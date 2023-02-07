@@ -35,8 +35,8 @@ target_link_options(ydb-core-kqp-ut-arrow PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-ut-arrow PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/arrow/kqp_arrow_in_channels_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/arrow/kqp_types_arrow_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/arrow/kqp_arrow_in_channels_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/arrow/kqp_types_arrow_ut.cpp
 )
 set_property(
   TARGET

@@ -32,9 +32,9 @@ target_link_options(ydb-core-quoter-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-quoter-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/kesus_quoter_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/ut_helpers.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/quoter/kesus_quoter_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/quoter/ut_helpers.cpp
 )
 set_property(
   TARGET

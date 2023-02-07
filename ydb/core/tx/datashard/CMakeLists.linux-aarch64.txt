@@ -81,213 +81,213 @@ target_link_libraries(core-tx-datashard PUBLIC
   services-lib-sharding
 )
 target_sources(core-tx-datashard PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_cdc_stream_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_table_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_restore_traits.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_and_wait_dependencies_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_data_tx_out_rs_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_distributed_erase_tx_out_rs_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_index.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_kqp_data_tx_out_rs_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_scheme_tx_out_rs_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/cdc_stream_scan.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_async_index.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_base.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_cdc_stream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange_split.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record_body_serializer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_async_index.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_cdc_stream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_common_ops.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_commit_writes_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_data_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_distributed_erase_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_read_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_scheme_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_snapshot_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/complete_data_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/completed_operations_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_cdc_stream_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_persistent_snapshot_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_table_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_volatile_snapshot_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cancel_tx_proposal.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__compact_borrowed.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__compaction.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cleanup_borrowed.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cleanup_in_rs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cleanup_tx.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__conditional_erase_rows.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__engine_host.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__get_state_tx.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__schema_changed.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__migrate_schemeshard.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__monitoring.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__mon_reset_schema_version.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__op_rows.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__plan_step.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__progress_resend_rs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__progress_tx.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__propose_tx_base.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__readset.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__read_iterator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__read_columns.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__s3_download_txs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__s3_upload_txs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__kqp_scan.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__snapshot_txs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__stats.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__store_table_path.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__store_scan_state.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_receiving.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_sender_activation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_sending.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_loans.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_locks_db.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_locks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_split_dst.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_split_src.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_switch_mvcc_state.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_trans_queue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_outreadset.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_active_transaction.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_common_upload.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_direct_transaction.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_direct_erase.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_direct_upload.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_distributed_erase.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_failpoints.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_dep_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_pipeline.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_downloads.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_uploads.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_schema_snapshots.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_snapshots.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_unsafe_upload.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_user_db.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_user_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_compute.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_effects.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_lookup_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_read_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_upsert_rows.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_delete_rows.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_repl_apply.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_repl_offsets.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_repl_offsets_client.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_repl_offsets_server.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_subdomain_path_id.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/direct_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_cdc_stream_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_index_notice_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_persistent_snapshot_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_table_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_volatile_snapshot_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/erase_rows_condition.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execute_commit_writes_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execute_data_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execute_distributed_erase_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execute_kqp_data_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execute_kqp_scan_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execution_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_iface.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_scan.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/finalize_build_index_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/finish_propose_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/initiate_build_index_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/key_conflicts.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/load_and_wait_in_rs_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/load_tx_details_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/make_scan_snapshot_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/make_snapshot_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/move_index_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/move_table_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/operation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/plan_queue_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/prepare_data_tx_in_rs_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/prepare_distributed_erase_tx_in_rs_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/prepare_kqp_data_tx_in_rs_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/prepare_scheme_tx_in_rs_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/protect_scheme_echoes_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_op_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/receive_snapshot_cleanup_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/receive_snapshot_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/remove_lock_change_records.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/remove_locks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_avl_tree.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_ops.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_treap.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/restore_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_and_send_out_rs_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_commit_writes_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_data_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_distributed_erase_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_scheme_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_snapshot_tx_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_plan_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_stream_clearance_unit.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/upload_stats.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_raw.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_zstd.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_uploader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/extstorage_usage_config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/import_s3.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_cdc_stream_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_table_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_restore_traits.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_and_wait_dependencies_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_data_tx_out_rs_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_distributed_erase_tx_out_rs_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_index.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_kqp_data_tx_out_rs_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_scheme_tx_out_rs_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/cdc_stream_scan.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_async_index.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_base.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_cdc_stream.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange_split.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record_body_serializer.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_async_index.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_cdc_stream.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_common_ops.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_commit_writes_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_data_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_distributed_erase_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_read_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_scheme_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_snapshot_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/complete_data_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/completed_operations_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_cdc_stream_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_persistent_snapshot_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_table_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_volatile_snapshot_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cancel_tx_proposal.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__compact_borrowed.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__compaction.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cleanup_borrowed.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cleanup_in_rs.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__cleanup_tx.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__conditional_erase_rows.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__engine_host.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__get_state_tx.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__schema_changed.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__migrate_schemeshard.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__init.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__monitoring.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__mon_reset_schema_version.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__op_rows.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__plan_step.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__progress_resend_rs.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__progress_tx.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__propose_tx_base.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__readset.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__read_iterator.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__read_columns.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__s3_download_txs.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__s3_upload_txs.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__kqp_scan.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__snapshot_txs.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__stats.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__store_table_path.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__store_scan_state.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_receiving.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_sender_activation.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_sending.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_counters.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_loans.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_locks_db.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_locks.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_split_dst.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_split_src.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_switch_mvcc_state.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_trans_queue.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_outreadset.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_active_transaction.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_common_upload.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_direct_transaction.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_direct_erase.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_direct_upload.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_distributed_erase.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_failpoints.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_dep_tracker.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_pipeline.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_downloads.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_uploads.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_schema_snapshots.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_snapshots.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_unsafe_upload.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_user_db.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_user_table.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_compute.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_effects.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_lookup_table.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_read_table.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_upsert_rows.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_delete_rows.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_repl_apply.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_repl_offsets.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_repl_offsets_client.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_repl_offsets_server.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_subdomain_path_id.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/direct_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_cdc_stream_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_index_notice_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_persistent_snapshot_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_table_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_volatile_snapshot_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/erase_rows_condition.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execute_commit_writes_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execute_data_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execute_distributed_erase_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execute_kqp_data_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execute_kqp_scan_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execution_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_common.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_iface.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_scan.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/finalize_build_index_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/finish_propose_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/initiate_build_index_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/key_conflicts.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/load_and_wait_in_rs_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/load_tx_details_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/make_scan_snapshot_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/make_snapshot_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/move_index_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/move_table_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/operation.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/plan_queue_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/prepare_data_tx_in_rs_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/prepare_distributed_erase_tx_in_rs_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/prepare_kqp_data_tx_in_rs_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/prepare_scheme_tx_in_rs_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/protect_scheme_echoes_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_op_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/receive_snapshot_cleanup_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/receive_snapshot_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/remove_lock_change_records.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/remove_locks.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_avl_tree.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_ops.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_treap.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/restore_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_and_send_out_rs_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_commit_writes_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_data_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_distributed_erase_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_scheme_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_snapshot_tx_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_plan_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_stream_clearance_unit.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/upload_stats.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_raw.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_zstd.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_uploader.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/extstorage_usage_config.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/import_s3.cpp
 )
 generate_enum_serilization(core-tx-datashard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_restore_traits.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_restore_traits.h
   INCLUDE_HEADERS
   ydb/core/tx/datashard/backup_restore_traits.h
 )
 generate_enum_serilization(core-tx-datashard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange.h
   INCLUDE_HEADERS
   ydb/core/tx/datashard/change_exchange.h
 )
 generate_enum_serilization(core-tx-datashard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record.h
   INCLUDE_HEADERS
   ydb/core/tx/datashard/change_record.h
 )
 generate_enum_serilization(core-tx-datashard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard.h
   INCLUDE_HEADERS
   ydb/core/tx/datashard/datashard.h
 )
 generate_enum_serilization(core-tx-datashard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_active_transaction.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_active_transaction.h
   INCLUDE_HEADERS
   ydb/core/tx/datashard/datashard_active_transaction.h
 )
 generate_enum_serilization(core-tx-datashard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_upload.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_upload.h
   INCLUDE_HEADERS
   ydb/core/tx/datashard/datashard_s3_upload.h
 )
 generate_enum_serilization(core-tx-datashard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execution_unit.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execution_unit.h
   INCLUDE_HEADERS
   ydb/core/tx/datashard/execution_unit.h
 )
 generate_enum_serilization(core-tx-datashard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execution_unit_kind.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/execution_unit_kind.h
   INCLUDE_HEADERS
   ydb/core/tx/datashard/execution_unit_kind.h
 )
 generate_enum_serilization(core-tx-datashard
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/operation.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/operation.h
   INCLUDE_HEADERS
   ydb/core/tx/datashard/operation.h
 )
@@ -338,12 +338,12 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   services-lib-sharding
 )
 target_sources(core-tx-datashard.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp
+  \${CMAKE_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp
 )
 resources(core-tx-datashard.global
-  ${CMAKE_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp
+  \${CMAKE_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/index.html
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/index.html
   KEYS
   datashard/index.html
 )

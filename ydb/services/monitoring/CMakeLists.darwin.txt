@@ -18,5 +18,5 @@ target_link_libraries(ydb-services-monitoring PUBLIC
   public-lib-operation_id
 )
 target_sources(ydb-services-monitoring PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/monitoring/grpc_service.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/monitoring/grpc_service.cpp
 )

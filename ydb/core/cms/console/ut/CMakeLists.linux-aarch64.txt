@@ -38,14 +38,14 @@ target_link_options(ydb-core-cms-console-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-cms-console-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_cache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_dispatcher_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console_ut_tenants.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console_ut_configs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/immediate_controls_configurator_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/log_settings_configurator_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/modifications_validator_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/net_classifier_updater_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_cache_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_dispatcher_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console_ut_tenants.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console_ut_configs.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/immediate_controls_configurator_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/log_settings_configurator_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/modifications_validator_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/net_classifier_updater_ut.cpp
 )
 set_property(
   TARGET

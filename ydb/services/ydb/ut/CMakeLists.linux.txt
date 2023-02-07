@@ -56,23 +56,23 @@ target_link_options(ydb-services-ydb-ut PRIVATE
   -ldl
 )
 target_sources(ydb-services-ydb-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_olap_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_coordination_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_index_table_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_client_certs_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_stats_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_olapstore_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/json_udf.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/re2_udf.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/cert_gen.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_olap_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_coordination_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_index_table_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_client_certs_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_stats_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_olapstore_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/json_udf.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/re2_udf.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/cert_gen.cpp
 )
 set_property(
   TARGET

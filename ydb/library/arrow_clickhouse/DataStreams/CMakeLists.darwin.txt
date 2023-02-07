@@ -18,7 +18,7 @@ target_link_libraries(library-arrow_clickhouse-DataStreams PUBLIC
   libs-apache-arrow
 )
 target_sources(library-arrow_clickhouse-DataStreams PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/DataStreams/AggregatingBlockInputStream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/DataStreams/IBlockInputStream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/DataStreams/MergingAggregatedBlockInputStream.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/DataStreams/AggregatingBlockInputStream.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/DataStreams/IBlockInputStream.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/DataStreams/MergingAggregatedBlockInputStream.cpp
 )

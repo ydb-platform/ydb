@@ -27,7 +27,7 @@ target_link_libraries(common-url_base-lib PUBLIC
   libs-apache-arrow
 )
 target_sources(common-url_base-lib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/lib/url_base_udf.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/lib/url_parse.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/lib/url_query.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/lib/url_base_udf.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/lib/url_parse.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/lib/url_query.cpp
 )

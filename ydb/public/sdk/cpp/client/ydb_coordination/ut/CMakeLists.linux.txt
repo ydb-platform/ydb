@@ -33,7 +33,7 @@ target_link_options(ydb-public-sdk-cpp-client-ydb_coordination-ut PRIVATE
   -ldl
 )
 target_sources(ydb-public-sdk-cpp-client-ydb_coordination-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_coordination/coordination_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_coordination/coordination_ut.cpp
 )
 set_property(
   TARGET

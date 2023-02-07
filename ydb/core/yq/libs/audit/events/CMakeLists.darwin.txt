@@ -19,5 +19,5 @@ target_link_libraries(libs-audit-events PUBLIC
   yql-public-issue
 )
 target_sources(libs-audit-events PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/audit/events/events.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/audit/events/events.cpp
 )

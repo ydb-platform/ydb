@@ -30,10 +30,10 @@ target_link_options(ydb-library-arrow_kernels-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-library-arrow_kernels-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_arithmetic.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_math.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_round.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_common.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_arithmetic.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_math.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_round.cpp
 )
 set_property(
   TARGET

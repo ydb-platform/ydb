@@ -24,12 +24,12 @@ target_link_libraries(core-tx-mediator PUBLIC
   ydb-core-util
 )
 target_sources(core-tx-mediator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__configure.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__schema_upgrade.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/tablet_queue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/execute_queue.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator_impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__init.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__configure.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__schema.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__schema_upgrade.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/tablet_queue.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/execute_queue.cpp
 )

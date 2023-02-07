@@ -37,10 +37,10 @@ target_link_options(ydb-core-mind-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-mind-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_ut_local.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_ut_pool.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_node_enumeration_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_ut_local.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_ut_pool.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_node_enumeration_ut.cpp
 )
 set_property(
   TARGET

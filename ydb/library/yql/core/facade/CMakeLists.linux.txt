@@ -39,5 +39,5 @@ target_link_libraries(yql-core-facade PUBLIC
   providers-result-provider
 )
 target_sources(yql-core-facade PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/facade/yql_facade.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/core/facade/yql_facade.cpp
 )

@@ -17,6 +17,6 @@ target_link_libraries(library-schlab-schoot PUBLIC
   library-schlab-protos
 )
 target_sources(library-schlab-schoot PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/schoot/schoot_gen.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/schoot/schoot_gen_cfg.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/schoot/schoot_gen.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/schoot/schoot_gen_cfg.cpp
 )

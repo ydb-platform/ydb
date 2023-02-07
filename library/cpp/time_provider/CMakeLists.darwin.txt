@@ -13,7 +13,7 @@ target_link_libraries(library-cpp-time_provider PUBLIC
   yutil
 )
 target_sources(library-cpp-time_provider PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/time_provider/monotonic.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/time_provider/time_provider.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/time_provider/monotonic_provider.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/time_provider/monotonic.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/time_provider/time_provider.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/time_provider/monotonic_provider.cpp
 )

@@ -29,6 +29,6 @@ target_link_libraries(providers-dq-planner PUBLIC
   providers-dq-opt
 )
 target_sources(providers-dq-planner PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/planner/dqs_task_graph.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/planner/execution_planner.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/planner/dqs_task_graph.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/planner/execution_planner.cpp
 )

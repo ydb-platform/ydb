@@ -37,10 +37,10 @@ target_link_options(ydb-core-kqp-ut-effects PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-ut-effects PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_effects_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_immediate_effects_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_inplace_update_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_write_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_effects_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_immediate_effects_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_inplace_update_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_write_ut.cpp
 )
 set_property(
   TARGET

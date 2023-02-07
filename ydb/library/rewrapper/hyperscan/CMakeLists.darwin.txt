@@ -23,5 +23,5 @@ target_link_libraries(library-rewrapper-hyperscan.global PUBLIC
   ydb-library-rewrapper
 )
 target_sources(library-rewrapper-hyperscan.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/rewrapper/hyperscan/hyperscan.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/rewrapper/hyperscan/hyperscan.cpp
 )

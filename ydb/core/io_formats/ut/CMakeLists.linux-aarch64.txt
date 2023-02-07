@@ -35,7 +35,7 @@ target_link_options(ydb-core-io_formats-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-io_formats-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/io_formats/ut_csv.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/io_formats/ut_csv.cpp
 )
 set_property(
   TARGET

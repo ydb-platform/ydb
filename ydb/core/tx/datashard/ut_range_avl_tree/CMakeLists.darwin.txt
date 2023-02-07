@@ -39,7 +39,7 @@ target_link_options(ydb-core-tx-datashard-ut_range_avl_tree PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-datashard-ut_range_avl_tree PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_avl_tree_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_avl_tree_ut.cpp
 )
 set_property(
   TARGET

@@ -22,5 +22,5 @@ target_link_libraries(ydb-library-schlab PUBLIC
   library-schlab-schine
 )
 target_sources(ydb-library-schlab PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/schlab_actor.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/schlab_actor.cpp
 )

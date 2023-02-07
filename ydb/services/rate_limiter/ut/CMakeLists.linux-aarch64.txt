@@ -36,7 +36,7 @@ target_link_options(ydb-services-rate_limiter-ut PRIVATE
   -ldl
 )
 target_sources(ydb-services-rate_limiter-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/rate_limiter/rate_limiter_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/rate_limiter/rate_limiter_ut.cpp
 )
 set_property(
   TARGET

@@ -17,5 +17,5 @@ target_link_libraries(core-filestore-core PUBLIC
   ydb-core-protos
 )
 target_sources(core-filestore-core PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/filestore/core/filestore.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/filestore/core/filestore.cpp
 )

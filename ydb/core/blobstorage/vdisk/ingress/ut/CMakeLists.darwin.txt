@@ -33,8 +33,8 @@ target_link_options(ydb-core-blobstorage-vdisk-ingress-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-vdisk-ingress-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_matrix_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_matrix_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_ut.cpp
 )
 set_property(
   TARGET

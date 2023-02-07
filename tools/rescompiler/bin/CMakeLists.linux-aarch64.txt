@@ -26,6 +26,6 @@ target_link_options(rescompiler PRIVATE
   -ldl
 )
 target_sources(rescompiler PRIVATE
-  ${CMAKE_SOURCE_DIR}/tools/rescompiler/main.cpp
+  \${CMAKE_SOURCE_DIR}/tools/rescompiler/main.cpp
 )
 vcs_info(rescompiler)

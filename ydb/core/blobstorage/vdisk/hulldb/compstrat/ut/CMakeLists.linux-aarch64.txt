@@ -34,7 +34,7 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_ut.cpp
 )
 set_property(
   TARGET

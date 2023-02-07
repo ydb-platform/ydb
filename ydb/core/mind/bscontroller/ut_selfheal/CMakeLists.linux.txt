@@ -37,8 +37,8 @@ target_link_options(ydb-core-mind-bscontroller-ut_selfheal PRIVATE
   -ldl
 )
 target_sources(ydb-core-mind-bscontroller-ut_selfheal PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/self_heal_actor_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/main.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/self_heal_actor_ut.cpp
 )
 set_property(
   TARGET

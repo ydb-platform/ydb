@@ -45,7 +45,7 @@ target_link_options(ydb-core-mind-ut_fat PRIVATE
   -ldl
 )
 target_sources(ydb-core-mind-ut_fat PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/ut_fat/blobstorage_node_warden_ut_fat.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/mind/ut_fat/blobstorage_node_warden_ut_fat.cpp
 )
 set_property(
   TARGET

@@ -14,5 +14,5 @@ target_link_libraries(services-lib-sharding PUBLIC
   yutil
 )
 target_sources(services-lib-sharding PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/lib/sharding/sharding.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/lib/sharding/sharding.cpp
 )

@@ -16,5 +16,5 @@ target_link_libraries(libs-checkpointing-events PUBLIC
   yq-libs-checkpointing_common
 )
 target_sources(libs-checkpointing-events PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpointing/events/events.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpointing/events/events.cpp
 )

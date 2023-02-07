@@ -29,5 +29,5 @@ target_link_libraries(restricted-googletest-googletest PUBLIC
   contrib-libs-re2
 )
 target_sources(restricted-googletest-googletest PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest/src/gtest-all.cc
+  \${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest/src/gtest-all.cc
 )

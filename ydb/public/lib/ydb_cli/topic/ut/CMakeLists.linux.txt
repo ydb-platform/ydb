@@ -45,9 +45,9 @@ target_link_options(ydb-public-lib-ydb_cli-topic-ut PRIVATE
   -ldl
 )
 target_sources(ydb-public-lib-ydb_cli-topic-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_read_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_read_ut.cpp
 )
 set_property(
   TARGET

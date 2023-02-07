@@ -38,12 +38,12 @@ target_link_options(ydb-core-blobstorage-vdisk-huge-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-huge-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedefs_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap_ctx_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugerecovery_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/top_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedefs_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap_ctx_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugerecovery_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/top_ut.cpp
 )
 set_property(
   TARGET

@@ -14,5 +14,5 @@ target_link_libraries(library-cpp-ipv6_address PUBLIC
   library-cpp-int128
 )
 target_sources(library-cpp-ipv6_address PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/ipv6_address/ipv6_address.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/ipv6_address/ipv6_address.cpp
 )

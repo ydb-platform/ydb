@@ -19,9 +19,9 @@ target_link_libraries(cms-console-validators PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(cms-console-validators PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/core_validators.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/registry.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/core_validators.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/registry.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice.cpp
 )

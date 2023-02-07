@@ -24,7 +24,7 @@ target_link_libraries(lib-DebugInfo-Symbolize PUBLIC
   llvm12-lib-Support
 )
 target_sources(lib-DebugInfo-Symbolize PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/Symbolize/DIPrinter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/Symbolize/SymbolizableObjectFile.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/Symbolize/Symbolize.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/Symbolize/DIPrinter.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/Symbolize/SymbolizableObjectFile.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/Symbolize/Symbolize.cpp
 )

@@ -19,6 +19,6 @@ target_link_libraries(yql-utils-actors PUBLIC
   providers-solomon-proto
 )
 target_sources(yql-utils-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actors/rich_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actors/http_sender_actor.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actors/rich_actor.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actors/http_sender_actor.cpp
 )

@@ -42,8 +42,8 @@ target_link_options(ydb-core-tx-datashard-ut_snapshot PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-datashard-ut_snapshot PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_snapshot.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_snapshot.cpp
 )
 set_property(
   TARGET

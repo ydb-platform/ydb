@@ -17,5 +17,5 @@ target_link_libraries(common-http_gateway-mock PUBLIC
   providers-common-http_gateway
 )
 target_sources(common-http_gateway-mock PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/http_gateway/mock/yql_http_mock_gateway.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/http_gateway/mock/yql_http_mock_gateway.cpp
 )

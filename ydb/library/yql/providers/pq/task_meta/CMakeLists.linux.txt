@@ -19,5 +19,5 @@ target_link_libraries(providers-pq-task_meta PUBLIC
   providers-pq-proto
 )
 target_sources(providers-pq-task_meta PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/task_meta/task_meta.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/task_meta/task_meta.cpp
 )

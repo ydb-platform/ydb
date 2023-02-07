@@ -15,18 +15,18 @@ target_link_libraries(core-ymq-proto PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(core-ymq-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/proto/records.proto
+  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/proto/records.proto
 )
 target_proto_addincls(core-ymq-proto
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  \${CMAKE_SOURCE_DIR}/
+  \${CMAKE_BINARY_DIR}
+  \${CMAKE_SOURCE_DIR}
+  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  \${CMAKE_BINARY_DIR}
+  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(core-ymq-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=\${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=\${CMAKE_BINARY_DIR}/
 )

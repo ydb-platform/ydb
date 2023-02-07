@@ -21,6 +21,6 @@ target_link_libraries(contrib-libs-fmt PUBLIC
   contrib-libs-cxxsupp
 )
 target_sources(contrib-libs-fmt PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/fmt/src/format.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/fmt/src/os.cc
+  \${CMAKE_SOURCE_DIR}/contrib/libs/fmt/src/format.cc
+  \${CMAKE_SOURCE_DIR}/contrib/libs/fmt/src/os.cc
 )

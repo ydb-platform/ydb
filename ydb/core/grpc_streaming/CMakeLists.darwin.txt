@@ -18,5 +18,5 @@ target_link_libraries(ydb-core-grpc_streaming PUBLIC
   ydb-core-base
 )
 target_sources(ydb-core-grpc_streaming PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_streaming/grpc_streaming.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/grpc_streaming/grpc_streaming.cpp
 )

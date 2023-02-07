@@ -29,7 +29,7 @@ target_link_libraries(providers-dq-opt PUBLIC
   cpp-yson-node
 )
 target_sources(providers-dq-opt PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/opt/dqs_opt.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/opt/logical_optimize.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/opt/physical_optimize.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/opt/dqs_opt.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/opt/logical_optimize.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/opt/physical_optimize.cpp
 )

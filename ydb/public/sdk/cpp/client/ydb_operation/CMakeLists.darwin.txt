@@ -20,5 +20,5 @@ target_link_libraries(cpp-client-ydb_operation PUBLIC
   client-ydb_types-operation
 )
 target_sources(cpp-client-ydb_operation PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_operation/operation.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_operation/operation.cpp
 )

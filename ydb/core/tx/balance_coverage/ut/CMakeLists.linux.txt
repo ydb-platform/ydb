@@ -34,7 +34,7 @@ target_link_options(ydb-core-tx-balance_coverage-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-balance_coverage-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/balance_coverage/balance_coverage_builder_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/balance_coverage/balance_coverage_builder_ut.cpp
 )
 set_property(
   TARGET

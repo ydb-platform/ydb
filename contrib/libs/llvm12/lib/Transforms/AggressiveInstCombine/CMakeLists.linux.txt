@@ -25,6 +25,6 @@ target_link_libraries(lib-Transforms-AggressiveInstCombine PUBLIC
   lib-Transforms-Utils
 )
 target_sources(lib-Transforms-AggressiveInstCombine PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/AggressiveInstCombine/TruncInstCombine.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/AggressiveInstCombine/TruncInstCombine.cpp
 )

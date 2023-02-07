@@ -40,11 +40,11 @@ target_link_options(ydb-library-binary_json-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-binary_json-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/container_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/identity_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/entry_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/test_base.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/valid_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/container_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/identity_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/entry_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/test_base.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/valid_ut.cpp
 )
 set_property(
   TARGET

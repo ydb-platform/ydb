@@ -24,7 +24,7 @@ target_link_libraries(dq-worker_manager-interface PUBLIC
   dq-api-protos
 )
 target_sources(dq-worker_manager-interface PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/worker_manager/interface/events.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/worker_manager/interface/worker_info.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/worker_manager/interface/counters.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/worker_manager/interface/events.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/worker_manager/interface/worker_info.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/worker_manager/interface/counters.cpp
 )

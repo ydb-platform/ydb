@@ -41,7 +41,7 @@ target_link_options(ydb-core-wrappers-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-wrappers-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_wrapper_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_wrapper_ut.cpp
 )
 set_property(
   TARGET

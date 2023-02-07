@@ -21,5 +21,5 @@ target_link_libraries(common-stat-static PUBLIC
   library-cpp-tdigest
 )
 target_sources(common-stat-static PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/static_udf.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/static_udf.cpp
 )

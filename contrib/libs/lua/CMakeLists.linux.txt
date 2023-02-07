@@ -25,22 +25,22 @@ target_link_libraries(contrib-libs-lua PUBLIC
   library-cpp-archive
 )
 target_sources(contrib-libs-lua PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/lib.cpp
-  ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
+  \${CMAKE_SOURCE_DIR}/contrib/libs/lua/lib.cpp
+  \${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
 )
 add_custom_command(
   OUTPUT
-  ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
+  \${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
   DEPENDS
-  ${TOOLS_ROOT}/tools/archiver/archiver
-  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua
-  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/json.lua
+  \${CMAKE_BINARY_DIR}/tools/archiver/archiver
+  \${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua
+  \${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/json.lua
   COMMAND
-  ${TOOLS_ROOT}/tools/archiver/archiver
+  \${CMAKE_BINARY_DIR}/tools/archiver/archiver
   -q
   -x
-  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua:
-  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/json.lua:
+  \${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua:
+  \${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/json.lua:
   -o
-  ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
+  \${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
 )

@@ -18,6 +18,6 @@ target_link_libraries(yql-sql-settings PUBLIC
   library-yql-utils
 )
 target_sources(yql-sql-settings PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/settings/partitioning.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/settings/translation_settings.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/settings/partitioning.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/settings/translation_settings.cpp
 )

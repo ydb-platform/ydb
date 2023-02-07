@@ -23,5 +23,5 @@ target_link_libraries(providers-dq-task_runner_actor PUBLIC
   providers-dq-task_runner
 )
 target_sources(providers-dq-task_runner_actor PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.cpp
 )

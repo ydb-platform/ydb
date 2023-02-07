@@ -31,17 +31,17 @@ target_link_libraries(providers-common-comp_nodes PUBLIC
   lib-Transforms-IPO
 )
 target_sources(providers-common-comp_nodes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_formatcode.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_formattype.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_makecode.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_maketype.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_parsetypehandle.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_position.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_reprcode.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_serializetypehandle.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_splittype.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_type_resource.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_typehandle.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_typekind.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_factory.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_formatcode.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_formattype.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_makecode.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_maketype.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_parsetypehandle.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_position.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_reprcode.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_serializetypehandle.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_splittype.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_type_resource.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_typehandle.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_typekind.cpp
 )

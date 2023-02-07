@@ -37,7 +37,7 @@ target_link_options(ydb-core-grpc_streaming-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-grpc_streaming-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_streaming/grpc_streaming_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/grpc_streaming/grpc_streaming_ut.cpp
 )
 set_property(
   TARGET

@@ -17,5 +17,5 @@ target_link_libraries(ydb-library-rewrapper PUBLIC
   library-rewrapper-proto
 )
 target_sources(ydb-library-rewrapper PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/rewrapper/dispatcher.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/rewrapper/dispatcher.cpp
 )

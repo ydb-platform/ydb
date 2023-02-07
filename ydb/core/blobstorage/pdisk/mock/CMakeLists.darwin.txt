@@ -15,5 +15,5 @@ target_link_libraries(blobstorage-pdisk-mock PUBLIC
   core-blobstorage-pdisk
 )
 target_sources(blobstorage-pdisk-mock PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/mock/pdisk_mock.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/mock/pdisk_mock.cpp
 )

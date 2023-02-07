@@ -38,8 +38,8 @@ target_link_options(ydb-core-control-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-control-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor_ut.cpp
 )
 set_property(
   TARGET

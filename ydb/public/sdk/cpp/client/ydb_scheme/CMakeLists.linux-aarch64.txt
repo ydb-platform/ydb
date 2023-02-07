@@ -18,10 +18,10 @@ target_link_libraries(cpp-client-ydb_scheme PUBLIC
   cpp-client-ydb_driver
 )
 target_sources(cpp-client-ydb_scheme PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_scheme/scheme.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_scheme/scheme.cpp
 )
 generate_enum_serilization(cpp-client-ydb_scheme
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_scheme/scheme.h
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_scheme/scheme.h
   INCLUDE_HEADERS
   ydb/public/sdk/cpp/client/ydb_scheme/scheme.h
 )

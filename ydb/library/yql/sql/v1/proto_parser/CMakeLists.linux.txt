@@ -20,5 +20,5 @@ target_link_libraries(sql-v1-proto_parser PUBLIC
   proto_ast-gen-v1_proto
 )
 target_sources(sql-v1-proto_parser PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/proto_parser/proto_parser.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/proto_parser/proto_parser.cpp
 )

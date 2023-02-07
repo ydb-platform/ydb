@@ -16,5 +16,5 @@ target_link_libraries(yql-utils-actor_log PUBLIC
   ydb-core-protos
 )
 target_sources(yql-utils-actor_log PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actor_log/log.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actor_log/log.cpp
 )

@@ -24,17 +24,17 @@ target_link_libraries(core-tx-sequenceshard PUBLIC
   tx-sequenceshard-public
 )
 target_sources(core-tx-sequenceshard PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/sequenceshard.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/sequenceshard_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_allocate_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_create_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_drop_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_freeze_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_init_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_mark_schemeshard_pipe.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_redirect_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_restore_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_update_sequence.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/schema.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/sequenceshard.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/sequenceshard_impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_allocate_sequence.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_create_sequence.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_drop_sequence.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_freeze_sequence.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_init.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_init_schema.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_mark_schemeshard_pipe.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_redirect_sequence.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_restore_sequence.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_update_sequence.cpp
 )

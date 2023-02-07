@@ -30,8 +30,8 @@ target_link_options(ydb-library-yql-utils-log-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-utils-log-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log/log_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log/tls_backend_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log/log_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log/tls_backend_ut.cpp
 )
 set_property(
   TARGET

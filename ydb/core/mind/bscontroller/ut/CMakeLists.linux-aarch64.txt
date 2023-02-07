@@ -32,9 +32,9 @@ target_link_options(ydb-core-mind-bscontroller-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-mind-bscontroller-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/grouper_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/group_mapper_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/mv_object_map_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/grouper_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/group_mapper_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/mv_object_map_ut.cpp
 )
 set_property(
   TARGET

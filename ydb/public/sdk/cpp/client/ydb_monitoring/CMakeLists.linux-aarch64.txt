@@ -19,10 +19,10 @@ target_link_libraries(cpp-client-ydb_monitoring PUBLIC
   cpp-client-ydb_driver
 )
 target_sources(cpp-client-ydb_monitoring PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.cpp
 )
 generate_enum_serilization(cpp-client-ydb_monitoring
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.h
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.h
   INCLUDE_HEADERS
   ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.h
 )

@@ -20,6 +20,6 @@ target_link_options(gencrc PRIVATE
   -fPIC
 )
 target_sources(gencrc PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/digest/old_crc/gencrc/main.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/digest/old_crc/gencrc/main.cpp
 )
 vcs_info(gencrc)

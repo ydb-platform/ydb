@@ -28,7 +28,7 @@ target_link_options(validation PRIVATE
   -ldl
 )
 target_sources(validation PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/main.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/helpers.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/main.cpp
 )
 vcs_info(validation)

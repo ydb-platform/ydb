@@ -26,5 +26,5 @@ target_link_libraries(core-client-scheme_cache_lib PUBLIC
   ydb-core-tx
 )
 target_sources(core-client-scheme_cache_lib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/scheme_cache_lib/yql_db_scheme_resolver.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/client/scheme_cache_lib/yql_db_scheme_resolver.cpp
 )

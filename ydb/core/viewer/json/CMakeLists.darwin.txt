@@ -16,5 +16,5 @@ target_link_libraries(core-viewer-json PUBLIC
   core-viewer-protos
 )
 target_sources(core-viewer-json PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json/json.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/viewer/json/json.cpp
 )

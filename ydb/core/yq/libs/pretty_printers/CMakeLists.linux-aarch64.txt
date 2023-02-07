@@ -22,6 +22,6 @@ target_link_libraries(yq-libs-pretty_printers PUBLIC
   dq-api-protos
 )
 target_sources(yq-libs-pretty_printers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/pretty_printers/graph_params_printer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/pretty_printers/minikql_program_printer.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/pretty_printers/graph_params_printer.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/pretty_printers/minikql_program_printer.cpp
 )

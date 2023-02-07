@@ -22,7 +22,7 @@ target_link_libraries(providers-dq-common PUBLIC
   yql-dq-actors
 )
 target_sources(providers-dq-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/common/attrs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/common/yql_dq_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/common/yql_dq_settings.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/common/attrs.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/common/yql_dq_common.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/common/yql_dq_settings.cpp
 )

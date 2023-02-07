@@ -15,19 +15,19 @@ target_link_libraries(library-folder_service-proto PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(library-folder_service-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/folder_service/proto/config.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/folder_service/proto/folder_service.proto
+  \${CMAKE_SOURCE_DIR}/ydb/library/folder_service/proto/config.proto
+  \${CMAKE_SOURCE_DIR}/ydb/library/folder_service/proto/folder_service.proto
 )
 target_proto_addincls(library-folder_service-proto
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  \${CMAKE_SOURCE_DIR}/
+  \${CMAKE_BINARY_DIR}
+  \${CMAKE_SOURCE_DIR}
+  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  \${CMAKE_BINARY_DIR}
+  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(library-folder_service-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=\${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=\${CMAKE_BINARY_DIR}/
 )

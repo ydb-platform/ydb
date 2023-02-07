@@ -25,12 +25,12 @@ target_link_options(ydb-core-ymq-base-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-ymq-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/action_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/counters_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/dlq_helpers_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/helpers_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/secure_protobuf_printer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/queue_attributes_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/action_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/counters_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/dlq_helpers_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/helpers_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/secure_protobuf_printer_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/queue_attributes_ut.cpp
 )
 set_property(
   TARGET

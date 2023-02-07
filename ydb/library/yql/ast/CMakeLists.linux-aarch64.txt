@@ -28,14 +28,14 @@ target_link_libraries(library-yql-ast PUBLIC
   yql-parser-pg_catalog
 )
 target_sources(library-yql-ast PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_constraint.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_annotation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_escaping.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_errors.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_types.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_gc_nodes.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_constraint.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_annotation.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_escaping.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_errors.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_types.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_gc_nodes.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string.cpp
 )

@@ -36,8 +36,8 @@ target_link_options(ydb-core-tx-sequenceshard-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-sequenceshard-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/ut_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/ut_sequenceshard.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/ut_helpers.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/ut_sequenceshard.cpp
 )
 set_property(
   TARGET

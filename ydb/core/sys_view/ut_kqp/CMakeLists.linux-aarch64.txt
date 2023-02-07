@@ -39,10 +39,10 @@ target_link_options(ydb-core-sys_view-ut_kqp PRIVATE
   -ldl
 )
 target_sources(ydb-core-sys_view-ut_kqp PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_kqp.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_labeled.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_kqp.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_common.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_counters.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_labeled.cpp
 )
 set_property(
   TARGET

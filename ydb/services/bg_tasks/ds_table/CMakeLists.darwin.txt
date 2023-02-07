@@ -20,18 +20,18 @@ target_link_libraries(services-bg_tasks-ds_table PUBLIC
   services-metadata-request
 )
 target_sources(services-bg_tasks-ds_table PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/behaviour.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/executor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/interrupt.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/task_executor_controller.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/executor_controller.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/task_executor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/finish_task.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/assign_tasks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/fetch_tasks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/add_tasks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/task_enabled.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/lock_pinger.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/initialization.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/behaviour.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/executor.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/interrupt.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/task_executor_controller.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/executor_controller.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/task_executor.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/finish_task.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/assign_tasks.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/fetch_tasks.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/config.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/add_tasks.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/task_enabled.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/lock_pinger.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/initialization.cpp
 )

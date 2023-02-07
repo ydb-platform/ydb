@@ -15,5 +15,5 @@ target_link_libraries(pq-gateway-dummy PUBLIC
   providers-pq-provider
 )
 target_sources(pq-gateway-dummy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.cpp
 )

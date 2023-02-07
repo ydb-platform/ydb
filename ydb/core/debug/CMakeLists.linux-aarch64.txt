@@ -14,5 +14,5 @@ target_link_libraries(ydb-core-debug PUBLIC
   yutil
 )
 target_sources(ydb-core-debug PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/debug/valgrind_check.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/debug/valgrind_check.cpp
 )

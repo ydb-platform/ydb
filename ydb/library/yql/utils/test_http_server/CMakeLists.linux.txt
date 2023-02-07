@@ -16,5 +16,5 @@ target_link_libraries(yql-utils-test_http_server PUBLIC
   cpp-http-misc
 )
 target_sources(yql-utils-test_http_server PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/test_http_server/test_http_server.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/test_http_server/test_http_server.cpp
 )

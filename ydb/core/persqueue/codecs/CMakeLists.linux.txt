@@ -16,5 +16,5 @@ target_link_libraries(core-persqueue-codecs PUBLIC
   cpp-client-ydb_persqueue_core
 )
 target_sources(core-persqueue-codecs PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/codecs/pqv1.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/persqueue/codecs/pqv1.cpp
 )

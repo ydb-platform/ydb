@@ -37,7 +37,7 @@ target_link_options(ydb-public-lib-deprecated-kicli-ut PRIVATE
   -ldl
 )
 target_sources(ydb-public-lib-deprecated-kicli-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/deprecated/kicli/cpp_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/deprecated/kicli/cpp_ut.cpp
 )
 set_property(
   TARGET

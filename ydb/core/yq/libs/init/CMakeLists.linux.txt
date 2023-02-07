@@ -67,5 +67,5 @@ target_link_libraries(yq-libs-init PUBLIC
   providers-ydb-provider
 )
 target_sources(yq-libs-init PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/init/init.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/init/init.cpp
 )

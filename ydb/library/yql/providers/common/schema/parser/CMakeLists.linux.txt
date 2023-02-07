@@ -16,5 +16,5 @@ target_link_libraries(common-schema-parser PUBLIC
   library-cpp-yson
 )
 target_sources(common-schema-parser PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/schema/parser/yql_type_parser.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/schema/parser/yql_type_parser.cpp
 )

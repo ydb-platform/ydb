@@ -28,7 +28,7 @@ target_link_options(pack_num PRIVATE
   -ldl
 )
 target_sources(pack_num PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/benchmark/pack_num/pack.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/benchmark/pack_num/pack_num_bench.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/benchmark/pack_num/pack.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/benchmark/pack_num/pack_num_bench.cpp
 )
 vcs_info(pack_num)

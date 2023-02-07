@@ -28,7 +28,7 @@ target_link_options(ydb-core-sys_view-service-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-sys_view-service-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/query_history_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/service/query_history_ut.cpp
 )
 set_property(
   TARGET

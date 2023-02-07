@@ -19,5 +19,5 @@ target_link_libraries(core-tx-time_cast PUBLIC
   ydb-core-tx
 )
 target_sources(core-tx-time_cast PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/time_cast/time_cast.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/time_cast/time_cast.cpp
 )

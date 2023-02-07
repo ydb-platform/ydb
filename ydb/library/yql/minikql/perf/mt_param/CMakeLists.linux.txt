@@ -37,6 +37,6 @@ target_link_options(mt_param PRIVATE
   -ldl
 )
 target_sources(mt_param PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/mt_param/mt_param.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/mt_param/mt_param.cpp
 )
 vcs_info(mt_param)

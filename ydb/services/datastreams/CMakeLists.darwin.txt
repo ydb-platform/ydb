@@ -28,9 +28,9 @@ target_link_libraries(ydb-services-datastreams PUBLIC
   ydb-services-ydb
 )
 target_sources(ydb-services-datastreams PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/datastreams_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/grpc_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/next_token.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/put_records_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/shard_iterator.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/datastreams/datastreams_proxy.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/datastreams/grpc_service.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/datastreams/next_token.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/datastreams/put_records_actor.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/datastreams/shard_iterator.cpp
 )

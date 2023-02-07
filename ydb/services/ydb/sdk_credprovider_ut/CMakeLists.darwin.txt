@@ -34,7 +34,7 @@ target_link_options(ydb-services-ydb-sdk_credprovider_ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-services-ydb-sdk_credprovider_ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/sdk_credprovider_ut/dummy_provider_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/sdk_credprovider_ut/dummy_provider_ut.cpp
 )
 set_property(
   TARGET

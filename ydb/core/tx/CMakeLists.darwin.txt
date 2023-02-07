@@ -38,6 +38,6 @@ target_link_libraries(ydb-core-tx PUBLIC
   ydb-library-aclib
 )
 target_sources(ydb-core-tx PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy_schemereq.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy_schemereq.cpp
 )

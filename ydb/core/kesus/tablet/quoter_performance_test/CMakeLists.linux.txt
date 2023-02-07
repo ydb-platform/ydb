@@ -37,7 +37,7 @@ target_link_options(quoter_performance_test PRIVATE
   -ldl
 )
 target_sources(quoter_performance_test PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/quoter_performance_test/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/ut_helpers.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/quoter_performance_test/main.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/ut_helpers.cpp
 )
 vcs_info(quoter_performance_test)

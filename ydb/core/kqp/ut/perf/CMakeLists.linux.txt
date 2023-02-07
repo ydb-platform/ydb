@@ -38,8 +38,8 @@ target_link_options(ydb-core-kqp-ut-perf PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-ut-perf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/perf/kqp_query_perf_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/perf/kqp_workload_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/perf/kqp_query_perf_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/perf/kqp_workload_ut.cpp
 )
 set_property(
   TARGET

@@ -17,6 +17,6 @@ target_link_libraries(cpp-client-ydb_params PUBLIC
   cpp-client-ydb_value
 )
 target_sources(cpp-client-ydb_params PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_params/params.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_params/impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_params/params.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_params/impl.cpp
 )

@@ -30,17 +30,17 @@ target_link_libraries(libs-poco-JSON PUBLIC
   libs-poco-Foundation
 )
 target_sources(libs-poco-JSON PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Array.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Handler.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/JSONException.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Object.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/ParseHandler.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Parser.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/ParserImpl.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/PrintHandler.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Query.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Stringifier.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Template.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/TemplateCache.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/pdjson.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Array.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Handler.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/JSONException.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Object.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/ParseHandler.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Parser.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/ParserImpl.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/PrintHandler.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Query.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Stringifier.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/Template.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/TemplateCache.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src/pdjson.c
 )

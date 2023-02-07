@@ -29,7 +29,7 @@ target_link_options(ttl PRIVATE
   -ldl
 )
 target_sources(ttl PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/ttl/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/ttl/ttl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/ttl/main.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/ttl/ttl.cpp
 )
 vcs_info(ttl)

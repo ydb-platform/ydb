@@ -47,8 +47,8 @@ target_link_options(ydb-core-tx-datashard-ut_change_exchange PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-datashard-ut_change_exchange PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_change_exchange.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_change_exchange.cpp
 )
 set_property(
   TARGET

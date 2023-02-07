@@ -33,9 +33,9 @@ target_link_options(ydb-library-yql-dq-runtime-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-yql-dq-runtime-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_output_channel_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/ut/ut_helper.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_output_channel_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/ut/ut_helper.cpp
 )
 set_property(
   TARGET

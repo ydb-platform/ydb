@@ -19,9 +19,9 @@ target_link_libraries(ydb-core-audit PUBLIC
   library-cpp-resource
 )
 target_sources(ydb-core-audit PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/audit/audit_log_json_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/audit/audit_log_txt_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/audit/audit_log.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/audit/audit_log_json_impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/audit/audit_log_txt_impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/audit/audit_log.cpp
 )
 
 add_global_library_for(ydb-core-audit.global ydb-core-audit)
@@ -36,12 +36,12 @@ target_link_libraries(ydb-core-audit.global PUBLIC
   library-cpp-resource
 )
 target_sources(ydb-core-audit.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/audit/da10233abc65c3f178c7da0ce0d7a4ea.cpp
+  \${CMAKE_BINARY_DIR}/ydb/core/audit/da10233abc65c3f178c7da0ce0d7a4ea.cpp
 )
 resources(ydb-core-audit.global
-  ${CMAKE_BINARY_DIR}/ydb/core/audit/da10233abc65c3f178c7da0ce0d7a4ea.cpp
+  \${CMAKE_BINARY_DIR}/ydb/core/audit/da10233abc65c3f178c7da0ce0d7a4ea.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_default_settings.txt
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_default_settings.txt
   KEYS
   kqp_default_settings.txt
 )

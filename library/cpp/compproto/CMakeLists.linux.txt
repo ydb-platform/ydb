@@ -14,5 +14,5 @@ target_link_libraries(library-cpp-compproto PUBLIC
   yutil
 )
 target_sources(library-cpp-compproto PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/compproto/lib.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/compproto/lib.cpp
 )

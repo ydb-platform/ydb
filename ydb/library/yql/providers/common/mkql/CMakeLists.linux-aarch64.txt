@@ -28,7 +28,7 @@ target_link_libraries(providers-common-mkql PUBLIC
   yql-parser-pg_catalog
 )
 target_sources(providers-common-mkql PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/mkql/parser.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/mkql/yql_provider_mkql.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/mkql/yql_type_mkql.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/mkql/parser.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/mkql/yql_provider_mkql.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/mkql/yql_type_mkql.cpp
 )

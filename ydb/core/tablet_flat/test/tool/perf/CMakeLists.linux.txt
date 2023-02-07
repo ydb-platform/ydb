@@ -33,7 +33,7 @@ target_link_options(table-perf PRIVATE
   -ldl
 )
 target_sources(table-perf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/perf/colons.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/perf/main.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/perf/colons.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/perf/main.cpp
 )
 vcs_info(table-perf)

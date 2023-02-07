@@ -35,8 +35,8 @@ target_link_options(ydb-core-tx-scheme_board-ut_populator PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-scheme_board-ut_populator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/populator_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/ut_helpers.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/populator_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/ut_helpers.cpp
 )
 set_property(
   TARGET

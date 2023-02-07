@@ -32,6 +32,6 @@ target_link_libraries(restricted-boost-atomic PUBLIC
   restricted-boost-winapi
 )
 target_sources(restricted-boost-atomic PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse2.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/lock_pool.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse2.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/lock_pool.cpp
 )

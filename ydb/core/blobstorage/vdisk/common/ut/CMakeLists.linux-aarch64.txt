@@ -35,15 +35,15 @@ target_link_options(ydb-core-blobstorage-vdisk-common-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-common-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/circlebufresize_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/circlebufstream_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/circlebuf_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/memusage_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_config_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_outofspace_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_syncneighbors_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/circlebufresize_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/circlebufstream_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/circlebuf_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/memusage_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_config_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_outofspace_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_syncneighbors_ut.cpp
 )
 set_property(
   TARGET

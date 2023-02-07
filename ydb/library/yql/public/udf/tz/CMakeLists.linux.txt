@@ -14,5 +14,5 @@ target_link_libraries(public-udf-tz PUBLIC
   yutil
 )
 target_sources(public-udf-tz PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/tz/udf_tz.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/tz/udf_tz.cpp
 )

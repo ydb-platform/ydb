@@ -15,19 +15,19 @@ target_link_libraries(api-protos-annotations PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(api-protos-annotations PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/annotations/sensitive.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/annotations/validation.proto
+  \${CMAKE_SOURCE_DIR}/ydb/public/api/protos/annotations/sensitive.proto
+  \${CMAKE_SOURCE_DIR}/ydb/public/api/protos/annotations/validation.proto
 )
 target_proto_addincls(api-protos-annotations
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  \${CMAKE_SOURCE_DIR}/
+  \${CMAKE_BINARY_DIR}
+  \${CMAKE_SOURCE_DIR}
+  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  \${CMAKE_BINARY_DIR}
+  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(api-protos-annotations
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=\${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=\${CMAKE_BINARY_DIR}/
 )

@@ -36,8 +36,8 @@ target_link_options(quoter_service_bandwidth_test PRIVATE
   -ldl
 )
 target_sources(quoter_service_bandwidth_test PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/quota_requester.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/server.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/main.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/quota_requester.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/server.cpp
 )
 vcs_info(quoter_service_bandwidth_test)

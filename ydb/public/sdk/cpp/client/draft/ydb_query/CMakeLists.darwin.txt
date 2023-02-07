@@ -17,6 +17,6 @@ target_link_libraries(client-draft-ydb_query PUBLIC
   cpp-client-ydb_table
 )
 target_sources(client-draft-ydb_query PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_query/client.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_query/query.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_query/client.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_query/query.cpp
 )

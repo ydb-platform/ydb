@@ -29,5 +29,5 @@ target_link_libraries(providers-dq-worker_manager PUBLIC
   dq-worker_manager-interface
 )
 target_sources(providers-dq-worker_manager PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/worker_manager/local_worker_manager.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/worker_manager/local_worker_manager.cpp
 )

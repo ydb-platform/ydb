@@ -19,5 +19,5 @@ target_link_libraries(ydb-services-local_discovery PUBLIC
   public-lib-operation_id
 )
 target_sources(ydb-services-local_discovery PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/local_discovery/grpc_service.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/local_discovery/grpc_service.cpp
 )

@@ -47,21 +47,21 @@ target_link_libraries(core-tx-tx_proxy PUBLIC
   public-lib-base
 )
 target_sources(core-tx-tx_proxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/mon.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/schemereq.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/datareq.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/describe.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/read_table_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/resolvereq.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/snapshotreq.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/commitreq.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/upload_rows_common_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/upload_rows.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/mon.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy_impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/schemereq.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/datareq.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/describe.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/read_table_impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/resolvereq.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/snapshotreq.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/commitreq.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/upload_rows_common_impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/upload_rows.cpp
 )
 generate_enum_serilization(core-tx-tx_proxy
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/read_table_impl.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/read_table_impl.h
   INCLUDE_HEADERS
   ydb/core/tx/tx_proxy/read_table_impl.h
 )

@@ -23,13 +23,13 @@ target_link_libraries(monlib-service-pages PUBLIC
   monlib-encode-prometheus
 )
 target_sources(monlib-service-pages PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/diag_mon_page.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/html_mon_page.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/index_mon_page.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/mon_page.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/pre_mon_page.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/resource_mon_page.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/templates.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/version_mon_page.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/registry_mon_page.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/diag_mon_page.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/html_mon_page.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/index_mon_page.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/mon_page.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/pre_mon_page.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/resource_mon_page.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/templates.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/version_mon_page.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/registry_mon_page.cpp
 )

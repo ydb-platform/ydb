@@ -23,23 +23,23 @@ target_link_libraries(contrib-libs-libfyaml PUBLIC
   contrib-libs-xxhash
 )
 target_sources(contrib-libs-libfyaml PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-accel.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-atom.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-composer.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-ctype.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-diag.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-doc.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-docbuilder.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-docstate.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-dump.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-emit.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-event.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-input.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-parse.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-path.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-token.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-types.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-utf8.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-walk.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-accel.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-atom.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-composer.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-ctype.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-diag.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-doc.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-docbuilder.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-docstate.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-dump.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-emit.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-event.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-input.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-parse.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-path.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-token.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-types.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-utf8.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-utils.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-walk.c
 )

@@ -25,6 +25,6 @@ target_link_libraries(llvm12-lib-Linker PUBLIC
   lib-Transforms-Utils
 )
 target_sources(llvm12-lib-Linker PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Linker/IRMover.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Linker/LinkModules.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Linker/IRMover.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Linker/LinkModules.cpp
 )

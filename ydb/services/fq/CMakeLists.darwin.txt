@@ -20,6 +20,6 @@ target_link_libraries(ydb-services-fq PUBLIC
   ydb-library-protobuf_printer
 )
 target_sources(ydb-services-fq PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/fq/grpc_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/fq/private_grpc.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/fq/grpc_service.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/fq/private_grpc.cpp
 )

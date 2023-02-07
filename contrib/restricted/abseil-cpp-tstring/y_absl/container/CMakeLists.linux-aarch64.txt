@@ -30,7 +30,7 @@ target_link_libraries(abseil-cpp-tstring-y_absl-container PUBLIC
   abseil-cpp-tstring-y_absl-types
 )
 target_sources(abseil-cpp-tstring-y_absl-container PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/hashtablez_sampler.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/hashtablez_sampler_force_weak_definition.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/raw_hash_set.cc
+  \${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/hashtablez_sampler.cc
+  \${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/hashtablez_sampler_force_weak_definition.cc
+  \${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/raw_hash_set.cc
 )

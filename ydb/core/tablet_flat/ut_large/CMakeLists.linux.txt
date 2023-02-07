@@ -37,7 +37,7 @@ target_link_options(ydb-core-tablet_flat-ut_large PRIVATE
   -ldl
 )
 target_sources(ydb-core-tablet_flat-ut_large PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_ut_large.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_ut_large.cpp
 )
 set_property(
   TARGET

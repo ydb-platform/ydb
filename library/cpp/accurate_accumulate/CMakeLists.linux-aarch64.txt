@@ -14,5 +14,5 @@ target_link_libraries(library-cpp-accurate_accumulate PUBLIC
   yutil
 )
 target_sources(library-cpp-accurate_accumulate PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/accurate_accumulate/accurate_accumulate.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/accurate_accumulate/accurate_accumulate.cpp
 )

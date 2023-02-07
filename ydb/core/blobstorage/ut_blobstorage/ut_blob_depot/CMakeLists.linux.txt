@@ -32,9 +32,9 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_test_functions.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_event_managers.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_test_functions.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_event_managers.cpp
 )
 set_property(
   TARGET

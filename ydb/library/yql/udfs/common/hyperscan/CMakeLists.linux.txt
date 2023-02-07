@@ -34,5 +34,5 @@ target_link_libraries(hyperscan_udf.global PUBLIC
   cpp-regex-pcre
 )
 target_sources(hyperscan_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperscan/hyperscan_udf.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperscan/hyperscan_udf.cpp
 )

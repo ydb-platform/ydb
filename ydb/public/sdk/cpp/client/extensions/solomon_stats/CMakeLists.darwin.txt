@@ -18,6 +18,6 @@ target_link_libraries(client-extensions-solomon_stats PUBLIC
   cpp-client-ydb_extension
 )
 target_sources(client-extensions-solomon_stats PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_client.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_connector.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_client.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_connector.cpp
 )

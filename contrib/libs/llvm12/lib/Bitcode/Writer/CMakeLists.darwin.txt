@@ -25,8 +25,8 @@ target_link_libraries(lib-Bitcode-Writer PUBLIC
   llvm12-lib-Support
 )
 target_sources(lib-Bitcode-Writer PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Writer/BitWriter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Writer/BitcodeWriter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Writer/BitcodeWriterPass.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Writer/ValueEnumerator.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Writer/BitWriter.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Writer/BitcodeWriter.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Writer/BitcodeWriterPass.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Writer/ValueEnumerator.cpp
 )

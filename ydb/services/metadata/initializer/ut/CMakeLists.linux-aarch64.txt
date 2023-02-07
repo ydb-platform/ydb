@@ -39,7 +39,7 @@ target_link_options(ydb-services-metadata-initializer-ut PRIVATE
   -ldl
 )
 target_sources(ydb-services-metadata-initializer-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/ut/ut_init.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/ut/ut_init.cpp
 )
 set_property(
   TARGET

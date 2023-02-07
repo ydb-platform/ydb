@@ -27,8 +27,8 @@ target_link_options(basic_example PRIVATE
   -ldl
 )
 target_sources(basic_example PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/basic_example/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/basic_example/basic_example_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/basic_example/basic_example.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/basic_example/main.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/basic_example/basic_example_data.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/basic_example/basic_example.cpp
 )
 vcs_info(basic_example)

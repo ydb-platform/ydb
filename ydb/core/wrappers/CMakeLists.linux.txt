@@ -24,10 +24,10 @@ target_link_libraries(ydb-core-wrappers PUBLIC
   core-wrappers-events
 )
 target_sources(ydb-core-wrappers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_wrapper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_storage_config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/abstract.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/fake_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/fake_storage_config.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_wrapper.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_storage.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_storage_config.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/wrappers/abstract.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/wrappers/fake_storage.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/wrappers/fake_storage_config.cpp
 )

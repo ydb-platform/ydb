@@ -28,7 +28,7 @@ target_link_options(ydb-public-sdk-cpp-client-ydb_params-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-public-sdk-cpp-client-ydb_params-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_params/params_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_params/params_ut.cpp
 )
 set_property(
   TARGET

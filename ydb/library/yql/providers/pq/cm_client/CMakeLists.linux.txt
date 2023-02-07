@@ -18,10 +18,10 @@ target_link_libraries(providers-pq-cm_client PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(providers-pq-cm_client PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/cm_client/client.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/cm_client/client.cpp
 )
 generate_enum_serilization(providers-pq-cm_client
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/cm_client/client.h
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/cm_client/client.h
   INCLUDE_HEADERS
   ydb/library/yql/providers/pq/cm_client/client.h
 )

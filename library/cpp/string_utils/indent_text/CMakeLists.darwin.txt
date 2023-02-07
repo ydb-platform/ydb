@@ -13,5 +13,5 @@ target_link_libraries(cpp-string_utils-indent_text PUBLIC
   yutil
 )
 target_sources(cpp-string_utils-indent_text PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/string_utils/indent_text/indent_text.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/string_utils/indent_text/indent_text.cpp
 )

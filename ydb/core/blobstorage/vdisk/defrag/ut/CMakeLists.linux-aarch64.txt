@@ -33,7 +33,7 @@ target_link_options(ydb-core-blobstorage-vdisk-defrag-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-defrag-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/defrag/defrag_actor_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/defrag/defrag_actor_ut.cpp
 )
 set_property(
   TARGET

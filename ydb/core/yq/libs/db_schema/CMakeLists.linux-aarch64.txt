@@ -19,5 +19,5 @@ target_link_libraries(yq-libs-db_schema PUBLIC
   cpp-client-ydb_table
 )
 target_sources(yq-libs-db_schema PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/db_schema/db_schema.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/db_schema/db_schema.cpp
 )

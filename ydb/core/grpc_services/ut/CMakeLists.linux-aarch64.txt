@@ -35,8 +35,8 @@ target_link_options(ydb-core-grpc_services-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-grpc_services-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_calls_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/operation_helpers_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_calls_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/operation_helpers_ut.cpp
 )
 set_property(
   TARGET

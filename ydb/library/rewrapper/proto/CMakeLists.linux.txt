@@ -15,18 +15,18 @@ target_link_libraries(library-rewrapper-proto PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(library-rewrapper-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/rewrapper/proto/serialization.proto
+  \${CMAKE_SOURCE_DIR}/ydb/library/rewrapper/proto/serialization.proto
 )
 target_proto_addincls(library-rewrapper-proto
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  \${CMAKE_SOURCE_DIR}/
+  \${CMAKE_BINARY_DIR}
+  \${CMAKE_SOURCE_DIR}
+  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  \${CMAKE_BINARY_DIR}
+  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(library-rewrapper-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=\${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=\${CMAKE_BINARY_DIR}/
 )

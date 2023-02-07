@@ -31,8 +31,8 @@ target_link_options(ydb-library-yql-providers-s3-path_generator-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-library-yql-providers-s3-path_generator-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/path_generator/ut/yql_generate_partitioning_rules_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/path_generator/ut/yql_parse_partitioning_rules_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/path_generator/ut/yql_generate_partitioning_rules_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/path_generator/ut/yql_parse_partitioning_rules_ut.cpp
 )
 set_property(
   TARGET

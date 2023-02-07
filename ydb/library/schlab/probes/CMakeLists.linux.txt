@@ -15,5 +15,5 @@ target_link_libraries(library-schlab-probes PUBLIC
   library-cpp-lwtrace
 )
 target_sources(library-schlab-probes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/probes/probes.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/probes/probes.cpp
 )

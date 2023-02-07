@@ -16,5 +16,5 @@ target_link_libraries(internal-proxies-ref PUBLIC
   argonish-internal-blake2b
 )
 target_sources(internal-proxies-ref PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/digest/argonish/internal/proxies/ref/proxy_ref.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/digest/argonish/internal/proxies/ref/proxy_ref.cpp
 )

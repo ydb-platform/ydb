@@ -20,10 +20,10 @@ target_link_libraries(providers-s3-serializations PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(providers-s3-serializations PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/serializations/serialization_interval.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/serializations/serialization_interval.cpp
 )
 generate_enum_serilization(providers-s3-serializations
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/serializations/serialization_interval.h
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/serializations/serialization_interval.h
   INCLUDE_HEADERS
   ydb/library/yql/providers/s3/serializations/serialization_interval.h
 )

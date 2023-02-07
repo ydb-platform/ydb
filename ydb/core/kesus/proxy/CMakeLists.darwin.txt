@@ -20,7 +20,7 @@ target_link_libraries(core-kesus-proxy PUBLIC
   api-protos
 )
 target_sources(core-kesus-proxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/events.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy_actor.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/events.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy_actor.cpp
 )

@@ -43,8 +43,8 @@ target_link_options(ydb-services-bg_tasks-ut PRIVATE
   -ldl
 )
 target_sources(ydb-services-bg_tasks-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ut/ut_tasks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ut/task_emulator.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ut/ut_tasks.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ut/task_emulator.cpp
 )
 set_property(
   TARGET

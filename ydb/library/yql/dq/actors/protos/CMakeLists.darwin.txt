@@ -20,20 +20,20 @@ target_link_libraries(dq-actors-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(dq-actors-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_events.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_stats.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_status_codes.proto
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_events.proto
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_stats.proto
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_status_codes.proto
 )
 target_proto_addincls(dq-actors-protos
   ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  \${CMAKE_SOURCE_DIR}/
+  \${CMAKE_BINARY_DIR}
+  \${CMAKE_SOURCE_DIR}
+  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  \${CMAKE_BINARY_DIR}
+  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(dq-actors-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+  --cpp_out=\${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=\${CMAKE_BINARY_DIR}/
 )

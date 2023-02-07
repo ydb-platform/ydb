@@ -18,6 +18,6 @@ target_link_libraries(library-arrow_clickhouse-Columns PUBLIC
   libs-apache-arrow
 )
 target_sources(library-arrow_clickhouse-Columns PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/Columns/ColumnsCommon.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/Columns/ColumnAggregateFunction.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/Columns/ColumnsCommon.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/Columns/ColumnAggregateFunction.cpp
 )

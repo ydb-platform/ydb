@@ -39,9 +39,9 @@ target_link_options(ydb-core-keyvalue-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-keyvalue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_collector_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_storage_read_request_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_collector_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_storage_read_request_ut.cpp
 )
 set_property(
   TARGET

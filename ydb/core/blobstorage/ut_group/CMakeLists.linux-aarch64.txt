@@ -36,7 +36,7 @@ target_link_options(ydb-core-blobstorage-ut_group PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-ut_group PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_group/main.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_group/main.cpp
 )
 set_property(
   TARGET

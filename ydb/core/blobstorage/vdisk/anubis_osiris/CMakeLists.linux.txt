@@ -24,11 +24,11 @@ target_link_libraries(blobstorage-vdisk-anubis_osiris PUBLIC
   ydb-core-protos
 )
 target_sources(blobstorage-vdisk-anubis_osiris PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_algo.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisfinder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisproxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisrunner.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_algo.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisfinder.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisproxy.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisrunner.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.cpp
 )

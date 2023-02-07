@@ -32,7 +32,7 @@ target_link_options(ydb-core-kqp-ut-olap PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-kqp-ut-olap PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/olap/kqp_olap_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/olap/kqp_olap_ut.cpp
 )
 set_property(
   TARGET

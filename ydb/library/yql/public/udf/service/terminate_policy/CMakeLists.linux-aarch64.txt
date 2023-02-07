@@ -19,5 +19,5 @@ target_link_libraries(udf-service-terminate_policy PUBLIC
   yql-public-udf
 )
 target_sources(udf-service-terminate_policy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/service/terminate_policy/udf_service.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/service/terminate_policy/udf_service.cpp
 )

@@ -18,7 +18,7 @@ target_link_libraries(internal-proxies-ssse3 PUBLIC
 target_sources_custom(internal-proxies-ssse3
   .ssse3
   SRCS
-  ${CMAKE_SOURCE_DIR}/library/cpp/digest/argonish/internal/proxies/ssse3/proxy_ssse3.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/digest/argonish/internal/proxies/ssse3/proxy_ssse3.cpp
   CUSTOM_FLAGS
   -mssse3
 )

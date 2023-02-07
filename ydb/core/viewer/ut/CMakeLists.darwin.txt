@@ -31,7 +31,7 @@ target_link_options(ydb-core-viewer-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-viewer-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer_ut.cpp
 )
 set_property(
   TARGET

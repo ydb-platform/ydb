@@ -25,9 +25,9 @@ target_link_libraries(llvm12-lib-Target PUBLIC
   llvm12-lib-Support
 )
 target_sources(llvm12-lib-Target PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/Target.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetIntrinsicInfo.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetLoweringObjectFile.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetMachine.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetMachineC.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/Target.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetIntrinsicInfo.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetLoweringObjectFile.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetMachine.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetMachineC.cpp
 )

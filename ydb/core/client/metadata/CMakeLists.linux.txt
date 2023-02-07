@@ -21,6 +21,6 @@ target_link_libraries(core-client-metadata PUBLIC
   yql-minikql-invoke_builtins
 )
 target_sources(core-client-metadata PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata/types_metadata.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata/functions_metadata.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/client/metadata/types_metadata.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/client/metadata/functions_metadata.cpp
 )

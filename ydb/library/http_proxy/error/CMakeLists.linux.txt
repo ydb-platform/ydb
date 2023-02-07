@@ -14,5 +14,5 @@ target_link_libraries(library-http_proxy-error PUBLIC
   yutil
 )
 target_sources(library-http_proxy-error PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/error/error.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/error/error.cpp
 )

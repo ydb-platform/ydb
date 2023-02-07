@@ -23,14 +23,14 @@ target_link_libraries(library-cpp-codecs PUBLIC
   cpp-string_utils-relaxed_escaper
 )
 target_sources(library-cpp-codecs PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/tls_cache.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/codecs.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/codecs_registry.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/comptable_codec.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/delta_codec.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/float_huffman.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/huffman_codec.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/pfor_codec.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/solar_codec.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/zstd_dict_codec.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/tls_cache.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/codecs.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/codecs_registry.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/comptable_codec.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/delta_codec.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/float_huffman.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/huffman_codec.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/pfor_codec.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/solar_codec.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/zstd_dict_codec.cpp
 )

@@ -15,6 +15,6 @@ target_link_libraries(ymq-queues-std PUBLIC
   core-ymq-base
 )
 target_sources(ymq-queues-std PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/std/queries.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/std/schema.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/std/queries.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/std/schema.cpp
 )

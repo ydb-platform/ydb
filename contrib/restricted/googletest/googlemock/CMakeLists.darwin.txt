@@ -24,5 +24,5 @@ target_link_libraries(restricted-googletest-googlemock PUBLIC
   restricted-googletest-googletest
 )
 target_sources(restricted-googletest-googlemock PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock/src/gmock-all.cc
+  \${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock/src/gmock-all.cc
 )

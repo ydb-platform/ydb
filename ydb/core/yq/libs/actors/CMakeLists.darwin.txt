@@ -80,23 +80,23 @@ target_link_libraries(yq-libs-actors PUBLIC
   library-yql-utils
 )
 target_sources(yq-libs-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/clusters_from_connections.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/database_resolver.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/error.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/nodes_health_check.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/nodes_manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/pending_fetcher.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/pinger.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/proxy_private.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/rate_limiter_resources.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/rate_limiter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/result_writer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/run_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/run_actor_params.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/system_clusters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/table_bindings_from_bindings.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/task_get.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/task_ping.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/task_result_write.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/clusters_from_connections.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/database_resolver.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/error.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/nodes_health_check.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/nodes_manager.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/pending_fetcher.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/pinger.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/proxy.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/proxy_private.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/rate_limiter_resources.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/rate_limiter.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/result_writer.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/run_actor.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/run_actor_params.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/system_clusters.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/table_bindings_from_bindings.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/task_get.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/task_ping.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/task_result_write.cpp
 )

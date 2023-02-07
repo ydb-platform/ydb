@@ -20,7 +20,7 @@ target_link_libraries(library-schlab-mon PUBLIC
   library-schlab-schemu
 )
 target_sources(library-schlab-mon PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/mon.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/mon.cpp
 )
 
 add_global_library_for(library-schlab-mon.global library-schlab-mon)
@@ -34,22 +34,22 @@ target_link_libraries(library-schlab-mon.global PUBLIC
   library-schlab-schemu
 )
 target_sources(library-schlab-mon.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
+  \${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
 )
 resources(library-schlab-mon.global
-  ${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
+  \${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/css/bootstrap.min.css
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/css/scharm.css
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/css/schviz.css
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/jquery.min.js
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/bootstrap.min.js
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/d3-tip-0.8.0-alpha.1.js
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/d3.v4.min.js
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/scharm.js
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/schviz.js
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/scharm-test0.js
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/scharm.html
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/css/bootstrap.min.css
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/css/scharm.css
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/css/schviz.css
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/jquery.min.js
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/bootstrap.min.js
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/d3-tip-0.8.0-alpha.1.js
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/d3.v4.min.js
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/scharm.js
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/schviz.js
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/scharm-test0.js
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/scharm.html
   KEYS
   schlab/css/bootstrap.min.css
   schlab/css/scharm.css

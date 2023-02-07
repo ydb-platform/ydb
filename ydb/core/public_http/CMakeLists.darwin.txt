@@ -30,10 +30,10 @@ target_link_libraries(ydb-core-public_http PUBLIC
   yql-public-issue
 )
 target_sources(ydb-core-public_http PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_req.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_router.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/grpc_request_context_wrapper.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_req.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_router.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_service.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/public_http/grpc_request_context_wrapper.cpp
 )
 
 add_global_library_for(ydb-core-public_http.global ydb-core-public_http)
@@ -57,12 +57,12 @@ target_link_libraries(ydb-core-public_http.global PUBLIC
   yql-public-issue
 )
 target_sources(ydb-core-public_http.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp
+  \${CMAKE_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp
 )
 resources(ydb-core-public_http.global
-  ${CMAKE_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp
+  \${CMAKE_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/openapi/openapi.yaml
+  \${CMAKE_SOURCE_DIR}/ydb/core/public_http/openapi/openapi.yaml
   KEYS
   resources/openapi.yaml
 )

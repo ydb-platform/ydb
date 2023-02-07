@@ -36,10 +36,10 @@ target_link_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/sort_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/type_cache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_test_factory.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/sort_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/type_cache_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_test_factory.cpp
 )
 set_property(
   TARGET

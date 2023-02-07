@@ -14,5 +14,5 @@ target_link_libraries(library-cpp-comptable PUBLIC
   library-cpp-compproto
 )
 target_sources(library-cpp-comptable PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/comptable/comptable.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/comptable/comptable.cpp
 )

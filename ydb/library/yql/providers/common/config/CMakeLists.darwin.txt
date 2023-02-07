@@ -23,6 +23,6 @@ target_link_libraries(providers-common-config PUBLIC
   cpp-string_utils-levenshtein_diff
 )
 target_sources(providers-common-config PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/config/yql_configuration_transformer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/config/yql_dispatch.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/config/yql_configuration_transformer.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/config/yql_dispatch.cpp
 )

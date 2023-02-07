@@ -20,5 +20,5 @@ target_link_libraries(yq-libs-logs PUBLIC
   yql-utils-actor_log
 )
 target_sources(yq-libs-logs PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/logs/log.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/logs/log.cpp
 )

@@ -34,8 +34,8 @@ target_link_options(ydb-core-blobstorage-backpressure-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-backpressure-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_client_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_server_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_client_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_server_ut.cpp
 )
 set_property(
   TARGET

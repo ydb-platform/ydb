@@ -15,5 +15,5 @@ target_link_libraries(library-pretty_types_print-protobuf PUBLIC
   contrib-libs-protobuf
 )
 target_sources(library-pretty_types_print-protobuf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/pretty_types_print/protobuf/out.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/pretty_types_print/protobuf/out.cpp
 )

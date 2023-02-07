@@ -22,9 +22,9 @@ target_link_libraries(lib-ydb_cli-dump PUBLIC
   cpp-client-ydb_proto
 )
 target_sources(lib-ydb_cli-dump PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/dump.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/dump_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/restore_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/restore_import_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/restore_compat.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/dump.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/dump_impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/restore_impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/restore_import_data.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/restore_compat.cpp
 )

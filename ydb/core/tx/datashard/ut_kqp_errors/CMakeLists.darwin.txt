@@ -39,8 +39,8 @@ target_link_options(ydb-core-tx-datashard-ut_kqp_errors PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-datashard-ut_kqp_errors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_kqp_errors.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_kqp_errors.cpp
 )
 set_property(
   TARGET

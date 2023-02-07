@@ -16,5 +16,5 @@ target_link_libraries(client-extensions-discovery_mutator PUBLIC
   cpp-client-ydb_extension
 )
 target_sources(client-extensions-discovery_mutator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator/discovery_mutator.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator/discovery_mutator.cpp
 )

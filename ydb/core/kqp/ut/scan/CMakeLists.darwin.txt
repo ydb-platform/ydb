@@ -32,8 +32,8 @@ target_link_options(ydb-core-kqp-ut-scan PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-kqp-ut-scan PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/scan/kqp_flowcontrol_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/scan/kqp_scan_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/scan/kqp_flowcontrol_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/scan/kqp_scan_ut.cpp
 )
 set_property(
   TARGET

@@ -26,5 +26,5 @@ target_link_libraries(yql-minikql-codegen PUBLIC
   lib-Transforms-ObjCARC
 )
 target_sources(yql-minikql-codegen PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen.cpp
 )

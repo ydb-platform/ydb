@@ -29,6 +29,6 @@ target_link_options(simple_persqueue_reader PRIVATE
   -ldl
 )
 target_sources(simple_persqueue_reader PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/simple/main.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/simple/main.cpp
 )
 vcs_info(simple_persqueue_reader)

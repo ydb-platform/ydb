@@ -27,12 +27,12 @@ target_link_libraries(yq-libs-events PUBLIC
   cpp-client-ydb_table
 )
 generate_enum_serilization(yq-libs-events
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/events/events.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/events/events.h
   INCLUDE_HEADERS
   ydb/core/yq/libs/events/events.h
 )
 generate_enum_serilization(yq-libs-events
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/events/event_ids.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/events/event_ids.h
   INCLUDE_HEADERS
   ydb/core/yq/libs/events/event_ids.h
 )

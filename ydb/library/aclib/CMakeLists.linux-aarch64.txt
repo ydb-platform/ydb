@@ -19,5 +19,5 @@ target_link_libraries(ydb-library-aclib PUBLIC
   library-aclib-protos
 )
 target_sources(ydb-library-aclib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/aclib/aclib.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/aclib/aclib.cpp
 )

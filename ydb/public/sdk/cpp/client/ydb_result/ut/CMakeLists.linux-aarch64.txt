@@ -31,7 +31,7 @@ target_link_options(ydb-public-sdk-cpp-client-ydb_result-ut PRIVATE
   -ldl
 )
 target_sources(ydb-public-sdk-cpp-client-ydb_result-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_result/result_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_result/result_ut.cpp
 )
 set_property(
   TARGET

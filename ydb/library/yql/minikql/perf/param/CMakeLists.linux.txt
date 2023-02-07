@@ -37,6 +37,6 @@ target_link_options(param PRIVATE
   -ldl
 )
 target_sources(param PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/param/param.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/param/param.cpp
 )
 vcs_info(param)

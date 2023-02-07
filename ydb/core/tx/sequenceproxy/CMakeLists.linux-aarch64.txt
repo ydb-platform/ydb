@@ -20,8 +20,8 @@ target_link_libraries(core-tx-sequenceproxy PUBLIC
   tx-sequenceshard-public
 )
 target_sources(core-tx-sequenceproxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_allocate.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_resolve.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_allocate.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_impl.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_resolve.cpp
 )

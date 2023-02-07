@@ -15,5 +15,5 @@ target_link_libraries(providers-common-gateway PUBLIC
   library-yql-ast
 )
 target_sources(providers-common-gateway PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/gateway/yql_provider_gateway.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/gateway/yql_provider_gateway.cpp
 )

@@ -34,7 +34,7 @@ target_link_options(ydb-core-security-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-security-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/security/ticket_parser_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/security/ticket_parser_ut.cpp
 )
 set_property(
   TARGET

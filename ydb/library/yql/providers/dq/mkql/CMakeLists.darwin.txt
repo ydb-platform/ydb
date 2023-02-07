@@ -20,5 +20,5 @@ target_link_libraries(providers-dq-mkql PUBLIC
   providers-dq-expr_nodes
 )
 target_sources(providers-dq-mkql PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/mkql/dqs_mkql_compiler.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/mkql/dqs_mkql_compiler.cpp
 )

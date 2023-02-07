@@ -28,6 +28,6 @@ target_link_options(archiver PRIVATE
   -ldl
 )
 target_sources(archiver PRIVATE
-  ${CMAKE_SOURCE_DIR}/tools/archiver/main.cpp
+  \${CMAKE_SOURCE_DIR}/tools/archiver/main.cpp
 )
 vcs_info(archiver)

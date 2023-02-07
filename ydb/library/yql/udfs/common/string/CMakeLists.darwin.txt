@@ -40,5 +40,5 @@ target_link_libraries(string_udf.global PUBLIC
   cpp-string_utils-quote
 )
 target_sources(string_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/string/string_udf.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/string/string_udf.cpp
 )

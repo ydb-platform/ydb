@@ -40,7 +40,7 @@ target_link_options(ydb-services-ydb-index_ut PRIVATE
   -ldl
 )
 target_sources(ydb-services-ydb-index_ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_index_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_index_ut.cpp
 )
 set_property(
   TARGET

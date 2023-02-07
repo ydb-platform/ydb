@@ -25,5 +25,5 @@ target_link_libraries(Target-X86-Disassembler PUBLIC
   Target-X86-TargetInfo
 )
 target_sources(Target-X86-Disassembler PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/X86/Disassembler/X86Disassembler.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/X86/Disassembler/X86Disassembler.cpp
 )

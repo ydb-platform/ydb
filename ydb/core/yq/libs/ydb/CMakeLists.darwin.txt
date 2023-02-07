@@ -27,12 +27,12 @@ target_link_libraries(yq-libs-ydb PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yq-libs-ydb PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/util.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/ydb.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/schema.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/util.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/ydb.cpp
 )
 generate_enum_serilization(yq-libs-ydb
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/ydb.h
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/ydb.h
   INCLUDE_HEADERS
   ydb/core/yq/libs/ydb/ydb.h
 )

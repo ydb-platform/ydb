@@ -31,10 +31,10 @@ target_link_options(ydb-library-yql-public-issue-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-public-issue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_manager_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_utils_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_warning_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_manager_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_utils_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_warning_ut.cpp
 )
 set_property(
   TARGET

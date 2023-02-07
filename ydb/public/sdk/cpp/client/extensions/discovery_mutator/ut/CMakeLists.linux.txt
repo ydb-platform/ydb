@@ -33,7 +33,7 @@ target_link_options(client-extensions-discovery_mutator-ut PRIVATE
   -ldl
 )
 target_sources(client-extensions-discovery_mutator-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator/discovery_mutator_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator/discovery_mutator_ut.cpp
 )
 set_property(
   TARGET

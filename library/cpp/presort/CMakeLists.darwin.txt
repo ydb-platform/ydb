@@ -13,5 +13,5 @@ target_link_libraries(library-cpp-presort PUBLIC
   yutil
 )
 target_sources(library-cpp-presort PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/presort/presort.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/presort/presort.cpp
 )

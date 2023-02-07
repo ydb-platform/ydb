@@ -17,6 +17,6 @@ target_link_libraries(cpp-containers-absl_flat_hash PUBLIC
   abseil-cpp-absl-container
 )
 target_sources(cpp-containers-absl_flat_hash PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/containers/absl_flat_hash/flat_hash_map.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/containers/absl_flat_hash/flat_hash_set.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/containers/absl_flat_hash/flat_hash_map.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/containers/absl_flat_hash/flat_hash_set.cpp
 )

@@ -21,5 +21,5 @@ target_link_libraries(core-driver_lib-cli_config_base PUBLIC
   library-yql-minikql
 )
 target_sources(core-driver_lib-cli_config_base PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_config_base/config_base.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_config_base/config_base.cpp
 )

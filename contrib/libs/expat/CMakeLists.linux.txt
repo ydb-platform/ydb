@@ -20,7 +20,7 @@ target_link_libraries(contrib-libs-expat PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(contrib-libs-expat PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/expat/lib/xmlparse.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/expat/lib/xmlrole.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/expat/lib/xmltok.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/expat/lib/xmlparse.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/expat/lib/xmlrole.c
+  \${CMAKE_SOURCE_DIR}/contrib/libs/expat/lib/xmltok.c
 )

@@ -22,7 +22,7 @@ target_link_options(ydb-library-schlab-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-library-schlab-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/ut/schlab_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/ut/schlab_ut.cpp
 )
 set_property(
   TARGET

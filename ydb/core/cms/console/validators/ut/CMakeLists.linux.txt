@@ -33,9 +33,9 @@ target_link_options(ydb-core-cms-console-validators-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-cms-console-validators-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/registry_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/registry_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice_ut.cpp
 )
 set_property(
   TARGET

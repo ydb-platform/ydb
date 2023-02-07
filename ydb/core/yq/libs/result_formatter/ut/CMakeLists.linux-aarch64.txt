@@ -36,7 +36,7 @@ target_link_options(ydb-core-yq-libs-result_formatter-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-yq-libs-result_formatter-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/result_formatter/result_formatter_ut.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/result_formatter/result_formatter_ut.cpp
 )
 set_property(
   TARGET

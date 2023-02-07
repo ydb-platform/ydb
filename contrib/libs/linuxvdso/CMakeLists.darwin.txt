@@ -9,5 +9,5 @@
 
 add_library(contrib-libs-linuxvdso)
 target_sources(contrib-libs-linuxvdso PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/linuxvdso/fake.cpp
+  \${CMAKE_SOURCE_DIR}/contrib/libs/linuxvdso/fake.cpp
 )

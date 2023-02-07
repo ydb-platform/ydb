@@ -26,6 +26,6 @@ target_link_options(btree_benchmark PRIVATE
   CoreFoundation
 )
 target_sources(btree_benchmark PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/btree_benchmark/main.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/util/btree_benchmark/main.cpp
 )
 vcs_info(btree_benchmark)

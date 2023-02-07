@@ -14,5 +14,5 @@ target_link_libraries(library-cpp-bucket_quoter PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(library-cpp-bucket_quoter PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/bucket_quoter/bucket_quoter.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/bucket_quoter/bucket_quoter.cpp
 )

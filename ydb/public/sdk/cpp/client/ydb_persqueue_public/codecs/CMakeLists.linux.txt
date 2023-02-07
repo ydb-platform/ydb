@@ -19,5 +19,5 @@ target_link_libraries(client-ydb_persqueue_public-codecs PUBLIC
   api-protos
 )
 target_sources(client-ydb_persqueue_public-codecs PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs/codecs.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs/codecs.cpp
 )

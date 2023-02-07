@@ -14,5 +14,5 @@ target_link_libraries(common-math-lib PUBLIC
   yutil
 )
 target_sources(common-math-lib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/math/lib/erfinv.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/math/lib/erfinv.cpp
 )

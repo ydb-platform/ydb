@@ -17,8 +17,8 @@ target_link_libraries(ydb-core-pgproxy PUBLIC
   ydb-core-base
 )
 target_sources(ydb-core-pgproxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_connection.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_listener.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy_types.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_connection.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_listener.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy_types.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy.cpp
 )

@@ -23,5 +23,5 @@ target_link_libraries(yql-sql-pg PUBLIC
   yql-sql-settings
 )
 target_sources(yql-sql-pg PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql.cpp
 )

@@ -51,5 +51,5 @@ target_link_libraries(yq-libs-mock PUBLIC
   providers-ydb-provider
 )
 target_sources(yq-libs-mock PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/mock/yql_mock.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/mock/yql_mock.cpp
 )

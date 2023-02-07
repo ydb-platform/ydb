@@ -16,5 +16,5 @@ target_link_libraries(libs-quota_manager-ut_helpers PUBLIC
   libs-quota_manager-events
 )
 target_sources(libs-quota_manager-ut_helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/quota_manager/ut_helpers/fake_quota_manager.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/quota_manager/ut_helpers/fake_quota_manager.cpp
 )

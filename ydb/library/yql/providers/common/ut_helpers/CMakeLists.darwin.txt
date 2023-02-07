@@ -23,5 +23,5 @@ target_link_libraries(providers-common-ut_helpers PUBLIC
   providers-common-comp_nodes
 )
 target_sources(providers-common-ut_helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.cpp
 )

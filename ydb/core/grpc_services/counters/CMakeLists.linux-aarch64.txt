@@ -20,6 +20,6 @@ target_link_libraries(core-grpc_services-counters PUBLIC
   core-sys_view-service
 )
 target_sources(core-grpc_services-counters PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/counters/counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/counters/proxy_counters.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/counters/counters.cpp
+  \${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/counters/proxy_counters.cpp
 )

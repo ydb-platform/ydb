@@ -13,5 +13,5 @@ target_link_libraries(cpp-digest-sfh PUBLIC
   yutil
 )
 target_sources(cpp-digest-sfh PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/digest/sfh/sfh.cpp
+  \${CMAKE_SOURCE_DIR}/library/cpp/digest/sfh/sfh.cpp
 )

@@ -732,19 +732,44 @@ private:
             return GetLambdaConstraint<TConstraintType>(lambda, ctx);
     }
 
+    static std::optional<bool> GetDirection(const TExprNode& dir) {
+        if (dir.IsCallable("Bool"))
+            return IsTrue(dir.Tail().Content());
+
+        if (dir.IsCallable("Not"))
+            if (const auto d = GetDirection(dir.Head()))
+                return !*d;
+
+        return std::nullopt;
+    }
+
+    static std::optional<TConstraintNode::TPathType> GetPathToKey(const TExprNode& body, const TExprNode& arg) {
+        if (&body == &arg)
+            return TConstraintNode::TPathType();
+
+        if (body.IsCallable({"Member","Nth"})) {
+            if (auto path = GetPathToKey(body.Head(), arg)) {
+                path->emplace_back(body.Tail().Content());
+                return path;
+            }
+        }
+
+        return std::nullopt;
+    }
+
     static std::vector<std::pair<TConstraintNode::TPathType, bool>>
     ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& keySelectorLambda) {
         const auto& keySelectorBody = keySelectorLambda.Tail();
         const auto& keySelectorArg = keySelectorLambda.Head().Head();
         std::vector<std::pair<TConstraintNode::TPathType, bool>> columns;
-        if (sortDirections.IsCallable("Bool"))
-            columns.emplace_back(TConstraintNode::TPathType(), IsTrue(sortDirections.Tail().Content()));
+        if (const auto dir = GetDirection(sortDirections))
+            columns.emplace_back(TConstraintNode::TPathType(), *dir);
         else if (sortDirections.IsList())
             if (const auto size = keySelectorBody.ChildrenSize()) {
                 columns.reserve(size);
                 for (auto i = 0U; i < size; ++i)
-                    if (const auto child = sortDirections.Child(i); child->IsCallable("Bool"))
-                        columns.emplace_back(TConstraintNode::TPathType(), IsTrue(child->Tail().Content()));
+                    if (const auto dir = GetDirection(*sortDirections.Child(i)))
+                        columns.emplace_back(TConstraintNode::TPathType(), *dir);
                     else
                         return {};
             } else
@@ -752,22 +777,16 @@ private:
         else
             return  {};
 
-        if (&keySelectorBody == &keySelectorArg)
-            columns.resize(1U);
-        else if (keySelectorBody.IsCallable({"Member", "Nth"}) && &keySelectorBody.Head() == &keySelectorArg)
-            if (columns.size() == 1U)
-                columns.front().first.emplace_back(keySelectorBody.Tail().Content());
-            else
-                return {};
-        else if (keySelectorBody.IsList())
+        if (keySelectorBody.IsList())
             if (const auto size = keySelectorBody.ChildrenSize()) {
-                std::unordered_set<std::string_view> set(size);
+                TSortedConstraintNode::TSetType set;
+                set.reserve(size);
                 columns.resize(size, std::make_pair(TConstraintNode::TPathType(), columns.back().second));
                 auto it = columns.begin();
                 for (auto i = 0U; i < size; ++i) {
-                    if (const auto child = keySelectorBody.Child(i); child->IsCallable({"Member", "Nth"}) && &child->Head() == &keySelectorArg) {
-                        if (set.emplace(child->Tail().Content()).second)
-                            it++->first.emplace_back(child->Tail().Content());
+                    if (auto path = GetPathToKey(*keySelectorBody.Child(i), keySelectorArg)) {
+                        if (set.insert(*path).second)
+                            it++->first = std::move(*path);
                         else if (columns.cend() != it)
                             it = columns.erase(it);
                     } else {
@@ -776,6 +795,11 @@ private:
                     }
                 }
             } else
+                return {};
+        else if (auto path = GetPathToKey(keySelectorBody, keySelectorArg))
+            if (columns.size() == 1U)
+                columns.front().first = std::move(*path);
+            else
                 return {};
         else
             return {};

@@ -79,11 +79,19 @@ struct TVDiskID {
 };
 #pragma pack(pop)
 
-template<typename SerializerType>
-TVDiskID VDiskIDFromVDiskID(const SerializerType &x);
+template <typename SerializerType>
+TVDiskID VDiskIDFromVDiskID(const SerializerType &x) {
+    return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
+}
 
-template<typename SerializerType>
-void VDiskIDFromVDiskID(const TVDiskID &id, SerializerType *proto);
+template <typename SerializerType>
+void VDiskIDFromVDiskID(const TVDiskID &id, SerializerType *proto) {
+    proto->SetGroupID(id.GroupID);
+    proto->SetGroupGeneration(id.GroupGeneration);
+    proto->SetRing(id.FailRealm);
+    proto->SetDomain(id.FailDomain);
+    proto->SetVDisk(id.VDisk);
+}
 
 // Takes a string in the same format as ToString output, sets isGenerationSet if second number is not '_'
 TVDiskID VDiskIDFromString(TString str, bool* isGenerationSet = nullptr);

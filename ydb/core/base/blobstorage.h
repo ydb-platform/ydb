@@ -2336,6 +2336,21 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
     }
 }
 
+// EGetHandleClass defines BlobStorage queue to a request to
+static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlobStorage::EGetHandleClass cls) {
+    switch (cls) {
+        case NKikimrBlobStorage::EGetHandleClass::AsyncRead:
+            return NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead;
+        case NKikimrBlobStorage::EGetHandleClass::FastRead:
+            return NKikimrBlobStorage::EVDiskQueueId::GetFastRead;
+        case NKikimrBlobStorage::EGetHandleClass::Discover:
+            return NKikimrBlobStorage::EVDiskQueueId::GetDiscover;
+        case NKikimrBlobStorage::EGetHandleClass::LowRead:
+            return NKikimrBlobStorage::EVDiskQueueId::GetLowRead;
+        default:
+            Y_FAIL("Unexpected case");
+    }
+}
 
 // EGetHandleClass defines BlobStorage queue to a request to
 static inline RawSerializer::EVDiskQueueId HandleClassToQueueId(RawSerializer::EGetHandleClass cls) {

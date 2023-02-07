@@ -305,6 +305,7 @@ private:
         YQL_CLOG(TRACE, ProviderKqp) << "PhysicalPeepholeTransformer: "
             << TransformerStatsToYson(PhysicalPeepholeTransformer->GetStatistics());
         YQL_CLOG(DEBUG, ProviderKqp) << "Physical KQL query: " << KqpExprToPrettyString(*builtQuery, ctx);
+        YQL_CLOG(DEBUG, ProviderKqp) << "Physical KQL query after peephole: " << KqpExprToPrettyString(*transformedQuery, ctx);
 
         auto& preparedQuery = *TransformCtx->QueryCtx->PreparingQuery;
         TKqpPhysicalQuery physicalQuery(transformedQuery);

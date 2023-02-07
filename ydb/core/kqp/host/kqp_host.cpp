@@ -10,6 +10,7 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/providers/config/yql_config_provider.h>
+#include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
@@ -922,6 +923,7 @@ public:
         TypesCtx->Modules = ModuleResolver;
         TypesCtx->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, TUserDataTable(), nullptr, nullptr);
         TypesCtx->JsonQueryReturnsJsonDocument = true;
+        TypesCtx->ArrowResolver = MakeSimpleArrowResolver(*FuncRegistry);
 
         // Result provider
         auto writerFactory = [] () { return MakeIntrusive<TKqpResultWriter>(); };
@@ -934,10 +936,11 @@ public:
         // Config provider
         const TGatewaysConfig* gatewaysConfig = nullptr; // TODO: can we get real gatewaysConfig here?
         auto allowSettings = [](TStringBuf settingName) {
-            return
-                settingName == "OrderedColumns" ||
-                settingName == "DisableOrderedColumns" ||
-                settingName == "Warning";
+            return settingName == "OrderedColumns"
+                || settingName == "DisableOrderedColumns"
+                || settingName == "Warning"
+                || settingName == "UseBlocks"
+                ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
         TypesCtx->AddDataSource(ConfigProviderName, configProvider);

@@ -3830,6 +3830,23 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TestTableWithNulls({ testCase });
     }
+
+    Y_UNIT_TEST(BlocksRead) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                PRAGMA UseBlocks;
+                PRAGMA Kikimr.OptEnableOlapPushdown = "false";
+
+                SELECT
+                    id, resource_id
+                FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 5;
+            )")
+            .SetExpectedReply("[[5;#]]");
+
+        TestTableWithNulls({ testCase });
+    }
 }
 
 } // namespace NKqp

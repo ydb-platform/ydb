@@ -261,7 +261,7 @@ public:
         NKikimrTxDataShard::TKqpReadRangesSourceSettings&& settings,
         const NYql::NDq::TDqAsyncIoFactory::TSourceArguments& args)
         : Settings(std::move(settings))
-        , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
+        , LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ", CA Id" << args.ComputeActorId << ". ")
         , ComputeActorId(args.ComputeActorId)
         , InputIndex(args.InputIndex)
         , TypeEnv(args.TypeEnv)
@@ -311,6 +311,7 @@ public:
     }
 
     void Bootstrap() {
+        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         THolder<TShardState> stateHolder = MakeHolder<TShardState>(Settings.GetShardIdHint());
         PendingShards.PushBack(stateHolder.Get());
         auto& state = *stateHolder.Release();
@@ -982,7 +983,7 @@ private:
     TVector<NKikimrTxDataShard::TLock> BrokenLocks;
 
     ui32 MaxInFlight = 1024;
-    const TString LogPrefix;
+    TString LogPrefix;
     TTableId TableId;
 
     const TActorId ComputeActorId;

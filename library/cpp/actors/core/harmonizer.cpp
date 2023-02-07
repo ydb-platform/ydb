@@ -121,6 +121,7 @@ struct TPoolInfo {
     TAtomic IncreasingThreadsByNeedyState = 0;
     TAtomic DecreasingThreadsByStarvedState = 0;
     TAtomic DecreasingThreadsByHoggishState = 0;
+    TAtomic PotentialMaxThreadCount = 0;
 
     bool IsBeingStopped(i16 threadIdx);
     double GetBooked(i16 threadIdx);
@@ -293,8 +294,13 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         LWPROBE(HarmonizeCheckPool, poolIdx, pool.Pool->GetName(), poolBooked, poolConsumed, lastSecondPoolBooked, lastSecondPoolConsumed, pool.GetThreadCount(), pool.MaxThreadCount, isStarved, isNeedy, isHoggish);
     }
     double budget = total - Max(booked, lastSecondBooked);
+    i16 budgetInt = static_cast<i16>(Max(budget, 0.0));
     if (budget < -0.1) {
         isStarvedPresent = true;
+    }
+    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
+        TPoolInfo& pool = Pools[poolIdx];
+        AtomicSet(pool.PotentialMaxThreadCount, Min(pool.MaxThreadCount, budgetInt));
     }
     double overbooked = consumed - booked;
     if (isStarvedPresent) {
@@ -422,6 +428,7 @@ TPoolHarmonizedStats THarmonizer::GetPoolStats(i16 poolId) const {
         .IncreasingThreadsByNeedyState = static_cast<ui64>(RelaxedLoad(&pool.IncreasingThreadsByNeedyState)),
         .DecreasingThreadsByStarvedState = static_cast<ui64>(RelaxedLoad(&pool.DecreasingThreadsByStarvedState)),
         .DecreasingThreadsByHoggishState = static_cast<ui64>(RelaxedLoad(&pool.DecreasingThreadsByHoggishState)),
+        .PotentialMaxThreadCount = static_cast<i16>(RelaxedLoad(&pool.PotentialMaxThreadCount)),
         .IsNeedy = static_cast<bool>(flags & 1),
         .IsStarved = static_cast<bool>(flags & 2),
         .IsHoggish = static_cast<bool>(flags & 4),

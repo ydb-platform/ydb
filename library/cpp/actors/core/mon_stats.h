@@ -65,6 +65,9 @@ namespace NActors {
         ui64 DecreasingThreadsByHoggishState = 0;
         i16 WrongWakenedThreadCount = 0;
         i16 CurrentThreadCount = 0;
+        i16 PotentialMaxThreadCount = 0;
+        i16 DefaultThreadCount = 0;
+        i16 MaxThreadCount = 0;
         bool IsNeedy = false;
         bool IsStarved = false;
         bool IsHoggish = false;

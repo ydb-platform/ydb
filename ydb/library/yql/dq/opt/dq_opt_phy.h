@@ -76,9 +76,6 @@ NNodes::TExprBase DqBuildTakeSkipStage(NNodes::TExprBase node, TExprContext& ctx
 NNodes::TExprBase DqRewriteLengthOfStageOutput(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage);
 
-NNodes::TExprBase DqRewriteLengthOfStageOutputLegacy(NNodes::TExprBase node, TExprContext& ctx,
-    IOptimizationContext& optCtx);
-
 NNodes::TExprBase DqRewriteRightJoinToLeft(const NNodes::TExprBase node, TExprContext& ctx);
 
 NNodes::TExprBase DqRewriteLeftPureJoin(const NNodes::TExprBase node, TExprContext& ctx,

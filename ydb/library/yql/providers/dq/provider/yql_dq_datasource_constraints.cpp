@@ -23,7 +23,8 @@ public:
             TDqSource::CallableName(),
             TDqSourceWrap::CallableName(),
             TDqSourceWideWrap::CallableName(),
-            TDqSourceWideBlockWrap::CallableName()
+            TDqSourceWideBlockWrap::CallableName(),
+            TDqPhyLength::CallableName()
         }, Hndl(&TDqDataSourceConstraintTransformer::HandleDefault));
     }
 

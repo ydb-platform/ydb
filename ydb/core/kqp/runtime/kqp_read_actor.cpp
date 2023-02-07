@@ -18,15 +18,44 @@
 
 namespace {
 
-static constexpr ui64 EVREAD_MAX_ROWS = 32767;
-static constexpr ui64 EVREAD_MAX_BYTES = 200_MB;
-
 static constexpr ui64 MAX_SHARD_RETRIES = 5;
 static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 
 bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::EComponent component) {
     auto* settings = actorSystem->LoggerSettings();
     return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, component);
+}
+
+struct TDefaultRangeEvReadSettings {
+    NKikimrTxDataShard::TEvRead Data;
+
+    TDefaultRangeEvReadSettings() {
+        Data.SetMaxRows(32767);
+        Data.SetMaxBytes(200_MB);
+    }
+
+} DefaultRangeEvReadSettings;
+
+THolder<NKikimr::TEvDataShard::TEvRead> DefaultReadSettings() {
+    auto result = MakeHolder<NKikimr::TEvDataShard::TEvRead>();
+    result->Record.MergeFrom(DefaultRangeEvReadSettings.Data);
+    return result;
+}
+
+struct TDefaultRangeEvReadAckSettings {
+    NKikimrTxDataShard::TEvReadAck Data;
+
+    TDefaultRangeEvReadAckSettings() {
+        Data.SetMaxRows(32767);
+        Data.SetMaxBytes(200_MB);
+    }
+
+} DefaultRangeEvReadAckSettings;
+
+THolder<NKikimr::TEvDataShard::TEvReadAck> DefaultAckSettings() {
+    auto result = MakeHolder<NKikimr::TEvDataShard::TEvReadAck>();
+    result->Record.MergeFrom(DefaultRangeEvReadAckSettings.Data);
+    return result;
 }
 
 }
@@ -39,7 +68,6 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NKikimr;
 using namespace NKikimr::NDataShard;
-
 
 class TKqpReadActor : public TActorBootstrapped<TKqpReadActor>, public NYql::NDq::IDqComputeActorAsyncInput {
     using TBase = TActorBootstrapped<TKqpReadActor>;
@@ -261,7 +289,7 @@ public:
         NKikimrTxDataShard::TKqpReadRangesSourceSettings&& settings,
         const NYql::NDq::TDqAsyncIoFactory::TSourceArguments& args)
         : Settings(std::move(settings))
-        , LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ", CA Id" << args.ComputeActorId << ". ")
+        , LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ", CA Id " << args.ComputeActorId << ". ")
         , ComputeActorId(args.ComputeActorId)
         , InputIndex(args.InputIndex)
         , TypeEnv(args.TypeEnv)
@@ -584,17 +612,16 @@ public:
     }
 
     void StartRead(TShardState* state) {
-        ui64 limit = 0;
+        TMaybe<ui64> limit;
         if (Settings.GetItemsLimit()) {
             limit = Settings.GetItemsLimit() - Min(Settings.GetItemsLimit(), RecievedRowCount);
-        } else {
-            limit = EVREAD_MAX_ROWS;
-        }
-        if (limit == 0) {
-            return;
+
+            if (*limit == 0) {
+                return;
+            }
         }
 
-        THolder<TEvDataShard::TEvRead> ev(new TEvDataShard::TEvRead());
+        auto ev = ::DefaultReadSettings();
         auto& record = ev->Record;
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings.GetReverse());
@@ -627,8 +654,9 @@ public:
         record.MutableTableId()->SetSchemaVersion(Settings.GetTable().GetSchemaVersion());
 
         record.SetReverse(Settings.GetReverse());
-        record.SetMaxRows(limit);
-        record.SetMaxBytes(EVREAD_MAX_BYTES);
+        if (limit) {
+            record.SetMaxRows(*limit);
+        }
 
         record.SetResultFormat(Settings.GetDataFormat());
 
@@ -835,6 +863,10 @@ public:
                 resultVector.push_back(std::move((*batch)[result.ProcessedRows]));
                 ProcessedRowCount += 1;
                 bytes += rowSize.AllocatedBytes;
+                if (ProcessedRowCount == Settings.GetItemsLimit()) {
+                    finished = true;
+                    return bytes;
+                }
             }
             CA_LOG_D(TStringBuilder() << "returned " << resultVector.size() << " rows");
 
@@ -844,19 +876,18 @@ public:
                     Reads[id].Reset();
                     ResetReads++;
                 } else if (!Reads[id].Finished) {
-                    ui64 limit = 0;
+                    TMaybe<ui64> limit;
                     if (Settings.GetItemsLimit()) {
                         limit = Settings.GetItemsLimit() - Min(Settings.GetItemsLimit(), RecievedRowCount);
-                    } else {
-                        limit = EVREAD_MAX_ROWS;
                     }
 
-                    if (limit > 0) {
-                        THolder<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
+                    if (!limit || *limit > 0) {
+                        auto request = ::DefaultAckSettings();
                         request->Record.SetReadId(record.GetReadId());
                         request->Record.SetSeqNo(record.GetSeqNo());
-                        request->Record.SetMaxRows(limit);
-                        request->Record.SetMaxBytes(EVREAD_MAX_BYTES);
+                        if (limit) {
+                            request->Record.SetMaxRows(*limit);
+                        }
                         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), state->TabletId, true),
                             IEventHandle::FlagTrackDelivery);
                     } else {
@@ -869,14 +900,11 @@ public:
                 }
 
                 StartTableScan();
-                if (PendingShards.Size() > 0) {
-                    return bytes;
-                }
 
                 Results.pop();
                 CA_LOG_D("dropping batch");
 
-                if (RunningReads() == 0 || (Settings.HasItemsLimit() && ProcessedRowCount >= Settings.GetItemsLimit())) {
+                if (RunningReads() == 0 || (Settings.GetItemsLimit() && ProcessedRowCount >= Settings.GetItemsLimit())) {
                     finished = true;
                     break;
                 }
@@ -1001,6 +1029,14 @@ void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory) {
             auto* actor = new TKqpReadActor(std::move(settings), args);
             return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
         });
+}
+
+void InjectRangeEvReadSettings(const NKikimrTxDataShard::TEvRead& read) {
+    ::DefaultRangeEvReadSettings.Data.MergeFrom(read);
+}
+
+void InjectRangeEvReadAckSettings(const NKikimrTxDataShard::TEvReadAck& ack) {
+    ::DefaultRangeEvReadAckSettings.Data.MergeFrom(ack);
 }
 
 } // namespace NKqp

@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/core/kqp/runtime/kqp_read_actor.h>
 
 namespace NKikimr::NKqp {
 
@@ -3445,6 +3446,38 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT * FROM EightShard WHERE $check = $cnt;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DqSourceCount) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        TFeatureFlags flags;
+        flags.SetEnablePredicateExtractForDataQueries(true);
+        settings.SetFeatureFlags(flags);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NKikimrTxDataShard::TEvRead evread;
+        evread.SetMaxRowsInResult(1);
+        evread.SetMaxRows(2);
+        InjectRangeEvReadSettings(evread);
+
+        NKikimrTxDataShard::TEvReadAck evreadack;
+        evreadack.SetMaxRows(2);
+        InjectRangeEvReadAckSettings(evreadack);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT COUNT(*) FROM `/Root/EightShard`;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[24u]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 
     Y_UNIT_TEST(DqSource) {

@@ -359,6 +359,9 @@ private:
         bool enableKqpDataQueryStreamLookup = Config.GetEnableKqpDataQueryStreamLookup();
         bool enableKqpScanQueryStreamLookup = Config.GetEnableKqpScanQueryStreamLookup();
 
+        bool enableKqpDataQuerySourceRead = Config.GetEnableKqpDataQuerySourceRead();
+        bool enableKqpScanQuerySourceRead = Config.GetEnableKqpScanQuerySourceRead();
+
         Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -366,13 +369,16 @@ private:
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
         if (Config.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
-            Config.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup) {
+            Config.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
+            Config.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
+            Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead) {
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                "Stream lookup flag was changed, from " << enableKqpDataQueryStreamLookup <<
+                "Iterator read flags was changed. StreamLookup from " << enableKqpDataQueryStreamLookup <<
                 " to " << Config.GetEnableKqpDataQueryStreamLookup() << " for data queries, from " <<
-                enableKqpScanQueryStreamLookup << " to " << Config.GetEnableKqpScanQueryStreamLookup() <<
-                " for scan queries");
+                enableKqpScanQueryStreamLookup << " to " << Config.GetEnableKqpScanQueryStreamLookup() << " for scan queries."
+                << " Sources for data queries from " << enableKqpDataQuerySourceRead << " to " << Config.GetEnableKqpDataQuerySourceRead()
+                << "for scan queries from " << enableKqpScanQuerySourceRead << " to " << Config.GetEnableKqpScanQuerySourceRead());
 
             QueryCache.Clear();
         }

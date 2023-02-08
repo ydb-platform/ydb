@@ -18,7 +18,7 @@ TDirectTxResult TDirectTxUpload::GetResult(TDataShard* self) {
     return res;
 }
 
-TVector<NMiniKQL::IChangeCollector::TChange> TDirectTxUpload::GetCollectedChanges() const {
+TVector<IDataShardChangeCollector::TChange> TDirectTxUpload::GetCollectedChanges() const {
     return TCommonUploadOps::GetCollectedChanges();
 }
 

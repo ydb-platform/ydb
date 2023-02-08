@@ -286,7 +286,7 @@ public:
         return it->second.Get();
     }
 
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion, TTransactionContext& txc) {
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
         auto localTid = Self->GetLocalTableId(tableId);
         Y_VERIFY_S(localTid, "Unexpected failure to find table " << tableId << " in datashard " << Self->TabletID());
 
@@ -311,19 +311,16 @@ public:
             "Committing changes lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self->TabletID());
         DB.CommitTx(localTid, lockId, writeVersion);
 
-        if (!CommittedLockChanges.contains(lockId)) {
-            if (const auto& lockChanges = Self->GetLockChangeRecords(lockId)) {
-                if (auto* collector = GetChangeCollector(tableId)) {
-                    collector->SetWriteVersion(WriteVersion);
-                    collector->CommitLockChanges(lockId, lockChanges, txc);
-                    CommittedLockChanges.insert(lockId);
-                }
+        if (!CommittedLockChanges.contains(lockId) && Self->HasLockChangeRecords(lockId)) {
+            if (auto* collector = GetChangeCollector(tableId)) {
+                collector->CommitLockChanges(lockId, WriteVersion);
+                CommittedLockChanges.insert(lockId);
             }
         }
     }
 
-    TVector<IChangeCollector::TChange> GetCollectedChanges() const {
-        TVector<IChangeCollector::TChange> total;
+    TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const {
+        TVector<IDataShardChangeCollector::TChange> total;
 
         for (auto& [_, collector] : ChangeCollectors) {
             if (!collector) {
@@ -340,7 +337,7 @@ public:
     void ResetCollectedChanges() {
         for (auto& pr : ChangeCollectors) {
             if (pr.second) {
-                pr.second->Reset();
+                pr.second->OnRestart();
             }
         }
     }
@@ -730,6 +727,24 @@ public:
         }
     }
 
+    bool NeedToReadBeforeWrite(const TTableId& tableId) const override {
+        if (Self->GetVolatileTxManager().GetTxMap()) {
+            return true;
+        }
+
+        if (Self->SysLocksTable().HasWriteLocks(tableId)) {
+            return true;
+        }
+
+        if (auto* collector = GetChangeCollector(tableId)) {
+            if (collector->NeedToReadKeys()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> row) {
         if (!Self->GetVolatileTxManager().GetTxMap() &&
             !Self->SysLocksTable().HasWriteLocks(tableId))
@@ -1108,14 +1123,14 @@ void TEngineBay::SetIsRepeatableSnapshot() {
     host->SetIsRepeatableSnapshot();
 }
 
-void TEngineBay::CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion, TTransactionContext& txc) {
+void TEngineBay::CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
     Y_VERIFY(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    host->CommitChanges(tableId, lockId, writeVersion, txc);
+    host->CommitChanges(tableId, lockId, writeVersion);
 }
 
-TVector<IChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {
+TVector<IDataShardChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {
     Y_VERIFY(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());

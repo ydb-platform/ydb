@@ -218,7 +218,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             dataTx->SetVolatileTxId(tx->GetTxId());
         }
 
-        KqpCommitLocks(tabletId, tx, writeVersion, DataShard, txc);
+        KqpCommitLocks(tabletId, tx, writeVersion, DataShard);
 
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 
@@ -344,11 +344,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         AddLocksToResult(op, ctx);
 
         if (auto changes = std::move(dataTx->GetCollectedChanges())) {
-            if (commitTxIds || guardLocks.LockTxId) {
-                DataShard.AddLockChangeRecords(commitTxIds ? tx->GetTxId() : guardLocks.LockTxId, std::move(changes));
-            } else {
-                op->ChangeRecords() = std::move(changes);
-            }
+            op->ChangeRecords() = std::move(changes);
         }
 
         KqpUpdateDataShardStatCounters(DataShard, dataTx->GetCounters());

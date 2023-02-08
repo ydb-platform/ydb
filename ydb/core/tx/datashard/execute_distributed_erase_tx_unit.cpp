@@ -46,14 +46,7 @@ public:
 
         if (eraseTx->HasDependents()) {
             TDataShardUserDb userDb(DataShard, txc.DB, readVersion);
-            THolder<IChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, txc.DB, request.GetTableId(), false)};
-
-            if (changeCollector) {
-                changeCollector->SetWriteVersion(writeVersion);
-                if (changeCollector->NeedToReadKeys()) {
-                    changeCollector->SetReadVersion(readVersion);
-                }
-            }
+            THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, txc.DB, request.GetTableId(), false)};
 
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
             if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, changeCollector.Get())) {
@@ -104,7 +97,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
             const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& writeVersion,
-            IChangeCollector* changeCollector = nullptr)
+            IDataShardChangeCollector* changeCollector = nullptr)
     {
         const ui64 tableId = request.GetTableId();
         const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
@@ -135,8 +128,7 @@ public:
             }
 
             if (changeCollector) {
-                if (!changeCollector->Collect(fullTableId, NTable::ERowOp::Erase, key, {})) {
-                    changeCollector->Reset();
+                if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion)) {
                     pageFault = true;
                 }
             }
@@ -153,6 +145,10 @@ public:
 
             DataShard.SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
             txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion);
+        }
+
+        if (pageFault && changeCollector) {
+            changeCollector->OnRestart();
         }
 
         return !pageFault;

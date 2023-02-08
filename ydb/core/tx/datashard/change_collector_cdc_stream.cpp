@@ -93,22 +93,29 @@ namespace {
     }
 
     struct TVersionContext {
-        TRowVersion& Holder;
-        const TRowVersion Return;
+        IBaseChangeCollectorSink& Sink;
+        IBaseChangeCollectorSink::TVersionState SavedState;
 
-        TVersionContext(TRowVersion& holder, const TRowVersion& replace)
-            : Holder(holder)
-            , Return(holder)
+        TVersionContext(IBaseChangeCollectorSink& sink, const TRowVersion& replace)
+            : Sink(sink)
+            , SavedState(sink.GetVersionState())
         {
-            Holder = replace;
+            Sink.SetVersionState({
+                .WriteVersion = replace,
+                .WriteTxId = 0,
+            });
         }
 
         ~TVersionContext() {
-            Holder = Return;
+            Sink.SetVersionState(SavedState);
         }
     };
 
 } // anonymous
+
+void TCdcStreamChangeCollector::OnRestart() {
+    TBaseChangeCollector::OnRestart();
+}
 
 bool TCdcStreamChangeCollector::NeedToReadKeys() const {
     if (CachedNeedToReadKeys) {
@@ -139,10 +146,6 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
 
     CachedNeedToReadKeys = value;
     return *CachedNeedToReadKeys;
-}
-
-void TCdcStreamChangeCollector::SetReadVersion(const TRowVersion& readVersion) {
-    ReadVersion = readVersion;
 }
 
 bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
@@ -215,7 +218,7 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 
         if (initialState) {
             Y_VERIFY(snapshotVersion.Defined());
-            TVersionContext ctx(WriteVersion, *snapshotVersion);
+            TVersionContext ctx(Sink, *snapshotVersion);
 
             switch (stream.Mode) {
             case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
@@ -267,10 +270,6 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     }
 
     return true;
-}
-
-void TCdcStreamChangeCollector::Reset() {
-    TBaseChangeCollector::Reset();
 }
 
 TMaybe<TRowState> TCdcStreamChangeCollector::GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
@@ -332,7 +331,7 @@ void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& 
 {
     NKikimrChangeExchange::TChangeRecord::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
-    TBaseChangeCollector::Persist(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body);
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body);
 }
 
 void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
@@ -341,7 +340,7 @@ void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& 
 {
     NKikimrChangeExchange::TChangeRecord::TDataChange body;
     Serialize(body, rop, key, keyTags, oldState, newState, valueTags);
-    TBaseChangeCollector::Persist(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body);
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body);
 }
 
 } // NDataShard

@@ -46,17 +46,13 @@ class TAsyncIndexChangeCollector: public TBaseChangeCollector {
 public:
     using TBaseChangeCollector::TBaseChangeCollector;
 
+    void OnRestart() override;
     bool NeedToReadKeys() const override;
-    void SetReadVersion(const TRowVersion& readVersion) override;
 
     bool Collect(const TTableId& tableId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates) override;
 
-    void Reset() override;
-
 private:
-    TRowVersion ReadVersion;
-
     mutable THashMap<TTableId, TCachedTags> CachedTags;
 
     // reused between Collect() calls, cleared after every Clear() call

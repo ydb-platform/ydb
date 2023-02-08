@@ -59,12 +59,12 @@ static THashMap<TTag, TPos> MakeTagToPos(const C& container, E extractor) {
     return tagToPos;
 }
 
-bool TAsyncIndexChangeCollector::NeedToReadKeys() const {
-    return true;
+void TAsyncIndexChangeCollector::OnRestart() {
+    TBaseChangeCollector::OnRestart();
 }
 
-void TAsyncIndexChangeCollector::SetReadVersion(const TRowVersion& readVersion) {
-    ReadVersion = readVersion;
+bool TAsyncIndexChangeCollector::NeedToReadKeys() const {
+    return true;
 }
 
 bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
@@ -179,10 +179,6 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     return true;
 }
 
-void TAsyncIndexChangeCollector::Reset() {
-    TBaseChangeCollector::Reset();
-}
-
 auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
     Y_VERIFY(Self->GetUserTables().contains(tableId.PathId.LocalPathId));
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
@@ -272,7 +268,7 @@ void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId&
 {
     NKikimrChangeExchange::TChangeRecord::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
-    TBaseChangeCollector::Persist(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body);
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body);
 }
 
 void TAsyncIndexChangeCollector::Clear() {

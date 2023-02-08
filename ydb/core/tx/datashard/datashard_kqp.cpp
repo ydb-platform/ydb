@@ -885,7 +885,7 @@ void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
     }
 }
 
-void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writeVersion, TDataShard& dataShard, TTransactionContext& txc) {
+void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writeVersion, TDataShard& dataShard) {
     auto& kqpTx = tx->GetDataTx()->GetKqpTransaction();
 
     if (!kqpTx.HasLocks()) {
@@ -909,7 +909,7 @@ void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writ
             TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
             auto txId = lockProto.GetLockId();
 
-            tx->GetDataTx()->CommitChanges(tableId, txId, writeVersion, txc);
+            tx->GetDataTx()->CommitChanges(tableId, txId, writeVersion);
         }
     } else {
         KqpEraseLocks(origin, tx, sysLocks);

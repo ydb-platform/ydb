@@ -52,7 +52,7 @@ void TDirectTransaction::SendResult(TDataShard* self, const TActorContext& ctx) 
     }
 }
 
-TVector<NMiniKQL::IChangeCollector::TChange> TDirectTransaction::GetCollectedChanges() const {
+TVector<IDataShardChangeCollector::TChange> TDirectTransaction::GetCollectedChanges() const {
     return Impl->GetCollectedChanges();
 }
 

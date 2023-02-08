@@ -6,6 +6,7 @@
 #include "datashard_outreadset.h"
 #include "datashard_snapshots.h"
 #include "execution_unit_kind.h"
+#include "change_collector.h"
 
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/engine/minikql/change_collector_iface.h>
@@ -444,7 +445,7 @@ struct TOutputOpData {
     using TResultPtr = THolder<TEvDataShard::TEvProposeTransactionResult>;
     using TDelayedAcks = TVector<THolder<IEventHandle>>;
     using TOutReadSets = TMap<std::pair<ui64, ui64>, TString>; // source:target -> body
-    using TChangeRecord = NMiniKQL::IChangeCollector::TChange;
+    using TChangeRecord = IDataShardChangeCollector::TChange;
     using TExpectedReadSets = TMap<std::pair<ui64, ui64>, TStackVec<TActorId, 1>>;
 
     TResultPtr Result;

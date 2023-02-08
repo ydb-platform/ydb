@@ -66,13 +66,6 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         ChangeCollector.Reset(CreateChangeCollector(*self, userDb, txc.DB, tableInfo, true));
     }
 
-    if (ChangeCollector) {
-        ChangeCollector->SetWriteVersion(writeVersion);
-        if (ChangeCollector->NeedToReadKeys()) {
-            ChangeCollector->SetReadVersion(readVersion);
-        }
-    }
-
     // Prepare (id, Type) vector for value columns
     TVector<NTable::TTag> tagsForSelect;
     TVector<std::pair<ui32, NScheme::TTypeInfo>> valueCols;
@@ -183,7 +176,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             if (ChangeCollector) {
                 Y_VERIFY(CollectChanges);
 
-                if (!ChangeCollector->Collect(fullTableId, NTable::ERowOp::Upsert, key, value)) {
+                if (!ChangeCollector->OnUpdate(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, writeVersion)) {
                     pageFault = true;
                 }
 
@@ -212,7 +205,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 
     if (pageFault) {
         if (ChangeCollector) {
-            ChangeCollector->Reset();
+            ChangeCollector->OnRestart();
         }
 
         return false;
@@ -252,7 +245,7 @@ TEvResponse* TCommonUploadOps<TEvRequest, TEvResponse>::GetResult() {
 }
 
 template <typename TEvRequest, typename TEvResponse>
-TVector<NMiniKQL::IChangeCollector::TChange> TCommonUploadOps<TEvRequest, TEvResponse>::GetCollectedChanges() const {
+TVector<IDataShardChangeCollector::TChange> TCommonUploadOps<TEvRequest, TEvResponse>::GetCollectedChanges() const {
     if (!ChangeCollector) {
         return {};
     }

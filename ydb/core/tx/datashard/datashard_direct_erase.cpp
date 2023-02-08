@@ -72,13 +72,6 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, params.Txc->DB, tableInfo, true));
     }
 
-    if (auto collector = params.GetChangeCollector()) {
-        collector->SetWriteVersion(params.WriteVersion);
-        if (collector->NeedToReadKeys()) {
-            collector->SetReadVersion(params.ReadVersion);
-        }
-    }
-
     const bool breakWriteConflicts = self->SysLocksTable().HasWriteLocks(fullTableId);
 
     bool pageFault = false;
@@ -143,7 +136,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         if (auto collector = params.GetChangeCollector()) {
-            if (!collector->Collect(fullTableId, NTable::ERowOp::Erase, key, {})) {
+            if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion)) {
                 pageFault = true;
             }
         }
@@ -164,7 +157,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
 
     if (pageFault) {
         if (auto collector = params.GetChangeCollector()) {
-            collector->Reset();
+            collector->OnRestart();
         }
 
         return EStatus::PageFault;
@@ -236,7 +229,7 @@ TDirectTxResult TDirectTxErase::GetResult(TDataShard* self) {
     return res;
 }
 
-TVector<NMiniKQL::IChangeCollector::TChange> TDirectTxErase::GetCollectedChanges() const {
+TVector<IDataShardChangeCollector::TChange> TDirectTxErase::GetCollectedChanges() const {
     if (!ChangeCollector) {
         return {};
     }

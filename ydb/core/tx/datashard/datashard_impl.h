@@ -1716,21 +1716,20 @@ public:
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
     ui64 GetNextChangeRecordLockOffset(ui64 lockId);
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
-    void PersistCommitLockChangeRecords(TTransactionContext& txc, ui64 order, ui64 lockId, ui64 group, const TRowVersion& rowVersion);
+    bool HasLockChangeRecords(ui64 lockId) const;
+    void CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 group, const TRowVersion& rowVersion, TVector<IDataShardChangeCollector::TChange>& collected);
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId);
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
-    void EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChange>&& records);
-    void AddLockChangeRecords(ui64 lockId, TVector<NMiniKQL::IChangeCollector::TChange>&& records);
-    const TVector<NMiniKQL::IChangeCollector::TChange>& GetLockChangeRecords(ui64 lockId) const;
+    void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records);
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
     void SuspendChangeSender(const TActorContext& ctx);
     const TActorId& GetChangeSender() const { return OutChangeSender; }
-    bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records);
+    bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records);
     bool LoadLockChangeRecords(NIceDb::TNiceDb& db);
-    bool LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records);
+    bool LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records);
     void ScheduleRemoveLockChanges(ui64 lockId);
     void ScheduleRemoveAbandonedLockChanges();
 
@@ -2525,7 +2524,7 @@ private:
         {
         }
 
-        explicit TEnqueuedRecord(const NMiniKQL::IChangeCollector::TChange& record)
+        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record)
             : TEnqueuedRecord(record.BodySize, record.TableId,
                     record.SchemaVersion, record.LockId, record.LockOffset)
         {
@@ -2549,6 +2548,11 @@ private:
     TActorId OutChangeSender;
     bool OutChangeSenderSuspended = false;
 
+    struct TUncommittedLockChangeRecords {
+        TVector<IDataShardChangeCollector::TChange> Changes;
+        size_t PersistentCount = 0;
+    };
+
     struct TCommittedLockChangeRecords {
         ui64 Order = Max<ui64>();
         ui64 Group;
@@ -2559,7 +2563,7 @@ private:
         size_t Count = 0;
     };
 
-    THashMap<ui64, TVector<NMiniKQL::IChangeCollector::TChange>> LockChangeRecords; // ui64 is lock id
+    THashMap<ui64, TUncommittedLockChangeRecords> LockChangeRecords; // ui64 is lock id
     THashMap<ui64, TCommittedLockChangeRecords> CommittedLockChangeRecords; // ui64 is lock id
     TVector<ui64> PendingLockChangeRecordsToRemove;
 
@@ -2616,7 +2620,7 @@ public:
         return result;
     }
 
-    void SetLockChangeRecords(THashMap<ui64, TVector<NMiniKQL::IChangeCollector::TChange>>&& lockChangeRecords) {
+    void SetLockChangeRecords(THashMap<ui64, TUncommittedLockChangeRecords>&& lockChangeRecords) {
         LockChangeRecords = std::move(lockChangeRecords);
     }
 

@@ -28,7 +28,7 @@ public:
 
 class TDataShardUserDb final : public IDataShardUserDb {
 public:
-    TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, const TRowVersion& readVersion = TRowVersion::Min())
+    TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, const TRowVersion& readVersion)
         : Self(self)
         , Db(db)
         , ReadVersion(readVersion)

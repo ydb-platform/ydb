@@ -16,7 +16,7 @@ public:
 
     bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) override;
     TDirectTxResult GetResult(TDataShard* self) override;
-    TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const override;
+    TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const override;
 };
 
 } // NDataShard

@@ -162,7 +162,7 @@ class TDataShard::TTxCdcStreamScanProgress
 {
     TDataShard::TEvPrivate::TEvCdcStreamScanProgress::TPtr Request;
     THolder<TDataShard::TEvPrivate::TEvCdcStreamScanContinue> Response;
-    TVector<NMiniKQL::IChangeCollector::TChange> ChangeRecords;
+    TVector<IDataShardChangeCollector::TChange> ChangeRecords;
 
     static TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, TUserTable::TCPtr table) {
         TVector<TRawTypeValue> key(Reserve(cells.size()));
@@ -279,7 +279,7 @@ public:
                 .WithBody(body.SerializeAsString())
                 .Build();
 
-            ChangeRecords.push_back(NMiniKQL::IChangeCollector::TChange{
+            ChangeRecords.push_back(IDataShardChangeCollector::TChange{
                 .Order = record.GetOrder(),
                 .Group = record.GetGroup(),
                 .Step = record.GetStep(),

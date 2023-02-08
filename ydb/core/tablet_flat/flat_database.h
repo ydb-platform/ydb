@@ -212,6 +212,24 @@ public:
 
     TCompactionStats GetCompactionStats(ui32 table) const;
 
+    /**
+     * Adds callback, which is called when database changes are committed
+     */
+    template<class TCallback>
+    void OnCommit(TCallback&& callback) {
+        OnCommit_.emplace_back(std::forward<TCallback>(callback));
+    }
+
+    /**
+     * Adds callback, which is called when database changes are rolled back
+     * 
+     * @param callback 
+     */
+    template<class TCallback>
+    void OnRollback(TCallback&& callback) {
+        OnRollback_.emplace_back(std::forward<TCallback>(callback));
+    }
+
 private:
     TTable* Require(ui32 tableId) const noexcept;
     TTable* RequireForUpdate(ui32 tableId) const noexcept;
@@ -231,6 +249,9 @@ private:
 
     mutable TDeque<TPartSimpleIt> TempIterators; // Keeps the last result of Select() valid
     mutable THashSet<ui32> IteratedTables;
+
+    TVector<std::function<void()>> OnCommit_;
+    TVector<std::function<void()>> OnRollback_;
 };
 
 

@@ -1419,7 +1419,7 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
         auto merge = NNodes::TCoLambda(traits->Child(5));
         {
             auto& plus = merge.Body().Ref();
-            if (!plus.IsCallable("+")) {
+            if (!plus.IsCallable({ "+", "AggrAdd" }) ) {
                 return node.Ptr();
             }
 

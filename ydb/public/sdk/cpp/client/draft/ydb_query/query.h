@@ -3,6 +3,7 @@
 #include <ydb/public/api/grpc/draft/ydb_query_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
@@ -77,5 +78,16 @@ private:
 };
 
 using TAsyncExecuteQueryResult = NThreading::TFuture<TExecuteQueryResult>;
+
+
+struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptSettings> {
+};
+
+class TExecuteScriptResult : public TOperation {
+public:
+    using TOperation::TOperation;
+};
+
+using TAsyncExecuteScriptResult = NThreading::TFuture<TExecuteScriptResult>;
 
 } // namespace NYdb::NQuery

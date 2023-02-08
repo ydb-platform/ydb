@@ -8,8 +8,7 @@
 namespace NKikimr::NGRpcService {
 
 void TGRpcYdbQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
-    using Ydb::Query::ExecuteQueryRequest;
-    using Ydb::Query::ExecuteQueryResponsePart;
+    using namespace Ydb::Query;
 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
@@ -17,8 +16,8 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::Query::IN, Ydb::Query::OUT, TGRpcYdbQueryService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+    MakeIntrusive<TGRpcRequest<IN, OUT, TGRpcYdbQueryService>>(this, &Service_, CQ_, \
+        [this](NGrpc::IRequestContextBase* ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Query::V1::QueryService::AsyncService::Request ## NAME, \
@@ -28,6 +27,12 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestNoOperationCall<ExecuteQueryRequest, ExecuteQueryResponsePart>
                 (ctx, &DoExecuteQueryRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
+    })
+
+    ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, {
+        ActorSystem_->Send(GRpcRequestProxyId_,
+            new TGrpcRequestNoOperationCall<ExecuteScriptRequest, Ydb::Operations::Operation>
+                (ctx, &DoExecuteScriptRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
     })
 #undef ADD_REQUEST
 }

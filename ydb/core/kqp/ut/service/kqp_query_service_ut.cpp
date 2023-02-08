@@ -85,6 +85,16 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             [[4000000003u];[1]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(ExecuteScript) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteScript(R"(
+            SELECT 42
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::SUCCESS, result.Status().GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

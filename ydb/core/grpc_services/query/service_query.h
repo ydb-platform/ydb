@@ -9,5 +9,6 @@ class IRequestNoOpCtx;
 class IFacilityProvider;
 
 void DoExecuteQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
+void DoExecuteScriptRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
 
 } // namespace NKikimr::NGRpcService

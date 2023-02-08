@@ -1,10 +1,10 @@
 # VDiskLoad
 
-Подает на VDisk нагрузку write-only. Имитирует Distributed Storage Proxy. Результатом теста является производительность записи в операциях в секунду.
+Подает нагрузку write-only на VDisk. Имитирует Distributed Storage Proxy. Результатом теста является производительность записи в операциях в секунду.
 
 {% include notitle [addition](../_includes/addition.md) %}
 
-## Спецификация актора {#proto}
+## Параметры актора {#options}
 
 ```proto
 message TVDiskLoad {

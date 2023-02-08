@@ -4,7 +4,7 @@
 
 {% include notitle [addition](../_includes/addition.md) %}
 
-## Спецификация актора {#proto}
+## Конфигурация актора {#options}
 
 ```proto
 message TKeyValueLoad {

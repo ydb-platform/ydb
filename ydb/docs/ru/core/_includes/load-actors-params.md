@@ -1,0 +1,1 @@
+Ниже описаны основные параметры актора. Полный список параметров смотрите в файле [load_test.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/load_test.proto) Git-репозитория {{ ydb-short-name }}.

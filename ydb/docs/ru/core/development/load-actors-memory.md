@@ -1,43 +1,29 @@
 # MemoryLoad
 
-Тестирует производительность аллокаторов памяти. Аллоцирует блоки памяти указанного размера через заданные промежутки времени.
+Аллоцирует блоки памяти указанного размера через заданные промежутки времени. После снятия нагрузки аллоцированная память освобождается. С помощью этого актора вы можете протестировать работу логики, например срабатывание некоторого триггера при достижении лимита по [RSS]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Resident_set_size){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Resident_set_size){% endif %}.
 
-{% include notitle [addition](../_includes/addition.md) %}
+{% note info %}
 
-## Спецификация актора {#proto}
+Это узкоспециализированный актор для тестирования конкретной функциональности. Не является нагружающим, его назначение — проверка корректности работы.
 
-```proto
-message TMemoryLoad {
-    optional uint64 Tag = 1;
-    optional uint32 DurationSeconds = 2;
-    optional uint64 BlockSize = 3;
-    optional uint64 IntervalUs = 4;
-}
-```
-<!-- 
+{% endnote %}
+
 ## Параметры актора {#options}
 
 Параметр | Описание
 --- | ---
-`Tag` | Тип: `uint64`.
-`DurationSeconds` | Тип: `uint32`.
-`BlockSize` | Тип: `uint64`.
-`IntervalUs` | Тип: `uint64`.
--->
+`DurationSeconds` | Продолжительность нагрузки в секундах.
+`BlockSize` | Размер аллоцируемого блока в байтах.
+`IntervalUs` | Интервал времени между аллоцированиями блоков в микросекундах.
 
 ## Примеры {#examples}
 
-{% list tabs %}
+Следующий актор аллоцирует блоки по `1048576` байт каждые `9000000` микросекунд в течение `3600` секунд и за время работы займет 32 ГБ:
 
-- CLI
-
-  ```proto
-  NodeId: 1
-  Event: { MemoryLoad: {
-      DurationSeconds: 120
-      BlockSize: 4096
-      IntervalUs: 1000
-  }}
-  ```
-
-{% endlist %}
+```proto
+MemoryLoad: {
+    DurationSeconds: 3600
+    BlockSize: 1048576
+    IntervalUs: 9000000
+}
+```

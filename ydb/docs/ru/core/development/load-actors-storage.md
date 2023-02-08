@@ -1,114 +1,78 @@
 # StorageLoad
 
-Нагружает Distributed Storage без задействования слоев таблеток и Query Processor. Результатом теста является производительность записи на Distributed Storage в блобах в секунду.
+Тестирует производительность записи и чтения с Distributed Storage. Нагрузка подается непосредственно на Distributed Storage без задействования слоев таблеток и Query Processor. При тестировании производительности записи актор записывает данные в указанную группу VDisk. Для тестирования чтения актор предварительно записывает данные в указанную группу VDisk, а потом читает их. После снятия нагрузки все данные, записанные актором, удаляются.
 
-{% include notitle [addition](../_includes/addition.md) %}
+Вы можете подать нагрузку двух видов:
 
-## Спецификация актора {#proto}
+* _Постоянная_  — актор следит, чтобы одновременно было запущено указанное число запросов. Чтобы подать постоянную нагрузку, задайте нулевую паузу между запросами (например, `WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 0 MaxUs: 0 } }`) и отличный от нуля `MaxInFlightWriteRequests`.
+* _Интервальная_  — актор запускает запросы через заданные промежутки времени. Чтобы подать интервальную нагрузку, задайте ненулевую паузу между запросами (например, `WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 50000 MaxUs: 50000 } }`). Максимальное число одновременно выполняемых запросов задается параметром `InFlightReads`. Если его значение равно `0`, то ограничения нет.
+
+## Параметры актора {#options}
+
+{% include [load-actors-params](../_includes/load-actors-params.md) %}
+
+Параметр | Описание
+--- | ---
+` DurationSeconds` | Продолжительность нагрузки.
+` Tablets` | Нагрузка подается от имени таблетки со следующими реквизитами:<ul><li>` TabletId` — идентификатор таблетки. Должен быть уникальным для каждого нагружающего актора.</li><li>` Channel` — канал таблетки.</li><li>` GroupId` — идентификатор группы VDisk'ов, на которую будет подана нагрузка.</li><li>` Generation` — поколение таблетки.</li></ul>
+` WriteSizes` | Размер записываемых данных. Для каждого запроса выбирается случайным образом из интервала `Min`-`Max`. Вы можете задать несколько диапазонов `WriteSizes`, и тогда выбор значения из конкретного диапазона будет определяться его `Weight`.
+` WriteIntervals` | Пауза между запросами для интервальной нагрузки в микросекундах. Для каждого запроса выбирается случайным образом из интервала `MinUs`-`MaxUs`. Вы можете задать несколько диапазонов `WriteIntervals`, и тогда выбор значения из конкретного диапазона будет определяться его `Weight`.
+` MaxInFlightWriteRequests` | Максимальное количество одновременно обрабатываемых запросов на запись.
+` ReadSizes` | Размер читаемых данных. Для каждого запроса выбирается случайным образом из интервала `Min`-`Max`. Вы можете задать несколько диапазонов `ReadSizes`, и тогда выбор значения из конкретного диапазона будет определяться его `Weight`.
+` ReadIntervals` | Пауза между запросами для интервальной нагрузки в микросекундах. Для каждого запроса выбирается случайным образом из интервала `MinUs`-`MaxUs`. Вы можете задать несколько диапазонов `ReadIntervals`, и тогда выбор значения из конкретного диапазона будет определяться его `Weight`.
+` MaxInFlightReadRequests` | Максимальное количество одновременно обрабатываемых запросов на чтение.
+` FlushIntervals` | Интервал времени между запросами на удаление записанных StorageLoad данных в микросекундах. Выбирается случайным образом из интервала `MinUs`-`MaxUs`. Вы можете задать несколько диапазонов `FlushIntervals`, и тогда выбор значения из конкретного диапазона будет определяться его `Weight`.
+` PutHandleClass` | Класс записи данных в дисковую подсистему. В случае `TabletLog` запись выполняется с максимальным приоритетом.
+` GetHandleClass` | Класс чтения данных с дисковой подсистемы. В случае `FastRead` чтение выполняется с максимальной скоростью.
+
+## Примеры {#examples}
+
+### Нагрузка на запись {#write}
+
+Следующий актор будет писать в группу с идентификатором `2181038080` в течение `60` секунд. Размер одной записи `4096` байт, число одновременно выполняемых запросов не более `256` (постоянная нагрузка):
 
 ```proto
-message TStorageLoad {
-    message TRequestInfo {
-        optional float SendTime = 1;
-        optional uint64 Type = 2;
-        optional uint32 Size = 3;
-        optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 4;
+StorageLoad: {
+    DurationSeconds: 60
+    Tablets: {
+        Tablets: { TabletId: 1000 Channel: 0 GroupId: 2181038080 Generation: 1 }
+        WriteSizes: { Weight: 1.0 Min: 4096 Max: 4096 }
+        WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 0 MaxUs: 0 } }
+        MaxInFlightWriteRequests: 256
+        FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
+        PutHandleClass: TabletLog
     }
-    message TTabletInfo {
-        optional uint64 TabletId = 1;
-        optional uint32 Channel = 2;
-        optional uint32 GroupId = 3;
-        optional uint32 Generation = 4;
-        repeated TRequestInfo Requests = 5;
-        optional float ScriptedCycleDurationSec = 6;
-    }
-    message TPerTabletProfile {
-        repeated TTabletInfo Tablets = 1;
-        repeated TSizeInfo Sizes = 2;
-        repeated TIntervalInfo WriteIntervals = 3;
-        optional uint32 MaxInFlightRequests = 4;
-        optional uint32 MaxInFlightBytes = 5;
-        repeated TIntervalInfo FlushIntervals = 6;
-        optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 7;
-        optional bool Soft = 8;
-        optional uint32 MaxInFlightReadRequests = 9;
-        optional uint32 MaxInFlightReadBytes = 10;
-        repeated TIntervalInfo ReadIntervals = 11;
-        repeated TSizeInfo ReadSizes = 12;
-        optional uint64 MaxTotalBytesWritten = 13;
-        optional NKikimrBlobStorage.EGetHandleClass GetHandleClass = 14;
-    };
-    optional uint64 Tag = 1;
-    optional uint32 DurationSeconds = 2;
-    optional bool RequestTracking = 3 [default = false];
-    repeated TPerTabletProfile Tablets = 4;
-    optional uint64 ScheduleThresholdUs = 5;
-    optional uint64 ScheduleRoundingUs = 6;
 }
 ```
-<!-- 
-## Примеры {#example}
 
-**Читающая нагрузка**
+При просмотре результата тестирования наибольший интерес представляют следующие значения:
 
-Нагрузка пишет в группу `$GROUPID`, состоит из двух частей. Первая - пишущая, подает небольшой фон пишущих запросов размера `$SIZE` каждые 50 мс, при этом ограничивает `InFlight` 1. То есть если запрос не успевает завершиться, то актор будет ждать завершения и после этого через 50мс, будет запущен следующий запрос.
+* ` Writes per seconds` — количество записей в секунду, например `28690.29`.
+* ` Speed@ 100%` — 100 перцентиль скорости записи в МБ/с, например `108.84`.
 
-Вторая часть основная, читающая. Читает запросами размера `$SIZE`, запросы отправляет каждые `${INTERVAL}` микросекунд. Можно его задать в 0, тогда этот параметр не будет играть роли. Конфигурация ограничивает количество запросов в полете числом `${IN_FLIGHT}`.
+### Нагрузка на чтение {#read}
 
-{% list tabs %}
+Чтобы подать нагрузку на чтение, необходимо сначала записать данные. Данные записываются запросами по `4096` байт каждые `50` мс, при этом число одновременно выполняемых запросов не более `1` (интервальная нагрузка). Если запрос не успеет завершиться за `50` мс, актор дождется его завершения и через `50` мс запустит следующий запрос. Данные старше `10` с удаляются. Чтение данных выполнятся запросами по `4096` байт, число одновременно выполняемых запросов `16` (постоянная нагрузка):
 
-- CLI
+```proto
+StorageLoad: {
+    DurationSeconds: 60
+    Tablets: {
+        Tablets: { TabletId: 5000 Channel: 0 GroupId: 2181038080 Generation: 1 }
+        WriteSizes: { Weight: 1.0 Min: 4096 Max: 4096}
+        WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 50000 MaxUs: 50000 } }
+        MaxInFlightWriteRequests: 1
 
-  ```proto
-  NodeId: ${NODEID}
-  Event: { StorageLoad: {
-      DurationSeconds: ${DURATION}
-      ScheduleThresholdUs: 0
-      ScheduleRoundingUs: 0
-      Tablets: {
-          Tablets: { TabletId: ${TABLETID} Channel: 0 GroupId: ${GROUPID} Generation: 1 }
-          Sizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
-          WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 50000 MaxUs: 50000 } }
-          MaxInFlightRequests: 1
+        ReadSizes: { Weight: 1.0 Min: 4096 Max: 4096 }
+        ReadIntervals: { Weight: 1.0 Uniform: { MinUs: 0 MaxUs: 0 } }
+        MaxInFlightReadRequests: 16
+        FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
+        PutHandleClass: TabletLog
+        GetHandleClass: FastRead
+    }
+}
+```
 
-          ReadSizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
-          ReadIntervals: { Weight: 1.0 Uniform: { MinUs: ${INTERVAL} MaxUs: ${INTERVAL} } }
-          MaxInFlightReadRequests: ${IN_FLIGHT}
-          FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
-          PutHandleClass: ${PUT_HANDLE_CLASS}
-          GetHandleClass: ${GET_HANDLE_CLASS}
-          Soft: true
-      }
-  }}
-  ```
+При просмотре результата тестирования наибольший интерес представляют следующие значение:
 
-{% endlist %}
-
-**Пишущая нагрузка**
-
-Пишет в группу `$GROUPID` нагрузку длительностью `$DURATION` секунд. Пишет размерами `$SIZE`, ограничивая количество запросов в полете числом `$IN_FLIGHT`.
-
-{% list tabs %}
-
-- CLI
-
-  ```proto
-  NodeId: ${NODEID}
-  Event: { StorageLoad: {
-      DurationSeconds: ${DURATION}
-      ScheduleThresholdUs: 0
-      ScheduleRoundingUs: 0
-      Tablets: {
-          Tablets: { TabletId: ${TABLETID} Channel: 0 GroupId: ${GROUPID} Generation: 1 }
-          Sizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
-          WriteIntervals: { Weight: 1.0 Uniform: { MinUs: ${INTERVAL} MaxUs: ${INTERVAL} } }
-          MaxInFlightRequests: ${IN_FLIGHT}
-          FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
-          PutHandleClass: ${PUT_HANDLE_CLASS}
-          Soft: true
-      }
-  }}
-  ```
-
-{% endlist %}
- -->
+* ` ReadSpeed@ 100%` — 100 перцентиль скорости чтения МБ/с, например `60.86`.

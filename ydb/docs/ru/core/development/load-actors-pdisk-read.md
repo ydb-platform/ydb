@@ -1,29 +1,60 @@
 # PDiskReadLoad
 
-Подает на PDisk нагрузку read-only. Имитирует VDisk. Актор создает на указанном PDisk чанки, записывает в них случайные данные и выполняет чтение из них с указанными параметрами. Результатом теста является производительность чтения в байтах в секунду.
+Тестирует производительность чтения с PDisk. Нагрузка подается от имени VDisk. Актор создает на указанном PDisk чанки, записывает в них случайные данные и выполняет чтение из них с указанными параметрами. После снятия нагрузки записанные актором данные удаляются.
 
-{% include notitle [addition](../_includes/addition.md) %}
+Вы можете подать нагрузку двух видов:
 
-## Спецификация актора {#proto}
+* _Постоянная_ — актор следит, чтобы одновременно было запущено указанное число запросов. Чтобы подать постоянную нагрузку, задайте нулевую паузу между запросами (например, `IntervalMsMin: 0`, `IntervalMsMax: 0`) и отличный от нуля `InFlightReads`.
+* _Интервальная_ — актор запускает запросы через заданные промежутки времени. Чтобы подать интервальную нагрузку, задайте ненулевую паузу между запросами (например, `IntervalMsMin: 10`, `IntervalMsMax: 100`). Максимальное количество одновременно выполняемых запросов задается параметром `InFlightReads`. Если его значение равно `0`, то ограничения нет.
+
+## Параметры актора {#options}
+
+{% include [load-actors-params](../_includes/load-actors-params.md) %}
+
+Параметр | Описание
+--- | ---
+`PDiskId` | Идентификатор нагружаемого PDisk на узле.
+`PDiskGuid` | Глобально-уникальный идентификатор нагружаемого PDisk.
+`VDiskId` | Нагрузка подается от имени VDisk со следующими реквизитами:<ul><li>`GroupID` — идентификатор группы.</li><li>`GroupGeneration` — поколение группы.</li><li>`Ring` — идентификатор кольца в группе.</li><li>`Domain` — идентификатор фэйл-домена в кольце.</li><li>`VDisk` — индекс VDisk в фэйл-домене.</li></ul>
+`Chunks` | Параметры чанка.<br>`Slots` — количество слотов в чанке, определяет размер записи.<br>Вы можете указать несколько `Chunks`, и тогда выбор конкретного чанка для чтения будет определяться его `Weight`.
+`DurationSeconds` | Продолжительность нагрузки в секундах.
+`IntervalMsMin`,<br>`IntervalMsMax` | Минимальный и максимальный промежутки времени между запросами при интервальной нагрузке в миллисекундах. Значение промежутка выбирается случайно из указанного диапазона.
+`InFlightReads` | Количество одновременно обрабатываемых запросов на чтение.
+`Sequential` | Тип чтения.<ul><li>`True` — последовательное.</li><li>`False` — случайное.</li></ul>
+`IsWardenlessTest` | Если PDiskReadLoad запускается на кластере, укажите `False`. Иначе (например, при запуске в юнит-тестах) укажите `True`.
+
+## Примеры {#examples}
+
+Следующий актор читает данные блоками по `32` МБ, в течение `120` секунд, одновременно выполняются `64` запроса (постоянная нагрузка):
 
 ```proto
-message TPDiskReadLoad {
-    message TChunkInfo {
-        optional uint32 Slots = 1; // number of slots per chunk
-        optional uint32 Weight = 2; // probability weight
+PDiskReadLoad: {
+    PDiskId: 1000
+    PDiskGuid: 2258451612736857634
+    VDiskId: {
+        GroupID: 11234
+        GroupGeneration: 5
+        Ring: 1
+        Domain: 1
+        VDisk: 3
     }
-    optional uint64 Tag = 1;
-    optional uint32 PDiskId = 2;
-    optional uint64 PDiskGuid = 3;
-    optional NKikimrBlobStorage.TVDiskID VDiskId = 4;
-    repeated TChunkInfo Chunks = 5;
-    optional uint32 DurationSeconds = 6;
-    optional uint32 InFlightReads = 7;
-    optional bool Sequential = 9 [default = false];
-
-    optional uint32 IntervalMsMin = 10;
-    optional uint32 IntervalMsMax = 11;
-
-    optional bool IsWardenlessTest = 13 [default = false];
+    Chunks: { Slots: 4096 Weight: 1 }
+    Chunks: { Slots: 4096 Weight: 1 }
+    Chunks: { Slots: 4096 Weight: 1 }
+    Chunks: { Slots: 4096 Weight: 1 }
+    Chunks: { Slots: 4096 Weight: 1 }
+    Chunks: { Slots: 4096 Weight: 1 }
+    Chunks: { Slots: 4096 Weight: 1 }
+    Chunks: { Slots: 4096 Weight: 1 }
+    DurationSeconds: 120
+    IntervalMsMin: 0
+    IntervalMsMax: 0
+    InFlightReads: 64
+    Sequential: false
+    IsWardenlessTest: false
 }
 ```
+
+При просмотре результата тестирования наибольший интерес представляет следующее значение:
+
+* `Average speed since start` — средняя скорость чтения с момента запуска в МБ/с, например `1257.148154`.

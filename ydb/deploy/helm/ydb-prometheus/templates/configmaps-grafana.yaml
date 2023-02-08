@@ -1,0 +1,20 @@
+{{- $namespace := .Release.Namespace -}}
+{{- $files := .Files.Glob "dashboards/*.json" }}
+{{- if and .Values.grafanaDashboards.enabled $files }}
+apiVersion: v1
+kind: ConfigMapList
+items:
+{{- range $path, $fileContents := $files }}
+{{- $dashboardName := regexReplaceAll "(^.*/)(.*)\\.json$" $path "${2}" }}
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: {{ printf "%s-%s" (include "ydb-prometheus.fullname" $) $dashboardName | trunc 63 | trimSuffix "-" }}
+    namespace: {{ $namespace }}
+    labels:
+{{- include "ydb-prometheus.labels" $ | nindent 6 }}
+{{- include "ydb-prometheus.labels.grafana" $ | nindent 6 }}
+  data:
+    {{ $dashboardName }}.json: {{ $.Files.Get $path | toJson }}
+{{- end }}
+{{- end }}

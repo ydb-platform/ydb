@@ -1,0 +1,97 @@
+# Allows to override chart & chart resources name
+nameOverride: ""
+fullnameOverride: ""
+
+# Enable kube-prometheus-stack chart
+kube-prometheus-stack:
+  enabled: true
+
+  # Install prometheus crd object
+  prometheus:
+    enabled: true
+
+    # Enable only for monitoring ydb external clusters
+    # prometheusSpec:
+    #   additionalScrapeConfigsSecret:
+    #     enabled: true
+    #     name: ydb-prometheus-additional-scrape-configs
+    #     key: additional-scrape-configs.yaml
+
+# Grafana dashboards
+grafanaDashboards:
+  # Enable dashboards generation
+  enabled: true
+
+  # Label which will be used to mark configmaps with grafana dashboards
+  markerLabel:
+    key: grafana_dashboard
+    value: "1"
+
+# Prometheus server related configuration
+prometheusConfig:
+  # Enable service monitors & scrape configs generation
+  enabled: true
+
+  # Additional scrape configs that referenced in prometheus.spec
+  #
+  additionalScrapeConfigs:
+    # Generated secret key
+    key: additional-scrape-configs.yaml
+    # Generated secret name, if empty chart name will be used
+    name: ""
+
+# YDB Monitoring related configuration
+ydb:
+  # Predefined monitoring counters to scrape
+  counters:
+    # Counter name
+    # counter: <counter name>
+    #
+    # Counter type
+    # If unspecified, will be used for both targets
+    # type: <static|dynamic>
+    #
+    # Metrics path
+    # If unspecified, will be used /counters/counters=%s/prometheus
+    # metricsPath: <url to prometheus metrics>
+    #
+    - counter: auth
+    - counter: compile
+    - counter: dsproxy
+    - counter: dsproxy_percentile
+    - counter: dsproxy_queue
+    - counter: dsproxynode
+    - counter: grpc
+    - counter: interconnect
+    - counter: kqp
+    - counter: netclassifier
+    - counter: pdisks
+      type: static
+    - counter: pqproxy
+    - counter: proxy
+    - counter: quoter_service
+    - counter: tablets
+    - counter: vdisks
+      type: static
+    - counter: utils
+    - counter: ydb
+      metricsPath: /counters/counters=ydb/name_label=name/prometheus
+
+  # Cluster which will be monitored
+  clusters: []
+  # Cluster name
+  # cluster: <cluster name>
+  #
+  # Cluster type
+  # For external clusters, additional scrape config secret will be generated
+  # For internal clusters, service monitor with appropriate configuration will be generated
+  # type: <external|internal>
+  #
+  # External cluster targets, used only if type == external
+  # external:
+  # Monitoring ports for static and dynamic nodes
+  #   ports:
+  #     static: <static (storage) node port>
+  #     dynamic: <dynamic (tenants) node ports>
+  # Monitoring hosts
+  #   hosts: <cluster targets>

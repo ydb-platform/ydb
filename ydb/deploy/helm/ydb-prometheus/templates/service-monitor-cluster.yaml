@@ -1,0 +1,2 @@
+{{- if .Values.prometheusConfig.enabled -}}
+{{- end -}}

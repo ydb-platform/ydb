@@ -124,6 +124,22 @@ You can parse delimited numbers:
   // we have result == 324562.645.
 ```
 
+
+## Relation With Other Work
+
+The fast_float library is part of:
+
+- GCC (as of version 12): the `from_chars` function in GCC relies on fast_float.
+- [WebKit](https://github.com/WebKit/WebKit), the engine behind Safari (Apple's web browser)
+
+
+The fastfloat algorithm is part of the [LLVM standard libraries](https://github.com/llvm/llvm-project/commit/87c016078ad72c46505461e4ff8bfa04819fe7ba).
+
+There is a [derived implementation part of AdaCore](https://github.com/AdaCore/VSS).
+
+
+The fast_float library provides a performance similar to that of the [fast_double_parser](https://github.com/lemire/fast_double_parser) library but using an updated algorithm reworked from the ground up, and while offering an API more in line with the expectations of C++ programmers. The fast_double_parser library is part of the [Microsoft LightGBM machine-learning framework](https://github.com/microsoft/LightGBM).
+
 ## Reference
 
 - Daniel Lemire, [Number Parsing at a Gigabyte per Second](https://arxiv.org/abs/2101.11408), Software: Practice and Experience 51 (8), 2021.
@@ -135,16 +151,6 @@ You can parse delimited numbers:
 - [There is a Java port of the fast_float library](https://github.com/wrandelshofer/FastDoubleParser) called `FastDoubleParser`. It used for important systems such as [Jackson](https://github.com/FasterXML/jackson-core).
 - [There is a C# port of the fast_float library](https://github.com/CarlVerret/csFastFloat) called `csFastFloat`.
 
-
-## Relation With Other Work
-
-The fast_float library is part of GCC (as of version 12): the `from_chars` function in GCC relies on fast_float.
-
-The fastfloat algorithm is part of the [LLVM standard libraries](https://github.com/llvm/llvm-project/commit/87c016078ad72c46505461e4ff8bfa04819fe7ba).
-
-The fast_float library provides a performance similar to that of the [fast_double_parser](https://github.com/lemire/fast_double_parser) library but using an updated algorithm reworked from the ground up, and while offering an API more in line with the expectations of C++ programmers. The fast_double_parser library is part of the [Microsoft LightGBM machine-learning framework](https://github.com/microsoft/LightGBM).
-
-There is a [derived implementation part of AdaCore](https://github.com/AdaCore/VSS).
 
 ## Users
 

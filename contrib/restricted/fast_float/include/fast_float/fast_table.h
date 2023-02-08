@@ -17,11 +17,11 @@ namespace fast_float {
  */
 
 /**
- * The smallest non-zero float (binary64) is 2^−1074.
+ * The smallest non-zero float (binary64) is 2^-1074.
  * We take as input numbers of the form w x 10^q where w < 2^64.
  * We have that w * 10^-343  <  2^(64-344) 5^-343 < 2^-1076.
  * However, we have that
- * (2^64-1) * 10^-342 =  (2^64-1) * 2^-342 * 5^-342 > 2^−1074.
+ * (2^64-1) * 10^-342 =  (2^64-1) * 2^-342 * 5^-342 > 2^-1074.
  * Thus it is possible for a number of the form w * 10^-342 where
  * w is a 64-bit value to be a non-zero floating-point number.
  *********
@@ -694,6 +694,6 @@ const uint64_t powers_template<unused>::power_of_five_128[number_of_entries] = {
         0x8e679c2f5e44ff8f,0x570f09eaa7ea7648,};
 using powers = powers_template<>;
 
-}
+} // namespace fast_float
 
 #endif

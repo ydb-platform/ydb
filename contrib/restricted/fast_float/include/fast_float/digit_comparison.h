@@ -125,8 +125,8 @@ void round_nearest_tie_even(adjusted_mantissa& am, int32_t shift, callback cb) n
     halfway = uint64_t(1) << (shift - 1);
   }
   uint64_t truncated_bits = am.mantissa & mask;
-  uint64_t is_above = truncated_bits > halfway;
-  uint64_t is_halfway = truncated_bits == halfway;
+  bool is_above = truncated_bits > halfway;
+  bool is_halfway = truncated_bits == halfway;
 
   // shift digits into position
   if (shift == 64) {

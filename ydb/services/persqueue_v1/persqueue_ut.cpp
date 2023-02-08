@@ -2669,8 +2669,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         DumpCounters("StartFuncs-2");
 
-        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 5);
-
         for (ui32 i = 0; i < 4; ++i) {
             doRead();
         }

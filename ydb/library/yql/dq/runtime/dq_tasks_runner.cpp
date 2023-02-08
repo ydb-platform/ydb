@@ -272,7 +272,7 @@ public:
     }
 
     bool UseSeparatePatternAlloc() const {
-        return Context.PatternCache && Settings.OptLLVM == "OFF";
+        return Context.PatternCache && (Settings.OptLLVM == "OFF" || Settings.UseCacheForLLVM);
     }
 
     TComputationPatternOpts CreatePatternOpts(TScopedAlloc& alloc, TTypeEnvironment& typeEnv) {

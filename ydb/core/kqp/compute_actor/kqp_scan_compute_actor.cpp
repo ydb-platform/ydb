@@ -166,6 +166,7 @@ public:
         settings.CollectBasicStats = GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_BASIC;
         settings.CollectProfileStats = GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
         settings.OptLLVM = GetUseLLVM() ? "--compile-options=disable-opt" : "OFF";
+        settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
         settings.AllowGeneratorsInUnboxedValues = false;
 
         NDq::TLogFunc logger;

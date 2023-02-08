@@ -1,22 +1,22 @@
 [
     {
+        "Category": "one",
         "Five": 1,
-        "Value": 1,
-        "Category": "one"
+        "Value": 1
     },
     {
+        "Category": "two",
         "Five": 1,
-        "Value": 2,
-        "Category": "two"
+        "Value": 2
     },
     {
+        "Category": "big",
         "Five": 1,
-        "Value": 3,
-        "Category": "big"
+        "Value": 3
     },
     {
+        "Category": "big",
         "Five": 1,
-        "Value": 4,
-        "Category": "big"
+        "Value": 4
     }
 ]

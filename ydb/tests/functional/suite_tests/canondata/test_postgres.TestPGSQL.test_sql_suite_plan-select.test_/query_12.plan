@@ -1,1 +1,116 @@
-"{\n  \"meta\":\n    {\n      \"version\":\"0.2\",\n      \"type\":\"query\"\n    },\n  \"tables\":[\n  {\n    \"name\":\"\\/Root\\/postgres_select.test_plan\\/onek\",\n    \"reads\":\n      [\n        {\n          \"type\":\"FullScan\",\n          \"scan_by\":\n            [\n              \"unique1 (-\u221e, +\u221e)\",\n              \"unique2 (-\u221e, +\u221e)\"\n            ],\n          \"columns\":\n            [\n              \"even\",\n              \"fivethous\",\n              \"four\",\n              \"hundred\",\n              \"odd\",\n              \"string4\",\n              \"stringu1\",\n              \"stringu2\",\n              \"ten\",\n              \"tenthous\",\n              \"thousand\",\n              \"twenty\",\n              \"two\",\n              \"twothousand\",\n              \"unique1\",\n              \"unique2\"\n            ]\n        }\n      ]\n  }\n],\n  \"Plan\":\n    {\n      \"Node Type\":\"Query\",\n      \"PlanNodeType\":\"Query\",\n      \"Plans\":\n        [\n          {\n            \"Node Type\":\"ResultSet\",\n            \"PlanNodeId\":4,\n            \"PlanNodeType\":\"ResultSet\",\n            \"Plans\":\n              [\n                {\n                  \"Node Type\":\"Limit\",\n                  \"Operators\":\n                    [\n                      {\n                        \"Limit\":\"1001\",\n                        \"Name\":\"Limit\"\n                      }\n                    ],\n                  \"PlanNodeId\":3,\n                  \"Plans\":\n                    [\n                      {\n                        \"Node Type\":\"UnionAll\",\n                        \"PlanNodeId\":2,\n                        \"PlanNodeType\":\"Connection\",\n                        \"Plans\":\n                          [\n                            {\n                              \"Node Type\":\"Limit-InnerJoin (MapJoin)-Filter-TableFullScan\",\n                              \"Operators\":\n                                [\n                                  {\n                                    \"Limit\":\"1001\",\n                                    \"Name\":\"Limit\"\n                                  },\n                                  {\n                                    \"Name\":\"InnerJoin (MapJoin)\"\n                                  },\n                                  {\n                                    \"Name\":\"Filter\",\n                                    \"Predicate\":\"Exist(item.stringu1) And Exist(item.unique1)\"\n                                  },\n                                  {\n                                    \"Name\":\"TableFullScan\",\n                                    \"ReadColumns\":\n                                      [\n                                        \"even\",\n                                        \"fivethous\",\n                                        \"four\",\n                                        \"hundred\",\n                                        \"odd\",\n                                        \"string4\",\n                                        \"stringu1\",\n                                        \"stringu2\",\n                                        \"ten\",\n                                        \"tenthous\",\n                                        \"thousand\",\n                                        \"twenty\",\n                                        \"two\",\n                                        \"twothousand\",\n                                        \"unique1\",\n                                        \"unique2\"\n                                      ],\n                                    \"ReadRanges\":\n                                      [\n                                        \"unique1 (-\u221e, +\u221e)\",\n                                        \"unique2 (-\u221e, +\u221e)\"\n                                      ],\n                                    \"Table\":\"postgres_select.test_plan\\/onek\"\n                                  }\n                                ],\n                              \"PlanNodeId\":1,\n                              \"Tables\":\n                                [\n                                  \"postgres_select.test_plan\\/onek\"\n                                ]\n                            }\n                          ]\n                      }\n                    ]\n                }\n              ]\n          }\n        ]\n    }\n}"
+{
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-InnerJoin (MapJoin)-Filter-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "InnerJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.stringu1) And Exist(item.unique1)"
+                                            },
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "even",
+                                                    "fivethous",
+                                                    "four",
+                                                    "hundred",
+                                                    "odd",
+                                                    "string4",
+                                                    "stringu1",
+                                                    "stringu2",
+                                                    "ten",
+                                                    "tenthous",
+                                                    "thousand",
+                                                    "twenty",
+                                                    "two",
+                                                    "twothousand",
+                                                    "unique1",
+                                                    "unique2"
+                                                ],
+                                                "ReadRanges": [
+                                                    "unique1 (-\u221e, +\u221e)",
+                                                    "unique2 (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "postgres_select.test_plan/onek"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "postgres_select.test_plan/onek"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/Root/postgres_select.test_plan/onek",
+            "reads": [
+                {
+                    "columns": [
+                        "even",
+                        "fivethous",
+                        "four",
+                        "hundred",
+                        "odd",
+                        "string4",
+                        "stringu1",
+                        "stringu2",
+                        "ten",
+                        "tenthous",
+                        "thousand",
+                        "twenty",
+                        "two",
+                        "twothousand",
+                        "unique1",
+                        "unique2"
+                    ],
+                    "scan_by": [
+                        "unique1 (-\u221e, +\u221e)",
+                        "unique2 (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                }
+            ]
+        }
+    ]
+}

@@ -1,1 +1,147 @@
-"{\n  \"meta\":\n    {\n      \"version\":\"0.2\",\n      \"type\":\"query\"\n    },\n  \"tables\":[\n  {\n    \"name\":\"\\/Root\\/postgres_window.test_plan\\/empsalary\",\n    \"reads\":\n      [\n        {\n          \"type\":\"FullScan\",\n          \"scan_by\":\n            [\n              \"empno (-\u221e, +\u221e)\"\n            ],\n          \"columns\":\n            [\n              \"depname\",\n              \"salary\"\n            ]\n        }\n      ]\n  }\n],\n  \"Plan\":\n    {\n      \"Node Type\":\"Query\",\n      \"PlanNodeType\":\"Query\",\n      \"Plans\":\n        [\n          {\n            \"Node Type\":\"ResultSet\",\n            \"PlanNodeId\":10,\n            \"PlanNodeType\":\"ResultSet\",\n            \"Plans\":\n              [\n                {\n                  \"Node Type\":\"Limit\",\n                  \"Operators\":\n                    [\n                      {\n                        \"Limit\":\"1001\",\n                        \"Name\":\"Limit\"\n                      }\n                    ],\n                  \"PlanNodeId\":9,\n                  \"Plans\":\n                    [\n                      {\n                        \"Node Type\":\"Merge\",\n                        \"PlanNodeId\":8,\n                        \"PlanNodeType\":\"Connection\",\n                        \"Plans\":\n                          [\n                            {\n                              \"Node Type\":\"TopSort-Sort\",\n                              \"Operators\":\n                                [\n                                  {\n                                    \"Limit\":\"1001\",\n                                    \"Name\":\"TopSort\",\n                                    \"TopSortBy\":\"row.row_number\"\n                                  },\n                                  {\n                                    \"Name\":\"Sort\",\n                                    \"SortBy\":\"row.depname\"\n                                  }\n                                ],\n                              \"PlanNodeId\":7,\n                              \"Plans\":\n                                [\n                                  {\n                                    \"Node Type\":\"UnionAll\",\n                                    \"PlanNodeId\":6,\n                                    \"PlanNodeType\":\"Connection\",\n                                    \"Plans\":\n                                      [\n                                        {\n                                          \"Node Type\":\"Sort\",\n                                          \"Operators\":\n                                            [\n                                              {\n                                                \"Name\":\"Sort\",\n                                                \"SortBy\":\"row.depname\"\n                                              }\n                                            ],\n                                          \"PlanNodeId\":5,\n                                          \"Plans\":\n                                            [\n                                              {\n                                                \"Node Type\":\"UnionAll\",\n                                                \"PlanNodeId\":4,\n                                                \"PlanNodeType\":\"Connection\",\n                                                \"Plans\":\n                                                  [\n                                                    {\n                                                      \"Node Type\":\"Aggregate\",\n                                                      \"Operators\":\n                                                        [\n                                                          {\n                                                            \"Name\":\"Aggregate\"\n                                                          }\n                                                        ],\n                                                      \"PlanNodeId\":3,\n                                                      \"Plans\":\n                                                        [\n                                                          {\n                                                            \"KeyColumns\":\n                                                              [\n                                                                \"depname\"\n                                                              ],\n                                                            \"Node Type\":\"HashShuffle\",\n                                                            \"PlanNodeId\":2,\n                                                            \"PlanNodeType\":\"Connection\",\n                                                            \"Plans\":\n                                                              [\n                                                                {\n                                                                  \"Node Type\":\"Aggregate-TableFullScan\",\n                                                                  \"Operators\":\n                                                                    [\n                                                                      {\n                                                                        \"Aggregation\":\"{_yql_agg_0: SUM(item.salary)}\",\n                                                                        \"GroupBy\":\"item.depname\",\n                                                                        \"Name\":\"Aggregate\"\n                                                                      },\n                                                                      {\n                                                                        \"Name\":\"TableFullScan\",\n                                                                        \"ReadColumns\":\n                                                                          [\n                                                                            \"depname\",\n                                                                            \"salary\"\n                                                                          ],\n                                                                        \"ReadRanges\":\n                                                                          [\n                                                                            \"empno (-\u221e, +\u221e)\"\n                                                                          ],\n                                                                        \"Table\":\"postgres_window.test_plan\\/empsalary\"\n                                                                      }\n                                                                    ],\n                                                                  \"PlanNodeId\":1,\n                                                                  \"Tables\":\n                                                                    [\n                                                                      \"postgres_window.test_plan\\/empsalary\"\n                                                                    ]\n                                                                }\n                                                              ]\n                                                          }\n                                                        ]\n                                                    }\n                                                  ]\n                                              }\n                                            ]\n                                        }\n                                      ]\n                                  }\n                                ]\n                            }\n                          ],\n                        \"SortColumns\":\n                          [\n                            \"row_number (Desc)\"\n                          ]\n                      }\n                    ]\n                }\n              ]\n          }\n        ]\n    }\n}"
+{
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 10,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 9,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 8,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-Sort",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.row_number"
+                                            },
+                                            {
+                                                "Name": "Sort",
+                                                "SortBy": "row.depname"
+                                            }
+                                        ],
+                                        "PlanNodeId": 7,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 6,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Sort",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "Sort",
+                                                                "SortBy": "row.depname"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 5,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 4,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "Aggregate",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "Aggregate"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 3,
+                                                                        "Plans": [
+                                                                            {
+                                                                                "KeyColumns": [
+                                                                                    "depname"
+                                                                                ],
+                                                                                "Node Type": "HashShuffle",
+                                                                                "PlanNodeId": 2,
+                                                                                "PlanNodeType": "Connection",
+                                                                                "Plans": [
+                                                                                    {
+                                                                                        "Node Type": "Aggregate-TableFullScan",
+                                                                                        "Operators": [
+                                                                                            {
+                                                                                                "Aggregation": "{_yql_agg_0: SUM(item.salary)}",
+                                                                                                "GroupBy": "item.depname",
+                                                                                                "Name": "Aggregate"
+                                                                                            },
+                                                                                            {
+                                                                                                "Name": "TableFullScan",
+                                                                                                "ReadColumns": [
+                                                                                                    "depname",
+                                                                                                    "salary"
+                                                                                                ],
+                                                                                                "ReadRanges": [
+                                                                                                    "empno (-\u221e, +\u221e)"
+                                                                                                ],
+                                                                                                "Table": "postgres_window.test_plan/empsalary"
+                                                                                            }
+                                                                                        ],
+                                                                                        "PlanNodeId": 1,
+                                                                                        "Tables": [
+                                                                                            "postgres_window.test_plan/empsalary"
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "row_number (Desc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/Root/postgres_window.test_plan/empsalary",
+            "reads": [
+                {
+                    "columns": [
+                        "depname",
+                        "salary"
+                    ],
+                    "scan_by": [
+                        "empno (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                }
+            ]
+        }
+    ]
+}

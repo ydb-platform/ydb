@@ -1,1 +1,336 @@
-"{\n  \"meta\":\n    {\n      \"version\":\"0.2\",\n      \"type\":\"query\"\n    },\n  \"tables\":[\n  {\n    \"name\":\"\\/Root\\/postgres_jointest\\/coalesce-and-join.test_plan\\/a\",\n    \"reads\":\n      [\n        {\n          \"type\":\"FullScan\",\n          \"scan_by\":\n            [\n              \"x (-\u221e, +\u221e)\",\n              \"y (-\u221e, +\u221e)\"\n            ],\n          \"columns\":\n            [\n              \"x\",\n              \"y\"\n            ]\n        }\n      ]\n  },\n  {\n    \"name\":\"\\/Root\\/postgres_jointest\\/coalesce-and-join.test_plan\\/b\",\n    \"reads\":\n      [\n        {\n          \"type\":\"Lookup\",\n          \"columns\":\n            [\n              \"x\"\n            ]\n        },\n        {\n          \"type\":\"Lookup\",\n          \"columns\":\n            [\n              \"x\"\n            ]\n        }\n      ]\n  }\n],\n  \"Plan\":\n    {\n      \"Node Type\":\"Query\",\n      \"PlanNodeType\":\"Query\",\n      \"Plans\":\n        [\n          {\n            \"Node Type\":\"ResultSet_4\",\n            \"PlanNodeId\":32,\n            \"PlanNodeType\":\"ResultSet\",\n            \"Plans\":\n              [\n                {\n                  \"Node Type\":\"Limit\",\n                  \"Operators\":\n                    [\n                      {\n                        \"Limit\":\"1001\",\n                        \"Name\":\"Limit\"\n                      }\n                    ],\n                  \"PlanNodeId\":31,\n                  \"Plans\":\n                    [\n                      {\n                        \"Node Type\":\"Merge\",\n                        \"PlanNodeId\":30,\n                        \"PlanNodeType\":\"Connection\",\n                        \"Plans\":\n                          [\n                            {\n                              \"Node Type\":\"TopSort-LeftJoin (MapJoin)\",\n                              \"Operators\":\n                                [\n                                  {\n                                    \"Limit\":\"1001\",\n                                    \"Name\":\"TopSort\",\n                                    \"TopSortBy\":\"row.a_y\"\n                                  },\n                                  {\n                                    \"Name\":\"LeftJoin (MapJoin)\"\n                                  }\n                                ],\n                              \"PlanNodeId\":29,\n                              \"Plans\":\n                                [\n                                  {\n                                    \"Node Type\":\"Map\",\n                                    \"PlanNodeId\":28,\n                                    \"PlanNodeType\":\"Connection\",\n                                    \"Plans\":\n                                      [\n                                        {\n                                          \"CTE Name\":\"tx_result_binding_4_0\",\n                                          \"Node Type\":\"ConstantExpr\",\n                                          \"Operators\":\n                                            [\n                                              {\n                                                \"Iterator\":\"%kqp%tx_result_binding_2_0\",\n                                                \"Name\":\"Iterator\"\n                                              }\n                                            ],\n                                          \"PlanNodeId\":27\n                                        }\n                                      ]\n                                  },\n                                  {\n                                    \"Node Type\":\"Broadcast\",\n                                    \"PlanNodeId\":26,\n                                    \"PlanNodeType\":\"Connection\",\n                                    \"Plans\":\n                                      [\n                                        {\n                                          \"Node Type\":\"Collect\",\n                                          \"PlanNodeId\":25,\n                                          \"Plans\":\n                                            [\n                                              {\n                                                \"Node Type\":\"UnionAll\",\n                                                \"PlanNodeId\":24,\n                                                \"PlanNodeType\":\"Connection\",\n                                                \"Plans\":\n                                                  [\n                                                    {\n                                                      \"CTE Name\":\"tx_result_binding_4_0\",\n                                                      \"Node Type\":\"Filter-TablePointLookup-ConstantExpr\",\n                                                      \"Operators\":\n                                                        [\n                                                          {\n                                                            \"Name\":\"Filter\",\n                                                            \"Predicate\":\"Exist(item.x)\"\n                                                          },\n                                                          {\n                                                            \"Name\":\"TablePointLookup\",\n                                                            \"ReadColumns\":\n                                                              [\n                                                                \"x\"\n                                                              ],\n                                                            \"Table\":\"postgres_jointest\\/coalesce-and-join.test_plan\\/b\"\n                                                          },\n                                                          {\n                                                            \"Iterator\":\"%kqp%tx_result_binding_3_0\",\n                                                            \"Name\":\"Iterator\"\n                                                          }\n                                                        ],\n                                                      \"PlanNodeId\":23,\n                                                      \"Tables\":\n                                                        [\n                                                          \"postgres_jointest\\/coalesce-and-join.test_plan\\/b\"\n                                                        ]\n                                                    }\n                                                  ]\n                                              }\n                                            ]\n                                        }\n                                      ]\n                                  }\n                                ]\n                            }\n                          ],\n                        \"SortColumns\":\n                          [\n                            \"a_y (Asc)\"\n                          ]\n                      }\n                    ]\n                }\n              ]\n          },\n          {\n            \"Node Type\":\"Precompute_3\",\n            \"Parent Relationship\":\"InitPlan\",\n            \"PlanNodeId\":21,\n            \"PlanNodeType\":\"Materialize\",\n            \"Plans\":\n              [\n                {\n                  \"Node Type\":\"Limit\",\n                  \"Operators\":\n                    [\n                      {\n                        \"Limit\":\"1\",\n                        \"Name\":\"Limit\"\n                      }\n                    ],\n                  \"PlanNodeId\":20\n                }\n              ],\n            \"Subplan Name\":\"CTE tx_result_binding_3_0\"\n          },\n          {\n            \"Node Type\":\"Precompute_2\",\n            \"Parent Relationship\":\"InitPlan\",\n            \"PlanNodeId\":18,\n            \"PlanNodeType\":\"Materialize\",\n            \"Plans\":\n              [\n                {\n                  \"Node Type\":\"Collect\",\n                  \"PlanNodeId\":17,\n                  \"Plans\":\n                    [\n                      {\n                        \"Node Type\":\"UnionAll\",\n                        \"PlanNodeId\":16,\n                        \"PlanNodeType\":\"Connection\",\n                        \"Plans\":\n                          [\n                            {\n                              \"Node Type\":\"LeftJoin (MapJoin)\",\n                              \"Operators\":\n                                [\n                                  {\n                                    \"Name\":\"LeftJoin (MapJoin)\"\n                                  }\n                                ],\n                              \"PlanNodeId\":15,\n                              \"Plans\":\n                                [\n                                  {\n                                    \"Node Type\":\"Map\",\n                                    \"PlanNodeId\":14,\n                                    \"PlanNodeType\":\"Connection\",\n                                    \"Plans\":\n                                      [\n                                        {\n                                          \"CTE Name\":\"tx_result_binding_2_0\",\n                                          \"Node Type\":\"ConstantExpr\",\n                                          \"Operators\":\n                                            [\n                                              {\n                                                \"Iterator\":\"%kqp%tx_result_binding_0_0\",\n                                                \"Name\":\"Iterator\"\n                                              }\n                                            ],\n                                          \"PlanNodeId\":13\n                                        }\n                                      ]\n                                  },\n                                  {\n                                    \"Node Type\":\"Broadcast\",\n                                    \"PlanNodeId\":12,\n                                    \"PlanNodeType\":\"Connection\",\n                                    \"Plans\":\n                                      [\n                                        {\n                                          \"Node Type\":\"Collect\",\n                                          \"PlanNodeId\":11,\n                                          \"Plans\":\n                                            [\n                                              {\n                                                \"Node Type\":\"UnionAll\",\n                                                \"PlanNodeId\":10,\n                                                \"PlanNodeType\":\"Connection\",\n                                                \"Plans\":\n                                                  [\n                                                    {\n                                                      \"CTE Name\":\"tx_result_binding_2_0\",\n                                                      \"Node Type\":\"Filter-TablePointLookup-ConstantExpr\",\n                                                      \"Operators\":\n                                                        [\n                                                          {\n                                                            \"Name\":\"Filter\",\n                                                            \"Predicate\":\"Exist(item.x)\"\n                                                          },\n                                                          {\n                                                            \"Name\":\"TablePointLookup\",\n                                                            \"ReadColumns\":\n                                                              [\n                                                                \"x\"\n                                                              ],\n                                                            \"Table\":\"postgres_jointest\\/coalesce-and-join.test_plan\\/b\"\n                                                          },\n                                                          {\n                                                            \"Iterator\":\"%kqp%tx_result_binding_1_0\",\n                                                            \"Name\":\"Iterator\"\n                                                          }\n                                                        ],\n                                                      \"PlanNodeId\":9,\n                                                      \"Tables\":\n                                                        [\n                                                          \"postgres_jointest\\/coalesce-and-join.test_plan\\/b\"\n                                                        ]\n                                                    }\n                                                  ]\n                                              }\n                                            ]\n                                        }\n                                      ]\n                                  }\n                                ]\n                            }\n                          ]\n                      }\n                    ]\n                }\n              ],\n            \"Subplan Name\":\"CTE tx_result_binding_2_0\"\n          },\n          {\n            \"Node Type\":\"Precompute_1\",\n            \"Parent Relationship\":\"InitPlan\",\n            \"PlanNodeId\":7,\n            \"PlanNodeType\":\"Materialize\",\n            \"Plans\":\n              [\n                {\n                  \"Node Type\":\"Filter-Limit\",\n                  \"Operators\":\n                    [\n                      {\n                        \"Name\":\"Filter\",\n                        \"Predicate\":\"Exist(item.x)\"\n                      },\n                      {\n                        \"Limit\":\"1\",\n                        \"Name\":\"Limit\"\n                      }\n                    ],\n                  \"PlanNodeId\":6\n                }\n              ],\n            \"Subplan Name\":\"CTE tx_result_binding_1_0\"\n          },\n          {\n            \"Node Type\":\"Precompute_0\",\n            \"Parent Relationship\":\"InitPlan\",\n            \"PlanNodeId\":4,\n            \"PlanNodeType\":\"Materialize\",\n            \"Plans\":\n              [\n                {\n                  \"Node Type\":\"Collect\",\n                  \"PlanNodeId\":3,\n                  \"Plans\":\n                    [\n                      {\n                        \"Node Type\":\"UnionAll\",\n                        \"PlanNodeId\":2,\n                        \"PlanNodeType\":\"Connection\",\n                        \"Plans\":\n                          [\n                            {\n                              \"Node Type\":\"TableFullScan\",\n                              \"Operators\":\n                                [\n                                  {\n                                    \"Name\":\"TableFullScan\",\n                                    \"ReadColumns\":\n                                      [\n                                        \"x\",\n                                        \"y\"\n                                      ],\n                                    \"ReadRanges\":\n                                      [\n                                        \"x (-\u221e, +\u221e)\",\n                                        \"y (-\u221e, +\u221e)\"\n                                      ],\n                                    \"Table\":\"postgres_jointest\\/coalesce-and-join.test_plan\\/a\"\n                                  }\n                                ],\n                              \"PlanNodeId\":1,\n                              \"Tables\":\n                                [\n                                  \"postgres_jointest\\/coalesce-and-join.test_plan\\/a\"\n                                ]\n                            }\n                          ]\n                      }\n                    ]\n                }\n              ],\n            \"Subplan Name\":\"CTE tx_result_binding_0_0\"\n          }\n        ]\n    }\n}"
+{
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet_4",
+                "PlanNodeId": 32,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 31,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 30,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.a_y"
+                                            },
+                                            {
+                                                "Name": "LeftJoin (MapJoin)"
+                                            }
+                                        ],
+                                        "PlanNodeId": 29,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 28,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "CTE Name": "tx_result_binding_4_0",
+                                                        "Node Type": "ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Iterator": "%kqp%tx_result_binding_2_0",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 27
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 26,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 25,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 24,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "CTE Name": "tx_result_binding_4_0",
+                                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.x)"
+                                                                            },
+                                                                            {
+                                                                                "Name": "TablePointLookup",
+                                                                                "ReadColumns": [
+                                                                                    "x"
+                                                                                ],
+                                                                                "Table": "postgres_jointest/coalesce-and-join.test_plan/b"
+                                                                            },
+                                                                            {
+                                                                                "Iterator": "%kqp%tx_result_binding_3_0",
+                                                                                "Name": "Iterator"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 23,
+                                                                        "Tables": [
+                                                                            "postgres_jointest/coalesce-and-join.test_plan/b"
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "a_y (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_3",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 21,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 20
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_3_0"
+            },
+            {
+                "Node Type": "Precompute_2",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 18,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 17,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 16,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "LeftJoin (MapJoin)",
+                                        "Operators": [
+                                            {
+                                                "Name": "LeftJoin (MapJoin)"
+                                            }
+                                        ],
+                                        "PlanNodeId": 15,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 14,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "CTE Name": "tx_result_binding_2_0",
+                                                        "Node Type": "ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 13
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 12,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 11,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 10,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "CTE Name": "tx_result_binding_2_0",
+                                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.x)"
+                                                                            },
+                                                                            {
+                                                                                "Name": "TablePointLookup",
+                                                                                "ReadColumns": [
+                                                                                    "x"
+                                                                                ],
+                                                                                "Table": "postgres_jointest/coalesce-and-join.test_plan/b"
+                                                                            },
+                                                                            {
+                                                                                "Iterator": "%kqp%tx_result_binding_1_0",
+                                                                                "Name": "Iterator"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 9,
+                                                                        "Tables": [
+                                                                            "postgres_jointest/coalesce-and-join.test_plan/b"
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_2_0"
+            },
+            {
+                "Node Type": "Precompute_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 7,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Filter-Limit",
+                        "Operators": [
+                            {
+                                "Name": "Filter",
+                                "Predicate": "Exist(item.x)"
+                            },
+                            {
+                                "Limit": "1",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 6
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_1_0"
+            },
+            {
+                "Node Type": "Precompute_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 4,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "x",
+                                                    "y"
+                                                ],
+                                                "ReadRanges": [
+                                                    "x (-\u221e, +\u221e)",
+                                                    "y (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "postgres_jointest/coalesce-and-join.test_plan/a"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "postgres_jointest/coalesce-and-join.test_plan/a"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_0_0"
+            }
+        ]
+    },
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/Root/postgres_jointest/coalesce-and-join.test_plan/a",
+            "reads": [
+                {
+                    "columns": [
+                        "x",
+                        "y"
+                    ],
+                    "scan_by": [
+                        "x (-\u221e, +\u221e)",
+                        "y (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                }
+            ]
+        },
+        {
+            "name": "/Root/postgres_jointest/coalesce-and-join.test_plan/b",
+            "reads": [
+                {
+                    "columns": [
+                        "x"
+                    ],
+                    "type": "Lookup"
+                },
+                {
+                    "columns": [
+                        "x"
+                    ],
+                    "type": "Lookup"
+                }
+            ]
+        }
+    ]
+}

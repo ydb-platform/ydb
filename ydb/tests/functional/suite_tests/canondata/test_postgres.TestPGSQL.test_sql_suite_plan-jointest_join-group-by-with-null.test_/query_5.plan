@@ -1,1 +1,181 @@
-"{\n  \"meta\":\n    {\n      \"version\":\"0.2\",\n      \"type\":\"query\"\n    },\n  \"tables\":[\n  {\n    \"name\":\"\\/Root\\/postgres_jointest\\/join-group-by-with-null.test_plan\\/int8_tbl\",\n    \"reads\":\n      [\n        {\n          \"type\":\"FullScan\",\n          \"scan_by\":\n            [\n              \"q1 (-\u221e, +\u221e)\",\n              \"q2 (-\u221e, +\u221e)\"\n            ],\n          \"columns\":\n            [\n              \"q1\",\n              \"q2\"\n            ]\n        },\n        {\n          \"type\":\"FullScan\",\n          \"scan_by\":\n            [\n              \"q1 (-\u221e, +\u221e)\",\n              \"q2 (-\u221e, +\u221e)\"\n            ],\n          \"columns\":\n            [\n              \"q1\",\n              \"q2\"\n            ]\n        }\n      ]\n  }\n],\n  \"Plan\":\n    {\n      \"Node Type\":\"Query\",\n      \"PlanNodeType\":\"Query\",\n      \"Plans\":\n        [\n          {\n            \"Node Type\":\"ResultSet\",\n            \"PlanNodeId\":12,\n            \"PlanNodeType\":\"ResultSet\",\n            \"Plans\":\n              [\n                {\n                  \"Node Type\":\"Limit\",\n                  \"Operators\":\n                    [\n                      {\n                        \"Limit\":\"1001\",\n                        \"Name\":\"Limit\"\n                      }\n                    ],\n                  \"PlanNodeId\":11,\n                  \"Plans\":\n                    [\n                      {\n                        \"Node Type\":\"Merge\",\n                        \"PlanNodeId\":10,\n                        \"PlanNodeType\":\"Connection\",\n                        \"Plans\":\n                          [\n                            {\n                              \"Node Type\":\"TopSort-Aggregate\",\n                              \"Operators\":\n                                [\n                                  {\n                                    \"Limit\":\"1001\",\n                                    \"Name\":\"TopSort\",\n                                    \"TopSortBy\":\"row.q2\"\n                                  },\n                                  {\n                                    \"Name\":\"Aggregate\"\n                                  }\n                                ],\n                              \"PlanNodeId\":9,\n                              \"Plans\":\n                                [\n                                  {\n                                    \"KeyColumns\":\n                                      [\n                                        \"t1.q2\"\n                                      ],\n                                    \"Node Type\":\"HashShuffle\",\n                                    \"PlanNodeId\":8,\n                                    \"PlanNodeType\":\"Connection\",\n                                    \"Plans\":\n                                      [\n                                        {\n                                          \"Node Type\":\"Aggregate-LeftJoin (MapJoin)\",\n                                          \"Operators\":\n                                            [\n                                              {\n                                                \"Aggregation\":\"{_yql_agg_0: COUNT(item.t2.q1)}\",\n                                                \"GroupBy\":\"item.t1.q2\",\n                                                \"Name\":\"Aggregate\"\n                                              },\n                                              {\n                                                \"Name\":\"LeftJoin (MapJoin)\"\n                                              }\n                                            ],\n                                          \"PlanNodeId\":7,\n                                          \"Plans\":\n                                            [\n                                              {\n                                                \"Node Type\":\"Map\",\n                                                \"PlanNodeId\":6,\n                                                \"PlanNodeType\":\"Connection\",\n                                                \"Plans\":\n                                                  [\n                                                    {\n                                                      \"Node Type\":\"TableFullScan\",\n                                                      \"Operators\":\n                                                        [\n                                                          {\n                                                            \"Name\":\"TableFullScan\",\n                                                            \"ReadColumns\":\n                                                              [\n                                                                \"q1\",\n                                                                \"q2\"\n                                                              ],\n                                                            \"ReadRanges\":\n                                                              [\n                                                                \"q1 (-\u221e, +\u221e)\",\n                                                                \"q2 (-\u221e, +\u221e)\"\n                                                              ],\n                                                            \"Table\":\"postgres_jointest\\/join-group-by-with-null.test_plan\\/int8_tbl\"\n                                                          }\n                                                        ],\n                                                      \"PlanNodeId\":5,\n                                                      \"Tables\":\n                                                        [\n                                                          \"postgres_jointest\\/join-group-by-with-null.test_plan\\/int8_tbl\"\n                                                        ]\n                                                    }\n                                                  ]\n                                              },\n                                              {\n                                                \"Node Type\":\"Broadcast\",\n                                                \"PlanNodeId\":4,\n                                                \"PlanNodeType\":\"Connection\",\n                                                \"Plans\":\n                                                  [\n                                                    {\n                                                      \"Node Type\":\"Collect\",\n                                                      \"PlanNodeId\":3,\n                                                      \"Plans\":\n                                                        [\n                                                          {\n                                                            \"Node Type\":\"UnionAll\",\n                                                            \"PlanNodeId\":2,\n                                                            \"PlanNodeType\":\"Connection\",\n                                                            \"Plans\":\n                                                              [\n                                                                {\n                                                                  \"Node Type\":\"TableFullScan\",\n                                                                  \"Operators\":\n                                                                    [\n                                                                      {\n                                                                        \"Name\":\"TableFullScan\",\n                                                                        \"ReadColumns\":\n                                                                          [\n                                                                            \"q1\",\n                                                                            \"q2\"\n                                                                          ],\n                                                                        \"ReadRanges\":\n                                                                          [\n                                                                            \"q1 (-\u221e, +\u221e)\",\n                                                                            \"q2 (-\u221e, +\u221e)\"\n                                                                          ],\n                                                                        \"Table\":\"postgres_jointest\\/join-group-by-with-null.test_plan\\/int8_tbl\"\n                                                                      }\n                                                                    ],\n                                                                  \"PlanNodeId\":1,\n                                                                  \"Tables\":\n                                                                    [\n                                                                      \"postgres_jointest\\/join-group-by-with-null.test_plan\\/int8_tbl\"\n                                                                    ]\n                                                                }\n                                                              ]\n                                                          }\n                                                        ]\n                                                    }\n                                                  ]\n                                              }\n                                            ]\n                                        }\n                                      ]\n                                  }\n                                ]\n                            }\n                          ],\n                        \"SortColumns\":\n                          [\n                            \"q2 (Asc)\"\n                          ]\n                      }\n                    ]\n                }\n              ]\n          }\n        ]\n    }\n}"
+{
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 12,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 11,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 10,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-Aggregate",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.q2"
+                                            },
+                                            {
+                                                "Name": "Aggregate"
+                                            }
+                                        ],
+                                        "PlanNodeId": 9,
+                                        "Plans": [
+                                            {
+                                                "KeyColumns": [
+                                                    "t1.q2"
+                                                ],
+                                                "Node Type": "HashShuffle",
+                                                "PlanNodeId": 8,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Aggregate-LeftJoin (MapJoin)",
+                                                        "Operators": [
+                                                            {
+                                                                "Aggregation": "{_yql_agg_0: COUNT(item.t2.q1)}",
+                                                                "GroupBy": "item.t1.q2",
+                                                                "Name": "Aggregate"
+                                                            },
+                                                            {
+                                                                "Name": "LeftJoin (MapJoin)"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 7,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "Map",
+                                                                "PlanNodeId": 6,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "TableFullScan",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "TableFullScan",
+                                                                                "ReadColumns": [
+                                                                                    "q1",
+                                                                                    "q2"
+                                                                                ],
+                                                                                "ReadRanges": [
+                                                                                    "q1 (-\u221e, +\u221e)",
+                                                                                    "q2 (-\u221e, +\u221e)"
+                                                                                ],
+                                                                                "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 5,
+                                                                        "Tables": [
+                                                                            "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                "Node Type": "Broadcast",
+                                                                "PlanNodeId": 4,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "Collect",
+                                                                        "PlanNodeId": 3,
+                                                                        "Plans": [
+                                                                            {
+                                                                                "Node Type": "UnionAll",
+                                                                                "PlanNodeId": 2,
+                                                                                "PlanNodeType": "Connection",
+                                                                                "Plans": [
+                                                                                    {
+                                                                                        "Node Type": "TableFullScan",
+                                                                                        "Operators": [
+                                                                                            {
+                                                                                                "Name": "TableFullScan",
+                                                                                                "ReadColumns": [
+                                                                                                    "q1",
+                                                                                                    "q2"
+                                                                                                ],
+                                                                                                "ReadRanges": [
+                                                                                                    "q1 (-\u221e, +\u221e)",
+                                                                                                    "q2 (-\u221e, +\u221e)"
+                                                                                                ],
+                                                                                                "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                                            }
+                                                                                        ],
+                                                                                        "PlanNodeId": 1,
+                                                                                        "Tables": [
+                                                                                            "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "q2 (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
+            "reads": [
+                {
+                    "columns": [
+                        "q1",
+                        "q2"
+                    ],
+                    "scan_by": [
+                        "q1 (-\u221e, +\u221e)",
+                        "q2 (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                },
+                {
+                    "columns": [
+                        "q1",
+                        "q2"
+                    ],
+                    "scan_by": [
+                        "q1 (-\u221e, +\u221e)",
+                        "q2 (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                }
+            ]
+        }
+    ]
+}

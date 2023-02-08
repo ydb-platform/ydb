@@ -1,1 +1,195 @@
-"{\n  \"meta\":\n    {\n      \"version\":\"0.2\",\n      \"type\":\"query\"\n    },\n  \"tables\":[\n  {\n    \"name\":\"\\/Root\\/postgres_jointest\\/join0.test_plan\\/tenk1\",\n    \"reads\":\n      [\n        {\n          \"type\":\"FullScan\",\n          \"scan_by\":\n            [\n              \"unique1 (-\u221e, +\u221e)\",\n              \"unique2 (-\u221e, +\u221e)\"\n            ],\n          \"columns\":\n            [\n              \"even\",\n              \"fivethous\",\n              \"four\",\n              \"hundred\",\n              \"odd\",\n              \"string4\",\n              \"stringu1\",\n              \"stringu2\",\n              \"ten\",\n              \"tenthous\",\n              \"thousand\",\n              \"twenty\",\n              \"two\",\n              \"twothousand\",\n              \"unique1\",\n              \"unique2\"\n            ]\n        }\n      ]\n  }\n],\n  \"Plan\":\n    {\n      \"Node Type\":\"Query\",\n      \"PlanNodeType\":\"Query\",\n      \"Plans\":\n        [\n          {\n            \"Node Type\":\"ResultSet\",\n            \"PlanNodeId\":14,\n            \"PlanNodeType\":\"ResultSet\",\n            \"Plans\":\n              [\n                {\n                  \"Node Type\":\"Limit\",\n                  \"Operators\":\n                    [\n                      {\n                        \"Limit\":\"1001\",\n                        \"Name\":\"Limit\"\n                      }\n                    ],\n                  \"PlanNodeId\":13,\n                  \"Plans\":\n                    [\n                      {\n                        \"Node Type\":\"UnionAll\",\n                        \"PlanNodeId\":12,\n                        \"PlanNodeType\":\"Connection\",\n                        \"Plans\":\n                          [\n                            {\n                              \"Node Type\":\"Limit-LeftJoin (MapJoin)\",\n                              \"Operators\":\n                                [\n                                  {\n                                    \"Limit\":\"1001\",\n                                    \"Name\":\"Limit\"\n                                  },\n                                  {\n                                    \"Name\":\"LeftJoin (MapJoin)\"\n                                  }\n                                ],\n                              \"PlanNodeId\":11,\n                              \"Plans\":\n                                [\n                                  {\n                                    \"Node Type\":\"Broadcast\",\n                                    \"PlanNodeId\":8,\n                                    \"PlanNodeType\":\"Connection\",\n                                    \"Plans\":\n                                      [\n                                        {\n                                          \"Node Type\":\"Collect\",\n                                          \"PlanNodeId\":7,\n                                          \"Plans\":\n                                            [\n                                              {\n                                                \"Node Type\":\"UnionAll\",\n                                                \"PlanNodeId\":6,\n                                                \"PlanNodeType\":\"Connection\",\n                                                \"Plans\":\n                                                  [\n                                                    {\n                                                      \"Node Type\":\"FullJoin (JoinDict)-ConstantExpr\",\n                                                      \"Operators\":\n                                                        [\n                                                          {\n                                                            \"Name\":\"FullJoin (JoinDict)\"\n                                                          },\n                                                          {\n                                                            \"Iterator\":\"[{id: 1}]\",\n                                                            \"Name\":\"Iterator\"\n                                                          }\n                                                        ],\n                                                      \"PlanNodeId\":5,\n                                                      \"Plans\":\n                                                        [\n                                                          {\n                                                            \"KeyColumns\":\n                                                              [\n                                                                \"unique1\"\n                                                              ],\n                                                            \"Node Type\":\"HashShuffle\",\n                                                            \"PlanNodeId\":4,\n                                                            \"PlanNodeType\":\"Connection\",\n                                                            \"Plans\":\n                                                              [\n                                                                {\n                                                                  \"Node Type\":\"Collect\",\n                                                                  \"PlanNodeId\":3,\n                                                                  \"Plans\":\n                                                                    [\n                                                                      {\n                                                                        \"Node Type\":\"UnionAll\",\n                                                                        \"PlanNodeId\":2,\n                                                                        \"PlanNodeType\":\"Connection\",\n                                                                        \"Plans\":\n                                                                          [\n                                                                            {\n                                                                              \"Node Type\":\"TableFullScan\",\n                                                                              \"Operators\":\n                                                                                [\n                                                                                  {\n                                                                                    \"Name\":\"TableFullScan\",\n                                                                                    \"ReadColumns\":\n                                                                                      [\n                                                                                        \"even\",\n                                                                                        \"fivethous\",\n                                                                                        \"four\",\n                                                                                        \"hundred\",\n                                                                                        \"odd\",\n                                                                                        \"string4\",\n                                                                                        \"stringu1\",\n                                                                                        \"stringu2\",\n                                                                                        \"ten\",\n                                                                                        \"tenthous\",\n                                                                                        \"thousand\",\n                                                                                        \"twenty\",\n                                                                                        \"two\",\n                                                                                        \"twothousand\",\n                                                                                        \"unique1\",\n                                                                                        \"unique2\"\n                                                                                      ],\n                                                                                    \"ReadRanges\":\n                                                                                      [\n                                                                                        \"unique1 (-\u221e, +\u221e)\",\n                                                                                        \"unique2 (-\u221e, +\u221e)\"\n                                                                                      ],\n                                                                                    \"Table\":\"postgres_jointest\\/join0.test_plan\\/tenk1\"\n                                                                                  }\n                                                                                ],\n                                                                              \"PlanNodeId\":1,\n                                                                              \"Tables\":\n                                                                                [\n                                                                                  \"postgres_jointest\\/join0.test_plan\\/tenk1\"\n                                                                                ]\n                                                                            }\n                                                                          ]\n                                                                      }\n                                                                    ]\n                                                                }\n                                                              ]\n                                                          }\n                                                        ]\n                                                    }\n                                                  ]\n                                              }\n                                            ]\n                                        }\n                                      ]\n                                  },\n                                  {\n                                    \"Node Type\":\"Map\",\n                                    \"PlanNodeId\":10,\n                                    \"PlanNodeType\":\"Connection\",\n                                    \"Plans\":\n                                      [\n                                        {\n                                          \"Node Type\":\"ConstantExpr\",\n                                          \"Operators\":\n                                            [\n                                              {\n                                                \"Iterator\":\"[{id: 1}]\",\n                                                \"Name\":\"Iterator\"\n                                              }\n                                            ],\n                                          \"PlanNodeId\":9\n                                        }\n                                      ]\n                                  }\n                                ]\n                            }\n                          ]\n                      }\n                    ]\n                }\n              ]\n          }\n        ]\n    }\n}"
+{
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 14,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 13,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 12,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "LeftJoin (MapJoin)"
+                                            }
+                                        ],
+                                        "PlanNodeId": 11,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 8,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 7,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 6,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "FullJoin (JoinDict)-ConstantExpr",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "FullJoin (JoinDict)"
+                                                                            },
+                                                                            {
+                                                                                "Iterator": "[{id: 1}]",
+                                                                                "Name": "Iterator"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 5,
+                                                                        "Plans": [
+                                                                            {
+                                                                                "KeyColumns": [
+                                                                                    "unique1"
+                                                                                ],
+                                                                                "Node Type": "HashShuffle",
+                                                                                "PlanNodeId": 4,
+                                                                                "PlanNodeType": "Connection",
+                                                                                "Plans": [
+                                                                                    {
+                                                                                        "Node Type": "Collect",
+                                                                                        "PlanNodeId": 3,
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "Node Type": "UnionAll",
+                                                                                                "PlanNodeId": 2,
+                                                                                                "PlanNodeType": "Connection",
+                                                                                                "Plans": [
+                                                                                                    {
+                                                                                                        "Node Type": "TableFullScan",
+                                                                                                        "Operators": [
+                                                                                                            {
+                                                                                                                "Name": "TableFullScan",
+                                                                                                                "ReadColumns": [
+                                                                                                                    "even",
+                                                                                                                    "fivethous",
+                                                                                                                    "four",
+                                                                                                                    "hundred",
+                                                                                                                    "odd",
+                                                                                                                    "string4",
+                                                                                                                    "stringu1",
+                                                                                                                    "stringu2",
+                                                                                                                    "ten",
+                                                                                                                    "tenthous",
+                                                                                                                    "thousand",
+                                                                                                                    "twenty",
+                                                                                                                    "two",
+                                                                                                                    "twothousand",
+                                                                                                                    "unique1",
+                                                                                                                    "unique2"
+                                                                                                                ],
+                                                                                                                "ReadRanges": [
+                                                                                                                    "unique1 (-\u221e, +\u221e)",
+                                                                                                                    "unique2 (-\u221e, +\u221e)"
+                                                                                                                ],
+                                                                                                                "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "PlanNodeId": 1,
+                                                                                                        "Tables": [
+                                                                                                            "postgres_jointest/join0.test_plan/tenk1"
+                                                                                                        ]
+                                                                                                    }
+                                                                                                ]
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 10,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Iterator": "[{id: 1}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 9
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/Root/postgres_jointest/join0.test_plan/tenk1",
+            "reads": [
+                {
+                    "columns": [
+                        "even",
+                        "fivethous",
+                        "four",
+                        "hundred",
+                        "odd",
+                        "string4",
+                        "stringu1",
+                        "stringu2",
+                        "ten",
+                        "tenthous",
+                        "thousand",
+                        "twenty",
+                        "two",
+                        "twothousand",
+                        "unique1",
+                        "unique2"
+                    ],
+                    "scan_by": [
+                        "unique1 (-\u221e, +\u221e)",
+                        "unique2 (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                }
+            ]
+        }
+    ]
+}

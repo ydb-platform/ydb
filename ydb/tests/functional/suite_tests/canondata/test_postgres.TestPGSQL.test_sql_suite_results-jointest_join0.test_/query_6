@@ -1,8 +1,8 @@
 [
     {
-        "unique2": 11,
         "stringu1": "WFAAAA",
+        "stringu2": "LKIAAA",
         "unique1": 3,
-        "stringu2": "LKIAAA"
+        "unique2": 11
     }
 ]

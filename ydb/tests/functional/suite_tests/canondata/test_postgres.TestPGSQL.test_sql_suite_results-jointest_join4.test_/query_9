@@ -1,17 +1,17 @@
 [
     {
-        "tt1_id": 1,
         "joincol": 11,
+        "tt1_id": 1,
         "tt2_id": 21
     },
     {
-        "tt1_id": 1,
         "joincol": 11,
+        "tt1_id": 1,
         "tt2_id": 22
     },
     {
-        "tt1_id": 2,
         "joincol": null,
+        "tt1_id": 2,
         "tt2_id": null
     }
 ]

@@ -1,7 +1,7 @@
 [
     {
-        "unique1": null,
+        "fault": 122,
         "q1": 123,
-        "fault": 122
+        "unique1": null
     }
 ]

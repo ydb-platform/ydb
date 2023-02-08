@@ -1,12 +1,12 @@
 [
     {
+        "bug_field": 666,
         "foo1_id": 0,
-        "foo3_id": 0,
-        "bug_field": 666
+        "foo3_id": 0
     },
     {
+        "bug_field": null,
         "foo1_id": 1,
-        "foo3_id": null,
-        "bug_field": null
+        "foo3_id": null
     }
 ]

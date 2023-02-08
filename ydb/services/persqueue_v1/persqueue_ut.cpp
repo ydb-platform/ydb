@@ -916,7 +916,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::CreateTopicResponse response;
             request.set_path(TStringBuilder() << "/Root/PQ/rt3.dc1--acc--topic2");
 
-            request.mutable_retention_period()->set_seconds(1);
+            request.set_retention_storage_mb(1);
 
             request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
             request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_GZIP);
@@ -1023,7 +1023,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             req.set_path("acc/topic2");
             req.set_consumer("first-consumer");
-            req.set_offset(15);
+            req.set_offset(18);
 
             grpc::ClientContext rcontext;
 
@@ -1042,7 +1042,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             req.set_path("acc/topic2");
             req.set_consumer("second-consumer");
-            req.set_offset(15);
+            req.set_offset(18);
 
             grpc::ClientContext rcontext;
 

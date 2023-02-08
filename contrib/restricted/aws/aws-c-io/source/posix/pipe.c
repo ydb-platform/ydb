@@ -12,7 +12,7 @@
 #endif
 
 /* TODO: move this detection to CMAKE and a config header */
-#if !defined(COMPAT_MODE) && defined(__GLIBC__) && __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 9
+#if !defined(COMPAT_MODE) && defined(__GLIBC__) && ((__GLIBC__ == 2 && __GLIBC_MINOR__ >= 9) || __GLIBC__ > 2)
 #    define HAVE_PIPE2 1
 #else
 #    define HAVE_PIPE2 0
@@ -276,10 +276,11 @@ int aws_pipe_read(struct aws_pipe_read_end *read_end, struct aws_byte_buf *dst_b
     ssize_t read_val = read(read_impl->handle.data.fd, dst_buffer->buffer + dst_buffer->len, num_bytes_to_read);
 
     if (read_val < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        int errno_value = errno; /* Always cache errno before potential side-effect */
+        if (errno_value == EAGAIN || errno_value == EWOULDBLOCK) {
             return aws_raise_error(AWS_IO_READ_WOULD_BLOCK);
         }
-        return s_raise_posix_error(errno);
+        return s_raise_posix_error(errno_value);
     }
 
     /* Success */
@@ -449,14 +450,15 @@ static void s_write_end_process_requests(struct aws_pipe_write_end *write_end) {
             ssize_t write_val = write(write_impl->handle.data.fd, request->cursor.ptr, request->cursor.len);
 
             if (write_val < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                int errno_value = errno; /* Always cache errno before potential side-effect */
+                if (errno_value == EAGAIN || errno_value == EWOULDBLOCK) {
                     /* The pipe is no longer writable. Bail out */
                     write_impl->is_writable = false;
                     return;
                 }
 
                 /* A non-recoverable error occurred during this write */
-                completed_error_code = s_translate_posix_error(errno);
+                completed_error_code = s_translate_posix_error(errno_value);
 
             } else {
                 aws_byte_cursor_advance(&request->cursor, write_val);

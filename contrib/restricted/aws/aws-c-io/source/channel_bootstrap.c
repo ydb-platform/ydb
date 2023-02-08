@@ -1335,8 +1335,8 @@ struct aws_socket *aws_server_bootstrap_new_socket_listener(
     const struct aws_server_socket_channel_bootstrap_options *bootstrap_options) {
     AWS_PRECONDITION(bootstrap_options);
     AWS_PRECONDITION(bootstrap_options->bootstrap);
-    AWS_PRECONDITION(bootstrap_options->incoming_callback)
-    AWS_PRECONDITION(bootstrap_options->shutdown_callback)
+    AWS_PRECONDITION(bootstrap_options->incoming_callback);
+    AWS_PRECONDITION(bootstrap_options->shutdown_callback);
 
     struct server_connection_args *server_connection_args =
         aws_mem_calloc(bootstrap_options->bootstrap->allocator, 1, sizeof(struct server_connection_args));

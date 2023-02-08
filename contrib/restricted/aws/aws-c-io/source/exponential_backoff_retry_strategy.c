@@ -266,7 +266,7 @@ static int s_exponential_retry_schedule_retry(
             AWS_LS_IO_EXPONENTIAL_BACKOFF_RETRY_STRATEGY,
             "id=%p: retry token %p is already scheduled.",
             (void *)backoff_retry_token->base.retry_strategy,
-            (void *)token)
+            (void *)token);
         return aws_raise_error(AWS_ERROR_INVALID_STATE);
     }
 
@@ -307,9 +307,9 @@ struct aws_retry_strategy *aws_retry_strategy_new_exponential_backoff(
     struct aws_allocator *allocator,
     const struct aws_exponential_backoff_retry_options *config) {
     AWS_PRECONDITION(config);
-    AWS_PRECONDITION(config->el_group)
-    AWS_PRECONDITION(config->jitter_mode <= AWS_EXPONENTIAL_BACKOFF_JITTER_DECORRELATED)
-    AWS_PRECONDITION(config->max_retries)
+    AWS_PRECONDITION(config->el_group);
+    AWS_PRECONDITION(config->jitter_mode <= AWS_EXPONENTIAL_BACKOFF_JITTER_DECORRELATED);
+    AWS_PRECONDITION(config->max_retries);
 
     if (config->max_retries > 63 || !config->el_group ||
         config->jitter_mode > AWS_EXPONENTIAL_BACKOFF_JITTER_DECORRELATED) {

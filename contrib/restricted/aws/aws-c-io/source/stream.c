@@ -289,7 +289,6 @@ struct aws_input_stream *aws_input_stream_new_from_file(struct aws_allocator *al
 
     impl->file = aws_fopen(file_name, "r+b");
     if (impl->file == NULL) {
-        aws_translate_and_raise_io_error(errno);
         goto on_error;
     }
 

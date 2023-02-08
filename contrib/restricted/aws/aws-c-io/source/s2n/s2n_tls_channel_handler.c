@@ -467,7 +467,7 @@ static void s_negotiation_task(struct aws_channel_task *task, void *arg, aws_tas
 int aws_tls_client_handler_start_negotiation(struct aws_channel_handler *handler) {
     struct s2n_handler *s2n_handler = (struct s2n_handler *)handler->impl;
 
-    AWS_LOGF_TRACE(AWS_LS_IO_TLS, "id=%p: Kicking off TLS negotiation.", (void *)handler)
+    AWS_LOGF_TRACE(AWS_LS_IO_TLS, "id=%p: Kicking off TLS negotiation.", (void *)handler);
     if (aws_channel_thread_is_callers_thread(s2n_handler->slot->channel)) {
         if (s2n_handler->state == NEGOTIATION_ONGOING) {
             s_drive_negotiation(handler);
@@ -616,7 +616,7 @@ static void s_delayed_shutdown_task_fn(struct aws_channel_task *channel_task, vo
     struct s2n_handler *s2n_handler = handler->impl;
 
     if (status == AWS_TASK_STATUS_RUN_READY) {
-        AWS_LOGF_DEBUG(AWS_LS_IO_TLS, "id=%p: Delayed shut down in write direction", (void *)handler)
+        AWS_LOGF_DEBUG(AWS_LS_IO_TLS, "id=%p: Delayed shut down in write direction", (void *)handler);
         s2n_blocked_status blocked;
         /* make a best effort, but the channel is going away after this run, so.... you only get one shot anyways */
         s2n_shutdown(s2n_handler->connection, &blocked);
@@ -959,7 +959,7 @@ static int s_s2n_handler_shutdown(
 
     if (dir == AWS_CHANNEL_DIR_WRITE) {
         if (!abort_immediately && error_code != AWS_IO_SOCKET_CLOSED) {
-            AWS_LOGF_DEBUG(AWS_LS_IO_TLS, "id=%p: Scheduling delayed write direction shutdown", (void *)handler)
+            AWS_LOGF_DEBUG(AWS_LS_IO_TLS, "id=%p: Scheduling delayed write direction shutdown", (void *)handler);
             if (s_s2n_do_delayed_shutdown(handler, slot, error_code) == AWS_OP_SUCCESS) {
                 return AWS_OP_SUCCESS;
             }

@@ -19,7 +19,7 @@
 #include <limits.h>
 #include <unistd.h>
 
-#if !defined(COMPAT_MODE) && defined(__GLIBC__) && __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 8
+#if !defined(COMPAT_MODE) && defined(__GLIBC__) && ((__GLIBC__ == 2 && __GLIBC_MINOR__ >= 8) || __GLIBC__ > 2)
 #    define USE_EFD 1
 #else
 #    define USE_EFD 0

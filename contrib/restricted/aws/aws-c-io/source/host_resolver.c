@@ -1199,7 +1199,7 @@ static void aws_host_resolver_thread(void *arg) {
         AWS_LS_IO_DNS,
         "static: Either no requests have been made for an address for %s for the duration "
         "of the ttl, or this thread is being forcibly shutdown. Killing thread.",
-        host_entry->host_name->bytes)
+        host_entry->host_name->bytes);
 
 done:
 

@@ -162,7 +162,7 @@ static void s_on_channel_setup_complete(struct aws_task *task, void *arg, enum a
                 AWS_LS_IO_CHANNEL,
                 "id=%p: message pool %p found in event-loop local storage: using it.",
                 (void *)setup_args->channel,
-                (void *)message_pool)
+                (void *)message_pool);
         }
 
         setup_args->channel->msg_pool = message_pool;

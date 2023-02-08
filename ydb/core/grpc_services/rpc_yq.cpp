@@ -497,7 +497,9 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateDescribeJobRequestOperationCall(TInt
         return {
             NPerms::Required("yq.jobs.get"),
             NPerms::Optional("yq.resources.viewPublic"),
-            NPerms::Optional("yq.resources.viewPrivate")
+            NPerms::Optional("yq.resources.viewPrivate"),
+            NPerms::Optional("yq.queries.viewAst"),
+            NPerms::Optional("yq.queries.viewQueryText")
         };
     } };
 

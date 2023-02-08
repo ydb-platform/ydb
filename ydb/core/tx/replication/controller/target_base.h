@@ -37,6 +37,7 @@ public:
 protected:
     ui64 GetReplicationId() const;
     ui64 GetTargetId() const;
+    ETargetKind GetTargetKind() const;
 
 private:
     const ETargetKind Kind;

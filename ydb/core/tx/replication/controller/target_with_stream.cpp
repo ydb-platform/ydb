@@ -13,7 +13,8 @@ void TTargetWithStream::Progress(ui64 schemeShardId, const TActorId& proxy, cons
             ctx.Send(ctx.SelfID, new TEvPrivate::TEvAssignStreamName(GetReplicationId(), GetTargetId()));
             NameAssignmentInProcess = true;
         } else if (!StreamCreator) {
-            StreamCreator = ctx.Register(CreateStreamCreator(ctx.SelfID, GetReplicationId(), GetTargetId(), proxy));
+            StreamCreator = ctx.Register(CreateStreamCreator(ctx.SelfID, proxy,
+                GetReplicationId(), GetTargetId(), GetTargetKind(), GetSrcPath(), GetStreamName()));
         }
         return;
     case EStreamState::Removing:

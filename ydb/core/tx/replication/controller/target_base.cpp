@@ -75,6 +75,10 @@ ui64 TTargetBase::GetTargetId() const {
     return TargetId;
 }
 
+TReplication::ETargetKind TTargetBase::GetTargetKind() const {
+    return Kind;
+}
+
 void TTargetBase::Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:

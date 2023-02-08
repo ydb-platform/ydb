@@ -382,9 +382,10 @@ struct Schema : NIceDb::Schema {
         struct Kind : Column<7, HostConfigDrive::Kind::ColumnType> {};
         struct PDiskType : Column<8, HostConfigDrive::TypeCol::ColumnType> { using Type = NKikimrBlobStorage::EPDiskType; };
         struct PDiskConfig : Column<9, NScheme::NTypeIds::String> {};
+        struct Path : Column<10, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Serial>;
-        using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, PDiskType, PDiskConfig>;
+        using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, PDiskType, PDiskConfig, Path>;
     };
 
     using TTables = SchemaTables<

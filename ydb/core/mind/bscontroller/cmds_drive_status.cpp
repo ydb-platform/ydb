@@ -140,6 +140,7 @@ namespace NKikimr::NBsController {
         driveInfoMutable->PDiskConfig = config;
         driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::ADDED;
         driveInfoMutable->NodeId = nodeId;
+        driveInfoMutable->Path = driveIt->second.Path;
 
         Fit.Boxes.insert(boxId);
 
@@ -165,6 +166,7 @@ namespace NKikimr::NBsController {
         driveInfoMutable->NodeId.Clear();
         driveInfoMutable->PDiskId.Clear();
         driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED;
+        driveInfoMutable->Path.Clear();
 
         Fit.Boxes.insert(driveInfo->BoxId);
 

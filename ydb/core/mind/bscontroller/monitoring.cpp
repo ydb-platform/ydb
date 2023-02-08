@@ -1160,6 +1160,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         TABLEH() { out << "LifeStage"; }
                         TABLEH() { out << "Kind"; }
                         TABLEH() { out << "PDiskType"; }
+                        TABLEH() { out << "Path"; }
                     }
                 }
                 TABLEBODY() {
@@ -1172,6 +1173,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                             TABLED() { out << info->LifeStage; }
                             TABLED() { out << info->Kind; }
                             TABLED() { out << info->PDiskType; }
+                            TABLED() { out << PrintMaybe(info->Path); }
                         }
                     }
                 }

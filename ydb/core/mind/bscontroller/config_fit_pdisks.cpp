@@ -112,7 +112,7 @@ namespace NKikimr {
         }
 
         // return TString not const TString& to make sure we never use dangling reference
-        static TString GetDiskPathFromNode(ui32 nodeId, const TString& serialNumber, const TBlobStorageController::TConfigState& state, bool throwOnError = false) {
+        TString GetDiskPathFromNode(ui32 nodeId, const TString& serialNumber, const TBlobStorageController::TConfigState& state, bool throwOnError = false) {
             if (auto nodeIt = state.Nodes.Get().find(nodeId); nodeIt != state.Nodes.Get().end()) {
                 for (const auto& [_, driveData] : nodeIt->second.KnownDrives) {
                     if (serialNumber == driveData.SerialNumber) {
@@ -132,7 +132,7 @@ namespace NKikimr {
         }
 
         // return TString not const TString& to make sure we never use dangling reference
-        static TString GetDiskSerialNumberFromNode(ui32 nodeId, const TString& path, const TBlobStorageController::TConfigState& state, bool throwOnError = false) {
+        TString GetDiskSerialNumberFromNode(ui32 nodeId, const TString& path, const TBlobStorageController::TConfigState& state, bool throwOnError = false) {
             if (auto nodeIt = state.Nodes.Get().find(nodeId); nodeIt != state.Nodes.Get().end()) {
                 for (const auto& [_, driveData] : nodeIt->second.KnownDrives) {
                     if (path == driveData.Path) {
@@ -233,15 +233,19 @@ namespace NKikimr {
                     return true;
                 }
 
-                auto path = GetDiskPathFromNode(*nodeId, serial, state, /* throwOnError */ true);
+                auto path = driveInfo.Path;
+                if (!path) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCFP07, "Couldn't get path for disk with serial number.", (SerialNumber, serial.Serial));
+                    return true;
+                }
 
                 TDiskInfo disk;
                 disk.BoxId = driveInfo.BoxId;
                 disk.HostId = *hostId;
-                disk.LastSeenPath = path;
+                disk.LastSeenPath = TString();
                 disk.LastSeenSerial = TString();
                 disk.NodeId = *nodeId;
-                disk.Path = path;
+                disk.Path = *path;
                 disk.PDiskCategory = TPDiskCategory(PDiskTypeToPDiskType(driveInfo.PDiskType), driveInfo.Kind);
                 disk.PDiskConfig = driveInfo.PDiskConfig.GetOrElse(TString());
                 disk.ReadCentric = false;

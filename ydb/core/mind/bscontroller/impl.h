@@ -1284,6 +1284,7 @@ public:
         Table::Kind::Type Kind = 0;
         Table::PDiskType::Type PDiskType = PDiskTypeToPDiskType(NPDisk::DEVICE_TYPE_UNKNOWN);
         TMaybe<Table::PDiskConfig::Type> PDiskConfig;
+        TMaybe<Table::Path::Type> Path;
 
         TDriveSerialInfo() = default;
         TDriveSerialInfo(const TDriveSerialInfo&) = default;
@@ -1303,7 +1304,8 @@ public:
                     Table::LifeStage,
                     Table::Kind,
                     Table::PDiskType,
-                    Table::PDiskConfig
+                    Table::PDiskConfig,
+                    Table::Path
                 > adapter(
                     &TDriveSerialInfo::BoxId,
                     &TDriveSerialInfo::NodeId,
@@ -1312,7 +1314,8 @@ public:
                     &TDriveSerialInfo::LifeStage,
                     &TDriveSerialInfo::Kind,
                     &TDriveSerialInfo::PDiskType,
-                    &TDriveSerialInfo::PDiskConfig
+                    &TDriveSerialInfo::PDiskConfig,
+                    &TDriveSerialInfo::Path
                 );
             callback(&adapter);
         }

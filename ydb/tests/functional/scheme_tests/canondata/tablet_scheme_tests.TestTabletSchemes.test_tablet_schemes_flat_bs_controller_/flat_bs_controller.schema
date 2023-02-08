@@ -1415,6 +1415,11 @@
                 "ColumnId": 9,
                 "ColumnName": "PDiskConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "Path",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -1429,7 +1434,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,

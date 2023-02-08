@@ -777,6 +777,40 @@ void TPathDescriber::DescribeBlobDepot(const TPath& path) {
     Self->DescribeBlobDepot(path->PathId, path->Name, *Result->Record.MutablePathDescription()->MutableBlobDepotDescription());
 }
 
+void TPathDescriber::DescribeExternalTable(const TActorContext& ctx, TPathId pathId, TPathElement::TPtr pathEl) {
+    const NScheme::TTypeRegistry* typeRegistry = AppData(ctx)->TypeRegistry;
+    auto it = Self->ExternalTables.FindPtr(pathId);
+    Y_VERIFY(it, "ExternalTable is not found");
+    TExternalTableInfo::TPtr externalTableInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableExternalTableDescription();
+    entry->SetName(pathEl->Name);
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetSourceType(externalTableInfo->SourceType);
+    entry->SetDataSourcePath(externalTableInfo->DataSourcePath);
+    entry->SetLocation(externalTableInfo->Location);
+    entry->SetVersion(externalTableInfo->AlterVersion);
+
+    entry->MutableColumns()->Reserve(externalTableInfo->Columns.size());
+    for (auto col : externalTableInfo->Columns) {
+        const auto& cinfo = col.second;
+        if (cinfo.IsDropped())
+            continue;
+
+        auto colDescr = entry->AddColumns();
+        colDescr->SetName(cinfo.Name);
+        colDescr->SetType(typeRegistry->GetTypeName(cinfo.PType.GetTypeId())); // TODO: no pg type details in string type
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(cinfo.PType);
+        colDescr->SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
+        }
+        colDescr->SetId(cinfo.Id);
+        colDescr->SetNotNull(cinfo.NotNull);
+    }
+    entry->SetContent(externalTableInfo->Content);
+}
+
 THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
     TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
     TString pathStr = Params.GetPath();
@@ -903,6 +937,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeBlobDepot:
             DescribeBlobDepot(path);
+            break;
+        case NKikimrSchemeOp::EPathTypeExternalTable:
+            DescribeExternalTable(ctx, base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

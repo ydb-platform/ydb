@@ -1373,6 +1373,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateSequence:
     case TTxState::TxCreateReplication:
     case TTxState::TxCreateBlobDepot:
+    case TTxState::TxCreateExternalTable:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1403,6 +1404,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterReplication:
     case TTxState::TxAlterBlobDepot:
     case TTxState::TxUpdateMainTableOnIndexMove:
+    case TTxState::TxAlterExternalTable:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1421,6 +1423,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropSequence:
     case TTxState::TxDropReplication:
     case TTxState::TxDropBlobDepot:
+    case TTxState::TxDropExternalTable:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -2586,6 +2589,56 @@ void TSchemeShard::PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const 
             NIceDb::TUpdate<Schema::RTMRPartitions::PartitionId>(partitionId),
             NIceDb::TUpdate<Schema::RTMRPartitions::BusKey>(partition.second->BusKey));
     }
+}
+
+void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTableInfo) {
+    Y_VERIFY(IsLocalId(pathId));
+
+    db.Table<Schema::ExternalTable>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::ExternalTable::SourceType>{externalTableInfo->SourceType},
+        NIceDb::TUpdate<Schema::ExternalTable::DataSourcePath>{externalTableInfo->DataSourcePath},
+        NIceDb::TUpdate<Schema::ExternalTable::Location>{externalTableInfo->Location},
+        NIceDb::TUpdate<Schema::ExternalTable::AlterVersion>{externalTableInfo->AlterVersion},
+        NIceDb::TUpdate<Schema::ExternalTable::Content>{externalTableInfo->Content});
+
+    for (auto col : externalTableInfo->Columns) {
+        ui32 colId = col.first;
+        const TTableInfo::TColumn& cinfo = col.second;
+        TString typeData;
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(cinfo.PType);
+        if (columnType.TypeInfo) {
+            Y_VERIFY(columnType.TypeInfo->SerializeToString(&typeData));
+        }
+        db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
+            NIceDb::TUpdate<Schema::MigratedColumns::ColName>(cinfo.Name),
+            NIceDb::TUpdate<Schema::MigratedColumns::ColType>((ui32)columnType.TypeId),
+            NIceDb::TUpdate<Schema::MigratedColumns::ColTypeData>(typeData),
+            NIceDb::TUpdate<Schema::MigratedColumns::ColKeyOrder>(cinfo.KeyOrder),
+            NIceDb::TUpdate<Schema::MigratedColumns::CreateVersion>(cinfo.CreateVersion),
+            NIceDb::TUpdate<Schema::MigratedColumns::DeleteVersion>(cinfo.DeleteVersion),
+            NIceDb::TUpdate<Schema::MigratedColumns::Family>(cinfo.Family),
+            NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(cinfo.DefaultKind),
+            NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(cinfo.DefaultValue),
+            NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull));
+    }
+}
+
+void TSchemeShard::PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathId)
+{
+    Y_VERIFY(IsLocalId(pathId));
+    if (ExternalTables.contains(pathId)) {
+        auto externalTableInfo = ExternalTables.at(pathId);
+
+        for (auto col : externalTableInfo->Columns) {
+            const ui32 colId = col.first;
+            db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Delete();
+        }
+
+        ExternalTables.erase(pathId);
+        DecrementPathDbRefCount(pathId);
+    }
+
+    db.Table<Schema::ExternalTable>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
@@ -3819,6 +3872,13 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                     Y_FAIL_S("BlobDepot for path " << pathId << " not found");
                 }
                 break;
+            case NKikimrSchemeOp::EPathType::EPathTypeExternalTable: {
+                auto it = ExternalTables.find(pathId);
+                Y_VERIFY(it != ExternalTables.end());
+                result.SetExternalTableVersion(it->second->AlterVersion);
+                generalVersion += result.GetExternalTableVersion();
+                break;
+            }
 
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid: {
                 Y_UNREACHABLE();
@@ -4566,6 +4626,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         break;
     case TPathElement::EPathType::EPathTypeBlobDepot:
         TabletCounters->Simple()[COUNTER_BLOB_DEPOT_COUNT].Sub(1);
+        break;
+    case TPathElement::EPathType::EPathTypeExternalTable:
+        TabletCounters->Simple()[COUNTER_EXTERNAL_TABLE_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_FAIL("impossible path type");

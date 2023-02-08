@@ -150,6 +150,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
+        case NKikimrSchemeOp::ESchemeOpDropExternalTable:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -324,6 +325,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
         case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
             return *modifyScheme.MutableBlobDepot()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
+            return *modifyScheme.MutableCreateExternalTable()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
+            Y_FAIL("no implementation for ESchemeOpAlterExternalTable");
         }
     }
 
@@ -343,6 +350,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateRtmrVolume:
         case NKikimrSchemeOp::ESchemeOpCreateColumnStore:
         case NKikimrSchemeOp::ESchemeOpCreateColumnTable:
+        case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
             return true;
         default:
             return false;
@@ -564,6 +572,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
         case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
+        case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -583,7 +592,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropColumnTable:
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
-        case NKikimrSchemeOp::ESchemeOpDropBlobDepot: {
+        case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
+        case NKikimrSchemeOp::ESchemeOpDropExternalTable: {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequiredAccess = NACLib::EAccessRights::RemoveSchema;
@@ -641,6 +651,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
+        case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;

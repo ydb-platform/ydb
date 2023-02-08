@@ -888,6 +888,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume)
 
+    // external table
+    GENERIC_HELPERS(CreateExternalTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateExternalTable)
+    GENERIC_HELPERS(DropExternalTable, NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropExternalTable, NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

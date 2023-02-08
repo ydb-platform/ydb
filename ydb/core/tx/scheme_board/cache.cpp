@@ -736,6 +736,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             SequenceInfo.Drop();
             ReplicationInfo.Drop();
             BlobDepotInfo.Drop();
+            ExternalTableInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -1148,8 +1149,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     root.WriteKey(#name).UnsafeWriteValue(ProtoJsonString(name->Description)); \
                 }
 
-            DESCRIPTION_PART(DomainDescription)
-            DESCRIPTION_PART(RtmrVolumeInfo)
+            DESCRIPTION_PART(DomainDescription);
+            DESCRIPTION_PART(RtmrVolumeInfo);
             DESCRIPTION_PART(KesusInfo);
             DESCRIPTION_PART(SolomonVolumeInfo);
             DESCRIPTION_PART(PQGroupInfo);
@@ -1159,6 +1160,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(SequenceInfo);
             DESCRIPTION_PART(ReplicationInfo);
             DESCRIPTION_PART(BlobDepotInfo);
+            DESCRIPTION_PART(ExternalTableInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1465,6 +1467,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindBlobDepot;
                 FillInfo(Kind, BlobDepotInfo, std::move(*pathDesc.MutableBlobDepotDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeExternalTable:
+                Kind = TNavigate::KindExternalTable;
+                FillInfo(Kind, ExternalTableInfo, std::move(*pathDesc.MutableExternalTableDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_VERIFY_DEBUG(false, "Invalid path type");
                 break;
@@ -1521,6 +1527,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeBlobDepot:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBlobDepot);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeExternalTable:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindExternalTable);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1730,6 +1739,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.SequenceInfo = SequenceInfo;
             entry.ReplicationInfo = ReplicationInfo;
             entry.BlobDepotInfo = BlobDepotInfo;
+            entry.ExternalTableInfo = ExternalTableInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2003,6 +2013,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // BlobDepot specific
         TIntrusivePtr<TNavigate::TBlobDepotInfo> BlobDepotInfo;
+
+        // ExternalTable specific
+        TIntrusivePtr<TNavigate::TExternalTableInfo> ExternalTableInfo;
 
     }; // TCacheItem
 

@@ -369,6 +369,14 @@ ISubOperationBase::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxStat
 ISubOperationBase::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::ETxState state);
 
+// External Table
+// Create
+ISubOperationBase::TPtr CreateNewExternalTable(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperationBase::TPtr CreateDropExternalTable(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateDropExternalTable(TOperationId id, TTxState::ETxState state);
+
 /// CDC
 // Create
 TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);

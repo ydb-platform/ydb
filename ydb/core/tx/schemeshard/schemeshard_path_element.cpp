@@ -164,6 +164,10 @@ TVirtualTimestamp TPathElement::GetDropTS() const {
     return TVirtualTimestamp(StepDropped, DropTxId);
 }
 
+bool TPathElement::IsExternalTable() const {
+    return PathType == EPathType::EPathTypeExternalTable;
+}
+
 void TPathElement::SetDropped(TStepId step, TTxId txId) {
     PathState = EPathState::EPathStateNotExist;
     StepDropped = step;

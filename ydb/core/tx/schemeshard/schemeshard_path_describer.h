@@ -43,6 +43,7 @@ class TPathDescriber {
     void DescribeSequence(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeReplication(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeBlobDepot(const TPath& path);
+    void DescribeExternalTable(const TActorContext& ctx, TPathId pathId, TPathElement::TPtr pathEl);
 
 public:
     explicit TPathDescriber(TSchemeShard* self, NKikimrSchemeOp::TDescribePath&& params)

@@ -303,6 +303,7 @@ public:
         auto migrateShards = event->Record.MutableShards();
         switch (path.Base()->PathType) {
             case NKikimrSchemeOp::EPathType::EPathTypeDir:
+            case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
                 Y_VERIFY(!path.Base()->IsRoot());
                 //no shards
                 break;

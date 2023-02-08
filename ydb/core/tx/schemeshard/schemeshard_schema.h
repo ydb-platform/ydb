@@ -1619,6 +1619,19 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, Description>;
     };
 
+    struct ExternalTable : Table<104> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct SourceType : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct DataSourcePath : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct Location : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct Content : Column<7, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, SourceType, DataSourcePath, Location, AlterVersion, Content>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1721,7 +1734,8 @@ struct Schema : NIceDb::Schema {
         Replications,
         ReplicationsAlterData,
         BlobDepots,
-        CdcStreamScanShardStatus
+        CdcStreamScanShardStatus,
+        ExternalTable
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

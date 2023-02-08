@@ -1877,6 +1877,30 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         }
 
+        // Read External Tables
+        {
+            auto rowset = db.Table<Schema::ExternalTable>().Range().Select();
+            if (!rowset.IsReady())
+                return false;
+
+            while (!rowset.EndOfSet()) {
+                TOwnerId ownerPathId = rowset.GetValue<Schema::ExternalTable::OwnerPathId>();
+                TLocalPathId localPathId = rowset.GetValue<Schema::ExternalTable::LocalPathId>();
+                TPathId pathId(ownerPathId, localPathId);
+
+                auto& externalTable = Self->ExternalTables[pathId] = new TExternalTableInfo();
+                externalTable->SourceType = rowset.GetValue<Schema::ExternalTable::SourceType>();
+                externalTable->DataSourcePath = rowset.GetValue<Schema::ExternalTable::DataSourcePath>();
+                externalTable->Location = rowset.GetValue<Schema::ExternalTable::Location>();
+                externalTable->AlterVersion = rowset.GetValue<Schema::ExternalTable::AlterVersion>();
+                externalTable->Content = rowset.GetValue<Schema::ExternalTable::Content>();
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next())
+                    return false;
+            }
+        }
+
         // Read table columns
         {
             TColumnRows columnRows;
@@ -1903,13 +1927,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto notNull = std::get<10>(rec);
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
-                Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable(), "Path is not a table, pathId: " << pathId);
-                Y_VERIFY_S(Self->Tables.FindPtr(pathId), "Table doesn't exist, pathId: " << pathId);
-
-                TTableInfo::TPtr tableInfo = Self->Tables[pathId];
-                Y_VERIFY_S(colId < tableInfo->NextColumnId, "Column id should be less than NextColId"
-                               << ", columnId: " << colId
-                               << ", NextColId: " << tableInfo->NextColumnId);
+                Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable() || Self->PathsById.at(pathId)->IsExternalTable(), "Path is not a table or external table, pathId: " << pathId);
+                Y_VERIFY_S(Self->Tables.FindPtr(pathId) || Self->ExternalTables.FindPtr(pathId), "Table or external table don't exist, pathId: " << pathId);
 
                 TTableInfo::TColumn colInfo(colName, colId, typeInfo);
                 colInfo.KeyOrder = keyOrder;
@@ -1920,11 +1939,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 colInfo.DefaultValue = defaultValue;
                 colInfo.NotNull = notNull;
 
-                tableInfo->Columns[colId] = colInfo;
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    TTableInfo::TPtr tableInfo = it->second;
+                    Y_VERIFY_S(colId < tableInfo->NextColumnId, "Column id should be less than NextColId"
+                                << ", columnId: " << colId
+                                << ", NextColId: " << tableInfo->NextColumnId);
 
-                if (colInfo.KeyOrder != (ui32)-1) {
-                    tableInfo->KeyColumnIds.resize(Max<ui32>(tableInfo->KeyColumnIds.size(), colInfo.KeyOrder + 1));
-                    tableInfo->KeyColumnIds[colInfo.KeyOrder] = colId;
+                    tableInfo->Columns[colId] = colInfo;
+
+                    if (colInfo.KeyOrder != (ui32)-1) {
+                        tableInfo->KeyColumnIds.resize(Max<ui32>(tableInfo->KeyColumnIds.size(), colInfo.KeyOrder + 1));
+                        tableInfo->KeyColumnIds[colInfo.KeyOrder] = colId;
+                    }
+                } else if (auto it = Self->ExternalTables.find(pathId); it != Self->ExternalTables.end()) {
+                    TExternalTableInfo::TPtr externalTableInfo = it->second;
+                    externalTableInfo->Columns[colId] = colInfo;
                 }
             }
         }
@@ -3945,6 +3974,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->TabletCounters->Simple()[COUNTER_SEQUENCE_COUNT].Add(1);
             } else if (path->IsReplication()) {
                 Self->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
+            } else if (path->IsExternalTable()) {
+                Self->TabletCounters->Simple()[COUNTER_EXTERNAL_TABLE_COUNT].Add(1);
             }
 
             path->ApplySpecialAttributes();

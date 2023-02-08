@@ -85,6 +85,7 @@ public:
         const TChecker& IsValidACL(const TString& acl, EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& PQPartitionsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& PQReservedStorageLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
+        const TChecker& IsExternalTable(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:

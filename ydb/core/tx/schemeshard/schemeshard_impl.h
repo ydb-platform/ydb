@@ -209,6 +209,7 @@ public:
     THashMap<TPathId, TFileStoreInfo::TPtr> FileStoreInfos;
     THashMap<TPathId, TKesusInfo::TPtr> KesusInfos;
     THashMap<TPathId, TOlapStoreInfo::TPtr> OlapStores;
+    THashMap<TPathId, TExternalTableInfo::TPtr> ExternalTables;
 
     TTablesStorage ColumnTables;
 
@@ -728,6 +729,10 @@ public:
     void PersistInitState(NIceDb::TNiceDb& db);
 
     void PersistStorageBillingTime(NIceDb::TNiceDb& db);
+
+    // ExternalTable
+    void PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTable);
+    void PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathId);
 
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 

@@ -94,6 +94,8 @@ public:
             return NKikimrViewer::EObjectType::Replication;
         case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
             return NKikimrViewer::EObjectType::BlobDepot;
+        case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
+            return NKikimrViewer::EObjectType::ExternalTable;
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
         case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
         case NKikimrSchemeOp::EPathType::EPathTypeInvalid:

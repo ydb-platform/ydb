@@ -175,6 +175,12 @@ namespace NSchemeShardUT_Private {
     DROP_BY_PATH_ID_HELPERS(DropTable);
     GENERIC_HELPERS(DropTableIndex);
 
+
+    // external table
+    GENERIC_HELPERS(CreateExternalTable);
+    GENERIC_HELPERS(DropExternalTable);
+    DROP_BY_PATH_ID_HELPERS(DropExternalTable);
+
     // backup & restore
     GENERIC_HELPERS(Backup);
     GENERIC_HELPERS(BackupToYt);

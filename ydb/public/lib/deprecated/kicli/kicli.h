@@ -580,6 +580,7 @@ public:
         Sequence,
         Replication,
         BlobDepot,
+        ExternalTable
     };
 
     TSchemaObject(TSchemaObject&&) = default;

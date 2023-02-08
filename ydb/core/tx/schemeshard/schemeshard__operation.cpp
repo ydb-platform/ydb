@@ -666,6 +666,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
         targetName = tx.GetCreateColumnTable().GetName();
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
+        targetName = tx.GetCreateExternalTable().GetName();
+        break;
     default:
         result.Transactions.push_back(tx);
         return result;
@@ -759,6 +762,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
             create.MutableCreateColumnTable()->SetName(name);
+            break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
+            create.MutableCreateExternalTable()->SetName(name);
             break;
         default:
             Y_UNREACHABLE();
@@ -1004,7 +1010,12 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
         return CreateAlterBlobDepot(NextPartId(), txState);
     case TTxState::ETxType::TxDropBlobDepot:
         return CreateDropBlobDepot(NextPartId(), txState);
-
+    case TTxState::ETxType::TxCreateExternalTable:
+        return CreateNewExternalTable(NextPartId(), txState);
+    case TTxState::ETxType::TxDropExternalTable:
+        return CreateDropExternalTable(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterExternalTable:
+        Y_FAIL("TODO: implement");
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1205,6 +1216,14 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
         return CreateAlterBlobDepot(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlobDepot:
         return CreateDropBlobDepot(NextPartId(), tx);
+
+    // ExternalTable
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
+        return CreateNewExternalTable(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
+        return CreateDropExternalTable(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
+        Y_FAIL("TODO: implement");
     }
 
     Y_UNREACHABLE();

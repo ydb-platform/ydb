@@ -1297,6 +1297,11 @@ enum EOperationType {
 
     // AlterExtSubDomain suboperations
     ESchemeOpAlterExtSubDomainCreateHive = 85;
+
+    // External Table
+    ESchemeOpCreateExternalTable = 86;
+    ESchemeOpDropExternalTable = 87;
+    ESchemeOpAlterExternalTable = 88;
 }
 
 message TApplyIf {
@@ -1405,6 +1410,8 @@ message TModifyScheme {
 
     optional TPersQueueGroupAllocate AllocatePersQueueGroup = 56;
     optional TPersQueueGroupDeallocate DeallocatePersQueueGroup = 57;
+
+    optional TExternalTableDescription CreateExternalTable = 58;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands
@@ -1460,6 +1467,7 @@ enum EPathType {
     EPathTypeSequence = 15;
     EPathTypeReplication = 16;
     EPathTypeBlobDepot = 17;
+    EPathTypeExternalTable = 18;
 }
 
 enum EPathSubType {
@@ -1511,6 +1519,7 @@ message TPathVersion {
     optional uint64 SequenceVersion = 24;
     optional uint64 ReplicationVersion = 25;
     optional uint64 BlobDepotVersion = 26;
+    optional uint64 ExternalTableVersion = 27;
 }
 
 // Describes single path
@@ -1596,6 +1605,7 @@ message TPathDescription {
     optional TSequenceDescription SequenceDescription = 24;
     optional TReplicationDescription ReplicationDescription = 25;
     optional TBlobDepotDescription BlobDepotDescription = 26;
+    optional TExternalTableDescription ExternalTableDescription = 27;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -1638,4 +1648,15 @@ message TResourceProfile {
     optional string MediumTxTaskType = 11 [default = "transaction"];
     // Resource Broker task type for large transactions.
     optional string LargeTxTaskType = 12 [default = "transaction"];
+}
+
+message TExternalTableDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+    optional string SourceType = 4;
+    optional string DataSourcePath = 5;
+    optional string Location = 6;
+    repeated TColumnDescription Columns = 7;
+    optional bytes Content = 8;
 }

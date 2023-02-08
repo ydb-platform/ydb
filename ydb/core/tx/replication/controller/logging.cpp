@@ -2,9 +2,7 @@
 
 #include "controller_impl.h"
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 TTabletLogPrefix::TTabletLogPrefix(const TController* self)
     : TabletId(self->TabletID())
@@ -43,9 +41,7 @@ void TActorLogPrefix::Out(IOutputStream& output) const {
     output << " ";
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TTabletLogPrefix, output, value) {
     value.Out(output);

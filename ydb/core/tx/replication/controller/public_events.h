@@ -4,8 +4,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/replication.pb.h>
 
-namespace NKikimr {
-namespace NReplication {
+namespace NKikimr::NReplication {
 
 struct TEvController {
     enum EEv {
@@ -40,5 +39,4 @@ struct TEvController {
 
 }; // TEvController
 
-} // NReplication
-} // NKikimr
+}

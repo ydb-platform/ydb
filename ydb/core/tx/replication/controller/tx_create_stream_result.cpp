@@ -1,8 +1,6 @@
 #include "controller_impl.h"
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TController::TTxCreateStreamResult: public TTxBase {
     TEvPrivate::TEvCreateStreamResult::TPtr Ev;
@@ -84,6 +82,4 @@ void TController::RunTxCreateStreamResult(TEvPrivate::TEvCreateStreamResult::TPt
     Execute(new TTxCreateStreamResult(this, ev), ctx);
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

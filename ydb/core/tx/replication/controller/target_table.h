@@ -2,9 +2,7 @@
 
 #include "target_with_stream.h"
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TTableTarget: public TTargetWithStream {
 public:
@@ -12,6 +10,4 @@ public:
 
 }; // TTableTarget
 
-} // NController
-} // NReplication
-} // NKikimr
+}

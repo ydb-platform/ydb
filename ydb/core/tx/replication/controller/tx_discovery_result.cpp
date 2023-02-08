@@ -3,9 +3,7 @@
 
 #include <util/string/join.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TController::TTxDiscoveryResult: public TTxBase {
     TEvPrivate::TEvDiscoveryResult::TPtr Ev;
@@ -88,6 +86,4 @@ void TController::RunTxDiscoveryResult(TEvPrivate::TEvDiscoveryResult::TPtr& ev,
     Execute(new TTxDiscoveryResult(this, ev), ctx);
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

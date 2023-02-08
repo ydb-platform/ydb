@@ -12,9 +12,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 using namespace NSchemeShard;
 
@@ -107,12 +105,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
     }
 
-    void SubscribeTx(ui64 txId) {
-        LOG_D("Subscribe tx"
-            << ": txId# " << txId);
-        Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
-    }
-
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
         const auto& record = ev->Get()->Record;
@@ -135,6 +127,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         default:
             return Error(record.GetStatus(), record.GetReason());
         }
+    }
+
+    void SubscribeTx(ui64 txId) {
+        LOG_D("Subscribe tx"
+            << ": txId# " << txId);
+        Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
@@ -421,6 +419,4 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
     return new TDstCreator(parent, schemeShardId, proxy, rid, tid, kind, srcPath, dstPath);
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

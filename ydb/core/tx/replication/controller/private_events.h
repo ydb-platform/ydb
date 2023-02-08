@@ -7,9 +7,7 @@
 #include <ydb/core/base/pathid.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 struct TEvPrivate {
     enum EEv {
@@ -74,6 +72,4 @@ struct TEvPrivate {
 
 }; // TEvPrivate
 
-} // NController
-} // NReplication
-} // NKikimr
+}

@@ -1,8 +1,6 @@
 #include "controller_impl.h"
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TController::TTxCreateDstResult: public TTxBase {
     TEvPrivate::TEvCreateDstResult::TPtr Ev;
@@ -90,6 +88,4 @@ void TController::RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev,
     Execute(new TTxCreateDstResult(this, ev), ctx);
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

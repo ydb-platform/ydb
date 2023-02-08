@@ -13,9 +13,7 @@ namespace NKikimrReplication {
     class TReplicationConfig;
 }
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TReplication: public TSimpleRefCount<TReplication> {
 public:
@@ -99,6 +97,4 @@ private:
 
 }; // TReplication
 
-} // NController
-} // NReplication
-} // NKikimr
+}

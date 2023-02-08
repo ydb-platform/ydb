@@ -11,9 +11,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/size_literals.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 inline TMaybe<TReplication::ETargetKind> TryTargetKindFromEntryType(NYdb::NScheme::ESchemeEntryType type) {
     switch (type) {
@@ -78,6 +76,4 @@ inline bool IsRetryableError(const NYdb::TStatus status) {
     return IsRetryableError(status, defaultRetryableErrors);
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

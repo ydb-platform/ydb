@@ -1,8 +1,6 @@
 #include "controller_impl.h"
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TController::TTxInit: public TTxBase {
     template <typename TRowset>
@@ -174,6 +172,4 @@ void TController::RunTxInit(const TActorContext& ctx) {
     Execute(new TTxInit(this), ctx);
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

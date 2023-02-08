@@ -3,8 +3,8 @@
 
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
-namespace NKikimr {
-namespace NReplication {
+namespace NKikimr::NReplication {
+
 namespace NController {
 
 TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
@@ -139,5 +139,4 @@ IActor* CreateController(const TActorId& tablet, TTabletStorageInfo* info) {
     return new NController::TController(tablet, info);
 }
 
-} // NReplication
-} // NKikimr
+}

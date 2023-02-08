@@ -2,9 +2,7 @@
 
 #include <util/generic/guid.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TController::TTxAssignStreamName: public TTxBase {
     TEvPrivate::TEvAssignStreamName::TPtr Ev;
@@ -78,6 +76,4 @@ void TController::RunTxAssignStreamName(TEvPrivate::TEvAssignStreamName::TPtr& e
     Execute(new TTxAssignStreamName(this, ev), ctx);
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

@@ -15,9 +15,7 @@
 
 #include <util/generic/hash.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TController
     : public TActor<TController>
@@ -118,6 +116,4 @@ private:
 
 }; // TController
 
-} // NController
-} // NReplication
-} // NKikimr
+}

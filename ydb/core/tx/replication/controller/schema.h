@@ -4,9 +4,7 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 struct TControllerSchema: NIceDb::Schema {
     struct SysParams: Table<1> {
@@ -72,6 +70,4 @@ struct TControllerSchema: NIceDb::Schema {
 
 }; // TControllerSchema
 
-} // NController
-} // NReplication
-} // NKikimr
+}

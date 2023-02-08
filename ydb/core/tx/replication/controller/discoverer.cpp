@@ -10,9 +10,7 @@
 
 #include <util/generic/hash_set.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TDiscoverer: public TActorBootstrapped<TDiscoverer> {
     void DescribePath(ui32 idx) {
@@ -147,6 +145,4 @@ IActor* CreateDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy
     return new TDiscoverer(parent, rid, proxy, std::move(specificPaths));
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

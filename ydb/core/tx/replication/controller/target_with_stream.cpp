@@ -4,9 +4,7 @@
 
 #include <library/cpp/actors/core/events.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 void TTargetWithStream::Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) {
     switch (GetStreamState()) {
@@ -38,6 +36,4 @@ void TTargetWithStream::Shutdown(const TActorContext& ctx) {
     TTargetBase::Shutdown(ctx);
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

@@ -6,9 +6,7 @@
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 public:
@@ -53,6 +51,4 @@ IActor* CreateStreamCreator(const TActorId& parent, ui64 rid, ui64 tid, const TA
     return new TStreamCreator(parent, rid, tid, proxy);
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

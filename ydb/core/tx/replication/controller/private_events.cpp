@@ -2,9 +2,7 @@
 
 #include <util/string/join.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 TEvPrivate::TEvDiscoveryResult::TEvDiscoveryResult(ui64 rid, TVector<TAddEntry>&& toAdd, TVector<ui64>&& toDel)
     : ReplicationId(rid)
@@ -95,9 +93,7 @@ bool TEvPrivate::TEvCreateDstResult::IsSuccess() const {
     return Status == NKikimrScheme::StatusSuccess;
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryResult::TAddEntry, stream, value) {
     stream << value.first.Name << " (" << value.first.Type << ")";

@@ -18,9 +18,7 @@
 #define LOG_W(stream) CLOG_W(*TlsActivationContext, stream)
 #define LOG_E(stream) CLOG_E(*TlsActivationContext, stream)
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TController;
 
@@ -49,6 +47,4 @@ private:
     const ui64 TargetId = 0;
 };
 
-} // NController
-} // NReplication
-} // NKikimr
+}

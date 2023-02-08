@@ -2,9 +2,7 @@
 
 #include "replication.h"
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TTargetBase: public TReplication::ITarget {
 protected:
@@ -58,6 +56,4 @@ private:
 
 }; // TTargetBase
 
-} // NController
-} // NReplication
-} // NKikimr
+}

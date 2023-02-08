@@ -12,9 +12,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TReplication::TImpl {
     friend class TReplication;
@@ -217,9 +215,7 @@ ui64 TReplication::GetNextTargetId() const {
     return Impl->NextTargetId;
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}
 
 Y_DECLARE_OUT_SPEC(, NKikimrReplication::TReplicationConfig::TargetCase, stream, value) {
     stream << static_cast<int>(value);

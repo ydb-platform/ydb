@@ -4,9 +4,7 @@
 
 #include <library/cpp/actors/core/events.h>
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
@@ -104,6 +102,4 @@ void TTargetBase::Shutdown(const TActorContext& ctx) {
     }
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

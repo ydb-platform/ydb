@@ -1,8 +1,6 @@
 #include "controller_impl.h"
 
-namespace NKikimr {
-namespace NReplication {
-namespace NController {
+namespace NKikimr::NReplication::NController {
 
 class TController::TTxDropReplication: public TTxBase {
     TEvController::TEvDropReplication::TPtr Ev;
@@ -72,6 +70,4 @@ void TController::RunTxDropReplication(TEvController::TEvDropReplication::TPtr& 
     Execute(new TTxDropReplication(this, ev), ctx);
 }
 
-} // NController
-} // NReplication
-} // NKikimr
+}

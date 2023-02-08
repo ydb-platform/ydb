@@ -4061,11 +4061,7 @@ TExprNode::TPtr OptimizeCombineCore(const TExprNode::TPtr& node, TExprContext& c
 }
 
 template<bool Sort>
-TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
-    if (!types.UseBlocks) {
-        return node; // TODO
-    }
-
+TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap") && input.Tail().Tail().IsCallable("AsStruct")) {
         TNodeMap<size_t> indexes(input.Tail().Tail().ChildrenSize());
         input.Tail().Tail().ForEachChild([&](const TExprNode& field) {
@@ -4114,14 +4110,16 @@ TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx, TTyp
                 .Seal().Build();
         }
 
-        auto top = ctx.Builder(node->Pos())
-            .Callable(Sort ? "WideTopSort" : "WideTop")
-                .Add(0, input.HeadPtr() )
-                .Add(1, node->ChildPtr(1))
-                .List(2).Add(std::move(directions)).Seal()
-            .Seal().Build();
-
-        return ctx.ChangeChild(input, 0U, std::move(top));
+        return Build<TCoNarrowMap>(ctx, node->Pos())
+            .template Input<std::conditional_t<Sort, TCoWideTopSort, TCoWideTop>>()
+                .Input(input.HeadPtr())
+                .Count(node->ChildPtr(1))
+                .template Keys<TCoSortKeys>()
+                    .Add(std::move(directions))
+                    .Build()
+                .Build()
+            .Lambda(input.TailPtr())
+            .Done().Ptr();
     }
 
     return node;
@@ -7143,12 +7141,11 @@ struct TPeepHoleRules {
         {"WideMap", &OptimizeWideMaps},
         {"NarrowMap", &OptimizeWideMaps},
         {"Unordered", &DropUnordered},
-    };
-
-    static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageExtRulesInit = {
         {"Top", &OptimizeTop<false>},
         {"TopSort", &OptimizeTop<true>},
     };
+
+    static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageExtRulesInit = {};
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageNonDetRulesInit = {
         {"Random", &Random0Arg<double>},

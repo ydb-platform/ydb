@@ -228,9 +228,9 @@ TVector<TCell> FillKeyValues(const TVector<NScheme::TTypeInfo>& keyColumnTypes, 
         auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
         if (paramIndex) {
             YQL_ENSURE(type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tuple);
-            auto actual = static_cast<NKikimr::NMiniKQL::TStructType*>(type);
-            YQL_ENSURE(*paramIndex < actual->GetMembersCount());
-            type = actual->GetMemberType(*paramIndex);
+            auto actual = static_cast<NKikimr::NMiniKQL::TTupleType*>(type);
+            YQL_ENSURE(*paramIndex < actual->GetElementsCount());
+            type = actual->GetElementType(*paramIndex);
             value = value.GetElement(*paramIndex);
         }
 

@@ -66,6 +66,22 @@ namespace NKikimr {
             return proto.ParseFromString(s) ? SingleLineProto(proto) : "<error>";
         }
 
+        static std::optional<TPDiskId> FindPDisk(const TDiskInfo& disk, const TBlobStorageController::TConfigState& state) {
+            auto id = state.FindPDiskByLocation(disk.NodeId, disk.Path);
+            if (!id) {
+                id = state.FindPDiskByLocation(disk.NodeId, disk.Serial);
+            }
+            return id;
+        }
+
+        static std::optional<TPDiskId> FindStaticPDisk(const TDiskInfo& disk, const TBlobStorageController::TConfigState& state) {
+            auto id = state.FindStaticPDiskByLocation(disk.NodeId, disk.Path);
+            if (!id) {
+                id = state.FindStaticPDiskByLocation(disk.NodeId, disk.Serial);
+            }
+            return id;
+        }
+
         static void UpdatePDiskIfNeeded(const TPDiskId& pdiskId, const TDiskInfo& disk, ui32 defaultMaxSlots, TBlobStorageController::TConfigState& state) {
             auto pdiskInfo = state.PDisks.Find(pdiskId);
             Y_VERIFY(pdiskInfo != nullptr);
@@ -84,7 +100,7 @@ namespace NKikimr {
                 pdiskInfo->BoxId = disk.BoxId;
                 if (pdiskInfo->PDiskConfig != disk.PDiskConfig) {
                     // update PDiskConfig only for nonstatic PDisks
-                    if (!state.FindStaticPDiskByLocation(disk.NodeId, disk.Path)) {
+                    if (!NKikimr::NBsController::FindStaticPDisk(disk, state)) {
                         pdiskInfo->PDiskConfig = disk.PDiskConfig;
                     } else {
                         throw TExError() << "Skipping PDiskConfig update for static disk" << TErrorParams::NodeId(disk.NodeId) << TErrorParams::Path(disk.Path);
@@ -295,7 +311,7 @@ namespace NKikimr {
             for (const auto& [diskId, disk] : disks) {
                 TPDiskId pdiskId;
                 // check if we already have spawned some PDisk at this location
-                if (auto pdiskIdOptional = state.FindPDiskByLocation(diskId.NodeId, diskId.Path)) {
+                if (auto pdiskIdOptional = NKikimr::NBsController::FindPDisk(disk, state)) {
                     pdiskId = *pdiskIdOptional;
                     // yes, we have; find it by id and update some characteristics (that we can update)
                     UpdatePDiskIfNeeded(pdiskId, disk, DefaultMaxSlots, state);
@@ -304,7 +320,7 @@ namespace NKikimr {
                     Schema::PDisk::Guid::Type guid;
 
                     ui32 staticSlotUsage = 0;
-                    if (auto pdiskIdOptional = state.FindStaticPDiskByLocation(disk.NodeId, disk.Path)) {
+                    if (auto pdiskIdOptional = NKikimr::NBsController::FindStaticPDisk(disk, state)) {
                         // yes, take some data from static configuration
                         pdiskId = *pdiskIdOptional;
                         guid = CheckStaticPDisk(state, pdiskId, disk.PDiskCategory, disk.PDiskConfig, &staticSlotUsage);

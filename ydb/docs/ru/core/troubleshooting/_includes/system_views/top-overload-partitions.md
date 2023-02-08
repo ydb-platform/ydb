@@ -22,3 +22,39 @@
 `RowCount` | Приблизительное количество строк в момент пика.<br>Тип: `Uint64`.
 `IndexSize` | Размер индекса партиции в таблетке в момент пика.<br>Тип: `Uint64`.
 `InFlightTxCount` | Количество транзакций, находящихся в процессе исполнения в момент пика.<br>Тип: `Uint32`.
+
+Примеры:
+
+Следующий запрос выводит партиции с потреблением CPU более 70% в указанном интервале времени, с идентификаторами таблеток и их размерами на момент превышения. Запрос выполняется к таблице `.sys/top_partitions_one_minute`, которая содержит данные за последние 6 часов с разбиением по часовым интервалам:
+
+>```yql
+>SELECT
+>    IntervalEnd,
+>    CPUCores,
+>    Path,
+>    TabletId,
+>    DataSize
+>FROM .sys/top_partitions_one_minute
+>WHERE CPUCores > 0.7
+>AND IntervalEnd BETWEEN Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuuZ") AND Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuu")
+>ORDER BY IntervalEnd desc, CPUCores desc
+>```
+
+* `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"` — время в зоне UTC 0 (`YYYY` — год, `MM` — месяц, `DD` — число, `hh` — часы, `mm` — минуты, `ss` — секунды, `uuuuuu` — микросекунды). Например, `"2023-01-26T13:00:00.000000Z"`.
+
+Следующий запрос выводит партиции с потреблением CPU более 90% в указанном интервале времени, с идентификаторами таблеток и их размерами на момент превышения. Запрос выполняется к таблице `.sys/top_partitions_one_hour`, которая содержит данные за последние 2 недели с разбиением по минутным интервалам:
+
+>```yql
+>SELECT
+>    IntervalEnd,
+>    CPUCores,
+>    Path,
+>    TabletId,
+>    DataSize
+>FROM .sys/top_partitions_one_hour
+>WHERE CPUCores > 0.9
+>AND IntervalEnd BETWEEN Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuuZ") AND Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuu")
+>ORDER BY IntervalEnd desc, CPUCores desc
+>```
+
+* `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"` — время в зоне UTC 0 (`YYYY` — год, `MM` — месяц, `DD` — число, `hh` — часы, `mm` — минуты, `ss` — секунды, `uuuuuu` — микросекунды). Например, `"2023-01-26T13:00:00.000000Z"`.

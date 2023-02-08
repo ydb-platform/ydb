@@ -156,7 +156,7 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
-                                                        "Predicate": "items1 == Concat",
+                                                        "Predicate": "item.Name == Concat",
                                                         "Name": "Filter"
                                                     },
                                                     {

@@ -193,6 +193,11 @@
                                                                 "PlanNodeId": 1,
                                                                 "Operators": [
                                                                     {
+                                                                        "GroupBy": "item.Group",
+                                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
+                                                                        "Name": "Aggregate"
+                                                                    },
+                                                                    {
                                                                         "ReadRanges": [
                                                                             "Group (-\u221e, +\u221e)",
                                                                             "Name (-\u221e, +\u221e)"
@@ -204,7 +209,7 @@
                                                                         "Table": "base_join_group_by_lookup_script_script/Input1"
                                                                     }
                                                                 ],
-                                                                "Node Type": "TableFullScan"
+                                                                "Node Type": "Aggregate-TableFullScan"
                                                             }
                                                         ],
                                                         "Node Type": "HashShuffle",
@@ -214,7 +219,12 @@
                                                         "PlanNodeType": "Connection"
                                                     }
                                                 ],
-                                                "Node Type": "Stage"
+                                                "Operators": [
+                                                    {
+                                                        "Name": "Aggregate"
+                                                    }
+                                                ],
+                                                "Node Type": "Aggregate"
                                             }
                                         ],
                                         "Node Type": "UnionAll",

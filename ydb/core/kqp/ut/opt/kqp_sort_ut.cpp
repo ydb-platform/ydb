@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-        auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan"); // without `Sort`
+        auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TableRangeScan"); // without `Sort`
         if (!node.IsDefined()) {
             node = FindPlanNodeByKv(plan, "Node Type", "Filter-TableRangeScan"); // without `Sort`
         }
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TableRangeScan");
             if (!node.IsDefined()) {
                 node = FindPlanNodeByKv(plan, "Node Type", "Filter-TableRangeScan");
             }
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TableRangeScan");
             if (!node.IsDefined()) {
                 node = FindPlanNodeByKv(plan, "Node Type", "Filter-TableRangeScan");
             }
@@ -957,7 +957,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-            auto node = FindPlanNodeByKv(plan, "Node Type", "Filter-TableFullScan");
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TableFullScan");
             UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
             auto limit = FindPlanNodeByKv(node, "Limit", "Min(1001,$limit)");
             UNIT_ASSERT(limit.IsDefined());
@@ -1045,14 +1045,14 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
 
-        auto tableLookup = FindPlanNodeByKv(plan, "Node Type", "Filter-TablePointLookup");
+        auto tableLookup = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
         UNIT_ASSERT(tableLookup.IsDefined());
 
-        auto& filterOp = tableLookup.GetMapSafe().at("Operators").GetArraySafe().at(0).GetMapSafe();
-        UNIT_ASSERT_VALUES_EQUAL("Filter", filterOp.at("Name").GetStringSafe());
-        UNIT_ASSERT_VALUES_EQUAL("$limit", filterOp.at("Limit").GetStringSafe());
+        auto& limitOp = tableLookup.GetMapSafe().at("Operators").GetArraySafe().at(0).GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL("Limit", limitOp.at("Name").GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL("$limit", limitOp.at("Limit").GetStringSafe());
 
-        auto& lookupOp = tableLookup.GetMapSafe().at("Operators").GetArraySafe().at(1).GetMapSafe();
+        auto& lookupOp = tableLookup.GetMapSafe().at("Operators").GetArraySafe().at(2).GetMapSafe();
         UNIT_ASSERT_VALUES_EQUAL("TablePointLookup", lookupOp.at("Name").GetStringSafe());
         UNIT_ASSERT_VALUES_EQUAL("index", lookupOp.at("Table").GetStringSafe());
         UNIT_ASSERT(!lookupOp.contains("ReadLimit"));

@@ -131,12 +131,16 @@ namespace NKikimr::NBsController {
         if (guid) {
             driveInfoMutable->Guid = *guid;
         }
-
         driveInfoMutable->Kind = cmd.GetKind();
-        driveInfoMutable->PDiskType = cmd.GetPDiskType();
+        if (cmd.GetPDiskType() != NKikimrBlobStorage::UNKNOWN_TYPE) {
+            driveInfoMutable->PDiskType = cmd.GetPDiskType();
+        } else {
+            driveInfoMutable->PDiskType = PDiskTypeToPDiskType(driveIt->second.DeviceType);
+        }
         TString config;
-        auto success = cmd.GetPDiskConfig().SerializeToString(&config);
-        Y_VERIFY(success);
+        if (!cmd.GetPDiskConfig().SerializeToString(&config)) {
+            throw TExError() << "Couldn't serialize PDiskConfig for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
+        }
         driveInfoMutable->PDiskConfig = config;
         driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::ADDED;
         driveInfoMutable->NodeId = nodeId;

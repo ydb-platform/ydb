@@ -818,10 +818,38 @@ void FindPlanNodesImpl(const NJson::TJsonValue& node, const TString& key, std::v
     }
 }
 
+void FindPlanStagesImpl(const NJson::TJsonValue& node, std::vector<NJson::TJsonValue>& stages) {
+    if (node.IsArray()) {
+        for (const auto& item: node.GetArray()) {
+            FindPlanStagesImpl(item, stages);
+        }
+    }
+
+    if (!node.IsMap()) {
+        return;
+    }
+
+    auto map = node.GetMap();
+    // TODO: Use explicit PlanNodeType for stages
+    if (map.contains("Node Type") && !map.contains("PlanNodeType")) {
+        stages.push_back(node);
+    }
+
+    for (const auto& [_, value]: map) {
+        FindPlanStagesImpl(value, stages);
+    }
+}
+
 std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, const TString& key) {
     std::vector<NJson::TJsonValue> results;
     FindPlanNodesImpl(plan, key, results);
     return results;
+}
+
+std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
+    std::vector<NJson::TJsonValue> stages;
+    FindPlanStagesImpl(plan, stages);
+    return stages;
 }
 
 void CreateSampleTablesWithIndex(TSession& session) {

@@ -120,6 +120,62 @@ TParams BuildInsertIndexParams(TTableClient& client) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpQueryPerf) {
+    Y_UNIT_TEST_TWIN(KvRead, EnableStreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(EnableStreamLookup);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+        TKikimrRunner kikimr{settings};
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$key").Uint64(102).Build()
+            .Build();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $key AS Uint64;
+
+            SELECT * FROM EightShard
+            WHERE Key = $key;
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // Cerr << stats.query_plan() << Endl;
+
+        // TODO: Fix stream lookup case
+        if (!EnableStreamLookup) {
+            AssertTableStats(result, "/Root/EightShard", {
+                .ExpectedReads = 1,
+            });
+        }
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        for (const auto& phase : stats.query_phases()) {
+            UNIT_ASSERT(phase.affected_shards() <= 1);
+        }
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(stats.query_plan(), &plan, true);
+
+        auto stages = FindPlanStages(plan);
+        // TODO: Fix stream lookup case
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), EnableStreamLookup ? 3 : 2);
+
+        i64 totalTasks = 0;
+        for (const auto& stage : stages) {
+            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
+        }
+        // TODO: Fix stream lookup case
+        UNIT_ASSERT_VALUES_EQUAL(totalTasks, EnableStreamLookup ? 3 : 2);
+    }
+
     Y_UNIT_TEST(Upsert) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

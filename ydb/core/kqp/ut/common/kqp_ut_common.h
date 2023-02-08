@@ -240,6 +240,7 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it);
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, const TString& key);
+std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan);
 
 TString ReadTableToYson(NYdb::NTable::TSession session, const TString& table);
 TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table);

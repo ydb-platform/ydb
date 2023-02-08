@@ -1,0 +1,52 @@
+[
+    {
+        "MobilePhone": 1,
+        "MobilePhoneModel": "iPad",
+        "u": 131
+    },
+    {
+        "MobilePhone": 26,
+        "MobilePhoneModel": "iPhone",
+        "u": 7
+    },
+    {
+        "MobilePhone": 6,
+        "MobilePhoneModel": "iPad",
+        "u": 7
+    },
+    {
+        "MobilePhone": 5,
+        "MobilePhoneModel": "iPad",
+        "u": 7
+    },
+    {
+        "MobilePhone": 60,
+        "MobilePhoneModel": "iPad",
+        "u": 5
+    },
+    {
+        "MobilePhone": 7,
+        "MobilePhoneModel": "iPad",
+        "u": 3
+    },
+    {
+        "MobilePhone": 6,
+        "MobilePhoneModel": "GT-P7300B",
+        "u": 3
+    },
+    {
+        "MobilePhone": 118,
+        "MobilePhoneModel": "A500",
+        "u": 2
+    },
+    {
+        "MobilePhone": 32,
+        "MobilePhoneModel": "iPhone",
+        "u": 2
+    },
+    {
+        "MobilePhone": 32,
+        "MobilePhoneModel": "iPad",
+        "u": 2
+    }
+]

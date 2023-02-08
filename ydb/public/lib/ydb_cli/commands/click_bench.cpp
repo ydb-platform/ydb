@@ -215,14 +215,16 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
                         << res.first << res.second << Endl << Endl;
                 }
             } else {
-                allOkay = false;
                 Cout << "failed\t" << duration << " seconds" << Endl;
                 Cerr << queryN << ": " << query << Endl
                      << res.first << res.second << Endl;
                 Sleep(TDuration::Seconds(1));
             }
         }
-        Y_VERIFY(successIteration == IterationsCount);
+
+        if (successIteration != IterationsCount) {
+            allOkay = false;
+        }
 
         auto [inserted, success] = QueryRuns.emplace(queryN, TTestInfo(std::move(timings)));
         Y_VERIFY(success);

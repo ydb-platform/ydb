@@ -1,0 +1,132 @@
+# -*- coding: utf-8 -*-
+import os
+import ydb
+import json
+from json import encoder
+import yatest.common
+from hamcrest import assert_that, is_
+encoder.FLOAT_REPR = lambda o: format(o, '{:e}')
+
+
+def run_cli(argv):
+    return yatest.common.execute(
+        [
+            yatest.common.binary_path("ydb/apps/ydb/ydb"),
+            "--endpoint",
+            "grpc://" + os.getenv("YDB_ENDPOINT"),
+            "--database",
+            "/" + os.getenv("YDB_DATABASE"),
+        ] + argv
+    )
+
+
+def get_queries(filename):
+    path = os.path.join(yatest.common.source_path("ydb/tests/functional/clickbench"), filename)
+    with open(path, "r") as r:
+        data = r.read()
+    for query in data.split('\n'):
+        if not query:
+            continue
+
+        yield query
+
+
+def format_row(row):
+    for col in row:
+        if isinstance(row[col], float):
+            row[col] = "{:e}".format(row[col])
+    return row
+
+
+def execute_scan_query(driver, yql_text, table_path):
+    yql_text = yql_text.replace("$data", table_path)
+    success = False
+    retries = 10
+    while retries > 0 and not success:
+        retries -= 1
+
+        it = driver.table_client.scan_query(yql_text)
+        result = []
+        while True:
+            try:
+                response = next(it)
+                for row in response.result_set.rows:
+                    result.append(format_row(row))
+
+            except StopIteration:
+                return result
+
+            except Exception:
+                if retries == 0:
+                    raise
+
+
+def explain_scan_query(driver, yql_text, table_path):
+    yql_text = yql_text.replace("$data", table_path)
+    client = ydb.ScriptingClient(driver)
+    result = client.explain_yql(
+        yql_text,
+        ydb.ExplainYqlScriptSettings().with_mode(ydb.ExplainYqlScriptSettings.MODE_EXPLAIN)
+    )
+    return json.loads(result.plan)
+
+
+def save_canonical_data(data, fname):
+    path = os.path.join(yatest.common.output_path(), fname)
+    with open(path, "w") as w:
+        w.write(
+            json.dumps(
+                data,
+                indent=4,
+                sort_keys=True,
+            )
+        )
+
+    return yatest.common.canonical_file(
+        local=True,
+        universal_lines=True,
+        path=path,
+    )
+
+
+def test_queries():
+    ret = run_cli(["workload", "clickbench", "init", "--store", "column"])
+    assert_that(ret.exit_code, is_(0))
+
+    ret = run_cli(
+        [
+            "import", "file", "csv", "--path", "clickbench/hits",
+            "--input-file",
+            yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
+        ]
+    )
+    assert_that(ret.exit_code, is_(0))
+
+    # just validating that benchmark can be executed successfully on this data.
+    out_fpath = os.path.join(yatest.common.output_path(), 'click_bench.results')
+    ret = run_cli(["workload", "clickbench", "run", "--output", out_fpath])
+    assert_that(ret.exit_code, is_(0))
+
+    driver = ydb.Driver(
+        ydb.DriverConfig(
+            database="/" + os.getenv("YDB_DATABASE"),
+            endpoint=os.getenv("YDB_ENDPOINT"),
+        )
+    )
+
+    driver.wait(5)
+
+    final_results = {}
+    for query_id, query in enumerate(get_queries("data/queries-deterministic.sql")):
+        results_to_canonize = execute_scan_query(driver, query, "`/local/clickbench/hits`")
+        key = "queries-deterministic-results-%s" % str(query_id)
+        final_results[key] = save_canonical_data(results_to_canonize, key)
+
+    for query_id, query in enumerate(get_queries("data/queries-original.sql")):
+        if not query:
+            raise ValueError(query_id)
+        plan = explain_scan_query(driver, query, "`/local/clickbench/hits`")
+        key = "queries-original-plan-%s" % str(query_id)
+        final_results[key] = save_canonical_data(plan, key)
+
+    return final_results

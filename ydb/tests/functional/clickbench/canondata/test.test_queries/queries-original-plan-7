@@ -1,0 +1,168 @@
+{
+    "meta": {
+        "type": "script",
+        "version": "0.2"
+    },
+    "queries": [
+        {
+            "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
+                "Plans": [
+                    {
+                        "Node Type": "ResultSet",
+                        "PlanNodeId": 6,
+                        "PlanNodeType": "ResultSet",
+                        "Plans": [
+                            {
+                                "Node Type": "Limit",
+                                "Operators": [
+                                    {
+                                        "Limit": "1001",
+                                        "Name": "Limit"
+                                    }
+                                ],
+                                "PlanNodeId": 5,
+                                "Plans": [
+                                    {
+                                        "Node Type": "Merge",
+                                        "PlanNodeId": 4,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TopSort-Aggregate",
+                                                "Operators": [
+                                                    {
+                                                        "Limit": "1001",
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "$15.cnt"
+                                                    },
+                                                    {
+                                                        "Name": "Aggregate"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 3,
+                                                "Plans": [
+                                                    {
+                                                        "KeyColumns": [
+                                                            "AdvEngineID"
+                                                        ],
+                                                        "Node Type": "HashShuffle",
+                                                        "PlanNodeId": 2,
+                                                        "PlanNodeType": "Connection",
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
+                                                                        "GroupBy": "item.AdvEngineID",
+                                                                        "Name": "Aggregate"
+                                                                    },
+                                                                    {
+                                                                        "Name": "TableFullScan",
+                                                                        "ReadColumns": [
+                                                                            "AdvEngineID"
+                                                                        ],
+                                                                        "ReadRanges": [
+                                                                            "EventTime (-\u221e, +\u221e)",
+                                                                            "CounterID (-\u221e, +\u221e)",
+                                                                            "EventDate (-\u221e, +\u221e)",
+                                                                            "UserID (-\u221e, +\u221e)",
+                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                        ],
+                                                                        "SsaProgram": {
+                                                                            "Command": [
+                                                                                {
+                                                                                    "Assign": {
+                                                                                        "Column": {
+                                                                                            "Id": 106
+                                                                                        },
+                                                                                        "Constant": {
+                                                                                            "Int32": 0
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                {
+                                                                                    "Assign": {
+                                                                                        "Column": {
+                                                                                            "Id": 107
+                                                                                        },
+                                                                                        "Function": {
+                                                                                            "Arguments": [
+                                                                                                {
+                                                                                                    "Id": 41
+                                                                                                },
+                                                                                                {
+                                                                                                    "Id": 106
+                                                                                                }
+                                                                                            ],
+                                                                                            "Id": 2
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                {
+                                                                                    "Filter": {
+                                                                                        "Predicate": {
+                                                                                            "Id": 107
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                {
+                                                                                    "Projection": {
+                                                                                        "Columns": [
+                                                                                            {
+                                                                                                "Id": 41
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                }
+                                                                            ],
+                                                                            "Version": 2
+                                                                        },
+                                                                        "Table": "clickbench/hits"
+                                                                    }
+                                                                ],
+                                                                "PlanNodeId": 1,
+                                                                "Tables": [
+                                                                    "clickbench/hits"
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ],
+                                        "SortColumns": [
+                                            "cnt (Desc)"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "tables": [
+                {
+                    "name": "/local/clickbench/hits",
+                    "reads": [
+                        {
+                            "columns": [
+                                "AdvEngineID"
+                            ],
+                            "scan_by": [
+                                "EventTime (-\u221e, +\u221e)",
+                                "CounterID (-\u221e, +\u221e)",
+                                "EventDate (-\u221e, +\u221e)",
+                                "UserID (-\u221e, +\u221e)",
+                                "WatchID (-\u221e, +\u221e)"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

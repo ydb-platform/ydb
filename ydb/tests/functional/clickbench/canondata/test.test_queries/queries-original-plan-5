@@ -1,0 +1,167 @@
+{
+    "meta": {
+        "type": "script",
+        "version": "0.2"
+    },
+    "queries": [
+        {
+            "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
+                "Plans": [
+                    {
+                        "Node Type": "ResultSet_1",
+                        "PlanNodeId": 11,
+                        "PlanNodeType": "ResultSet",
+                        "Plans": [
+                            {
+                                "Node Type": "Collect",
+                                "PlanNodeId": 10,
+                                "Plans": [
+                                    {
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeId": 9,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "CTE Name": "tx_result_binding_1_0",
+                                                "Node Type": "ConstantExpr",
+                                                "Operators": [
+                                                    {
+                                                        "Iterator": "%kqp%tx_result_binding_0_0",
+                                                        "Name": "Iterator"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 8
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "Node Type": "Precompute_0",
+                        "Parent Relationship": "InitPlan",
+                        "PlanNodeId": 6,
+                        "PlanNodeType": "Materialize",
+                        "Plans": [
+                            {
+                                "Node Type": "Aggregate-Limit-Aggregate",
+                                "Operators": [
+                                    {
+                                        "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Limit": "1",
+                                        "Name": "Limit"
+                                    },
+                                    {
+                                        "Name": "Aggregate"
+                                    }
+                                ],
+                                "PlanNodeId": 5,
+                                "Plans": [
+                                    {
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeId": 4,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Aggregate-Aggregate",
+                                                "Operators": [
+                                                    {
+                                                        "Name": "Aggregate"
+                                                    },
+                                                    {
+                                                        "Name": "Aggregate"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 3,
+                                                "Plans": [
+                                                    {
+                                                        "KeyColumns": [
+                                                            "SearchPhrase"
+                                                        ],
+                                                        "Node Type": "HashShuffle",
+                                                        "PlanNodeId": 2,
+                                                        "PlanNodeType": "Connection",
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Aggregation": "state",
+                                                                        "GroupBy": "item.SearchPhrase",
+                                                                        "Name": "Aggregate"
+                                                                    },
+                                                                    {
+                                                                        "Name": "TableFullScan",
+                                                                        "ReadColumns": [
+                                                                            "SearchPhrase"
+                                                                        ],
+                                                                        "ReadRanges": [
+                                                                            "EventTime (-\u221e, +\u221e)",
+                                                                            "CounterID (-\u221e, +\u221e)",
+                                                                            "EventDate (-\u221e, +\u221e)",
+                                                                            "UserID (-\u221e, +\u221e)",
+                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                        ],
+                                                                        "SsaProgram": {
+                                                                            "Command": [
+                                                                                {
+                                                                                    "Projection": {
+                                                                                        "Columns": [
+                                                                                            {
+                                                                                                "Id": 40
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                }
+                                                                            ],
+                                                                            "Version": 2
+                                                                        },
+                                                                        "Table": "clickbench/hits"
+                                                                    }
+                                                                ],
+                                                                "PlanNodeId": 1,
+                                                                "Tables": [
+                                                                    "clickbench/hits"
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ],
+                        "Subplan Name": "CTE tx_result_binding_0_0"
+                    }
+                ]
+            },
+            "tables": [
+                {
+                    "name": "/local/clickbench/hits",
+                    "reads": [
+                        {
+                            "columns": [
+                                "SearchPhrase"
+                            ],
+                            "scan_by": [
+                                "EventTime (-\u221e, +\u221e)",
+                                "CounterID (-\u221e, +\u221e)",
+                                "EventDate (-\u221e, +\u221e)",
+                                "UserID (-\u221e, +\u221e)",
+                                "WatchID (-\u221e, +\u221e)"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

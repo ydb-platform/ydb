@@ -1,0 +1,72 @@
+[
+    {
+        "RegionID": 229,
+        "c": 45950,
+        "column1": 8053,
+        "column3": "1.639418e+03",
+        "column4": 2755
+    },
+    {
+        "RegionID": 2,
+        "c": 19102,
+        "column1": 2650,
+        "column3": "1.578434e+03",
+        "column4": 1216
+    },
+    {
+        "RegionID": 208,
+        "c": 3823,
+        "column1": 423,
+        "column3": "1.457413e+03",
+        "column4": 293
+    },
+    {
+        "RegionID": 1,
+        "c": 3701,
+        "column1": 314,
+        "column3": "1.561987e+03",
+        "column4": 220
+    },
+    {
+        "RegionID": 47,
+        "c": 2127,
+        "column1": 244,
+        "column3": "1.650603e+03",
+        "column4": 115
+    },
+    {
+        "RegionID": 7,
+        "c": 1438,
+        "column1": 168,
+        "column3": "1.531786e+03",
+        "column4": 98
+    },
+    {
+        "RegionID": 9,
+        "c": 1377,
+        "column1": 26,
+        "column3": "1.734963e+03",
+        "column4": 93
+    },
+    {
+        "RegionID": 35,
+        "c": 1096,
+        "column1": 124,
+        "column3": "1.601727e+03",
+        "column4": 82
+    },
+    {
+        "RegionID": 8,
+        "c": 987,
+        "column1": 352,
+        "column3": "1.754390e+03",
+        "column4": 74
+    },
+    {
+        "RegionID": 226,
+        "c": 774,
+        "column1": 140,
+        "column3": "1.564641e+03",
+        "column4": 111
+    }
+]

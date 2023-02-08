@@ -1,0 +1,165 @@
+{
+    "meta": {
+        "type": "script",
+        "version": "0.2"
+    },
+    "queries": [
+        {
+            "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
+                "Plans": [
+                    {
+                        "Node Type": "ResultSet",
+                        "PlanNodeId": 8,
+                        "PlanNodeType": "ResultSet",
+                        "Plans": [
+                            {
+                                "Node Type": "Limit",
+                                "Operators": [
+                                    {
+                                        "Limit": "10",
+                                        "Name": "Limit"
+                                    }
+                                ],
+                                "PlanNodeId": 7,
+                                "Plans": [
+                                    {
+                                        "Node Type": "Merge",
+                                        "PlanNodeId": 6,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TopSort-Aggregate",
+                                                "Operators": [
+                                                    {
+                                                        "Limit": "10",
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "$13.u"
+                                                    },
+                                                    {
+                                                        "Name": "Aggregate"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 5,
+                                                "Plans": [
+                                                    {
+                                                        "KeyColumns": [
+                                                            "RegionID"
+                                                        ],
+                                                        "Node Type": "HashShuffle",
+                                                        "PlanNodeId": 4,
+                                                        "PlanNodeType": "Connection",
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "Aggregate-Aggregate",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
+                                                                        "GroupBy": "item.RegionID",
+                                                                        "Name": "Aggregate"
+                                                                    },
+                                                                    {
+                                                                        "Name": "Aggregate"
+                                                                    }
+                                                                ],
+                                                                "PlanNodeId": 3,
+                                                                "Plans": [
+                                                                    {
+                                                                        "KeyColumns": [
+                                                                            "RegionID",
+                                                                            "UserID"
+                                                                        ],
+                                                                        "Node Type": "HashShuffle",
+                                                                        "PlanNodeId": 2,
+                                                                        "PlanNodeType": "Connection",
+                                                                        "Plans": [
+                                                                            {
+                                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                                "Operators": [
+                                                                                    {
+                                                                                        "Aggregation": "state",
+                                                                                        "GroupBy": "",
+                                                                                        "Name": "Aggregate"
+                                                                                    },
+                                                                                    {
+                                                                                        "Name": "TableFullScan",
+                                                                                        "ReadColumns": [
+                                                                                            "RegionID",
+                                                                                            "UserID"
+                                                                                        ],
+                                                                                        "ReadRanges": [
+                                                                                            "EventTime (-\u221e, +\u221e)",
+                                                                                            "CounterID (-\u221e, +\u221e)",
+                                                                                            "EventDate (-\u221e, +\u221e)",
+                                                                                            "UserID (-\u221e, +\u221e)",
+                                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                                        ],
+                                                                                        "SsaProgram": {
+                                                                                            "Command": [
+                                                                                                {
+                                                                                                    "Projection": {
+                                                                                                        "Columns": [
+                                                                                                            {
+                                                                                                                "Id": 9
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 10
+                                                                                                            }
+                                                                                                        ]
+                                                                                                    }
+                                                                                                }
+                                                                                            ],
+                                                                                            "Version": 2
+                                                                                        },
+                                                                                        "Table": "clickbench/hits"
+                                                                                    }
+                                                                                ],
+                                                                                "PlanNodeId": 1,
+                                                                                "Tables": [
+                                                                                    "clickbench/hits"
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ],
+                                        "SortColumns": [
+                                            "u (Desc)"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "tables": [
+                {
+                    "name": "/local/clickbench/hits",
+                    "reads": [
+                        {
+                            "columns": [
+                                "RegionID",
+                                "UserID"
+                            ],
+                            "scan_by": [
+                                "EventTime (-\u221e, +\u221e)",
+                                "CounterID (-\u221e, +\u221e)",
+                                "EventDate (-\u221e, +\u221e)",
+                                "UserID (-\u221e, +\u221e)",
+                                "WatchID (-\u221e, +\u221e)"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

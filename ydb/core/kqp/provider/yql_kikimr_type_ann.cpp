@@ -5,6 +5,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
 namespace NYql {
@@ -224,6 +225,16 @@ namespace {
                 TStringBuilder() << "Invalid type for column: " << column << ". " << message));
         };
         return columnTypeError;
+    }
+
+    TStringBuf GetColumnTypeName(const TTypeAnnotationNode* type) {
+        if (type->GetKind() == ETypeAnnotationKind::Data) {
+            return type->Cast<TDataExprType>()->GetName();
+        } else {
+            auto pgTypeId = type->Cast<TPgExprType>()->GetId();
+            auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId);
+            return NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc);
+        }
     }
 
     bool ValidateColumnDataType(const TDataExprType* type, const TExprBase& typeNode, const TString& columnName,
@@ -560,20 +571,33 @@ private:
             auto type = columnType->Cast<TTypeExprType>()->GetType();
             auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
             auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-            if (actualType->GetKind() != ETypeAnnotationKind::Data) {
-                columnTypeError(typeNode.Pos(), columnName, "Only core YQL data types are currently supported");
+            if (
+                actualType->GetKind() != ETypeAnnotationKind::Data
+                && actualType->GetKind() != ETypeAnnotationKind::Pg
+            ) {
+                columnTypeError(typeNode.Pos(), columnName, "Only YQL data types and PG types are currently supported");
                 return TStatus::Error;
             }
 
-            auto dataType = actualType->Cast<TDataExprType>();
-
-            if (!ValidateColumnDataType(dataType, typeNode, columnName, ctx)) {
-                return IGraphTransformer::TStatus::Error;
+            if (actualType->GetKind() == ETypeAnnotationKind::Data) {
+                if (!ValidateColumnDataType(actualType->Cast<TDataExprType>(), typeNode, columnName, ctx)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else {
+                //TODO: Validate pg modifiers
             }
 
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
-            columnMeta.Type = dataType->GetName();
+            columnMeta.Type = GetColumnTypeName(actualType);
+            if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
+                auto pgTypeId = actualType->Cast<TPgExprType>()->GetId();
+                columnMeta.TypeInfo = NKikimr::NScheme::TTypeInfo(
+                    NKikimr::NScheme::NTypeIds::Pg,
+                    NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId)
+                );
+                YQL_ENSURE(!notNull, "notNull is forbidden for pg types");
+            }
             columnMeta.NotNull = notNull;
 
             if (columnTuple.Size() > 2) {

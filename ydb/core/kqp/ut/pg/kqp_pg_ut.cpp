@@ -35,6 +35,94 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+NYdb::NScripting::TExecuteYqlResult
+ExecutePgSelect(NKikimr::NKqp::TKikimrRunner& kikimr, const TString& tableName) {
+    NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+    auto result = client.ExecuteYqlScript(
+        TStringBuilder() << R"(
+        --!syntax_pg
+        SELECT * FROM ")"
+        << tableName << "\""
+    ).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    return result;
+}
+
+void ExecutePgInsert(
+    NKikimr::NKqp::TKikimrRunner& kikimr,
+    const TString& tableName,
+    ui32 id,
+    const TPgTypeTestSpec& spec
+) {
+    NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+    auto valType = NYql::NPg::LookupType(id).Name;
+    auto keyType = (spec.IsKey) ? valType : "int2";
+    if (id == BITOID) {
+        valType.append("(4)");
+    }
+    for (size_t i = 0; i < ((id == BOOLOID) ? 2 : 3); i++) {
+        auto keyIn = (spec.IsKey) ? spec.TextIn(i) : ToString(i);
+        TString req = Sprintf("\
+        --!syntax_pg\n\
+        INSERT INTO \"%s\" (key, value) VALUES (\n\
+            '%s'::%s, '%s'::%s\n\
+        )", tableName.Data(), keyIn.Data(), keyType.Data(), spec.TextIn(i).Data(), valType.Data());
+        Cerr << req << Endl;
+        auto result = client.ExecuteYqlScript(req).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
+void ExecutePgArrayInsert(
+    NKikimr::NKqp::TKikimrRunner& kikimr,
+    const TString& tableName,
+    ui32 id,
+    const TPgTypeTestSpec& spec
+) {
+    NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+    auto valType = NYql::NPg::LookupType(id).Name;
+    if (id == BITOID) {
+        valType.append("(4)");
+    }
+    for (size_t i = 0; i < ((id == BOOLOID) ? 2 : 3); i++) {
+        auto keyEntry = Sprintf("'%d'::int2", i);
+        auto valueEntry = Sprintf(
+            "ARRAY ['%s'::%s, '%s'::%s]",
+            spec.TextIn(i).Data(),
+            valType.Data(),
+            spec.TextIn(i).Data(),
+            valType.Data()
+        );
+        TString req = Sprintf("\
+        --!syntax_pg\n\
+        INSERT INTO \"%s\" (key, value) VALUES (\n\
+            %s, %s\n\
+        );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
+        Cerr << req << Endl;
+        auto result = client.ExecuteYqlScript(req).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
+void ValidatePgYqlResult(const NYdb::NScripting::TExecuteYqlResult& result, const TPgTypeTestSpec& spec) {
+    TResultSetParser parser(result.GetResultSetParser(0));
+    bool gotRows = false;
+    for (size_t i = 0; parser.TryNextRow(); ++i) {
+        gotRows = true;
+        auto check = [&parser] (const TString& column, const TString& expected) {
+            auto& c = parser.ColumnParser(column);
+            UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
+            Cerr << expected << Endl;
+        };
+        auto expected = spec.TextOut(i);
+        if (spec.IsKey) {
+            check("key", expected);
+        }
+        check("value", expected);
+    }
+    Y_ENSURE(gotRows, "empty select result");
+}
+
 Y_UNIT_TEST_SUITE(KqpPg) {
 
     auto makePgType = [] (ui32 oid, i32 typlen = -1) { return TPgType(oid, typlen, -1); };
@@ -494,67 +582,50 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(TableSelect) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
-        auto testSingleType = [&kikimr] (ui32 id, bool isKey,
-            std::function<TString(size_t)> textIn,
-            std::function<TString(size_t)> textOut)
+        auto testSingleType = [&kikimr] (ui32 id, const TPgTypeTestSpec& spec)
         {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
-            auto tableName = createTable(db, session, id, isKey, false, textIn);
+            auto tableName = createTable(db, session, id, spec.IsKey, false, spec.TextIn);
             session.Close().GetValueSync();
             NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-            auto result = client.ExecuteYqlScript(
-                TStringBuilder() << R"(
-                --!syntax_pg
-                SELECT * FROM ")"
-                << tableName << "\""
-            ).GetValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            TResultSetParser parser(result.GetResultSetParser(0));
-            for (size_t i = 0; parser.TryNextRow(); ++i) {
-                auto check = [&parser, &id] (const TString& column, const TString& expected) {
-                    auto& c = parser.ColumnParser(column);
-                    UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
-                    Cerr << expected << Endl;
-                };
-                auto expected = textOut(i);
-                if (isKey) {
-                    check("key", expected);
-                }
-                check("value", expected);
-            }
+            auto result = ExecutePgSelect(kikimr, tableName);
+            ValidatePgYqlResult(result, spec);
         };
 
 
         auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec)
         {
-            testSingleType(id, typeSpec.IsKey, typeSpec.TextIn, typeSpec.TextOut);
+            testSingleType(id, typeSpec);
 
             auto arrayId = NYql::NPg::LookupType(id).ArrayTypeId;
-
             auto textInArray = [&typeSpec] (auto i) {
                 auto str = typeSpec.TextIn(i);
                 return typeSpec.ArrayPrint(str);
             };
-
             auto textOutArray = [&typeSpec] (auto i) {
-            auto str = typeSpec.TextOut(i);
+                auto str = typeSpec.TextOut(i);
                 return typeSpec.ArrayPrint(str);
             };
+            TPgTypeTestSpec arraySpec(typeSpec.IsKey, textInArray, textOutArray);
 
-            testSingleType(arrayId, typeSpec.IsKey, textInArray, textOutArray);
+            testSingleType(arrayId, arraySpec);
         };
 
         auto testByteaType = [&] () {
-            testSingleType(BYTEAOID, true,
+            TPgTypeTestSpec byteaSpec(
+                true,
                 [] (auto i) { return Sprintf("bytea %u", i); },
-                [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); });
+                [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); }
+            );
 
-            // testSingleType(BYTEAARRAYOID, false,
-            //     [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
-            //     [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); });
+            TPgTypeTestSpec bytearrSpec(
+                false,
+                [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
+                [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); }
+            );
+            testSingleType(BYTEAOID, byteaSpec);
+            testSingleType(BYTEAARRAYOID, bytearrSpec);
         };
         testByteaType();
         for (const auto& [oid, spec] : typeSpecs) {
@@ -570,76 +641,109 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         auto value = NYql::NCommon::PgValueFromNativeBinary(binaryStr, INT2ARRAYOID);
     }
 
-    Y_UNIT_TEST(CreateNotNullPgColumn) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
-
-        TTableBuilder builder;
-        UNIT_ASSERT_EXCEPTION(builder.AddNonNullableColumn("key", makePgType(INT2OID)), yexception);
-        //add create table check here once create table YQL is supported
-    }
-
     Y_UNIT_TEST(TableInsert) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
-        auto testSingleType = [&kikimr] (ui32 id, bool isKey,
-            std::function<TString(size_t)> textIn,
-            std::function<TString(size_t)> textOut)
-        {
+        auto testSingleType = [&kikimr] (ui32 id, const TPgTypeTestSpec& spec) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
-            auto tableName = createTable(db, session, id, isKey, false, textIn, "", 0);
+            auto tableName = createTable(
+                db,
+                session,
+                id,
+                spec.IsKey,
+                false,
+                spec.TextIn,
+                "",
+                0
+            );
             session.Close().GetValueSync();
-            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-            auto valType = NYql::NPg::LookupType(id).Name;
-            auto keyType = (isKey) ? valType : "int2";
-            if (id == BITOID) {
-                valType.append("(4)");
-            }
-            for (size_t i = 0; i < ((id == BOOLOID) ? 2 : 10); i++) {
-                auto keyIn = (isKey) ? textIn(i) : ToString(i);
-                TString req = TStringBuilder() << R"(
-                    --!syntax_pg
-                    INSERT INTO ")" << tableName << "\" (key, value) VALUES ('"
-                    << keyIn << "'::" << keyType << ", '" << textIn(i) << "'::" << valType << ");";
-                Cerr << req << Endl;
-                auto result = client.ExecuteYqlScript(req).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            }
-            auto result = client.ExecuteYqlScript(
-                TStringBuilder() << R"(
-                --!syntax_pg
-                SELECT * FROM ")" << tableName << "\";"
-            ).GetValueSync();
 
-            TResultSetParser parser(result.GetResultSetParser(0));
-            for (size_t i = 0; parser.TryNextRow(); ++i) {
-                auto check = [&parser, &id] (const TString& column, const TString& expected) {
-                    auto& c = parser.ColumnParser(column);
-                    UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
-                };
-                auto expected = textOut(i);
-                if (isKey) {
-                    check("key", expected);
-                }
-                check("value", expected);
-            }
+            ExecutePgInsert(kikimr, tableName, id, spec);
+            auto result = ExecutePgSelect(kikimr, tableName);
+            ValidatePgYqlResult(result, spec);
         };
 
         auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec)
         {
-            testSingleType(id, typeSpec.IsKey, typeSpec.TextIn, typeSpec.TextOut);
+            testSingleType(id, typeSpec);
         };
-
         auto testByteaType = [&] () {
-            testSingleType(BYTEAOID, true,
+            TPgTypeTestSpec byteaSpec(
+                true,
                 [] (auto i) { return Sprintf("bytea %u", i); },
-                [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); });
+                [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); }
+            );
 
-            // testSingleType(BYTEAARRAYOID, false,
-            //     [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
-            //     [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); });
+            TPgTypeTestSpec bytearrSpec(
+                false,
+                [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
+                [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); }
+            );
+            testSingleType(BYTEAOID, byteaSpec);
+            testSingleType(BYTEAARRAYOID, bytearrSpec);
         };
         testByteaType();
+        for (auto [oid, spec] : typeSpecs) {
+            Cerr << oid << Endl;
+            if (oid == CHAROID) {
+                continue;
+                // I cant come up with a query with explicit char conversion.
+                // ::char, ::character casts to pg_bpchar
+            }
+            if (oid == MONEYOID || oid == BITOID || oid == VARBITOID) {
+                spec.IsKey = false;
+                // Those types do not have HashProcId, so are not hashable,
+                // And we can not validate their uniqueness as keys in INSERT.
+            }
+            testType(oid, spec);
+        }
+    }
+
+    Y_UNIT_TEST(TableArrayInsert) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+
+        auto testSingleType = [&kikimr] (ui32 id, const TPgTypeTestSpec& spec) {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto arrayId = NYql::NPg::LookupType(id).ArrayTypeId;
+            auto tableName = createTable(
+                db,
+                session,
+                arrayId,
+                spec.IsKey/*false*/,
+                false,
+                spec.TextIn,
+                "",
+                0
+            );
+            session.Close().GetValueSync();
+
+            ExecutePgArrayInsert(kikimr, tableName, id, spec);
+
+            auto result = ExecutePgSelect(kikimr, tableName);
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                auto check = [&parser, &id, &spec] (const TString& column, const TString& expected) {
+                    auto& c = parser.ColumnParser(column);
+                    UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
+                };
+                TString expected = spec.TextOut(i);
+                check("value", expected);
+            }
+        };
+
+
+        auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec) {
+            auto textOutArray = [&typeSpec] (auto i) {
+                auto str = typeSpec.TextOut(i);
+                return typeSpec.ArrayPrint(str);
+            };
+            TPgTypeTestSpec arraySpec(false, typeSpec.TextIn, textOutArray);
+            testSingleType(id, arraySpec);
+        };
+
         for (auto [oid, spec] : typeSpecs) {
             Cerr << oid << Endl;
             if (oid == CHAROID) {
@@ -676,29 +780,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 INSERT INTO ")" << emptyTableName << "\" (key, value) SELECT * FROM \"" << tableName << "\";"
             ).GetValueSync();
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
-            // result = client.ExecuteYqlScript(
-            //     TStringBuilder() << R"(
-            //     --!syntax_pg
-            //     SELECT * FROM ")" << emptyTableName << "\";"
-            // ).GetValueSync();
-            // UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            // bool gotRows = false;
-            // TResultSetParser parser(result.GetResultSetParser(0));
-            // for (size_t i = 0; parser.TryNextRow(); ++i) {
-            //     gotRows = true;
-            //     auto check = [&parser, &id] (const TString& column, const TString& expected) {
-            //         auto& c = parser.ColumnParser(column);
-            //         UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
-            //     };
-            //     auto expected = textOut(i);
-            //     if (isKey) {
-            //         check("key", expected);
-            //     }
-            //     check("value", expected);
-            //     Cerr << expected << Endl;
-            // }
-            // Y_ENSURE(gotRows, "Empty select");
         };
 
         auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec)
@@ -707,7 +788,95 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         };
 
         testType(INT2OID, typeSpecs[INT2OID]);
-        testType(DATEOID, typeSpecs[DATEOID]);
+    }
+
+    Y_UNIT_TEST(CreateTable) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto testSingleType = [&kikimr] (ui32 id, const TPgTypeTestSpec& spec, bool isArray)
+        {
+            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+
+            auto tableName = "/Root/Pg" + ToString(id) + (isArray ? "array" : "");
+            auto typeName = ((isArray) ? "_pg" : "pg") + NYql::NPg::LookupType(id).Name;
+            auto keyEntry = spec.IsKey ? ("key "+ typeName) : "key pgint2";
+            auto valueEntry = "value " + typeName;
+            auto req = Sprintf("\
+            CREATE TABLE `%s` (\n\
+                %s,\n\
+                %s,\n\
+                PRIMARY KEY (key)\n\
+            );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
+            Cerr << req << Endl;
+            auto result = client.ExecuteYqlScript(req).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            if (!isArray) {
+                ExecutePgInsert(kikimr, tableName, id, spec);
+                result = ExecutePgSelect(kikimr, tableName);
+                ValidatePgYqlResult(result, spec);
+            } else {
+                ExecutePgArrayInsert(kikimr, tableName, id, spec);
+                result = ExecutePgSelect(kikimr, tableName);
+                TResultSetParser parser(result.GetResultSetParser(0));
+                for (size_t i = 0; parser.TryNextRow(); ++i) {
+                    auto check = [&parser, &id, &spec] (const TString& column, const TString& expected) {
+                        auto& c = parser.ColumnParser(column);
+                        UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
+                    };
+                    TString expected = spec.TextOut(i);
+                    check("value", expected);
+                }
+            }
+        };
+
+        auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec)
+        {
+            testSingleType(id, typeSpec, false);
+
+            auto textOutArray = [&typeSpec] (auto i) {
+                auto str = typeSpec.TextOut(i);
+                return typeSpec.ArrayPrint(str);
+            };
+            TPgTypeTestSpec arraySpec(false, typeSpec.TextIn, textOutArray);
+
+            testSingleType(id, arraySpec, true);
+
+        };
+        for (auto [oid, spec] : typeSpecs) {
+            if (oid == CHAROID) {
+                continue;
+            }
+            if (oid == CHAROID) {
+                continue;
+                // I cant come up with a query with explicit char conversion.
+                // ::char, ::character casts to pg_bpchar
+            }
+            if (oid == MONEYOID || oid == BITOID || oid == VARBITOID) {
+                spec.IsKey = false;
+                // Those types do not have HashProcId, so are not hashable,
+                // And we can not validate their uniqueness as keys in INSERT.
+            }
+            testType(oid, spec);
+        }
+    }
+
+    Y_UNIT_TEST(CreateNotNullPgColumn) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+
+        TTableBuilder builder;
+        UNIT_ASSERT_EXCEPTION(builder.AddNonNullableColumn("key", makePgType(INT2OID)), yexception);
+
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+        auto req = TStringBuilder() << R"(
+        --!syntax_v1
+        CREATE TABLE `/Root/Pg` (
+        key pg_int2,
+        value pg_int2 NOT NULL,
+        PRIMARY KEY (key)
+        );)";
+        Cerr << req << Endl;
+        auto result = client.ExecuteYqlScript(req).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
+        UNIT_ASSERT(result.GetIssues().begin()->GetMessage().EndsWith("notNull is forbidden for pg types"));
     }
 }
 

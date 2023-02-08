@@ -15,9 +15,9 @@ class IErasureCounter {
 public:
     virtual ~IErasureCounter() = default;
 
-    virtual bool GroupAlreadyHasLockedDisks(TErrorInfo& error) const = 0;
-    virtual bool CheckForMaxAvailability(TErrorInfo& error, TInstant& defaultDeadline) const = 0;
-    virtual bool CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo& error, TInstant& defaultDeadline) const = 0;
+    virtual bool GroupAlreadyHasLockedDisks() const = 0;
+    virtual bool CheckForMaxAvailability(TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const = 0;
+    virtual bool CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const = 0;
     virtual void CountGroupState(TClusterInfoPtr info,  
                                  TDuration retryTime, 
                                  TDuration duration, 
@@ -35,6 +35,7 @@ protected:
     ui32 Locked;
     const TVDiskInfo& VDisk;
     const ui32 GroupId;
+    bool HasAlreadyLockedDisks;
 
 protected:
     bool IsDown(const TVDiskInfo& vdisk, 
@@ -53,11 +54,12 @@ public:
         , Locked(0)
         , VDisk(vdisk)
         , GroupId(groupId)
+        , HasAlreadyLockedDisks(false)
     {
     }
 
-    bool GroupAlreadyHasLockedDisks(TErrorInfo& error) const final;
-    bool CheckForMaxAvailability(TErrorInfo& error, TInstant& defaultDeadline) const final;
+    bool GroupAlreadyHasLockedDisks() const final;
+    bool CheckForMaxAvailability(TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const final;
 };
 
 class TDefaultErasureCounter: public TErasureCounterBase {
@@ -71,7 +73,8 @@ public:
                          TDuration duration, TErrorInfo &error) override;
     bool CheckForKeepAvailability(TClusterInfoPtr info, 
                                   TErrorInfo& error, 
-                                  TInstant& defaultDeadline) const override;
+                                  TInstant& defaultDeadline, 
+                                  bool allowPartial) const override;
     void CountVDisk(const TVDiskInfo& vdisk, 
                     TClusterInfoPtr info,
                     TDuration retryTime, 
@@ -93,7 +96,8 @@ public:
                          TDuration duration, TErrorInfo &error) override;
     bool CheckForKeepAvailability(TClusterInfoPtr info, 
                                   TErrorInfo& error, 
-                                  TInstant& defaultDeadline) const override;
+                                  TInstant& defaultDeadline, 
+                                  bool allowPartial) const override;
     void CountVDisk(const TVDiskInfo& vdisk, 
                     TClusterInfoPtr info,
                     TDuration retryTime, 

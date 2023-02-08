@@ -1367,6 +1367,83 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
     }
+
+    Y_UNIT_TEST(TestTwoOrMoreDisksFromGroupAtTheSameRequestBlock42) {
+        TCmsTestEnv env(8);
+        
+        // It is impossible to get two or more permissions for one group in one request
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW_PARTIAL,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        // It's ok to get two permissions for one group if PartialPermissionAllowed is set to false
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        // Icorrect requests
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+    }
+    
+    Y_UNIT_TEST(TestTwoOrMoreDisksFromGroupAtTheSameRequestMirror3dc) {
+        TTestEnvOpts options(9);
+        options.UseMirror3dcErasure = true;
+        options.VDisks = 9;
+        options.DataCenterCount = 3;
+
+        TCmsTestEnv env(options);
+
+        // It is impossible to get two or more permissions for one group in one request
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW_PARTIAL,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        // It's ok to get two permissions for one group if PartialPermissionAllowed is set to false
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+
+        // Incorrect requests
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage")); 
+    }
 }
 } // NCmsTest
 } // NKikimr

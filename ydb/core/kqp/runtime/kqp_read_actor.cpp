@@ -717,7 +717,9 @@ public:
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         auto& msg = *ev->Get();
 
-        for (auto& read : ReadIdByTabletId[msg.TabletId]) {
+        TVector<ui32> reads;
+        reads.swap(ReadIdByTabletId[msg.TabletId]);
+        for (auto read : reads) {
             CA_LOG_W("Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered);
             RetryRead(read);
         }

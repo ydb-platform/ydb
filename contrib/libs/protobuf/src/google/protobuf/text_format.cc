@@ -38,6 +38,7 @@
 #include <stdio.h>
 
 #include <algorithm>
+#include <atomic>
 #include <climits>
 #include <cmath>
 #include <limits>
@@ -84,11 +85,18 @@ inline bool IsOctNumber(const TProtoStringType& str) {
 
 }  // namespace
 
+namespace internal {
+// Controls insertion of DEBUG_STRING_SILENT_MARKER.
+PROTOBUF_EXPORT std::atomic<bool> enable_debug_text_format_marker;
+}  // namespace internal
+
 TProtoStringType Message::DebugString() const {
   TProtoStringType debug_string;
 
   TextFormat::Printer printer;
   printer.SetExpandAny(true);
+  printer.SetInsertSilentMarker(internal::enable_debug_text_format_marker.load(
+      std::memory_order_relaxed));
 
   printer.PrintToString(*this, &debug_string);
 
@@ -101,6 +109,8 @@ TProtoStringType Message::ShortDebugString() const {
   TextFormat::Printer printer;
   printer.SetSingleLineMode(true);
   printer.SetExpandAny(true);
+  printer.SetInsertSilentMarker(internal::enable_debug_text_format_marker.load(
+      std::memory_order_relaxed));
 
   printer.PrintToString(*this, &debug_string);
   // Single line mode currently might have an extra space at the end.
@@ -117,6 +127,8 @@ TProtoStringType Message::Utf8DebugString() const {
   TextFormat::Printer printer;
   printer.SetUseUtf8StringEscaping(true);
   printer.SetExpandAny(true);
+  printer.SetInsertSilentMarker(internal::enable_debug_text_format_marker.load(
+      std::memory_order_relaxed));
 
   printer.PrintToString(*this, &debug_string);
 
@@ -348,6 +360,12 @@ class TextFormat::Parser::ParserImpl {
   }
 
  private:
+  static constexpr arc_i32 kint32max = std::numeric_limits<arc_i32>::max();
+  static constexpr arc_ui32 kuint32max = std::numeric_limits<arc_ui32>::max();
+  static constexpr arc_i64 kint64min = std::numeric_limits<arc_i64>::min();
+  static constexpr arc_i64 kint64max = std::numeric_limits<arc_i64>::max();
+  static constexpr arc_ui64 kuint64max = std::numeric_limits<arc_ui64>::max();
+
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ParserImpl);
 
   // Reports an error with the given message with information indicating
@@ -408,14 +426,19 @@ class TextFormat::Parser::ParserImpl {
         TryConsume("[")) {
       TProtoStringType full_type_name, prefix;
       DO(ConsumeAnyTypeUrl(&full_type_name, &prefix));
-      DO(Consume("]"));
-      TryConsume(":");  // ':' is optional between message labels and values.
+      TProtoStringType prefix_and_full_type_name =
+          StrCat(prefix, full_type_name);
+      DO(ConsumeBeforeWhitespace("]"));
+      TryConsumeWhitespace(prefix_and_full_type_name, "Any");
+      // ':' is optional between message labels and values.
+      TryConsumeBeforeWhitespace(":");
+      TryConsumeWhitespace(prefix_and_full_type_name, "Any");
       TProtoStringType serialized_value;
       const Descriptor* value_descriptor =
           finder_ ? finder_->FindAnyType(*message, prefix, full_type_name)
                   : DefaultFinderFindAnyType(*message, prefix, full_type_name);
       if (value_descriptor == nullptr) {
-        ReportError("Could not find type \"" + prefix + full_type_name +
+        ReportError("Could not find type \"" + prefix_and_full_type_name +
                     "\" stored in google.protobuf.Any.");
         return false;
       }
@@ -431,14 +454,15 @@ class TextFormat::Parser::ParserImpl {
         }
       }
       reflection->SetString(message, any_type_url_field,
-                            TProtoStringType(prefix + full_type_name));
+                            prefix_and_full_type_name);
       reflection->SetString(message, any_value_field, serialized_value);
       return true;
     }
     if (TryConsume("[")) {
       // Extension.
       DO(ConsumeFullTypeName(&field_name));
-      DO(Consume("]"));
+      DO(ConsumeBeforeWhitespace("]"));
+      TryConsumeWhitespace(message->GetTypeName(), "Extension");
 
       field = finder_ ? finder_->FindExtension(message, field_name)
                       : DefaultFinderFindExtension(message, field_name);
@@ -457,7 +481,8 @@ class TextFormat::Parser::ParserImpl {
         }
       }
     } else {
-      DO(ConsumeIdentifier(&field_name));
+      DO(ConsumeIdentifierBeforeWhitespace(&field_name));
+      TryConsumeWhitespace(message->GetTypeName(), "Normal");
 
       arc_i32 field_number;
       if (allow_field_number_ && safe_strto32(field_name, &field_number)) {
@@ -525,16 +550,19 @@ class TextFormat::Parser::ParserImpl {
       // start with "{" or "<" which indicates the beginning of a message body.
       // If there is no ":" or there is a "{" or "<" after ":", this field has
       // to be a message or the input is ill-formed.
-      bool skipResult;
-      if (TryConsume(":") && !LookingAt("{") && !LookingAt("<")) {
-        skipResult = SkipFieldValue();
+      bool skip;
+      if (TryConsumeBeforeWhitespace(":")) {
+        TryConsumeWhitespace(message->GetTypeName(), "Unknown/Reserved");
+        if (!LookingAt("{") && !LookingAt("<")) {
+          skip = SkipFieldValue();
+        } else {
+          skip = SkipFieldMessage();
+        }
       } else {
-        skipResult = SkipFieldMessage();
+        skip = SkipFieldMessage();
       }
-      // For historical reasons, fields may optionally be separated by commas or
-      // semicolons.
       TryConsume(";") || TryConsume(",");
-      return skipResult;
+      return skip;
     }
 
     if (singular_overwrite_policy_ == FORBID_SINGULAR_OVERWRITES) {
@@ -564,7 +592,8 @@ class TextFormat::Parser::ParserImpl {
     // Perform special handling for embedded message types.
     if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
       // ':' is optional here.
-      bool consumed_semicolon = TryConsume(":");
+      bool consumed_semicolon = TryConsumeBeforeWhitespace(":");
+      TryConsumeWhitespace(message->GetTypeName(), "Normal");
       if (consumed_semicolon && field->options().weak() &&
           LookingAtType(io::Tokenizer::TYPE_STRING)) {
         // we are getting a bytes string for a weak field.
@@ -578,7 +607,8 @@ class TextFormat::Parser::ParserImpl {
       }
     } else {
       // ':' is required here.
-      DO(Consume(":"));
+      DO(ConsumeBeforeWhitespace(":"));
+      TryConsumeWhitespace(message->GetTypeName(), "Normal");
     }
 
     if (field->is_repeated() && TryConsume("[")) {
@@ -632,11 +662,12 @@ class TextFormat::Parser::ParserImpl {
     if (TryConsume("[")) {
       // Extension name or type URL.
       DO(ConsumeTypeUrlOrFullTypeName());
-      DO(Consume("]"));
+      DO(ConsumeBeforeWhitespace("]"));
     } else {
       TProtoStringType field_name;
-      DO(ConsumeIdentifier(&field_name));
+      DO(ConsumeIdentifierBeforeWhitespace(&field_name));
     }
+    TryConsumeWhitespace("Unknown/Reserved", "n/a");
 
     // Try to guess the type of this field.
     // If this field is not a message, there should be a ":" between the
@@ -644,8 +675,13 @@ class TextFormat::Parser::ParserImpl {
     // start with "{" or "<" which indicates the beginning of a message body.
     // If there is no ":" or there is a "{" or "<" after ":", this field has
     // to be a message or the input is ill-formed.
-    if (TryConsume(":") && !LookingAt("{") && !LookingAt("<")) {
-      DO(SkipFieldValue());
+    if (TryConsumeBeforeWhitespace(":")) {
+      TryConsumeWhitespace("Unknown/Reserved", "n/a");
+      if (!LookingAt("{") && !LookingAt("<")) {
+        DO(SkipFieldValue());
+      } else {
+        DO(SkipFieldMessage());
+      }
     } else {
       DO(SkipFieldMessage());
     }
@@ -967,6 +1003,15 @@ class TextFormat::Parser::ParserImpl {
     return false;
   }
 
+  // Similar to `ConsumeIdentifier`, but any following whitespace token may
+  // be reported.
+  bool ConsumeIdentifierBeforeWhitespace(TProtoStringType* identifier) {
+    tokenizer_.set_report_whitespace(true);
+    bool result = ConsumeIdentifier(identifier);
+    tokenizer_.set_report_whitespace(false);
+    return result;
+  }
+
   // Consume a string of form "<id1>.<id2>....<idN>".
   bool ConsumeFullTypeName(TProtoStringType* name) {
     DO(ConsumeIdentifier(name));
@@ -1194,6 +1239,16 @@ class TextFormat::Parser::ParserImpl {
     return true;
   }
 
+  // Similar to `Consume`, but the following token may be tokenized as
+  // TYPE_WHITESPACE.
+  bool ConsumeBeforeWhitespace(const TProtoStringType& value) {
+    // Report whitespace after this token, but only once.
+    tokenizer_.set_report_whitespace(true);
+    bool result = Consume(value);
+    tokenizer_.set_report_whitespace(false);
+    return result;
+  }
+
   // Attempts to consume the supplied value. Returns false if a the
   // token found does not match the value specified.
   bool TryConsume(const TProtoStringType& value) {
@@ -1203,6 +1258,26 @@ class TextFormat::Parser::ParserImpl {
     } else {
       return false;
     }
+  }
+
+  // Similar to `TryConsume`, but the following token may be tokenized as
+  // TYPE_WHITESPACE.
+  bool TryConsumeBeforeWhitespace(const TProtoStringType& value) {
+    // Report whitespace after this token, but only once.
+    tokenizer_.set_report_whitespace(true);
+    bool result = TryConsume(value);
+    tokenizer_.set_report_whitespace(false);
+    return result;
+  }
+
+  bool TryConsumeWhitespace(const TProtoStringType& message_type,
+                            const char* field_type) {
+    if (LookingAtType(io::Tokenizer::TYPE_WHITESPACE)) {
+      tokenizer_.Next();
+      return true;
+    }
+
+    return false;
   }
 
   // An internal instance of the Tokenizer's error collector, used to
@@ -1438,8 +1513,8 @@ class TextFormat::Printer::TextGenerator
 class TextFormat::Printer::DebugStringFieldValuePrinter
     : public TextFormat::FastFieldValuePrinter {
  public:
-  void PrintMessageStart(const Message& message, int field_index,
-                         int field_count, bool single_line_mode,
+  void PrintMessageStart(const Message& /*message*/, int /*field_index*/,
+                         int /*field_count*/, bool single_line_mode,
                          BaseTextGenerator* generator) const override {
     // This is safe as only TextGenerator is used with
     // DebugStringFieldValuePrinter.
@@ -1490,7 +1565,7 @@ const Descriptor* TextFormat::Finder::FindAnyType(
 }
 
 MessageFactory* TextFormat::Finder::FindExtensionFactory(
-    const FieldDescriptor* field) const {
+    const FieldDescriptor* /*field*/) const {
   return nullptr;
 }
 
@@ -1552,7 +1627,6 @@ bool TextFormat::Parser::ParseFromString(ConstStringParam input,
   io::ArrayInputStream input_stream(input.data(), input.size());
   return Parse(&input_stream, output);
 }
-
 
 bool TextFormat::Parser::Merge(io::ZeroCopyInputStream* input,
                                Message* output) {
@@ -1756,7 +1830,8 @@ void TextFormat::FastFieldValuePrinter::PrintDouble(
   generator->PrintString(!std::isnan(val) ? SimpleDtoa(val) : "nan");
 }
 void TextFormat::FastFieldValuePrinter::PrintEnum(
-    arc_i32 val, const TProtoStringType& name, BaseTextGenerator* generator) const {
+    arc_i32 /*val*/, const TProtoStringType& name,
+    BaseTextGenerator* generator) const {
   generator->PrintString(name);
 }
 
@@ -1771,13 +1846,13 @@ void TextFormat::FastFieldValuePrinter::PrintBytes(
   PrintString(val, generator);
 }
 void TextFormat::FastFieldValuePrinter::PrintFieldName(
-    const Message& message, int field_index, int field_count,
+    const Message& message, int /*field_index*/, int /*field_count*/,
     const Reflection* reflection, const FieldDescriptor* field,
     BaseTextGenerator* generator) const {
   PrintFieldName(message, reflection, field, generator);
 }
 void TextFormat::FastFieldValuePrinter::PrintFieldName(
-    const Message& message, const Reflection* reflection,
+    const Message& /*message*/, const Reflection* /*reflection*/,
     const FieldDescriptor* field, BaseTextGenerator* generator) const {
   if (field->is_extension()) {
     generator->PrintLiteral("[");
@@ -1791,7 +1866,7 @@ void TextFormat::FastFieldValuePrinter::PrintFieldName(
   }
 }
 void TextFormat::FastFieldValuePrinter::PrintMessageStart(
-    const Message& message, int field_index, int field_count,
+    const Message& /*message*/, int /*field_index*/, int /*field_count*/,
     bool single_line_mode, BaseTextGenerator* generator) const {
   if (single_line_mode) {
     generator->PrintLiteral(" { ");
@@ -1800,12 +1875,12 @@ void TextFormat::FastFieldValuePrinter::PrintMessageStart(
   }
 }
 bool TextFormat::FastFieldValuePrinter::PrintMessageContent(
-    const Message& message, int field_index, int field_count,
-    bool single_line_mode, BaseTextGenerator* generator) const {
+    const Message& /*message*/, int /*field_index*/, int /*field_count*/,
+    bool /*single_line_mode*/, BaseTextGenerator* /*generator*/) const {
   return false;  // Use the default printing function.
 }
 void TextFormat::FastFieldValuePrinter::PrintMessageEnd(
-    const Message& message, int field_index, int field_count,
+    const Message& /*message*/, int /*field_index*/, int /*field_count*/,
     bool single_line_mode, BaseTextGenerator* generator) const {
   if (single_line_mode) {
     generator->PrintLiteral("} ");
@@ -1867,8 +1942,8 @@ class FieldValuePrinterWrapper : public TextFormat::FastFieldValuePrinter {
                  TextFormat::BaseTextGenerator* generator) const override {
     generator->PrintString(delegate_->PrintEnum(val, name));
   }
-  void PrintFieldName(const Message& message, int field_index, int field_count,
-                      const Reflection* reflection,
+  void PrintFieldName(const Message& message, int /*field_index*/,
+                      int /*field_count*/, const Reflection* reflection,
                       const FieldDescriptor* field,
                       TextFormat::BaseTextGenerator* generator) const override {
     generator->PrintString(

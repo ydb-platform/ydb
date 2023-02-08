@@ -83,7 +83,7 @@ inline const Type* Raw(const MessageLite* msg, arc_i64 offset) {
 inline ExtensionSet* GetExtensionSet(MessageLite* msg,
                                      arc_i64 extension_offset) {
   if (extension_offset == -1) {
-    return NULL;
+    return nullptr;
   }
 
   return Raw<ExtensionSet>(msg, extension_offset);
@@ -148,7 +148,7 @@ inline void ClearOneofField(const ParseTableField& field, Arena* arena,
                             MessageLite* msg) {
   switch (field.processing_type & kTypeMask) {
     case WireFormatLite::TYPE_MESSAGE:
-      if (arena == NULL) {
+      if (arena == nullptr) {
         delete *Raw<MessageLite*>(msg, field.offset);
       }
       break;
@@ -161,7 +161,7 @@ inline void ClearOneofField(const ParseTableField& field, Arena* arena,
 
     case TYPE_STRING_INLINED:
     case TYPE_BYTES_INLINED:
-      Raw<InlinedStringField>(msg, field.offset)->DestroyNoArena(NULL);
+      Raw<InlinedStringField>(msg, field.offset)->DestroyNoArena(nullptr);
       break;
 
     default:
@@ -343,15 +343,12 @@ class RepeatedMessageTypeHandler {
   typedef MessageLite Type;
   typedef MessageLite WeakType;
   static Arena* GetArena(Type* t) { return t->GetArena(); }
-  static void* GetMaybeArenaPointer(Type* t) {
-    return t->GetMaybeArenaPointer();
-  }
   static inline Type* NewFromPrototype(const Type* prototype,
-                                       Arena* arena = NULL) {
+                                       Arena* arena = nullptr) {
     return prototype->New(arena);
   }
-  static void Delete(Type* t, Arena* arena = NULL) {
-    if (arena == NULL) {
+  static void Delete(Type* t, Arena* arena = nullptr) {
+    if (arena == nullptr) {
       delete t;
     }
   }
@@ -376,7 +373,7 @@ bool MergePartialFromCodedStreamInlined(MessageLite* msg,
   // TODO(ckennelly):  Make this a compile-time parameter with templates.
   GOOGLE_DCHECK_GE(table.has_bits_offset, 0);
   arc_ui32* has_bits = Raw<arc_ui32>(msg, table.has_bits_offset);
-  GOOGLE_DCHECK(has_bits != NULL);
+  GOOGLE_DCHECK(has_bits != nullptr);
 
   while (true) {
     arc_ui32 tag = input->ReadTagWithCutoffNoLastTag(kMaxTag).first;
@@ -623,7 +620,7 @@ bool MergePartialFromCodedStreamInlined(MessageLite* msg,
               MutableField<MessageLite*>(msg, has_bits, presence_index, offset);
           MessageLite* submsg = *submsg_holder;
 
-          if (submsg == NULL) {
+          if (submsg == nullptr) {
             Arena* const arena = msg->GetArena();
             const MessageLite* prototype =
                 table.aux[field_number].messages.default_message();
@@ -642,7 +639,7 @@ bool MergePartialFromCodedStreamInlined(MessageLite* msg,
           RepeatedPtrFieldBase* field = Raw<RepeatedPtrFieldBase>(msg, offset);
           const MessageLite* prototype =
               table.aux[field_number].messages.default_message();
-          GOOGLE_DCHECK(prototype != NULL);
+          GOOGLE_DCHECK(prototype != nullptr);
 
           MessageLite* submsg =
               MergePartialFromCodedStreamHelper::Add(field, prototype);
@@ -659,11 +656,11 @@ bool MergePartialFromCodedStreamInlined(MessageLite* msg,
               MutableField<MessageLite*>(msg, has_bits, presence_index, offset);
           MessageLite* submsg = *submsg_holder;
 
-          if (submsg == NULL) {
+          if (submsg == nullptr) {
             Arena* const arena = msg->GetArena();
             const MessageLite* prototype =
                 table.aux[field_number].messages.default_message();
-            if (prototype == NULL) {
+            if (prototype == nullptr) {
               prototype = ImplicitWeakMessage::default_instance();
             }
             submsg = prototype->New(arena);
@@ -683,7 +680,7 @@ bool MergePartialFromCodedStreamInlined(MessageLite* msg,
           RepeatedPtrFieldBase* field = Raw<RepeatedPtrFieldBase>(msg, offset);
           const MessageLite* prototype =
               table.aux[field_number].messages.default_message();
-          if (prototype == NULL) {
+          if (prototype == nullptr) {
             prototype = ImplicitWeakMessage::default_instance();
           }
 
@@ -703,7 +700,7 @@ bool MergePartialFromCodedStreamInlined(MessageLite* msg,
           MessageLite** submsg_holder = Raw<MessageLite*>(msg, offset);
           ResetOneofField<ProcessingType_MESSAGE>(
               table, field_number, arena, msg, oneof_case + presence_index,
-              offset, NULL);
+              offset, nullptr);
           MessageLite* submsg = *submsg_holder;
 
           if (PROTOBUF_PREDICT_FALSE(

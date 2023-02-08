@@ -142,7 +142,7 @@ ExtensionFinder::~ExtensionFinder() {}
 
 bool GeneratedExtensionFinder::Find(int number, ExtensionInfo* output) {
   const ExtensionInfo* extension = FindRegisteredExtension(extendee_, number);
-  if (extension == NULL) {
+  if (extension == nullptr) {
     return false;
   } else {
     *output = *extension;
@@ -204,12 +204,12 @@ ExtensionSet::ExtensionSet(Arena* arena)
       flat_capacity_(0),
       flat_size_(0),
       map_{flat_capacity_ == 0
-               ? NULL
+               ? nullptr
                : Arena::CreateArray<KeyValue>(arena_, flat_capacity_)} {}
 
 ExtensionSet::~ExtensionSet() {
   // Deletes all allocated extensions.
-  if (arena_ == NULL) {
+  if (arena_ == nullptr) {
     ForEach([](int /* number */, Extension& ext) { ext.Free(); });
     if (PROTOBUF_PREDICT_FALSE(is_large())) {
       delete map_.large;
@@ -242,9 +242,13 @@ void ExtensionSet::DeleteFlatMap(const ExtensionSet::KeyValue* flat,
 
 bool ExtensionSet::Has(int number) const {
   const Extension* ext = FindOrNull(number);
-  if (ext == NULL) return false;
+  if (ext == nullptr) return false;
   GOOGLE_DCHECK(!ext->is_repeated);
   return !ext->is_cleared;
+}
+
+bool ExtensionSet::HasLazy(int number) const {
+  return Has(number) && FindOrNull(number)->is_lazy;
 }
 
 int ExtensionSet::NumExtensions() const {
@@ -259,12 +263,12 @@ int ExtensionSet::NumExtensions() const {
 
 int ExtensionSet::ExtensionSize(int number) const {
   const Extension* ext = FindOrNull(number);
-  return ext == NULL ? 0 : ext->GetSize();
+  return ext == nullptr ? 0 : ext->GetSize();
 }
 
 FieldType ExtensionSet::ExtensionType(int number) const {
   const Extension* ext = FindOrNull(number);
-  if (ext == NULL) {
+  if (ext == nullptr) {
     GOOGLE_LOG(DFATAL) << "Don't lookup extension types if they aren't present (1). ";
     return 0;
   }
@@ -276,7 +280,7 @@ FieldType ExtensionSet::ExtensionType(int number) const {
 
 void ExtensionSet::ClearExtension(int number) {
   Extension* ext = FindOrNull(number);
-  if (ext == NULL) return;
+  if (ext == nullptr) return;
   ext->Clear();
 }
 
@@ -301,7 +305,7 @@ enum { REPEATED_FIELD, OPTIONAL_FIELD };
   LOWERCASE ExtensionSet::Get##CAMELCASE(int number, LOWERCASE default_value) \
       const {                                                                 \
     const Extension* extension = FindOrNull(number);                          \
-    if (extension == NULL || extension->is_cleared) {                         \
+    if (extension == nullptr || extension->is_cleared) {                      \
       return default_value;                                                   \
     } else {                                                                  \
       GOOGLE_DCHECK_TYPE(*extension, OPTIONAL_FIELD, UPPERCASE);                     \
@@ -312,7 +316,7 @@ enum { REPEATED_FIELD, OPTIONAL_FIELD };
   const LOWERCASE& ExtensionSet::GetRef##CAMELCASE(                           \
       int number, const LOWERCASE& default_value) const {                     \
     const Extension* extension = FindOrNull(number);                          \
-    if (extension == NULL || extension->is_cleared) {                         \
+    if (extension == nullptr || extension->is_cleared) {                      \
       return default_value;                                                   \
     } else {                                                                  \
       GOOGLE_DCHECK_TYPE(*extension, OPTIONAL_FIELD, UPPERCASE);                     \
@@ -339,7 +343,7 @@ enum { REPEATED_FIELD, OPTIONAL_FIELD };
   LOWERCASE ExtensionSet::GetRepeated##CAMELCASE(int number, int index)       \
       const {                                                                 \
     const Extension* extension = FindOrNull(number);                          \
-    GOOGLE_CHECK(extension != NULL) << "Index out-of-bounds (field is empty).";      \
+    GOOGLE_CHECK(extension != nullptr) << "Index out-of-bounds (field is empty).";   \
     GOOGLE_DCHECK_TYPE(*extension, REPEATED_FIELD, UPPERCASE);                       \
     return extension->repeated_##LOWERCASE##_value->Get(index);               \
   }                                                                           \
@@ -347,7 +351,7 @@ enum { REPEATED_FIELD, OPTIONAL_FIELD };
   const LOWERCASE& ExtensionSet::GetRefRepeated##CAMELCASE(int number,        \
                                                            int index) const { \
     const Extension* extension = FindOrNull(number);                          \
-    GOOGLE_CHECK(extension != NULL) << "Index out-of-bounds (field is empty).";      \
+    GOOGLE_CHECK(extension != nullptr) << "Index out-of-bounds (field is empty).";   \
     GOOGLE_DCHECK_TYPE(*extension, REPEATED_FIELD, UPPERCASE);                       \
     return extension->repeated_##LOWERCASE##_value->Get(index);               \
   }                                                                           \
@@ -355,7 +359,7 @@ enum { REPEATED_FIELD, OPTIONAL_FIELD };
   void ExtensionSet::SetRepeated##CAMELCASE(int number, int index,            \
                                             LOWERCASE value) {                \
     Extension* extension = FindOrNull(number);                                \
-    GOOGLE_CHECK(extension != NULL) << "Index out-of-bounds (field is empty).";      \
+    GOOGLE_CHECK(extension != nullptr) << "Index out-of-bounds (field is empty).";   \
     GOOGLE_DCHECK_TYPE(*extension, REPEATED_FIELD, UPPERCASE);                       \
     extension->repeated_##LOWERCASE##_value->Set(index, value);               \
   }                                                                           \
@@ -392,7 +396,7 @@ PRIMITIVE_ACCESSORS(BOOL, bool, Bool)
 const void* ExtensionSet::GetRawRepeatedField(int number,
                                               const void* default_value) const {
   const Extension* extension = FindOrNull(number);
-  if (extension == NULL) {
+  if (extension == nullptr) {
     return default_value;
   }
   // We assume that all the RepeatedField<>* pointers have the same
@@ -466,7 +470,7 @@ void* ExtensionSet::MutableRawRepeatedField(int number, FieldType field_type,
 // the don't already exist; instead, just GOOGLE_CHECK-fails.
 void* ExtensionSet::MutableRawRepeatedField(int number) {
   Extension* extension = FindOrNull(number);
-  GOOGLE_CHECK(extension != NULL) << "Extension not found.";
+  GOOGLE_CHECK(extension != nullptr) << "Extension not found.";
   // We assume that all the RepeatedField<>* pointers have the same
   // size and alignment within the anonymous union in Extension.
   return extension->repeated_arc_i32_value;
@@ -477,7 +481,7 @@ void* ExtensionSet::MutableRawRepeatedField(int number) {
 
 int ExtensionSet::GetEnum(int number, int default_value) const {
   const Extension* extension = FindOrNull(number);
-  if (extension == NULL || extension->is_cleared) {
+  if (extension == nullptr || extension->is_cleared) {
     // Not present.  Return the default value.
     return default_value;
   } else {
@@ -556,7 +560,7 @@ void ExtensionSet::AddEnum(int number, FieldType type, bool packed, int value,
 const TProtoStringType& ExtensionSet::GetString(
     int number, const TProtoStringType& default_value) const {
   const Extension* extension = FindOrNull(number);
-  if (extension == NULL || extension->is_cleared) {
+  if (extension == nullptr || extension->is_cleared) {
     // Not present.  Return the default value.
     return default_value;
   } else {
@@ -583,14 +587,14 @@ TProtoStringType* ExtensionSet::MutableString(int number, FieldType type,
 const TProtoStringType& ExtensionSet::GetRepeatedString(int number,
                                                    int index) const {
   const Extension* extension = FindOrNull(number);
-  GOOGLE_CHECK(extension != NULL) << "Index out-of-bounds (field is empty).";
+  GOOGLE_CHECK(extension != nullptr) << "Index out-of-bounds (field is empty).";
   GOOGLE_DCHECK_TYPE(*extension, REPEATED_FIELD, STRING);
   return extension->repeated_string_value->Get(index);
 }
 
 TProtoStringType* ExtensionSet::MutableRepeatedString(int number, int index) {
   Extension* extension = FindOrNull(number);
-  GOOGLE_CHECK(extension != NULL) << "Index out-of-bounds (field is empty).";
+  GOOGLE_CHECK(extension != nullptr) << "Index out-of-bounds (field is empty).";
   GOOGLE_DCHECK_TYPE(*extension, REPEATED_FIELD, STRING);
   return extension->repeated_string_value->Mutable(index);
 }
@@ -617,13 +621,13 @@ TProtoStringType* ExtensionSet::AddString(int number, FieldType type,
 const MessageLite& ExtensionSet::GetMessage(
     int number, const MessageLite& default_value) const {
   const Extension* extension = FindOrNull(number);
-  if (extension == NULL) {
+  if (extension == nullptr) {
     // Not present.  Return the default value.
     return default_value;
   } else {
     GOOGLE_DCHECK_TYPE(*extension, OPTIONAL_FIELD, MESSAGE);
     if (extension->is_lazy) {
-      return extension->lazymessage_value->GetMessage(default_value);
+      return extension->lazymessage_value->GetMessage(default_value, arena_);
     } else {
       return *extension->message_value;
     }
@@ -666,7 +670,7 @@ MessageLite* ExtensionSet::MutableMessage(int number, FieldType type,
 void ExtensionSet::SetAllocatedMessage(int number, FieldType type,
                                        const FieldDescriptor* descriptor,
                                        MessageLite* message) {
-  if (message == NULL) {
+  if (message == nullptr) {
     ClearExtension(number);
     return;
   }
@@ -681,9 +685,9 @@ void ExtensionSet::SetAllocatedMessage(int number, FieldType type,
     extension->is_lazy = false;
     if (message_arena == arena_) {
       extension->message_value = message;
-    } else if (message_arena == NULL) {
+    } else if (message_arena == nullptr) {
       extension->message_value = message;
-      arena_->Own(message);  // not NULL because not equal to message_arena
+      arena_->Own(message);  // not nullptr because not equal to message_arena
     } else {
       extension->message_value = message->New(arena_);
       extension->message_value->CheckTypeAndMergeFrom(*message);
@@ -691,16 +695,16 @@ void ExtensionSet::SetAllocatedMessage(int number, FieldType type,
   } else {
     GOOGLE_DCHECK_TYPE(*extension, OPTIONAL_FIELD, MESSAGE);
     if (extension->is_lazy) {
-      extension->lazymessage_value->SetAllocatedMessage(message);
+      extension->lazymessage_value->SetAllocatedMessage(message, arena_);
     } else {
-      if (arena_ == NULL) {
+      if (arena_ == nullptr) {
         delete extension->message_value;
       }
       if (message_arena == arena_) {
         extension->message_value = message;
-      } else if (message_arena == NULL) {
+      } else if (message_arena == nullptr) {
         extension->message_value = message;
-        arena_->Own(message);  // not NULL because not equal to message_arena
+        arena_->Own(message);  // not nullptr because not equal to message_arena
       } else {
         extension->message_value = message->New(arena_);
         extension->message_value->CheckTypeAndMergeFrom(*message);
@@ -713,7 +717,7 @@ void ExtensionSet::SetAllocatedMessage(int number, FieldType type,
 void ExtensionSet::UnsafeArenaSetAllocatedMessage(
     int number, FieldType type, const FieldDescriptor* descriptor,
     MessageLite* message) {
-  if (message == NULL) {
+  if (message == nullptr) {
     ClearExtension(number);
     return;
   }
@@ -727,9 +731,10 @@ void ExtensionSet::UnsafeArenaSetAllocatedMessage(
   } else {
     GOOGLE_DCHECK_TYPE(*extension, OPTIONAL_FIELD, MESSAGE);
     if (extension->is_lazy) {
-      extension->lazymessage_value->UnsafeArenaSetAllocatedMessage(message);
+      extension->lazymessage_value->UnsafeArenaSetAllocatedMessage(message,
+                                                                   arena_);
     } else {
-      if (arena_ == NULL) {
+      if (arena_ == nullptr) {
         delete extension->message_value;
       }
       extension->message_value = message;
@@ -741,19 +746,19 @@ void ExtensionSet::UnsafeArenaSetAllocatedMessage(
 MessageLite* ExtensionSet::ReleaseMessage(int number,
                                           const MessageLite& prototype) {
   Extension* extension = FindOrNull(number);
-  if (extension == NULL) {
-    // Not present.  Return NULL.
-    return NULL;
+  if (extension == nullptr) {
+    // Not present.  Return nullptr.
+    return nullptr;
   } else {
     GOOGLE_DCHECK_TYPE(*extension, OPTIONAL_FIELD, MESSAGE);
-    MessageLite* ret = NULL;
+    MessageLite* ret = nullptr;
     if (extension->is_lazy) {
-      ret = extension->lazymessage_value->ReleaseMessage(prototype);
-      if (arena_ == NULL) {
+      ret = extension->lazymessage_value->ReleaseMessage(prototype, arena_);
+      if (arena_ == nullptr) {
         delete extension->lazymessage_value;
       }
     } else {
-      if (arena_ == NULL) {
+      if (arena_ == nullptr) {
         ret = extension->message_value;
       } else {
         // ReleaseMessage() always returns a heap-allocated message, and we are
@@ -770,15 +775,16 @@ MessageLite* ExtensionSet::ReleaseMessage(int number,
 MessageLite* ExtensionSet::UnsafeArenaReleaseMessage(
     int number, const MessageLite& prototype) {
   Extension* extension = FindOrNull(number);
-  if (extension == NULL) {
-    // Not present.  Return NULL.
-    return NULL;
+  if (extension == nullptr) {
+    // Not present.  Return nullptr.
+    return nullptr;
   } else {
     GOOGLE_DCHECK_TYPE(*extension, OPTIONAL_FIELD, MESSAGE);
-    MessageLite* ret = NULL;
+    MessageLite* ret = nullptr;
     if (extension->is_lazy) {
-      ret = extension->lazymessage_value->UnsafeArenaReleaseMessage(prototype);
-      if (arena_ == NULL) {
+      ret = extension->lazymessage_value->UnsafeArenaReleaseMessage(prototype,
+                                                                    arena_);
+      if (arena_ == nullptr) {
         delete extension->lazymessage_value;
       }
     } else {
@@ -796,14 +802,14 @@ MessageLite* ExtensionSet::UnsafeArenaReleaseMessage(
 const MessageLite& ExtensionSet::GetRepeatedMessage(int number,
                                                     int index) const {
   const Extension* extension = FindOrNull(number);
-  GOOGLE_CHECK(extension != NULL) << "Index out-of-bounds (field is empty).";
+  GOOGLE_CHECK(extension != nullptr) << "Index out-of-bounds (field is empty).";
   GOOGLE_DCHECK_TYPE(*extension, REPEATED_FIELD, MESSAGE);
   return extension->repeated_message_value->Get(index);
 }
 
 MessageLite* ExtensionSet::MutableRepeatedMessage(int number, int index) {
   Extension* extension = FindOrNull(number);
-  GOOGLE_CHECK(extension != NULL) << "Index out-of-bounds (field is empty).";
+  GOOGLE_CHECK(extension != nullptr) << "Index out-of-bounds (field is empty).";
   GOOGLE_DCHECK_TYPE(*extension, REPEATED_FIELD, MESSAGE);
   return extension->repeated_message_value->Mutable(index);
 }
@@ -827,7 +833,7 @@ MessageLite* ExtensionSet::AddMessage(int number, FieldType type,
   MessageLite* result = reinterpret_cast<internal::RepeatedPtrFieldBase*>(
                             extension->repeated_message_value)
                             ->AddFromCleared<GenericTypeHandler<MessageLite>>();
-  if (result == NULL) {
+  if (result == nullptr) {
     result = prototype.New(arena_);
     extension->repeated_message_value->AddAllocated(result);
   }
@@ -843,7 +849,7 @@ MessageLite* ExtensionSet::AddMessage(int number, FieldType type,
 
 void ExtensionSet::RemoveLast(int number) {
   Extension* extension = FindOrNull(number);
-  GOOGLE_CHECK(extension != NULL) << "Index out-of-bounds (field is empty).";
+  GOOGLE_CHECK(extension != nullptr) << "Index out-of-bounds (field is empty).";
   GOOGLE_DCHECK(extension->is_repeated);
 
   switch (cpp_type(extension->type)) {
@@ -882,7 +888,7 @@ void ExtensionSet::RemoveLast(int number) {
 
 MessageLite* ExtensionSet::ReleaseLast(int number) {
   Extension* extension = FindOrNull(number);
-  GOOGLE_CHECK(extension != NULL) << "Index out-of-bounds (field is empty).";
+  GOOGLE_CHECK(extension != nullptr) << "Index out-of-bounds (field is empty).";
   GOOGLE_DCHECK(extension->is_repeated);
   GOOGLE_DCHECK(cpp_type(extension->type) == WireFormatLite::CPPTYPE_MESSAGE);
   return extension->repeated_message_value->ReleaseLast();
@@ -898,7 +904,7 @@ MessageLite* ExtensionSet::UnsafeArenaReleaseLast(int number) {
 
 void ExtensionSet::SwapElements(int number, int index1, int index2) {
   Extension* extension = FindOrNull(number);
-  GOOGLE_CHECK(extension != NULL) << "Index out-of-bounds (field is empty).";
+  GOOGLE_CHECK(extension != nullptr) << "Index out-of-bounds (field is empty).";
   GOOGLE_DCHECK(extension->is_repeated);
 
   switch (cpp_type(extension->type)) {
@@ -963,7 +969,8 @@ size_t SizeOfUnion(ItX it_xs, ItX end_xs, ItY it_ys, ItY end_ys) {
 }
 }  // namespace
 
-void ExtensionSet::MergeFrom(const ExtensionSet& other) {
+void ExtensionSet::MergeFrom(const MessageLite* extendee,
+                             const ExtensionSet& other) {
   if (PROTOBUF_PREDICT_TRUE(!is_large())) {
     if (PROTOBUF_PREDICT_TRUE(!other.is_large())) {
       GrowCapacity(SizeOfUnion(flat_begin(), flat_end(), other.flat_begin(),
@@ -974,13 +981,15 @@ void ExtensionSet::MergeFrom(const ExtensionSet& other) {
                                other.map_.large->end()));
     }
   }
-  other.ForEach([this](int number, const Extension& ext) {
-    this->InternalExtensionMergeFrom(number, ext);
+  other.ForEach([extendee, this, &other](int number, const Extension& ext) {
+    this->InternalExtensionMergeFrom(extendee, number, ext, other.arena_);
   });
 }
 
-void ExtensionSet::InternalExtensionMergeFrom(
-    int number, const Extension& other_extension) {
+void ExtensionSet::InternalExtensionMergeFrom(const MessageLite* extendee,
+                                              int number,
+                                              const Extension& other_extension,
+                                              Arena* other_arena) {
   if (other_extension.is_repeated) {
     Extension* extension;
     bool is_new =
@@ -1033,7 +1042,7 @@ void ExtensionSet::InternalExtensionMergeFrom(
               reinterpret_cast<internal::RepeatedPtrFieldBase*>(
                   extension->repeated_message_value)
                   ->AddFromCleared<GenericTypeHandler<MessageLite>>();
-          if (target == NULL) {
+          if (target == nullptr) {
             target = other_message.New(arena_);
             extension->repeated_message_value->AddAllocated(target);
           }
@@ -1077,6 +1086,7 @@ void ExtensionSet::InternalExtensionMergeFrom(
               extension->lazymessage_value =
                   other_extension.lazymessage_value->New(arena_);
               extension->lazymessage_value->MergeFrom(
+                  GetPrototypeForLazyMessage(extendee, number),
                   *other_extension.lazymessage_value, arena_);
             } else {
               extension->is_lazy = false;
@@ -1092,11 +1102,12 @@ void ExtensionSet::InternalExtensionMergeFrom(
             if (other_extension.is_lazy) {
               if (extension->is_lazy) {
                 extension->lazymessage_value->MergeFrom(
+                    GetPrototypeForLazyMessage(extendee, number),
                     *other_extension.lazymessage_value, arena_);
               } else {
                 extension->message_value->CheckTypeAndMergeFrom(
                     other_extension.lazymessage_value->GetMessage(
-                        *extension->message_value));
+                        *extension->message_value, other_arena));
               }
             } else {
               if (extension->is_lazy) {
@@ -1117,23 +1128,23 @@ void ExtensionSet::InternalExtensionMergeFrom(
   }
 }
 
-void ExtensionSet::Swap(ExtensionSet* x) {
+void ExtensionSet::Swap(const MessageLite* extendee, ExtensionSet* other) {
 #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
-  if (GetArena() != nullptr && GetArena() == x->GetArena()) {
+  if (GetArena() != nullptr && GetArena() == other->GetArena()) {
 #else   // PROTOBUF_FORCE_COPY_IN_SWAP
-  if (GetArena() == x->GetArena()) {
+  if (GetArena() == other->GetArena()) {
 #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
-    InternalSwap(x);
+    InternalSwap(other);
   } else {
     // TODO(cfallin, rohananil): We maybe able to optimize a case where we are
     // swapping from heap to arena-allocated extension set, by just Own()'ing
     // the extensions.
     ExtensionSet extension_set;
-    extension_set.MergeFrom(*x);
-    x->Clear();
-    x->MergeFrom(*this);
+    extension_set.MergeFrom(extendee, *other);
+    other->Clear();
+    other->MergeFrom(extendee, *this);
     Clear();
-    MergeFrom(extension_set);
+    MergeFrom(extendee, extension_set);
   }
 }
 
@@ -1145,7 +1156,8 @@ void ExtensionSet::InternalSwap(ExtensionSet* other) {
   swap(map_, other->map_);
 }
 
-void ExtensionSet::SwapExtension(ExtensionSet* other, int number) {
+void ExtensionSet::SwapExtension(const MessageLite* extendee,
+                                 ExtensionSet* other, int number) {
   if (this == other) return;
 
   if (GetArena() == other->GetArena()) {
@@ -1165,18 +1177,22 @@ void ExtensionSet::SwapExtension(ExtensionSet* other, int number) {
     // We do it this way to reuse the copy-across-arenas logic already
     // implemented in ExtensionSet's MergeFrom.
     ExtensionSet temp;
-    temp.InternalExtensionMergeFrom(number, *other_ext);
+    temp.InternalExtensionMergeFrom(extendee, number, *other_ext,
+                                    other->GetArena());
     Extension* temp_ext = temp.FindOrNull(number);
+
     other_ext->Clear();
-    other->InternalExtensionMergeFrom(number, *this_ext);
+    other->InternalExtensionMergeFrom(extendee, number, *this_ext,
+                                      this->GetArena());
     this_ext->Clear();
-    InternalExtensionMergeFrom(number, *temp_ext);
+    InternalExtensionMergeFrom(extendee, number, *temp_ext, temp.GetArena());
   } else if (this_ext == nullptr) {
-    InternalExtensionMergeFrom(number, *other_ext);
+    InternalExtensionMergeFrom(extendee, number, *other_ext, other->GetArena());
     if (other->GetArena() == nullptr) other_ext->Free();
     other->Erase(number);
   } else {
-    other->InternalExtensionMergeFrom(number, *this_ext);
+    other->InternalExtensionMergeFrom(extendee, number, *this_ext,
+                                      this->GetArena());
     if (GetArena() == nullptr) this_ext->Free();
     Erase(number);
   }
@@ -1888,7 +1904,7 @@ const ExtensionSet::Extension* ExtensionSet::FindOrNullInLargeMap(
   if (it != map_.large->end()) {
     return &it->second;
   }
-  return NULL;
+  return nullptr;
 }
 
 ExtensionSet::Extension* ExtensionSet::FindOrNull(int key) {
@@ -1960,8 +1976,12 @@ void ExtensionSet::GrowCapacity(size_t minimum_new_capacity) {
   map_ = new_map;
 }
 
+#if (__cplusplus < 201703) && \
+    (!defined(_MSC_VER) || (_MSC_VER >= 1900 && _MSC_VER < 1912))
 // static
 constexpr uint16_t ExtensionSet::kMaximumFlatCapacity;
+#endif  //  (__cplusplus < 201703) && (!defined(_MSC_VER) || (_MSC_VER >= 1900
+        //  && _MSC_VER < 1912))
 
 void ExtensionSet::Erase(int key) {
   if (PROTOBUF_PREDICT_FALSE(is_large())) {

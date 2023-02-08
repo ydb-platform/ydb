@@ -104,7 +104,7 @@ FileInputStream::CopyingFileInputStream::CopyingFileInputStream(
       is_closed_(false),
       errno_(0),
       previous_seek_failed_(false) {
-#ifndef _MSC_VER
+#ifndef _WIN32
   int flags = fcntl(file_, F_GETFL);
   flags &= ~O_NONBLOCK;
   fcntl(file_, F_SETFL, flags);
@@ -170,7 +170,7 @@ int FileInputStream::CopyingFileInputStream::Skip(int count) {
 
 // ===================================================================
 
-FileOutputStream::FileOutputStream(int file_descriptor, int block_size)
+FileOutputStream::FileOutputStream(int file_descriptor, int /*block_size*/)
     : CopyingOutputStreamAdaptor(&copying_output_),
       copying_output_(file_descriptor) {}
 

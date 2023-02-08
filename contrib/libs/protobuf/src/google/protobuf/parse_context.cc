@@ -205,7 +205,7 @@ std::pair<const char*, bool> EpsCopyInputStream::DoneFallback(int overrun,
 }
 
 const char* EpsCopyInputStream::SkipFallback(const char* ptr, int size) {
-  return AppendSize(ptr, size, [](const char* p, int s) {});
+  return AppendSize(ptr, size, [](const char* /*p*/, int /*s*/) {});
 }
 
 const char* EpsCopyInputStream::ReadStringFallback(const char* ptr, int size,
@@ -237,7 +237,7 @@ const char* EpsCopyInputStream::AppendStringFallback(const char* ptr, int size,
 template <int>
 void byteswap(void* p);
 template <>
-void byteswap<1>(void* p) {}
+void byteswap<1>(void* /*p*/) {}
 template <>
 void byteswap<4>(void* p) {
   *static_cast<arc_ui32*>(p) = bswap_32(*static_cast<arc_ui32*>(p));
@@ -460,7 +460,6 @@ const char* PackedBoolParser(void* object, const char* ptr, ParseContext* ctx) {
 template <typename T>
 const char* FixedParser(void* object, const char* ptr, ParseContext* ctx) {
   int size = ReadSize(&ptr);
-  GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);
   return ctx->ReadPackedFixed(ptr, size,
                               static_cast<RepeatedField<T>*>(object));
 }

@@ -946,7 +946,7 @@ CodedOutputStream::~CodedOutputStream() { Trim(); }
 
 uint8_t* CodedOutputStream::WriteStringWithSizeToArray(const TProtoStringType& str,
                                                      uint8_t* target) {
-  GOOGLE_DCHECK_LE(str.size(), kuint32max);
+  GOOGLE_DCHECK_LE(str.size(), std::numeric_limits<arc_ui32>::max());
   target = WriteVarint32ToArray(str.size(), target);
   return WriteStringToArray(str, target);
 }

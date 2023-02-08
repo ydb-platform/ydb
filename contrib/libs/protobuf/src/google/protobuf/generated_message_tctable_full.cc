@@ -28,33 +28,26 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Author: kenton@google.com (Kenton Varda)
-//  Based on original Protocol Buffers design by
-//  Sanjay Ghemawat, Jeff Dean, and others.
+#include <cstdint>
 
-#include <google/protobuf/repeated_field.h>
+#include <google/protobuf/parse_context.h>
+#include <google/protobuf/extension_set.h>
+#include <google/protobuf/generated_message_tctable_impl.h>
+#include <google/protobuf/message.h>
+#include <google/protobuf/unknown_field_set.h>
 
-#include <algorithm>
-
-#include <google/protobuf/stubs/logging.h>
-#include <google/protobuf/stubs/common.h>
-
+// clang-format off
 #include <google/protobuf/port_def.inc>
+// clang-format on
 
 namespace google {
 namespace protobuf {
+namespace internal {
 
+const char* TcParser::GenericFallback(PROTOBUF_TC_PARAM_DECL) {
+  return GenericFallbackImpl<Message, UnknownFieldSet>(PROTOBUF_TC_PARAM_PASS);
+}
 
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<bool>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<arc_i32>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<arc_ui32>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<arc_i64>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<arc_ui64>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<float>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<double>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedPtrField<TProtoStringType>;
-
+}  // namespace internal
 }  // namespace protobuf
 }  // namespace google
-
-#include <google/protobuf/port_undef.inc>

@@ -44,6 +44,8 @@ target_sources(contrib-libs-protobuf PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/generated_message_reflection.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/generated_message_table_driven.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/generated_message_table_driven_lite.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/generated_message_tctable_full.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/generated_message_tctable_lite.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/implicit_weak_message.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/inlined_string_field.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/io/coded_stream.cc
@@ -64,6 +66,7 @@ target_sources(contrib-libs-protobuf PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/parse_context.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/reflection_ops.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/repeated_field.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/repeated_ptr_field.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/service.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/source_context.pb.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/struct.pb.cc
@@ -97,7 +100,6 @@ target_sources(contrib-libs-protobuf PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/util/internal/protostream_objectsource.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/util/internal/protostream_objectwriter.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/util/internal/type_info.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/util/internal/type_info_test_helper.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/util/internal/utility.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/util/json_util.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/util/message_differencer.cc

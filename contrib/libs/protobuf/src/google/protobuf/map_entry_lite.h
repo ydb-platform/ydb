@@ -194,7 +194,7 @@ class MapEntryImpl : public Base {
         _has_bits_{} {}
 
   ~MapEntryImpl() {
-    if (Base::GetArenaForAllocation() != NULL) return;
+    if (Base::GetArenaForAllocation() != nullptr) return;
     KeyTypeHandler::DeleteNoArena(key_);
     ValueTypeHandler::DeleteNoArena(value_);
   }
@@ -284,11 +284,6 @@ class MapEntryImpl : public Base {
 
   bool IsInitialized() const override {
     return ValueTypeHandler::IsInitialized(value_);
-  }
-
-  Base* New() const override {
-    Derived* entry = new Derived;
-    return entry;
   }
 
   Base* New(Arena* arena) const override {
@@ -528,7 +523,9 @@ class MapEntryLite : public MapEntryImpl<T, MessageLite, Key, Value,
       SuperType;
   constexpr MapEntryLite() {}
   explicit MapEntryLite(Arena* arena) : SuperType(arena) {}
-  ~MapEntryLite() { MessageLite::_internal_metadata_.template Delete<TProtoStringType>(); }
+  ~MapEntryLite() {
+    MessageLite::_internal_metadata_.template Delete<TProtoStringType>();
+  }
   void MergeFrom(const MapEntryLite& other) { MergeFromInternal(other); }
 
  private:

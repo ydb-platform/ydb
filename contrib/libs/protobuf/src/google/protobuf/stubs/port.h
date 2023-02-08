@@ -65,6 +65,10 @@
 #include <machine/endian.h>  // __BYTE_ORDER
 #elif defined(__FreeBSD__)
 #include <sys/endian.h>  // __BYTE_ORDER
+#elif (defined(sun) || defined(__sun)) && (defined(__SVR4) || defined(__svr4__))
+#include <sys/isa_defs.h>  // __BYTE_ORDER
+#elif defined(_AIX) || defined(__TOS_AIX__)
+#include <sys/machine.h>  // BYTE_ORDER
 #else
 #if !defined(__QNX__)
 #include <endian.h>  // __BYTE_ORDER
@@ -271,8 +275,7 @@ static inline uint32 bswap_32(uint32 x) {
 
 #ifndef bswap_64
 static inline uint64 bswap_64(uint64 x) {
-  return (((x & arc_ui64{0xFFu}) << 56) |
-          ((x & arc_ui64{0xFF00u}) << 40) |
+  return (((x & arc_ui64{0xFFu}) << 56) | ((x & arc_ui64{0xFF00u}) << 40) |
           ((x & arc_ui64{0xFF0000u}) << 24) |
           ((x & arc_ui64{0xFF000000u}) << 8) |
           ((x & arc_ui64{0xFF00000000u}) >> 8) |

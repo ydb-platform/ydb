@@ -199,12 +199,12 @@ class PROTOBUF_EXPORT InlinedStringField {
                        arc_ui32* donating_states, arc_ui32 mask);
 
   // Release returns a TProtoStringType* instance that is heap-allocated and is not
-  // Own()'d by any arena. If the field is not set, this returns NULL. The
-  // caller retains ownership. Clears this field back to NULL state. Used to
+  // Own()'d by any arena. If the field is not set, this returns nullptr. The
+  // caller retains ownership. Clears this field back to nullptr state. Used to
   // implement release_<field>() methods on generated classes.
-  PROTOBUF_MUST_USE_RESULT TProtoStringType* Release(
-      const TProtoStringType* default_value, Arena* arena, bool donated);
-  PROTOBUF_MUST_USE_RESULT TProtoStringType* ReleaseNonDefault(
+  PROTOBUF_NODISCARD TProtoStringType* Release(const TProtoStringType* default_value,
+                                          Arena* arena, bool donated);
+  PROTOBUF_NODISCARD TProtoStringType* ReleaseNonDefault(
       const TProtoStringType* default_value, Arena* arena);
   TProtoStringType* ReleaseNonDefaultNoArena(const TProtoStringType* default_value);
 
@@ -248,9 +248,9 @@ class PROTOBUF_EXPORT InlinedStringField {
     get_mutable()->clear();
   }
 
-  // Clears content, but keeps allocated TProtoStringType if arena != NULL, to avoid
-  // the overhead of heap operations. After this returns, the content (as seen
-  // by the user) will always be equal to |default_value|.
+  // Clears content, but keeps allocated TProtoStringType if arena != nullptr, to
+  // avoid the overhead of heap operations. After this returns, the content (as
+  // seen by the user) will always be equal to |default_value|.
   void ClearToDefault(const LazyString& default_value, Arena* arena,
                       bool donated);
 

@@ -224,6 +224,21 @@ Tokenizer::~Tokenizer() {
   }
 }
 
+bool Tokenizer::report_whitespace() const { return report_whitespace_; }
+// Note: `set_report_whitespace(false)` implies `set_report_newlines(false)`.
+void Tokenizer::set_report_whitespace(bool report) {
+  report_whitespace_ = report;
+  report_newlines_ &= report;
+}
+
+// If true, newline tokens are reported by Next().
+bool Tokenizer::report_newlines() const { return report_newlines_; }
+// Note: `set_report_newlines(true)` implies `set_report_whitespace(true)`.
+void Tokenizer::set_report_newlines(bool report) {
+  report_newlines_ = report;
+  report_whitespace_ |= report;  // enable report_whitespace if necessary
+}
+
 // -------------------------------------------------------------------
 // Internal helpers.
 
@@ -560,13 +575,46 @@ Tokenizer::NextCommentStatus Tokenizer::TryConsumeCommentStart() {
   }
 }
 
+bool Tokenizer::TryConsumeWhitespace() {
+  if (report_newlines_) {
+    if (TryConsumeOne<WhitespaceNoNewline>()) {
+      ConsumeZeroOrMore<WhitespaceNoNewline>();
+      current_.type = TYPE_WHITESPACE;
+      return true;
+    }
+    return false;
+  }
+  if (TryConsumeOne<Whitespace>()) {
+    ConsumeZeroOrMore<Whitespace>();
+    current_.type = TYPE_WHITESPACE;
+    return report_whitespace_;
+  }
+  return false;
+}
+
+bool Tokenizer::TryConsumeNewline() {
+  if (!report_whitespace_ || !report_newlines_) {
+    return false;
+  }
+  if (TryConsume('\n')) {
+    current_.type = TYPE_NEWLINE;
+    return true;
+  }
+  return false;
+}
+
 // -------------------------------------------------------------------
 
 bool Tokenizer::Next() {
   previous_ = current_;
 
   while (!read_error_) {
-    ConsumeZeroOrMore<Whitespace>();
+    StartToken();
+    bool report_token = TryConsumeWhitespace() || TryConsumeNewline();
+    EndToken();
+    if (report_token) {
+      return true;
+    }
 
     switch (TryConsumeCommentStart()) {
       case LINE_COMMENT:
@@ -769,8 +817,9 @@ bool Tokenizer::NextWithComments(TProtoStringType* prev_trailing_comments,
   if (current_.type == TYPE_START) {
     // Ignore unicode byte order mark(BOM) if it appears at the file
     // beginning. Only UTF-8 BOM (0xEF 0xBB 0xBF) is accepted.
-    if (TryConsume((char)0xEF)) {
-      if (!TryConsume((char)0xBB) || !TryConsume((char)0xBF)) {
+    if (TryConsume(static_cast<char>(0xEF))) {
+      if (!TryConsume(static_cast<char>(0xBB)) ||
+          !TryConsume(static_cast<char>(0xBF))) {
         AddError(
             "Proto file starts with 0xEF but not UTF-8 BOM. "
             "Only UTF-8 is accepted for proto file.");
@@ -991,7 +1040,8 @@ static inline bool IsTrailSurrogate(arc_ui32 code_point) {
 }
 
 // Combine a head and trail surrogate into a single Unicode code point.
-static arc_ui32 AssembleUTF16(arc_ui32 head_surrogate, arc_ui32 trail_surrogate) {
+static arc_ui32 AssembleUTF16(arc_ui32 head_surrogate,
+                              arc_ui32 trail_surrogate) {
   GOOGLE_DCHECK(IsHeadSurrogate(head_surrogate));
   GOOGLE_DCHECK(IsTrailSurrogate(trail_surrogate));
   return 0x10000 + (((head_surrogate - kMinHeadSurrogate) << 10) |

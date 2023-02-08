@@ -316,7 +316,7 @@ void SerializeMessageNoTable(const MessageLite* msg, ArrayOutput* output) {
 // Helper to branch to fast path if possible
 void SerializeMessageDispatch(const MessageLite& msg,
                               const FieldMetadata* field_table, int num_fields,
-                              arc_i32 cached_size,
+                              arc_i32 /*cached_size*/,
                               io::CodedOutputStream* output) {
   const uint8_t* base = reinterpret_cast<const uint8_t*>(&msg);
   SerializeInternal(base, field_table, num_fields, output);
@@ -325,7 +325,7 @@ void SerializeMessageDispatch(const MessageLite& msg,
 // Helper to branch to fast path if possible
 void SerializeMessageDispatch(const MessageLite& msg,
                               const FieldMetadata* field_table, int num_fields,
-                              arc_i32 cached_size, ArrayOutput* output) {
+                              arc_i32 /*cached_size*/, ArrayOutput* output) {
   const uint8_t* base = reinterpret_cast<const uint8_t*>(&msg);
   output->ptr = SerializeInternalToArray(base, field_table, num_fields,
                                          output->is_deterministic, output->ptr);
@@ -523,7 +523,8 @@ struct PackedFieldHelper {
 template <>
 struct PackedFieldHelper<WireFormatLite::TYPE_STRING> {
   template <typename O>
-  static void Serialize(const void* field, const FieldMetadata& md, O* output) {
+  static void Serialize(const void* /*field*/, const FieldMetadata& md,
+                        O* /*output*/) {
     GOOGLE_LOG(FATAL) << "Not implemented field number " << md.tag << " with type "
                << md.type;
   }
@@ -591,12 +592,12 @@ bool IsNull<WireFormatLite::TYPE_BYTES>(const void* ptr) {
 
 template <>
 bool IsNull<WireFormatLite::TYPE_GROUP>(const void* ptr) {
-  return Get<const MessageLite*>(ptr) == NULL;
+  return Get<const MessageLite*>(ptr) == nullptr;
 }
 
 template <>
 bool IsNull<WireFormatLite::TYPE_MESSAGE>(const void* ptr) {
-  return Get<const MessageLite*>(ptr) == NULL;
+  return Get<const MessageLite*>(ptr) == nullptr;
 }
 
 
@@ -701,13 +702,13 @@ uint8_t* SerializeInternalToArray(const uint8_t* base,
       // Special cases
       case FieldMetadata::kSpecial: {
         io::ArrayOutputStream array_stream(array_output.ptr, INT_MAX);
-        io::CodedOutputStream output(&array_stream);
-        output.SetSerializationDeterministic(is_deterministic);
+        io::CodedOutputStream output_stream(&array_stream);
+        output_stream.SetSerializationDeterministic(is_deterministic);
         func = reinterpret_cast<SpecialSerializer>(
             const_cast<void*>(field_metadata.ptr));
         func(base, field_metadata.offset, field_metadata.tag,
-             field_metadata.has_offset, &output);
-        array_output.ptr += output.ByteCount();
+             field_metadata.has_offset, &output_stream);
+        array_output.ptr += output_stream.ByteCount();
       } break;
       default:
         // __builtin_unreachable()
@@ -726,7 +727,7 @@ void ExtensionSerializer(const MessageLite* extendee, const uint8_t* ptr,
 }
 
 void UnknownFieldSerializerLite(const uint8_t* ptr, arc_ui32 offset,
-                                arc_ui32 tag, arc_ui32 has_offset,
+                                arc_ui32 /*tag*/, arc_ui32 /*has_offset*/,
                                 io::CodedOutputStream* output) {
   output->WriteString(
       reinterpret_cast<const InternalMetadata*>(ptr + offset)
@@ -739,7 +740,7 @@ MessageLite* DuplicateIfNonNullInternal(MessageLite* message) {
     ret->CheckTypeAndMergeFrom(*message);
     return ret;
   } else {
-    return NULL;
+    return nullptr;
   }
 }
 
@@ -761,7 +762,7 @@ MessageLite* GetOwnedMessageInternal(Arena* message_arena,
          submessage_arena);
   GOOGLE_DCHECK(message_arena != submessage_arena);
   GOOGLE_DCHECK_EQ(submessage_arena, nullptr);
-  if (message_arena != NULL && submessage_arena == NULL) {
+  if (message_arena != nullptr && submessage_arena == nullptr) {
     message_arena->Own(submessage);
     return submessage;
   } else {

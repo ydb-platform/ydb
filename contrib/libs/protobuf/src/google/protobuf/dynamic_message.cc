@@ -246,7 +246,6 @@ class DynamicMessage : public Message {
 
   // implements Message ----------------------------------------------
 
-  Message* New() const override;
   Message* New(Arena* arena) const override;
 
   int GetCachedSize() const override;
@@ -450,7 +449,7 @@ void DynamicMessage::SharedCtor(bool lock_factory) {
 
       case FieldDescriptor::CPPTYPE_MESSAGE: {
         if (!field->is_repeated()) {
-          new (field_ptr) Message*(NULL);
+          new (field_ptr) Message*(nullptr);
         } else {
           if (IsMapFieldInApi(field)) {
             // We need to lock in most cases to avoid data racing. Only not lock
@@ -499,7 +498,7 @@ void DynamicMessage::SharedCtor(bool lock_factory) {
 
 bool DynamicMessage::is_prototype() const {
   return type_info_->prototype == this ||
-         // If type_info_->prototype is NULL, then we must be constructing
+         // If type_info_->prototype is nullptr, then we must be constructing
          // the prototype now, which means we must be the prototype.
          type_info_->prototype == nullptr;
 }
@@ -546,7 +545,7 @@ DynamicMessage::~DynamicMessage() {
               // from reflection.
               const TProtoStringType* default_value = nullptr;
               reinterpret_cast<ArenaStringPtr*>(field_ptr)->Destroy(
-                  default_value, NULL);
+                  default_value, nullptr);
               break;
             }
           }
@@ -606,14 +605,14 @@ DynamicMessage::~DynamicMessage() {
                       type_info_->offsets[i]))
                   ->GetPointer();
           reinterpret_cast<ArenaStringPtr*>(field_ptr)->Destroy(default_value,
-                                                                NULL);
+                                                                nullptr);
           break;
         }
       }
     } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
           if (!is_prototype()) {
         Message* message = *reinterpret_cast<Message**>(field_ptr);
-        if (message != NULL) {
+        if (message != nullptr) {
           delete message;
         }
       }
@@ -645,10 +644,8 @@ void DynamicMessage::CrossLinkPrototypes() {
   }
 }
 
-Message* DynamicMessage::New() const { return New(NULL); }
-
 Message* DynamicMessage::New(Arena* arena) const {
-  if (arena != NULL) {
+  if (arena != nullptr) {
     void* new_base = Arena::CreateArray<char>(arena, type_info_->size);
     memset(new_base, 0, type_info_->size);
     return new (new_base) DynamicMessage(type_info_, arena);
@@ -701,7 +698,7 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   }
 
   const TypeInfo** target = &prototypes_[type];
-  if (*target != NULL) {
+  if (*target != nullptr) {
     // Already exists.
     return (*target)->prototype;
   }
@@ -710,7 +707,7 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   *target = type_info;
 
   type_info->type = type;
-  type_info->pool = (pool_ == NULL) ? type->file()->pool() : pool_;
+  type_info->pool = (pool_ == nullptr) ? type->file()->pool() : pool_;
   type_info->factory = this;
 
   // We need to construct all the structures passed to Reflection's constructor.
@@ -747,9 +744,9 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
         // hasbits.
         type_info->has_bits_offset = size;
         arc_ui32* has_bits_indices = new arc_ui32[type->field_count()];
-        for (int i = 0; i < type->field_count(); i++) {
+        for (int j = 0; j < type->field_count(); j++) {
           // Initialize to -1, fields that need a hasbit will overwrite.
-          has_bits_indices[i] = static_cast<arc_ui32>(-1);
+          has_bits_indices[j] = static_cast<arc_ui32>(-1);
         }
         type_info->has_bits_indices.reset(has_bits_indices);
       }

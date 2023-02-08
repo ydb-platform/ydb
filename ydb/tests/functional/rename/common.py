@@ -23,6 +23,9 @@ async def async_retry_operation(callee, retry_settings=None, *args, **kwargs):
         else:
             try:
                 return await next_opt.result
+            except ydb.GenericError as e:
+                if "Cannot find table" in e.message:
+                    next_opt.set_exception(ydb.Unavailable(e.message))
             except Exception as e:
                 next_opt.set_exception(e)
 

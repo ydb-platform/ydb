@@ -356,11 +356,26 @@ private:
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
+        bool enableKqpDataQueryStreamLookup = Config.GetEnableKqpDataQueryStreamLookup();
+        bool enableKqpScanQueryStreamLookup = Config.GetEnableKqpScanQueryStreamLookup();
+
         Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+
+        if (Config.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
+            Config.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup) {
+
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
+                "Stream lookup flag was changed, from " << enableKqpDataQueryStreamLookup <<
+                " to " << Config.GetEnableKqpDataQueryStreamLookup() << " for data queries, from " <<
+                enableKqpScanQueryStreamLookup << " to " << Config.GetEnableKqpScanQueryStreamLookup() <<
+                " for scan queries");
+
+            QueryCache.Clear();
+        }
     }
 
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {

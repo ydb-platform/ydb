@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD), Q_
 #include <ydb/core/load_test/events.h>
+#include <ydb/core/load_test/ycsb/common.h>
 #include <ydb/core/load_test/ycsb/test_load_actor.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -21,11 +22,6 @@ namespace {
 const TString DefaultTableName = "usertable";
 const TString FieldPrefix = "field";
 const size_t ValueColumnsCount = 10;
-
-TString GetKey(size_t n) {
-    // user1000385178204227360
-    return Sprintf("user%.19lu", n);
-}
 
 void InitRoot(Tests::TServer::TPtr server,
     TActorId sender) {
@@ -702,6 +698,30 @@ Y_UNIT_TEST_SUITE(ReadLoad) {
 
         UNIT_ASSERT_VALUES_EQUAL(result->JsonResult["subtests"].GetInteger(), 4);
         UNIT_ASSERT_VALUES_EQUAL(result->JsonResult["oks"].GetInteger(), (4 * expectedRowCount));
+
+        // sanity check that there was data in table
+        helper.CheckKeys(0, expectedRowCount);
+    }
+
+    Y_UNIT_TEST(ShouldReadKqp) {
+        TTestHelper helper;
+
+        const ui64 expectedRowCount = 1000;
+
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
+        auto& record = request->Record;
+        auto& command = *record.MutableReadKqpStart();
+
+        command.AddInflights(10);
+        command.SetRowCount(expectedRowCount);
+
+        auto& setupTable = *record.MutableTableSetup();
+        setupTable.SetWorkingDir("/Root");
+        setupTable.SetTableName("usertable");
+
+        auto result = helper.RunTestLoad(std::move(request));
+
+        UNIT_ASSERT_VALUES_EQUAL(result->JsonResult["oks"].GetInteger(), (10 * expectedRowCount));
 
         // sanity check that there was data in table
         helper.CheckKeys(0, expectedRowCount);

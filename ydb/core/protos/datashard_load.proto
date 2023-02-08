@@ -40,7 +40,10 @@ message TEvYCSBTestLoadRequest {
         // number of random rows to be read (point reads)
         optional uint64 ReadCount = 2;
 
+        // note that KQP supports only 1 inflight
         repeated uint32 Inflights = 3;
+
+        // not used in KQP
         repeated uint32 Chunks = 4;
 
         // Specifies the format for result data in TEvReadResult
@@ -87,6 +90,7 @@ message TEvYCSBTestLoadRequest {
         TUpdateStart UpsertProposeStart = 24;
 
         TReadStart ReadIteratorStart = 25;
+        TReadStart ReadKqpStart = 26;
     }
 }
 

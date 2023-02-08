@@ -1,4 +1,5 @@
 #include "actors.h"
+#include "common.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -15,11 +16,6 @@
 // * row is ~ 1 KB, keys are like user1000385178204227360
 
 namespace NKikimr::NDataShardLoad {
-
-TString GetKey(size_t n) {
-    // user1000385178204227360
-    return Sprintf("user%.19lu", n);
-}
 
 using TUploadRowsRequestPtr = std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>;
 

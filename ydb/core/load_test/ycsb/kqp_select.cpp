@@ -2,7 +2,10 @@
 #include "common.h"
 
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/public/lib/operation_id/operation_id.h>
@@ -37,36 +40,19 @@ struct TQueryInfo {
     NYdb::TParams Params;
 };
 
-TQueryInfo GenerateUpsert(size_t n, const TString& table) {
+TQueryInfo GenerateSelect(const TString& table, const TString& key) {
     TStringStream str;
 
     str << Sprintf(R"__(
         --!syntax_v1
 
         DECLARE $key AS Text;
-        DECLARE $field0 AS Bytes;
-        DECLARE $field1 AS Bytes;
-        DECLARE $field2 AS Bytes;
-        DECLARE $field3 AS Bytes;
-        DECLARE $field4 AS Bytes;
-        DECLARE $field5 AS Bytes;
-        DECLARE $field6 AS Bytes;
-        DECLARE $field7 AS Bytes;
-        DECLARE $field8 AS Bytes;
-        DECLARE $field9 AS Bytes;
 
-        UPSERT INTO `%s` ( id, field0, field1, field2, field3, field4, field5, field6, field7, field8, field9 )
-            VALUES ( $key, $field0, $field1, $field2, $field3, $field4, $field5, $field6, $field7, $field8, $field9 );
+        SELECT * FROM `%s` WHERE id == '$key';
     )__", table.c_str());
 
     NYdb::TParamsBuilder paramsBuilder;
-
-    paramsBuilder.AddParam("$key").Utf8(GetKey(n)).Build();
-    for (size_t i = 0; i < 10; ++i) {
-        TString name = "$field" + ToString(i);
-        paramsBuilder.AddParam(name).String(Value).Build();
-    }
-
+    paramsBuilder.AddParam("$key").Utf8(key).Build();
     auto params = paramsBuilder.Build();
 
     return TQueryInfo(str.Str(), std::move(params));
@@ -74,19 +60,17 @@ TQueryInfo GenerateUpsert(size_t n, const TString& table) {
 
 // it's a partial copy-paste from TUpsertActor: logic slightly differs, so that
 // it seems better to have copy-paste rather if/else for different loads
-class TKqpUpsertActor : public TActorBootstrapped<TKqpUpsertActor> {
-    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart Config;
+class TKqpSelectActor : public TActorBootstrapped<TKqpSelectActor> {
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     const TSubLoadId Id;
     const TString Database;
 
-    TString ConfingString;
-
     TString Session;
     TRequestsVector Requests;
+    bool Infinite;
+
     size_t CurrentRequest = 0;
-    size_t Inflight = 0;
 
     TInstant StartTs;
     TInstant EndTs;
@@ -94,35 +78,34 @@ class TKqpUpsertActor : public TActorBootstrapped<TKqpUpsertActor> {
     size_t Errors = 0;
 
 public:
-    TKqpUpsertActor(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
-                    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
+    TKqpSelectActor(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
                     const TActorId& parent,
                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                     const TSubLoadId& id,
-                    TRequestsVector requests)
-        : Config(cmd)
-        , Target(target)
+                    TRequestsVector requests,
+                    bool infinite)
+        : Target(target)
         , Parent(parent)
         , Id(id)
         , Database(Target.GetWorkingDir())
         , Requests(std::move(requests))
+        , Infinite(infinite)
     {
         Y_UNUSED(counters);
-        google::protobuf::TextFormat::PrintToString(cmd, &ConfingString);
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
-            << " Bootstrap called: " << ConfingString);
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
+            << " Bootstrap called");
 
-        Become(&TKqpUpsertActor::StateFunc);
+        Become(&TKqpSelectActor::StateFunc);
         CreateSession(ctx);
     }
 
 private:
     void CreateSession(const TActorContext& ctx) {
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
             << " sends event for session creation to proxy: " << kqpProxy.ToString());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
@@ -135,7 +118,7 @@ private:
             return;
 
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
             << " sends session close query to proxy: " << kqpProxy);
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
@@ -143,37 +126,34 @@ private:
         ctx.Send(kqpProxy, ev.Release());
     }
 
-    void SendRows(const TActorContext &ctx) {
-        while (Inflight < Config.GetInflight() && CurrentRequest < Requests.size()) {
-            auto* request = static_cast<NKqp::TEvKqp::TEvQueryRequest*>(Requests[CurrentRequest].get());
-            request->Record.MutableRequest()->SetSessionId(Session);
+    void ReadRow(const TActorContext &ctx) {
+        auto* request = static_cast<NKqp::TEvKqp::TEvQueryRequest*>(Requests[CurrentRequest].get());
+        request->Record.MutableRequest()->SetSessionId(Session);
 
-            auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
-                << " send request# " << CurrentRequest
-                << " to proxy# " << kqpProxy << ": " << request->ToString());
+        auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
+            << " send request# " << CurrentRequest
+            << " to proxy# " << kqpProxy << ": " << request->ToString());
 
-            if (!Config.GetInfinite()) {
-                ctx.Send(kqpProxy, Requests[CurrentRequest].release());
-            } else {
-                auto requestCopy = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
-                requestCopy->Record = request->Record;
-                ctx.Send(kqpProxy, requestCopy.release());
-            }
-
-            ++CurrentRequest;
-            ++Inflight;
+        if (!Infinite) {
+            ctx.Send(kqpProxy, Requests[CurrentRequest].release());
+        } else {
+            auto requestCopy = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            requestCopy->Record = request->Record;
+            ctx.Send(kqpProxy, requestCopy.release());
         }
+
+        ++CurrentRequest;
     }
 
     void OnRequestDone(const TActorContext& ctx) {
-        if (Config.GetInfinite() && CurrentRequest >= Requests.size()) {
+        if (Infinite && CurrentRequest >= Requests.size()) {
             CurrentRequest = 0;
         }
 
         if (CurrentRequest < Requests.size()) {
-            SendRows(ctx);
-        } else if (Inflight == 0) {
+            ReadRow(ctx);
+        } else {
             EndTs = TInstant::Now();
             auto delta = EndTs - StartTs;
 
@@ -186,14 +166,14 @@ private:
 
             ctx.Send(Parent, response.release());
 
-            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
                 << " finished in " << delta << ", errors=" << Errors);
             Die(ctx);
         }
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
             << " tablet recieved PoisonPill, going to die");
         CloseSession(ctx);
         Die(ctx);
@@ -204,18 +184,16 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Session = response.GetResponse().GetSessionId();
-            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id << " session: " << Session);
-            SendRows(ctx);
+            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id << " session: " << Session);
+            ReadRow(ctx);
         } else {
             StopWithError(ctx, "failed to create session: " + ev->Get()->ToString());
         }
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
             << " received from " << ev->Sender << ": " << ev->Get()->Record.DebugString());
-
-        --Inflight;
 
         auto& response = ev->Get()->Record.GetRef();
         if (response.GetYdbStatus() != Ydb::StatusIds_StatusCode_SUCCESS) {
@@ -234,7 +212,7 @@ private:
     void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
         HTML(str) {
-            str << "TKqpUpsertActor# " << Id << " started on " << StartTs
+            str << "TKqpSelectActor# " << Id << " started on " << StartTs
                 << " sent " << CurrentRequest << " out of " << Requests.size();
             TInstant ts = EndTs ? EndTs : TInstant::Now();
             auto delta = ts - StartTs;
@@ -254,9 +232,9 @@ private:
     )
 };
 
-// creates multiple TKqpUpsertActor for inflight > 1 and waits completion
-class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMultiSession> {
-    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart Config;
+// creates multiple TKqpSelectActor for inflight > 1 and waits completion
+class TKqpSelectActorMultiSession : public TActorBootstrapped<TKqpSelectActorMultiSession> {
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TReadStart Config;
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     const TSubLoadId Id;
@@ -265,6 +243,18 @@ class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMul
 
     TString ConfingString;
 
+    ui64 ReadCount = 0;
+
+    ui64 TabletId = 0;
+    ui64 TableId = 0;
+    ui64 OwnerId = 0;
+
+    TVector<ui32> KeyColumnIds;
+    TVector<ui32> AllColumnIds;
+
+    TVector<TOwnedCellVec> Keys;
+
+    ui64 LastReadId = 0;
     ui64 LastSubTag = 0;
     TVector<TActorId> Actors;
 
@@ -277,7 +267,7 @@ class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMul
     size_t Errors = 0;
 
 public:
-    TKqpUpsertActorMultiSession(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+    TKqpSelectActorMultiSession(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TReadStart& cmd,
                                 const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
                                 const TActorId& parent,
                                 TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
@@ -291,31 +281,126 @@ public:
     {
         Y_UNUSED(counters);
         google::protobuf::TextFormat::PrintToString(cmd, &ConfingString);
+
+        if (Config.HasReadCount()) {
+            ReadCount = Config.GetReadCount();
+        } else {
+            ReadCount = Config.GetRowCount();
+        }
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
             << " Bootstrap called: " << ConfingString);
 
-        Become(&TKqpUpsertActorMultiSession::StateFunc);
-        StartActors(ctx);
+        Become(&TKqpSelectActorMultiSession::StateFunc);
+        DescribePath(ctx);
     }
 
 private:
+    void DescribePath(const TActorContext& ctx) {
+        TString path = Target.GetWorkingDir() + "/" + Target.GetTableName();
+        auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
+        request->Record.MutableDescribePath()->SetPath(path);
+        ctx.Send(MakeTxProxyID(), request.release());
+    }
+
+    void Handle(const NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->GetRecord();
+        OwnerId = record.GetPathOwnerId();
+        TableId = record.GetPathId();
+
+        const auto& description = record.GetPathDescription();
+        if (description.TablePartitionsSize() != 1) {
+            return StopWithError(
+                ctx,
+                TStringBuilder() << "Path must have exactly 1 part, has: " << description.TablePartitionsSize());
+        }
+        const auto& partition = description.GetTablePartitions(0);
+        TabletId = partition.GetDatashardId();
+
+        const auto& table = description.GetTable();
+
+        KeyColumnIds.reserve(table.KeyColumnIdsSize());
+        for (const auto& id: table.GetKeyColumnIds()) {
+            KeyColumnIds.push_back(id);
+        }
+
+        AllColumnIds.reserve(table.ColumnsSize());
+        for (const auto& column: table.GetColumns()) {
+            AllColumnIds.push_back(column.GetId());
+        }
+
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
+            << " will work with tablet# " << TabletId << " with ownerId# " << OwnerId
+            << " with tableId# " << TableId << " resolved for path# "
+            << Target.GetWorkingDir() << "/" << Target.GetTableName()
+            << " with columnsCount# " << AllColumnIds.size() << ", keyColumnCount# " << KeyColumnIds.size());
+
+        RunFullScan(ctx, Config.GetRowCount());
+    }
+
+    void RunFullScan(const TActorContext& ctx, ui64 sampleKeys) {
+        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto& record = request->Record;
+
+        record.SetReadId(++LastReadId);
+        record.MutableTableId()->SetOwnerId(OwnerId);
+        record.MutableTableId()->SetTableId(TableId);
+
+        if (sampleKeys) {
+            for (const auto& id: KeyColumnIds) {
+                record.AddColumns(id);
+            }
+        } else {
+            for (const auto& id: AllColumnIds) {
+                record.AddColumns(id);
+            }
+        }
+
+        TVector<TString> from = {TString("user")};
+        TVector<TString> to = {TString("zzz")};
+        AddRangeQuery(*request, from, true, to, true);
+
+        record.SetResultFormat(::NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+
+        TSubLoadId subId(Id.Tag, SelfId(), ++LastSubTag);
+        auto* actor = CreateReadIteratorScan(request.release(), TabletId, SelfId(), subId, sampleKeys);
+        Actors.emplace_back(ctx.Register(actor));
+
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
+            << " started fullscan actor# " << Actors.back());
+    }
+
+    void Handle(TEvPrivate::TEvKeys::TPtr& ev, const TActorContext& ctx) {
+        Keys = std::move(ev->Get()->Keys);
+        if (Keys.size() == 0) {
+            return StopWithError(ctx, "Failed to read keys");
+        }
+
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
+            << " received keyCount# " << Keys.size());
+
+        StartActors(ctx);
+    }
+
     void StartActors(const TActorContext& ctx) {
-        const auto actorsCount = Config.GetInflight();
-        const auto requestsPerActor = Config.GetRowCount() / actorsCount;
+        Inflight = Config.GetInflights(0);
 
         TVector<TRequestsVector> perActorRequests;
-        perActorRequests.reserve(actorsCount);
+        perActorRequests.reserve(Inflight);
 
-        size_t currentKey = Config.GetKeyFrom();
-        for (size_t i = 0; i < actorsCount; ++i) {
+        size_t keyCounter = 0;
+        for (size_t i = 0; i < Inflight; ++i) {
             TRequestsVector requests;
 
-            requests.reserve(requestsPerActor);
-            for (size_t i = 0; i < requestsPerActor; ++i) {
-                auto queryInfo = GenerateUpsert(currentKey++, Target.GetTableName());
+            const auto& keyCell = Keys[keyCounter++ % Keys.size()][0];
+            TStringBuf keyBuf = keyCell.AsBuf();
+            TString key(keyBuf.data(), keyBuf.size());
+
+            requests.reserve(ReadCount);
+            for (size_t i = 0; i < ReadCount; ++i) {
+                auto queryInfo = GenerateSelect(Target.GetTableName(), key);
 
                 auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
                 request->Record.MutableRequest()->SetKeepSession(true);
@@ -339,26 +424,22 @@ private:
 
         StartTs = TInstant::Now();
 
-        Actors.reserve(actorsCount);
-        Inflight = actorsCount;
-        for (size_t i = 0; i < actorsCount; ++i) {
+        Actors.reserve(Inflight);
+        for (size_t i = 0; i < Inflight; ++i) {
             TSubLoadId subId(Id.Tag, SelfId(), ++LastSubTag);
-            auto configCopy = Config;
-            configCopy.SetInflight(1); // we have only 1 session
-            configCopy.SetRowCount(requestsPerActor);
 
-            auto* kqpActor = new TKqpUpsertActor(
-                configCopy,
+            auto* kqpActor = new TKqpSelectActor(
                 Target,
                 SelfId(),
                 Counters,
                 subId,
-                std::move(perActorRequests[i]));
+                std::move(perActorRequests[i]),
+                Config.GetInfinite());
             Actors.emplace_back(ctx.Register(kqpActor));
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
-            << " started# " << actorsCount << " actors each with inflight# " << requestsPerActor);
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
+            << " started# " << Inflight << " actors each with inflight# 1");
     }
 
     void Handle(const TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
@@ -373,7 +454,8 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "kqp# " << Id << " finished: " << ev->Get()->ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
+            << " finished: " << ev->Get()->ToString());
 
         Errors += record.GetReport().GetOperationsError();
         Oks += record.GetReport().GetOperationsOK();
@@ -391,7 +473,7 @@ private:
             report.SetOperationsError(Errors);
             ctx.Send(Parent, response.release());
 
-            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
                 << " finished in " << delta << ", oks# " << Oks << ", errors# " << Errors);
 
             Stop(ctx);
@@ -401,19 +483,19 @@ private:
     void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
         HTML(str) {
-            str << "TKqpUpsertActorMultiSession# " << Id << " started on " << StartTs;
+            str << "TKqpSelectActorMultiSession# " << Id << " started on " << StartTs;
         }
         ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Id.SubTag, str.Str()));
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
             << " tablet recieved PoisonPill, going to die");
         Stop(ctx);
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
+        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
             << " stopped with error: " << reason);
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Id.SubTag, reason));
@@ -432,19 +514,21 @@ private:
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
         HFunc(TEvDataShardLoad::TEvTestLoadInfoRequest, Handle)
         HFunc(TEvDataShardLoad::TEvTestLoadFinished, Handle);
+        HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle)
+        HFunc(TEvPrivate::TEvKeys, Handle)
     )
 };
 
 } // anonymous
 
-IActor *CreateKqpUpsertActor(
-    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+IActor *CreateKqpSelectActor(
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TReadStart& cmd,
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     const TSubLoadId& id)
 {
-    return new TKqpUpsertActorMultiSession(cmd, target, parent, std::move(counters), id);
+    return new TKqpSelectActorMultiSession(cmd, target, parent, std::move(counters), id);
 }
 
 } // NKikimr::NDataShardLoad

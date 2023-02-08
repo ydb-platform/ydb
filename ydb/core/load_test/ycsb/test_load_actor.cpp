@@ -303,6 +303,9 @@ public:
         // i.e. shard which calculates stats, compacts, etc
 
         if (!Request.HasTableSetup() || Request.GetTableSetup().GetSkipWarmup()) {
+            LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+                << " skipped warmup");
+
             State = EState::RunLoad;
             PrepareTable(ctx);
             return;
@@ -325,9 +328,15 @@ public:
         case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kReadIteratorStart:
             cmd.SetRowCount(Request.GetReadIteratorStart().GetRowCount());
             break;
-        default:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kReadKqpStart:
+            cmd.SetRowCount(Request.GetReadKqpStart().GetRowCount());
+            break;
+        default: {
+            LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+                << " skipped warmup");
             State = EState::RunLoad;
             return PrepareTable(ctx);
+        }
         }
 
         const auto& target = Request.GetTargetShard();
@@ -390,6 +399,14 @@ public:
         case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kReadIteratorStart:
             actor.reset(CreateReadIteratorActor(
                 Request.GetReadIteratorStart(),
+                Request.GetTargetShard(),
+                ctx.SelfID,
+                counters,
+                TSubLoadId(Tag, ctx.SelfID, ++LastTag)));
+            break;
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kReadKqpStart:
+            actor.reset(CreateKqpSelectActor(
+                Request.GetReadKqpStart(),
                 Request.GetTargetShard(),
                 ctx.SelfID,
                 counters,

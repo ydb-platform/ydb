@@ -11,8 +11,4 @@ namespace NKikimr::NDataShardLoad {
 using TUploadRequest = std::unique_ptr<IEventBase>;
 using TRequestsVector = std::vector<TUploadRequest>;
 
-TString GetKey(size_t n);
-
-static const TString Value = TString(100, 'x');
-
 } // NKikimr::NDataShardLoad

@@ -419,7 +419,6 @@ private:
     void SendPutObject(const TString& key, TString&& data) const {
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(key);
-            //.WithStorageClass(Aws::S3::Model::StorageClass::STANDARD_IA); // TODO: move to config
 #if 0
         Aws::Map<Aws::String, Aws::String> metadata;
         metadata.emplace("Content-Type", "application/x-compressed");

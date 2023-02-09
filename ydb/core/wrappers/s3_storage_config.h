@@ -28,16 +28,18 @@ private:
     YDB_READONLY_DEF(TString, Bucket);
     Aws::Client::ClientConfiguration Config;
     const Aws::Auth::AWSCredentials Credentials;
+    YDB_READONLY(Aws::S3::Model::StorageClass, StorageClass, Aws::S3::Model::StorageClass::STANDARD);
 
     static Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrSchemeOp::TS3Settings& settings);
     static Aws::Auth::AWSCredentials CredentialsFromSettings(const NKikimrSchemeOp::TS3Settings& settings);
     static Aws::Client::ClientConfiguration ConfigFromSettings(const Ydb::Import::ImportFromS3Settings& settings);
     static Aws::Auth::AWSCredentials CredentialsFromSettings(const Ydb::Import::ImportFromS3Settings& settings);
-
 protected:
     virtual TString DoGetStorageId() const override;
     virtual IExternalStorageOperator::TPtr DoConstructStorageOperator() const override;
 public:
+    static Aws::S3::Model::StorageClass ConvertStorageClass(const Ydb::Export::ExportToS3Settings::StorageClass storage);
+
     const Aws::Client::ClientConfiguration& GetConfig() const {
         return Config;
     }

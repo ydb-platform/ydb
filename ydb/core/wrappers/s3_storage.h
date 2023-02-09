@@ -33,6 +33,7 @@ private:
     const Aws::Client::ClientConfiguration Config;
     const Aws::Auth::AWSCredentials Credentials;
     const TString Bucket;
+    const Aws::S3::Model::StorageClass StorageClass = Aws::S3::Model::StorageClass::STANDARD;
 
     template <typename TRequest, typename TOutcome>
     using THandler = std::function<void(const Aws::S3::S3Client*, const TRequest&, const TOutcome&, const std::shared_ptr<const Aws::Client::AsyncCallerContext>&)>;
@@ -45,7 +46,7 @@ private:
         using TCtx = TContext<TEvRequest, TEvResponse>;
         ev->Get()->MutableRequest().WithBucket(Bucket);
 
-        auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext());
+        auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext(), StorageClass);
         auto callback = [](
             const Aws::S3::S3Client*,
             const typename TEvRequest::TRequest& request,
@@ -66,11 +67,14 @@ private:
     }
 
 public:
-    TS3ExternalStorage(const Aws::Client::ClientConfiguration& config, const Aws::Auth::AWSCredentials& credentials, const TString& bucket)
+    TS3ExternalStorage(const Aws::Client::ClientConfiguration& config,
+        const Aws::Auth::AWSCredentials& credentials,
+        const TString& bucket, const Aws::S3::Model::StorageClass storageClass)
         : Client(new Aws::S3::S3Client(credentials, config))
         , Config(config)
         , Credentials(credentials)
         , Bucket(bucket)
+        , StorageClass(storageClass)
     {
     }
 

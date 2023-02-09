@@ -27,9 +27,10 @@ protected:
     using TRequest = typename TEvRequest::TRequest;
     using TOutcome = typename TEvResponse::TOutcome;
 public:
-    explicit TCommonContextBase(const TActorSystem* sys, const TActorId& sender, IRequestContext::TPtr requestContext)
+    explicit TCommonContextBase(const TActorSystem* sys, const TActorId& sender, IRequestContext::TPtr requestContext, const Aws::S3::Model::StorageClass storageClass)
         : AsyncCallerContext()
         , RequestContext(requestContext)
+        , StorageClass(storageClass)
         , ActorSystem(sys)
         , Sender(sender)
     {
@@ -54,6 +55,7 @@ protected:
 
     mutable bool Replied = false;
     IRequestContext::TPtr RequestContext;
+    const Aws::S3::Model::StorageClass StorageClass;
 private:
     const TActorSystem* ActorSystem;
     const TActorId Sender;
@@ -200,6 +202,8 @@ private:
 
 template <typename TEvRequest, typename TEvResponse>
 class TInputStreamContext: public TContextBase<TEvRequest, TEvResponse> {
+private:
+    using TBase = TContextBase<TEvRequest, TEvResponse>;
 protected:
     using TRequest = typename TEvRequest::TRequest;
     using TOutcome = typename TEvResponse::TOutcome;
@@ -221,11 +225,10 @@ private:
     };
 
 public:
-    using TContextBase<TEvRequest, TEvResponse>::TContextBase;
+    using TBase::TBase;
 
     const TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
         auto& request = ev->Get()->MutableRequest();
-
         Buffer = std::move(ev->Get()->Body);
         request.SetBody(MakeShared<DefaultUnderlyingStream>("StreamContext",
             MakeUnique<TInputStreamBuf>("StreamContext", Buffer)));
@@ -237,6 +240,20 @@ private:
     TString Buffer;
 
 }; // TInputStreamContext
+
+template <typename TEvRequest, typename TEvResponse>
+class TPutInputStreamContext: public TInputStreamContext<TEvRequest, TEvResponse> {
+private:
+    using TBase = TInputStreamContext<TEvRequest, TEvResponse>;
+public:
+    using TBase::TBase;
+
+    const typename TBase::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
+        auto& request = ev->Get()->MutableRequest();
+        request.WithStorageClass(TBase::StorageClass);
+        return TBase::PrepareRequest(ev);
+    }
+}; // TPutInputStreamContext
 
 } // anonymous
 
@@ -267,7 +284,7 @@ void TS3ExternalStorage::Execute(TEvHeadObjectRequest::TPtr& ev) const {
 }
 
 void TS3ExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {
-    Call<TEvPutObjectRequest, TEvPutObjectResponse, TInputStreamContext>(
+    Call<TEvPutObjectRequest, TEvPutObjectResponse, TPutInputStreamContext>(
         ev, &S3Client::PutObjectAsync);
 }
 

@@ -879,7 +879,7 @@ message TS3Settings {
     optional string ObjectKeyPattern = 4; // dst for backup, src for restore
     optional string AccessKey = 5;
     optional string SecretKey = 6;
-    optional Ydb.Export.ExportToS3Settings.StorageClass StorageClass = 7;
+    optional Ydb.Export.ExportToS3Settings.StorageClass StorageClass = 7 [default = STANDARD];
     optional bool VerifySSL = 8;
     optional string ProxyHost = 9;
     optional uint32 ProxyPort = 10;

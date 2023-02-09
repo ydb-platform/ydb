@@ -183,7 +183,7 @@ TString TS3ExternalStorageConfig::DoGetStorageId() const {
 }
 
 IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOperator() const {
-    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket);
+    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass);
 }
 
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings): Config(ConfigFromSettings(settings))
@@ -203,8 +203,33 @@ TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Aws::Auth::AWSCredentia
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrSchemeOp::TS3Settings& settings)
     : Config(ConfigFromSettings(settings))
     , Credentials(CredentialsFromSettings(settings))
+    , StorageClass(ConvertStorageClass(settings.GetStorageClass()))
 {
     Bucket = settings.GetBucket();
+}
+
+Aws::S3::Model::StorageClass TS3ExternalStorageConfig::ConvertStorageClass(const Ydb::Export::ExportToS3Settings::StorageClass storage) {
+    switch (storage) {
+        case Ydb::Export::ExportToS3Settings::STANDARD:
+            return Aws::S3::Model::StorageClass::STANDARD;
+        case Ydb::Export::ExportToS3Settings::STANDARD_IA:
+            return Aws::S3::Model::StorageClass::STANDARD_IA;
+        case Ydb::Export::ExportToS3Settings::REDUCED_REDUNDANCY:
+            return Aws::S3::Model::StorageClass::REDUCED_REDUNDANCY;
+        case Ydb::Export::ExportToS3Settings::ONEZONE_IA:
+            return Aws::S3::Model::StorageClass::ONEZONE_IA;
+        case Ydb::Export::ExportToS3Settings::INTELLIGENT_TIERING:
+            return Aws::S3::Model::StorageClass::INTELLIGENT_TIERING;
+        case Ydb::Export::ExportToS3Settings::GLACIER:
+            return Aws::S3::Model::StorageClass::GLACIER;
+        case Ydb::Export::ExportToS3Settings::DEEP_ARCHIVE:
+            return Aws::S3::Model::StorageClass::DEEP_ARCHIVE;
+        case Ydb::Export::ExportToS3Settings::OUTPOSTS:
+            return Aws::S3::Model::StorageClass::OUTPOSTS;
+        case Ydb::Export::ExportToS3Settings::STORAGE_CLASS_UNSPECIFIED:
+        default:
+            return Aws::S3::Model::StorageClass::NOT_SET;
+    }
 }
 
 }

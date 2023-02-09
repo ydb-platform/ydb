@@ -25,6 +25,20 @@ using namespace NKikimr::NMiniKQL;
 namespace NYql {
 namespace NCommon {
 
+TRuntimeNode WideTopImpl(const TExprNode& node, TMkqlBuildContext& ctx,
+    TRuntimeNode(TProgramBuilder::*func)(TRuntimeNode, TRuntimeNode, const std::vector<std::pair<ui32, TRuntimeNode>>&)) {
+    const auto flow = MkqlBuildExpr(node.Head(), ctx);
+    const auto count = MkqlBuildExpr(*node.Child(1U), ctx);
+
+    std::vector<std::pair<ui32, TRuntimeNode>> directions;
+    directions.reserve(node.Tail().ChildrenSize());
+    node.Tail().ForEachChild([&](const TExprNode& dir) {
+        directions.emplace_back(std::make_pair(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx)));
+    });
+
+    return (ctx.ProgramBuilder.*func)(flow, count, directions);
+}
+
 TRuntimeNode CombineByKeyImpl(const TExprNode& node, TMkqlBuildContext& ctx) {
     NNodes::TCoCombineByKey combine(&node);
     const bool isStreamOrFlow = combine.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
@@ -745,29 +759,19 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("WideTop", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto flow = MkqlBuildExpr(node.Head(), ctx);
-        const auto count = MkqlBuildExpr(*node.Child(1U), ctx);
-
-        std::vector<std::pair<ui32, TRuntimeNode>> directions;
-        directions.reserve(node.Tail().ChildrenSize());
-        node.Tail().ForEachChild([&](const TExprNode& dir) {
-            directions.emplace_back(std::make_pair(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx)));
-        });
-
-        return ctx.ProgramBuilder.WideTop(flow, count, directions);
+        return WideTopImpl(node, ctx, &TProgramBuilder::WideTop);
     });
 
     AddCallable("WideTopSort", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto flow = MkqlBuildExpr(node.Head(), ctx);
-        const auto count = MkqlBuildExpr(*node.Child(1U), ctx);
+        return WideTopImpl(node, ctx, &TProgramBuilder::WideTopSort);
+    });
 
-        std::vector<std::pair<ui32, TRuntimeNode>> directions;
-        directions.reserve(node.Tail().ChildrenSize());
-        node.Tail().ForEachChild([&](const TExprNode& dir) {
-            directions.emplace_back(std::make_pair(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx)));
-        });
+    AddCallable("WideTopBlocks", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return WideTopImpl(node, ctx, &TProgramBuilder::WideTopBlocks);
+    });
 
-        return ctx.ProgramBuilder.WideTopSort(flow, count, directions);
+    AddCallable("WideTopSortBlocks", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return WideTopImpl(node, ctx, &TProgramBuilder::WideTopSortBlocks);
     });
 
     AddCallable("Iterable", [](const TExprNode& node, TMkqlBuildContext& ctx) {

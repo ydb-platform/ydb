@@ -5314,6 +5314,47 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
         .Build();
 }
 
+TExprNode::TPtr OptimizeTopBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (!types.ArrowResolver) {
+        return node;
+    }
+
+    if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
+        return node;
+    }
+
+    auto flowItemType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
+    if (flowItemType->GetKind() != ETypeAnnotationKind::Multi) {
+        return node;
+    }
+
+    const auto& allTypes = flowItemType->Cast<TMultiExprType>()->GetItems();
+    if (AnyOf(allTypes, [](const TTypeAnnotationNode* type) { return type->IsBlockOrScalar(); })) {
+        return node;
+    }
+
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Head().Pos()),
+        TVector<const TTypeAnnotationNode*>(allTypes.begin(), allTypes.end()), ctx);
+    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+    if (resolveStatus != IArrowResolver::OK) {
+        return node;
+    }
+
+    TStringBuf newName = node->Content() == "WideTop" ? "WideTopBlocks" : "WideTopSortBlocks";
+    YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
+    return ctx.Builder(node->Pos())
+        .Callable("WideFromBlocks")
+            .Callable(0, newName)
+                .Callable(0, "WideToBlocks")
+                    .Add(0, node->HeadPtr())
+                .Seal()
+                .Add(1, node->ChildPtr(1))
+                .Add(2, node->ChildPtr(2))
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr UpdateBlockCombineColumns(const TExprNode::TPtr& node, std::optional<ui32> filterColumn, const TVector<ui32>& argIndices, TExprContext& ctx) {
     auto combineChildren = node->ChildrenList();
     combineChildren[0] = node->Head().HeadPtr();
@@ -7169,6 +7210,8 @@ struct TPeepHoleRules {
         {"Take", &OptimizeSkipTakeToBlocks},
         {"BlockCombineAll", &OptimizeBlockCombine},
         {"BlockCombineHashed", &OptimizeBlockCombine},
+        {"WideTop", &OptimizeTopBlocks},
+        {"WideTopSort", &OptimizeTopBlocks},
     };
 
     TPeepHoleRules()

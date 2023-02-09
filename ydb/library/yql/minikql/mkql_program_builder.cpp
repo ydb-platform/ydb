@@ -1483,6 +1483,14 @@ TRuntimeNode TProgramBuilder::WideTakeBlocks(TRuntimeNode flow, TRuntimeNode cou
     return BuildWideSkipTakeBlocks(__func__, flow, count);
 }
 
+TRuntimeNode TProgramBuilder::WideTopBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys) {
+    return BuildWideTop(__func__, flow, count, keys);
+}
+
+TRuntimeNode TProgramBuilder::WideTopSortBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys) {
+    return BuildWideTop(__func__, flow, count, keys);
+}
+
 TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
     TCallableBuilder callableBuilder(Env, __func__, NewBlockType(value.GetStaticType(), TBlockType::EShape::Scalar));
     callableBuilder.Add(value);

@@ -13,6 +13,7 @@
 #include "mkql_block_logical.h"
 #include "mkql_block_compress.h"
 #include "mkql_block_skiptake.h"
+#include "mkql_block_top.h"
 #include "mkql_callable.h"
 #include "mkql_chain_map.h"
 #include "mkql_chain1_map.h"
@@ -277,6 +278,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideFromBlocks", &WrapWideFromBlocks},
         {"WideSkipBlocks", &WrapWideSkipBlocks},
         {"WideTakeBlocks", &WrapWideTakeBlocks},
+        {"WideTopBlocks", &WrapWideTopBlocks},
+        {"WideTopSortBlocks", &WrapWideTopSortBlocks},
         {"AsScalar", &WrapAsScalar},
         {"BlockCoalesce", &WrapBlockCoalesce},
         {"BlockIf", &WrapBlockIf},

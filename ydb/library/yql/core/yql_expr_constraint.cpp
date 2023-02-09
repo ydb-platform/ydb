@@ -224,6 +224,10 @@ public:
         Functions["WithWorld"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["WideTop"] = &TCallableConstraintTransformer::WideTopWrap<false>;
         Functions["WideTopSort"] = &TCallableConstraintTransformer::WideTopWrap<true>;
+        Functions["WideTopBlocks"] = &TCallableConstraintTransformer::WideTopWrap<false>;
+        Functions["WideTopSortBlocks"] = &TCallableConstraintTransformer::WideTopWrap<true>;
+        Functions["WideToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["WideFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
     }
 
     std::optional<IGraphTransformer::TStatus> ProcessCore(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

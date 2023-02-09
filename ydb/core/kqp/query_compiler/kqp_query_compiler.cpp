@@ -567,6 +567,8 @@ private:
         bool hasSort = false;
         bool hasMapJoin = false;
         bool hasUdf = false;
+        bool hasFilter = false;
+        bool hasWideCombiner = false;
         VisitExpr(stage.Program().Ptr(), [&](const TExprNode::TPtr& exprNode) {
             TExprBase node(exprNode);
             if (auto maybeReadTable = node.Maybe<TKqpWideReadTable>()) {
@@ -638,6 +640,10 @@ private:
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
             } else if (node.Maybe<TCoSort>()) {
                 hasSort = true;
+            } else if (node.Maybe<TCoFilterBase>()) {
+                hasFilter = true;
+            } else if (node.Maybe<TCoWideCombiner>()) {
+                hasWideCombiner = true;
             } else if (node.Maybe<TCoMapJoinCore>()) {
                 hasMapJoin = true;
             } else if (node.Maybe<TCoUdf>()) {
@@ -678,6 +684,8 @@ private:
         programProto.MutableSettings()->SetHasMapJoin(hasMapJoin);
         programProto.MutableSettings()->SetHasSort(hasSort);
         programProto.MutableSettings()->SetHasUdf(hasUdf);
+        programProto.MutableSettings()->SetHasAggregation(hasWideCombiner);
+        programProto.MutableSettings()->SetHasFilter(hasFilter);
 
         for (auto member : paramsType->GetItems()) {
             auto paramName = TString(member->GetName());

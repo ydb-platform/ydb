@@ -124,6 +124,15 @@ namespace NActors {
         ui32 GetThreads(ui32 poolId) const {
             return Executors ? Executors[poolId]->GetThreads() : CpuManager.GetThreads(poolId);
         }
+
+        std::optional<ui32> GetThreads(const TString& poolName) const {
+            for (ui32 i = 0; i < GetExecutorsCount(); ++i) {
+                if (GetPoolName(i) == poolName) {
+                    return GetThreads(i);
+                }
+            }
+            return {};
+        }
     };
 
     class TActorSystem : TNonCopyable {
@@ -284,6 +293,12 @@ namespace NActors {
         }
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
+        std::optional<ui32> GetPoolThreadsCount(const TString& poolName) const {
+            if (!SystemSetup) {
+                return {};
+            }
+            return SystemSetup->GetThreads(poolName);
+        }
 
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));

@@ -33,6 +33,8 @@ message TProgram {
         bool HasMapJoin = 1;
         bool HasSort = 2;
         bool HasUdf = 3;
+        bool HasAggregation = 4;
+        bool HasFilter = 5;
     }
 
     uint32 RuntimeVersion = 1;

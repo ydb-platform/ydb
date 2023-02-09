@@ -27,6 +27,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/log.h>
+#include <util/system/info.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -185,16 +186,43 @@ private:
     ui32 GetMaxTasksPerNodeEstimate(TStageInfo& stageInfo, const bool isOlapScan) const {
         ui32 result = 0;
         if (isOlapScan) {
-            result = AggregationSettings.GetCSScanMinimalThreads();
+            if (AggregationSettings.HasCSScanMinimalThreads()) {
+                result = AggregationSettings.GetCSScanMinimalThreads();
+            } else {
+                std::optional<ui32> userPoolSize;
+                if (TlsActivationContext && TlsActivationContext->ActorSystem()) {
+                    userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount("user");
+                }
+                if (!userPoolSize) {
+                    ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
+                    userPoolSize = NSystemInfo::NumberOfCpus();
+                }
+                result = *userPoolSize;
+            }
         } else {
             result = AggregationSettings.GetDSScanMinimalThreads();
+            const auto& stage = GetStage(stageInfo);
+            if (stage.GetProgram().GetSettings().GetHasSort()) {
+                result = std::max(result, AggregationSettings.GetDSBaseSortScanThreads());
+            }
+            if (stage.GetProgram().GetSettings().GetHasMapJoin()) {
+                result = std::max(result, AggregationSettings.GetDSBaseJoinScanThreads());
+            }
         }
+        return Max<ui32>(1, result);
+    }
+
+    ui32 GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount) const {
+        ui32 result = Max<ui32>(1, previousTasksCount / 2);
         const auto& stage = GetStage(stageInfo);
+        if (stage.GetProgram().GetSettings().GetHasAggregation() && !stage.GetProgram().GetSettings().GetHasFilter()) {
+            result *= AggregationSettings.GetAggregationHardThreadsKff();
+        }
         if (stage.GetProgram().GetSettings().GetHasSort()) {
-            result = std::max(result, AggregationSettings.GetSortScanThreads());
+            result *= AggregationSettings.GetAggregationSortThreadsKff();
         }
         if (stage.GetProgram().GetSettings().GetHasMapJoin()) {
-            result = std::max(result, AggregationSettings.GetJoinScanThreads());
+            result *= AggregationSettings.GetAggregationJoinThreadsKff();
         }
         return result;
     }
@@ -357,14 +385,7 @@ private:
 
             switch (input.GetTypeCase()) {
                 case NKqpProto::TKqpPhyConnection::kHashShuffle: {
-                    partitionsCount = std::max(partitionsCount, (ui32)originStageInfo.Tasks.size() / 2);
-                    ui32 nodes = ShardsOnNode.size();
-                    if (nodes) {
-                        // <= 2 tasks on node
-                        partitionsCount = std::min(partitionsCount, std::min(AggregationSettings.GetAggregationComputeThreads(), nodes * 2));
-                    } else {
-                        partitionsCount = std::min(partitionsCount, AggregationSettings.GetAggregationComputeThreads());
-                    }
+                    partitionsCount = Max<ui32>(1, GetMaxTasksAggregation(stageInfo, originStageInfo.Tasks.size()));
                     break;
                 }
 

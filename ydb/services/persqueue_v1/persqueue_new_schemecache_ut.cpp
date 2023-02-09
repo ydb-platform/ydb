@@ -255,11 +255,6 @@ namespace NKikimr::NPersQueueTests {
                             }
                             messagesReceived = msg.GetOffset() + 1;
                         }
-                        if (messagesReceived >= maxMessagesCount) {
-                            Cerr << "Closing session. Got " << messagesReceived << " messages" << Endl;
-                            reader->Close(TDuration::Seconds(0));
-                            Cerr << "Session closed" << Endl;
-                        }
                     }, false);
                 reader = CreateReader(*ydbDriver, settings);
 
@@ -267,6 +262,9 @@ namespace NKikimr::NPersQueueTests {
 
                 Cout.Flush();
                 while (messagesReceived < maxMessagesCount) Sleep(TDuration::MilliSeconds(10));
+                Cerr << "Closing session. Got " << messagesReceived << " messages" << Endl;
+                reader->Close(TDuration::Seconds(0));
+                Cerr << "Session closed" << Endl;
 
                 if (tsIt == 0) {
                     for (ui32 i = 0; i < ts.size(); ++i) {

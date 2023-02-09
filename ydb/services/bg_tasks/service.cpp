@@ -7,11 +7,13 @@ NActors::TActorId MakeServiceId(const ui32 nodeId) {
 }
 
 void TServiceOperator::Register() {
-    Singleton<TServiceOperator>()->EnabledFlag = true;
+    auto* service = Singleton<TServiceOperator>();
+    service->EnabledFlag.store(true);
 }
 
 bool TServiceOperator::IsEnabled() {
-    return Singleton<TServiceOperator>()->EnabledFlag;
+    auto* service = Singleton<TServiceOperator>();
+    return service->EnabledFlag.load();
 }
 
 }

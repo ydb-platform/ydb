@@ -212,27 +212,33 @@ namespace Tests {
         Runtime->SetupMonitoring();
         Runtime->SetLogBackend(Settings->LogBackend);
 
+        Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
+            Y_UNUSED(nodeIdx);
+
+            appData.AuthConfig.MergeFrom(Settings->AuthConfig);
+            appData.PQConfig.MergeFrom(Settings->PQConfig);
+            appData.PQClusterDiscoveryConfig.MergeFrom(Settings->PQClusterDiscoveryConfig);
+            appData.NetClassifierConfig.MergeFrom(Settings->NetClassifierConfig);
+            appData.StreamingConfig.MergeFrom(Settings->AppConfig.GetGRpcConfig().GetStreamingConfig());
+            appData.EnforceUserTokenRequirement = Settings->AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            appData.DomainsConfig.MergeFrom(Settings->AppConfig.GetDomainsConfig());
+            appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
+            appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
+            appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
+
+            appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
+            auto dnConfig = appData.DynamicNameserviceConfig;
+            dnConfig->MaxStaticNodeId = 1023;
+            dnConfig->MaxDynamicNodeId = 1024 + 100;
+        });
+
         const bool mockDisk = (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode;
         SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, Settings->CacheParams);
 
+        // WARNING: must be careful about modifying app data after actor system starts
+
         for (ui32 nodeIdx = 0; nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
             SetupDomainLocalService(nodeIdx);
-            Runtime->GetAppData(nodeIdx).AuthConfig.MergeFrom(Settings->AuthConfig);
-            Runtime->GetAppData(nodeIdx).PQConfig.MergeFrom(Settings->PQConfig);
-            Runtime->GetAppData(nodeIdx).PQClusterDiscoveryConfig.MergeFrom(Settings->PQClusterDiscoveryConfig);
-            Runtime->GetAppData(nodeIdx).NetClassifierConfig.MergeFrom(Settings->NetClassifierConfig);
-            Runtime->GetAppData(nodeIdx).StreamingConfig.MergeFrom(Settings->AppConfig.GetGRpcConfig().GetStreamingConfig());
-            Runtime->GetAppData(nodeIdx).EnforceUserTokenRequirement = Settings->AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
-            Runtime->GetAppData(nodeIdx).DomainsConfig.MergeFrom(Settings->AppConfig.GetDomainsConfig());
-            Runtime->GetAppData(nodeIdx).PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
-            Runtime->GetAppData(nodeIdx).DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
-            Runtime->GetAppData(nodeIdx).PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
-
-            Runtime->GetAppData(nodeIdx).DynamicNameserviceConfig = new TDynamicNameserviceConfig;
-            auto dnConfig = Runtime->GetAppData(nodeIdx).DynamicNameserviceConfig;
-            dnConfig->MaxStaticNodeId = 1023;
-            dnConfig->MaxDynamicNodeId = 1024 + 100;
-
             SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
         }

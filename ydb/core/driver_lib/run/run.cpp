@@ -32,6 +32,7 @@
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
+#include <ydb/core/log_backend/log_backend.h>
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/mon/async_http_mon.h>
 #include <ydb/core/mon/crossref.h>
@@ -1089,13 +1090,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
 void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
 {
-    if (ModuleFactories && ModuleFactories->LogBackendFactory) {
-        auto logBackend = ModuleFactories->LogBackendFactory->CreateLogBackend(runConfig, Counters);
-        LogBackend.reset(logBackend.Release());
-    } else {
-        auto logBackend = TLogBackendFactory().CreateLogBackend(runConfig, Counters);
-        LogBackend.reset(logBackend.Release());
-    }
+    auto logBackend = CreateLogBackendWithUnifiedAgent(runConfig, Counters);
+    LogBackend.reset(logBackend.Release());
 
     if (!runConfig.AppConfig.HasLogConfig())
         return;

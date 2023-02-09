@@ -1,5 +1,4 @@
 #pragma once
-#include "log_backend.h"
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_devicemode.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/tx/datashard/export_iface.h>
@@ -31,10 +30,6 @@ namespace NKikimr {
 
 // A way to parameterize YDB binary, we do it via a set of factories
 struct TModuleFactories {
-    // A way to parameterize log backend
-    std::shared_ptr<ILogBackendFactory> LogBackendFactory;
-    //
-    std::shared_ptr<ILogBackendFactory> AuditLogBackendFactory;
     // A backend factory for Query Replay
     std::shared_ptr<NKqp::IQueryReplayBackendFactory> QueryReplayBackendFactory;
     //

@@ -49,6 +49,8 @@
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 
+#include <ydb/core/log_backend/log_backend.h>
+
 #include <ydb/core/kesus/proxy/proxy.h>
 #include <ydb/core/kesus/tablet/tablet.h>
 
@@ -2359,12 +2361,9 @@ TAuditWriterInitializer::TAuditWriterInitializer(const TKikimrRunConfig &runConf
 
 void TAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData)
 {
-    TAutoPtr<TLogBackend> fileBackend;
-    if (Factories && Factories->AuditLogBackendFactory) {
-        fileBackend = Factories->AuditLogBackendFactory->CreateLogBackend(KikimrRunConfig, appData->Counters);
-    }
+    auto fileBackend = CreateAuditLogBackendWithUnifiedAgent(KikimrRunConfig, appData->Counters);
     if (!fileBackend)
-        return;
+            return;
 
     const auto format = Config.GetAuditConfig().GetFormat();
     auto actor = NAudit::CreateAuditWriter(std::move(fileBackend), format);

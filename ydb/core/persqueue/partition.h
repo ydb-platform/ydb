@@ -248,7 +248,7 @@ private:
     void AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request);
     void AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
                            const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated);
-                     
+
     TUserInfo& GetOrCreatePendingUser(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration = {});
     TUserInfo* GetPendingUserIfExists(const TString& user);
 
@@ -290,6 +290,11 @@ public:
                TVector<TTransaction> distrTxs = {});
 
     void Bootstrap(const TActorContext& ctx);
+
+    ui64 Size() const {
+        return BodySize + Head.PackedSize;
+    }
+
 
 
     //Bootstrap sends kvRead

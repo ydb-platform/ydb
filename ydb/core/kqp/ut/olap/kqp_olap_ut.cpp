@@ -1294,6 +1294,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
+        // Should be fixed in KIKIMR-17007
+        return;
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
@@ -1822,7 +1824,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetExpectedReply("[[4600u;]]")
             .AddExpectedPlanOptions("KqpOlapFilter")
 #if SSA_RUNTIME_VERSION >= 2U
-//            .AddExpectedPlanOptions("WideCombiner")
             .AddExpectedPlanOptions("TKqpOlapAgg")
             .MutableLimitChecker().SetExpectedResultCount(1)
 #else

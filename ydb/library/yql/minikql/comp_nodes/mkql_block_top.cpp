@@ -12,6 +12,8 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
+#include <ydb/library/yql/utils/sort.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -87,7 +89,7 @@ public:
                     }
 
                     TBlockLess cmp(KeyIndicies_, s, s.Values_);
-                    std::nth_element(blockIndicies->begin(), blockIndicies->begin() + s.Count_, blockIndicies->end(), cmp);
+                    NYql::FastNthElement(blockIndicies->begin(), blockIndicies->begin() + s.Count_, blockIndicies->end(), cmp);
                 }
                 
                 // copy all to builders
@@ -222,9 +224,9 @@ private:
                 }
             } else {
                 if (sort) {
-                    std::partial_sort(blockIndicies.begin(), blockIndicies.begin() + blockLen, blockIndicies.end(), cmp);
+                    NYql::FastPartialSort(blockIndicies.begin(), blockIndicies.begin() + blockLen, blockIndicies.end(), cmp);
                 } else {
-                    std::nth_element(blockIndicies.begin(), blockIndicies.begin() + blockLen, blockIndicies.end(), cmp);
+                    NYql::FastNthElement(blockIndicies.begin(), blockIndicies.begin() + blockLen, blockIndicies.end(), cmp);
                 }
             }
 

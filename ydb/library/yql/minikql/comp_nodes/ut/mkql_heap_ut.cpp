@@ -3,6 +3,8 @@
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
+#include <ydb/library/yql/utils/sort.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -159,7 +161,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLHeapTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetListLength(), xxx.size());
 
         auto copy = xxx;
-        std::nth_element(copy.begin(), copy.begin() + 4U, copy.end(), [](float l, float r){ return std::abs(l) > std::abs(r); });
+        NYql::FastNthElement(copy.begin(), copy.begin() + 4U, copy.end(), [](float l, float r){ return std::abs(l) > std::abs(r); });
 
         for (auto i = 0U; i < copy.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(copy[i], result.GetElement(i).template Get<float>());
@@ -190,7 +192,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLHeapTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetListLength(), xxx.size());
 
         auto copy = xxx;
-        std::partial_sort(copy.begin(), copy.begin() + 6U, copy.end(), [](double l, double r){ return std::abs(l) < std::abs(r); });
+        NYql::FastPartialSort(copy.begin(), copy.begin() + 6U, copy.end(), [](double l, double r){ return std::abs(l) < std::abs(r); });
 
         for (auto i = 0U; i < copy.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(copy[i], result.GetElement(i).template Get<double>());
@@ -239,7 +241,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLHeapTest) {
         auto copy = xxx;
 
         const auto comp = [](double l, double r){ return std::abs(l) > std::abs(r); };
-        std::nth_element(copy.begin(), copy.begin() + n - 1U, copy.end(), comp);
+        NYql::FastNthElement(copy.begin(), copy.begin() + n - 1U, copy.end(), comp);
         const auto mm = std::minmax_element(copy.begin(), copy.begin() + n, comp);
 
         double min = result.GetElement(0).template Get<double>(), max = min;
@@ -299,7 +301,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLHeapTest) {
         auto copy = xxx;
 
         const auto comp = [](double l, double r){ return std::abs(l) < std::abs(r); };
-        std::nth_element(copy.begin(), copy.begin() + n - 1U, copy.end(), comp);
+        NYql::FastNthElement(copy.begin(), copy.begin() + n - 1U, copy.end(), comp);
         const auto mm = std::minmax_element(copy.begin(), copy.begin() + n, comp);
 
         double min = result.GetElement(0).template Get<double>(), max = min;

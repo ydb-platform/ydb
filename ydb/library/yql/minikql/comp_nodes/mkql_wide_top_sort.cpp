@@ -7,6 +7,8 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/utils/cast.h>
 
+#include <ydb/library/yql/utils/sort.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -71,7 +73,7 @@ public:
         if (Full.size() + 1U == GetStorageSize()) {
             Free.pop_back();
 
-            std::nth_element(Full.begin(), Full.begin() + Count, Full.end(), LessFunc);
+            NYql::FastNthElement(Full.begin(), Full.begin() + Count, Full.end(), LessFunc);
             std::copy(Full.cbegin() + Count, Full.cend(), std::back_inserter(Free));
             Full.resize(Count);
 
@@ -102,7 +104,7 @@ public:
         Free.shrink_to_fit();
 
         if (Full.size() > Count) {
-            std::nth_element(Full.begin(), Full.begin() + Count, Full.end(), LessFunc);
+            NYql::FastNthElement(Full.begin(), Full.begin() + Count, Full.end(), LessFunc);
             Full.resize(Count);
         }
 

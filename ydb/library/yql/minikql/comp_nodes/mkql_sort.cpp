@@ -6,6 +6,8 @@
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 
+#include <ydb/library/yql/utils/sort.h>
+
 #include <algorithm>
 #include <iterator>
 
@@ -601,7 +603,7 @@ public:
             });
 
             Description.Prepare(ctx, items);
-            std::nth_element(items.begin(), items.begin() + count - 1U, items.end(), Description.MakeComparator<TKeyPayloadPairVector>(ascending));
+            NYql::FastNthElement(items.begin(), items.begin() + count - 1U, items.end(), Description.MakeComparator<TKeyPayloadPairVector>(ascending));
             items.resize(count);
 
             NUdf::TUnboxedValue *inplace = nullptr;
@@ -750,11 +752,11 @@ IComputationNode* WrapSort(TCallable& callable, const TComputationNodeFactoryCon
 }
 
 IComputationNode* WrapTop(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapNthAlgo(&std::nth_element<TKeyPayloadPairVector::iterator, TComparator>, callable, ctx);
+    return WrapNthAlgo(&NYql::FastNthElement<TKeyPayloadPairVector::iterator, TComparator>, callable, ctx);
 }
 
 IComputationNode* WrapTopSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapNthAlgo(&std::partial_sort<TKeyPayloadPairVector::iterator, TComparator>, callable, ctx);
+    return WrapNthAlgo(&NYql::FastPartialSort<TKeyPayloadPairVector::iterator, TComparator>, callable, ctx);
 }
 
 IComputationNode* WrapKeepTop(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

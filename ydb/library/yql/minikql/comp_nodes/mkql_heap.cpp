@@ -5,6 +5,8 @@
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 
+#include <ydb/library/yql/utils/sort.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -395,11 +397,11 @@ IComputationNode* WrapStableSort(TCallable& callable, const TComputationNodeFact
 }
 
 IComputationNode* WrapNthElement(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapNth(&std::nth_element<NUdf::TUnboxedValuePod*, TComparator>, callable, ctx);
+    return WrapNth(&NYql::FastNthElement<NUdf::TUnboxedValuePod*, TComparator>, callable, ctx);
 }
 
 IComputationNode* WrapPartialSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapNth(&std::partial_sort<NUdf::TUnboxedValuePod*, TComparator>, callable, ctx);
+    return WrapNth(&NYql::FastPartialSort<NUdf::TUnboxedValuePod*, TComparator>, callable, ctx);
 }
 }
 }

@@ -6,6 +6,8 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
+#include <ydb/library/yql/utils/sort.h>
+
 #include "mkql_computation_node_ut.h"
 
 #include <random>
@@ -216,7 +218,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         auto copy = test;
 
         const auto comp = [](const auto& l, const auto& r){ return l.second > r.second || (l.second == r.second && std::abs(l.first) < std::abs(r.first)); };
-        std::nth_element(copy.begin(), copy.begin() + n - 1ULL, copy.end(), comp);
+        NYql::FastNthElement(copy.begin(), copy.begin() + n - 1ULL, copy.end(), comp);
         copy.resize(n);
 
         std::vector<std::pair<double, ui64>> res;
@@ -299,7 +301,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         auto copy = test;
 
         const auto comp = [](const auto& l, const auto& r){ return l.second > r.second || (l.second == r.second && std::abs(l.first) < std::abs(r.first)); };
-        std::partial_sort(copy.begin(), copy.begin() + n, copy.end(), comp);
+        NYql::FastPartialSort(copy.begin(), copy.begin() + n, copy.end(), comp);
         copy.resize(n);
 
         std::vector<std::pair<double, ui64>> res;
@@ -350,7 +352,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         auto copy = test;
 
         const auto comp = [](const auto& l, const auto& r){ return l.second < r.second || (l.second == r.second && std::abs(l.first) > std::abs(r.first)); };
-        std::nth_element(copy.begin(), copy.begin() + n - 1ULL, copy.end(), comp);
+        NYql::FastNthElement(copy.begin(), copy.begin() + n - 1ULL, copy.end(), comp);
         copy.resize(n);
 
         std::vector<std::pair<double, ui64>> res;
@@ -405,7 +407,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         auto copy = test;
 
         const auto comp = [](const auto& l, const auto& r){ return l.second < r.second || (l.second == r.second && std::abs(l.first) > std::abs(r.first)); };
-        std::partial_sort(copy.begin(), copy.begin() + n, copy.end(), comp);
+        NYql::FastPartialSort(copy.begin(), copy.begin() + n, copy.end(), comp);
         copy.resize(n);
 
         std::vector<std::pair<double, ui64>> res;
@@ -455,7 +457,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
 
         auto copy = test;
 
-        std::partial_sort(copy.begin(), copy.begin() + n, copy.end(),  std::greater<ui64>());
+        NYql::FastPartialSort(copy.begin(), copy.begin() + n, copy.end(),  std::greater<ui64>());
         copy.resize(n);
 
         std::vector<ui64> res;

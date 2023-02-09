@@ -125,19 +125,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideTopTest) {
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "very long value 4");
         UNIT_ASSERT(iterator.Next(item));
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "very long key two");
-        UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "very long value 9");
+        UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "very long value 7");
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "very long key two");
+        UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "very long value 5");
         UNIT_ASSERT(iterator.Next(item));
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "very long key two");
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "very long value 6");
         UNIT_ASSERT(iterator.Next(item));
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "very long key two");
-        UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "very long value 7");
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "very long key two");
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "very long value 8");
         UNIT_ASSERT(iterator.Next(item));
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "very long key two");
-        UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "very long value 5");
+        UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "very long value 9");
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }

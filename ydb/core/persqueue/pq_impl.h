@@ -134,7 +134,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE_WITH_SENDER(HandleReserveBytesRequest)
 #undef DESCRIBE_HANDLE_WITH_SENDER
     bool ChangingState() const { return !TabletStateRequests.empty(); }
-    void ReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);
+    void TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);
     void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
 
     void SchedulePlanStepAck(ui64 step,
@@ -266,6 +266,16 @@ private:
 
     void SendReplies(const TActorContext& ctx);
     void CheckChangedTxStates(const TActorContext& ctx);
+
+    bool AllTransactionsHaveBeenProcessed() const;
+
+    void BeginWriteTabletState(const TActorContext& ctx, NKikimrPQ::ETabletState state);
+    void EndWriteTabletState(const NKikimrClient::TResponse& resp,
+                             const TActorContext& ctx);
+
+    void SendProposeTransactionAbort(const TActorId& target,
+                                     ui64 txId,
+                                     const TActorContext& ctx);
 };
 
 

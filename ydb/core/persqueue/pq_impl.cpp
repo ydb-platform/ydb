@@ -901,14 +901,36 @@ void TPersQueue::ReturnTabletState(const TActorContext& ctx, const TChangeNotifi
     ctx.Send(req.Actor, event.Release());
 }
 
-void TPersQueue::ReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status)
+void TPersQueue::TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status)
 {
-    for (auto req : TabletStateRequests)
-        ReturnTabletState(ctx, req, status);
-    TabletStateRequests.clear();
+    if (AllTransactionsHaveBeenProcessed() && (TabletState == NKikimrPQ::EDropped)) {
+        for (auto req : TabletStateRequests) {
+            ReturnTabletState(ctx, req, status);
+        }
+        TabletStateRequests.clear();
+    }
 }
 
-void TPersQueue::HandleStateWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
+void TPersQueue::BeginWriteTabletState(const TActorContext& ctx, NKikimrPQ::ETabletState state)
+{
+    NKikimrPQ::TTabletState stateProto;
+    stateProto.SetState(state);
+    TString strState;
+    bool ok = stateProto.SerializeToString(&strState);
+    Y_VERIFY(ok);
+
+    TAutoPtr<TEvKeyValue::TEvRequest> kvRequest(new TEvKeyValue::TEvRequest);
+    kvRequest->Record.SetCookie(WRITE_STATE_COOKIE);
+
+    auto kvCmd = kvRequest->Record.AddCmdWrite();
+    kvCmd->SetKey(KeyState());
+    kvCmd->SetValue(strState);
+    kvCmd->SetTactic(AppData(ctx)->PQConfig.GetTactic());
+
+    ctx.Send(ctx.SelfID, kvRequest.Release());
+}
+
+void TPersQueue::EndWriteTabletState(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
 {
     bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) &&
             (resp.WriteResultSize() == 1) &&
@@ -922,7 +944,8 @@ void TPersQueue::HandleStateWriteResponse(const NKikimrClient::TResponse& resp, 
     }
 
     TabletState = NKikimrPQ::EDropped;
-    ReturnTabletStateAll(ctx);
+
+    TryReturnTabletStateAll(ctx);
 }
 
 void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx)
@@ -938,7 +961,7 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         HandleConfigReadResponse(resp, ctx);
         break;
     case WRITE_STATE_COOKIE:
-        HandleStateWriteResponse(resp, ctx);
+        EndWriteTabletState(resp, ctx);
         break;
     case WRITE_TX_COOKIE:
         EndWriteTxs(resp, ctx);
@@ -1343,34 +1366,20 @@ void TPersQueue::Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorConte
     TChangeNotification stateRequest(ev->Sender, txId);
 
     NKikimrPQ::ETabletState reqState = record.GetRequestedState();
-    if (reqState == TabletState) {
-        ReturnTabletState(ctx, stateRequest, NKikimrProto::OK);
-        return;
-    } else if (reqState == NKikimrPQ::ENormal &&
-            TabletState == NKikimrPQ::EDropped) {
+
+    if (reqState == NKikimrPQ::ENormal) {
         ReturnTabletState(ctx, stateRequest, NKikimrProto::ERROR);
         return;
     }
 
+    Y_VERIFY(reqState == NKikimrPQ::EDropped);
+
     TabletStateRequests.insert(stateRequest);
-    if (TabletStateRequests.size() > 1)
-        return; // already sent, just enqueue
+    if (TabletStateRequests.size() > 1) {
+        return; // already writing, just enqueue
+    }
 
-    NKikimrPQ::TTabletState stateProto;
-    stateProto.SetState(record.GetRequestedState());
-    TString strState;
-    bool ok = stateProto.SerializeToString(&strState);
-    Y_VERIFY(ok);
-
-    TAutoPtr<TEvKeyValue::TEvRequest> kvRequest(new TEvKeyValue::TEvRequest);
-    kvRequest->Record.SetCookie(WRITE_STATE_COOKIE);
-
-    auto kvCmd = kvRequest->Record.AddCmdWrite();
-    kvCmd->SetKey(KeyState());
-    kvCmd->SetValue(strState);
-    kvCmd->SetTactic(AppData(ctx)->PQConfig.GetTactic());
-
-    ctx.Send(ctx.SelfID, kvRequest.Release());
+    BeginWriteTabletState(ctx, reqState);
 }
 
 void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx)
@@ -2258,6 +2267,13 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
                     ", is_write=" << isWriteOperation);
     }
 
+    if (TabletState != NKikimrPQ::ENormal) {
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSource()),
+                                    event.GetTxId(),
+                                    ctx);
+        return;
+    }
+
     //
     // TODO(abcdef): сохранить пока инициализируемся. TEvPersQueue::TEvHasDataInfo::TPtr как образец. не только конфиг. Inited==true
     //
@@ -2274,9 +2290,9 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
         //
         // FIXME(abcdef): последовательность вызовов Release
         //
-        ctx.Send(i->second.Actor, ev.Release()->Release().Release());
+        ctx.Send(i->second.Actor, ev->Release().Release());
     } else {
-        EvProposeTransactionQueue.emplace_back(ev.Release()->Release().Release());
+        EvProposeTransactionQueue.emplace_back(ev->Release().Release());
 
         TryWriteTxs(ctx);
     }
@@ -2291,7 +2307,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCont
                 ", PlanStep: " << event.GetStep() <<
                 ", Mediator: " << event.GetMediatorID());
 
-    EvPlanStepQueue.emplace_back(ev->Sender, ev.Release()->Release().Release());
+    EvPlanStepQueue.emplace_back(ev->Sender, ev->Release().Release());
 
     TryWriteTxs(ctx);
 }
@@ -2415,6 +2431,7 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     }
 
     SendReplies(ctx);
+    TryReturnTabletStateAll(ctx);
     CheckChangedTxStates(ctx);
 
     WriteTxsInProgress = false;
@@ -2887,6 +2904,24 @@ void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
         CheckTxState(ctx, *tx);
     }
     ChangedTxs.clear();
+}
+
+bool TPersQueue::AllTransactionsHaveBeenProcessed() const
+{
+    return EvProposeTransactionQueue.empty() && Txs.empty();
+}
+
+void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
+                                             ui64 txId,
+                                             const TActorContext& ctx)
+{
+    auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
+
+    event->Record.SetOrigin(TabletID());
+    event->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+    event->Record.SetTxId(txId);
+
+    ctx.Send(target, std::move(event));
 }
 
 ui64 TPersQueue::GetAllowedStep() const

@@ -57,6 +57,10 @@ struct TReadSetParams {
     ui64 SeqNo = 0;
 };
 
+struct TDropTabletParams {
+    ui64 TxId = 0;
+};
+
 using NKikimr::NPQ::NHelpers::CreatePQTabletMock;
 using TPQTabletMock = NKikimr::NPQ::NHelpers::TPQTabletMock;
 
@@ -110,12 +114,24 @@ protected:
         TMaybe<ui64> Consumer;
     };
 
+    struct TDropTabletReplyMatcher {
+        TMaybe<NKikimrProto::EReplyStatus> Status;
+        TMaybe<ui64> TxId;
+        TMaybe<ui64> TabletId;
+        TMaybe<NKikimrPQ::ETabletState> State;
+    };
+
     using TProposeTransactionParams = NHelpers::TProposeTransactionParams;
     using TPlanStepParams = NHelpers::TPlanStepParams;
     using TReadSetParams = NHelpers::TReadSetParams;
+    using TDropTabletParams = NHelpers::TDropTabletParams;
 
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
+
+    void SendToPipe(const TActorId& sender,
+                    IEventBase* event,
+                    ui32 node = 0, ui64 cookie = 0);
 
     void SendProposeTransactionRequest(const TProposeTransactionParams& params);
     void WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher = {});
@@ -129,6 +145,14 @@ protected:
 
     void WaitReadSetAck(NHelpers::TPQTabletMock& tablet, const TReadSetAckMatcher& matcher);
     void SendReadSetAck(NHelpers::TPQTabletMock& tablet);
+
+    void SendDropTablet(const TDropTabletParams& params);
+    void WaitDropTabletReply(const TDropTabletReplyMatcher& matcher);
+
+    void StartPQWriteStateObserver();
+    void WaitForPQWriteState();
+
+    bool FoundPQWriteState = false;
 
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
@@ -155,6 +179,28 @@ void TPQTabletFixture::SetUp(NUnitTest::TTestContext&)
 
 void TPQTabletFixture::TearDown(NUnitTest::TTestContext&)
 {
+    if (Pipe != TActorId()) {
+        Ctx->Runtime->ClosePipe(Pipe, Ctx->Edge, 0);
+    }
+}
+
+void TPQTabletFixture::SendToPipe(const TActorId& sender,
+                                  IEventBase* event,
+                                  ui32 node, ui64 cookie)
+{
+    if (Pipe == TActorId()) {
+        Pipe = Ctx->Runtime->ConnectToPipe(Ctx->TabletId,
+                                           Ctx->Edge,
+                                           0,
+                                           GetPipeConfigWithRetries());
+    }
+
+    Y_VERIFY(Pipe != TActorId());
+
+    Ctx->Runtime->SendToPipe(Pipe,
+                             sender,
+                             event,
+                             node, cookie);
 }
 
 void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionParams& params)
@@ -194,16 +240,8 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
     //
     event->Record.SetTxId(params.TxId);
 
-    if (Pipe == TActorId()) {
-        Pipe = Ctx->Runtime->ConnectToPipe(Ctx->TabletId,
-                                           Ctx->Edge,
-                                           0,
-                                           GetPipeConfigWithRetries());
-    }
-
-    Ctx->Runtime->SendToPipe(Pipe,
-                             Ctx->Edge,
-                             event.Release());
+    SendToPipe(Ctx->Edge,
+               event.Release());
 }
 
 void TPQTabletFixture::WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher)
@@ -218,7 +256,7 @@ void TPQTabletFixture::WaitProposeTransactionResponse(const TProposeTransactionR
 
     if (matcher.Status) {
         UNIT_ASSERT(event->Record.HasStatus());
-        UNIT_ASSERT(*matcher.Status == event->Record.GetStatus());
+        UNIT_ASSERT_EQUAL(*matcher.Status, event->Record.GetStatus());
     }
 }
 
@@ -233,9 +271,8 @@ void TPQTabletFixture::SendPlanStep(const TPlanStepParams& params)
         ActorIdToProto(Ctx->Edge, tx->MutableAckTo());
     }
 
-    Ctx->Runtime->SendToPipe(Pipe,
-                             Ctx->Edge,
-                             event.Release());
+    SendToPipe(Ctx->Edge,
+               event.Release());
 }
 
 void TPQTabletFixture::WaitPlanStepAck(const TPlanStepAckMatcher& matcher)
@@ -297,7 +334,7 @@ void TPQTabletFixture::WaitReadSet(NHelpers::TPQTabletMock& tablet, const TReadS
         NKikimrTx::TReadSetData data;
         Y_VERIFY(data.ParseFromString(tablet.ReadSet->GetReadSet()));
 
-        UNIT_ASSERT(*matcher.Decision == data.GetDecision());
+        UNIT_ASSERT_EQUAL(*matcher.Decision, data.GetDecision());
     }
     if (matcher.Producer.Defined()) {
         UNIT_ASSERT(tablet.ReadSet->HasTabletProducer());
@@ -335,6 +372,66 @@ void TPQTabletFixture::WaitReadSetAck(NHelpers::TPQTabletMock& tablet, const TRe
         UNIT_ASSERT(tablet.ReadSetAck->HasTabletConsumer());
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Consumer, tablet.ReadSetAck->GetTabletConsumer());
     }
+}
+
+void TPQTabletFixture::SendDropTablet(const TDropTabletParams& params)
+{
+    auto event = MakeHolder<TEvPersQueue::TEvDropTablet>();
+    event->Record.SetTxId(params.TxId);
+    event->Record.SetRequestedState(NKikimrPQ::EDropped);
+
+    SendToPipe(Ctx->Edge,
+               event.Release());
+}
+
+void TPQTabletFixture::WaitDropTabletReply(const TDropTabletReplyMatcher& matcher)
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvDropTabletReply>();
+    UNIT_ASSERT(event != nullptr);
+
+    if (matcher.Status.Defined()) {
+        UNIT_ASSERT(event->Record.HasStatus());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Status, event->Record.GetStatus());
+    }
+    if (matcher.TxId.Defined()) {
+        UNIT_ASSERT(event->Record.HasTxId());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, event->Record.GetTxId());
+    }
+    if (matcher.TabletId.Defined()) {
+        UNIT_ASSERT(event->Record.HasTabletId());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.TabletId, event->Record.GetTabletId());
+    }
+    if (matcher.State.Defined()) {
+        UNIT_ASSERT(event->Record.HasActualState());
+        UNIT_ASSERT_EQUAL(*matcher.State, event->Record.GetActualState());
+    }
+}
+
+void TPQTabletFixture::StartPQWriteStateObserver()
+{
+    FoundPQWriteState = false;
+
+    auto observer = [this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+        if (auto* kvResponse = dynamic_cast<TEvKeyValue::TEvResponse*>(event->GetBase())) {
+            if ((event->Sender == event->Recipient) &&
+                kvResponse->Record.HasCookie() &&
+                (kvResponse->Record.GetCookie() == 4)) { // TPersQueue::WRITE_STATE_COOKIE
+                FoundPQWriteState = true;
+            }
+        }
+
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    Ctx->Runtime->SetObserverFunc(observer);
+}
+
+void TPQTabletFixture::WaitForPQWriteState()
+{
+    TDispatchOptions options;
+    options.CustomFinalCondition = [this]() {
+        return FoundPQWriteState;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
 }
 
 NHelpers::TPQTabletMock* TPQTabletFixture::CreatePQTabletMock(ui64 tabletId)
@@ -522,6 +619,116 @@ Y_UNIT_TEST_F(Partition_Send_Predicate_With_False, TPQTabletFixture)
     //
     // TODO(abcdef): проверить, что удалена информация о транзакции
     //
+}
+
+Y_UNIT_TEST_F(DropTablet_And_Tx, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+
+    const ui64 txId_1 = 67890;
+    const ui64 txId_2 = 67891;
+
+    StartPQWriteStateObserver();
+
+    SendProposeTransactionRequest({.TxId=txId_1,
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  {.Partition=1, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    SendDropTablet({.TxId=12345});
+
+    //
+    // транзакция TxId_1 будет обработана
+    //
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    WaitForPQWriteState();
+
+    //
+    // по транзакции TxId_2 получим отказ
+    //
+    SendProposeTransactionRequest({.TxId=txId_2,
+                                  .TxOps={
+                                  {.Partition=1, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+
+    SendPlanStep({.Step=100, .TxIds={txId_1}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId_1}}); // TEvPlanStepAck для координатора
+    SendDropTablet({.TxId=67890});                 // TEvDropTable когда выполняется транзакция
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    //
+    // ответы на TEvDropTablet будут после транзакции
+    //
+    WaitDropTabletReply({.Status=NKikimrProto::EReplyStatus::OK, .TxId=12345, .TabletId=Ctx->TabletId, .State=NKikimrPQ::EDropped});
+    WaitDropTabletReply({.Status=NKikimrProto::EReplyStatus::OK, .TxId=67890, .TabletId=Ctx->TabletId, .State=NKikimrPQ::EDropped});
+}
+
+Y_UNIT_TEST_F(DropTablet, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    //
+    // транзакций нет, ответ будет сразу
+    //
+    SendDropTablet({.TxId=99999});
+    WaitDropTabletReply({.Status=NKikimrProto::EReplyStatus::OK, .TxId=99999, .TabletId=Ctx->TabletId, .State=NKikimrPQ::EDropped});
+}
+
+Y_UNIT_TEST_F(DropTablet_Before_Write, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+
+    const ui64 txId_1 = 67890;
+    const ui64 txId_2 = 67891;
+    const ui64 txId_3 = 67892;
+
+    StartPQWriteStateObserver();
+
+    //
+    // TEvDropTablet между транзакциями
+    //
+    SendProposeTransactionRequest({.TxId=txId_1,
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  {.Partition=1, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    SendDropTablet({.TxId=12345});
+    SendProposeTransactionRequest({.TxId=txId_2,
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  {.Partition=1, .Consumer="user", .Begin=0, .End=0, .Path="/topic"}
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    WaitForPQWriteState();
+
+    SendProposeTransactionRequest({.TxId=txId_3,
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  {.Partition=1, .Consumer="user", .Begin=0, .End=0, .Path="/topic"}
+                                  }});
+
+    //
+    // транзакция пришла после того как состояние было записано на диск. не будет обработана
+    //
+    WaitProposeTransactionResponse({.TxId=txId_3,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+
+    //
+    // транзакция пришла до того как состояние было записано на диск. будет обработана
+    //
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
 }
 
 }

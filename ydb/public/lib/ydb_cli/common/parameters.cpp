@@ -238,8 +238,13 @@ bool TCommandWithParameters::GetNextParams(const std::map<TString, TType>& param
             return false;
         }
 
-        if (StdinParameters.size() != 1) {
-            throw TMisuseException() << "Only one stdin parameter allowed in \"full\" batch mode.";
+        if (StdinParameters.size() > 1) {
+            throw TMisuseException() << "Only one stdin parameter allowed in \""
+                << BatchMode << "\" batch mode.";
+        }
+        if (StdinParameters.empty()) {
+            throw TMisuseException() << "An stdin parameter name must be specified in \""
+                << BatchMode << "\" batch mode.";
         }
         TString name = StdinParameters.front();
         TString fullname = "$" + name;

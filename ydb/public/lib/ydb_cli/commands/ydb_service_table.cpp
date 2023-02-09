@@ -445,13 +445,14 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
     if (!Parameters.empty() || !IsStdinInteractive()) {
         THolder<TParamsBuilder> paramBuilder;
         while (GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
-            auto operation = [this, &txSettings, &paramBuilder, &settings, &asyncResult](NTable::TSession session) {
+            TParams params = paramBuilder->Build();
+            auto operation = [this, &txSettings, &params, &settings, &asyncResult](NTable::TSession session) {
                 auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
                 asyncResult = promise.GetFuture();
                 auto result = session.ExecuteDataQuery(
                     Query,
                     NTable::TTxControl::BeginTx(txSettings).CommitTx(),
-                    paramBuilder->Build(),
+                    params,
                     FillSettings(settings)
                 );
                 return result.Apply([promise](const NTable::TAsyncDataQueryResult& result) mutable {

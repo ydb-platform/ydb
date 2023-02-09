@@ -15,6 +15,7 @@ namespace NKikimr {
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
 
 namespace NKqpConstants {
@@ -348,21 +349,26 @@ public:
         const auto& params = request.GetParams();
         TString mode = params.Has("mode") ? params.Get("mode") : "start";
         info.Mode = mode;
+        LOG_N("handle http GET request, mode: " << mode << " LoadActors.size(): " << LoadActors.size());
 
-        if (mode == "results" && GetAccept(request) == "application/json") {
-            GenerateJsonInfoRes(id);
-            return;
-        }
+        if (mode == "results") {
+            if (GetAccept(request) == "application/json") {
+                GenerateJsonInfoRes(id);
+                return;
+            }
 
-        // send messages to subactors
-        for (const auto& kv : LoadActors) {
-            Send(kv.second, new NMon::TEvHttpInfo(request, id));
-            info.ActorMap[kv.second].Tag = kv.first;
-        }
+            // send messages to subactors
+            for (const auto& kv : LoadActors) {
+                Send(kv.second, new NMon::TEvHttpInfo(request, id));
+                info.ActorMap[kv.second].Tag = kv.first;
+            }
 
-        // record number of responses pending
-        info.HttpInfoResPending = LoadActors.size();
-        if (!info.HttpInfoResPending) {
+            // record number of responses pending
+            info.HttpInfoResPending = LoadActors.size();
+            if (!info.HttpInfoResPending) {
+                GenerateHttpInfoRes(mode, id);
+            }
+        } else {
             GenerateHttpInfoRes(mode, id);
         }
     }
@@ -393,10 +399,11 @@ public:
 
         TString mode = params.Has("mode") ? params.Get("mode") : "start";
 
+        LOG_N("handle http POST request, mode: " << mode);
         if (mode == "start") {
             TString errorMsg = "ok";
             auto record = ParseMessage<NKikimr::TEvLoadTestRequest>(request, params.Get("config"));
-            LOG_D( "received config: " << params.Get("config").Quote() << "; proto parse success: " << std::to_string(bool{record}));
+            LOG_I( "received config: " << params.Get("config").Quote() << "; proto parse success: " << std::to_string(bool{record}));
 
             ui64 tag = 0;
             if (record) {
@@ -414,11 +421,11 @@ public:
                 }
             } else {
                 errorMsg = "bad protobuf";
+                LOG_E(errorMsg);
             }
 
             GenerateJsonTagInfoRes(id, tag, errorMsg);
         } else if (mode = "stop") {
-            LOG_D("received stop request");
             auto record = ParseMessage<NKikimr::TEvLoadTestRequest::TStop>(request, content);
             if (!record) {
                 record = NKikimr::TEvLoadTestRequest::TStop{};
@@ -439,7 +446,6 @@ public:
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
-        LOG_N("Handle HttpInfo request");
         // calculate ID of this request
         ui32 id = NextRequestId++;
 
@@ -493,6 +499,7 @@ public:
         auto it = InfoRequests.find(id);
         Y_VERIFY(it != InfoRequests.end());
         THttpInfoRequest& info = it->second;
+        LOG_I("Handle TEvHttpInfoRes, pending: " << info.HttpInfoResPending);
 
         auto actorIt = info.ActorMap.find(ev->Sender);
         Y_VERIFY(actorIt != info.ActorMap.end());

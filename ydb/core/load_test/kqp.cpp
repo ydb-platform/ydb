@@ -384,7 +384,8 @@ private:
     }
 
     void StartDeathProcess(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " TKqpLoadActor StartDeathProcess called");
+        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " TKqpLoadActor StartDeathProcess called,"
+            << " DeleteTableOnFinish: " << DeleteTableOnFinish);
 
         Become(&TKqpLoadActor::StateEndOfWork);
 
@@ -396,8 +397,6 @@ private:
     }
 
     void DropTables(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for tables drop");
-
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
         ev->Record.MutableRequest()->SetSessionId(TableSession);
@@ -414,7 +413,7 @@ private:
         auto& response = ev->Get()->Record.GetRef();
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
-            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: SUCCESS");
+            LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: SUCCESS");
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: FAIL, reason: " + ev->Get()->ToString());
         }
@@ -432,6 +431,7 @@ private:
         finishEv->LastHtmlPage = RenderHTML();
         finishEv->JsonResult = GetJsonResult();
         ctx.Send(Parent, finishEv);
+        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " DeathReport");
         PassAway();
     }
 
@@ -512,7 +512,7 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Become(&TKqpLoadActor::StateMain);
-            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " tables are created");
+            LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " tables are created");
             InitData = WorkloadQueryGen->GetInitialData();
             InsertInitData(ctx);
         } else {
@@ -544,6 +544,7 @@ private:
         }
 
         if (InitData.empty()) {
+            LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " initial query is executed, going to create workers");
             Start = TInstant::Now();
             if (IncreaseSessions) {
                 ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);

@@ -611,6 +611,21 @@ TCheckFunc PQPartitionsInsideDomain(ui64 count) {
     };
 }
 
+TCheckFunc PQReservedStorage(ui64 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
+
+        const auto& pathDescr = record.GetPathDescription();
+        const auto& domain = pathDescr.GetDomainDescription();
+        const auto& curCount = domain.GetDiskSpaceUsage().GetTopics().GetReserveSize();
+
+        UNIT_ASSERT_EQUAL_C(curCount, count,
+                            "pq reserved storage mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
+                                " has size " << curCount <<
+                                " but expected " << count);
+    };
+}
+
 TCheckFunc PathsInsideDomainOneOf(TSet<ui64> variants) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());

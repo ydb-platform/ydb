@@ -211,22 +211,15 @@ public:
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
         Y_VERIFY(parseOk);
 
-        ui64 throughput = ((ui64)pqGroup->TotalPartitionCount) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-        const ui64 storage = [&config, &throughput]() {
-                        if (config.GetPartitionConfig().HasStorageLimitBytes()) {
-                            return config.GetPartitionConfig().GetStorageLimitBytes();
-                        } else {
-                            return throughput * config.GetPartitionConfig().GetLifetimeSeconds();
-                        }
-                    }();
+        const PQGroupReserve reserve(config, pqGroup->TotalPartitionCount);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();
         domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount);
-        domainInfo->DecPQReservedStorage(storage);
+        domainInfo->DecPQReservedStorage(reserve.Storage);
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(throughput);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(storage);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(reserve.Throughput);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(reserve.Storage);
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Sub(pqGroup->TotalPartitionCount);
 

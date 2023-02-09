@@ -262,15 +262,7 @@ public:
         const ui64 shardsToCreate = pqGroupInfo->ExpectedShardCount() + 1;
         const ui64 partitionsToCreate = pqGroupInfo->TotalPartitionCount;
 
-        const ui64 throughput = ((ui64)partitionsToCreate) *
-                                tabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-
-        ui64 storage = 0;
-        if (tabletConfig.GetPartitionConfig().HasStorageLimitBytes()) {
-            storage = tabletConfig.GetPartitionConfig().GetStorageLimitBytes();
-        } else {
-            storage = throughput * tabletConfig.GetPartitionConfig().GetLifetimeSeconds();
-        }
+        const PQGroupReserve reserve(tabletConfig, partitionsToCreate);
 
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
@@ -278,7 +270,7 @@ public:
                 .ShardsLimit(shardsToCreate)
                 .PathShardsLimit(shardsToCreate)
                 .PQPartitionsLimit(partitionsToCreate)
-                .PQReservedStorageLimit(storage);
+                .PQReservedStorageLimit(reserve.Storage);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -465,12 +457,12 @@ public:
         dstPath.DomainInfo()->IncPathsInside();
         dstPath.DomainInfo()->AddInternalShards(txState);
         dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
-        dstPath.DomainInfo()->IncPQReservedStorage(storage);
+        dstPath.DomainInfo()->IncPQReservedStorage(reserve.Storage);
         dstPath.Base()->IncShardsInside(shardsToCreate);
         parentPath.Base()->IncAliveChildren();
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(reserve.Throughput);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(reserve.Storage);
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate);
 
         SetState(NextState());

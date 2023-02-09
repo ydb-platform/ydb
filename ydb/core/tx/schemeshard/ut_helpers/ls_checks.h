@@ -34,6 +34,7 @@ namespace NLs {
 
     TCheckFunc PathsInsideDomain(ui64 count);
     TCheckFunc PQPartitionsInsideDomain(ui64 count);
+    TCheckFunc PQReservedStorage(ui64 count);
     TCheckFunc PathsInsideDomainOneOf(TSet<ui64> variants);
     TCheckFunc ShardsInsideDomain(ui64 count);
     TCheckFunc ShardsInsideDomainOneOf(TSet<ui64> variants);

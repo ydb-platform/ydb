@@ -673,6 +673,7 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     diskSpaceUsage->MutableTables()->SetTotalSize(subDomainInfo->GetDiskSpaceUsage().Tables.TotalSize);
     diskSpaceUsage->MutableTables()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Tables.DataSize);
     diskSpaceUsage->MutableTables()->SetIndexSize(subDomainInfo->GetDiskSpaceUsage().Tables.IndexSize);
+    diskSpaceUsage->MutableTopics()->SetReserveSize(subDomainInfo->GetPQReservedStorage());
 
     if (subDomainInfo->GetDeclaredSchemeQuotas()) {
         entry->MutableDeclaredSchemeQuotas()->CopyFrom(*subDomainInfo->GetDeclaredSchemeQuotas());

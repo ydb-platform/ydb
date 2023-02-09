@@ -199,6 +199,25 @@ void TSelfPinger::ScheduleSelfPingWakeup(const NActors::TActorContext &ctx) {
     SelfPingWakeupScheduledTime = AppData(ctx)->TimeProvider->Now();
 }
 
+PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions) {
+    const auto& partitionConfig = tabletConfig.GetPartitionConfig();
+
+    if (tabletConfig.GetMeteringMode() == NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY) {
+        const ui64 throughput = partitions * partitionConfig.GetWriteSpeedInBytesPerSecond();
+
+        Throughput = throughput;
+
+        if (partitionConfig.HasStorageLimitBytes()) {
+            Storage = partitions * partitionConfig.GetStorageLimitBytes();
+        } else {
+            Storage = throughput * partitionConfig.GetLifetimeSeconds();
+        }
+    } else {
+        Throughput = 0;
+        Storage = 0;
+    }
+}
+
 }
 
 namespace NTableIndex {

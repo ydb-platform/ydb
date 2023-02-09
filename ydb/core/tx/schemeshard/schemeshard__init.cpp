@@ -3,6 +3,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/core/util/pb.h>
 
 namespace NKikimr {
@@ -3930,7 +3931,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             if (path->IsPQGroup()) {
                 auto pqGroup = Self->PersQueueGroups.at(path->PathId);
-                auto delta = pqGroup->AlterData ? pqGroup->AlterData->TotalGroupCount : pqGroup->TotalGroupCount;
+                auto delta = pqGroup->AlterData ? pqGroup->AlterData->TotalPartitionCount : pqGroup->TotalPartitionCount;
                 auto tabletConfig = pqGroup->AlterData ? (pqGroup->AlterData->TabletConfig.empty() ? pqGroup->TabletConfig : pqGroup->AlterData->TabletConfig)
                                                        : pqGroup->TabletConfig;
                 NKikimrPQ::TPQTabletConfig config;
@@ -3938,15 +3939,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
                 Y_VERIFY(parseOk);
 
-                ui64 throughput = ((ui64)delta) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-                ui64 storage = throughput * config.GetPartitionConfig().GetLifetimeSeconds();
+                const PQGroupReserve reserve(config, delta);
 
                 inclusiveDomainInfo->IncPQPartitionsInside(delta);
-                inclusiveDomainInfo->IncPQReservedStorage(storage);
+                inclusiveDomainInfo->IncPQReservedStorage(reserve.Storage);
 
                 Self->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(delta);
-                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput);
-                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage);
+                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(reserve.Throughput);
+                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(reserve.Storage);
             }
 
             if (path->PlannedToDrop()) {

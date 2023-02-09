@@ -46,7 +46,13 @@ message TDiskSpaceUsage {
         optional uint64 IndexSize = 3;
     }
 
+    message TTopics {
+        // in bytes
+        optional uint64 ReserveSize = 1;
+    }
+
     optional TTables Tables = 1;
+    optional TTopics Topics = 2;
 }
 
 message TDomainState {

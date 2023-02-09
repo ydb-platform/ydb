@@ -365,15 +365,7 @@ public:
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
         Y_VERIFY(parseOk);
 
-        const ui64 throughput = ((ui64)partitionsToCreate) *
-                                config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-        const ui64 storage = [&config, &throughput]() {
-            if (config.GetPartitionConfig().HasStorageLimitBytes()) {
-                return config.GetPartitionConfig().GetStorageLimitBytes();
-            } else {
-                return throughput * config.GetPartitionConfig().GetLifetimeSeconds();
-            }
-        }();
+        const PQGroupReserve reserve(config, partitionsToCreate);
 
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
@@ -381,7 +373,7 @@ public:
                 .ShardsLimit(shardsToCreate)
                 .PathShardsLimit(shardsToCreate)
                 .PQPartitionsLimit(partitionsToCreate)
-                .PQReservedStorageLimit(storage);
+                .PQReservedStorageLimit(reserve.Storage);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -515,10 +507,10 @@ public:
         dstPath.DomainInfo()->IncPathsInside();
         dstPath.DomainInfo()->AddInternalShards(txState);
         dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
-        dstPath.DomainInfo()->IncPQReservedStorage(storage);
+        dstPath.DomainInfo()->IncPQReservedStorage(reserve.Storage);
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(reserve.Throughput);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(reserve.Storage);
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate);
 

@@ -1,6 +1,5 @@
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
-#include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
 #include <ydb/services/ydb/ydb_keys_ut.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
@@ -14,12 +13,13 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/digest/md5/md5.h>
 
+#include <util/system/tempfile.h>
+
 #include <random>
 
 
 using namespace NYdb;
 using namespace NYdb::NTable;
-using namespace NKikimr::NPersQueueTests;
 using namespace NKikimr::NDataStreams::V1;
 namespace YDS_V1 = Ydb::DataStreams::V1;
 namespace NYDS_V1 = NYdb::NDataStreams::V1;

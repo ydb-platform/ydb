@@ -82,7 +82,7 @@ public:
     bool PrepareNetDataFile(const TString& content = "::1/128\tdc1") {
         if (NetDataFile)
             return false;
-        NetDataFile = MakeHolder<TTempFileHandle>("netData.tsv");
+        NetDataFile = MakeHolder<TTempFileHandle>();
         NetDataFile->Write(content.Data(), content.Size());
         NetDataFile->FlushData();
         ServerSettings.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name());

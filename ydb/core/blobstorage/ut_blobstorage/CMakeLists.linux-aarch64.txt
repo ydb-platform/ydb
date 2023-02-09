@@ -9,7 +9,6 @@
 add_subdirectory(lib)
 add_subdirectory(ut_blob_depot)
 add_subdirectory(ut_blob_depot_fat)
-add_subdirectory(ut_decommit)
 add_subdirectory(ut_donor)
 add_subdirectory(ut_group_reconfiguration)
 add_subdirectory(ut_osiris)
@@ -44,6 +43,7 @@ target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/assimilation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/block_race.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/counting_events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/decommit_3dc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/defrag.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/encryption.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/extra_block_checks.cpp

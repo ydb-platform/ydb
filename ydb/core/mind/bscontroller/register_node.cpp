@@ -100,10 +100,7 @@ class TBlobStorageController::TTxUpdateNodeDrives
             }
             NPDisk::TDriveData driveData;
             DriveDataToDriveData(data, driveData);
-            auto [it, emplaced] = nodeInfo.KnownDrives.emplace(serial, driveData);
-            if (it->second.DeviceType == NPDisk::DEVICE_TYPE_NVME) {
-                it->second.DeviceType = NPDisk::DEVICE_TYPE_SSD;
-            }
+            nodeInfo.KnownDrives.emplace(serial, driveData);
         }
     }
 

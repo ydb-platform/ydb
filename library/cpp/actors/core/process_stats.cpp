@@ -9,6 +9,7 @@
 #include <util/datetime/uptime.h>
 #include <util/system/defaults.h>
 #include <util/stream/file.h>
+#include <util/system/fs.h>
 #include <util/string/vector.h>
 #include <util/string/split.h>
 
@@ -101,13 +102,17 @@ namespace NActors {
                     break;
                 }
             }
-            if (!memoryCGroup.empty()) {
-                TFileInput limit("/sys/fs/cgroup/memory" + memoryCGroup + "/memory.limit_in_bytes");
-                if (limit.ReadLine(line) > 0) {
-                    CGroupMemLim = FromString<ui64>(line);
-                    if (CGroupMemLim > (1ULL << 40)) {
-                        CGroupMemLim = 0;
-                    }
+
+            TString cgroupFileName = "/sys/fs/cgroup/memory" + memoryCGroup + "/memory.limit_in_bytes";
+            if (!NFs::Exists(cgroupFileName)) {
+                // fallback for mk8s
+                cgroupFileName = "/sys/fs/cgroup/memory/memory.limit_in_bytes";
+            }
+            TFileInput limit(cgroupFileName);
+            if (limit.ReadLine(line) > 0) {
+                CGroupMemLim = FromString<ui64>(line);
+                if (CGroupMemLim > (1ULL << 40)) {
+                    CGroupMemLim = 0;
                 }
             }
 

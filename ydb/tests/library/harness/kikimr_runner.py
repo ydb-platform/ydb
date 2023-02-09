@@ -74,7 +74,12 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         self.__role = role
         self.__node_broker_port = node_broker_port
-        self.__log_file = tempfile.NamedTemporaryFile(dir=self.cwd, prefix="logfile_", suffix=".log", delete=False)
+
+        if configurator.use_log_files:
+            self.__log_file = tempfile.NamedTemporaryFile(dir=self.cwd, prefix="logfile_", suffix=".log", delete=False)
+        else:
+            self.__log_file = None
+
         self.__cms_config_cache_file = tempfile.NamedTemporaryFile(
             dir=self.cwd,
             prefix="cms_config_cache_",
@@ -166,10 +171,14 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--node-kind=%s" % self.__configurator.node_kind
             )
 
+        if self.__log_file is not None:
+            command.append(
+                "--log-file-name=%s" % self.__log_file.name,
+            )
+
         command.extend(
             [
                 "--yaml-config=%s" % join(self.__config_path, "config.yaml"),
-                "--log-file-name=%s" % self.__log_file.name,
                 "--grpc-port=%s" % self.grpc_port,
                 "--mon-port=%d" % self.mon_port,
                 "--ic-port=%d" % self.ic_port,

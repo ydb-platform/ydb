@@ -6,6 +6,7 @@
 
 namespace NKikimr::NReplication::NController {
 
+using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
@@ -75,7 +76,7 @@ ui64 TTargetBase::GetTargetId() const {
     return TargetId;
 }
 
-TReplication::ETargetKind TTargetBase::GetTargetKind() const {
+ETargetKind TTargetBase::GetTargetKind() const {
     return Kind;
 }
 

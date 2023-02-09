@@ -131,9 +131,6 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::SequenceShard:
                 domain->RemoveSequenceShard(ShardIdx);
                 break;
-            case ETabletType::ReplicationController:
-                domain->RemoveReplicationController(ShardIdx);
-                break;
             default:
                 break;
             }

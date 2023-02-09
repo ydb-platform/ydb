@@ -1749,20 +1749,6 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         SequenceShards.erase(it);
     }
 
-    const THashSet<TShardIdx>& GetReplicationControllers() const {
-        return ReplicationControllers;
-    }
-
-    void AddReplicationController(const TShardIdx& shardIdx) {
-        ReplicationControllers.insert(shardIdx);
-    }
-
-    void RemoveReplicationController(const TShardIdx& shardIdx) {
-        auto it = ReplicationControllers.find(shardIdx);
-        Y_VERIFY_S(it != ReplicationControllers.end(), "shardIdx: " << shardIdx);
-        ReplicationControllers.erase(it);
-    }
-
     const NKikimrSubDomains::TProcessingParams& GetProcessingParams() const {
         return ProcessingParams;
     }
@@ -2001,7 +1987,6 @@ private:
     THashSet<TShardIdx> InternalShards;
     THashSet<TShardIdx> BackupShards;
     THashSet<TShardIdx> SequenceShards;
-    THashSet<TShardIdx> ReplicationControllers;
 
     ui64 PQPartitionsInsideCount = 0;
     ui64 PQReservedStorage = 0;
@@ -2436,6 +2421,7 @@ struct TReplicationInfo : public TSimpleRefCount<TReplicationInfo> {
     ui64 AlterVersion = 0;
     TReplicationInfo::TPtr AlterData = nullptr;
     NKikimrSchemeOp::TReplicationDescription Description;
+    TShardIdx ControllerShardIdx = InvalidShardIdx;
 };
 
 struct TBlobDepotInfo : TSimpleRefCount<TBlobDepotInfo> {

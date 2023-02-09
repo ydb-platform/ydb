@@ -266,10 +266,6 @@ public:
             }
         }
 
-        const auto domainPathId = parentPath.GetPathIdForDomain();
-        auto domainInfo = parentPath.DomainInfo();
-        const ui64 shardsToCreate = domainInfo->GetReplicationControllers().empty();
-
         auto path = parentPath.Child(name);
         {
             const auto checks = path.Check();
@@ -293,7 +289,7 @@ public:
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(shardsToCreate)
+                    .ShardsLimit(1)
                     .IsValidACL(acl);
             }
 
@@ -315,12 +311,10 @@ public:
         }
 
         TChannelsBindings channelsBindings;
-        if (shardsToCreate) {
-            if (!context.SS->ResolveTabletChannels(0, domainPathId, channelsBindings)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "Unable to construct channel binding for replication controller with the storage pool");
-                return result;
-            }
+        if (!context.SS->ResolveTabletChannels(0, parentPath.GetPathIdForDomain(), channelsBindings)) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "Unable to construct channel binding for replication controller with the storage pool");
+            return result;
         }
 
         path.MaterializeLeaf(owner);
@@ -332,39 +326,25 @@ public:
 
         context.SS->IncrementPathDbRefCount(path->PathId);
         parentPath->IncAliveChildren();
-        domainInfo->IncPathsInside();
+        parentPath.DomainInfo()->IncPathsInside();
+
+        auto replication = TReplicationInfo::Create(std::move(desc));
+        context.SS->Replications[path->PathId] = replication;
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
+
+        replication->AlterData->ControllerShardIdx = context.SS->RegisterShardInfo(
+            TShardInfo::ReplicationControllerInfo(OperationId.GetTxId(), path->PathId)
+                .WithBindedChannels(channelsBindings));
+        context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Add(1);
 
         Y_VERIFY(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateReplication, path->PathId);
+        txState.Shards.emplace_back(replication->AlterData->ControllerShardIdx,
+            ETabletType::ReplicationController, TTxState::CreateParts);
+        txState.State = TTxState::CreateParts;
 
-        if (shardsToCreate) {
-            const auto shardIdx = context.SS->RegisterShardInfo(
-                TShardInfo::ReplicationControllerInfo(OperationId.GetTxId(), domainPathId)
-                    .WithBindedChannels(channelsBindings));
-            context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Add(1);
-
-            txState.Shards.emplace_back(shardIdx, ETabletType::ReplicationController, TTxState::CreateParts);
-            txState.State = TTxState::CreateParts;
-
-            Y_VERIFY(context.SS->PathsById.contains(domainPathId));
-            context.SS->PathsById.at(domainPathId)->IncShardsInside();
-
-            domainInfo->AddInternalShard(shardIdx);
-            domainInfo->AddReplicationController(shardIdx);
-        } else {
-            const auto shardIdx = *domainInfo->GetReplicationControllers().begin();
-
-            txState.Shards.emplace_back(shardIdx, ETabletType::ReplicationController, TTxState::ConfigureParts);
-            txState.State = TTxState::ConfigureParts;
-
-            Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
-            const auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
-
-            if (shardInfo.CurrentTxId != OperationId.GetTxId()) {
-                context.OnComplete.Dependence(shardInfo.CurrentTxId, OperationId.GetTxId());
-            }
-        }
+        path->IncShardsInside();
+        parentPath.DomainInfo()->AddInternalShards(txState);
 
         if (parentPath->HasActiveChanges()) {
             const auto parentTxId = parentPath->PlannedToCreate() ? parentPath->CreateTxId : parentPath->LastTxId;
@@ -379,8 +359,6 @@ public:
             context.SS->PersistACL(db, path.Base());
         }
 
-        auto replication = TReplicationInfo::Create(std::move(desc));
-        context.SS->Replications[path->PathId] = replication;
         context.SS->PersistReplication(db, path->PathId, *replication);
         context.SS->PersistReplicationAlter(db, path->PathId, *replication->AlterData);
 
@@ -390,7 +368,7 @@ public:
             const TShardInfo& shardInfo = context.SS->ShardInfos.at(shard.Idx);
 
             if (shard.Operation == TTxState::CreateParts) {
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, domainPathId, OperationId.GetTxId(), shard.TabletType);
+                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, path->PathId, OperationId.GetTxId(), shard.TabletType);
                 context.SS->PersistChannelsBinding(db, shard.Idx, shardInfo.BindedChannels);
             }
         }

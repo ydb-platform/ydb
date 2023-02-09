@@ -8,6 +8,13 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         runtime.SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NActors::NLog::PRI_TRACE);
     }
 
+    ui64 ExtractControllerId(const NKikimrSchemeOp::TPathDescription& desc) {
+        UNIT_ASSERT(desc.HasReplicationDescription());
+        const auto& r = desc.GetReplicationDescription();
+        UNIT_ASSERT(r.HasControllerId());
+        return r.GetControllerId();
+    }
+
     Y_UNIT_TEST(Create) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -28,6 +35,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         ui64 txId = 100;
 
         SetupLogging(runtime);
+        THashSet<ui64> controllerIds;
 
         for (int i = 0; i < 2; ++i) {
             const auto name = Sprintf("Replication%d", i);
@@ -36,8 +44,17 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
                 Name: "%s"
             )", name.c_str()));
             env.TestWaitNotification(runtime, txId);
-            TestLs(runtime, "/MyRoot/" + name, false, NLs::PathExist);
+
+            const auto desc = DescribePath(runtime, "/MyRoot/" + name);
+            TestDescribeResult(desc, {
+                NLs::PathExist,
+                NLs::Finished,
+            });
+
+            controllerIds.insert(ExtractControllerId(desc.GetPathDescription()));
         }
+
+        UNIT_ASSERT_VALUES_EQUAL(controllerIds.size(), 2);
     }
 
     Y_UNIT_TEST(CreateInParallel) {
@@ -46,6 +63,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         ui64 txId = 100;
 
         SetupLogging(runtime);
+        THashSet<ui64> controllerIds;
 
         for (int i = 0; i < 2; ++i) {
             TVector<TString> names;
@@ -64,9 +82,17 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
 
             env.TestWaitNotification(runtime, txIds);
             for (const auto& name : names) {
-                TestLs(runtime, "/MyRoot/" + name, false, NLs::PathExist);
+                const auto desc = DescribePath(runtime, "/MyRoot/" + name);
+                TestDescribeResult(desc, {
+                    NLs::PathExist,
+                    NLs::Finished,
+                });
+
+                controllerIds.insert(ExtractControllerId(desc.GetPathDescription()));
             }
         }
+
+        UNIT_ASSERT_VALUES_EQUAL(controllerIds.size(), 4);
     }
 
     Y_UNIT_TEST(CreateDropRecreate) {
@@ -75,22 +101,31 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         ui64 txId = 100;
 
         SetupLogging(runtime);
+        ui64 controllerId = 0;
 
         TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
             Name: "Replication"
         )");
         env.TestWaitNotification(runtime, txId);
-        TestLs(runtime, "/MyRoot/Replication", false, NLs::PathExist);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+            TestDescribeResult(desc, {NLs::PathExist});
+            controllerId = ExtractControllerId(desc.GetPathDescription());
+        }
 
         TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
         env.TestWaitNotification(runtime, txId);
-        TestLs(runtime, "/MyRoot/Replication", false, NLs::PathNotExist);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
 
         TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
             Name: "Replication"
         )");
         env.TestWaitNotification(runtime, txId);
-        TestLs(runtime, "/MyRoot/Replication", false, NLs::PathExist);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+            TestDescribeResult(desc, {NLs::PathExist});
+            UNIT_ASSERT_VALUES_UNEQUAL(controllerId, ExtractControllerId(desc.GetPathDescription()));
+        }
     }
 
 } // TReplicationTests

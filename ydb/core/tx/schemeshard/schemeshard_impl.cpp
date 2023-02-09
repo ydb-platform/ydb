@@ -1279,36 +1279,6 @@ TShardIdx TSchemeShard::NextShardIdx(const TShardIdx& shardIdx, ui64 inc) const 
     return MakeLocalId(TLocalShardIdx(nextLocalId));
 }
 
-TShardIdx TSchemeShard::RegisterShardInfo(TShardInfo&& shardInfo) {
-    TShardIdx shardIdx = ReserveShardIdxs(1);
-    return RegisterShardInfo(shardIdx, std::move(shardInfo));
-}
-
-TShardIdx TSchemeShard::RegisterShardInfo(const TShardInfo& shardInfo) {
-    TShardIdx shardIdx = ReserveShardIdxs(1);
-    return RegisterShardInfo(shardIdx, shardInfo);
-}
-
-TShardIdx TSchemeShard::RegisterShardInfo(const TShardIdx& shardIdx, TShardInfo&& shardInfo) {
-    Y_VERIFY(shardIdx.GetOwnerId() == TabletID());
-    ui64 localId = ui64(shardIdx.GetLocalId());
-    Y_VERIFY_S(localId < NextLocalShardIdx, "shardIdx: " << shardIdx << " NextLocalShardIdx: " << NextLocalShardIdx);
-    Y_VERIFY_S(!ShardInfos.contains(shardIdx), "shardIdx: " << shardIdx << " already registered");
-    IncrementPathDbRefCount(shardInfo.PathId, "new shard created");
-    ShardInfos.emplace(shardIdx, std::move(shardInfo));
-    return shardIdx;
-}
-
-TShardIdx TSchemeShard::RegisterShardInfo(const TShardIdx& shardIdx, const TShardInfo& shardInfo) {
-    Y_VERIFY(shardIdx.GetOwnerId() == TabletID());
-    ui64 localId = ui64(shardIdx.GetLocalId());
-    Y_VERIFY_S(localId < NextLocalShardIdx, "shardIdx: " << shardIdx << " NextLocalShardIdx: " << NextLocalShardIdx);
-    Y_VERIFY_S(!ShardInfos.contains(shardIdx), "shardIdx: " << shardIdx << " already registered");
-    IncrementPathDbRefCount(shardInfo.PathId, "new shard created");
-    ShardInfos.emplace(shardIdx, shardInfo);
-    return shardIdx;
-}
-
 const TTableInfo* TSchemeShard::GetMainTableForIndex(TPathId indexTableId) const {
     if (!Tables.contains(indexTableId))
         return nullptr;

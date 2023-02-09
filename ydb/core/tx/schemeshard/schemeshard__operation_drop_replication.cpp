@@ -94,7 +94,7 @@ public:
         }
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
+        context.SS->ChangeTxState(db, OperationId, TTxState::DeleteParts);
         context.OnComplete.ActivateTx(OperationId);
 
         return true;
@@ -104,6 +104,45 @@ private:
     const TOperationId OperationId;
 
 }; // TDropParts
+
+class TDeleteParts: public TSubOperationState {
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TDropReplication TDeleteParts"
+            << " opId# " << OperationId << " ";
+    }
+
+public:
+    explicit TDeleteParts(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {
+            NReplication::TEvController::TEvDropReplicationResult::EventType,
+        });
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_I(DebugHint() << "ProgressState");
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        Y_VERIFY(txState->TxType == TTxState::TxDropReplication);
+
+        for (const auto& shard : txState->Shards) {
+            context.OnComplete.DeleteShard(shard.Idx);
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
+        context.OnComplete.ActivateTx(OperationId);
+
+        return true;
+    }
+
+private:
+    const TOperationId OperationId;
+
+}; // TDeleteParts
 
 class TPropose: public TSubOperationState {
     TString DebugHint() const override {
@@ -190,6 +229,8 @@ class TDropReplication: public TSubOperation {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::DropParts:
+            return TTxState::DeleteParts;
+        case TTxState::DeleteParts:
             return TTxState::Propose;
         case TTxState::Propose:
             return TTxState::Done;
@@ -202,6 +243,8 @@ class TDropReplication: public TSubOperation {
         switch (state) {
         case TTxState::DropParts:
             return MakeHolder<TDropParts>(OperationId);
+        case TTxState::DeleteParts:
+            return MakeHolder<TDeleteParts>(OperationId);
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
@@ -285,11 +328,10 @@ public:
         txState.State = TTxState::DropParts;
         txState.MinStep = TStepId(1);
 
-        for (const auto& shardIdx: path.DomainInfo()->GetReplicationControllers()) {
-            Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
-            const auto tabletType = context.SS->ShardInfos.at(shardIdx).TabletType;
-            txState.Shards.emplace_back(shardIdx, tabletType, TTxState::DropParts);
-        }
+        const auto& shardIdx = replication->ControllerShardIdx;
+        Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
+        const auto tabletType = context.SS->ShardInfos.at(shardIdx).TabletType;
+        txState.Shards.emplace_back(shardIdx, tabletType, TTxState::DropParts);
 
         path->PathState = TPathElement::EPathState::EPathStateDrop;
         path->DropTxId = OperationId.GetTxId();
@@ -324,6 +366,22 @@ public:
         LOG_N("TDropReplication AbortUnsafe"
             << ": opId# " << OperationId
             << ", txId# " << txId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+
+        Y_VERIFY(txState);
+        const auto& pathId = txState->TargetPathId;
+
+        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        auto path = context.SS->PathsById.at(pathId);
+
+        Y_VERIFY(path);
+        if (path->Dropped()) {
+            for (auto shard : txState->Shards) {
+                context.OnComplete.DeleteShard(shard.Idx);
+            }
+        }
+
         context.OnComplete.DoneOperation(OperationId);
     }
 

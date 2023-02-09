@@ -2011,6 +2011,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         THashMap<TPathId, TShardIdx> nbsVolumeShards; // pathId -> shardIdx
         THashMap<TPathId, TShardIdx> fileStoreShards; // pathId -> shardIdx
         THashMap<TPathId, TShardIdx> kesusShards; // pathId -> shardIdx
+        THashMap<TPathId, TShardIdx> replicationControllers;
         THashMap<TPathId, TShardIdx> blobDepotShards;
         THashMap<TPathId, TVector<TShardIdx>> olapColumnShards;
         {
@@ -2062,6 +2063,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         break;
                     case ETabletType::ColumnShard:
                         olapColumnShards[shard.PathId].push_back(idx);
+                        break;
+                    case ETabletType::ReplicationController:
+                        replicationControllers.emplace(shard.PathId, idx);
                         break;
                     case ETabletType::BlobDepot:
                         blobDepotShards.emplace(shard.PathId, idx);
@@ -3887,7 +3891,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 break;
             case ETabletType::ReplicationController:
                 Self->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Add(1);
-                domainInfo->AddReplicationController(shardIdx);
                 break;
             case ETabletType::BlobDepot:
                 Self->TabletCounters->Simple()[COUNTER_BLOB_DEPOT_COUNT].Add(1);
@@ -4670,6 +4673,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->Replications[pathId] = replicationInfo;
                 Self->IncrementPathDbRefCount(pathId);
 
+                if (replicationControllers.contains(pathId)) {
+                    replicationInfo->ControllerShardIdx = replicationControllers.at(pathId);
+                }
+
                 if (!rowset.Next()) {
                     return false;
                 }
@@ -4692,7 +4699,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TReplicationInfo::TPtr alterData = new TReplicationInfo(alterVersion, std::move(description));
                 Y_VERIFY_S(Self->Replications.contains(pathId),
                     "Cannot load alter for replication " << pathId);
-                Self->Replications[pathId]->AlterData = alterData;
+                auto replicationInfo = Self->Replications.at(pathId);
+
+                alterData->ControllerShardIdx = replicationInfo->ControllerShardIdx;
+                replicationInfo->AlterData = alterData;
 
                 if (!rowset.Next()) {
                     return false;

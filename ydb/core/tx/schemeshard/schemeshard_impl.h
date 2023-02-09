@@ -525,10 +525,21 @@ public:
 
     TShardIdx ReserveShardIdxs(ui64 count);
     TShardIdx NextShardIdx(const TShardIdx& shardIdx, ui64 inc) const;
-    TShardIdx RegisterShardInfo(TShardInfo&& shardInfo);
-    TShardIdx RegisterShardInfo(const TShardInfo& shardInfo);
-    TShardIdx RegisterShardInfo(const TShardIdx& shardIdx, TShardInfo&& shardInfo);
-    TShardIdx RegisterShardInfo(const TShardIdx& shardIdx, const TShardInfo& shardInfo);
+    template <typename T>
+    TShardIdx RegisterShardInfo(T&& shardInfo) {
+        return RegisterShardInfo(ReserveShardIdxs(1), std::forward<T>(shardInfo));
+    }
+
+    template <typename T>
+    TShardIdx RegisterShardInfo(const TShardIdx& shardIdx, T&& shardInfo) {
+        Y_VERIFY(shardIdx.GetOwnerId() == TabletID());
+        const auto localId = ui64(shardIdx.GetLocalId());
+        Y_VERIFY_S(localId < NextLocalShardIdx, "shardIdx: " << shardIdx << " NextLocalShardIdx: " << NextLocalShardIdx);
+        Y_VERIFY_S(!ShardInfos.contains(shardIdx), "shardIdx: " << shardIdx << " already registered");
+        IncrementPathDbRefCount(shardInfo.PathId, "new shard created");
+        ShardInfos.emplace(shardIdx, std::forward<T>(shardInfo));
+        return shardIdx;
+    }
 
     TTxState& CreateTx(TOperationId opId, TTxState::ETxType txType, TPathId targetPath, TPathId sourcePath = InvalidPathId);
     TTxState* FindTx(TOperationId opId);

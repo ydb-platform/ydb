@@ -1169,7 +1169,7 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
 void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info,
         NKikimrSchemeOp::TReplicationDescription& desc)
 {
-    Y_VERIFY_S(info, "Empty sequence info"
+    Y_VERIFY_S(info, "Empty replication info"
         << " pathId# " << pathId
         << " name# " << name);
 
@@ -1179,10 +1179,7 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
     PathIdFromPathId(pathId, desc.MutablePathId());
     desc.SetVersion(info->AlterVersion);
 
-    const auto& controllers = ResolveDomainInfo(pathId)->GetReplicationControllers();
-    if (!controllers.empty()) {
-        const auto shardIdx = *controllers.begin();
-
+    if (const auto& shardIdx = info->ControllerShardIdx; shardIdx != InvalidShardIdx) {
         Y_VERIFY(ShardInfos.contains(shardIdx));
         const auto& shardInfo = ShardInfos.at(shardIdx);
 

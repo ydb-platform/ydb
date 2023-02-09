@@ -32,7 +32,7 @@ Y_UNIT_TEST(TestChannelSize) {
     output->MutableChannels()->Add();
 
     auto est = EstimateTaskResources(task, config);
-    UNIT_ASSERT_EQUAL(201, est.ChannelBuffersCount);
+    UNIT_ASSERT_EQUAL(2, est.ChannelBuffersCount);
     UNIT_ASSERT_EQUAL(est.ChannelBufferMemoryLimit, config.GetChannelBufferSize());
 
     // add more channels, to be more then 256
@@ -42,9 +42,9 @@ Y_UNIT_TEST(TestChannelSize) {
     }
 
     est = EstimateTaskResources(task, config);
-    UNIT_ASSERT_EQUAL(301, est.ChannelBuffersCount);
+    UNIT_ASSERT_EQUAL(2, est.ChannelBuffersCount);
 
-    UNIT_ASSERT(est.ChannelBufferMemoryLimit < config.GetChannelBufferSize());
+    UNIT_ASSERT(est.ChannelBufferMemoryLimit == config.GetChannelBufferSize());
     UNIT_ASSERT(est.ChannelBufferMemoryLimit >= config.GetMinChannelBufferSize());
 }
 

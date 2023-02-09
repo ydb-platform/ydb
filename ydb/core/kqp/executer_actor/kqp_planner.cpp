@@ -113,7 +113,7 @@ void TKqpPlanner::Process() {
 
         LOG_E("Not enough resources to execute query locally and no information about other nodes");
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
-            "Not enough resources to execute query locally and no information about other nodes");
+            "Not enough resources to execute query locally and no information about other nodes (estimation: " + ToString(LocalRunMemoryEst) + ")");
 
         TlsActivationContext->Send(std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release()));
         return;

@@ -17,12 +17,8 @@ void EstimateTaskResources(const TDqTask& task, const TTableServiceConfig::TReso
     TTaskResourceEstimation& ret)
 {
     ret.TaskId = task.GetId();
-    for (const auto& input : task.GetInputs()) {
-        ret.ChannelBuffersCount += input.ChannelsSize();
-    }
-    for (const auto& output : task.GetOutputs()) {
-        ret.ChannelBuffersCount += output.ChannelsSize();
-    }
+    ret.ChannelBuffersCount += task.GetInputs().size() ? 1 : 0;
+    ret.ChannelBuffersCount += task.GetOutputs().size() ? 1 : 0;
 
     ui64 channelBuffersSize = ret.ChannelBuffersCount * config.GetChannelBufferSize();
     if (channelBuffersSize > config.GetMaxTotalChannelBuffersSize()) {

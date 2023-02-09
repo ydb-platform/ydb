@@ -24,7 +24,7 @@ public:
     };
 
     virtual TVector<TResult> Plan(const TVector<NKikimrKqp::TKqpNodeResources>& nodeResources,
-        TVector<TTaskResourceEstimation>&& estimatedResources) = 0;
+        const TVector<TTaskResourceEstimation>& estimatedResources) = 0;
 
 protected:
     TLogFunc LogFunc;

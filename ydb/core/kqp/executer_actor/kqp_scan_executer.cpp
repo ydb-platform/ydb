@@ -40,15 +40,42 @@ namespace {
 class TKqpScanExecuter : public TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan> {
     using TBase = TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan>;
 
+    struct TEvPrivate {
+        enum EEv {
+            EvResourcesSnapshot = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvRetry
+        };
+
+        struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EEv::EvResourcesSnapshot> {
+            TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
+
+            TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
+                : Snapshot(std::move(snapshot)) {}
+        };
+
+        struct TEvRetry : public TEventLocal<TEvRetry, EEv::EvRetry> {
+            ui32 RequestId;
+            TActorId Target;
+
+            TEvRetry(ui64 requestId, const TActorId& target)
+                : RequestId(requestId)
+                , Target(target) {}
+        };
+    };
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
     }
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-        const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation)
+        const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, 
+        const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
+        ui32 executerDelayToRetryMs)
         : TBase(std::move(request), database, userToken, counters, TWilsonKqp::ScanExecuter, "ScanExecuter")
         , AggregationSettings(aggregation)
+        , Planner(nullptr)
+        , ExecuterDelayToRetryMs(executerDelayToRetryMs)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
         YQL_ENSURE(Request.DataShardLocks.empty());
@@ -77,6 +104,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
                 hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
+                hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvents::TEvWakeup, HandleTimeout);
                 default:
@@ -98,6 +126,7 @@ private:
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvents::TEvWakeup, HandleTimeout);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
+                hFunc(TEvPrivate::TEvRetry, HandleRetry);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 IgnoreFunc(TEvKqpNode::TEvCancelKqpTasksResponse);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
@@ -405,6 +434,14 @@ private:
         }
     }
 
+    void GetResourcesSnapshot() {
+        GetKqpResourceManager()->RequestClusterResourcesInfo(
+            [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
+                as->Send(eh);
+            });
+    }
+
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
         TSet<ui64> shardIds;
@@ -420,17 +457,24 @@ private:
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, std::move(shardIds));
             KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
         } else {
-            Execute();
+            GetResourcesSnapshot();
         }
     }
 
-
     void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
-        Execute();
+        GetResourcesSnapshot();
     }
 
-    void Execute() {
+    void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
+        if (ev->Get()->Snapshot.empty()) {
+            LOG_E("Can not find default state storage group for database " << Database);
+        }
+
+        Execute(std::move(ev->Get()->Snapshot));
+    }
+
+    void Execute(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot) {
         LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
         NWilson::TSpan prepareTasksSpan(TWilsonKqp::ScanExecuterPrepareTasks, ExecuterStateSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
 
@@ -648,7 +692,7 @@ private:
             << ", totalShardScans: " << nShardScans << ", execType: Scan"
             << ", snapshot: {" << Request.Snapshot.TxId << ", " << Request.Snapshot.Step << "}");
 
-        ExecuteScanTx(std::move(computeTasks), std::move(scanTasks));
+        ExecuteScanTx(std::move(computeTasks), std::move(scanTasks), std::move(snapshot));
 
         Become(&TKqpScanExecuter::ExecuteState);
         if (ExecuterStateSpan) {
@@ -688,9 +732,9 @@ public:
     }
 
 private:
-    void ExecuteScanTx(TVector<NYql::NDqProto::TDqTask>&& computeTasks, THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks) {
+    void ExecuteScanTx(TVector<NYql::NDqProto::TDqTask>&& computeTasks, THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks,
+        TVector<NKikimrKqp::TKqpNodeResources>&& snapshot) {
         LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, computeTasks.size(), scanTasks.size());
-        LOG_D("Execute scan tx, computeTasks: " << computeTasks.size() << ", scanTasks: " << scanTasks.size());
         for (const auto& [_, tasks]: scanTasks) {
             for (const auto& task : tasks) {
                 PendingComputeTasks.insert(task.GetId());
@@ -701,11 +745,42 @@ private:
             PendingComputeTasks.insert(taskDesc.GetId());
         }
 
-        auto planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
+        Planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
             std::move(scanTasks), Request.Snapshot,
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
-            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath, ExecuterSpan.GetTraceId());
-        RegisterWithSameMailbox(planner);
+            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath, ExecuterSpan, std::move(snapshot));
+        LOG_D("Execute scan tx, computeTasks: " << Planner->GetComputeTasksNumber() << ", scanTasks: " << Planner->GetScanTasksNumber());
+
+        Planner->Process();
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) override {
+        ui32 eventType = ev->Get()->SourceType;
+        auto reason = ev->Get()->Reason;
+        switch (eventType) {
+            case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
+                if (reason == TEvents::TEvUndelivered::EReason::ReasonActorUnknown) {
+                    LOG_D("Schedule a retry by ActorUnknown reason, nodeId:" << ev->Sender.NodeId() << " requestId: " << ev->Cookie);
+                    Schedule(TDuration::MilliSeconds(ExecuterDelayToRetryMs), new TEvPrivate::TEvRetry(ev->Cookie, ev->Sender));
+                    return;
+                }
+                InvalidateNode(ev->Sender.NodeId());
+                return InternalError(TStringBuilder()
+                    << "TEvKqpNode::TEvStartKqpTasksRequest lost: " << reason);
+            }
+            default: {
+                LOG_E("Event lost, type: " << eventType << ", reason: " << reason);
+            }
+        }
+    }
+
+    void HandleRetry(TEvPrivate::TEvRetry::TPtr& ev) {
+        if (Planner->SendKqpTasksRequest(ev->Get()->RequestId, ev->Get()->Target)) {
+            return;
+        }
+        InvalidateNode(Target.NodeId());
+        return InternalError(TStringBuilder()
+            << "TEvKqpNode::TEvStartKqpTasksRequest lost: ActorUnknown");
     }
 
 private:
@@ -769,15 +844,20 @@ public:
         channelDesc.SetIsPersistent(IsCrossShardChannel(TasksGraph, channel));
         channelDesc.SetInMemory(channel.InMemory);
     }
+private:
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
+    std::unique_ptr<TKqpPlanner> Planner;
+    ui32 ExecuterDelayToRetryMs;
 };
 
 } // namespace
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation)
+    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters,
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
+    ui32 executerDelayToRetryMs)
 {
-    return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation);
+    return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerDelayToRetryMs);
 }
 
 } // namespace NKqp

@@ -375,7 +375,7 @@ protected:
         }
     }
 
-    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
+    virtual void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
         ui32 eventType = ev->Get()->SourceType;
         auto reason = ev->Get()->Reason;
         switch (eventType) {
@@ -1142,7 +1142,8 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation);
+    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, 
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation, ui32 executerDelayToRetryMs);
 
 } // namespace NKqp
 } // namespace NKikimr

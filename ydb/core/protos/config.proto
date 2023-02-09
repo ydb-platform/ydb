@@ -1236,6 +1236,7 @@ message TTableServiceConfig {
     optional TAggregationConfig AggregationConfig = 29;
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = false];
     optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
+    optional uint32 ExecuterDelayToRetryMs = 32 [default = 200];
 };
 
 // Config describes immediate controls and allows

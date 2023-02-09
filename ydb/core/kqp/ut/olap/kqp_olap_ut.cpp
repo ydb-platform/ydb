@@ -1292,7 +1292,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 #endif
         }
     }
-
+    /*
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
         // Should be fixed in KIKIMR-17007
         return;
@@ -1340,7 +1340,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 #endif
         }
     }
-
+    */
     Y_UNIT_TEST_TWIN(CountAllPushdown, UseLlvm) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)

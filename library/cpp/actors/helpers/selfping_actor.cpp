@@ -8,6 +8,53 @@
 
 namespace NActors {
 
+ui64 MeasureTaskDurationNs() {
+    // Prepare worm test data
+    // 11 * 11 * 3 * 8 = 2904 bytes, fits in L1 cache
+    constexpr ui64 Size = 11;
+    // Align the data to reduce random alignment effects
+    alignas(64) TStackVec<ui64, Size * Size * 3> data;
+    ui64 s = 0;
+    NHPTimer::STime beginTime;
+    NHPTimer::STime endTime;
+    // Prepare the data
+    data.resize(Size * Size * 3);
+    for (ui64 matrixIdx = 0; matrixIdx < 3; ++matrixIdx) {
+        for (ui64 y = 0; y < Size; ++y) {
+            for (ui64 x = 0; x < Size; ++x) {
+                data[matrixIdx * (Size * Size) + y * Size + x] = y * Size + x;
+            }
+        }
+    }
+    // Warm-up the cache
+    NHPTimer::GetTime(&beginTime);
+    for (ui64 idx = 0; idx < data.size(); ++idx) {
+        s += data[idx];
+    }
+    NHPTimer::GetTime(&endTime);
+    s += (ui64)(1000000.0 * NHPTimer::GetSeconds(endTime - beginTime));
+
+    // Measure the CPU performance
+    // C = A * B  with injected dependency to s
+    NHPTimer::GetTime(&beginTime);
+    for (ui64 y = 0; y < Size; ++y) {
+        for (ui64 x = 0; x < Size; ++x) {
+            for (ui64 i = 0; i < Size; ++i) {
+                s += data[y * Size + i] * data[Size * Size + i * Size + x];
+            }
+            data[2 * Size * Size + y * Size + x] = s;
+            s = 0;
+        }
+    }
+    for (ui64 idx = 0; idx < data.size(); ++idx) {
+        s += data[idx];
+    }
+    NHPTimer::GetTime(&endTime);
+    // Prepare the result
+    double d = 1000000000.0 * (NHPTimer::GetSeconds(endTime - beginTime) + 0.000000001 * (s & 1));
+    return (ui64)d;
+}
+
 namespace {
 
 struct TEvPing: public TEventLocal<TEvPing, TEvents::THelloWorld::Ping> {
@@ -108,53 +155,6 @@ public:
         default:
             Y_FAIL("TSelfPingActor::RunningState: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
-    }
-
-    ui64 MeasureTaskDurationNs() {
-        // Prepare worm test data
-        // 11 * 11 * 3 * 8 = 2904 bytes, fits in L1 cache
-        constexpr ui64 Size = 11;
-        // Align the data to reduce random alignment effects
-        alignas(64) TStackVec<ui64, Size * Size * 3> data;
-        ui64 s = 0;
-        NHPTimer::STime beginTime;
-        NHPTimer::STime endTime;
-        // Prepare the data
-        data.resize(Size * Size * 3);
-        for (ui64 matrixIdx = 0; matrixIdx < 3; ++matrixIdx) {
-            for (ui64 y = 0; y < Size; ++y) {
-                for (ui64 x = 0; x < Size; ++x) {
-                    data[matrixIdx * (Size * Size) + y * Size + x] = y * Size + x;
-                }
-            }
-        }
-        // Warm-up the cache
-        NHPTimer::GetTime(&beginTime);
-        for (ui64 idx = 0; idx < data.size(); ++idx) {
-            s += data[idx];
-        }
-        NHPTimer::GetTime(&endTime);
-        s += (ui64)(1000000.0 * NHPTimer::GetSeconds(endTime - beginTime));
-
-        // Measure the CPU performance
-        // C = A * B  with injected dependency to s
-        NHPTimer::GetTime(&beginTime);
-        for (ui64 y = 0; y < Size; ++y) {
-            for (ui64 x = 0; x < Size; ++x) {
-                for (ui64 i = 0; i < Size; ++i) {
-                    s += data[y * Size + i] * data[Size * Size + i * Size + x];
-                }
-                data[2 * Size * Size + y * Size + x] = s;
-                s = 0;
-            }
-        }
-        for (ui64 idx = 0; idx < data.size(); ++idx) {
-            s += data[idx];
-        }
-        NHPTimer::GetTime(&endTime);
-        // Prepare the result
-        double d = 1000000000.0 * (NHPTimer::GetSeconds(endTime - beginTime) + 0.000000001 * (s & 1));
-        return (ui64)d;
     }
 
     void HandlePing(TEvPing::TPtr &ev, const TActorContext &ctx)

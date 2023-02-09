@@ -22,6 +22,7 @@ target_link_libraries(ydb-core-mind-hive-ut PUBLIC
   core-mind-hive
   library-cpp-getopt
   library-cpp-svnversion
+  cpp-actors-helpers
   ydb-core-base
   ydb-core-mind
   core-testlib-default

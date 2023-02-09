@@ -5,6 +5,7 @@
 
 namespace NActors {
 
+ui64 MeasureTaskDurationNs();
 NActors::IActor* CreateSelfPingActor(
     TDuration sendInterval,
     const NMonitoring::TDynamicCounters::TCounterPtr& maxPingCounter,

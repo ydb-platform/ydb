@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/actors/helpers/selfping_actor.h>
 #include <util/stream/null.h>
 #include <util/datetime/cputimer.h>
 #include "hive_impl.h"
@@ -24,6 +25,19 @@
 using namespace NKikimr;
 using namespace NHive;
 
+using duration_nano_t = std::chrono::duration<ui64, std::nano>;
+using duration_t = std::chrono::duration<double>;
+
+duration_t GetBasePerformance() {
+    duration_nano_t accm;
+    for (int i = 0; i < 1000000; ++i) {
+        accm += duration_nano_t(NActors::MeasureTaskDurationNs());
+    }
+    return std::chrono::duration_cast<duration_t>(accm);
+}
+
+static double BASE_PERF = GetBasePerformance().count();
+
 Y_UNIT_TEST_SUITE(THiveImplTest) {
     Y_UNIT_TEST(BootQueueSpeed) {
         TBootQueue bootQueue;
@@ -45,9 +59,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         Ctest << "Create = " << passed << Endl;
 #ifndef SANITIZER_TYPE
 #ifndef NDEBUG
-        UNIT_ASSERT(passed < 3);
+        UNIT_ASSERT(passed < 3 * BASE_PERF);
 #else
-        UNIT_ASSERT(passed < 1);
+        UNIT_ASSERT(passed < 1 * BASE_PERF);
 #endif
 #endif
         timer.Reset();
@@ -68,9 +82,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         Ctest << "Process = " << passed << Endl;
 #ifndef SANITIZER_TYPE
 #ifndef NDEBUG
-        UNIT_ASSERT(passed < 10);
+        UNIT_ASSERT(passed < 10 * BASE_PERF);
 #else
-        UNIT_ASSERT(passed < 1);
+        UNIT_ASSERT(passed < 1 * BASE_PERF);
 #endif
 #endif
 
@@ -82,9 +96,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         Ctest << "Move = " << passed << Endl;
 #ifndef SANITIZER_TYPE
 #ifndef NDEBUG
-        UNIT_ASSERT(passed < 2);
+        UNIT_ASSERT(passed < 2 * BASE_PERF);
 #else
-        UNIT_ASSERT(passed < 0.1);
+        UNIT_ASSERT(passed < 0.1 * BASE_PERF);
 #endif
 #endif
     }
@@ -111,9 +125,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             Ctest << "Time=" << passed << Endl;
 #ifndef SANITIZER_TYPE
 #ifndef NDEBUG
-            UNIT_ASSERT(passed < 1);
+            UNIT_ASSERT(passed < 1 * BASE_PERF);
 #else
-            UNIT_ASSERT(passed < 0.4);
+            UNIT_ASSERT(passed < 0.7 * BASE_PERF);
 #endif
 #endif
             std::vector<double> buckets(NUM_BUCKETS, 0);

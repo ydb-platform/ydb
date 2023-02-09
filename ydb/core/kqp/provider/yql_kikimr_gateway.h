@@ -499,6 +499,23 @@ struct TDropTableStoreSettings {
     TString TableStore;
 };
 
+struct TCreateExternalTableSettings {
+    TString ExternalTable;
+    TString DataSourcePath;
+    TString Location;
+    TVector<TString> ColumnOrder;
+    TMap<TString, TKikimrColumnMetadata> Columns;
+    TVector<std::pair<TString, TString>> SourceTypeParameters;
+};
+
+struct TAlterExternalTableSettings {
+    TString ExternalTable;
+};
+
+struct TDropExternalTableSettings {
+    TString ExternalTable;
+};
+
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -653,6 +670,12 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterTableStore(const TString& cluster, const TAlterTableStoreSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster, const TDropTableStoreSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings) = 0;
 
     virtual TVector<TString> GetCollectedSchemeData() = 0;
 

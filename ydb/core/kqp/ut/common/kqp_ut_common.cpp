@@ -945,5 +945,31 @@ void InitRoot(Tests::TServer::TPtr server, TActorId sender) {
     server->SetupRootStoragePools(sender);
 }
 
+THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
+                                                     const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
+{
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
+    using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
+
+    auto request = MakeHolder<TNavigate>();
+    auto& entry = request->ResultSet.emplace_back();
+    entry.Path = SplitPath(path);
+    entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+    entry.Operation = op;
+    entry.ShowPrivatePath = true;
+    runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvRequest(request.Release())));
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+    UNIT_ASSERT(ev);
+    UNIT_ASSERT(ev->Get());
+
+    auto* response = ev->Get()->Request.Release();
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
+
+    return THolder(response);
+}
+
 } // namspace NKqp
 } // namespace NKikimr

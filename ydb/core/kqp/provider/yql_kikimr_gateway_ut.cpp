@@ -1,5 +1,5 @@
-#include <ydb/core/client/minikql_result_lib/converter.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+#include <ydb/core/client/minikql_result_lib/converter.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -262,6 +262,45 @@ void TestDropTableCommon(TIntrusivePtr<IKikimrGateway> gateway) {
     UNIT_ASSERT(!loadResponse.Metadata->DoesExist);
 }
 
+void TestCreateExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
+    NYql::TCreateExternalTableSettings settings;
+
+    settings.ExternalTable = path;
+
+    settings.Columns.insert(std::make_pair("Column1", TKikimrColumnMetadata{"Column1", 0, "Uint32", false}));
+    settings.ColumnOrder.push_back("Column1");
+
+    settings.Columns.insert(std::make_pair("Column2", TKikimrColumnMetadata{"Column2", 0, "String", false}));
+    settings.ColumnOrder.push_back("Column2");
+
+    auto responseFuture = gateway->CreateExternalTable(TestCluster, settings, true);
+    responseFuture.Wait();
+    auto response = responseFuture.GetValue();
+    response.Issues().PrintTo(Cerr);
+
+    UNIT_ASSERT_C(response.Success(), response.Issues().ToString());
+
+    auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+    const auto& externalTable = externalTableDesc->ResultSet.at(0);
+    UNIT_ASSERT_EQUAL(externalTable.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalTable);
+    UNIT_ASSERT(externalTable.ExternalTableInfo);
+    UNIT_ASSERT_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 2);
+}
+
+void TestDropExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
+
+    auto responseFuture = gateway->DropExternalTable(TestCluster, TDropExternalTableSettings{.ExternalTable=path});
+    responseFuture.Wait();
+    auto response = responseFuture.GetValue();
+    response.Issues().PrintTo(Cerr);
+    UNIT_ASSERT(response.Success());
+
+    auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+    const auto& externalTable = externalTableDesc->ResultSet.at(0);
+    UNIT_ASSERT_EQUAL(externalTableDesc->ErrorCount, 1);
+    UNIT_ASSERT_EQUAL(externalTable.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
+}
+
 } // namespace
 
 
@@ -328,6 +367,23 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestCreateTableCommon(GetIcGateway(kikimr.GetTestServer()), kikimr.GetTestClient(), true, Nothing(), true);
+    }
+
+    Y_UNIT_TEST(TestCreateExternalTable) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
+    }
+
+    Y_UNIT_TEST(TestCreateSameExternalTable) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
+        TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
+    }
+
+    Y_UNIT_TEST(TestDropExternalTable) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
+        TestDropExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
     }
 }
 

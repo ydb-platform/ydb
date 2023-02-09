@@ -661,8 +661,9 @@ private:
             Y_VERIFY(batch);
 
 #if 1 // TODO: check we call ValidateFull() once over pipeline (upsert -> long tx -> shard insert)
-            if (!batch->ValidateFull().ok()) {
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Bad batch in bulk upsert data", ctx);
+            auto validationInfo = batch->ValidateFull();
+            if (!validationInfo.ok()) {
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Bad batch in bulk upsert data: " + validationInfo.message() + "; order:" + JoinSeq(", ", outputColumns), ctx);
             }
 #endif
 

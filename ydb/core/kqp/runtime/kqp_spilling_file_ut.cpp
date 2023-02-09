@@ -19,6 +19,11 @@ using namespace NYql;
 
 namespace {
 
+TString GetSpillingPrefix() {
+    static TString str = Sprintf("%s_%d/", "kqp_spilling", (int)getpid());
+    return str;
+}
+
 TBuffer CreateBlob(ui32 size, char symbol) {
     TBuffer blob(size);
     blob.Fill(symbol, size);
@@ -37,7 +42,7 @@ TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters() {
 }
 
 TActorId StartSpillingService(TTestBasicRuntime& runtime, ui64 maxTotalSize = 1000, ui64 maxFileSize = 500,
-    ui64 maxFilePartSize = 100, const TString& root = "./kqp_spilling/")
+    ui64 maxFilePartSize = 100, const TString& root = "./" + GetSpillingPrefix())
 {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
 
@@ -225,7 +230,7 @@ Y_UNIT_TEST(MultipleFileParts) {
 
     WaitBootstrap(runtime);
 
-    const TString filePrefix = TStringBuilder() << NFs::CurrentWorkingDirectory() << "/kqp_spilling/node_" << runtime.GetNodeId() << "/1_test_";
+    const TString filePrefix = TStringBuilder() << NFs::CurrentWorkingDirectory() << "/" << GetSpillingPrefix() << "node_" << runtime.GetNodeId() << "/1_test_";
 
     for (ui32 i = 0; i < 5; ++i) {
         // Cerr << "---- store blob #" << i << Endl;
@@ -268,7 +273,7 @@ Y_UNIT_TEST(SingleFilePart) {
 
     WaitBootstrap(runtime);
 
-    const TString filePrefix = TStringBuilder() << NFs::CurrentWorkingDirectory() << "/kqp_spilling/node_" << runtime.GetNodeId() << "/1_test_";
+    const TString filePrefix = TStringBuilder() << NFs::CurrentWorkingDirectory() << "/" << GetSpillingPrefix() << "node_" << runtime.GetNodeId() << "/1_test_";
 
     for (ui32 i = 0; i < 5; ++i) {
         // Cerr << "---- store blob #" << i << Endl;
@@ -319,7 +324,7 @@ Y_UNIT_TEST(ReadError) {
         UNIT_ASSERT_VALUES_EQUAL(0, resp->Get()->BlobId);
     }
 
-    ::unlink((NFs::CurrentWorkingDirectory() + "/kqp_spilling/node_1/1_test_0").c_str());
+    ::unlink((NFs::CurrentWorkingDirectory() + GetSpillingPrefix() + "node_1/1_test_0").c_str());
 
     {
         auto ev = new TEvKqpSpilling::TEvRead(0, true);
@@ -327,8 +332,9 @@ Y_UNIT_TEST(ReadError) {
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvError>(tester);
         auto& err = resp->Get()->Message;
+        auto expected = "can't open \"" + GetSpillingPrefix() + "node_1/1_test_0\" with mode RdOnly";
         UNIT_ASSERT_C(err.Contains("No such file or directory"), err);
-        UNIT_ASSERT_C(err.Contains("can't open \"kqp_spilling/node_1/1_test_0\" with mode RdOnly"), err);
+        UNIT_ASSERT_C(err.Contains(expected), err);
     }
 }
 
@@ -382,7 +388,7 @@ Y_UNIT_TEST(StartError) {
     runtime.Initialize(TAppPrepare().Unwrap());
     SetupLogs(runtime);
 
-    auto spillingService = StartSpillingService(runtime, 100, 500, 100, "/root/kqp_spilling/");
+    auto spillingService = StartSpillingService(runtime, 100, 500, 100, "/root/" + GetSpillingPrefix());
     auto tester = runtime.AllocateEdgeActor();
     auto spillingActor = StartSpillingActor(runtime, tester);
 

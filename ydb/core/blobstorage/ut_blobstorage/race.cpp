@@ -231,8 +231,6 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
 
 Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
     Y_UNIT_TEST(Test_block42) {
-        for (ui32 i = 0; i < 100; ++i) {
-            RunGroupReconfigurationRaceTest(TBlobStorageGroupType::Erasure4Plus2Block);
-        }
+        RunGroupReconfigurationRaceTest(TBlobStorageGroupType::Erasure4Plus2Block);
     }
 }

@@ -1520,7 +1520,6 @@ public:
         YQL_ENSURE(QueryState);
         if (QueryState->Commit) {
             if (auto ctx = Transactions.ReleaseTransaction(QueryState->TxId)) {
-                ctx->Invalidate();
                 Transactions.AddToBeAborted(std::move(ctx));
             }
             QueryState->TxId = TTxId();

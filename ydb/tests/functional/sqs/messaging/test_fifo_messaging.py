@@ -54,6 +54,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         return config_generator
 
     def test_only_single_read_infly_from_fifo(self):
+        self._init_with_params(tables_format=0)
         self._create_queue_send_x_messages_read_y_messages(
             self.queue_name, send_count=10, read_count=1, visibility_timeout=1000,
             msg_body_template=self._msg_body_template, is_fifo=True
@@ -63,6 +64,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         )
 
     def test_fifo_read_delete_single_message(self):
+        self._init_with_params(tables_format=0)
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         message_ids = self._send_messages(
             created_queue_url, message_count=10, msg_body_template=self._msg_body_template, is_fifo=True, group_id='group'

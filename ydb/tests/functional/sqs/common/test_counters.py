@@ -23,8 +23,14 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
         attributes_path = self._smart_make_table_path(self._username, self.queue_name, version, None, 'Attributes')
 
         deadline = int((time.time() + 600) * 1000)
-        self._execute_yql_query('UPSERT INTO `{}` (State, ShowDetailedCountersDeadline) VALUES (0, {})'
-                                .format(attributes_path, deadline))
+        query_key = {'name': 'State', 'value': 0}
+        if self.get_tables_format() != 0:
+            query_key = {'name': 'QueueIdNumber', 'value': self._get_queue_version_number(self._username, self.queue_name)}
+
+        self._execute_yql_query(
+            f'''UPDATE `{attributes_path}` SET ShowDetailedCountersDeadline = {deadline}
+                WHERE {query_key['name']} = {query_key['value']}'''
+        )
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_creates_counter(self, tables_format):

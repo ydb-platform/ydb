@@ -49,13 +49,13 @@ public:
             auto versionCounter = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("revision", version);
             *versionCounter->GetCounter("version", false) = 1;
         }
-        
+
         // TODO(t1mursadykov): Add role for static nodes with sys tablets only
         if (AppData(ctx)->DynamicNameserviceConfig) {
             if (SelfId().NodeId() <= AppData(ctx)->DynamicNameserviceConfig->MaxStaticNodeId)
                 ctx.Send(ctx.SelfID, new TEvWhiteboard::TEvSystemStateAddRole("Storage"));
         }
-        
+
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         ProcessStats.Fill(getpid());
         if (ProcessStats.CGroupMemLim != 0) {
@@ -655,34 +655,66 @@ protected:
         }
     }
 
+    static void CopyTabletStateInfo(
+        NKikimrWhiteboard::TTabletStateInfo& dst,
+        const NKikimrWhiteboard::TTabletStateInfo& src,
+        const NKikimrWhiteboard::TEvTabletStateRequest&)
+    {
+        dst = src;
+    }
+
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
         auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
         std::unique_ptr<TEvWhiteboard::TEvTabletStateResponse> response = std::make_unique<TEvWhiteboard::TEvTabletStateResponse>();
         auto& record = response->Record;
-        if (request.groupby().empty()) {
-            ui64 changedSince = request.has_changedsince() ? request.changedsince() : 0;
-            for (const auto& pr : TabletStateInfo) {
-                if (pr.second.changetime() >= changedSince) {
+        if (request.format() == "packed5") {
+            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(TabletStateInfo.size());
+            for (const auto& [tabletId, tabletInfo] : TabletStateInfo) {
+                ptr->TabletId = tabletInfo.tabletid();
+                ptr->FollowerId = tabletInfo.followerid();
+                ptr->Generation = tabletInfo.generation();
+                ptr->Type = tabletInfo.type();
+                ptr->State = tabletInfo.state();
+                ++ptr;
+            }
+        } else {
+            if (request.groupby().empty()) {
+                ui64 changedSince = request.has_changedsince() ? request.changedsince() : 0;
+                if (request.filtertabletid_size() == 0) {
+                    for (const auto& pr : TabletStateInfo) {
+                        if (pr.second.changetime() >= changedSince) {
+                            NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
+                            CopyTabletStateInfo(tabletStateInfo, pr.second, request);
+                        }
+                    }
+                } else {
+                    for (auto tabletId : request.filtertabletid()) {
+                        auto it = TabletStateInfo.find({tabletId, 0});
+                        if (it != TabletStateInfo.end()) {
+                            if (it->second.changetime() >= changedSince) {
+                                NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
+                                CopyTabletStateInfo(tabletStateInfo, it->second, request);
+                            }
+                        }
+                    }
+                }
+            } else if (request.groupby() == "Type,State") { // the only supported group-by for now
+                std::unordered_map<std::pair<NKikimrTabletBase::TTabletTypes::EType,
+                    NKikimrWhiteboard::TTabletStateInfo::ETabletState>, NKikimrWhiteboard::TTabletStateInfo> stateGroupBy;
+                for (const auto& [id, stateInfo] : TabletStateInfo) {
+                    NKikimrWhiteboard::TTabletStateInfo& state = stateGroupBy[{stateInfo.type(), stateInfo.state()}];
+                    auto count = state.count();
+                    if (count == 0) {
+                        state.set_type(stateInfo.type());
+                        state.set_state(stateInfo.state());
+                    }
+                    state.set_count(count + 1);
+                }
+                for (auto& pr : stateGroupBy) {
                     NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                    tabletStateInfo = pr.second;
+                    tabletStateInfo = std::move(pr.second);
                 }
-            }
-        } else if (request.groupby() == "Type,State") { // the only supported group-by for now
-            std::unordered_map<std::pair<NKikimrTabletBase::TTabletTypes::EType,
-                NKikimrWhiteboard::TTabletStateInfo::ETabletState>, NKikimrWhiteboard::TTabletStateInfo> stateGroupBy;
-            for (const auto& [id, stateInfo] : TabletStateInfo) {
-                NKikimrWhiteboard::TTabletStateInfo& state = stateGroupBy[{stateInfo.type(), stateInfo.state()}];
-                auto count = state.count();
-                if (count == 0) {
-                    state.set_type(stateInfo.type());
-                    state.set_state(stateInfo.state());
-                }
-                state.set_count(count + 1);
-            }
-            for (auto& pr : stateGroupBy) {
-                NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                tabletStateInfo = std::move(pr.second);
             }
         }
         response->Record.set_responsetime(ctx.Now().MilliSeconds());

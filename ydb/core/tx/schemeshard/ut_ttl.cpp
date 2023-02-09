@@ -931,10 +931,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
     Y_UNIT_TEST(CheckCounters) {
         TTestBasicRuntime runtime;
-        TTestEnvOptions opts;
-        opts.DisableStatsBatching(true);
-
-        TTestEnv env(runtime, opts);
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnablePersistentQueryStats(false)
+            .DisableStatsBatching(true));
         ui64 txId = 100;
 
         runtime.UpdateCurrentTime(TInstant::Now());
@@ -1039,6 +1038,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         // after erase
         runtime.AdvanceCurrentTime(TDuration::Hours(1));
         WaitForCondErase(runtime);
+        WaitForStats(runtime, 2);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+
+        // move table
+        TestMoveTable(runtime, ++txId, "/MyRoot/TTLEnabledTable", "/MyRoot/TTLEnabledTableMoved");
+        env.TestWaitNotification(runtime, txId);
+
+        // just after move
+        CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+
+        // after a while
+        runtime.AdvanceCurrentTime(TDuration::Minutes(20));
+        WaitForStats(runtime, 2);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 2}, {"inf", 0}});
+
+        // after erase
+        runtime.AdvanceCurrentTime(TDuration::Minutes(40));
+        WaitForCondErase(runtime);
+        WaitForStats(runtime, 2);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 2}, {"900", 0}, {"1800", 0}, {"inf", 0}});
+
+        // after a while
+        runtime.AdvanceCurrentTime(TDuration::Minutes(10));
         WaitForStats(runtime, 2);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
     }

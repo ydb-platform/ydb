@@ -88,10 +88,15 @@ struct TPDiskInfo
 {
     using TPtr = TIntrusivePtr<TPDiskInfo>;
 
+    using EIgnoreReason = NKikimrCms::TPDiskInfo::EIgnoreReason;
+
     TActorId StatusChanger;
     TInstant LastStatusChange;
+    bool StatusChangeFailed = false;
+    EPDiskStatus ActualStatus = EPDiskStatus::ACTIVE;
     TStatusChangerState::TPtr StatusChangerState;
     TStatusChangerState::TPtr PrevStatusChangerState;
+    EIgnoreReason IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
 
     explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits);
 
@@ -137,6 +142,7 @@ struct TSentinelState: public TSimpleRefCount<TSentinelState> {
 class TClusterMap {
 public:
     using TPDiskIDSet = THashSet<TPDiskID, TPDiskIDHash>;
+    using TPDiskIgnoredMap = THashMap<TPDiskID, TPDiskInfo::EIgnoreReason, TPDiskIDHash>;
     using TDistribution = THashMap<TString, TPDiskIDSet>;
     using TNodeIDSet = THashSet<ui32>;
 
@@ -163,7 +169,7 @@ class TGuardian : public TClusterMap {
 public:
     explicit TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100, ui32 rackRatio = 100);
 
-    TPDiskIDSet GetAllowedPDisks(const TClusterMap& all, TString& issues, TPDiskIDSet& disallowed) const;
+    TPDiskIDSet GetAllowedPDisks(const TClusterMap& all, TString& issues, TPDiskIgnoredMap& disallowed) const;
 
 private:
     const ui32 DataCenterRatio;

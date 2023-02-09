@@ -72,6 +72,7 @@ protected:
     void Handle(TEvCreateTopicRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvAlterTopicRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDescribeConsumerRequest::TPtr& ev, const TActorContext& ctx);
 
     TActorId DiscoveryCacheActorID;
 };

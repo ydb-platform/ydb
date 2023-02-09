@@ -400,6 +400,7 @@ struct TShardedTableOptions {
         TString Name;
         EMode Mode;
         EFormat Format;
+        bool VirtualTimestamps = false;
     };
 
 #define TABLE_OPTION_IMPL(type, name, defaultValue) \

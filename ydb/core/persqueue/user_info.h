@@ -270,7 +270,7 @@ struct TUserInfo {
         const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
         const ui32 partition, const TString &session, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
-        const TString& cloudId, const TString& dbId, const TMaybe<TString>& dbPath, const TString& folderId,
+        const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId,
         bool meterRead, ui64 burst = 1'000'000'000, ui64 speed = 1'000'000'000
     )
         : ReadSpeedLimiter(std::move(readSpeedLimiter))
@@ -307,11 +307,9 @@ struct TUserInfo {
         if (AppData(ctx)->Counters) {
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
                 LabeledCounters.Reset(new TUserLabeledCounters(
-                    user + "|$x|" + topicConverter->GetClientsideName(), partition, *dbPath));
+                    user + "||" + topicConverter->GetClientsideName(), partition, dbPath));
 
-                if (DoInternalRead) {
-                    SetupStreamCounters(ctx, dcId, ToString<ui32>(partition), cloudId, dbId, folderId);
-                }
+                SetupStreamCounters(ctx, dcId, ToString<ui32>(partition), cloudId, dbId, dbPath, isServerless, folderId);
             } else {
                 LabeledCounters.Reset(new TUserLabeledCounters(
                     user + "/" + (important ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
@@ -324,30 +322,39 @@ struct TUserInfo {
 
     void SetupStreamCounters(
         const TActorContext& ctx, const TString& dcId, const TString& partition,
-        const TString& cloudId, const TString& dbId, const TString& folderId
+        const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId
     ) {
-        auto subgroup = NPersQueue::GetCountersForStream(AppData(ctx)->Counters);
-        auto aggregates =
-            NPersQueue::GetLabelsForStream(TopicConverter, cloudId, dbId, folderId);
+        auto subgroup = NPersQueue::GetCountersForTopic(AppData(ctx)->Counters, isServerless);
+        auto subgroups =
+            NPersQueue::GetSubgroupsForTopic(TopicConverter, cloudId, dbId, dbPath, folderId);
+        if (DoInternalRead) {
+            subgroups.push_back({"consumer", User});
 
-        BytesRead = TMultiCounter(subgroup,
-                                  aggregates, {{"consumer", User}},
-                                  {"stream.internal_read.bytes_per_second",
-                                   "stream.outgoing_bytes_per_second"}, true, "name");
-        MsgsRead = TMultiCounter(subgroup,
-                                 aggregates, {{"consumer", User}},
-                                 {"stream.internal_read.records_per_second",
-                                  "stream.outgoing_records_per_second"}, true, "name");
+            BytesRead = TMultiCounter(subgroup, {}, subgroups,
+                                      {"api.grpc.topic.stream_read.bytes",
+                                       "topic.read.bytes"}, true, "name");
+            MsgsRead = TMultiCounter(subgroup, {}, subgroups,
+                                     {"api.grpc.topic.stream_read.messages",
+                                      "topic.read.messages"}, true, "name");
+        } else {
+            BytesRead = TMultiCounter(subgroup, {}, subgroups,
+                                      {"topic.read.bytes"}, true, "name");
+            MsgsRead = TMultiCounter(subgroup, {}, subgroups,
+                                      {"topic.read.messages"}, true, "name");
+        }
+            Y_UNUSED(dcId);
+            Y_UNUSED(partition);
+        /*
+            Counter.SetCounter(subgroup,
+                               {{"database", dbPath}, {"cloud_id", cloudId}, {"folder_id", folderId}, {"database_id", dbId},
+                                {"topic", TopicConverter->GetFederationPath()},
+                                {"consumer", User}, {"host", dcId}, {"partition", partition}},
+                               {"name", "topic.read.awaiting_consume_milliseconds", true});
+        */
 
-        Counter.SetCounter(subgroup,
-                           {{"cloud", cloudId}, {"folder", folderId}, {"database", dbId},
-                            {"stream", TopicConverter->GetFederationPath()},
-                            {"consumer", User}, {"host", dcId}, {"shard", partition}},
-                           {"name", "stream.await_operating_milliseconds", true});
-
+        subgroups.push_back({"name", "topic.read.lag_milliseconds"});
         ReadTimeLag.reset(new TPercentileCounter(
-                     NPersQueue::GetCountersForStream(AppData(ctx)->Counters), aggregates,
-                     {{"consumer", User}, {"name", "stream.internal_read.time_lags_milliseconds"}}, "bin",
+                     NPersQueue::GetCountersForTopic(AppData(ctx)->Counters, isServerless), {}, subgroups, "bin",
                      TVector<std::pair<ui64, TString>>{{100, "100"}, {200, "200"}, {500, "500"},
                                                         {1000, "1000"}, {2000, "2000"},
                                                         {5000, "5000"}, {10'000, "10000"},
@@ -448,7 +455,7 @@ struct TUserInfo {
     void SetImportant(bool important)
     {
         Important = important;
-        if (LabeledCounters) {
+        if (LabeledCounters && !AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
             LabeledCounters->SetGroup(User + "/" + (important ? "1" : "0") + "/" + TopicConverter->GetClientsideName());
         }
     }
@@ -491,7 +498,7 @@ class TUsersInfoStorage {
 public:
     TUsersInfoStorage(TString dcId, ui64 tabletId, const NPersQueue::TTopicConverterPtr& topicConverter, ui32 partition,
                       const TTabletCountersBase& counters, const NKikimrPQ::TPQTabletConfig& config,
-                      const TString& CloudId, const TString& DbId, const TString& DbPath, const TString& FolderId);
+                      const TString& CloudId, const TString& DbId, const TString& DbPath, const bool isServerless, const TString& FolderId);
 
     void Init(TActorId tabletActor, TActorId partitionActor);
 
@@ -535,6 +542,7 @@ private:
     TString CloudId;
     TString DbId;
     TString DbPath;
+    bool IsServerless;
     TString FolderId;
     ui64 CurReadRuleGeneration;
 };

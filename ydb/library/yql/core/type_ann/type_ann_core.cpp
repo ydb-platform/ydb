@@ -10588,7 +10588,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (op != "Exists" && op != "NotExists") {
             valueBaseType = RemoveAllOptionals(valueType);
             YQL_ENSURE(valueBaseType);
-            if (valueBaseType->GetKind() != ETypeAnnotationKind::Data) {
+            if (valueBaseType->GetKind() != ETypeAnnotationKind::Data &&
+                valueBaseType->GetKind() != ETypeAnnotationKind::Null)
+            {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
                                          TStringBuilder() << "Expecting (optional) Data as second argument, but got: " << *valueType));
                 return IGraphTransformer::TStatus::Error;
@@ -10610,7 +10612,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (valueBaseType && CanCompare<false>(RemoveAllOptionals(keyType), valueBaseType) != ECompareOptions::Comparable) {
+        if (valueBaseType && CanCompare<false>(RemoveAllOptionals(keyType), valueBaseType) == ECompareOptions::Uncomparable) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Uncompatible key and value types: " << *keyType << " and " << *valueType));
             return IGraphTransformer::TStatus::Error;

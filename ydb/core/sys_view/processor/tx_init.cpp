@@ -461,6 +461,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         if (AppData()->FeatureFlags.GetEnableDbCounters()) {
             Self->ScheduleApplyCounters();
+            Self->ScheduleApplyLabeledCounters();
             Self->SendNavigate();
         }
 

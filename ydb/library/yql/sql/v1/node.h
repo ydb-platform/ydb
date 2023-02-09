@@ -1114,6 +1114,8 @@ namespace NSQLTranslationV1 {
 
         TNodePtr Mode;
         TNodePtr Format;
+        TNodePtr VirtualTimestamps;
+        TNodePtr RetentionPeriod;
         std::optional<std::variant<TLocalSinkSettings>> SinkSettings;
     };
 

@@ -1189,6 +1189,8 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
                 } else if (type == TTabletTypes::ReplicationController) {
                     bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
+                } else if (type == TTabletTypes::PersQueue) {
+                    bootstrapperActorId = Boot(ctx, type, &CreatePersQueue, DataGroupErasure);
                 } else {
                     status = NKikimrProto::ERROR;
                 }

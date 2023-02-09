@@ -61,10 +61,14 @@ struct TAvgOperation {
 class TSelfPingActor : public TActorBootstrapped<TSelfPingActor> {
 private:
     const TDuration SendInterval;
-    const NMonitoring::TDynamicCounters::TCounterPtr Counter;
+    const NMonitoring::TDynamicCounters::TCounterPtr MaxPingCounter;
+    const NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounter;
+    const NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounterWithSmallWindow;
     const NMonitoring::TDynamicCounters::TCounterPtr CalculationTimeCounter;
 
-    NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> SlidingWindow;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> MaxPingSlidingWindow;
+    NSlidingWindow::TSlidingWindow<TAvgOperation<ui64>> AvgPingSlidingWindow;
+    NSlidingWindow::TSlidingWindow<TAvgOperation<ui64>> AvgPingSmallSlidingWindow;
     NSlidingWindow::TSlidingWindow<TAvgOperation<ui64>> CalculationSlidingWindow;
 
     THPTimer Timer;
@@ -74,12 +78,19 @@ public:
         return SELF_PING_ACTOR;
     }
 
-    TSelfPingActor(TDuration sendInterval, const NMonitoring::TDynamicCounters::TCounterPtr& counter,
+    TSelfPingActor(TDuration sendInterval,
+            const NMonitoring::TDynamicCounters::TCounterPtr& maxPingCounter,
+            const NMonitoring::TDynamicCounters::TCounterPtr& avgPingCounter,
+            const NMonitoring::TDynamicCounters::TCounterPtr& avgPingSmallWindowCounter,
             const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter)
         : SendInterval(sendInterval)
-        , Counter(counter)
+        , MaxPingCounter(maxPingCounter)
+        , AvgPingCounter(avgPingCounter)
+        , AvgPingCounterWithSmallWindow(avgPingSmallWindowCounter)
         , CalculationTimeCounter(calculationTimeCounter)
-        , SlidingWindow(TDuration::Seconds(15), 100)
+        , MaxPingSlidingWindow(TDuration::Seconds(15), 100)
+        , AvgPingSlidingWindow(TDuration::Seconds(15), 100)
+        , AvgPingSmallSlidingWindow(TDuration::Seconds(1), 100)
         , CalculationSlidingWindow(TDuration::Seconds(15), 100)
     {
     }
@@ -154,11 +165,23 @@ public:
         const double passedTime = hpNow - e.TimeStart;
         const ui64 delayUs = passedTime > 0.0 ? static_cast<ui64>(passedTime * 1e6) : 0;
 
-        *Counter = SlidingWindow.Update(delayUs, now);
+        if (MaxPingCounter) {
+            *MaxPingCounter = MaxPingSlidingWindow.Update(delayUs, now);
+        }
+        if (AvgPingCounter) {
+            auto res = AvgPingSlidingWindow.Update({1, delayUs}, now);
+            *AvgPingCounter = double(res.Sum) / double(res.Count + 1);
+        }
+        if (AvgPingCounterWithSmallWindow) {
+            auto res = AvgPingSmallSlidingWindow.Update({1, delayUs}, now);
+            *AvgPingCounterWithSmallWindow = double(res.Sum) / double(res.Count + 1);
+        }
 
-        ui64 d = MeasureTaskDurationNs();
-        auto res = CalculationSlidingWindow.Update({1, d}, now);
-        *CalculationTimeCounter = double(res.Sum) / double(res.Count + 1);
+        if (CalculationTimeCounter) {
+            ui64 d = MeasureTaskDurationNs();
+            auto res = CalculationSlidingWindow.Update({1, d}, now);
+            *CalculationTimeCounter = double(res.Sum) / double(res.Count + 1);
+        }
 
         SchedulePing(ctx, hpNow);
     }
@@ -174,10 +197,12 @@ private:
 
 IActor* CreateSelfPingActor(
     TDuration sendInterval,
-    const NMonitoring::TDynamicCounters::TCounterPtr& counter,
+    const NMonitoring::TDynamicCounters::TCounterPtr& maxPingCounter,
+    const NMonitoring::TDynamicCounters::TCounterPtr& avgPingCounter,
+    const NMonitoring::TDynamicCounters::TCounterPtr& avgPingSmallWindowCounter,
     const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter)
 {
-    return new TSelfPingActor(sendInterval, counter, calculationTimeCounter);
+    return new TSelfPingActor(sendInterval, maxPingCounter, avgPingCounter, avgPingSmallWindowCounter, calculationTimeCounter);
 }
 
 } // NActors

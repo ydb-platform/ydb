@@ -4067,7 +4067,8 @@ bool TPrepareQueryResult::IsQueryFromCache() const {
 TExplainQueryResult::TExplainQueryResult(TStatus&& status, TString&& plan, TString&& ast)
     : TStatus(std::move(status))
     , Plan_(plan)
-    , Ast_(ast) {}
+    , Ast_(ast)
+{}
 
 const TString& TExplainQueryResult::GetPlan() const {
     CheckStatusOk("TExplainQueryResult::GetPlan");
@@ -4083,8 +4084,9 @@ const TString& TExplainQueryResult::GetAst() const {
 
 TDescribeTableResult::TDescribeTableResult(TStatus&& status, Ydb::Table::DescribeTableResult&& desc,
     const TDescribeTableSettings& describeSettings)
-    : TStatus(std::move(status))
-    , TableDescription_(std::move(desc), describeSettings) {}
+    : NScheme::TDescribePathResult(std::move(status), desc.self())
+    , TableDescription_(std::move(desc), describeSettings)
+{}
 
 TTableDescription TDescribeTableResult::GetTableDescription() const {
     CheckStatusOk("TDescribeTableResult::GetTableDescription");

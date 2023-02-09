@@ -103,8 +103,6 @@ namespace NKikimr {
 
 namespace Tests {
 
-
-
     TServerSettings& TServerSettings::SetDomainName(const TString& value) {
         StoragePoolTypes.erase("test");
         DomainName = value;
@@ -364,6 +362,56 @@ namespace Tests {
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)},
                                                                                   Settings->StoragePoolTypes);
         app.AddDomain(domain.Release());
+    }
+
+    TVector<ui64> TServer::StartPQTablets(ui32 pqTabletsN) {
+        auto getChannelBind = [](const TString& storagePool) {
+            TChannelBind bind;
+            bind.SetStoragePoolName(storagePool);
+            return bind;
+        };
+        TVector<ui64> ids;
+        ids.reserve(pqTabletsN);
+        for (ui32 i = 0; i < pqTabletsN; ++i) {
+            auto tabletId = Tests::ChangeStateStorage(Tests::DummyTablet2 + i + 1, Settings->Domain);
+            TIntrusivePtr<TTabletStorageInfo> tabletInfo =
+                CreateTestTabletInfo(tabletId, TTabletTypes::PersQueue);
+            TIntrusivePtr<TTabletSetupInfo> setupInfo =
+                new TTabletSetupInfo(&CreatePersQueue, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
+
+            static TString STORAGE_POOL = "/Root:test";
+            static TChannelsBindings BINDED_CHANNELS =
+                {getChannelBind(STORAGE_POOL), getChannelBind(STORAGE_POOL), getChannelBind(STORAGE_POOL)};
+
+            ui32 nodeIndex = 0;
+            auto ev =
+                MakeHolder<TEvHive::TEvCreateTablet>(tabletId, 0, TTabletTypes::PersQueue, BINDED_CHANNELS);
+
+            TActorId senderB = Runtime->AllocateEdgeActor(nodeIndex);
+            ui64 hive = ChangeStateStorage(Tests::Hive, Settings->Domain);
+            Runtime->SendToPipe(hive, senderB, ev.Release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto createTabletReply = Runtime->GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle);
+            UNIT_ASSERT(createTabletReply);
+            auto expectedStatus = NKikimrProto::OK;
+            UNIT_ASSERT_EQUAL_C(createTabletReply->Record.GetStatus(), expectedStatus,
+                                (ui32)createTabletReply->Record.GetStatus() << " != " << (ui32)expectedStatus);
+            UNIT_ASSERT_EQUAL_C(createTabletReply->Record.GetOwner(), tabletId,
+                                createTabletReply->Record.GetOwner() << " != " << tabletId);
+            ui64 id = createTabletReply->Record.GetTabletID();
+            while (true) {
+                auto tabletCreationResult =
+                    Runtime->GrabEdgeEventRethrow<TEvHive::TEvTabletCreationResult>(handle);
+                UNIT_ASSERT(tabletCreationResult);
+                if (id == tabletCreationResult->Record.GetTabletID()) {
+                    UNIT_ASSERT_EQUAL_C(tabletCreationResult->Record.GetStatus(), NKikimrProto::OK,
+                        (ui32)tabletCreationResult->Record.GetStatus() << " != " << (ui32)NKikimrProto::OK);
+                    break;
+                }
+            }
+            ids.push_back(id);
+        }
+        return ids;
     }
 
     void TServer::CreateBootstrapTablets() {

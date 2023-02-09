@@ -68,7 +68,9 @@ message TTabletStateInfo {
 
 message TEvTabletStateRequest {
     optional uint64 ChangedSince = 1;
+    optional string Format = 5; // it could be "packed5"
     optional string GroupBy = 20; // it's either empty or "Type,State" for now
+    repeated fixed64 FilterTabletId = 22;
 }
 
 message TEvTabletStateResponse {
@@ -76,6 +78,7 @@ message TEvTabletStateResponse {
     optional uint64 ResponseTime = 2; // ms, filled during processing and merging
     optional uint64 ResponseDuration = 3; // us, filled during collect
     optional uint64 ProcessDuration = 4; // us, filled during processing
+    optional bytes Packed5 = 5;
 }
 
 message TNodeStateInfo {
@@ -229,6 +232,7 @@ message TBSGroupStateInfo {
     optional uint32 Count = 13; // filled during group count
     optional string StoragePoolName = 14; // from BS_CONTROLLER
     optional bool Encryption = 19;
+    repeated uint32 VDiskNodeIds = 20;
 }
 
 message TEvBSGroupStateRequest {

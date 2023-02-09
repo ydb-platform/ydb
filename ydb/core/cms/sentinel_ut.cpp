@@ -174,6 +174,16 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         return {state, sentinelState};
     }
 
+    THashSet<TPDiskID, TPDiskIDHash> MapKeys(TClusterMap::TPDiskIgnoredMap& map) {
+        THashSet<TPDiskID, TPDiskIDHash> result;
+
+        for (auto& [k, _] : map) {
+            result.insert(k);
+        }
+
+        return result;
+    };
+
     void GuardianDataCenterRatio(ui16 numDataCenter, const TVector<ui16>& nodesPerDataCenterVariants, bool anyDC = false) {
         UNIT_ASSERT(!anyDC || numDataCenter == 1);
 
@@ -198,7 +208,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             }
 
             TString issues;
-            THashSet<TPDiskID, TPDiskIDHash> disallowed;
+            TClusterMap::TPDiskIgnoredMap disallowed;
 
             UNIT_ASSERT_VALUES_EQUAL(changed.GetAllowedPDisks(all, issues, disallowed), changedSet);
             UNIT_ASSERT(disallowed.empty());
@@ -218,7 +228,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             disallowed.clear();
             if (!anyDC) {
                 UNIT_ASSERT(changed.GetAllowedPDisks(all, issues, disallowed).empty());
-                UNIT_ASSERT_VALUES_EQUAL(disallowed, changedSet);
+                UNIT_ASSERT_VALUES_EQUAL(MapKeys(disallowed), changedSet);
                 UNIT_ASSERT_STRING_CONTAINS(issues, "due to DataCenterRatio");
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(changed.GetAllowedPDisks(all, issues, disallowed), changedSet);
@@ -259,7 +269,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             }
 
             TString issues;
-            THashSet<TPDiskID, TPDiskIDHash> disallowed;
+            TClusterMap::TPDiskIgnoredMap disallowed;
 
             UNIT_ASSERT_VALUES_EQUAL(changed.GetAllowedPDisks(all, issues, disallowed), changedSet);
             UNIT_ASSERT(disallowed.empty());
@@ -287,7 +297,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
                 UNIT_ASSERT(issues.empty());
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(allowed, decltype(allowed){});
-                UNIT_ASSERT_VALUES_EQUAL(disallowed, changedSet);
+                UNIT_ASSERT_VALUES_EQUAL(MapKeys(disallowed), changedSet);
                 UNIT_ASSERT_STRING_CONTAINS(issues, "due to RackRatio");
             }
         }

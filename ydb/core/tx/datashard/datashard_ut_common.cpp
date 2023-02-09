@@ -1674,6 +1674,7 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetName(streamDesc.Name);
     desc.MutableStreamDescription()->SetMode(streamDesc.Mode);
     desc.MutableStreamDescription()->SetFormat(streamDesc.Format);
+    desc.MutableStreamDescription()->SetVirtualTimestamps(streamDesc.VirtualTimestamps);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }

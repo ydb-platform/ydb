@@ -686,6 +686,7 @@ const char* const LoadMessageQuery = R"__(
                 (return (Coalesce (Member item 'Valid) (Bool 'false))))))))
 
         (return (Extend
+            (AsList (SetResult 'dlqExists (Bool 'true)))
             (AsList (SetResult 'result records))
             (AsList (SetResult 'movedMessagesCount (Uint64 '0)))
 
@@ -715,12 +716,12 @@ const char* const LoadOrRedriveMessageQuery = R"__(
                 '('VisibilityDeadline (DataType 'Uint64))))))
 
         (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
-        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
         (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
         (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
 
         (let dlqIdNumber                (Parameter 'DLQ_ID_NUMBER (DataType 'Uint64)))
-        (let dlqIdNumberAndShardHash    (Parameter 'DLQ_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let dlqIdNumberHash            (Parameter 'DLQ_ID_NUMBER_HASH (DataType 'Uint64)))
         (let dlqShard                   (Parameter 'DLQ_SHARD  (DataType ')__" DLQ_SHARD_TYPE_PARAM R"__()))
         (let dlqIdNumberAndShardHash    (Parameter 'DLQ_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
 
@@ -825,6 +826,7 @@ const char* const LoadOrRedriveMessageQuery = R"__(
             'WriteOffset
             'LastModifiedTimestamp))
         (let deadLetterStateRead (SelectRow deadLetterStateTable deadLetterStateRow deadLetterStateSelect))
+        (let dlqExists (Exists deadLetterStateRead))
 
         (let newDlqMessagesCount (Add (Member deadLetterStateRead 'MessageCount) (Length messagesToMove)))
         (let newDlqWriteOffset (Add (Member deadLetterStateRead 'WriteOffset) deadLettersCount))
@@ -844,13 +846,14 @@ const char* const LoadOrRedriveMessageQuery = R"__(
             '('InflyCount (Sub (Member sourceStateRead 'InflyCount) (Length messagesToMove)))))
 
         (return (Extend
+            (AsList (SetResult 'dlqExists dlqExists))
             (AsList (SetResult 'result records))
             (AsList (SetResult 'movedMessagesCount (Length messagesToMove)))
             (AsList (SetResult 'newMessagesCount newSourceMessagesCount))
-            (AsList (UpdateRow deadLetterStateTable deadLetterStateRow deadLetterStateUpdate))
-            (AsList (UpdateRow sourceStateTable sourceStateRow sourceStateUpdate))
+            (ListIf dlqExists (UpdateRow deadLetterStateTable deadLetterStateRow deadLetterStateUpdate))
+            (ListIf dlqExists (UpdateRow sourceStateTable sourceStateRow sourceStateUpdate))
 
-            (Map messagesToUpdate (lambda '(item) (block '(
+            (If dlqExists (Map messagesToUpdate (lambda '(item) (block '(
                 (let row '(
                     )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
@@ -861,8 +864,9 @@ const char* const LoadOrRedriveMessageQuery = R"__(
                     '('ReceiveCount          (Member item 'ReceiveCount))
                     '('VisibilityDeadline    (Member item 'VisibilityDeadline))))
                 (return (UpdateRow sourceInflyTable row update))))))
+                (AsList (Void)))
 
-            (Map messagesToMove (lambda '(item) (block '(
+            (If dlqExists (Map messagesToMove (lambda '(item) (block '(
                 (let msgRow '(
                     )__" DLQ_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Add dlqStartOffset (Member item 'DlqIndex)))))
@@ -872,8 +876,9 @@ const char* const LoadOrRedriveMessageQuery = R"__(
                     '('SentTimestamp dlqMostRecentTimestamp)
                     '('DelayDeadline delayDeadline)))
                 (return (UpdateRow deadLetterMessagesTable msgRow messageUpdate))))))
+                (AsList (Void)))
 
-            (Map messagesToMove (lambda '(item) (block '(
+            (If dlqExists (Map messagesToMove (lambda '(item) (block '(
                 (let sentTsRow '(
                     )__" DLQ_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('SentTimestamp dlqMostRecentTimestamp)
@@ -883,8 +888,9 @@ const char* const LoadOrRedriveMessageQuery = R"__(
                     '('RandomId readId)
                     '('DelayDeadline delayDeadline)))
                 (return (UpdateRow deadLetterSentTsIdxTable sentTsRow sentTsUpdate))))))
+                (AsList (Void)))
 
-            (Map messagesToMove (lambda '(item) (block '(
+            (If dlqExists (Map messagesToMove (lambda '(item) (block '(
                 (let dataRow '(
                     )__" DLQ_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('RandomId readId)
@@ -896,27 +902,31 @@ const char* const LoadOrRedriveMessageQuery = R"__(
                     '('SenderId (Member item 'SenderId))
                     '('MessageId (Member item 'MessageId))))
                 (return (UpdateRow deadLetterMessageDataTable dataRow dataUpdate))))))
+                (AsList (Void)))
 
-            (Map messagesToMove (lambda '(item) (block '(
+            (If dlqExists (Map messagesToMove (lambda '(item) (block '(
                 (let inflyRow '(
                     )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
                 (return (EraseRow sourceInflyTable inflyRow))))))
+                (AsList (Void)))
 
-            (Map messagesToMove (lambda '(item) (block '(
+            (If dlqExists (Map messagesToMove (lambda '(item) (block '(
                 (let dataRow '(
                     )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('RandomId (Member item 'RandomId))
                     '('Offset (Member item 'Offset))))
 
                 (return (EraseRow sourceMessageDataTable dataRow))))))
+                (AsList (Void)))
 
-            (Map messagesToMove (lambda '(item) (block '(
+            (If dlqExists (Map messagesToMove (lambda '(item) (block '(
                 (let sentTsRow '(
                     )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('SentTimestamp (Member item 'SentTimestamp))
                     '('Offset (Member item 'Offset))))
                 (return (EraseRow sourceSentTsIdxTable sentTsRow))))))
+                (AsList (Void)))
             ))
     )
 )__";

@@ -597,6 +597,12 @@ public:
         QueryState->TxCtx->SnapshotHandle.ManagingActor = snapMgrActorId;
     }
 
+    void DiscardPersistentSnapshot(const IKqpGateway::TKqpSnapshotHandle& handle) {
+        if (handle.ManagingActor) { // persistent snapshot was acquired
+            Send(handle.ManagingActor, new TEvKqpSnapshot::TEvDiscardSnapshot(handle.Snapshot));
+        }
+    }
+
     void AcquireMvccSnapshot() {
         LOG_D("AcquireMvccSnapshot");
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
@@ -854,6 +860,8 @@ public:
         request.DisableLlvmForUdfStages = Config->DisableLlvmForUdfStages();
         request.LlvmEnabled = Config->GetEnableLlvm() != EOptionalFlag::Disabled;
         YQL_ENSURE(queryState);
+        bool enableLlvm = queryState->PreparedQuery->HasEnableLlvm() ? queryState->PreparedQuery->GetEnableLlvm() : true;
+        request.LlvmEnabled = enableLlvm && QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN;
         request.Snapshot = queryState->TxCtx->GetSnapshot();
 
         return request;
@@ -1189,8 +1197,6 @@ public:
             auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
             LOG_I(SelfId() << " " << requestInfo << " TEvTxResponse has non-success status, CurrentTx: "
                     << QueryState->CurrentTx << " response->DebugString(): " << response->DebugString());
-
-            QueryState->TxCtx->Invalidate();
 
             auto status = response->GetStatus();
             TIssues issues;
@@ -1819,8 +1825,12 @@ public:
     void Cleanup(bool isFinal = false) {
         isFinal = isFinal || !QueryState->KeepSession;
 
-        if (QueryState && QueryState->TxCtx && QueryState->TxCtx->IsInvalidated()) {
-            InvalidateExplicitTransaction(QueryState->TxCtx, QueryState->TxId);
+        if (QueryState && QueryState->TxCtx) {
+            auto& txCtx = QueryState->TxCtx;
+            if (txCtx->IsInvalidated()) {
+                InvalidateExplicitTransaction(QueryState->TxCtx, QueryState->TxId);
+            }
+            DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
 
         if (isFinal)
@@ -1943,6 +1953,7 @@ public:
 
         auto* response = QueryResponse->Record.GetRef().MutableResponse();
 
+        Y_ENSURE(QueryState);
         if (QueryState->CompileResult) {
             AddQueryIssues(*response, QueryState->CompileResult->Issues);
         }
@@ -1957,13 +1968,12 @@ public:
             IssueToMessage(TIssue{message}, response->AddQueryIssues());
         }
 
-        if (QueryState) {
-            if (QueryState->TxCtx) {
-                QueryState->TxCtx->Invalidate();
-            }
-
-            FillTxInfo(response);
+        if (QueryState->TxCtx) {
+            QueryState->TxCtx->OnEndQuery();
+            QueryState->TxCtx->Invalidate();
         }
+
+        FillTxInfo(response);
 
         Cleanup(IsFatalError(ydbStatus));
     }

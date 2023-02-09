@@ -655,7 +655,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         if (Partitions.find(partitionId) == Partitions.end()) {
             Partitions.emplace(partitionId, TPartitionInfo(
                 ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                            IsLocalDC, DCId, Config, *Counters, ctx, true)),
+                                            IsLocalDC, DCId, IsServerless, Config, *Counters, ctx, true)),
                 GetPartitionKeyRange(partition),
                 true,
                 *Counters
@@ -783,7 +783,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                        IsLocalDC, DCId, Config, *Counters, ctx, false)),
+                                        IsLocalDC, DCId, IsServerless, Config, *Counters, ctx, false)),
             GetPartitionKeyRange(partition),
             false,
             *Counters
@@ -1415,7 +1415,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
     for (auto& p : Partitions) {
         if (!p.second.InitDone)
             continue;
-        THolder<TEvPQ::TEvPartitionStatus> event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, ev->Get()->Record.HasClientId() ? ev->Get()->Record.GetClientId() : "");
+        THolder<TEvPQ::TEvPartitionStatus> event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, ev->Get()->Record.HasClientId() ? ev->Get()->Record.GetClientId() : "",
+                                                    ev->Get()->Record.HasGetStatForAllConsumers() ? ev->Get()->Record.GetGetStatForAllConsumers() : false);
         ctx.Send(p.second.Actor, event.Release());
     }
 }
@@ -2137,6 +2138,9 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 
 void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
+
+    IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
+
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ctx.SelfID.NodeId()));
 }
 

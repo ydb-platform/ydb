@@ -74,6 +74,16 @@ public:
     static void ProtoMerge(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom);
 };
 
+template<typename ResponseType>
+struct TStaticMergeKey {
+    using KeyType = typename TWhiteboardInfo<ResponseType>::TElementKeyType;
+
+    template<typename ElementType>
+    KeyType GetKey(const ElementType& info) const {
+        return TWhiteboardInfo<ResponseType>::GetElementKey(info);
+    }
+};
+
 template <typename ResponseType>
 class TWhiteboardMerger : public TWhiteboardMergerBase {
 public:
@@ -138,16 +148,106 @@ public:
         }
     };
 
-    template <typename ElementKeyType>
-    struct TStaticMergeKey {
-        using KeyType = ElementKeyType;
+    template<typename MergeKey>
+    static THolder<TResponseType> MergeResponsesBaseHybrid(TMap<ui32, THolder<TResponseType>>& responses, const MergeKey& mergeKey) {
+        using TElementType = typename TWhiteboardInfo<ResponseType>::TElementType;
+        using TElementTypePacked5 = typename TWhiteboardInfo<ResponseType>::TElementTypePacked5;
 
-        ElementKeyType GetKey(TElementType& info) const {
-            return TWhiteboardInfo<ResponseType>::GetElementKey(info);
+        std::unordered_map<typename MergeKey::KeyType, TElementType*> mergedData;
+
+        struct TPackedDataCtx {
+            const TElementTypePacked5* Element;
+            ui32 NodeId;
+        };
+
+        std::unordered_map<typename MergeKey::KeyType, TPackedDataCtx> mergedDataPacked5;
+
+        size_t projectedSize = 0;
+        for (auto it = responses.begin(); it != responses.end(); ++it) {
+            if (it->second != nullptr) {
+                projectedSize += TWhiteboardInfo<ResponseType>::GetElementsCount(it->second.Get());
+            }
         }
-    };
+        mergedData.reserve(projectedSize);
+        mergedDataPacked5.reserve(projectedSize);
 
-    template <typename MergeKey>
+        ui64 minResponseTime = 0;
+        ui64 maxResponseDuration = 0;
+        ui64 sumProcessDuration = 0;
+
+        for (auto it = responses.begin(); it != responses.end(); ++it) {
+            if (it->second != nullptr) {
+                {
+                    TWhiteboardMergerComparator<TElementType> comparator;
+                    auto& stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(it->second.Get());
+                    for (TElementType& info : stateInfo) {
+                        if (!info.HasNodeId()) {
+                            info.SetNodeId(it->first);
+                        }
+                        auto key = mergeKey.GetKey(info);
+                        auto inserted = mergedData.emplace(key, &info);
+                        if (!inserted.second) {
+                            if (comparator(*inserted.first->second, info)) {
+                                inserted.first->second = &info;
+                            }
+                        }
+                    }
+                }
+                {
+                    TWhiteboardMergerComparator<TElementTypePacked5> comparator;
+                    auto stateInfo = TWhiteboardInfo<ResponseType>::GetElementsFieldPacked5(it->second.Get());
+                    for (auto& info : stateInfo) {
+                        auto key = mergeKey.GetKey(info);
+                        auto inserted = mergedDataPacked5.emplace(key, TPackedDataCtx{
+                            .Element = &info,
+                            .NodeId = it->first
+                        });
+                        if (!inserted.second) {
+                            if (comparator(*inserted.first->second.Element, info)) {
+                                inserted.first->second = {
+                                    .Element = &info,
+                                    .NodeId = it->first
+                                };
+                            }
+                        }
+                    }
+                }
+                if (minResponseTime == 0 || it->second->Record.GetResponseTime() < minResponseTime) {
+                    minResponseTime = it->second->Record.GetResponseTime();
+                }
+                if (maxResponseDuration == 0 || it->second->Record.GetResponseDuration() > maxResponseDuration) {
+                    maxResponseDuration = it->second->Record.GetResponseDuration();
+                }
+                sumProcessDuration += it->second->Record.GetProcessDuration();
+            }
+        }
+
+        THolder<TResponseType> result = MakeHolder<TResponseType>();
+        auto& field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
+        field.Reserve(mergedData.size() + mergedDataPacked5.size());
+        for (auto it = mergedDataPacked5.begin(); it != mergedDataPacked5.end(); ++it) {
+            auto* element = field.Add();
+            it->second.Element->Fill(*element);
+            element->SetNodeId(it->second.NodeId);
+            mergedData.erase(it->first);
+        }
+        for (auto it = mergedData.begin(); it != mergedData.end(); ++it) {
+            auto* element = field.Add();
+            element->Swap(it->second);
+        }
+        if (minResponseTime) {
+            result->Record.SetResponseTime(minResponseTime);
+        }
+        if (maxResponseDuration) {
+            result->Record.SetResponseDuration(maxResponseDuration);
+        }
+        if (sumProcessDuration) {
+            result->Record.SetProcessDuration(sumProcessDuration);
+        }
+        return result;
+    }
+
+    template<typename MergeKey>
     static THolder<TResponseType> MergeResponsesBase(TMap<ui32, THolder<TResponseType>>& responses, const MergeKey& mergeKey) {
         std::unordered_map<typename MergeKey::KeyType, TElementType*> mergedData;
         ui64 minResponseTime = 0;
@@ -156,8 +256,8 @@ public:
         TWhiteboardMergerComparator<TElementType> comparator;
         for (auto it = responses.begin(); it != responses.end(); ++it) {
             if (it->second != nullptr) {
-                auto* stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(it->second.Get());
-                for (TElementType& info : *stateInfo) {
+                auto& stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(it->second.Get());
+                for (TElementType& info : stateInfo) {
                     if (!info.HasNodeId()) {
                         info.SetNodeId(it->first);
                     }
@@ -180,10 +280,10 @@ public:
         }
 
         THolder<TResponseType> result = MakeHolder<TResponseType>();
-        auto* field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
-        field->Reserve(mergedData.size());
+        auto& field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
+        field.Reserve(mergedData.size());
         for (auto it = mergedData.begin(); it != mergedData.end(); ++it) {
-            auto* element = field->Add();
+            auto* element = field.Add();
             element->Swap(it->second);
         }
         if (minResponseTime) {
@@ -199,7 +299,7 @@ public:
     }
 
     static THolder<TResponseType> MergeResponsesElementKey(TMap<ui32, THolder<TResponseType>>& responses) {
-        TStaticMergeKey<typename TWhiteboardInfo<ResponseType>::TElementKeyType> mergeKey;
+        TStaticMergeKey<ResponseType> mergeKey;
         return MergeResponsesBase(responses, mergeKey);
     }
 

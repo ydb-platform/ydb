@@ -8,6 +8,7 @@
 #include <library/cpp/actors/util/unordered_cache.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/actors/util/cpu_load_log.h>
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -34,6 +35,7 @@ namespace NActors {
         TCpuAllocationConfig Allocation;
 
         volatile bool StopFlag = false;
+        TMinusOneCpuEstimator<1024> MinusOneCpuEstimator;
 
     public:
         TUnitedWorkers(

@@ -124,10 +124,55 @@ namespace NActors {
             return 1;
         }
 
+        virtual i16 GetPriority() const {
+            return 0;
+        }
+
         // generic
         virtual TAffinity* Affinity() const = 0;
 
         virtual void SetRealTimeMode() const {}
+
+        virtual ui32 GetThreadCount() const {
+            return 1;
+        };
+
+        virtual void SetThreadCount(ui32 threads) {
+            Y_UNUSED(threads);
+        }
+
+        virtual i16 GetBlockingThreadCount() const {
+            return 0;
+        }
+
+        virtual i16 GetDefaultThreadCount() const {
+            return 1;
+        }
+
+        virtual i16 GetMinThreadCount() const {
+            return 1;
+        }
+
+        virtual i16 GetMaxThreadCount() const {
+            return 1;
+
+        }
+
+        virtual bool IsThreadBeingStopped(i16 threadIdx) const {
+            Y_UNUSED(threadIdx);
+            return false;
+        }
+
+        virtual double GetThreadConsumedUs(i16 threadIdx) {
+            Y_UNUSED(threadIdx);
+            return 0.0;
+        }
+
+        virtual double GetThreadBookedUs(i16 threadIdx) {
+            Y_UNUSED(threadIdx);
+            return 0.0;
+        }
+
     };
 
     // could be proxy to in-pool schedulers (for NUMA-aware executors)

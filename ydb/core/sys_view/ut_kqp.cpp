@@ -1177,7 +1177,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env(1, 4, 0, true);
+        TTestEnv env(1, 4, 0, 0, true);
         CreateTenantsAndTables(env);
 
         TTableClient client(env.GetDriver());
@@ -1229,7 +1229,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, 0, true);
+        TTestEnv env(1, 4, 0, 0, true);
         CreateTenantsAndTables(env, true, partitionCount);
 
         TTableClient client(env.GetDriver());
@@ -1259,7 +1259,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, 0, true);
+        TTestEnv env(1, 4, 0, 0, true);
         CreateTenantsAndTables(env, true, partitionCount);
 
         TTableClient client(env.GetDriver());

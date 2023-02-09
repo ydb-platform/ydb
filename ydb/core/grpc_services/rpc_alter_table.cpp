@@ -474,10 +474,12 @@ private:
         for (const auto& add : req->add_changefeeds()) {
             auto op = modifyScheme->MutableCreateCdcStream();
             op->SetTableName(name);
+            if (add.has_retention_period()) {
+                op->SetRetentionPeriodSeconds(add.retention_period().seconds());
+            }
 
             StatusIds::StatusCode code;
             TString error;
-
             if (!FillChangefeedDescription(*op->MutableStreamDescription(), add, code, error)) {
                 NYql::TIssues issues;
                 issues.AddIssue(NYql::TIssue(error));

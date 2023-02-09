@@ -302,7 +302,7 @@ public:
         ui64 totalStorageSize = 0;
         ui64 availableStorageSize = 0;
 
-        for (auto& element : *TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementsField(MergedPDiskInfo.Get())) {
+        for (auto& element : TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementsField(MergedPDiskInfo.Get())) {
             if (element.HasTotalSize() && element.HasAvailableSize()) {
                 totalStorageSize += element.GetTotalSize();
                 availableStorageSize += element.GetAvailableSize();
@@ -311,12 +311,12 @@ public:
             element.SetOverall(GetWhiteboardFlag(GetPDiskOverallFlag(element)));
             PDisksIndex.emplace(TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementKey(element), element);
         }
-        for (auto& element : *TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementsField(MergedVDiskInfo.Get())) {
+        for (auto& element : TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementsField(MergedVDiskInfo.Get())) {
             element.SetOverall(GetWhiteboardFlag(GetVDiskOverallFlag(element)));
             VDisksIndex.emplace(TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementKey(element), element);
         }
         NKikimrViewer::EFlag flag = NKikimrViewer::Grey;
-        for (const auto& element : *TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementsField(MergedBSGroupInfo.Get())) {
+        for (const auto& element : TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementsField(MergedBSGroupInfo.Get())) {
             flag = Max(flag, GetBSGroupOverallFlag(element, VDisksIndex, PDisksIndex));
         }
         ui32 numberOfCpus = 0;

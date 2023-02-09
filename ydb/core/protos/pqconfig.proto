@@ -468,7 +468,6 @@ message TReadSessionStatusResponse {
 
     optional string ClientNode = 6;
     optional uint32 ProxyNodeId = 7;
-
 }
 
 
@@ -479,6 +478,7 @@ message TReadSessionsInfoResponse {
         optional uint32 ProxyNodeId = 3;
         optional string Session = 4;
         optional uint64 Timestamp = 5;
+        optional uint64 TimestampMs = 6;
     }
     repeated TPartitionInfo PartitionInfo = 1;
     optional uint64 TabletId = 2;
@@ -585,6 +585,7 @@ message TOffsetsResponse {
 
 message TStatus {
     optional string ClientId = 1;
+    optional bool GetStatForAllConsumers = 2;
 }
 
 message TClientPosition {
@@ -660,6 +661,20 @@ message TStatusResponse {
         optional int64 SourceIdRetentionPeriodSec = 28;
 
         repeated TErrorMessage Errors = 29;
+
+        repeated TConsumerResult ConsumerResult = 30;
+    }
+
+    message TConsumerResult {
+        optional string Consumer = 1;
+
+        optional int64 AvgReadSpeedPerMin = 2;
+        optional int64 AvgReadSpeedPerHour = 3;
+        optional int64 AvgReadSpeedPerDay = 4;
+
+        optional uint64 WriteLagMs = 5;
+        optional uint64 ReadLagMs = 6;
+        optional uint64 LastReadTimestampMs = 7;
     }
 
     optional uint64 TabletId = 1;
@@ -743,7 +758,7 @@ message TYdsShardIterator {
     required string StreamArn = 2;
     required uint32 ShardId = 3;
     required uint64 ReadTimestampMs = 4;
-    required uint32 SequenceNumber = 5;
+    required uint64 SequenceNumber = 5;
     required uint64 CreationTimestampMs = 6;
     optional ETopicKind Kind = 7;
 }

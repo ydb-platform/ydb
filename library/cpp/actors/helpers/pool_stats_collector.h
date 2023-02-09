@@ -124,6 +124,15 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr MailboxPushedOutBySoftPreemption;
         NMonitoring::TDynamicCounters::TCounterPtr MailboxPushedOutByTime;
         NMonitoring::TDynamicCounters::TCounterPtr MailboxPushedOutByEventCount;
+        NMonitoring::TDynamicCounters::TCounterPtr WrongWakenedThreadCount;
+        NMonitoring::TDynamicCounters::TCounterPtr CurrentThreadCount;
+        NMonitoring::TDynamicCounters::TCounterPtr IsNeedy;
+        NMonitoring::TDynamicCounters::TCounterPtr IsStarved;
+        NMonitoring::TDynamicCounters::TCounterPtr IsHoggish;
+        NMonitoring::TDynamicCounters::TCounterPtr IncreasingThreadsByNeedyState;
+        NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByStarvedState;
+        NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByHoggishState;
+
 
         THistogramCounters LegacyActivationTimeHistogram;
         NMonitoring::THistogramPtr ActivationTimeHistogram;
@@ -167,6 +176,14 @@ private:
             MailboxPushedOutBySoftPreemption = PoolGroup->GetCounter("MailboxPushedOutBySoftPreemption", true);
             MailboxPushedOutByTime = PoolGroup->GetCounter("MailboxPushedOutByTime", true);
             MailboxPushedOutByEventCount = PoolGroup->GetCounter("MailboxPushedOutByEventCount", true);
+            WrongWakenedThreadCount = PoolGroup->GetCounter("WrongWakenedThreadCount", true);
+            CurrentThreadCount = PoolGroup->GetCounter("CurrentThreadCount", false);
+            IsNeedy = PoolGroup->GetCounter("IsNeedy", false);
+            IsStarved = PoolGroup->GetCounter("IsStarved", false);
+            IsHoggish = PoolGroup->GetCounter("IsHoggish", false);
+            IncreasingThreadsByNeedyState = PoolGroup->GetCounter("IncreasingThreadsByNeedyState", true);
+            DecreasingThreadsByStarvedState = PoolGroup->GetCounter("DecreasingThreadsByStarvedState", true);
+            DecreasingThreadsByHoggishState = PoolGroup->GetCounter("DecreasingThreadsByHoggishState", true);
 
             LegacyActivationTimeHistogram.Init(PoolGroup.Get(), "ActivationTime", "usec", 5*1000*1000);
             ActivationTimeHistogram = PoolGroup->GetHistogram(
@@ -203,6 +220,14 @@ private:
             *MailboxPushedOutBySoftPreemption = stats.MailboxPushedOutBySoftPreemption;
             *MailboxPushedOutByTime = stats.MailboxPushedOutByTime;
             *MailboxPushedOutByEventCount = stats.MailboxPushedOutByEventCount;
+            *WrongWakenedThreadCount = poolStats.WrongWakenedThreadCount;
+            *CurrentThreadCount = poolStats.CurrentThreadCount;
+            *IsNeedy = poolStats.IsNeedy;
+            *IsStarved = poolStats.IsStarved;
+            *IsHoggish = poolStats.IsHoggish;
+            *IncreasingThreadsByNeedyState = poolStats.IncreasingThreadsByNeedyState;
+            *DecreasingThreadsByStarvedState = poolStats.DecreasingThreadsByStarvedState;
+            *DecreasingThreadsByHoggishState = poolStats.DecreasingThreadsByHoggishState;
 
             LegacyActivationTimeHistogram.Set(stats.ActivationTimeHistogram);
             ActivationTimeHistogram->Reset();

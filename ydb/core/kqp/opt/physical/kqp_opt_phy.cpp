@@ -103,8 +103,9 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> BuildReadTableRangesStage(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildReadTableRangesStage(node, ctx, KqpCtx);
+    TMaybeNode<TExprBase> BuildReadTableRangesStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        auto parents = getParents();
+        TExprBase output = KqpBuildReadTableRangesStage(node, ctx, KqpCtx, *parents);
         DumpAppliedRule("BuildReadTableRangesStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

@@ -18,8 +18,8 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse> {
 
     static constexpr bool StaticNodesOnly = true;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>* GetElementsField(TResponseType* response) {
-        return response->Record.MutableBSGroupStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
+        return *response->Record.MutableBSGroupStateInfo();
     }
 
     static ui32 GetElementKey(const TElementType& type) {

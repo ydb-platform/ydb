@@ -148,6 +148,7 @@ private:
     NPersQueue::TTopicConverterPtr TopicConverter;
     bool IsLocalDC;
     TString DCId;
+    bool IsServerless = false;
     TVector<NScheme::TTypeId> KeySchema;
     NKikimrPQ::TPQTabletConfig Config;
 

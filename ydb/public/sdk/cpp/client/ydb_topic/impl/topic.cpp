@@ -27,6 +27,16 @@ const TTopicDescription& TDescribeTopicResult::GetTopicDescription() const {
     return TopicDescription_;
 }
 
+TDescribeConsumerResult::TDescribeConsumerResult(TStatus&& status, Ydb::Topic::DescribeConsumerResult&& result)
+    : TStatus(std::move(status))
+    , ConsumerDescription_(std::move(result))
+{
+}
+
+const TConsumerDescription& TDescribeConsumerResult::GetConsumerDescription() const {
+    return ConsumerDescription_;
+}
+
 TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     : Proto_(std::move(result))
     , PartitioningSettings_(Proto_.partitioning_settings())
@@ -53,6 +63,16 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
         Consumers_.emplace_back(consumer);
     }
 }
+
+TConsumerDescription::TConsumerDescription(Ydb::Topic::DescribeConsumerResult&& result)
+    : Proto_(std::move(result))
+    , Consumer_(result.consumer())
+{
+    for (const auto& part : Proto_.partitions()) {
+        Partitions_.emplace_back(part);
+    }
+}
+
 
 TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     : ConsumerName_(consumer.name())
@@ -95,7 +115,11 @@ ui32 TTopicDescription::GetTotalPartitionsCount() const {
     return Partitions_.size();
 }
 
-const TVector<TPartitionInfo>&  TTopicDescription::GetPartitions() const {
+const TVector<TPartitionInfo>& TTopicDescription::GetPartitions() const {
+    return Partitions_;
+}
+
+const TVector<TPartitionInfo>& TConsumerDescription::GetPartitions() const {
     return Partitions_;
 }
 
@@ -140,6 +164,10 @@ const Ydb::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {
     return Proto_;
 }
 
+const Ydb::Topic::DescribeConsumerResult& TConsumerDescription::GetProto() const {
+    return Proto_;
+}
+
 const TString& TTopicDescription::GetOwner() const {
     return Owner_;
 }
@@ -165,9 +193,33 @@ ui64 TPartitioningSettings::GetPartitionCountLimit() const {
     return PartitionCountLimit_;
 }
 
+TPartitionStats::TPartitionStats(const Ydb::Topic::PartitionStats& partitionStats)
+    : StartOffset_(partitionStats.partition_offsets().start())
+    , EndOffset_(partitionStats.partition_offsets().end())
+{}
+
+ui64 TPartitionStats::GetStartOffset() const {
+    return StartOffset_;
+}
+
+ui64 TPartitionStats::GetEndOffset() const {
+    return EndOffset_;
+}
+
+TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsumerResult::PartitionConsumerStats& partitionStats)
+    : CommittedOffset_(partitionStats.committed_offset())
+{}
+
+ui64 TPartitionConsumerStats::GetCommittedOffset() const {
+    return CommittedOffset_;
+}
+
+
+
 TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionInfo& partitionInfo)
     : PartitionId_(partitionInfo.partition_id())
     , Active_(partitionInfo.active())
+    , PartitionStats_()
 {
     for (const auto& partId : partitionInfo.child_partition_ids()) {
         ChildPartitionIds_.push_back(partId);
@@ -176,6 +228,35 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionI
     for (const auto& partId : partitionInfo.parent_partition_ids()) {
         ParentPartitionIds_.push_back(partId);
     }
+    if (partitionInfo.has_partition_stats()) {
+        PartitionStats_ = TPartitionStats{partitionInfo.partition_stats()};
+    }
+}
+
+TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeConsumerResult::PartitionInfo& partitionInfo)
+    : PartitionId_(partitionInfo.partition_id())
+    , Active_(partitionInfo.active())
+    , PartitionStats_()
+{
+    for (const auto& partId : partitionInfo.child_partition_ids()) {
+        ChildPartitionIds_.push_back(partId);
+    }
+
+    for (const auto& partId : partitionInfo.parent_partition_ids()) {
+        ParentPartitionIds_.push_back(partId);
+    }
+    if (partitionInfo.has_partition_stats()) {
+        PartitionStats_ = TPartitionStats{partitionInfo.partition_stats()};
+        PartitionConsumerStats_ = TPartitionConsumerStats{partitionInfo.partition_consumer_stats()};
+    }
+}
+
+const TMaybe<TPartitionStats>& TPartitionInfo::GetPartitionStats() const {
+    return PartitionStats_;
+}
+
+const TMaybe<TPartitionConsumerStats>& TPartitionInfo::GetPartitionConsumerStats() const {
+    return PartitionConsumerStats_;
 }
 
 
@@ -194,6 +275,10 @@ TAsyncStatus TTopicClient::DropTopic(const TString& path, const TDropTopicSettin
 
 TAsyncDescribeTopicResult TTopicClient::DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) {
     return Impl_->DescribeTopic(path, settings);
+}
+
+TAsyncDescribeConsumerResult TTopicClient::DescribeConsumer(const TString& path, const TString& consumer, const TDescribeConsumerSettings& settings) {
+    return Impl_->DescribeConsumer(path, consumer, settings);
 }
 
 IRetryPolicy::TPtr IRetryPolicy::GetDefaultPolicy() {

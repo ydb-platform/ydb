@@ -14,6 +14,7 @@ target_link_libraries(lib-ydb_cli-import PUBLIC
   api-protos
   common
   cpp-client-ydb_proto
+  cpp-string_utils-csv
 )
 target_sources(lib-ydb_cli-import PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/import.cpp

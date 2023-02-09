@@ -67,7 +67,7 @@ class TestSchemeShardLimitsCase0(Base):
         assert_that(
             callee,
             raises(
-                ydb.GenericError,
+                ydb.BadRequest,
                 "ACL is too long"
             )
         )
@@ -103,7 +103,7 @@ class TestSchemeShardLimitsCase1(Base):
         assert_that(
             callee,
             raises(
-                ydb.GenericError,
+                ydb.BadRequest,
                 "ACL is too long"
             )
         )

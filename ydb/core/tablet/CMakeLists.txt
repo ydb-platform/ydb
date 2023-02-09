@@ -33,6 +33,7 @@ target_link_libraries(ydb-core-tablet PUBLIC
 target_sources(ydb-core-tablet PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/bootstrapper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/labeled_counters_merger.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/labeled_db_counters.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/node_tablet_monitor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/node_whiteboard.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/pipe_tracker.cpp
@@ -58,4 +59,5 @@ target_sources(ydb-core-tablet PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_sys.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_tracing_signals.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/private/aggregated_counters.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/private/labeled_db_counters.cpp
 )

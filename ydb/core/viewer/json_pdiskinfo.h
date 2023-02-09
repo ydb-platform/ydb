@@ -17,8 +17,8 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse> {
 
     static constexpr bool StaticNodesOnly = true;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>* GetElementsField(TResponseType* response) {
-        return response->Record.MutablePDiskStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
+        return *response->Record.MutablePDiskStateInfo();
     }
 
     static std::pair<ui32, ui32> GetElementKey(const TElementType& type) {

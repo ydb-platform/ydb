@@ -1757,6 +1757,38 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         }
     }
 
+    Y_UNIT_TEST(ShouldSucceedWithoutTableProfiles) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .RunFakeConfigDispatcher(true));
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}});
+
+        Run(runtime, env, ConvertTestData(data), R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )");
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        NKqp::CompareYson(data.Data[0].YsonStr, content);
+    }
+
     Y_UNIT_TEST(ShouldWriteBillRecordOnServerlessDb) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

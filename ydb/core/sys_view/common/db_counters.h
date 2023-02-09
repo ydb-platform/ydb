@@ -14,12 +14,22 @@ class TDbServiceCounters {
 
     using TGRpcRequestDesc = std::pair<TString, TString>;
     THashMap<TGRpcRequestDesc, NKikimrSysView::TDbGRpcCounters*> ByGRpcRequest;
+    THashMap<TString, NKikimrSysView::TDbLabeledCounters*> ByGroupName;
 
 public:
+    void Clear()
+    {
+        ProtoCounters.Clear();
+        ByTabletType.clear();
+        ByGRpcRequest.clear();
+        ByGroupName.clear();
+    }
+
     void Swap(TDbServiceCounters& other) {
         ProtoCounters.Swap(&other.ProtoCounters);
         ByTabletType.swap(other.ByTabletType);
         ByGRpcRequest.swap(other.ByGRpcRequest);
+        ByGroupName.swap(other.ByGroupName);
     }
 
     NKikimrSysView::TDbServiceCounters& Proto() { return ProtoCounters; }
@@ -70,6 +80,29 @@ public:
         counters->SetGRpcService(grpcService);
         counters->SetGRpcRequest(grpcRequest);
         ByGRpcRequest[key] = counters;
+
+        return counters;
+    }
+
+    NKikimrSysView::TDbLabeledCounters* FindLabeledCounters(const TString& groupName) const
+    {
+        if (auto it = ByGroupName.find(groupName); it != ByGroupName.end()) {
+            return it->second;
+        }
+        return {};
+    }
+
+    NKikimrSysView::TDbLabeledCounters* FindOrAddLabeledCounters(const TString& groupName)
+    {
+        if (auto it = ByGroupName.find(groupName); it != ByGroupName.end()) {
+            return it->second;
+        }
+
+        auto* counters = ProtoCounters.AddLabeledCounters();
+        auto lCounters = counters->MutableAggregatedPerTablets();
+        lCounters->SetGroup(groupName);
+        lCounters->SetDelimiter("|");
+        ByGroupName[groupName] = counters;
 
         return counters;
     }

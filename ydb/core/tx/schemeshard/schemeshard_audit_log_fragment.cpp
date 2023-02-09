@@ -181,7 +181,6 @@ TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
 
 TAuditLogFragment::TAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx)
     : Operation(DefineUserOperationName(tx.GetOperationType()))
-    , ProtoRequest(tx.ShortDebugString())
 {
     FillPathes(tx);
     FillACL(tx);
@@ -510,10 +509,6 @@ TString TAuditLogFragment::ToString() const {
 
     for (const auto& acl: RmACL)  {
         result << ", remove access: " << acl;
-    }
-
-    if (ProtoRequest) {
-        result << ", protobuf request: " << ProtoRequest;
     }
 
     return result;

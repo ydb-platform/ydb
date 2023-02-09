@@ -279,6 +279,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 void TTableInfo::ResetDescriptionCache() {
     TableDescription.ClearId_Deprecated();
     TableDescription.ClearPathId();
+    TableDescription.ClearPath();
     TableDescription.ClearName();
     TableDescription.ClearColumns();
     TableDescription.ClearKeyColumnIds();
@@ -1426,7 +1427,8 @@ void TTableInfo::FinishSplitMergeOp(TOperationId opId) {
 bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
                                     const TForceShardSplitSettings& forceShardSplitSettings,
                                     TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
-                                    THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad) const
+                                    THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
+                                    const TTableInfo* mainTableForIndex) const
 {
     if (ExpectedPartitionCount + 1 - shardsToMerge.size() <= GetMinPartitionsCount()) {
         return false;
@@ -1464,7 +1466,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     // Check if we can try merging by load
     TInstant now = AppData()->TimeProvider->Now();
     TDuration minUptime = TDuration::Seconds(splitSettings.MergeByLoadMinUptimeSec);
-    if (!canMerge && IsMergeByLoadEnabled() && stats->StartTime && stats->StartTime + minUptime < now) {
+    if (!canMerge && IsMergeByLoadEnabled(mainTableForIndex) && stats->StartTime && stats->StartTime + minUptime < now) {
         canMerge = true;
     }
 
@@ -1478,8 +1480,8 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
     // Check that total load doesn't exceed the limits
     float shardLoad = stats->GetCurrentRawCpuUsage() * 0.000001;
-    if (IsMergeByLoadEnabled()) {
-        const auto& settings = PartitionConfig().GetPartitioningPolicy().GetSplitByLoadSettings();
+    if (IsMergeByLoadEnabled(mainTableForIndex)) {
+        const auto settings = GetEffectiveSplitByLoadSettings(mainTableForIndex);
         i64 cpuPercentage = settings.GetCpuPercentageThreshold();
         float cpuUsageThreshold = 0.01 * (cpuPercentage ? cpuPercentage : (i64)splitSettings.FastSplitCpuPercentageThreshold);
 
@@ -1508,7 +1510,8 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
 bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                          const TForceShardSplitSettings& forceShardSplitSettings,
-                                         TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const
+                                         TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
+                                         const TTableInfo* mainTableForIndex) const
 {
     // Don't split/merge backup tables
     if (IsBackup) {
@@ -1536,12 +1539,12 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     THashSet<TTabletId> partOwners;
 
     // Make sure we can actually merge current shard first
-    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
+    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex)) {
         return false;
     }
 
     for (i64 pi = partitionIdx - 1; pi >= 0; --pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex)) {
             break;
         }
     }
@@ -1549,7 +1552,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     Reverse(shardsToMerge.begin(), shardsToMerge.end());
 
     for (ui64 pi = partitionIdx + 1; pi < GetPartitions().size(); ++pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex)) {
             break;
         }
     }
@@ -1557,7 +1560,11 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     return shardsToMerge.size() > 1;
 }
 
-bool TTableInfo::CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const {
+bool TTableInfo::CheckSplitByLoad(
+        const TSplitSettings& splitSettings, TShardIdx shardIdx,
+        ui64 dataSize, ui64 rowCount,
+        const TTableInfo* mainTableForIndex) const
+{
     // Don't split/merge backup tables
     if (IsBackup)
         return false;
@@ -1585,11 +1592,11 @@ bool TTableInfo::CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx
         maxShards = splitSettings.SplitByLoadMaxShardsDefault;
     }
 
-    if (!policy.HasSplitByLoadSettings() || !policy.GetSplitByLoadSettings().GetEnabled()) {
+    if (!IsSplitByLoadEnabled(mainTableForIndex)) {
         return false;
     }
 
-    const auto& settings = policy.GetSplitByLoadSettings();
+    const auto settings = GetEffectiveSplitByLoadSettings(mainTableForIndex);
     i64 cpuPercentage = settings.GetCpuPercentageThreshold();
 
     float cpuUsageThreshold = 0.01 * (cpuPercentage ? cpuPercentage : (i64)splitSettings.FastSplitCpuPercentageThreshold);

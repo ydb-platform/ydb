@@ -250,6 +250,7 @@ public:
     THashSet<TShardIdx> ShardsWithLoaned;   // shards have parts loaned to another shards
     bool EnableBackgroundCompaction = false;
     bool EnableBackgroundCompactionServerless = false;
+    bool EnableBorrowedSplitCompaction = false;
     bool EnableMoveIndex = false;
 
     TShardDeleter ShardDeleter;
@@ -386,6 +387,7 @@ public:
     void SubscribeConsoleConfigs(const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featureFlags, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvConsoleConfigsTimeout::TPtr& ev, const TActorContext& ctx);
 
     void ConfigureStatsBatching(
         const NKikimrConfig::TSchemeShardConfig& config,
@@ -406,6 +408,7 @@ public:
     void StartStopCompactionQueues();
 
     void WaitForTableProfiles(ui64 importId, ui32 itemIdx);
+    void LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* config, const TActorContext& ctx);
 
     bool ApplyStorageConfig(const TStoragePools& storagePools,
                             const NKikimrSchemeOp::TStorageConfig& storageConfig,
@@ -472,7 +475,7 @@ public:
     static bool ResolveChannelsDetailsAsIs(ui32 /*profileId*/, const TChannelProfiles::TProfile& profile, const TStoragePools& storagePools, TChannelsBindings& channelsBinding);
     static bool TabletResolveChannelsDetails(ui32 profileId, const TChannelProfiles::TProfile& profile, const TStoragePools& storagePools, TChannelsBindings& channelsBinding);
 
-    void ClearDescribePathCaches(const TPathElement::TPtr node);
+    void ClearDescribePathCaches(const TPathElement::TPtr node, bool force = false);
     TString PathToString(TPathElement::TPtr item);
     NKikimrSchemeOp::TPathVersion  GetPathVersion(const TPath& pathEl) const;
     ui64 GetAliveChildren(TPathElement::TPtr pathEl, const std::optional<TPathElement::EPathType>& type = std::nullopt) const;
@@ -1119,6 +1122,7 @@ public:
         void Create(TIndexBuildId ownerTxId, TTabletId dst, THolder<IEventBase> message, const TActorContext& ctx);
         void Close(TIndexBuildId ownerTxId, TTabletId dst, const TActorContext& ctx);
         ui64 CloseAll(TIndexBuildId ownerTxId, const TActorContext& ctx);
+        void Shutdown(const TActorContext& ctx);
 
         bool Has(TActorId actorId) const;
         TTabletId GetTabletId(TActorId actorId) const;

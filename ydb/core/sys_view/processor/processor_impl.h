@@ -50,6 +50,7 @@ private:
             EvSendRequests,
             EvProcess,
             EvApplyCounters,
+            EvApplyLabeledCounters,
             EvSendNavigate,
             EvEnd
         };
@@ -63,6 +64,8 @@ private:
         struct TEvProcess : public TEventLocal<TEvProcess, EvProcess> {};
 
         struct TEvApplyCounters : public TEventLocal<TEvApplyCounters, EvApplyCounters> {};
+
+        struct TEvApplyLabeledCounters : public TEventLocal<TEvApplyLabeledCounters, EvApplyLabeledCounters> {};
 
         struct TEvSendNavigate : public TEventLocal<TEvSendNavigate, EvSendNavigate> {};
     };
@@ -119,7 +122,9 @@ private:
     void Handle(TEvSysView::TEvGetTopPartitionsRequest::TPtr& ev);
 
     void Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev);
+    void Handle(TEvSysView::TEvSendDbLabeledCountersRequest::TPtr& ev);
     void Handle(TEvPrivate::TEvApplyCounters::TPtr& ev);
+    void Handle(TEvPrivate::TEvApplyLabeledCounters::TPtr& ev);
     void Handle(TEvPrivate::TEvSendNavigate::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev);
@@ -148,6 +153,7 @@ private:
     void ScheduleCollect();
     void ScheduleSendRequests();
     void ScheduleApplyCounters();
+    void ScheduleApplyLabeledCounters();
     void ScheduleSendNavigate();
 
     template <typename TSchema, typename TMap>
@@ -229,7 +235,9 @@ private:
             hFunc(TEvSysView::TEvSendTopPartitions, Handle);
             hFunc(TEvSysView::TEvGetTopPartitionsRequest, Handle);
             hFunc(TEvSysView::TEvSendDbCountersRequest, Handle);
+            hFunc(TEvSysView::TEvSendDbLabeledCountersRequest, Handle);
             hFunc(TEvPrivate::TEvApplyCounters, Handle);
+            hFunc(TEvPrivate::TEvApplyLabeledCounters, Handle);
             hFunc(TEvPrivate::TEvSendNavigate, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
@@ -263,6 +271,8 @@ private:
     static constexpr size_t BatchSizeLimit = 4 << 20;
     // interval of db counters processing
     static constexpr TDuration ProcessCountersInterval = TDuration::Seconds(5);
+    // interval of db labeled counters processing
+    static constexpr TDuration ProcessLabeledCountersInterval = TDuration::Seconds(60);
     // interval of sending next navigate request
     static constexpr TDuration SendNavigateInterval = TDuration::Seconds(5);
 
@@ -355,6 +365,7 @@ private:
     TString DatabaseId;
 
     ::NMonitoring::TDynamicCounterPtr ExternalGroup;
+    ::NMonitoring::TDynamicCounterPtr LabeledGroup;
     std::unordered_map<TString, ::NMonitoring::TDynamicCounterPtr> InternalGroups;
 
     using TDbCountersServiceMap = std::unordered_map<NKikimrSysView::EDbCountersService,
@@ -366,7 +377,9 @@ private:
         size_t FreshCount = 0;
     };
     std::unordered_map<TNodeId, TNodeCountersState> NodeCountersStates;
+    std::unordered_map<TNodeId, TNodeCountersState> NodeLabeledCountersStates;
     TDbCountersServiceMap AggregatedCountersState;
+    TDbCountersServiceMap AggregatedLabeledState;
 
     std::unordered_map<NKikimrSysView::EDbCountersService, TIntrusivePtr<IDbCounters>> Counters;
 };

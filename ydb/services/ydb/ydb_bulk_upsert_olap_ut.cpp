@@ -11,18 +11,20 @@ using namespace NYdb;
 
 namespace {
 
-ui32 ScanQuerySelect(NYdb::NTable::TTableClient client, const TString& tablePath,
-                     const std::vector<std::pair<TString, NYdb::EPrimitiveType>>& ydbSchema = TTestOlap::PublicSchema()) {
+std::vector<TString> ScanQuerySelect(
+    NYdb::NTable::TTableClient client, const TString& tablePath,
+    const std::vector<std::pair<TString, NYdb::EPrimitiveType>>& ydbSchema = TTestOlap::PublicSchema())
+{
     auto query = Sprintf("SELECT * FROM `%s`", tablePath.c_str());
 
     // Executes scan query
     auto result = client.StreamExecuteScanQuery(query).GetValueSync();
     if (!result.IsSuccess()) {
         Cerr << "ScanQuery execution failure: " << result.GetIssues().ToString() << Endl;
-        return 0;
+        return {};
     }
 
-    ui32 numRows = 0;
+    std::vector<TString> out;
     bool eos = false;
     Cout << "ScanQuery:" << Endl;
     while (!eos) {
@@ -31,7 +33,7 @@ ui32 ScanQuerySelect(NYdb::NTable::TTableClient client, const TString& tablePath
             eos = true;
             if (!streamPart.EOS()) {
                 Cerr << "ScanQuery execution failure: " << streamPart.GetIssues().ToString() << Endl;
-                return 0;
+                return {};
             }
             continue;
         }
@@ -42,31 +44,50 @@ ui32 ScanQuerySelect(NYdb::NTable::TTableClient client, const TString& tablePath
 
             TResultSetParser parser(rs);
             while (parser.TryNextRow()) {
+                TStringBuilder ss;
+
                 for (auto& [colName, colType] : ydbSchema) {
                     switch (colType) {
                         case NYdb::EPrimitiveType::Timestamp:
-                            Cout << parser.ColumnParser(colName).GetOptionalTimestamp() << ", ";
+                            ss << parser.ColumnParser(colName).GetOptionalTimestamp() << ",";
                             break;
+                        case NYdb::EPrimitiveType::Datetime:
+                            ss << parser.ColumnParser(colName).GetOptionalDatetime() << ",";
+                            break;
+                        case NYdb::EPrimitiveType::String: {
+                            auto& col = parser.ColumnParser(colName);
+                            if (col.GetKind() == TTypeParser::ETypeKind::Optional) {
+                                ss << col.GetOptionalString() << ",";
+                            } else {
+                                ss << col.GetString() << ",";
+                            }
+                            break;
+                        }
                         case NYdb::EPrimitiveType::Utf8:
-                            Cout << parser.ColumnParser(colName).GetOptionalUtf8() << ", ";
+                            ss << parser.ColumnParser(colName).GetOptionalUtf8() << ",";
                             break;
                         case NYdb::EPrimitiveType::Int32:
-                            Cout << parser.ColumnParser(colName).GetOptionalInt32() << ", ";
+                            ss << parser.ColumnParser(colName).GetOptionalInt32() << ",";
                             break;
                         case NYdb::EPrimitiveType::JsonDocument:
-                            Cout << parser.ColumnParser(colName).GetOptionalJsonDocument() << ", ";
+                            ss << parser.ColumnParser(colName).GetOptionalJsonDocument() << ",";
                             break;
                         default:
-                            Cout << "<other>, ";
+                            ss << "<other>,";
                             break;
                     }
                 }
-                Cout << Endl;
-                ++numRows;
+
+                out.emplace_back(TString(ss));
+                auto& str = out.back();
+                if (str.size()) {
+                    str.resize(str.size() - 1);
+                }
+                Cout << str << Endl;
             }
         }
     }
-    return numRows;
+    return out;
 }
 
 }
@@ -105,8 +126,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         Cerr << "Upsert done: " << TInstant::Now() - start << Endl;
 
         { // Read all
-            ui32 numRows = ScanQuerySelect(client, tablePath);
-            UNIT_ASSERT_GT(numRows, 0);
+            auto rows = ScanQuerySelect(client, tablePath);
+            UNIT_ASSERT_GT(rows.size(), 0);
         }
 
         // Negatives
@@ -159,6 +180,89 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         }
     }
 
+    Y_UNIT_TEST(UpsertCsvBug) {
+        NKikimrConfig::TAppConfig appConfig;
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+        TString tablePath = TTestOlap::TablePath;
+
+        { // KIKIMR-16411
+//          CREATE TABLE subscriber (
+//              id String NOT NULL,
+//              email Utf8,
+//              status String,
+//              subscribed_at Datetime,
+//              confirmed_at Datetime,
+//              unsubscribed_at Datetime,
+//              referrer Utf8,
+//              language Utf8,
+//              timezone Utf8,
+//              ip_address String,
+//              fields JsonDocument,
+//              PRIMARY KEY (id)
+//          );
+            std::vector<std::pair<TString, NYdb::EPrimitiveType>> schema = {
+                { "id", NYdb::EPrimitiveType::String },
+                { "email", NYdb::EPrimitiveType::Utf8 },
+                { "status", NYdb::EPrimitiveType::String },
+                { "subscribed_at", NYdb::EPrimitiveType::Datetime },
+                { "confirmed_at", NYdb::EPrimitiveType::Datetime },
+                { "unsubscribed_at", NYdb::EPrimitiveType::Datetime },
+                { "referrer", NYdb::EPrimitiveType::Utf8 },
+                { "language", NYdb::EPrimitiveType::Utf8 },
+                { "timezone", NYdb::EPrimitiveType::Utf8 },
+                { "ip_address", NYdb::EPrimitiveType::String },
+                { "fields", NYdb::EPrimitiveType::JsonDocument }
+            };
+
+            auto tableBuilder = client.GetTableBuilder();
+            for (auto& [name, type] : schema) {
+                if (name == "id") {
+                    tableBuilder.AddNonNullableColumn(name, type);
+                } else {
+                    tableBuilder.AddNullableColumn(name, type);
+                }
+            }
+            tableBuilder.SetPrimaryKeyColumns({"id"});
+            auto result = session.CreateTable(tablePath, tableBuilder.Build(), {}).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            TString csv =
+            "id|email|status|subscribed_at|confirmed_at|unsubscribed_at|referrer|language|timezone|ip_address|fields\n"
+            "123123bs|testd|subscr|1579301930|123213123||http|ru|AsiaNovo|hello|\"{}\"\n";
+
+            Ydb::Formats::CsvSettings csvSettings;
+            csvSettings.set_header(true);
+            csvSettings.set_delimiter("|");
+
+            TString formatSettings;
+            Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+
+            NYdb::NTable::TBulkUpsertSettings upsertSettings;
+            upsertSettings.FormatSettings(formatSettings);
+
+            auto res = client.BulkUpsert(tablePath,
+                NYdb::NTable::EDataFormat::CSV, csv, {}, upsertSettings).GetValueSync();
+
+            Cerr << res.GetStatus() << Endl;
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+
+            auto rows = ScanQuerySelect(client, tablePath, schema);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rows[0],
+                "123123bs,testd,subscr,2020-01-17T22:58:50.000000Z,1973-11-27T01:52:03.000000Z,(empty maybe),http,ru,AsiaNovo,hello,{}");
+        }
+    }
+
     Y_UNIT_TEST(UpsertCSV) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
@@ -192,8 +296,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         Cerr << "Upsert done: " << TInstant::Now() - start << Endl;
 
         { // Read all
-            ui32 numRows = ScanQuerySelect(client, tablePath);
-            UNIT_ASSERT_GT(numRows, 0);
+            auto rows = ScanQuerySelect(client, tablePath);
+            UNIT_ASSERT_GT(rows.size(), 0);
         }
 
         // Negatives
@@ -341,8 +445,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         Cerr << "Upsert done: " << TInstant::Now() - start << Endl;
 
         { // Read all
-            ui32 numRows = ScanQuerySelect(client, tablePath);
-            UNIT_ASSERT_GT(numRows, 0);
+            auto rows = ScanQuerySelect(client, tablePath);
+            UNIT_ASSERT_GT(rows.size(), 0);
         }
 
         // Read

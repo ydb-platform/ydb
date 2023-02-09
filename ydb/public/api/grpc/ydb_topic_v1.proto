@@ -69,14 +69,14 @@ service TopicService {
     // Create topic command.
     rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse);
 
-
     // Describe topic command.
     rpc DescribeTopic(DescribeTopicRequest) returns (DescribeTopicResponse);
 
+    // Describe topic's consumer command.
+    rpc DescribeConsumer(DescribeConsumerRequest) returns (DescribeConsumerResponse);
 
     // Alter topic command.
     rpc AlterTopic(AlterTopicRequest) returns (AlterTopicResponse);
-
 
     // Drop topic command.
     rpc DropTopic(DropTopicRequest) returns (DropTopicResponse);

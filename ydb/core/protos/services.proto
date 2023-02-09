@@ -307,6 +307,8 @@ enum EServiceKikimr {
     FQ_INTERNAL_SERVICE = 1153;
     FQ_QUOTA_SERVICE = 1154;
 
+    VIEWER = 1166;
+
     // 1024 - 1099 is reserved for nbs
 
     // Change exchange (async indexes & CDC)

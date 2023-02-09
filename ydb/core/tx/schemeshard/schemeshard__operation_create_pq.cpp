@@ -53,17 +53,19 @@ TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
 
     if ((ui32)op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) {
         status = NKikimrScheme::StatusInvalidParameter;
-        errStr = TStringBuilder()
-                << "Invalid write speed per second in partition specified: " << op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
-                << " vs " << TSchemeShard::MaxPQWriteSpeedPerPartition;
+        errStr = TStringBuilder() << "Invalid write speed"
+            << ": specified: " << op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() << "bps"
+            << ", max: " << TSchemeShard::MaxPQWriteSpeedPerPartition << "bps";
         return nullptr;
     }
 
-    if ((ui32)op.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds() > TSchemeShard::MaxPQLifetimeSeconds) {
+    const auto lifetimeSeconds = op.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds();
+    if (lifetimeSeconds <= 0 || (ui32)lifetimeSeconds > TSchemeShard::MaxPQLifetimeSeconds) {
         status = NKikimrScheme::StatusInvalidParameter;
-        errStr = TStringBuilder()
-                << "Invalid retention period specified: " << op.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds()
-                << " vs " << TSchemeShard::MaxPQLifetimeSeconds;
+        errStr = TStringBuilder() << "Invalid retention period"
+            << ": specified: " << lifetimeSeconds << "s"
+            << ", min: " << 1 << "s"
+            << ", max: " << TSchemeShard::MaxPQLifetimeSeconds << "s";
         return nullptr;
     }
 

@@ -230,10 +230,10 @@ public:
 
     static THolder<ResponseType> FilterResponse(THolder<TResponseType>& source, const TVector<THolder<IFieldProtoFilter>>& filters) {
         THolder<TResponseType> result = MakeHolder<TResponseType>();
-        auto* field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
-        auto* sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source.Get());
-        field->Reserve(sourceField->size());
-        for (TElementType& info : *sourceField) {
+        auto& field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
+        auto& sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source.Get());
+        field.Reserve(sourceField.size());
+        for (TElementType& info : sourceField) {
             size_t cnt = 0;
             for (const THolder<IFieldProtoFilter>& filter : filters) {
                 if (!filter->CheckFilter(info))
@@ -242,7 +242,7 @@ public:
             }
             if (cnt == filters.size()) {
                 // TODO: swap already allocated element of repeatedptr field
-                auto* element = field->Add();
+                auto* element = field.Add();
                 element->Swap(&info);
             }
         }

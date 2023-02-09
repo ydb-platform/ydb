@@ -1,7 +1,8 @@
 #pragma once
 
+#include "events.h"
 #include <ydb/services/lib/actors/pq_schema_actor.h>
-
+#include <ydb/core/persqueue/events/global.h>
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
@@ -40,7 +41,6 @@ public:
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); }
 };
 
-
 class TPQDescribeTopicActor : public TPQGrpcSchemaBase<TPQDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest>
                             , public TCdcStreamCompatible
 {
@@ -57,21 +57,112 @@ public:
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 };
 
-class TDescribeTopicActor : public TPQGrpcSchemaBase<TDescribeTopicActor, NKikimr::NGRpcService::TEvDescribeTopicRequest>
-                          , public TCdcStreamCompatible
+class TDescribeTopicActorImpl
 {
-using TBase = TPQGrpcSchemaBase<TDescribeTopicActor, TEvDescribeTopicRequest>;
-
+protected:
+    struct TTabletInfo {
+        ui64 TabletId;
+        std::vector<ui32> Partitions;
+        TActorId Pipe;
+        ui32 NodeId = 0;
+        ui32 RetriesLeft = 3;
+    };
 public:
-     TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopicRequest* request);
-    ~TDescribeTopicActor() = default;
+    TDescribeTopicActorImpl(const TString& consumer);
+    virtual ~TDescribeTopicActorImpl() = default;
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvPQProxy::TEvRequestTablet::TPtr& ev, const TActorContext& ctx);
+
+    bool ProcessTablets(const NKikimrSchemeOp::TPersQueueGroupDescription& description, const TActorContext& ctx);
+
+    void RequestTablet(TTabletInfo& tablet, const TActorContext& ctx);
+    void RequestTablet(ui64 tabletId, const TActorContext& ctx);
+    void RestartTablet(ui64 tabletId, const TActorContext& ctx, TActorId pipe = {}, const TDuration& delay = TDuration::Zero());
+    void RequestAdditionalInfo(const TActorContext& ctx);
+
+    bool StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+    virtual void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) = 0;
+
+    virtual void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) = 0;
+    virtual void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) = 0;
+    virtual void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) = 0;
+    virtual void Reply(const TActorContext& ctx) = 0;
+
+private:
+
+    std::map<ui64, TTabletInfo> Tablets;
+    ui32 RequestsInfly = 0;
+
+    ui64 BalancerTabletId;
+
+protected:
+    TString Consumer;
 };
+
+class TDescribeTopicActor : public TPQGrpcSchemaBase<TDescribeTopicActor, NKikimr::NGRpcService::TEvDescribeTopicRequest>
+                          , public TCdcStreamCompatible
+                          , public TDescribeTopicActorImpl
+{
+using TBase = TPQGrpcSchemaBase<TDescribeTopicActor, NKikimr::NGRpcService::TEvDescribeTopicRequest>;
+using TTabletInfo = TDescribeTopicActorImpl::TTabletInfo;
+
+public:
+     TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopicRequest* request);
+     TDescribeTopicActor(NKikimr::NGRpcService::IRequestOpCtx * ctx);
+
+    ~TDescribeTopicActor() = default;
+
+    void Bootstrap(const NActors::TActorContext& ctx);
+    void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) override;
+
+    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+
+    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
+    virtual void Reply(const TActorContext& ctx) override;
+
+private:
+    Ydb::Topic::DescribeTopicResult Result;
+};
+
+class TDescribeConsumerActor : public TPQGrpcSchemaBase<TDescribeConsumerActor, NKikimr::NGRpcService::TEvDescribeConsumerRequest>
+                          , public TCdcStreamCompatible
+                          , public TDescribeTopicActorImpl
+{
+using TBase = TPQGrpcSchemaBase<TDescribeConsumerActor, NKikimr::NGRpcService::TEvDescribeConsumerRequest>;
+using TTabletInfo = TDescribeTopicActorImpl::TTabletInfo;
+
+public:
+     TDescribeConsumerActor(NKikimr::NGRpcService::TEvDescribeConsumerRequest* request);
+     TDescribeConsumerActor(NKikimr::NGRpcService::IRequestOpCtx * ctx);
+
+    ~TDescribeConsumerActor() = default;
+
+    void Bootstrap(const NActors::TActorContext& ctx);
+
+    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+
+    void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) override;
+    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
+    virtual void Reply(const TActorContext& ctx) override;
+
+private:
+    Ydb::Topic::DescribeConsumerResult Result;
+};
+
+
 
 class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>
                         , public TCdcStreamCompatible

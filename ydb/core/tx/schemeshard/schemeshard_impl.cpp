@@ -490,10 +490,10 @@ bool TSchemeShard::ApplyStorageConfig(
     return true;
 }
 
-void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node) {
+void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool force) {
     Y_VERIFY(node);
 
-    if (node->Dropped() || !node->IsCreateFinished()) {
+    if ((node->Dropped() || !node->IsCreateFinished()) && !force) {
         return;
     }
 
@@ -1503,6 +1503,7 @@ void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) 
         NIceDb::TUpdate<Schema::CdcStream::AlterVersion>(alterData->AlterVersion),
         NIceDb::TUpdate<Schema::CdcStream::Mode>(alterData->Mode),
         NIceDb::TUpdate<Schema::CdcStream::Format>(alterData->Format),
+        NIceDb::TUpdate<Schema::CdcStream::VirtualTimestamps>(alterData->VirtualTimestamps),
         NIceDb::TUpdate<Schema::CdcStream::State>(alterData->State)
     );
 
@@ -1526,6 +1527,7 @@ void TSchemeShard::PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId&
         NIceDb::TUpdate<Schema::CdcStreamAlterData::AlterVersion>(alterData->AlterVersion),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::Mode>(alterData->Mode),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::Format>(alterData->Format),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::VirtualTimestamps>(alterData->VirtualTimestamps),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::State>(alterData->State)
     );
 }
@@ -3866,6 +3868,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
         ctx.Send(SVPMigrator, new TEvents::TEvPoisonPill());
     }
 
+    IndexBuildPipes.Shutdown(ctx);
     ShardDeleter.Shutdown(ctx);
     ParentDomainLink.Shutdown(ctx);
 
@@ -3912,6 +3915,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     EnableBackgroundCompaction = appData->FeatureFlags.GetEnableBackgroundCompaction();
     EnableBackgroundCompactionServerless = appData->FeatureFlags.GetEnableBackgroundCompactionServerless();
+    EnableBorrowedSplitCompaction = appData->FeatureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = appData->FeatureFlags.GetEnableMoveIndex();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
@@ -3977,6 +3981,8 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
         //console configs
         HFuncTraced(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
+
     default:
         StateInitImpl(ev, ctx);
     }
@@ -4013,6 +4019,8 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
         //console configs
         HFuncTraced(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
+
     default:
         if (!HandleDefaultEvents(ev, ctx)) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -4157,6 +4165,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         //console configs
         HFuncTraced(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvFindTabletSubDomainPathId, Handle);
 
@@ -6133,6 +6142,15 @@ ui64 TSchemeShard::TDedicatedPipePool::CloseAll(TIndexBuildId ownerTxId, const T
     return tables.size();
 }
 
+void TSchemeShard::TDedicatedPipePool::Shutdown(const TActorContext& ctx) {
+    for (const auto& [clientId, _] : Owners) {
+        NTabletPipe::CloseClient(ctx, clientId);
+    }
+
+    Pipes.clear();
+    Owners.clear();
+}
+
 TIndexBuildId TSchemeShard::TDedicatedPipePool::GetOwnerId(TActorId actorId) const {
     if (!Has(actorId)) {
         return InvalidIndexBuildId;
@@ -6164,16 +6182,17 @@ void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
         }),
         IEventHandle::FlagTrackDelivery
     );
+    ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvConsoleConfigsTimeout);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvConsoleConfigsTimeout::TPtr&, const TActorContext& ctx) {
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot get console configs");
+    LoadTableProfiles(nullptr, ctx);
 }
 
 void TSchemeShard::Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot subscribe to console configs");
-    TableProfilesLoaded = true;
-
-    auto waiters = std::move(TableProfilesWaiters);
-    for (const auto& [importId, itemIdx] : waiters) {
-        Execute(CreateTxProgressImport(importId, itemIdx), ctx);
-    }
+    LoadTableProfiles(nullptr, ctx);
 }
 
 void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx) {
@@ -6191,13 +6210,9 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     }
 
     if (appConfig.HasTableProfilesConfig()) {
-        TableProfiles.Load(appConfig.GetTableProfilesConfig());
-        TableProfilesLoaded = true;
-
-        auto waiters = std::move(TableProfilesWaiters);
-        for (const auto& [importId, itemIdx] : waiters) {
-            Execute(CreateTxProgressImport(importId, itemIdx), ctx);
-        }
+        LoadTableProfiles(&appConfig.GetTableProfilesConfig(), ctx);
+    } else {
+        LoadTableProfiles(nullptr, ctx);
     }
 
     if (IsShemeShardConfigured()) {
@@ -6217,6 +6232,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
 
     EnableBackgroundCompaction = featureFlags.GetEnableBackgroundCompaction();
     EnableBackgroundCompactionServerless = featureFlags.GetEnableBackgroundCompactionServerless();
+    EnableBorrowedSplitCompaction = featureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = featureFlags.GetEnableMoveIndex();
 }
 

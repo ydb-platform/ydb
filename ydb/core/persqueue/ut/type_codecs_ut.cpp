@@ -8,7 +8,7 @@
 #include <util/random/fast.h>
 #include <util/datetime/base.h>
 
-namespace NKikimr {
+namespace NKikimr::NPQ {
 
 using ICodec = NScheme::ICodec;
 using TTypeCodecs = NScheme::TTypeCodecs;
@@ -256,5 +256,4 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
 
 }
 
-} // namespace NKikimr
-
+} // namespace NKikimr::NPQ

@@ -25,6 +25,8 @@ from concurrent import futures
 
 
 DEFAULT_VISIBILITY_TIMEOUT = 30
+DEFAULT_TABLES_FORMAT = 1
+
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +246,11 @@ class KikimrSqsTestBase(object):
                 )
             )
         )
+
+    def get_tables_format(self, user=None):
+        if user is None:
+            user = self._username
+        return self.tables_format_per_user.get(user, DEFAULT_TABLES_FORMAT)
 
     def check_all_users_queues_tables_consistency(self):
         users = [entry.name for entry in self._driver.scheme_client.list_directory(self.sqs_root).children]
@@ -642,7 +649,7 @@ class KikimrSqsTestBase(object):
                 time.sleep(1)  # wait node to start
 
     def _smart_make_table_path(self, user_name, queue_name, queue_version, shard, table_name):
-        tables_format = self.tables_format_per_user.get(user_name, 0)
+        tables_format = self.get_tables_format(user_name)
 
         table_path = self.sqs_root
         if tables_format == 0:

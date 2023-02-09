@@ -289,6 +289,8 @@ message StreamReadMessage {
         repeated TopicReadSettings topics_read_settings = 1;
         // Path of consumer that is used for reading by this session.
         string consumer = 2;
+        // Optional name. Will be shown in debug stat.
+        string reader_name = 3;
 
         message TopicReadSettings {
             // Topic path.
@@ -499,6 +501,12 @@ message StreamReadMessage {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Control messages
 
+// message representing statistics by seleveral windows
+message MultipleWindowsStat {
+    int64 per_minute = 1;
+    int64 per_hour = 2;
+    int64 per_day = 3;
+}
 
 // Consumer description.
 message Consumer {
@@ -517,6 +525,20 @@ message Consumer {
 
     // Attributes of consumer
     map<string, string> attributes = 6;
+
+    // Filled only when requested statistics in Describe*Request.
+    ConsumerStats consumer_stats = 7;
+
+    message ConsumerStats {
+        // Minimal timestamp of last read from partitions.
+        google.protobuf.Timestamp min_partitions_last_read_time = 1;
+        // Maximum of differences between timestamp of read and write timestamp for all messages, read during last minute.
+        google.protobuf.Duration max_read_time_lag = 2;
+        // Maximum of differences between write timestamp and create timestamp for all messages, read during last minute.
+        google.protobuf.Duration max_write_time_lag = 3;
+        // Bytes read stastics.
+        MultipleWindowsStat bytes_read = 4;
+    }
 }
 
 // Consumer alter description.
@@ -628,6 +650,9 @@ message DescribeTopicRequest {
 
     // Topic path.
     string path = 2;
+
+    // Include topic statistics.
+    bool include_stats = 3;
 }
 
 // Describe topic response sent from server to client.
@@ -678,6 +703,9 @@ message DescribeTopicResult {
     // Metering settings.
     MeteringMode metering_mode = 12;
 
+    // Statistics of topic.
+    TopicStats topic_stats = 13;
+
     message PartitionInfo {
         // Partition identifier.
         int64 partition_id = 1;
@@ -687,7 +715,111 @@ message DescribeTopicResult {
         repeated int64 child_partition_ids = 3;
         // Ids of partitions from which this partition was formed by split or merge.
         repeated int64 parent_partition_ids = 4;
+
+        // Stats for partition, filled only when include_stats in request is true.
+        PartitionStats partition_stats = 5;
     }
+
+    message TopicStats {
+        // Approximate size of topic.
+        int64 store_size_bytes = 1;
+
+        // Minimum of timestamps of last write among all partitions.
+        google.protobuf.Timestamp min_last_write_time = 2;
+        // Maximum of differences between write timestamp and create timestamp for all messages, written during last minute. 
+        google.protobuf.Duration max_write_time_lag = 3;
+        // How much bytes were written statistics.
+        MultipleWindowsStat bytes_written = 4;
+    }
+}
+
+
+// Describe topic's consumer request sent from client to server.
+message DescribeConsumerRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Topic path.
+    string path = 2;
+    // Consumer name;
+    string consumer = 3;
+    // Include consumer statistics.
+    bool include_stats = 4;
+}
+
+// Describe topic's consumer response sent from server to client.
+// If topic is not existed then response status will be "SCHEME_ERROR".
+message DescribeConsumerResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Describe topic's consumer result message that will be inside DescribeConsumerResponse.operation.
+message DescribeConsumerResult {
+    // Description of scheme object.
+    Ydb.Scheme.Entry self = 1;
+
+    Consumer consumer = 2;
+
+    repeated PartitionInfo partitions = 3;
+
+    message PartitionInfo {
+        // Partition identifier.
+        int64 partition_id = 1;
+        // Is partition open for write.
+        bool active = 2;
+        // Ids of partitions which was formed when this partition was split or merged.
+        repeated int64 child_partition_ids = 3;
+        // Ids of partitions from which this partition was formed by split or merge.
+        repeated int64 parent_partition_ids = 4;
+
+        // Stats for partition, filled only when include_stats in request is true.
+        PartitionStats partition_stats = 5;
+        // Stats for consumer of this partition, filled only when include_stats in request is true.
+        PartitionConsumerStats partition_consumer_stats = 6;
+    }
+
+    message PartitionConsumerStats {
+        // Last read offset from this partition.
+        int64 last_read_offset = 1;
+        // Committed offset for this partition.
+        int64 committed_offset = 2;
+        // Reading this partition read session identifier.
+        string read_session_id = 3;
+
+        // Timestamp of providing this partition to this session by server.
+        google.protobuf.Timestamp partition_read_session_create_time = 4;
+
+        // Timestamp of last read from this partition.
+        google.protobuf.Timestamp last_read_time = 5;
+        // Maximum of differences between timestamp of read and write timestamp for all messages, read during last minute.
+        google.protobuf.Duration max_read_time_lag = 6;
+        // Maximum of differences between write timestamp and create timestamp for all messages, read during last minute.
+        google.protobuf.Duration max_write_time_lag = 7;
+
+        // How much bytes were read during several windows statistics from this partiton.
+        MultipleWindowsStat bytes_read = 8;
+
+        // Read session name, provided by client.
+        string reader_name = 11;
+        // Host where read session connected.
+        int32 connection_node_id = 12;
+    }
+}
+
+message PartitionStats {
+    // Partition contains messages with offsets in range [start, end).
+    OffsetsRange partition_offsets = 1;
+    // Approximate size of partition.
+    int64 store_size_bytes = 2;
+    // Timestamp of last write.
+    google.protobuf.Timestamp last_write_time = 3;
+    // Maximum of differences between write timestamp and create timestamp for all messages, written during last minute. 
+    google.protobuf.Duration max_write_time_lag = 4;
+    // How much bytes were written during several windows in this partition.
+    MultipleWindowsStat bytes_written = 5;
+
+    // Host where tablet for this partition works. Useful for debugging purposes.
+    int32 partition_node_id = 8;
 }
 
 

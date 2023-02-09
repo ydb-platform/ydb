@@ -37,13 +37,15 @@ const PDiskHeaders = [
     "PrevState",
     "StateCounter",
     "Status",
-    "ChangingAllowed",
-    "Touched",
     "DesiredStatus",
+    "ChangingAllowed",
+    "LastStatusChange",
+    "StatusChangeFailed",
+    "Touched",
     "StatusChangeAttempts",
     "PrevDesiredStatus",
     "PrevStatusChangeAttempts",
-    "LastStatusChange",
+    "IgnoreReason",
 ];
 
 class CmsSentinelState {
@@ -145,7 +147,15 @@ class CmsSentinelState {
             "PrevDesiredStatus": this.id.bind(this),
             "PrevStatusChangeAttempts": this.id.bind(this),
             "LastStatusChange": this.id.bind(this),
+            "IgnoreReason": this.id.bind(this),
         };
+    }
+
+    getHiddenPDiskInfo() {
+        return [
+            "PrevDesiredStatus",
+            "PrevStatusChangeAttempts",
+        ];
     }
 
     nameToSelector(name) {
@@ -366,7 +376,14 @@ class CmsSentinelState {
     }
 
     addCheckbox(elem, name) {
-        var cb = $('<input />', { type: 'checkbox', id: 'cb-' + name, value: name, checked: 'checked' });
+        var params = { type: 'checkbox', id: 'cb-' + name, value: name };
+        if (!this.getHiddenPDiskInfo().includes(name)) {
+            params.checked = 'checked';
+        } else {
+            this.filtered[name] = true;
+            this.filteredSize++;
+        }
+        var cb = $('<input />', params);
 
         cb.change(function() {
             if(cb[0].checked) {

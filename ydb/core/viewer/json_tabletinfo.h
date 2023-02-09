@@ -9,24 +9,39 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include "json_pipe_req.h"
 #include "json_wb_req.h"
+#include <span>
 
 namespace NKikimr {
 namespace NViewer {
 
-template <>
+template<>
 struct TWhiteboardInfo<TEvWhiteboard::TEvTabletStateResponse> {
     using TResponseType = TEvWhiteboard::TEvTabletStateResponse;
     using TElementType = NKikimrWhiteboard::TTabletStateInfo;
+    using TElementTypePacked5 = NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponsePacked5;
     using TElementKeyType = std::pair<ui64, ui32>;
 
     static constexpr bool StaticNodesOnly = false;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>* GetElementsField(TResponseType* response) {
-        return response->Record.MutableTabletStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
+        return *response->Record.MutableTabletStateInfo();
     }
 
-    static std::pair<ui64, ui32> GetElementKey(const TElementType& type) {
-        return std::pair<ui64, ui32>(type.GetTabletId(), type.GetFollowerId());
+    static std::span<const TElementTypePacked5> GetElementsFieldPacked5(TResponseType* response) {
+        const auto& packed5 = response->Record.GetPacked5();
+        return std::span{reinterpret_cast<const TElementTypePacked5*>(packed5.data()), packed5.size() / sizeof(TElementTypePacked5)};
+    }
+
+    static size_t GetElementsCount(TResponseType* response) {
+        return response->Record.GetTabletStateInfo().size() + response->Record.GetPacked5().size() / sizeof(TElementTypePacked5);
+    }
+
+    static TElementKeyType GetElementKey(const TElementType& type) {
+        return TElementKeyType(type.GetTabletId(), type.GetFollowerId());
+    }
+
+    static TElementKeyType GetElementKey(const TElementTypePacked5& type) {
+        return TElementKeyType(type.TabletId, type.FollowerId);
     }
 
     static TString GetDefaultMergeField() {
@@ -35,9 +50,11 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvTabletStateResponse> {
 
     static THolder<TResponseType> MergeResponses(TMap<ui32, THolder<TResponseType>>& responses, const TString& fields = GetDefaultMergeField()) {
         if (fields == GetDefaultMergeField()) {
-            return TWhiteboardMerger<TResponseType>::MergeResponsesElementKey(responses);
+            TStaticMergeKey<TResponseType> mergeKey;
+            return TWhiteboardMerger<TResponseType>::MergeResponsesBaseHybrid(responses, mergeKey);
         } else {
-            return TWhiteboardMerger<TResponseType>::MergeResponses(responses, fields);
+            TWhiteboardMerger<TResponseType>::TDynamicMergeKey mergeKey(fields);
+            return TWhiteboardMerger<TResponseType>::MergeResponsesBase(responses, mergeKey);
         }
     }
 };
@@ -49,6 +66,13 @@ struct TWhiteboardMergerComparator<NKikimrWhiteboard::TTabletStateInfo> {
     }
 };
 
+template <>
+struct TWhiteboardMergerComparator<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponsePacked5> {
+    bool operator ()(const NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponsePacked5& a, const NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponsePacked5& b) const {
+        return a.Generation < b.Generation;
+    }
+};
+
 class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse> {
     static const bool WithRetry = false;
     using TBase = TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>;
@@ -57,7 +81,10 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
 public:
     TJsonTabletInfo(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
         : TJsonWhiteboardRequest(viewer, ev)
-    {}
+    {
+        static TString prefix = "json/tabletinfo ";
+        LogPrefix = prefix;
+    }
 
     static NTabletPipe::TClientConfig InitPipeClientConfig() {
         NTabletPipe::TClientConfig clientConfig;
@@ -73,6 +100,7 @@ public:
     }
 
     void Bootstrap() override {
+        BLOG_TRACE("Bootstrap()");
         const auto& params(Event->Get()->Request.GetParams());
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         if (params.Has("path")) {

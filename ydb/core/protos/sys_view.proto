@@ -2,6 +2,7 @@ package NKikimrSysView;
 
 option java_package = "ru.yandex.kikimr.proto";
 
+import "ydb/core/protos/labeled_counters.proto";
 import "ydb/core/protos/tablet.proto";
 
 message TPartitionStatsKey {
@@ -519,11 +520,16 @@ message TDbGRpcProxyCounters {
     optional TDbCounters RequestCounters = 1;
 }
 
+message TDbLabeledCounters {
+    optional NKikimrLabeledCounters.TTabletLabeledCounters AggregatedPerTablets = 1;
+}
+
 message TDbServiceCounters {
     optional TDbCounters Main = 1;
     repeated TDbTabletCounters TabletCounters = 2;
     repeated TDbGRpcCounters GRpcCounters = 3;
     optional TDbGRpcProxyCounters GRpcProxyCounters = 4;
+    repeated TDbLabeledCounters LabeledCounters = 5;
 }
 
 enum EDbCountersService {
@@ -531,8 +537,9 @@ enum EDbCountersService {
     TABLETS = 2;
     GRPC = 3;
     GRPC_PROXY = 4;
-    RESERVED_2 = 5;
+    LABELED = 5;
     RESERVED_3 = 6;
+    RESERVED_4 = 7;
 }
 
 // node -> sysview processor tablet
@@ -551,6 +558,22 @@ message TEvSendDbCountersResponse {
     optional string Database = 1;
     optional uint64 Generation = 2; // confirmed generation
 }
+
+message TEvSendDbLabeledCountersRequest {
+    message TServiceCounters {
+        optional EDbCountersService Service = 1;
+        optional TDbServiceCounters Counters = 2;
+    }
+    repeated TServiceCounters ServiceCounters = 1;
+    optional uint64 NodeId = 2;
+    optional uint64 Generation = 3;
+}
+
+message TEvSendDbLabeledCountersResponse {
+    optional string Database = 1;
+    optional uint64 Generation = 2; // confirmed generation
+}
+
 
 // ---- Top partitions
 

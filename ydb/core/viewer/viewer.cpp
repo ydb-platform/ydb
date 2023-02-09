@@ -49,6 +49,7 @@
 #include "json_healthcheck.h"
 #include "json_nodes.h"
 #include "json_acl.h"
+#include "json_local_rpc.h"
 
 namespace NKikimr {
 namespace NViewer {
@@ -179,6 +180,8 @@ public:
             TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse>::InitMerger();
             TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::InitMerger();
 
+            JsonHandlers["/json/describe_topic"] = new TJsonHandler<TJsonDescribeTopic>;
+            JsonHandlers["/json/describe_consumer"] = new TJsonHandler<TJsonDescribeConsumer>;
             JsonHandlers["/json/nodelist"] = new TJsonHandler<TJsonNodeList>;
             JsonHandlers["/json/nodeinfo"] = new TJsonHandler<TJsonNodeInfo>;
             JsonHandlers["/json/vdiskinfo"] = new TJsonHandler<TJsonVDiskInfo>;

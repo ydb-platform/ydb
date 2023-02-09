@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import itertools
 import string
+from datetime import timedelta
 from os.path import basename, dirname, join
 
 from ydb.core.protos import msgbus_pb2
@@ -330,7 +331,7 @@ class CreateTopicRequest(AbstractTSchemeOperationRequest):
             self.__important_client_ids = None
             self.__max_count_in_partition = None
             self.__max_size_in_partition = None
-            self.__lifetime_seconds = 0
+            self.__lifetime_seconds = int(timedelta(days=1).total_seconds())
 
         @property
         def partitions_count(self):

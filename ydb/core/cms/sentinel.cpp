@@ -213,7 +213,7 @@ TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio, ui32 room
 }
 
 TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TString& issues,
-        TPDiskIDSet& disallowed) const {
+        TPDiskIgnoredMap& disallowed) const {
     TPDiskIDSet result;
     TStringBuilder issuesBuilder;
 
@@ -232,7 +232,9 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
             result.insert(kv.second.begin(), kv.second.end());
         } else {
             LOG_IGNORED(DataCenter);
-            disallowed.insert(kv.second.begin(), kv.second.end());
+            for (auto& pdisk : kv.second) {
+                disallowed.emplace(pdisk, NKikimrCms::TPDiskInfo::RATIO_BY_DATACENTER);
+            }
         }
     }
 
@@ -241,7 +243,9 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
 
         if (kv.first && !CheckRatio(kv, all.ByRoom, RoomRatio)) {
             LOG_IGNORED(Room);
-            disallowed.insert(kv.second.begin(), kv.second.end());
+            for (auto& pdisk : kv.second) {
+                disallowed.emplace(pdisk, NKikimrCms::TPDiskInfo::RATIO_BY_ROOM);
+            }
             EraseNodesIf(result, [&room = kv.second](const TPDiskID& id) {
                 return room.contains(id);
             });
@@ -257,7 +261,9 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
         }
         if (kv.first && !CheckRatio(kv, all.ByRack, RackRatio)) {
             LOG_IGNORED(Rack);
-            disallowed.insert(kv.second.begin(), kv.second.end());
+            for (auto& pdisk : kv.second) {
+                disallowed.emplace(pdisk, NKikimrCms::TPDiskInfo::RATIO_BY_RACK);
+            }
             EraseNodesIf(result, [&rack = kv.second](const TPDiskID& id) {
                 return rack.contains(id);
             });
@@ -967,6 +973,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             if (!SentinelState->Nodes.contains(id.NodeId)) {
                 LOG_E("Missing node info"
                     << ": pdiskId# " << id);
+                info.IgnoreReason = NKikimrCms::TPDiskInfo::MISSING_NODE;
                 continue;
             }
 
@@ -983,13 +990,15 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         TString issues;
-        THashSet<TPDiskID, TPDiskIDHash> disallowed;
+        TClusterMap::TPDiskIgnoredMap disallowed;
         TClusterMap::TPDiskIDSet allowed = changed.GetAllowedPDisks(all, issues, disallowed);
         std::move(alwaysAllowed.begin(), alwaysAllowed.end(), std::inserter(allowed, allowed.begin()));
 
         for (const auto& id : allowed) {
             Y_VERIFY(SentinelState->PDisks.contains(id));
             TPDiskInfo::TPtr info = SentinelState->PDisks.at(id);
+
+            info->IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
 
             if (!info->IsChangingAllowed()) {
                 info->AllowChanging();
@@ -1019,9 +1028,11 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             }
         }
 
-        for (const auto& id : disallowed) {
+        for (const auto& [id, reason] : disallowed) {
             Y_VERIFY(SentinelState->PDisks.contains(id));
-            SentinelState->PDisks.at(id)->DisallowChanging();
+            auto& pdisk = SentinelState->PDisks.at(id);
+            pdisk->DisallowChanging();
+            pdisk->IgnoreReason = reason;
         }
 
         if (issues) {
@@ -1067,10 +1078,15 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         auto filterByStatus = [](const TPDiskInfo& info, NKikimrCms::TGetSentinelStateRequest::EShow filter) {
             switch(filter) {
                 case NKikimrCms::TGetSentinelStateRequest::UNHEALTHY:
-                    return info.GetState() != NKikimrBlobStorage::TPDiskState::Normal || info.GetStatus() != EPDiskStatus::ACTIVE;
+                    return info.GetState() != NKikimrBlobStorage::TPDiskState::Normal
+                        || info.ActualStatus != EPDiskStatus::ACTIVE
+                        || info.GetStatus() != EPDiskStatus::ACTIVE
+                        || info.StatusChangeFailed;
                 case NKikimrCms::TGetSentinelStateRequest::SUSPICIOUS:
                     return info.GetState() != NKikimrBlobStorage::TPDiskState::Normal
+                        || info.ActualStatus != EPDiskStatus::ACTIVE
                         || info.GetStatus() != EPDiskStatus::ACTIVE
+                        || info.StatusChangeFailed
                         || info.StatusChangerState
                         || !info.IsTouched()
                         || !info.IsChangingAllowed();
@@ -1115,18 +1131,20 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     entry.MutableInfo()->SetState(info->GetState());
                     entry.MutableInfo()->SetPrevState(info->GetPrevState());
                     entry.MutableInfo()->SetStateCounter(info->GetStateCounter());
-                    entry.MutableInfo()->SetStatus(info->GetStatus());
+                    entry.MutableInfo()->SetStatus(info->ActualStatus);
+                    entry.MutableInfo()->SetDesiredStatus(info->GetStatus());
                     entry.MutableInfo()->SetChangingAllowed(info->IsChangingAllowed());
                     entry.MutableInfo()->SetTouched(info->IsTouched());
                     entry.MutableInfo()->SetLastStatusChange(info->LastStatusChange.ToString());
+                    entry.MutableInfo()->SetStatusChangeFailed(info->StatusChangeFailed);
                     if (info->StatusChangerState) {
-                        entry.MutableInfo()->SetDesiredStatus(info->StatusChangerState->Status);
                         entry.MutableInfo()->SetStatusChangeAttempts(info->StatusChangerState->Attempt);
                     }
                     if (info->PrevStatusChangerState) {
                         entry.MutableInfo()->SetPrevDesiredStatus(info->PrevStatusChangerState->Status);
                         entry.MutableInfo()->SetPrevStatusChangeAttempts(info->PrevStatusChangerState->Attempt);
                     }
+                    entry.MutableInfo()->SetIgnoreReason(info->IgnoreReason);
                 }
             }
         }
@@ -1152,10 +1170,13 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         if (!success) {
             LOG_C("PDisk status has NOT been changed"
                 << ": pdiskId# " << id);
+            it->second->StatusChangeFailed = true;
             (*Counters->PDisksNotChanged)++;
         } else {
             LOG_N("PDisk status has been changed"
                 << ": pdiskId# " << id);
+            it->second->ActualStatus = it->second->GetStatus();
+            it->second->StatusChangeFailed = false;
             (*Counters->PDisksChanged)++;
         }
 

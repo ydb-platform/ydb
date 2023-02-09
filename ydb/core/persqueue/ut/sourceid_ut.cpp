@@ -5,8 +5,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NPQ {
+namespace NKikimr::NPQ {
 
 Y_UNIT_TEST_SUITE(TSourceIdTests) {
     inline static TString TestSourceId(ui64 idx = 0) {
@@ -326,5 +325,4 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
 } // TSourceIdTests
 
-} // NPQ
-} // NKikimr
+} // namespace NKikimr::NPQ

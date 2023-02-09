@@ -220,10 +220,9 @@ struct TPDiskConfig : public TThrRefBase {
     }
 
     bool CheckSerial(const TString& deviceSerial) const {
-        if (ExpectedSerial ||
-                SerialManagementStage == NKikimrBlobStorage::TSerialManagementStage::CHECK_SERIAL ||
+        if (SerialManagementStage == NKikimrBlobStorage::TSerialManagementStage::CHECK_SERIAL ||
                 SerialManagementStage == NKikimrBlobStorage::TSerialManagementStage::ONLY_SERIAL) {
-            if (ExpectedSerial != deviceSerial) {
+            if (ExpectedSerial && ExpectedSerial != deviceSerial) {
                 return false;
             }
         }

@@ -10,6 +10,7 @@
 #include "wb_merge.h"
 #include "wb_group.h"
 #include "wb_filter.h"
+#include "log.h"
 
 namespace NKikimr {
 namespace NViewer {
@@ -59,10 +60,16 @@ protected:
     std::unordered_map<TNodeId, ui32> NodeRetries;
     bool StaticNodesOnly = TWhiteboardInfo<ResponseType>::StaticNodesOnly;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
+    TString LogPrefix;
+    TString Format;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
+    }
+
+    TString GetLogPrefix() {
+        return LogPrefix;
     }
 
     TJsonWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -74,6 +81,10 @@ public:
     THolder<RequestType> BuildRequest(TNodeId nodeId) {
         Y_UNUSED(nodeId);
         THolder<RequestType> request = MakeHolder<RequestType>();
+        constexpr bool hasFormat = requires(const RequestType* r) {r->Record.GetFormat();};
+        if constexpr (hasFormat) {
+            request->Record.SetFormat(Format);
+        }
         if (ChangedSince != 0) {
             request->Record.SetChangedSince(ChangedSince);
         }
@@ -127,6 +138,7 @@ public:
         Retries = FromStringWithDefault<ui32>(params.Get("retries"), 0);
         RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("retry_period"), RetryPeriod.MilliSeconds()));
         StaticNodesOnly = FromStringWithDefault<bool>(params.Get("static"), StaticNodesOnly);
+        Format = params.Get("format");
         if (FilterNodeIds.empty()) {
             if (AliveOnly) {
                 static const TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(TBase::SelfId().NodeId());
@@ -263,14 +275,35 @@ public:
         }
     }
 
-    template <typename ResponseRecordType>
-    void UpdateDuration(ResponseRecordType& record) {
+    template<typename ResponseRecordType>
+    TString GetResponseDuration(ResponseRecordType& record) {
+        constexpr bool hasResponseDuration = requires(const ResponseRecordType& r) {r.GetResponseDuration();};
+        if constexpr (hasResponseDuration) {
+            return TStringBuilder() << " ResponseDuration: " << record.GetResponseDuration() << "us";
+        } else {
+            return {};
+        }
+    }
+
+    template<typename ResponseRecordType>
+    TString GetProcessDuration(ResponseRecordType& record) {
+        constexpr bool hasProcessDuration = requires(const ResponseRecordType& r) {r.GetProcessDuration();};
+        if constexpr (hasProcessDuration) {
+            return TStringBuilder() << " ProcessDuration: " << record.GetProcessDuration() << "us";
+        } else {
+            return {};
+        }
+    }
+
+    template<typename ResponseRecordType>
+    void OnRecordReceived(ResponseRecordType& record, TNodeId nodeId) {
         record.SetResponseDuration((AppData()->TimeProvider->Now() - NodesRequestedTime).MicroSeconds());
+        BLOG_TRACE("Received " << typeid(ResponseType).name() << " from " << nodeId << GetResponseDuration(record) << GetProcessDuration(record));
     }
 
     void HandleNodeInfo(typename ResponseType::TPtr& ev) {
-        UpdateDuration(ev->Get()->Record);
         ui64 nodeId = ev.Get()->Cookie;
+        OnRecordReceived(ev->Get()->Record, nodeId);
         PerNodeStateInfo[nodeId] = ev->Release();
         NodeErrors.erase(nodeId);
         TBase::RequestDone();

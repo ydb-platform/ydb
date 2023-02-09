@@ -11,6 +11,7 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> Result;
         TActorId ParentId;
         std::deque<std::pair<TVDiskID, TActorId>> Donors;
+        TDynBitMap UnresolvedItems;
 
     public:
         TDonorQueryActor(TEvBlobStorage::TEvEnrichNotYet& msg, std::deque<std::pair<TVDiskID, TActorId>> donors)
@@ -27,6 +28,13 @@ namespace NKikimr {
             ParentId = parentId;
             Become(&TThis::StateFunc);
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " starting Donor-mode query");
+
+            const auto& result = Result->Record;
+            UnresolvedItems.Reserve(result.ResultSize());
+            for (size_t i = 0; i < result.ResultSize(); ++i) {
+                UnresolvedItems[i] = result.GetResult(i).GetStatus() == NKikimrProto::NOT_YET;
+            }
+
             Step();
         }
 
@@ -50,14 +58,11 @@ namespace NKikimr {
             auto query = fun(vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {}, 0);
 
             bool action = false;
-
-            const auto& result = Result->Record;
-            for (ui64 i = 0; i < result.ResultSize(); ++i) {
-                const auto& r = result.GetResult(i);
-                if (r.GetStatus() == NKikimrProto::NOT_YET) {
-                    query->AddExtremeQuery(LogoBlobIDFromLogoBlobID(r.GetBlobID()), r.GetShift(), r.GetSize(), &i);
-                    action = true;
-                }
+            Y_FOR_EACH_BIT(i, UnresolvedItems) {
+                const auto& r = Result->Record.GetResult(i);
+                const ui64 cookie = i;
+                query->AddExtremeQuery(LogoBlobIDFromLogoBlobID(r.GetBlobID()), r.GetShift(), r.GetSize(), &cookie);
+                action = true;
             }
 
             if (action) {
@@ -74,14 +79,22 @@ namespace NKikimr {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " received " << ev->Get()->ToString());
             auto& result = Result->Record;
             for (const auto& item : ev->Get()->Record.GetResult()) {
-                auto *res = result.MutableResult(item.GetCookie());
-                if (item.GetStatus() == NKikimrProto::OK || (item.GetStatus() == NKikimrProto::ERROR && res->GetStatus() == NKikimrProto::NOT_YET)) {
+                const ui64 index = item.GetCookie();
+                Y_VERIFY_DEBUG(UnresolvedItems[index]);
+
+                if (item.GetStatus() == NKikimrProto::OK /* || item.GetStatus() == NKikimrProto::ERROR */) {
+                    auto *res = result.MutableResult(index);
+
                     std::optional<ui64> cookie = res->HasCookie() ? std::make_optional(res->GetCookie()) : std::nullopt;
                     res->CopyFrom(item);
                     if (cookie) { // retain original cookie
                         res->SetCookie(*cookie);
                     } else {
                         res->ClearCookie();
+                    }
+
+                    if (res->GetStatus() == NKikimrProto::OK) {
+                        UnresolvedItems[index] = false;
                     }
                 }
             }

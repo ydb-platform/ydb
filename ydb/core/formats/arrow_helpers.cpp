@@ -218,6 +218,20 @@ std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId) {
     return std::make_shared<arrow::NullType>();
 }
 
+std::shared_ptr<arrow::DataType> GetCSVArrowType(NScheme::TTypeId typeId) {
+    std::shared_ptr<arrow::DataType> result;
+    switch (typeId) {
+        case NScheme::NTypeIds::Datetime:
+            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+        case NScheme::NTypeIds::Timestamp:
+            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
+        case NScheme::NTypeIds::Date:
+            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+        default:
+            return GetArrowType(typeId);
+    }
+}
+
 std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeId>>& columns) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(columns.size());
@@ -1117,6 +1131,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
             auto& curCell = cells[0][col];
             if (column->IsNull(row)) {
                 curCell = TCell();
+                ++col;
                 continue;
             }
 

@@ -59,6 +59,8 @@ struct TEvSysView {
         EvRegisterDbCounters,
         EvSendDbCountersRequest,
         EvSendDbCountersResponse,
+        EvSendDbLabeledCountersRequest,
+        EvSendDbLabeledCountersResponse,
         EvWatchDatabase,
 
         EvUpdateTtlStats,
@@ -328,6 +330,18 @@ struct TEvSysView {
         TEvSendDbCountersResponse,
         NKikimrSysView::TEvSendDbCountersResponse,
         EvSendDbCountersResponse>
+    {};
+
+    struct TEvSendDbLabeledCountersRequest : public TEventPB<
+        TEvSendDbLabeledCountersRequest,
+        NKikimrSysView::TEvSendDbLabeledCountersRequest,
+        EvSendDbLabeledCountersRequest>
+    {};
+
+    struct TEvSendDbLabeledCountersResponse : public TEventPB<
+        TEvSendDbLabeledCountersResponse,
+        NKikimrSysView::TEvSendDbLabeledCountersResponse,
+        EvSendDbLabeledCountersResponse>
     {};
 
     struct TEvWatchDatabase : public TEventLocal<

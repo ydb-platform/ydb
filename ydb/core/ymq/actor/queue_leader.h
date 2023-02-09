@@ -28,6 +28,8 @@ class TQueueLeader : public TActorBootstrapped<TQueueLeader> {
     struct TDeleteMessageBatchRequestProcessing;
     struct TChangeMessageVisibilityBatchRequestProcessing;
     struct TGetRuntimeQueueAttributesRequestProcessing;
+    struct TShardInfo;
+    struct TLoadBatch;
 
 public:
     TQueueLeader(TString userName, TString queueName, TString folderId, TString rootUrl, TIntrusivePtr<TQueueCounters> counters, TIntrusivePtr<TUserCounters> userCounters, const TActorId& schemeCache, const TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions>& quoterResourcesForUser);
@@ -115,15 +117,17 @@ private:
     void LockFifoGroup(TReceiveMessageBatchRequestProcessing& reqInfo);
     void OnFifoGroupLocked(const TString& requestId, const TSqsEvents::TEvExecuted::TRecord& ev);
     void ReadFifoMessages(TReceiveMessageBatchRequestProcessing& reqInfo);
+    void OnFifoMessagesReadSuccess(const NKikimr::NClient::TValue& value, TReceiveMessageBatchRequestProcessing& reqInfo);
     void OnFifoMessagesRead(const TString& requestId, const TSqsEvents::TEvExecuted::TRecord& ev, bool usedDLQ);
 
     void GetMessagesFromInfly(TReceiveMessageBatchRequestProcessing& reqInfo);
     void LoadStdMessages(TReceiveMessageBatchRequestProcessing& reqInfo);
-    void OnLoadStdMessageResult(const TString& requestId, ui64 offset, const TSqsEvents::TEvExecuted::TRecord& ev, const NKikimr::NClient::TValue* messageRecord, bool ignoreMessageLoadingErrors);
+    void OnLoadStdMessageResult(const TString& requestId, ui64 offset, bool success, const NKikimr::NClient::TValue* messageRecord, bool ignoreMessageLoadingErrors);
     void TryReceiveAnotherShard(TReceiveMessageBatchRequestProcessing& reqInfo);
     void WaitAddMessagesToInflyOrTryAnotherShard(TReceiveMessageBatchRequestProcessing& reqInfo);
     void Reply(TReceiveMessageBatchRequestProcessing& reqInfo);
     // batching
+    void OnLoadStdMessagesBatchSuccess(const NKikimr::NClient::TValue& value, TShardInfo& shardInfo, TIntrusivePtr<TLoadBatch> batch);
     void OnLoadStdMessagesBatchExecuted(ui64 shard, ui64 batchId, const bool usedDLQ, const TSqsEvents::TEvExecuted::TRecord& reply);
 
     // delete

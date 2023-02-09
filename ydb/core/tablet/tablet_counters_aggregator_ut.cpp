@@ -1,5 +1,7 @@
 #include "tablet_counters_aggregator.h"
+#include "private/labeled_db_counters.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 
@@ -824,6 +826,101 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         UNIT_ASSERT_VALUES_EQUAL(res[1], "cons/aaa|1|aba/caba/daba|man");
     }
 
+    Y_UNIT_TEST(DbAggregation) {
+        TVector<TActorId> cc;
+        TActorId aggregatorId;
+
+        TTestBasicRuntime runtime(1);
+
+        runtime.Initialize(TAppPrepare().Unwrap());
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+        TActorId edge = runtime.AllocateEdgeActor();
+
+        runtime.SetRegistrationObserverFunc([&cc, &aggregatorId]
+            (TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+                TTestActorRuntime::DefaultRegistrationObserver(runtime, parentId, actorId);
+                    if (parentId == aggregatorId) {
+                        cc.push_back(actorId);
+                    }
+                });
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        runtime.DispatchEvents(options);
+        for (const auto& a : cc) {
+            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
+            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
+        }
+
+        NPrivate::TDbLabeledCounters PQCounters;
+
+        const size_t namesN{5};
+        std::array<const char *, namesN> names;
+        names.fill("");
+        names[0] = "whatever";
+        names[1] = "whenever";
+        std::array<const char *, namesN> groupNames;
+        groupNames.fill("topic");
+        groupNames[1] = "user||topic";
+        std::array<ui8, namesN> types;
+        types.fill(static_cast<ui8>(TLabeledCounterOptions::CT_SIMPLE));
+
+        std::array<ui8, namesN> functions;
+        functions.fill(static_cast<ui8>(TLabeledCounterOptions::EAF_SUM));
+        functions[1] = static_cast<ui8>(TLabeledCounterOptions::EAF_MAX);
+
+        {
+            NKikimr::TTabletLabeledCountersBase labeledCounters(namesN, &names[0], &types[0], &functions[0],
+                                                                "some_stream", &groupNames[0], 1, "/Root/PQ1");
+            labeledCounters.GetCounters()[0].Set(10);
+            labeledCounters.GetCounters()[1].Set(10);
+            PQCounters.Apply(0, &labeledCounters);
+            labeledCounters.GetCounters()[0].Set(11);
+            labeledCounters.GetCounters()[1].Set(100);
+            PQCounters.Apply(1, &labeledCounters);
+            labeledCounters.GetCounters()[0].Set(12);
+            labeledCounters.GetCounters()[1].Set(10);
+            PQCounters.Apply(2, &labeledCounters);
+            // SUM 33
+            // MAX 100
+        }
+
+        {
+            NKikimr::TTabletLabeledCountersBase labeledCounters(namesN, &names[0], &types[0], &functions[0],
+                                                                "some_stream", &groupNames[0], 1, "/Root/PQ2");
+            labeledCounters.GetCounters()[0].Set(20);
+            labeledCounters.GetCounters()[1].Set(1);
+            PQCounters.Apply(0, &labeledCounters);
+            labeledCounters.GetCounters()[0].Set(21);
+            labeledCounters.GetCounters()[1].Set(11);
+            PQCounters.Apply(1, &labeledCounters);
+            labeledCounters.GetCounters()[0].Set(22);
+            labeledCounters.GetCounters()[1].Set(10);
+            PQCounters.Apply(2, &labeledCounters);
+            // SUM 63
+            // MAX 11
+        }
+
+        NKikimr::NSysView::TDbServiceCounters counters;
+
+        // Here we check that consequent calls do not interfere
+        for (int i = 10; i >= 0; --i) {
+            PQCounters.ToProto(counters);
+
+            auto pqCounters = counters.FindOrAddLabeledCounters("some_stream");
+            UNIT_ASSERT_VALUES_EQUAL(pqCounters->GetAggregatedPerTablets().group(), "some_stream");
+            UNIT_ASSERT_VALUES_EQUAL(pqCounters->GetAggregatedPerTablets().delimiter(), "|");
+            UNIT_ASSERT_VALUES_EQUAL(pqCounters->GetAggregatedPerTablets().GetLabeledCounter().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(pqCounters->GetAggregatedPerTablets().GetLabeledCounter(0).value(), 63);
+            UNIT_ASSERT_VALUES_EQUAL(pqCounters->GetAggregatedPerTablets().GetLabeledCounter(1).value(), 11);
+
+            PQCounters.FromProto(counters);
+        }
+    }
 }
 
 }

@@ -1705,6 +1705,57 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         }
     }
 
+    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotRenameTimeout) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetEnableMvcc(WithMvcc)
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 2);
+        CreateShardedTable(server, sender, "/Root", "table-2", 2);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        WaitTxNotification(server, sender, AsyncMoveTable(server, "/Root/table-1", "/Root/table-1-moved"));
+
+        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1-moved", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        Cerr << "---- Sleeping ----" << Endl;
+        SimulateSleep(server, TDuration::Seconds(60));
+
+        auto table1snapshot3 = ReadShardedTable(server, "/Root/table-1-moved", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot3,
+            "ERROR: WrongRequest\n");
+    }
+
 }
 
 } // namespace NKikimr

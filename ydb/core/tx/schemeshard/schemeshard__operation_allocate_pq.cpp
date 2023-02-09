@@ -196,7 +196,7 @@ public:
             return result;
         }
 
-        pqGroupInfo->AlterVersion = allocateDesc.GetAlterVersion();
+        pqGroupInfo->AlterVersion = allocateDesc.GetAlterVersion() + 1;
 
         if (!allocateDesc.HasPQTabletConfig()) {
             auto errStr = TStringBuilder() << "No PQTabletConfig specified";
@@ -445,6 +445,8 @@ public:
 
         context.SS->PersQueueGroups[pathId] = emptyGroup;
         context.SS->PersQueueGroups[pathId]->AlterData = pqGroupInfo;
+        context.SS->PersQueueGroups[pathId]->AlterVersion = pqGroupInfo->AlterVersion;
+
         context.SS->IncrementPathDbRefCount(pathId);
 
         context.SS->PersistPersQueueGroup(db, pathId, emptyGroup);
@@ -491,7 +493,7 @@ public:
         context.SS->ClearDescribePathCaches(parentPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, parentPath.Base()->PathId);
 
-        context.SS->ClearDescribePathCaches(dstPath.Base());
+        context.SS->ClearDescribePathCaches(dstPath.Base(), true);
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
         dstPath.DomainInfo()->IncPathsInside();

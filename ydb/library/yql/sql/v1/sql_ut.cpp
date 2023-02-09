@@ -1471,7 +1471,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto res = SqlToYql(R"( USE plato;
             CREATE TABLE tableName (
                 Key Uint32, PRIMARY KEY (Key),
-                CHANGEFEED feedName WITH (MODE = 'KEYS_ONLY', FORMAT = 'json')
+                CHANGEFEED feedName WITH (
+                    MODE = 'KEYS_ONLY',
+                    FORMAT = 'json',
+                    VIRTUAL_TIMESTAMPS = FALSE,
+                    RETENTION_PERIOD = Interval("P1D")
+                )
             );
         )");
         UNIT_ASSERT_C(res.Root, Err2Str(res));
@@ -1483,6 +1488,9 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("KEYS_ONLY"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("format"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("json"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("retention_period"));
             }
         };
 
@@ -1630,7 +1638,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(AlterTableAlterChangefeedIsCorrect) {
         UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table ALTER CHANGEFEED feed DISABLE").IsOk());
         ExpectFailWithError("USE plato; ALTER TABLE table ALTER CHANGEFEED feed SET (FORMAT = 'proto');",
-            "<main>:1:66: Error: FORMAT alter is not supported\n");
+            "<main>:1:57: Error: FORMAT alter is not supported\n");
     }
 
     Y_UNIT_TEST(AlterTableDropChangefeedIsCorrect) {
@@ -3048,7 +3056,34 @@ select FormatType($f());
         )";
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:70: Error: Unknown changefeed setting: FOO\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:64: Error: Unknown changefeed setting: FOO\n");
+    }
+
+
+    Y_UNIT_TEST(InvalidChangefeedVirtualTimestamps) {
+        auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", VIRTUAL_TIMESTAMPS = "foo")
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:101: Error: Literal of Bool type is expected for VIRTUAL_TIMESTAMPS\n");
+    }
+
+    Y_UNIT_TEST(InvalidChangefeedRetentionPeriod) {
+        auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", RETENTION_PERIOD = "foo")
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:99: Error: Literal of Interval type is expected for RETENTION_PERIOD\n");
     }
 
     Y_UNIT_TEST(ErrJoinWithGroupingSetsWithoutCorrelationName) {

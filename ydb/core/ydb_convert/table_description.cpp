@@ -371,6 +371,7 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
 
         changefeed->set_name(stream.GetName());
         changefeed->set_state(Ydb::Table::ChangefeedDescription::STATE_ENABLED);
+        changefeed->set_virtual_timestamps(stream.GetVirtualTimestamps());
 
         switch (stream.GetMode()) {
         case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
@@ -398,6 +399,7 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
         const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
     out.SetName(in.name());
+    out.SetVirtualTimestamps(in.virtual_timestamps());
 
     switch (in.mode()) {
     case Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY:

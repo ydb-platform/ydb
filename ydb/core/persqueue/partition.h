@@ -174,7 +174,7 @@ public:
     }
 
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
-               const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId,
+               const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
                const TActorContext& ctx, bool newPartition = false);
 
@@ -382,6 +382,8 @@ private:
 
     TString CloudId;
     TString DbId;
+    TString DbPath;
+    bool IsServerless;
     TString FolderId;
 
     TUsersInfoStorage UsersInfoStorage;
@@ -455,10 +457,12 @@ private:
 
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
     NKikimr::NPQ::TMultiCounter WritesTotal;
-    NKikimr::NPQ::TMultiCounter BytesWritten;
+    NKikimr::NPQ::TMultiCounter BytesWrittenTotal;
+    NKikimr::NPQ::TMultiCounter BytesWrittenGrpc;
     NKikimr::NPQ::TMultiCounter BytesWrittenUncompressed;
     NKikimr::NPQ::TMultiCounter BytesWrittenComp;
-    NKikimr::NPQ::TMultiCounter MsgsWritten;
+    NKikimr::NPQ::TMultiCounter MsgsWrittenTotal;
+    NKikimr::NPQ::TMultiCounter MsgsWrittenGrpc;;
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;

@@ -111,6 +111,10 @@ struct TRoundRobinBalancer: public IBalancer {
         State->Load(assigned, current);
         State->AssignPool(NextPool[assigned]);
     }
+
+    ui64 GetPeriodUs() override {
+        return 1000;
+    }
 };
 
 void AddUnitedPool(THolder<TActorSystemSetup>& setup, ui32 concurrency = 0) {

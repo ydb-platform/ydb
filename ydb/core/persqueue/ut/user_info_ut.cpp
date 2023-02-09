@@ -32,4 +32,4 @@ namespace NKikimr::NPQ {
         }
     }
   }
-}
+} // namespace NKikimr::NPQ

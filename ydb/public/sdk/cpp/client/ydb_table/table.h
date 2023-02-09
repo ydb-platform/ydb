@@ -3,9 +3,10 @@
 #include "table_enum.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/query_stats/stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/query_stats/stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
 #include <util/generic/hash.h>
@@ -435,9 +436,11 @@ public:
     TVector<TChangefeedDescription> GetChangefeedDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
 
+    // Deprecated. Use GetEntry() of TDescribeTableResult instead
     const TString& GetOwner() const;
     const TVector<NScheme::TPermissions>& GetPermissions() const;
     const TVector<NScheme::TPermissions>& GetEffectivePermissions() const;
+
     const TVector<TKeyRange>& GetKeyRanges() const;
 
     // Folow options related to table statistics
@@ -1745,7 +1748,7 @@ private:
 };
 
 //! Represents result of DescribeTable call
-class TDescribeTableResult : public TStatus {
+class TDescribeTableResult : public NScheme::TDescribePathResult {
 public:
     TDescribeTableResult(TStatus&& status, Ydb::Table::DescribeTableResult&& desc,
         const TDescribeTableSettings& describeSettings);
@@ -1754,7 +1757,6 @@ public:
 
 private:
     TTableDescription TableDescription_;
-
 };
 
 class TDataQueryResult : public TStatus {

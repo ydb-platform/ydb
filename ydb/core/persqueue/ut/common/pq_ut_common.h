@@ -10,8 +10,7 @@
 const bool ENABLE_DETAILED_PQ_LOG = false;
 const bool ENABLE_DETAILED_KV_LOG = false;
 
-namespace NKikimr {
-namespace {
+namespace NKikimr::NPQ {
 
 template <typename T>
 inline constexpr static T PlainOrSoSlow(T plain, T slow) noexcept {
@@ -23,29 +22,7 @@ inline constexpr static T PlainOrSoSlow(T plain, T slow) noexcept {
 
 constexpr ui32 NUM_WRITES = PlainOrSoSlow(100, 1);
 
-void SetupLogging(TTestActorRuntime& runtime) {
-    NActors::NLog::EPriority pqPriority = ENABLE_DETAILED_PQ_LOG ? NLog::PRI_TRACE : NLog::PRI_ERROR;
-    NActors::NLog::EPriority priority = ENABLE_DETAILED_KV_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
-    NActors::NLog::EPriority otherPriority = NLog::PRI_INFO;
-
-    runtime.SetLogPriority(NKikimrServices::PERSQUEUE, pqPriority);
-    runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, pqPriority);
-    runtime.SetLogPriority(NKikimrServices::KEYVALUE, priority);
-    runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, priority);
-    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, priority);
-    runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, priority);
-    runtime.SetLogPriority(NKikimrServices::BS_PROXY, priority);
-
-    runtime.SetLogPriority(NKikimrServices::HIVE, otherPriority);
-    runtime.SetLogPriority(NKikimrServices::LOCAL, otherPriority);
-    runtime.SetLogPriority(NKikimrServices::BS_NODE, otherPriority);
-    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, otherPriority);
-    runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, otherPriority);
-
-    runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, otherPriority);
-    runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, otherPriority);
-
-}
+void FillPQConfig(NKikimrPQ::TPQConfig& pqConfig, const TString& dbRoot, bool isFirstClass);
 
 class TInitialEventsFilter : TNonCopyable {
     bool IsDone;
@@ -68,11 +45,9 @@ public:
     }
 };
 
-} // anonymous namespace
-
-
 struct TTestContext {
-    TTabletTypes::EType TabletType;
+    const TTabletTypes::EType PQTabletType = TTabletTypes::PersQueue;
+    const TTabletTypes::EType BalancerTabletType = TTabletTypes::PersQueueReadBalancer;
     ui64 TabletId;
     ui64 BalancerTabletId;
     TInitialEventsFilter InitialEventsFilter;
@@ -83,12 +58,36 @@ struct TTestContext {
 
 
     TTestContext() {
-        TabletType = TTabletTypes::PersQueue;
         TabletId = MakeTabletID(0, 0, 1);
         TabletIds.push_back(TabletId);
 
         BalancerTabletId = MakeTabletID(0, 0, 2);
         TabletIds.push_back(BalancerTabletId);
+    }
+
+    static void SetupLogging(TTestActorRuntime& runtime)  {
+        NActors::NLog::EPriority pqPriority = ENABLE_DETAILED_PQ_LOG ? NLog::PRI_TRACE : NLog::PRI_DEBUG;
+        NActors::NLog::EPriority priority = ENABLE_DETAILED_KV_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
+        NActors::NLog::EPriority otherPriority = NLog::PRI_INFO;
+
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, pqPriority);
+        runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, pqPriority);
+        runtime.SetLogPriority(NKikimrServices::KEYVALUE, priority);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, priority);
+        runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, priority);
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, priority);
+        runtime.SetLogPriority(NKikimrServices::BS_PROXY, priority);
+
+        runtime.SetLogPriority(NKikimrServices::HIVE, otherPriority);
+        runtime.SetLogPriority(NKikimrServices::LOCAL, otherPriority);
+        runtime.SetLogPriority(NKikimrServices::BS_NODE, otherPriority);
+        runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, otherPriority);
+        runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, otherPriority);
+
+        runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, otherPriority);
+        runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, otherPriority);
+
+        runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, otherPriority);
     }
 
     static bool RequestTimeoutFilter(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration duration, TInstant& deadline) {
@@ -116,7 +115,8 @@ struct TTestContext {
         return RequestTimeoutFilter(runtime, event, duration, deadline);
     }
 
-    void Prepare(const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone, bool isFirstClass = false, bool enableMonitoring = false, bool enableDbCounters = false) {
+    void Prepare(const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone, bool isFirstClass = false,
+                 bool enableMonitoring = false, bool enableDbCounters = false) {
         Y_UNUSED(dispatchName);
         outActiveZone = false;
         TTestBasicRuntime* runtime = new TTestBasicRuntime;
@@ -127,29 +127,23 @@ struct TTestContext {
         Runtime->SetScheduledLimit(200);
 
         TAppPrepare appData;
+        appData.SetEnablePersistentQueryStats(enableDbCounters);
         appData.SetEnableDbCounters(enableDbCounters);
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime, &appData);
         setup(*Runtime);
         CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
+            CreateTestTabletInfo(TabletId, PQTabletType, TErasureType::ErasureNone),
             &CreatePersQueue);
 
-        Runtime->GetAppData(0).PQConfig.SetEnabled(true);
-        // NOTE(shmel1k@): KIKIMR-14221
-        Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(isFirstClass);
-        Runtime->GetAppData(0).PQConfig.SetRequireCredentialsInNewProtocol(false);
-        Runtime->GetAppData(0).PQConfig.SetClusterTablePath("/Root/PQ/Config/V2/Cluster");
-        Runtime->GetAppData(0).PQConfig.SetVersionTablePath("/Root/PQ/Config/V2/Versions");
-        Runtime->GetAppData(0).PQConfig.SetRoot("/Root/PQ");
-        Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+        FillPQConfig(Runtime->GetAppData(0).PQConfig, "/Root/PQ", isFirstClass);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         Runtime->DispatchEvents(options);
 
         CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(BalancerTabletId, TTabletTypes::PersQueueReadBalancer, TErasureType::ErasureNone),
+            CreateTestTabletInfo(BalancerTabletId, BalancerTabletType, TErasureType::ErasureNone),
             &CreatePersQueueReadBalancer);
 
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -168,7 +162,7 @@ struct TTestContext {
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime);
         CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
+            CreateTestTabletInfo(TabletId, PQTabletType, TErasureType::ErasureNone),
             &CreatePersQueue);
 
         Runtime->GetAppData(0).PQConfig.SetEnabled(true);
@@ -178,7 +172,7 @@ struct TTestContext {
         Runtime->DispatchEvents(options);
 
         CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(BalancerTabletId, TTabletTypes::PersQueueReadBalancer, TErasureType::ErasureNone),
+            CreateTestTabletInfo(BalancerTabletId, BalancerTabletType, TErasureType::ErasureNone),
             &CreatePersQueueReadBalancer);
 
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -207,16 +201,9 @@ struct TFinalizer {
     }
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// SINGLE COMMAND TEST FUNCTIONS
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void BalancerPrepare(
-    const TString topic,
-    const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map,
-    const ui64 ssId,
-    TTestContext& tc,
-    const bool requireAuth = false);
+/*
+** SINGLE COMMAND TEST FUNCTIONS
+*/
 
 struct TTabletPreparationParameters {
     ui32 maxCountInPartition{20'000'000};
@@ -238,8 +225,42 @@ struct TTabletPreparationParameters {
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TVector<std::pair<TString, bool>>& users,
-    TTestContext& tc);
-void PQTabletRestart(TTestContext& tc);
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    TActorId edge);
+
+void PQBalancerPrepare(
+    const TString topic,
+    const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map,
+    const ui64 ssId,
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    TActorId edge,
+    const bool requireAuth = false);
+
+void PQTabletRestart(
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    TActorId edge);
+
+
+/*
+** TTestContext requiring functions
+*/
+
+void PQTabletPrepare(
+    const TTabletPreparationParameters& parameters,
+    const TVector<std::pair<TString, bool>>& users,
+    TTestContext& context);
+
+void PQBalancerPrepare(
+    const TString topic,
+    const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map,
+    const ui64 ssId,
+    TTestContext& context,
+    const bool requireAuth = false);
+
+void PQTabletRestart(TTestContext& context);
 
 TActorId RegisterReadSession(
    const TString& session,
@@ -269,15 +290,6 @@ void PQGetPartInfo(
     ui64 startOffset,
     ui64 endOffset,
     TTestContext& tc);
-
-void ReserveBytes(
-    const ui32 partition,
-    TTestContext& tc,
-    const TString& cookie,
-    i32 msgSeqNo,
-    i64 size,
-    const TActorId& pipeClient,
-    bool lastRequest);
 
 void WaitPartition(
     const TString &session,
@@ -408,4 +420,4 @@ void CmdWrite(
     bool treatBadOffsetAsError = true,
     bool disableDeduplication = false);
 
-} // namespace NKikimr
+} // namespace NKikimr::NPQ

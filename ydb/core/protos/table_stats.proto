@@ -11,8 +11,9 @@ message THistogram {
 }
 
 message TTableStats {
-    optional uint64 DataSize = 1;
-    optional uint64 RowCount = 2;
+    optional uint64 DataSize = 1; // both inMem and ondisk
+    optional uint64 RowCount = 2; // both inMem and ondisk
+
     optional uint64 IndexSize = 3;
     optional uint64 InMemSize = 4;
 

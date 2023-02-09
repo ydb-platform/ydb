@@ -808,7 +808,12 @@ private:
     }
 
     void ResolveShards(const NActors::TActorContext& ctx) {
-        Y_VERIFY(!GetRows().empty());
+        if (GetRows().empty()) {
+            // We have already resolved the table and know it exists
+            // No reason to resolve table range as well
+            return ReplyIfDone(ctx);
+        }
+
         Y_VERIFY(ResolveNamesResult);
 
         auto& entry = ResolveNamesResult->ResultSet.front();
@@ -939,6 +944,9 @@ private:
         }
 
         TBase::Become(&TThis::StateWaitResults);
+
+        // Sanity check: don't break when we don't have any shards for some reason
+        ReplyIfDone(ctx);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {

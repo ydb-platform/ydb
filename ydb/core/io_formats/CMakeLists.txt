@@ -6,9 +6,11 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-core-io_formats)
 target_compile_options(ydb-core-io_formats PRIVATE
+  -Wno-unused-parameter
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_link_libraries(ydb-core-io_formats PUBLIC

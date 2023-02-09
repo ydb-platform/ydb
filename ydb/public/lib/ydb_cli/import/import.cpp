@@ -11,6 +11,8 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
+#include <library/cpp/string_utils/csv/csv.h>
+
 #include <util/generic/vector.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>
@@ -111,18 +113,19 @@ TStatus TImportFileClient::UpsertCsv(const TString& dataFile, const TString& dbP
         special = true;
     }
 
-    // Do not use csvSettings.skip_rows.
-    for (ui32 i = 0; i < settings.SkipRows_; ++i) {
-        input.ReadLine(line);
-    }
-
+    NCsvFormat::TLinesSplitter splitter(input);
     TString headerRow;
     if (settings.Header_) {
-        input.ReadLine(headerRow);
+        headerRow = splitter.ConsumeLine();
         headerRow += '\n';
         buffer = headerRow;
         csvSettings.set_header(true);
         special = true;
+    }
+
+    // Do not use csvSettings.skip_rows.
+    for (ui32 i = 0; i < settings.SkipRows_; ++i) {
+        splitter.ConsumeLine();
     }
 
     if (special) {
@@ -133,14 +136,11 @@ TStatus TImportFileClient::UpsertCsv(const TString& dataFile, const TString& dbP
 
     std::deque<TAsyncStatus> inFlightRequests;
 
-    // TODO: better read
-    // * read serveral lines a time
-    // * support endlines inside quotes
-    // ReadLine() should count quotes for it and stop the line then counter is odd.
-    while (size_t sz = input.ReadLine(line)) {
+    ui64 readSize = 0;
+    while (TString line = splitter.ConsumeLine()) {
         buffer += line;
-        buffer += '\n'; // TODO: keep original endline?
-
+        buffer += '\n';
+        readSize += line.size();
         if (buffer.Size() >= settings.BytesPerRequest_) {
             auto status = WaitForQueue(inFlightRequests, settings.MaxInFlightRequests_);
             if (!status.IsSuccess()) {

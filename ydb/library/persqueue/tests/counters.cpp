@@ -20,15 +20,18 @@ NJson::TJsonValue SendQuery(ui16 port, const TString& query, bool mayFail) {
     TString firstLine = input.FirstLine();
 
     const auto httpCode = ParseHttpRetCode(firstLine);
+    NJson::TJsonValue value;
+    bool res = NJson::ReadJsonTree(&input, &value);
+
+    Cerr << "counters: " << value.GetStringRobust() << "\n";
+
+    UNIT_ASSERT(res);
     if (mayFail && httpCode != 200u) {
         return {};
     } else {
         UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u);
     }
-    NJson::TJsonValue value;
-    UNIT_ASSERT(NJson::ReadJsonTree(&input, &value));
 
-    Cerr << "counters: " << value.GetStringRobust() << "\n";
     return value;
 }
 
@@ -84,19 +87,21 @@ NJson::TJsonValue GetClientCountersLegacy(ui16 port, const TString& counters, co
 }
 
 NJson::TJsonValue GetCounters1stClass(ui16 port, const TString& counters,
+                                      const TString& databasePath,
                                       const TString& cloudId, const TString& databaseId,
-                                      const TString& folderId, const TString& streamName,
+                                      const TString& folderId, const TString& topicName,
                                       const TString& consumer, const TString& host,
-                                      const TString& shard) {
+                                      const TString& partition) {
     bool mayFail = false;
-    TVector<TString> pathItems = SplitString(streamName, "/");
+    TVector<TString> pathItems = SplitString(topicName, "/");
     TStringBuilder queryBuilder;
     queryBuilder <<
         "/counters/counters=" << counters <<
-        "/cloud=" << cloudId <<
-        "/folder=" << folderId <<
-        "/database=" << databaseId <<
-        "/stream=" << JoinRange("%2F", pathItems.begin(), pathItems.end());
+        "/database=" << databasePath <<
+        "/cloud_id=" << cloudId <<
+        "/folder_id=" << folderId <<
+        "/database_id=" << databaseId <<
+        "/topic=" << JoinRange("%2F", pathItems.begin(), pathItems.end());
 
     if (consumer) {
         queryBuilder <<
@@ -108,9 +113,9 @@ NJson::TJsonValue GetCounters1stClass(ui16 port, const TString& counters,
             "/host=" << host;
     }
 
-    if (shard) {
+    if (partition) {
         queryBuilder <<
-            "/shard=" << shard;
+            "/partition=" << partition;
         mayFail = true;
     }
 

@@ -101,7 +101,9 @@ namespace NKikimr::NHttpProxy {
             auto signature = context.GetSignature();
             Processors->Execute(context.MethodName, std::move(context), std::move(signature), ctx);
         } catch (NKikimr::NSQS::TSQSException& e) {
-            context.SendBadRequest(NYdb::EStatus::BAD_REQUEST, e.what(), ctx);
+            context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
+            context.ResponseData.ErrorText = e.what();
+            context.DoReply(ctx);
             return;
         }
     }

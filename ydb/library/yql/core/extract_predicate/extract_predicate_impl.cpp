@@ -1063,6 +1063,11 @@ TIndexRange ExtractIndexRangeFromKeys(const TVector<TString>& keys, const THashM
     return result;
 }
 
+TExprNode::TPtr MakeRangeAnd(TPositionHandle pos, TExprNodeList&& children, TExprContext& ctx) {
+    YQL_ENSURE(!children.empty());
+    return children.size() == 1 ? children.front() : ctx.NewCallable(pos, "RangeAnd", std::move(children));
+}
+
 TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const TExprNode::TPtr& range, const THashMap<TString, size_t>& indexKeysOrder,
     TIndexRange& resultIndexRange, TExprContext& ctx)
 {
@@ -1114,70 +1119,73 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
         struct TNodeAndIndexRange {
             TExprNode::TPtr Node;
             TIndexRange IndexRange;
+            size_t OriginalPosition = 0;
         };
 
         TVector<TNodeAndIndexRange> toRebuild;
+        size_t pos = 0;
         for (const auto& child : range->ChildrenList()) {
             toRebuild.emplace_back();
             TNodeAndIndexRange& curr = toRebuild.back();
             curr.Node = DoRebuildRangeForIndexKeys(rowType, child, indexKeysOrder, curr.IndexRange, ctx);
+            curr.OriginalPosition = pos++;
         }
 
-        std::stable_sort(toRebuild.begin(), toRebuild.end(), [&](const TNodeAndIndexRange& a, const TNodeAndIndexRange& b) {
-            // sort children by key order
-            // move RangeRest/RangeConst to the end while preserving their relative order
-            return a.IndexRange < b.IndexRange;
-        });
-
-
-        TExprNodeList rests;
-        TVector<TExprNodeList> childrenChains;
-        THashMap<size_t, TSet<size_t>> chainIdxByEndIdx;
-
+        TVector<TNodeAndIndexRange> rests;
+        TMap<TIndexRange, TVector<TNodeAndIndexRange>> children;
         for (auto& current : toRebuild) {
             if (current.IndexRange.IsEmpty()) {
                 YQL_ENSURE(current.Node->IsCallable("RangeRest"));
-                rests.emplace_back(std::move(current.Node));
+                rests.emplace_back(std::move(current));
+            } else {
+                children[current.IndexRange].push_back(std::move(current));
+            }
+        }
+
+        TVector<TVector<TNodeAndIndexRange>> childrenChains;
+        for (auto it = children.begin(); it != children.end(); ++it) {
+            if (!commonIndexRange) {
+                commonIndexRange = it->first;
+                childrenChains.emplace_back(std::move(it->second));
                 continue;
             }
-            const size_t beginIdx = current.IndexRange.Begin;
-            const size_t endIdx = current.IndexRange.End;
-            if (!commonIndexRange || beginIdx == commonIndexRange->Begin) {
-                if (!commonIndexRange) {
-                    commonIndexRange = current.IndexRange;
-                } else {
-                    commonIndexRange->End = std::max(commonIndexRange->End, endIdx);
+            if (commonIndexRange->Begin == it->first.Begin) {
+                YQL_ENSURE(it->first.End > commonIndexRange->End);
+                for (auto& asRest : childrenChains) {
+                    rests.insert(rests.end(), asRest.begin(), asRest.end());
                 }
-                chainIdxByEndIdx[endIdx].insert(childrenChains.size());
-                childrenChains.emplace_back();
-                childrenChains.back().push_back(current.Node);
+                childrenChains.clear();
+                childrenChains.push_back(std::move(it->second));
+                commonIndexRange = it->first;
+                continue;
+            }
+
+            if (commonIndexRange->End == it->first.Begin) {
+                commonIndexRange->End = it->first.End;
+                childrenChains.push_back(std::move(it->second));
             } else {
-                auto it = chainIdxByEndIdx.find(beginIdx);
-                if (it == chainIdxByEndIdx.end()) {
-                    rests.emplace_back(RebuildAsRangeRest(rowType, *current.Node, ctx));
-                    continue;
-                }
-
-                YQL_ENSURE(!it->second.empty());
-                const size_t tgtChainIdx = *it->second.begin();
-                it->second.erase(tgtChainIdx);
-                if (it->second.empty()) {
-                    chainIdxByEndIdx.erase(it);
-                }
-
-                childrenChains[tgtChainIdx].push_back(current.Node);
-                chainIdxByEndIdx[endIdx].insert(tgtChainIdx);
-                commonIndexRange->End = std::max(commonIndexRange->End, endIdx);
+                rests.insert(rests.end(), it->second.begin(), it->second.end());
             }
         }
 
         for (auto& chain : childrenChains) {
-            YQL_ENSURE(!chain.empty());
-            rebuilt.push_back(ctx.NewCallable(range->Pos(), "RangeAnd", std::move(chain)));
+            TExprNodeList chainNodes;
+            for (auto& entry : chain) {
+                chainNodes.push_back(entry.Node);
+            }
+            rebuilt.push_back(MakeRangeAnd(range->Pos(), std::move(chainNodes), ctx));
         }
 
         if (!rests.empty()) {
-            rebuilt.push_back(RebuildAsRangeRest(rowType, *ctx.NewCallable(range->Pos(), "RangeAnd", std::move(rests)), ctx));
+            // restore original order in rests
+            std::sort(rests.begin(), rests.end(), [&](const TNodeAndIndexRange& a, const TNodeAndIndexRange& b) {
+                return a.OriginalPosition < b.OriginalPosition;
+            });
+            TExprNodeList restsNodes;
+            for (auto& item : rests) {
+                restsNodes.push_back(RebuildAsRangeRest(rowType, *item.Node, ctx));
+            }
+            rebuilt.push_back(RebuildAsRangeRest(rowType, *MakeRangeAnd(range->Pos(), std::move(restsNodes), ctx), ctx));
         }
     }
 

@@ -15,9 +15,9 @@ namespace NPersQueue {
             ->GetSubgroup("Topic", topic->GetShortClientsideName());
 }
 
-::NMonitoring::TDynamicCounterPtr GetCountersForStream(::NMonitoring::TDynamicCounterPtr counters)
+::NMonitoring::TDynamicCounterPtr GetCountersForTopic(::NMonitoring::TDynamicCounterPtr counters, bool isServerless)
 {
-    return counters->GetSubgroup("counters", "datastreams");
+    return counters->GetSubgroup("counters", isServerless ? "datastreams_serverless" : "datastreams");
 }
 
 TVector<TPQLabelsInfo> GetLabelsForCustomCluster(const TTopicConverterPtr& topic, TString cluster)
@@ -37,13 +37,14 @@ TVector<TPQLabelsInfo> GetLabels(const TTopicConverterPtr& topic)
     return GetLabelsForCustomCluster(topic, topic->GetCluster());
 }
 
-TVector<TPQLabelsInfo> GetLabelsForStream(const TTopicConverterPtr& topic, const TString& cloudId,
-                                        const TString& dbId, const TString& folderId) {
-    TVector<TPQLabelsInfo> res = {
-            {{{"cloud", cloudId}}, {cloudId}},
-            {{{"folder", folderId}}, {folderId}},
-            {{{"database", dbId}}, {dbId}},
-            {{{"stream", topic->GetClientsideName()}}, {topic->GetClientsideName()}}};
+TVector<std::pair<TString, TString>> GetSubgroupsForTopic(const TTopicConverterPtr& topic, const TString& cloudId,
+                                        const TString& dbId, const TString& dbPath, const TString& folderId) {
+    TVector<std::pair<TString, TString>> res = {
+            {"database", dbPath},
+            {"cloud_id", cloudId},
+            {"folder_id", folderId},
+            {"database_id", dbId},
+            {"topic", topic->GetClientsideName()}};
     return res;
 }
 

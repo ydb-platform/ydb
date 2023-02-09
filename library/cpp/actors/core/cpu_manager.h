@@ -1,6 +1,7 @@
 #pragma once
 
 #include "actorsystem.h"
+#include "harmonizer.h"
 #include "executor_pool_basic.h"
 #include "executor_pool_io.h"
 #include "executor_pool_united.h"
@@ -11,6 +12,7 @@ namespace NActors {
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
         THolder<TUnitedWorkers> UnitedWorkers;
         THolder<IBalancer> Balancer;
+        THolder<IHarmonizer> Harmonizer;
         TCpuManagerConfig Config;
     public:
         explicit TCpuManager(THolder<TActorSystemSetup>& setup)

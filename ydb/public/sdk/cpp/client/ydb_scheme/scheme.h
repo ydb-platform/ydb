@@ -2,6 +2,13 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
+namespace Ydb {
+    class VirtualTimestamp;
+    namespace Scheme {
+        class Entry;
+    }
+}
+
 namespace NYdb {
 namespace NScheme {
 
@@ -34,6 +41,25 @@ enum class ESchemeEntryType : i32 {
     Topic = 17
 };
 
+struct TVirtualTimestamp {
+    ui64 PlanStep = 0;
+    ui64 TxId = 0;
+
+    TVirtualTimestamp() = default;
+    TVirtualTimestamp(ui64 planStep, ui64 txId);
+    TVirtualTimestamp(const ::Ydb::VirtualTimestamp& proto);
+
+    TString ToString() const;
+    void Out(IOutputStream& o) const;
+
+    bool operator<(const TVirtualTimestamp& rhs) const;
+    bool operator<=(const TVirtualTimestamp& rhs) const;
+    bool operator>(const TVirtualTimestamp& rhs) const;
+    bool operator>=(const TVirtualTimestamp& rhs) const;
+    bool operator==(const TVirtualTimestamp& rhs) const;
+    bool operator!=(const TVirtualTimestamp& rhs) const;
+};
+
 struct TSchemeEntry {
     TString Name;
     TString Owner;
@@ -41,6 +67,10 @@ struct TSchemeEntry {
     TVector<TPermissions> EffectivePermissions;
     TVector<TPermissions> Permissions;
     ui64 SizeBytes = 0;
+    TVirtualTimestamp CreatedAt;
+
+    TSchemeEntry() = default;
+    TSchemeEntry(const ::Ydb::Scheme::Entry& proto);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -126,8 +156,8 @@ private:
 
 class TDescribePathResult : public TStatus {
 public:
-    TDescribePathResult(TSchemeEntry&& entry, TStatus&& status);
-    TSchemeEntry GetEntry() const;
+    TDescribePathResult(TStatus&& status, const TSchemeEntry& entry);
+    const TSchemeEntry& GetEntry() const;
 
 private:
     TSchemeEntry Entry_;
@@ -135,8 +165,8 @@ private:
 
 class TListDirectoryResult : public TDescribePathResult {
 public:
-    TListDirectoryResult(TVector<TSchemeEntry>&& children, TSchemeEntry&& self, TStatus&& status);
-    TVector<TSchemeEntry> GetChildren() const;
+    TListDirectoryResult(TStatus&& status, const TSchemeEntry& self, TVector<TSchemeEntry>&& children);
+    const TVector<TSchemeEntry>& GetChildren() const;
 
 private:
     TVector<TSchemeEntry> Children_;

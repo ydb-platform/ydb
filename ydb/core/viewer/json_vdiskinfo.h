@@ -54,8 +54,8 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse> {
 
     static constexpr bool StaticNodesOnly = true;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>* GetElementsField(TResponseType* response) {
-        return response->Record.MutableVDiskStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
+        return *response->Record.MutableVDiskStateInfo();
     }
 
     static const NKikimrBlobStorage::TVDiskID& GetElementKey(const TElementType& type) {

@@ -270,6 +270,9 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
+            if (Config->EnableLlvm.Get()) {
+                kqpResult.PreparingQuery->SetEnableLlvm(*Config->EnableLlvm.Get());
+            }
             KqpCompileResult->PreparedQuery.reset(kqpResult.PreparingQuery.release());
             KqpCompileResult->QueryTraits = kqpResult.QueryTraits;
 
@@ -341,6 +344,9 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS && !FailForcedNewEngineCompilationStatus.load(std::memory_order_relaxed)) {
             YQL_ENSURE(kqpResult.PreparingQuery);
+            if (Config->EnableLlvm.Get()) {
+                kqpResult.PreparingQuery->SetEnableLlvm(*Config->EnableLlvm.Get());
+            }
             KqpCompileResult->PreparedQueryNewEngine.reset(kqpResult.PreparingQuery.release());
 
             auto duration = TInstant::Now() - RecompileStartTime;

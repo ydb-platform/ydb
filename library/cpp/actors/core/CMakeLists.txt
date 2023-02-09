@@ -42,6 +42,7 @@ target_sources(cpp-actors-core PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/executor_pool_io.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/executor_pool_united.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/executor_thread.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/harmonizer.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/interconnect.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/io_dispatcher.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/log.cpp

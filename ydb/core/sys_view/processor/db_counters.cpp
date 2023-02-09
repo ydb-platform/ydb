@@ -5,7 +5,8 @@
 #include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/core/tablet/labeled_db_counters.h>
+#include <ydb/core/tablet/labeled_counters_merger.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 
 namespace NKikimr {
@@ -120,6 +121,10 @@ static void SwapMaxCounters(NKikimrSysView::TDbCounters* dst, NKikimrSysView::TD
     dst->SetCumulativeCount(src.GetCumulativeCount());
 };
 
+static void SwapLabeledCounters(NKikimrLabeledCounters::TTabletLabeledCounters* dst, NKikimrLabeledCounters::TTabletLabeledCounters& src) {
+    dst->MutableLabeledCounter()->Swap(src.MutableLabeledCounter());
+};
+
 static void ResetSimpleCounters(NKikimrSysView::TDbCounters* dst) {
     auto simpleSize = dst->SimpleSize();
     auto* to = dst->MutableSimple();
@@ -134,6 +139,38 @@ static void ResetMaxCounters(NKikimrSysView::TDbCounters* dst) {
     auto* to = dst->MutableCumulative();
     for (size_t i = 0; i < cumulativeSize; ++i) {
         (*to)[i] = 0;
+    }
+}
+
+static void ResetLabeledCounters(NKikimrLabeledCounters::TTabletLabeledCounters* dst) {
+    auto labeledSize = dst->LabeledCounterSize();
+    auto* to = dst->MutableLabeledCounter();
+    for (size_t i = 0; i < labeledSize; ++i) {
+        auto& counter = (*to)[i];
+        TLabeledCounterOptions::ECounterType type(counter.GetType());
+        TLabeledCounterOptions::EAggregateFunc aggrFunc(counter.GetAggregateFunc());
+        const bool switchResetValue = (type == TLabeledCounterOptions::CT_TIMELAG);
+        switch (aggrFunc) {
+            case TLabeledCounterOptions::EAF_MIN:
+                if (switchResetValue) {
+                    counter.SetValue(0);
+                } else {
+                    counter.SetValue(std::numeric_limits<ui64>::max());
+                }
+                break;
+            case TLabeledCounterOptions::EAF_MAX:
+                if (switchResetValue) {
+                    counter.SetValue(std::numeric_limits<ui64>::max());
+                } else {
+                    counter.SetValue(0);
+                }
+                break;
+            case TLabeledCounterOptions::EAF_SUM:
+                counter.SetValue(0);
+                break;
+            default:
+                Y_FAIL("bad aggrFunc value");
+        }
     }
 }
 
@@ -161,6 +198,24 @@ static void AggregateCounters(NKikimr::NSysView::TDbServiceCounters* dst,
     if (src.HasGRpcProxyCounters()) {
         TAggrSum::Apply(dst->Proto().MutableGRpcProxyCounters()->MutableRequestCounters(),
             src.GetGRpcProxyCounters().GetRequestCounters());
+    }
+
+    for (const auto& srcReq : src.GetLabeledCounters()) {
+        auto* dstReq = dst->FindOrAddLabeledCounters(srcReq.GetAggregatedPerTablets().GetGroup());
+        if (dstReq->GetAggregatedPerTablets().GetLabeledCounter().size() <
+            srcReq.GetAggregatedPerTablets().GetLabeledCounter().size()) {
+            const ui32 n = srcReq.GetAggregatedPerTablets().GetLabeledCounter().size() -
+                    dstReq->GetAggregatedPerTablets().GetLabeledCounter().size();
+            for (ui32 i = 0; i < n; ++i) {
+                dstReq->MutableAggregatedPerTablets()->AddLabeledCounter();
+            }
+        }
+
+        for (int i = 0; i < srcReq.GetAggregatedPerTablets().GetLabeledCounter().size(); ++i) {
+            const auto& srcCounter = srcReq.GetAggregatedPerTablets().GetLabeledCounter(i);
+            auto* trgCounter = dstReq->MutableAggregatedPerTablets()->MutableLabeledCounter(i);
+            NKikimr::TMerger::MergeOne(srcCounter, *trgCounter);
+        }
     }
 }
 
@@ -195,6 +250,11 @@ static void SwapStatefulCounters(NKikimr::NSysView::TDbServiceCounters* dst,
         auto* dstReq = dst->FindOrAddGRpcCounters(srcReq.GetGRpcService(), srcReq.GetGRpcRequest());
         SwapSimpleCounters(dstReq->MutableRequestCounters(), *srcReq.MutableRequestCounters());
     }
+
+    for (auto& srcReq : *src.MutableLabeledCounters()) {
+        auto* dstReq = dst->FindOrAddLabeledCounters(srcReq.GetAggregatedPerTablets().GetGroup());
+        SwapLabeledCounters(dstReq->MutableAggregatedPerTablets(), *srcReq.MutableAggregatedPerTablets());
+    }
 }
 
 static void ResetStatefulCounters(NKikimrSysView::TDbServiceCounters* dst) {
@@ -209,6 +269,9 @@ static void ResetStatefulCounters(NKikimrSysView::TDbServiceCounters* dst) {
     }
     for (auto& dstReq : *dst->MutableGRpcCounters()) {
         ResetSimpleCounters(dstReq.MutableRequestCounters());
+    }
+    for (auto& dstReq : *dst->MutableLabeledCounters()) {
+        ResetLabeledCounters(dstReq.MutableAggregatedPerTablets());
     }
 }
 
@@ -261,6 +324,10 @@ TIntrusivePtr<IDbCounters> TSysViewProcessor::CreateCountersForService(
         result = NGRpcService::CreateGRpcProxyDbCounters(ExternalGroup, group);
         break;
     }
+    case NKikimrSysView::LABELED: {
+        result = NKikimr::CreateLabeledDbCounters(LabeledGroup);
+        break;
+    }
     default:
         break;
     }
@@ -282,6 +349,13 @@ void TSysViewProcessor::AttachExternalCounters() {
         ->GetSubgroup("folder_id", FolderId)
         ->GetSubgroup("database_id", DatabaseId)
         ->RegisterSubgroup("host", "", ExternalGroup);
+
+    GetServiceCounters(AppData()->Counters, "labeled_serverless", false)
+        ->GetSubgroup("database", Database)
+        ->GetSubgroup("cloud_id", CloudId)
+        ->GetSubgroup("folder_id", FolderId)
+        ->GetSubgroup("database_id", DatabaseId)
+        ->RegisterSubgroup("host", "", LabeledGroup);
 }
 
 void TSysViewProcessor::AttachInternalCounters() {
@@ -302,6 +376,9 @@ void TSysViewProcessor::DetachExternalCounters() {
     }
 
     GetServiceCounters(AppData()->Counters, "ydb_serverless", false)
+        ->RemoveSubgroup("database", Database);
+
+    GetServiceCounters(AppData()->Counters, "labeled_serverless", false)
         ->RemoveSubgroup("database", Database);
 }
 
@@ -348,6 +425,7 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
         incomingServicesSet.insert(service);
 
         auto& simpleState = state.Simple[service];
+        simpleState.Clear();
         SwapStatefulCounters(&simpleState, *serviceCounters.MutableCounters());
 
         auto& aggrState = AggregatedCountersState[service];
@@ -374,6 +452,61 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
     Send(ev->Sender, std::move(response));
 }
 
+void TSysViewProcessor::Handle(TEvSysView::TEvSendDbLabeledCountersRequest::TPtr& ev) {
+    if (!AppData()->FeatureFlags.GetEnableDbCounters()) {
+        return;
+    }
+
+    auto& record = ev->Get()->Record;
+    auto nodeId = record.GetNodeId();
+
+    auto& state = NodeLabeledCountersStates[nodeId];
+    state.FreshCount = 0;
+
+    if (state.Generation == record.GetGeneration()) {
+        SVLOG_D("[" << TabletID() << "] TEvSendDbLabeledCountersRequest, known generation: "
+            << "node id# " << nodeId
+            << ", generation# " << record.GetGeneration());
+
+        auto response = MakeHolder<TEvSysView::TEvSendDbLabeledCountersResponse>();
+        response->Record.SetDatabase(Database);
+        response->Record.SetGeneration(state.Generation);
+        Send(ev->Sender, std::move(response));
+        return;
+    }
+
+    state.Generation = record.GetGeneration();
+
+    std::unordered_set<NKikimrSysView::EDbCountersService> incomingServicesSet;
+
+    for (auto& serviceCounters : *record.MutableServiceCounters()) {
+        const auto service = serviceCounters.GetService();
+        incomingServicesSet.insert(service);
+
+        auto& simpleState = state.Simple[service];
+        simpleState.Clear();
+        SwapStatefulCounters(&simpleState, *serviceCounters.MutableCounters());
+    }
+
+    for (auto it = state.Simple.begin(); it != state.Simple.end(); ) {
+        if (incomingServicesSet.find(it->first) == incomingServicesSet.end()) {
+            it = state.Simple.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    SVLOG_D("[" << TabletID() << "] TEvSendDbLabeledCountersRequest: "
+        << "node id# " << nodeId
+        << ", generation# " << state.Generation
+        << ", request size# " << record.ByteSize());
+
+    auto response = MakeHolder<TEvSysView::TEvSendDbLabeledCountersResponse>();
+    response->Record.SetDatabase(Database);
+    response->Record.SetGeneration(state.Generation);
+    Send(ev->Sender, std::move(response));
+}
+
 void TSysViewProcessor::Handle(TEvPrivate::TEvApplyCounters::TPtr&) {
     for (auto& [_, counters] : AggregatedCountersState) {
         ResetStatefulCounters(&counters.Proto());
@@ -391,7 +524,6 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvApplyCounters::TPtr&) {
         }
         ++it;
     }
-
     for (auto& [service, aggrCounters] : AggregatedCountersState) {
         TIntrusivePtr<IDbCounters> counters;
         if (auto it = Counters.find(service); it != Counters.end()) {
@@ -409,6 +541,43 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvApplyCounters::TPtr&) {
         << "services count# " << AggregatedCountersState.size());
 
     ScheduleApplyCounters();
+}
+
+void TSysViewProcessor::Handle(TEvPrivate::TEvApplyLabeledCounters::TPtr&) {
+    for (auto& [_, counters] : AggregatedLabeledState) {
+        ResetStatefulCounters(&counters.Proto());
+    }
+
+    for (auto it = NodeLabeledCountersStates.begin(); it != NodeLabeledCountersStates.end(); ) {
+        auto& state = it->second;
+        if (state.FreshCount > 1) {
+            it = NodeLabeledCountersStates.erase(it);
+            continue;
+        }
+        ++state.FreshCount;
+        for (const auto& [service, counters] : state.Simple) {
+            AggregateStatefulCounters(&AggregatedLabeledState[service], counters.Proto());
+        }
+        ++it;
+    }
+
+    for (auto& [service, aggrCounters] : AggregatedLabeledState) {
+        TIntrusivePtr<IDbCounters> counters;
+        if (auto it = Counters.find(service); it != Counters.end()) {
+            counters = it->second;
+        } else {
+            counters = CreateCountersForService(service);
+        }
+        if (!counters) {
+            continue;
+        }
+        counters->FromProto(aggrCounters);
+    }
+
+    SVLOG_D("[" << TabletID() << "] TEvApplyLabeledCounters: "
+        << "services count# " << AggregatedLabeledState.size());
+
+    ScheduleApplyLabeledCounters();
 }
 
 void TSysViewProcessor::Handle(TEvPrivate::TEvSendNavigate::TPtr&) {

@@ -18,7 +18,6 @@ struct TAuditLogFragment {
     TVector<TString> AddACL;
     TVector<TString> RmACL;
     TMaybe<TString> NewOwner;
-    TMaybe<TString> ProtoRequest;
 
     TAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx);
 

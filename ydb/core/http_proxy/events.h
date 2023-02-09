@@ -130,7 +130,6 @@ namespace NKikimr::NHttpProxy {
             TEvClientReady() {}
         };
 
-
         struct TEvError : public TEventLocal<TEvError, EvError> {
             NYdb::EStatus Status;
             TString Response;
@@ -140,9 +139,6 @@ namespace NKikimr::NHttpProxy {
             , Response(response)
             {}
         };
-
-
-
     };
 
 

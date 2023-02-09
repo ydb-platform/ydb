@@ -3,6 +3,7 @@
 
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -163,6 +164,25 @@ private:
 
 private:
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
+};
+
+class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {
+public:
+    TFakeConfigDispatcher()
+        : TActor<TFakeConfigDispatcher>(&TFakeConfigDispatcher::StateWork)
+    {
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
+        }
+    }
+
+    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev, const TActorContext& ctx) {
+        Y_UNUSED(ev);
+        ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationRequest(), 0, ev->Cookie);
+    }
 };
 
 // Automatically resend notification requests to Schemeshard if it gets restarted
@@ -496,6 +516,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 
     app.SetEnableDataColumnForIndexTable(true);
     app.SetEnableSystemViews(opts.EnableSystemViews_);
+    app.SetEnablePersistentQueryStats(opts.EnablePersistentQueryStats_);
     app.SetEnablePersistentPartitionStats(opts.EnablePersistentPartitionStats_);
     app.SetEnableTtlOnAsyncIndexedTables(opts.EnableTtlOnAsyncIndexedTables_);
     app.SetAllowUpdateChannelsBindingOfSolomonPartitions(opts.AllowUpdateChannelsBindingOfSolomonPartitions_);
@@ -505,6 +526,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableProtoSourceIdInfo(opts.EnableProtoSourceIdInfo_);
     app.SetEnablePqBilling(opts.EnablePqBilling_);
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
+    app.SetEnableBorrowedSplitCompaction(opts.EnableBorrowedSplitCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
 
@@ -529,6 +551,13 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     SetupTabletServices(runtime, &app);
     if (opts.EnablePipeRetries_) {
         EnableSchemeshardPipeRetriesGuard = EnableSchemeshardPipeRetries(runtime);
+    }
+
+    if (opts.RunFakeConfigDispatcher_) {
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.RegisterService(NConsole::MakeConfigsDispatcherID(runtime.GetNodeId(node)),
+                runtime.Register(new TFakeConfigDispatcher(), node), node);
+        }
     }
 
     TActorId sender = runtime.AllocateEdgeActor();
@@ -838,7 +867,6 @@ void NSchemeShardUT_Private::TTestEnv::InitRootStoragePools(NActors::TTestActorR
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
     }
 }
-
 
 void NSchemeShardUT_Private::TTestEnv::BootSchemeShard(NActors::TTestActorRuntime &runtime, ui64 schemeRoot) {
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(schemeRoot, TTabletTypes::SchemeShard), SchemeShardFactory);

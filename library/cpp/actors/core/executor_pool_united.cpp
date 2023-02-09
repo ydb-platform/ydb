@@ -7,6 +7,7 @@
 #include "mailbox.h"
 #include "scheduler_queue.h"
 #include <library/cpp/actors/util/affinity.h>
+#include <library/cpp/actors/util/cpu_load_log.h>
 #include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/util/futex.h>
 #include <library/cpp/actors/util/intrinsics.h>
@@ -953,6 +954,8 @@ namespace NActors {
         // Thread-safe per pool stats
         // NOTE: It's guaranteed that cpu never executes two instance of the same pool
         TVector<TExecutorThreadStats> PoolStats;
+        TCpuLoadLog<1024> LoadLog;
+
 
         // Configuration
         TCpuId CpuId;
@@ -1000,7 +1003,9 @@ namespace NActors {
         }
 
         bool ActiveWait(ui64 spinThresholdTs, TPoolId& result) {
-            ui64 deadline = GetCycleCountFast() + spinThresholdTs;
+            ui64 ts = GetCycleCountFast();
+            LoadLog.RegisterBusyPeriod(ts);
+            ui64 deadline = ts + spinThresholdTs;
             while (GetCycleCountFast() < deadline) {
                 for (ui32 i = 0; i < 12; ++i) {
                     TPoolId current = State.CurrentPool();
@@ -1008,6 +1013,7 @@ namespace NActors {
                         SpinLockPause();
                     } else {
                         result = current;
+                        LoadLog.RegisterIdlePeriod(GetCycleCountFast());
                         return true; // wakeup
                     }
                 }
@@ -1269,15 +1275,25 @@ namespace NActors {
                 if (Pools[pool].IsUnited()) {
                     ui64 ElapsedTs = 0;
                     ui64 ParkedTs = 0;
+                    TStackVec<TCpuLoadLog<1024>*, 128> logs;
+                    ui64 worstActivationTimeUs = 0;
                     for (TCpu* cpu : Pools[pool].WakeOrderCpus) {
-                        const TExecutorThreadStats& cpuStats = cpu->PoolStats[pool];
+                        TExecutorThreadStats& cpuStats = cpu->PoolStats[pool];
                         ElapsedTs += cpuStats.ElapsedTicks;
                         ParkedTs += cpuStats.ParkedTicks;
+                        worstActivationTimeUs = Max(worstActivationTimeUs, cpuStats.WorstActivationTimeUs);
+                        cpuStats.WorstActivationTimeUs = 0;
+                        logs.push_back(&cpu->LoadLog);
                     }
+                    ui64 minPeriodTs = Min(ui64(Us2Ts(Balancer->GetPeriodUs())), ui64((1024ull-2ull)*64ull*128ull*1024ull));
+                    ui64 estimatedTs = MinusOneCpuEstimator.MaxLatencyIncreaseWithOneLessCpu(
+                            &logs[0], logs.size(), ts, minPeriodTs);
                     TBalancerStats stats;
                     stats.Ts = ts;
                     stats.CpuUs = Ts2Us(ElapsedTs);
                     stats.IdleUs = Ts2Us(ParkedTs);
+                    stats.ExpectedLatencyIncreaseUs = Ts2Us(estimatedTs);
+                    stats.WorstActivationTimeUs = worstActivationTimeUs;
                     Balancer->SetPoolStats(pool, stats);
                 }
             }
@@ -1332,11 +1348,13 @@ namespace NActors {
             return result;
         }
         wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
+        cpu.LoadLog.RegisterBusyPeriod(GetCycleCountFast());
         bool wakeup;
         do {
             wakeup = cpu.BlockedWait(result, Config.Balancer.PeriodUs * 1000);
             wctx.AddParkedCycles(timeTracker.Elapsed());
         } while (!wakeup);
+        cpu.LoadLog.RegisterIdlePeriod(GetCycleCountFast());
         return result;
     }
 

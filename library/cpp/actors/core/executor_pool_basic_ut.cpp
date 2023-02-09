@@ -6,9 +6,13 @@
 #include <library/cpp/actors/util/should_continue.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/actors/protos/unittests.pb.h>
 
 using namespace NActors;
+
+#define VALUES_EQUAL(a, b, ...) \
+        UNIT_ASSERT_VALUES_EQUAL_C((a), (b), (i64)semaphore.OldSemaphore \
+                << ' ' << (i64)semaphore.CurrentSleepThreadCount \
+                << ' ' << (i64)semaphore.CurrentThreadCount __VA_ARGS__);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -90,138 +94,59 @@ THolder<TActorSystemSetup> GetActorSystemSetup(TBasicExecutorPool* pool)
 
 Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
-    Y_UNIT_TEST(DecreaseIncreaseThreadsCount) {
-        const size_t msgCount = 1e4;
-        const size_t size = 4;
-        const size_t halfSize = size / 2;
-        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
+    Y_UNIT_TEST(Semaphore) {
+        TBasicExecutorPool::TSemaphore semaphore;
+        semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(0);
 
-        auto setup = GetActorSystemSetup(executorPool);
-        TActorSystem actorSystem(setup);
-        actorSystem.Start();
+        VALUES_EQUAL(0, semaphore.ConverToI64());
+        semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(-1);
+        VALUES_EQUAL(-1, semaphore.ConverToI64());
+        semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(1);
+        VALUES_EQUAL(1, semaphore.ConverToI64());
 
-        executorPool->SetThreadCount(halfSize);
-        TTestSenderActor* actors[size];
-        TActorId actorIds[size];
-        for (size_t i = 0; i < size; ++i) {
-            actors[i] = new TTestSenderActor();
-            actorIds[i] = actorSystem.Register(actors[i]);
+        for (i64 value = -1'000'000; value <= 1'000'000; ++value) {
+            VALUES_EQUAL(TBasicExecutorPool::TSemaphore::GetSemaphore(value).ConverToI64(), value);
         }
 
-        const int testCount = 2;
+        for (i8 sleepThreads = -10; sleepThreads <= 10; ++sleepThreads) {
 
-        TExecutorPoolStats poolStats[testCount];
-        TVector<TExecutorThreadStats> statsCopy[testCount];
+            semaphore = TBasicExecutorPool::TSemaphore();
+            semaphore.CurrentSleepThreadCount = sleepThreads;
+            i64 initialValue = semaphore.ConverToI64();
 
-        for (size_t testIdx = 0; testIdx < testCount; ++testIdx) {
-            for (size_t i = 0; i < size; ++i) {
-                actors[i]->Start(actors[i]->SelfId(), msgCount);
-            }
-            for (size_t i = 0; i < size; ++i) {
-                actorSystem.Send(actorIds[i], new TEvMsg());
-            }
+            semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(initialValue - 1);
+            VALUES_EQUAL(-1, semaphore.OldSemaphore);
 
-            Sleep(TDuration::MilliSeconds(100));
-
-            for (size_t i = 0; i < size; ++i) {
-                actors[i]->Stop();
-            }
-
-            executorPool->GetCurrentStats(poolStats[testIdx], statsCopy[testIdx]);
-        }
-
-        for (size_t i = 1; i <= halfSize; ++i) {
-            UNIT_ASSERT_UNEQUAL(statsCopy[0][i].ReceivedEvents, statsCopy[1][i].ReceivedEvents);
-        }
-
-        for (size_t i = halfSize + 1; i <= size; ++i) {
-            UNIT_ASSERT_EQUAL(statsCopy[0][i].ReceivedEvents, statsCopy[1][i].ReceivedEvents);
-        }
-
-        executorPool->SetThreadCount(size);
-
-        for (size_t testIdx = 0; testIdx < testCount; ++testIdx) {
-            for (size_t i = 0; i < size; ++i) {
-                actors[i]->Start(actors[i]->SelfId(), msgCount);
-            }
-            for (size_t i = 0; i < size; ++i) {
-                actorSystem.Send(actorIds[i], new TEvMsg());
+            i64 value = initialValue;
+            value -= 100;
+            for (i32 expected = -100; expected <= 100; ++expected) {
+                semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(value);
+                UNIT_ASSERT_VALUES_EQUAL_C(expected, semaphore.OldSemaphore, (i64)semaphore.OldSemaphore
+                        << ' ' << (i64)semaphore.CurrentSleepThreadCount
+                        << ' ' << (i64)semaphore.CurrentThreadCount);
+                UNIT_ASSERT_VALUES_EQUAL_C(sleepThreads, semaphore.CurrentSleepThreadCount, (i64)semaphore.OldSemaphore
+                        << ' ' << (i64)semaphore.CurrentSleepThreadCount
+                        << ' ' << (i64)semaphore.CurrentThreadCount);
+                semaphore = TBasicExecutorPool::TSemaphore();
+                semaphore.OldSemaphore = expected;
+                semaphore.CurrentSleepThreadCount = sleepThreads;
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.ConverToI64(), value);
+                value++;
             }
 
-            Sleep(TDuration::MilliSeconds(100));
-
-            for (size_t i = 0; i < size; ++i) {
-                actors[i]->Stop();
+            for (i32 expected = 101; expected >= -101; --expected) {
+                semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(value);
+                UNIT_ASSERT_VALUES_EQUAL_C(expected, semaphore.OldSemaphore, (i64)semaphore.OldSemaphore
+                        << ' ' << (i64)semaphore.CurrentSleepThreadCount
+                        << ' ' << (i64)semaphore.CurrentThreadCount);
+                UNIT_ASSERT_VALUES_EQUAL_C(sleepThreads, semaphore.CurrentSleepThreadCount, (i64)semaphore.OldSemaphore
+                        << ' ' << (i64)semaphore.CurrentSleepThreadCount
+                        << ' ' << (i64)semaphore.CurrentThreadCount);
+                value--;
             }
-
-            executorPool->GetCurrentStats(poolStats[testIdx], statsCopy[testIdx]);
         }
 
-        for (size_t i = 1; i <= size; ++i) {
-            UNIT_ASSERT_UNEQUAL(statsCopy[0][i].ReceivedEvents, statsCopy[1][i].ReceivedEvents);
-        }
-    }
-
-    Y_UNIT_TEST(ChangeCount) {
-        const size_t msgCount = 1e3;
-        const size_t size = 4;
-        const size_t halfSize = size / 2;
-        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
-
-        auto begin = TInstant::Now();
-
-        auto setup = GetActorSystemSetup(executorPool);
-        TActorSystem actorSystem(setup);
-        actorSystem.Start();
-        executorPool->SetThreadCount(halfSize);
-
-        TTestSenderActor* actors[size];
-        TActorId actorIds[size];
-        for (size_t i = 0; i < size; ++i) {
-            actors[i] = new TTestSenderActor();
-            actorIds[i] = actorSystem.Register(actors[i]);
-        }
-
-        for (size_t i = 0; i < size; ++i) {
-            actors[i]->Start(actorIds[i], msgCount);
-        }
-        for (size_t i = 0; i < size; ++i) {
-            actorSystem.Send(actorIds[i], new TEvMsg());
-        }
-
-        const i32 N = 6;
-        const i32 threadsCouns[N] = { 1, 3, 2, 3, 1, 4 };
-
-        ui64 counter = 0;
-
-        TTestSenderActor* changerActor = new TTestSenderActor([&]{
-            executorPool->SetThreadCount(threadsCouns[counter]);
-            counter++;
-            if (counter == N) {
-                counter = 0;
-            }
-        });
-        TActorId changerActorId = actorSystem.Register(changerActor);
-        changerActor->Start(changerActorId, msgCount);
-        actorSystem.Send(changerActorId, new TEvMsg());
-
-        while (true) {
-            size_t maxCounter = 0;
-            for (size_t i = 0; i < size; ++i) {
-                maxCounter = Max(maxCounter, actors[i]->GetCounter());
-            }
-
-            if (maxCounter == 0) {
-                break;
-            }
-
-            auto now = TInstant::Now();
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
-
-            Sleep(TDuration::MilliSeconds(1));
-        }
-
-        changerActor->Stop();
+        //UNIT_ASSERT_VALUES_EQUAL_C(-1, TBasicExecutorPool::TSemaphore::GetSemaphore(value-1).OldSemaphore);
     }
 
     Y_UNIT_TEST(CheckCompleteOne) {
@@ -431,5 +356,184 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolAllocatedMailboxes, 4095); // one line
         UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount >= msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].MailboxPushedOutBySoftPreemption, 0);
+    }
+}
+
+Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
+
+    struct TMockState {
+        void ActorDo() {}
+    };
+
+    struct TTestActors {
+        const size_t Count;
+        TArrayHolder<TTestSenderActor*> Actors;
+        TArrayHolder<TActorId> ActorIds;
+
+        TTestActors(size_t count)
+            : Count(count)
+            , Actors(new TTestSenderActor*[count])
+            , ActorIds(new TActorId[count])
+        { }
+
+        void Start(TActorSystem &actorSystem, size_t msgCount) {
+            for (size_t i = 0; i < Count; ++i) {
+                Actors[i]->Start(Actors[i]->SelfId(), msgCount);
+            }
+            for (size_t i = 0; i < Count; ++i) {
+                actorSystem.Send(ActorIds[i], new TEvMsg());
+            }
+        }
+
+        void Stop() {
+            for (size_t i = 0; i < Count; ++i) {
+                Actors[i]->Stop();
+            }
+        }
+    };
+
+    template <typename TState = TMockState>
+    struct TTestCtx {
+        const size_t MaxThreadCount;
+        const size_t SendingMessageCount;
+        std::unique_ptr<TBasicExecutorPool> ExecutorPool;
+        THolder<TActorSystemSetup> Setup;
+        TActorSystem ActorSystem;
+
+        TState State;
+
+        TTestCtx(size_t maxThreadCount, size_t sendingMessageCount)
+            : MaxThreadCount(maxThreadCount)
+            , SendingMessageCount(sendingMessageCount)
+            , ExecutorPool(new TBasicExecutorPool(0, MaxThreadCount, 50))
+            , Setup(GetActorSystemSetup(ExecutorPool.get()))
+            , ActorSystem(Setup)
+        {
+        }
+
+        TTestCtx(size_t maxThreadCount, size_t sendingMessageCount, const TState &state)
+            : MaxThreadCount(maxThreadCount)
+            , SendingMessageCount(sendingMessageCount)
+            , ExecutorPool(new TBasicExecutorPool(0, MaxThreadCount, 50))
+            , Setup(GetActorSystemSetup(ExecutorPool.get()))
+            , ActorSystem(Setup)
+            , State(state)
+        {
+        }
+
+        ~TTestCtx() {
+            ExecutorPool.release();
+        }
+
+        TTestActors RegisterCheckActors(size_t actorCount) {
+            TTestActors res(actorCount);
+            for (size_t i = 0; i < actorCount; ++i) {
+                res.Actors[i] = new TTestSenderActor([&] {
+                    State.ActorDo();
+                });
+                res.ActorIds[i] = ActorSystem.Register(res.Actors[i]);
+            }
+            return res;
+        }
+    };
+
+    struct TCheckingInFlightState {
+        TAtomic ExpectedMaximum = 0;
+        TAtomic CurrentInFlight = 0;
+
+        void ActorStartProcessing() {
+            ui32 inFlight = AtomicIncrement(CurrentInFlight);
+            ui32 maximum = AtomicGet(ExpectedMaximum);
+            if (maximum) {
+                UNIT_ASSERT_C(inFlight <= maximum, "inFlight# " << inFlight << " maximum# " << maximum);
+            }
+        }
+
+        void ActorStopProcessing() {
+            AtomicDecrement(CurrentInFlight);
+        }
+
+        void ActorDo() {
+            ActorStartProcessing();
+            NanoSleep(1'000'000);
+            ActorStopProcessing();
+        }
+    };
+
+    Y_UNIT_TEST(DecreaseIncreaseThreadCount) {
+        const size_t msgCount = 1e2;
+        const size_t size = 4;
+        const size_t testCount = 2;
+        TTestCtx<TCheckingInFlightState> ctx(size, msgCount);
+        ctx.ActorSystem.Start();
+
+        TVector<TExecutorThreadStats> statsCopy[testCount];
+
+        TTestActors testActors = ctx.RegisterCheckActors(size);
+
+        const size_t N = 6;
+        const size_t threadsCounts[N] = { 1, 3, 2, 3, 1, 4 };
+        for (ui32 idx = 0; idx < 4 * N; ++idx) {
+            size_t currentThreadCount = threadsCounts[idx];
+            ctx.ExecutorPool->SetThreadCount(currentThreadCount);
+            AtomicSet(ctx.State.ExpectedMaximum, currentThreadCount);
+
+            for (size_t testIdx = 0; testIdx < testCount; ++testIdx) {
+                testActors.Start(ctx.ActorSystem, msgCount);
+                Sleep(TDuration::MilliSeconds(100));
+                testActors.Stop();
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        ctx.ActorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(ContiniousChangingThreadCount) {
+        const size_t msgCount = 1e2;
+        const size_t size = 4;
+
+        auto begin = TInstant::Now();
+        TTestCtx<TCheckingInFlightState> ctx(size, msgCount, TCheckingInFlightState{msgCount});
+        ctx.ActorSystem.Start();
+        TTestActors testActors = ctx.RegisterCheckActors(size);
+
+        testActors.Start(ctx.ActorSystem, msgCount);
+
+        const size_t N = 6;
+        const size_t threadsCouns[N] = { 1, 3, 2, 3, 1, 4 };
+
+        ui64 counter = 0;
+
+        TTestSenderActor* changerActor = new TTestSenderActor([&]{
+            ctx.State.ActorStartProcessing();
+            AtomicSet(ctx.State.ExpectedMaximum, 0);
+            ctx.ExecutorPool->SetThreadCount(threadsCouns[counter]);
+            NanoSleep(10'000'000);
+            AtomicSet(ctx.State.ExpectedMaximum, threadsCouns[counter]);
+            counter++;
+            if (counter == N) {
+                counter = 0;
+            }
+            ctx.State.ActorStopProcessing();
+        });
+        TActorId changerActorId = ctx.ActorSystem.Register(changerActor);
+        changerActor->Start(changerActorId, msgCount);
+        ctx.ActorSystem.Send(changerActorId, new TEvMsg());
+
+        while (true) {
+            size_t maxCounter = 0;
+            for (size_t i = 0; i < size; ++i) {
+                maxCounter = Max(maxCounter, testActors.Actors[i]->GetCounter());
+            }
+            if (maxCounter == 0) {
+                break;
+            }
+            auto now = TInstant::Now();
+            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
+            Sleep(TDuration::MilliSeconds(1));
+        }
+
+        changerActor->Stop();
+        ctx.ActorSystem.Stop();
     }
 }

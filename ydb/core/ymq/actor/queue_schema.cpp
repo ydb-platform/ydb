@@ -450,7 +450,7 @@ void TCreateQueueSchemaActorV2::RequestTablesFormatSettings(const TString& accou
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
     TParameters(trans->MutableParams()->MutableProto())
         .Utf8("USER_NAME", accountName)
-        .Uint32("DEFAULT_TABLES_FORMAT", 0);
+        .Uint32("DEFAULT_TABLES_FORMAT", 1);
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }

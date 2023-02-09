@@ -19,7 +19,7 @@
 #include <ydb/public/lib/base/msgbus.h>
 
 
-namespace NKikimr {
+namespace NKikimr::NPQ {
 
 Y_UNIT_TEST_SUITE(TPQTestSlow) {
 
@@ -148,5 +148,5 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
     });
 }
 
-} // TKeyValueTest
-} // namespace NKikimr
+} // Y_UNIT_TEST_SUITE(TPQTestSlow)
+} // namespace NKikimr::NPQ

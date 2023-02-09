@@ -24,6 +24,7 @@ public:
 };
 
 std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId);
+std::shared_ptr<arrow::DataType> GetCSVArrowType(NScheme::TTypeId typeId);
 
 template <typename T>
 inline bool ArrayEqualValue(const std::shared_ptr<arrow::Array>& x, const std::shared_ptr<arrow::Array>& y) {

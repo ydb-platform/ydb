@@ -14,7 +14,7 @@
 #include <util/system/valgrind.h>
 
 
-namespace NKikimr {
+namespace NKikimr::NPQ {
 
 const static TString TOPIC_NAME = "rt3.dc1--topic";
 
@@ -32,7 +32,7 @@ Y_UNIT_TEST(TestGroupsBalancer) {
     ui64 ssId = 325;
     BootFakeSchemeShard(*tc.Runtime, ssId, state);
 
-    BalancerPrepare(TOPIC_NAME, {{0,{1, 1}}, {11,{1, 1}}, {1,{1, 2}}, {2,{1, 2}}}, ssId, tc);
+    PQBalancerPrepare(TOPIC_NAME, {{0,{1, 1}}, {11,{1, 1}}, {1,{1, 2}}, {2,{1, 2}}}, ssId, tc);
 
     TActorId pipe = RegisterReadSession("session1", tc);
     Y_UNUSED(pipe);
@@ -80,7 +80,7 @@ Y_UNIT_TEST(TestGroupsBalancer2) {
     ui64 ssId = 325;
     BootFakeSchemeShard(*tc.Runtime, ssId, state);
 
-    BalancerPrepare(TOPIC_NAME, {{0, {1, 1}}, {1, {1, 2}}, {2, {1, 3}}, {3, {1, 4}}}, ssId, tc);
+    PQBalancerPrepare(TOPIC_NAME, {{0, {1, 1}}, {1, {1, 2}}, {2, {1, 3}}, {3, {1, 4}}}, ssId, tc);
 
     TActorId pipe = RegisterReadSession("session1", tc, {1,2});
     Y_UNUSED(pipe);
@@ -108,7 +108,7 @@ Y_UNIT_TEST(TestGroupsBalancer3) {
     ui64 ssId = 325;
     BootFakeSchemeShard(*tc.Runtime, ssId, state);
 
-    BalancerPrepare(TOPIC_NAME, {{0, {1, 1}}, {1, {1, 2}} }, ssId, tc);
+    PQBalancerPrepare(TOPIC_NAME, {{0, {1, 1}}, {1, {1, 2}} }, ssId, tc);
 
     TActorId pipe = RegisterReadSession("session", tc, {2});
 
@@ -288,18 +288,18 @@ Y_UNIT_TEST(TestCreateBalancer) {
         ui64 ssId = 325;
         BootFakeSchemeShard(*tc.Runtime, ssId, state);
 
-        BalancerPrepare(TOPIC_NAME, {{1,{1,2}}}, ssId, tc);
+        PQBalancerPrepare(TOPIC_NAME, {{1,{1,2}}}, ssId, tc);
 
         TActorId pipe1 = RegisterReadSession("session0", tc, {1});
 
-        BalancerPrepare(TOPIC_NAME, {{1,{1,2}}, {2,{1,3}}}, ssId, tc);
+        PQBalancerPrepare(TOPIC_NAME, {{1,{1,2}}, {2,{1,3}}}, ssId, tc);
 
         tc.Runtime->Send(new IEventHandle(pipe1, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
 
 
-//        BalancerPrepare(TOPIC_NAME, {{2,1}}, tc); //TODO: not supported yet
-//        BalancerPrepare(TOPIC_NAME, {{1,1}}, tc); // TODO: not supported yet
-        BalancerPrepare(TOPIC_NAME, {{1,{1, 2}}, {2,{1, 3}}, {3,{1, 4}}}, ssId, tc);
+//        PQBalancerPrepare(TOPIC_NAME, {{2,1}}, tc); //TODO: not supported yet
+//        PQBalancerPrepare(TOPIC_NAME, {{1,1}}, tc); // TODO: not supported yet
+        PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}, {2,{1, 3}}, {3,{1, 4}}}, ssId, tc);
         activeZone = false;
 
         TActorId pipe = RegisterReadSession("session1", tc);
@@ -336,7 +336,7 @@ Y_UNIT_TEST(TestDescribeBalancer) {
 
         tc.Runtime->SetScheduledLimit(50);
         tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
-        BalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc);
+        PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc);
         TAutoPtr<IEventHandle> handle;
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
         TEvPersQueue::TEvDescribeResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
@@ -377,7 +377,7 @@ Y_UNIT_TEST(TestCheckACL) {
 
         tc.Runtime->SetScheduledLimit(600);
         tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
-        BalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc);
+        PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc);
 
         {
             TDispatchOptions options;
@@ -459,7 +459,7 @@ Y_UNIT_TEST(TestCheckACL) {
         request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
         request->Record.SetToken("");
 
-        BalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc, true);
+        PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc, true);
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
         result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec7 = result->Record;
@@ -2087,4 +2087,4 @@ Y_UNIT_TEST(TestTabletRestoreEventsOrder) {
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)
-} // NKikimr
+} // namespace NKikimr::NPQ

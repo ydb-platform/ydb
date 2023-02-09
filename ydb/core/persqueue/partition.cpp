@@ -424,7 +424,7 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
 }
 
 TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
-                       const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId,
+                       const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
                        const TActorContext &ctx, bool newPartition)
     : TabletID(tabletId)
@@ -446,10 +446,12 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , GapSize(0)
     , CloudId(config.GetYcCloudId())
     , DbId(config.GetYdbDatabaseId())
+    , DbPath(config.GetYdbDatabasePath())
+    , IsServerless(isServerless)
     , FolderId(config.GetYcFolderId())
     , UsersInfoStorage(
             DCId, TabletID, TopicConverter, Partition, counters, Config,
-            CloudId, DbId, config.GetYdbDatabasePath(), FolderId
+            CloudId, DbId, config.GetYdbDatabasePath(), IsServerless, FolderId
     )
     , ReadingTimestamp(false)
     , SetOffsetCookie(0)
@@ -722,7 +724,7 @@ void TPartition::Bootstrap(const TActorContext& ctx) {
         userInfo.ReadQuota.UpdateConfig(readQuota.GetBurstSize(), readQuota.GetSpeedInBytesPerSecond());
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "boostrapping " << Partition << " " << ctx.SelfID);
+    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "bootstrapping " << Partition << " " << ctx.SelfID);
 
     if (NewPartition) {
         InitComplete(ctx);
@@ -771,10 +773,10 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
             {10240_KB, "10240kb"}, {65536_KB, "65536kb"}, {999'999'999, "99999999kb"}}, true));
 
     subGroup = GetServiceCounters(counters, "pqproxy|writeSession");
-    BytesWritten = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"BytesWritten" + suffix}, true);
+    BytesWrittenTotal = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"BytesWritten" + suffix}, true);
     BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"UncompressedBytesWritten" + suffix}, true);
     BytesWrittenComp = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"CompactedBytesWritten" + suffix}, true);
-    MsgsWritten = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"MessagesWritten" + suffix}, true);
+    MsgsWrittenTotal = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"MessagesWritten" + suffix}, true);
 
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
@@ -809,30 +811,36 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
 void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     const auto topicName = TopicConverter->GetModernName();
     auto counters = AppData(ctx)->Counters;
-    auto labels = NPersQueue::GetLabelsForStream(TopicConverter, CloudId, DbId, FolderId);
-
+    auto subgroups = NPersQueue::GetSubgroupsForTopic(TopicConverter, CloudId, DbId, DbPath, FolderId);
+/*
     WriteBufferIsFullCounter.SetCounter(
-        NPersQueue::GetCountersForStream(counters),
-        {{"cloud", CloudId},
-         {"folder", FolderId},
-         {"database", DbId},
-         {"stream", TopicConverter->GetFederationPath()},
+        NPersQueue::GetCountersForTopic(counters, IsServerless),
+        {
+         {"database", DbPath},
+         {"cloud_id", CloudId},
+         {"folder_id", FolderId},
+         {"database_id", DbId},
+         {"topic", TopicConverter->GetFederationPath()},
          {"host", DCId},
-         {"shard", ToString<ui32>(Partition)}},
-        {"name", "stream.internal_write.buffer_brimmed_duration_ms", true});
+         {"partition", ToString<ui32>(Partition)}},
+        {"name", "api.grpc.topic.stream_write.buffer_brimmed_milliseconds", true});
+*/
+
+    subgroups.push_back({"name", "topic.write.lag_milliseconds"});
 
     InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        NPersQueue::GetCountersForStream(counters), labels,
-                    {{"name", "stream.internal_write.time_lags_milliseconds"}}, "bin",
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {},
+                    subgroups, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {100, "100"}, {200, "200"}, {500, "500"},
                         {1000, "1000"}, {2000, "2000"}, {5000, "5000"},
                         {10'000, "10000"}, {30'000, "30000"}, {60'000, "60000"},
                         {180'000,"180000"}, {9'999'999, "999999"}}, true));
 
+    subgroups.back().second = "topic.write.message_size_bytes";
     MessageSize = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        NPersQueue::GetCountersForStream(counters), labels,
-                    {{"name", "stream.internal_write.record_size_bytes"}}, "bin",
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {},
+                    subgroups, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {1024, "1024"}, {5120, "5120"}, {10'240, "10240"},
                         {20'480, "20480"}, {51'200, "51200"}, {102'400, "102400"},
@@ -840,23 +848,26 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                         {2'097'152,"2097152"}, {5'242'880, "5242880"}, {10'485'760, "10485760"},
                         {67'108'864, "67108864"}, {999'999'999, "99999999"}}, true));
 
-    BytesWritten = NKikimr::NPQ::TMultiCounter(
+    subgroups.pop_back();
+    BytesWrittenGrpc = NKikimr::NPQ::TMultiCounter(
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
+                    {"api.grpc.topic.stream_write.bytes"} , true, "name");
+    BytesWrittenTotal = NKikimr::NPQ::TMultiCounter(
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
+                    {"topic.write.bytes"} , true, "name");
 
-        NPersQueue::GetCountersForStream(counters), labels, {},
-                    {"stream.internal_write.bytes_per_second",
-                     "stream.incoming_bytes_per_second"} , true, "name");
-    MsgsWritten = NKikimr::NPQ::TMultiCounter(
-        NPersQueue::GetCountersForStream(counters), labels, {},
-                    {"stream.internal_write.records_per_second",
-                     "stream.incoming_records_per_second"}, true, "name");
+    MsgsWrittenGrpc = NKikimr::NPQ::TMultiCounter(
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
+                    {"api.grpc.topic.stream_write.messages"}, true, "name");
+    MsgsWrittenTotal = NKikimr::NPQ::TMultiCounter(
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
+                    {"topic.write.messages"}, true, "name");
+
 
     BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(
 
-        NPersQueue::GetCountersForStream(counters), labels, {},
-                    {"stream.internal_write.uncompressed_bytes_per_second"}, true, "name");
-    BytesWrittenComp = NKikimr::NPQ::TMultiCounter(
-        NPersQueue::GetCountersForStream(counters), labels, {},
-                    {"stream.internal_write.compacted_bytes_per_second"}, true, "name");
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
+                    {"topic.write.uncompressed_bytes"}, true, "name");
 
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
@@ -867,21 +878,23 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WriteBigLatency"}, true, "name", false);
     WritesTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WritesTotal"}, true, "name", false);
     if (IsQuotingEnabled() && !TopicWriteQuotaResourcePath.empty()) {
+        subgroups.push_back({"name", "api.grpc.topic.stream_write.topic_throttled_milliseconds"});
         TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
-                NPersQueue::GetCountersForStream(counters), labels,
-                            {{"name", "stream.internal_write.topic_write_quota_wait_milliseconds"}}, "bin",
+                NPersQueue::GetCountersForTopic(counters, IsServerless), {},
+                            subgroups, "bin",
                             TVector<std::pair<ui64, TString>>{
                                 {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
                                 {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},
                                 {1000, "1000"}, {2500, "2500"}, {5000, "5000"},
                                 {10'000, "10000"}, {9'999'999, "999999"}}, true));
+        subgroups.pop_back();
     }
 
+    subgroups.push_back({"name", "api.grpc.topic.stream_write.partition_throttled_milliseconds"});
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
-            NPersQueue::GetCountersForStream(counters), labels,
-                        {{"name", "stream.internal_write.partition_write_quota_wait_milliseconds"}}, "bin",
+            NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups, "bin",
                         TVector<std::pair<ui64, TString>>{
                             {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
                             {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},
@@ -1004,7 +1017,6 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
             avg.Update(now);
         }
     }
-
     WriteBufferIsFullCounter.UpdateWorkingTime(now);
 
     WriteLagMs.Update(0, now);
@@ -1725,6 +1737,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         PartitionCountersLabeled->GetCounters()[METRIC_INIT_TIME] = InitDuration.MilliSeconds();
         PartitionCountersLabeled->GetCounters()[METRIC_LIFE_TIME] = CreationTime.MilliSeconds();
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS] = 1;
+        PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS_TOTAL] = Config.PartitionIdsSize();
         ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
     UpdateUserInfoEndOffset(ctx.Now());
@@ -2056,6 +2069,22 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             ui64 totalLag = clientInfo->GetReadLagMs() + userInfo.GetWriteLagMs() + (ctx.Now() - userInfo.GetReadTimestamp()).MilliSeconds();
             clientInfo->SetTotalLagMs(totalLag);
         }
+
+        if (ev->Get()->GetStatForAllConsumers) { //fill lags
+            auto* clientInfo = result.AddConsumerResult();
+            clientInfo->SetConsumer(userInfo.User);
+            auto readTimestamp = (userInfo.GetReadWriteTimestamp() ? userInfo.GetReadWriteTimestamp() : GetWriteTimeEstimate(userInfo.GetReadOffset())).MilliSeconds();
+            clientInfo->SetReadLagMs(userInfo.GetReadOffset() < (i64)EndOffset
+                                        ? (userInfo.GetReadTimestamp() - TInstant::MilliSeconds(readTimestamp)).MilliSeconds()
+                                        : 0);
+            clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
+            clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
+
+            clientInfo->SetAvgReadSpeedPerMin(userInfo.AvgReadBytes[1].GetValue());
+            clientInfo->SetAvgReadSpeedPerHour(userInfo.AvgReadBytes[2].GetValue());
+            clientInfo->SetAvgReadSpeedPerDay(userInfo.AvgReadBytes[3].GetValue());
+        }
+
     }
     result.SetAvgReadSpeedPerSec(resSpeed[0]);
     result.SetAvgReadSpeedPerMin(resSpeed[1]);
@@ -3636,14 +3665,19 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_OK].Increment(WriteNewSize);
     TabletCounters.Percentile()[COUNTER_PQ_WRITE_CYCLE_BYTES].IncrementFor(WriteCycleSize);
     TabletCounters.Percentile()[COUNTER_PQ_WRITE_NEW_BYTES].IncrementFor(WriteNewSize);
-    if (BytesWritten)
-        BytesWritten.Inc(WriteNewSizeInternal);
+    if (BytesWrittenGrpc)
+        BytesWrittenGrpc.Inc(WriteNewSizeInternal);
+    if (BytesWrittenTotal)
+        BytesWrittenTotal.Inc(WriteNewSize);
+
     if (BytesWrittenUncompressed)
         BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
     if (BytesWrittenComp)
         BytesWrittenComp.Inc(WriteCycleSize);
-    if (MsgsWritten)
-        MsgsWritten.Inc(WriteNewMessagesInternal);
+    if (MsgsWrittenGrpc)
+        MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
+    if (MsgsWrittenTotal)
+        MsgsWrittenTotal.Inc(WriteNewMessages);
 
     //All ok
     auto now = ctx.Now();
@@ -4286,7 +4320,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         }
 
         WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
-        WriteNewSizeInternal = p.Msg.External ? 0 : WriteNewSize;
+        WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
         WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
         if (p.Msg.PartNo == 0) {
              ++WriteNewMessages;

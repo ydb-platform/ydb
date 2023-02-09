@@ -66,15 +66,17 @@ message HashKeyRange {
 
 message Record {
     // Timestamp that the record was inserted into the stream
-    int64 timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 approximate_arrival_timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Data blob
     bytes data = 2 [(FieldTransformer) = TRANSFORM_BASE64];
     // Encryption type used on record
-    EncryptionType encryption = 3;
+    EncryptionType encryption_type = 3;
     // Identifies shard in the stream the record is assigned to
     string partition_key = 4;
     // Unique id of the record within shard
     string sequence_number = 5;
+    // Codec id from ydb_topic.proto if data is coded
+    int32 codec = 6;
 }
 
 // Represents the stream description

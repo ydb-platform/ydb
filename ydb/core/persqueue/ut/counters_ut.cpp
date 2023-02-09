@@ -6,14 +6,15 @@
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 
-namespace NKikimr {
+namespace NKikimr::NPQ {
 
 namespace {
 
 TVector<std::pair<ui64, TString>> TestData() {
     TVector<std::pair<ui64, TString>> data;
     TString s{32, 'c'};
-    ui32 pp = 8 + 4 + 2 + 9;
+    // FIXME: replace magic numbers and add VERIFY on sizes
+    const ui32 pp = 8 + 4 + 2 + 9;
     for (ui32 i = 0; i < 10; ++i) {
         data.push_back({i + 1, s.substr(pp)});
     }
@@ -81,6 +82,7 @@ Y_UNIT_TEST(Partition) {
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
+    PQGetPartInfo(0, 30, tc);
 
     {
         auto counters = tc.Runtime->GetAppData(0).Counters;
@@ -111,6 +113,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
+    PQGetPartInfo(0, 30, tc);
 
     {
         auto counters = tc.Runtime->GetAppData(0).Counters;
@@ -127,7 +130,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         const TString referenceCounters = NResource::Find(TStringBuf("counters_datastreams.html"));
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 }
 
@@ -221,9 +224,18 @@ Y_UNIT_TEST(PartitionFirstClass) {
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         activeZone = false;
+        bool dbRegistered{false};
 
         tc.Prepare(dispatchName, setup, activeZone, true, true, true);
         tc.Runtime->SetScheduledLimit(1000);
+        tc.Runtime->SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
+                auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
+                UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
+                dbRegistered = true;
+            }
+            return TTestActorRuntime::DefaultObserverFunc(runtime, event);
+        });
 
         PQTabletPrepare({}, {}, tc);
 
@@ -241,15 +253,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
             options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
             tc.Runtime->DispatchEvents(options);
         }
-
-        IActor* actorX = CreateClusterLabeledCountersAggregatorActor(tc.Edge, TTabletTypes::PersQueue);
-        tc.Runtime->Register(actorX);
-
-        TAutoPtr<IEventHandle> handle;
-        TEvTabletCounters::TEvTabletLabeledCountersResponse *result;
-        result = tc.Runtime->GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>(handle);
-        UNIT_ASSERT(result);
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.LabeledCountersByGroupSize(), 0);
+        UNIT_ASSERT(dbRegistered);
     });
 }
 
@@ -369,4 +373,4 @@ Y_UNIT_TEST(ImportantFlagSwitching) {
 }
 } // Y_UNIT_TEST_SUITE(PQCountersLabeled)
 
-} // namespace NKikimr
+} // namespace NKikimr::NPQ

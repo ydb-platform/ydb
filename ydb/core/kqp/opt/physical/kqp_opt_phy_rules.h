@@ -15,7 +15,7 @@ NYql::NNodes::TExprBase KqpBuildReadTableStage(NYql::NNodes::TExprBase node, NYq
     const TKqpOptimizeContext& kqpCtx);
 
 NYql::NNodes::TExprBase KqpBuildReadTableRangesStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx);
+    const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parents);
 
 NYql::NNodes::TExprBase KqpBuildLookupTableStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
 

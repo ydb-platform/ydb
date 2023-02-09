@@ -62,6 +62,7 @@ struct TEvPQProxy {
         EvUpdateToken,
         EvTopicUpdateToken,
         EvCommitRange,
+        EvRequestTablet,
         EvEnd
     };
 
@@ -434,6 +435,13 @@ struct TEvPQProxy {
         ui64 EndOffset;
         ui64 WriteTimestampEstimateMs;
         bool Init;
+    };
+    struct TEvRequestTablet : public NActors::TEventLocal<TEvRequestTablet, EvRequestTablet> {
+        TEvRequestTablet(const ui64 tabletId)
+            : TabletId(tabletId)
+        { }
+
+        ui64 TabletId;
     };
 
 };

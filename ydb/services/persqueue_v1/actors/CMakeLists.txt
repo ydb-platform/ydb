@@ -16,6 +16,7 @@ target_link_libraries(services-persqueue_v1-actors PUBLIC
   ydb-core-base
   ydb-core-grpc_services
   ydb-core-persqueue
+  core-persqueue-events
   ydb-core-protos
   ydb-core-scheme
   core-tx-scheme_cache

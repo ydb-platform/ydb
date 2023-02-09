@@ -283,7 +283,7 @@ private:
         }
 
         if (status.GetCode() == TStatus::DISALLOW) {
-            out = "reject";
+            out = "rejected";
             return true;
         }
 

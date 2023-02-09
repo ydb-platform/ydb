@@ -2569,4 +2569,50 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
     }
+
+    Y_UNIT_TEST(TestGetRecordsWithBigSeqno) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        std::vector<NYDS_V1::TDataRecord> records;
+        records.push_back({
+            .Data = "overflow",
+            .PartitionKey = "overflow",
+            .ExplicitHashDecimal = "",
+        });
+
+        {
+            auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
+        }
+
+        TString shardIterator;
+        {
+            auto seqNo = std::to_string(static_cast<ui64>(std::numeric_limits<ui32>::max()) + 5);
+            auto result = testServer.DataStreamsClient->GetShardIterator(
+                streamName,
+                "shard-000000",
+                YDS_V1::ShardIteratorType::LATEST,
+                NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber(seqNo.c_str())
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            shardIterator = result.GetResult().shard_iterator();
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
+        }
+    }
 }

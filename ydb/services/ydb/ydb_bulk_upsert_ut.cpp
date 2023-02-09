@@ -1286,4 +1286,21 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             }
         }
     }
+
+    Y_UNIT_TEST(ZeroRows) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+
+        NYdb::NTable::TTableClient db(connection);
+
+        CreateTestTable(db);
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList()
+            .EndList();
+        auto status = db.BulkUpsert("Root/Test", rows.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+    }
 }

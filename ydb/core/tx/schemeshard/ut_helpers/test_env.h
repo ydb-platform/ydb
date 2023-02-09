@@ -32,7 +32,9 @@ namespace NSchemeShardUT_Private {
 
         OPTION(ui32, NChannels, 4);
         OPTION(bool, EnablePipeRetries, true);
+        OPTION(bool, RunFakeConfigDispatcher, false);
         OPTION(std::optional<bool>, EnableSystemViews, std::nullopt);
+        OPTION(std::optional<bool>, EnablePersistentQueryStats, std::nullopt);
         OPTION(std::optional<bool>, EnablePersistentPartitionStats, std::nullopt);
         OPTION(std::optional<bool>, EnableTtlOnAsyncIndexedTables, std::nullopt);
         OPTION(std::optional<bool>, AllowUpdateChannelsBindingOfSolomonPartitions, std::nullopt);
@@ -42,6 +44,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableProtoSourceIdInfo, std::nullopt);
         OPTION(std::optional<bool>, EnablePqBilling, std::nullopt);
         OPTION(std::optional<bool>, EnableBackgroundCompaction, std::nullopt);
+        OPTION(std::optional<bool>, EnableBorrowedSplitCompaction, std::nullopt);
         OPTION(std::optional<bool>, DisableStatsBatching, std::nullopt);
         OPTION(THashSet<TString>, SystemBackupSIDs, {});
         OPTION(std::optional<bool>, EnableMoveIndex, std::nullopt);

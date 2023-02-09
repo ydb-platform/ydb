@@ -12,6 +12,7 @@ target_link_libraries(cpp-actors-util PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-deprecated-atomic
+  library-cpp-pop_count
 )
 target_sources(cpp-actors-util PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/affinity.cpp

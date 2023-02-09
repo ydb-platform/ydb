@@ -2,8 +2,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/size_literals.h>
 
-namespace NKikimr {
-namespace NPQ {
+namespace NKikimr::NPQ {
 namespace {
 
 Y_UNIT_TEST_SUITE(TPQTestInternal) {
@@ -205,5 +204,4 @@ Y_UNIT_TEST(TestBatchPacking) {
 
 
 } // TInternalsTest
-} // NPQ
-} // NKikimr
+} // namespace NKikimr::NPQ

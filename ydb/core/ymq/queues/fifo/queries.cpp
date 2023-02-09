@@ -693,6 +693,7 @@ const char* const ReadMessageQuery = R"__(
         )))))
 
         (return (Extend
+            (AsList (SetResult 'dlqExists (Bool 'true)))
             (AsList (SetResult 'result result))
             (AsList (SetResult 'movedMessagesCount (Uint64 '0)))
 
@@ -826,6 +827,7 @@ const char* const ReadOrRedriveMessageQuery = R"__(
             'WriteOffset
             'LastModifiedTimestamp))
         (let dlqStateRead (SelectRow dlqStateTable dlqStateRow dlqStateSelect))
+        (let dlqExists (Exists dlqStateRead))
 
         (let dlqSentTimestamp (Max now (Member dlqStateRead 'LastModifiedTimestamp)))
         (let dlqStartOffset (Add (Member dlqStateRead 'WriteOffset) (Uint64 '1)))
@@ -860,14 +862,15 @@ const char* const ReadOrRedriveMessageQuery = R"__(
             '('MessageCount newSourceMsgCount)))
 
         (return (Extend
+            (AsList (SetResult 'dlqExists dlqExists))
             (AsList (SetResult 'result messagesToReturnAsStruct))
             (AsList (SetResult 'movedMessagesCount (Length messagesToMoveAsStruct)))
             (AsList (SetResult 'newMessagesCount newSourceMsgCount))
-            (ListIf (HasItems messagesToMoveAsStruct) (UpdateRow dlqStateTable dlqStateRow dlqStateUpdate))
-            (ListIf (HasItems messagesToMoveAsStruct) (UpdateRow sourceStateTable sourceStateRow sourceStateUpdate))
+            (ListIf (And (HasItems messagesToMoveAsStruct) dlqExists) (UpdateRow dlqStateTable dlqStateRow dlqStateUpdate))
+            (ListIf (And (HasItems messagesToMoveAsStruct) dlqExists) (UpdateRow sourceStateTable sourceStateRow sourceStateUpdate))
 
             # copy messages to dlq
-            (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
+            (If dlqExists (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dlqDataRow '(
                     )__" DLQ_ID_KEYS_PARAM  R"__(
                     '('RandomId randomId)
@@ -879,8 +882,9 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                     '('SenderId (Member (Nth item '1) 'SenderId))
                     '('MessageId (Member (Nth item '1) 'MessageId))))
                 (return (UpdateRow dlqDataTable dlqDataRow dlqDataUpdate))))))
+                (AsList (Void)))
 
-            (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
+            (If dlqExists (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dlqMsgRow '(
                     )__" DLQ_ID_KEYS_PARAM  R"__(
                     '('Offset (Nth item '0))))
@@ -893,8 +897,9 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                     '('FirstReceiveTimestamp (Uint64 '0))
                     '('SentTimestamp dlqSentTimestamp)))
                 (return (UpdateRow dlqMsgTable dlqMsgRow dlqMessageUpdate))))))
+                (AsList (Void)))
 
-            (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
+            (If dlqExists (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dlqSentTsRow '(
                     )__" DLQ_ID_KEYS_PARAM  R"__(
                     '('SentTimestamp dlqSentTimestamp)
@@ -906,8 +911,9 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                     '('DelayDeadline delayDeadline)
                     '('GroupId (Member (Nth item '1) 'GroupId))))
                 (return (UpdateRow dlqSentTsIdx dlqSentTsRow dlqSentTsUpdate))))))
+                (AsList (Void)))
 
-            (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
+            (If dlqExists (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dlqGroupRow '(
                     )__" DLQ_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member (Nth item '1) 'GroupId))))
@@ -930,8 +936,9 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                         (UpdateRow dlqGroupTable dlqGroupRow dlqGroupUpdate)
                     )
                 )))))
+                (AsList (Void)))
 
-            (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
+            (If dlqExists (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dlqTail (Member (Nth item '1) 'DlqTail))
                 (let dlqPrevMessageRow '(
                     )__" DLQ_ID_KEYS_PARAM  R"__(
@@ -944,29 +951,33 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                         (UpdateRow dlqMsgTable dlqPrevMessageRow dlqPrevMessageUpdate)
                         (Void))
                 )))))
+                (AsList (Void)))
 
             # remove dead letters' content from source queue
-            (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
+            (If dlqExists (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let row '(
                     )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('RandomId (Member (Nth item '1) 'SourceRandomId))
                     '('Offset   (Member (Nth item '1) 'SourceOffset))))
                 (return (EraseRow sourceDataTable row))))))
+                (AsList (Void)))
 
-            (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
+            (If dlqExists (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let row '(
                     )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset   (Member (Nth item '1) 'SourceOffset))))
                 (return (EraseRow sourceMsgTable row))))))
+                (AsList (Void)))
 
-            (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
+            (If dlqExists (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let row '(
                     )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('SentTimestamp (Member (Nth item '1) 'SourceSentTimestamp))
                     '('Offset        (Member (Nth item '1) 'SourceOffset))))
                 (return (EraseRow sourceSentTsIdx row))))))
+                (AsList (Void)))
 
-            (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
+            (If dlqExists (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let row '(
                     )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member (Nth item '1) 'GroupId))))
@@ -975,14 +986,14 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                     '('Head (Member (Nth item '1) 'SourceNextOffset))
                     '('LockTimestamp (Uint64 '0))
                     '('VisibilityDeadline (Uint64 '0))))
-
                 (return
                     (If (Coalesce (Equal (Member (Nth item '1) 'SourceNextOffset) (Uint64 '0)) (Bool 'false))
                         (EraseRow  sourceGroupTable row)
                         (UpdateRow sourceGroupTable row update)))))))
+                (AsList (Void)))
 
             # just return ordinary messages
-            (Map messagesToReturnAsStruct (lambda '(item) (block '(
+            (If dlqExists (Map messagesToReturnAsStruct (lambda '(item) (block '(
                 (let message (Member item 'SourceMessageFieldsRead))
                 (let row '(
                     )__" QUEUE_ID_KEYS_PARAM  R"__(
@@ -992,7 +1003,9 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                 (let update '(
                     '('FirstReceiveTimestamp receiveTimestamp)
                     '('ReceiveCount (Add (Member message 'ReceiveCount) (Uint32 '1)))))
-                (return (UpdateRow sourceMsgTable row update))))))))
+                (return (UpdateRow sourceMsgTable row update))))))
+                (AsList (Void)))
+            ))
     )
 )__";
 

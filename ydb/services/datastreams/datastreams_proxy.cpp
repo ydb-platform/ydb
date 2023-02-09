@@ -1161,12 +1161,12 @@ namespace NKikimr::NDataStreams::V1 {
         using TIteratorType = Ydb::DataStreams::V1::ShardIteratorType;
 
         void SendResponse(const TActorContext& ctx, const TShardIterator& shardIt);
-        std::optional<ui32> SequenceNumberToInt(const TString& sequenceNumberStr);
+        std::optional<ui64> SequenceNumberToInt(const TString& sequenceNumberStr);
 
         TString StreamName;
         TString ShardId;
         TIteratorType IteratorType;
-        ui32 SequenceNumber;
+        ui64 SequenceNumber;
         ui64 ReadTimestampMs;
     };
 
@@ -1273,9 +1273,9 @@ namespace NKikimr::NDataStreams::V1 {
         Die(ctx);
     }
 
-    std::optional<ui32> TGetShardIteratorActor::SequenceNumberToInt(const TString& sequenceNumberStr) {
+    std::optional<ui64> TGetShardIteratorActor::SequenceNumberToInt(const TString& sequenceNumberStr) {
         try {
-            return std::stoi(sequenceNumberStr.c_str());
+            return std::stoull(sequenceNumberStr.c_str());
         } catch(...) {
             return std::nullopt;
         }
@@ -1309,7 +1309,6 @@ namespace NKikimr::NDataStreams::V1 {
 
     private:
         void SendReadRequest(const TActorContext& ctx);
-        void PrepareResponse(const std::vector<Ydb::DataStreams::V1::Record>& records, ui64 millisBehindLatestMs);
         void SendResponse(const TActorContext& ctx);
         ui64 GetPayloadSize() const;
 
@@ -1435,7 +1434,9 @@ namespace NKikimr::NDataStreams::V1 {
                 switch (record.GetErrorCode()) {
                     case NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
                     case NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
-                        PrepareResponse({}, 0);
+                        Result.set_next_shard_iterator(TShardIterator(ShardIterator).Serialize());
+                        Result.set_millis_behind_latest(0);
+
                         if (IsQuotaRequired()) {
                             Y_VERIFY(MaybeRequestQuota(1, EWakeupTag::RlAllowed, ctx));
                         } else {
@@ -1451,28 +1452,34 @@ namespace NKikimr::NDataStreams::V1 {
             default: {}
         }
 
-        ui64 millisBehindLatestMs = 0;
-        std::vector<Ydb::DataStreams::V1::Record> records;
+        TShardIterator shardIterator(ShardIterator);
         const auto& response = record.GetPartitionResponse();
         if (response.HasCmdReadResult()) {
             const auto& results = response.GetCmdReadResult().GetResult();
-            records.reserve(results.size());
             for (auto& r : results) {
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
-                Ydb::DataStreams::V1::Record record;
-                record.set_data(proto.GetData());
-                record.set_timestamp(r.GetCreateTimestampMS());
-                record.set_encryption(Ydb::DataStreams::V1::EncryptionType::NONE);
-                record.set_partition_key(r.GetPartitionKey());
-                record.set_sequence_number(std::to_string(r.GetOffset()).c_str());
-                records.push_back(record);
+                auto record = Result.add_records();
+                record->set_data(proto.GetData());
+                record->set_approximate_arrival_timestamp(r.GetCreateTimestampMS());
+                record->set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE);
+                record->set_partition_key(r.GetPartitionKey());
+                record->set_sequence_number(std::to_string(r.GetOffset()).c_str());
+                if (proto.GetCodec() > 0) {
+                    record->set_codec(proto.GetCodec() + 1);
+                }
             }
-            millisBehindLatestMs = records.size() > 0
-                ? TInstant::Now().MilliSeconds() - results.rbegin()->GetWriteTimestampMS()
-                : 0;
+            if (!results.empty()) {
+                auto last = results.rbegin();
+                shardIterator.SetReadTimestamp(last->GetCreateTimestampMS() + 1);
+                shardIterator.SetSequenceNumber(last->GetOffset() + 1);
+                Result.set_millis_behind_latest(TInstant::Now().MilliSeconds() - last->GetWriteTimestampMS());
+            } else { // remove else?
+                Result.set_millis_behind_latest(0);
+            }
         }
 
-        PrepareResponse(records, millisBehindLatestMs);
+        Result.set_next_shard_iterator(shardIterator.Serialize());
+
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
             Y_VERIFY(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
@@ -1502,24 +1509,6 @@ namespace NKikimr::NDataStreams::V1 {
             default:
                 return HandleWakeup(ev, ctx);
         }
-    }
-
-    void TGetRecordsActor::PrepareResponse(const std::vector<Ydb::DataStreams::V1::Record>& records, ui64 millisBehindLatestMs) {
-        for (auto& r : records) {
-            auto record = Result.add_records();
-            *record = r;
-        }
-
-        auto timestamp = records.size() > 0 ? records.back().Gettimestamp() + 1
-                                            : ShardIterator.GetReadTimestamp();
-        auto seqNo = records.size() > 0 ? std::stoi(records.back().Getsequence_number()) + 1
-                                        : ShardIterator.GetSequenceNumber();
-        TShardIterator shardIterator(ShardIterator.GetStreamName(),
-                                     ShardIterator.GetStreamArn(),
-                                     ShardIterator.GetShardId(),
-                                     timestamp, seqNo, ShardIterator.GetKind());
-        Result.set_next_shard_iterator(shardIterator.Serialize());
-        Result.set_millis_behind_latest(millisBehindLatestMs);
     }
 
     void TGetRecordsActor::SendResponse(const TActorContext& ctx) {

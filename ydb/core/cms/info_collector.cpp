@@ -442,7 +442,6 @@ void TInfoCollector::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     }
 
     if (msg.SourceType == TEvTenantPool::EvGetStatus && msg.Reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
-        LOG_W("Node is alive, but TenantPool is not running (KIKIMR-8249)");
         ResponseProcessed(nodeId, TEvTenantPool::EvTenantPoolStatus);
     } else {
         Info->ClearNode(nodeId);

@@ -867,7 +867,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     if (!WaitForData)
         return;
 
-    Counters.WaitsForData.Inc();
+    if (Counters.WaitsForData) {
+        Counters.WaitsForData.Inc();
+    }
 
     Y_VERIFY(record.HasEndOffset());
     Y_VERIFY(EndOffset <= record.GetEndOffset()); //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout

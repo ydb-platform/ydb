@@ -222,6 +222,7 @@ class TReader {
     const TReadIteratorState& State;
     IBlockBuilder& BlockBuilder;
     const TShortTableInfo& TableInfo;
+    const TMonotonic StartTs;
 
     std::vector<NKikimr::NScheme::TTypeId> ColumnTypes;
 
@@ -232,6 +233,8 @@ class TReader {
     ui64 RowsSinceLastCheck = 0;
 
     ui64 BytesInResult = 0;
+
+    ui64 InvisibleRowSkips = 0;
 
     NHPTimer::STime StartTime;
     NHPTimer::STime EndTime;
@@ -247,10 +250,12 @@ class TReader {
 public:
     TReader(TReadIteratorState& state,
             IBlockBuilder& blockBuilder,
-            const TShortTableInfo& tableInfo)
+            const TShortTableInfo& tableInfo,
+            TMonotonic ts)
         : State(state)
         , BlockBuilder(blockBuilder)
         , TableInfo(tableInfo)
+        , StartTs(ts)
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
     {
         GetTimeFast(&StartTime);
@@ -335,6 +340,7 @@ public:
         NTable::TSelectStats stats;
         auto ready = txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion);
         RowsSinceLastCheck += 1 + stats.InvisibleRowSkips;
+        InvisibleRowSkips += stats.InvisibleRowSkips;
         if (ready == NTable::EReady::Page) {
             return EReadStatus::NeedData;
         }
@@ -438,21 +444,58 @@ public:
         return false;
     }
 
-    void FillResult(TEvDataShard::TEvReadResult& result) {
+    void FillResult(TEvDataShard::TEvReadResult& result, TDataShard& datashard, TReadIteratorState& state) {
         auto& record = result.Record;
         record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
+        auto now = AppData()->MonotonicTimeProvider->Now();
+        auto delta = now - StartTs;
+        datashard.IncCounter(COUNTER_READ_ITERATOR_ITERATION_LATENCY_MS, delta.MilliSeconds());
+
+        // note that in all metrics below we treat key prefix read as key read
+        // and not as range read
+        const bool isKeysRequest = !State.Request->Keys.empty();
+
         if (HasUnreadQueries()) {
             if (OutOfQuota()) {
+                datashard.IncCounter(COUNTER_READ_ITERATOR_NO_QUOTA);
                 record.SetLimitReached(true);
+            } else if (HasMaxRowsInResult()) {
+                datashard.IncCounter(COUNTER_READ_ITERATOR_MAX_ROWS_REACHED);
+            } else {
+                datashard.IncCounter(COUNTER_READ_ITERATOR_MAX_TIME_REACHED);
             }
         } else {
+            state.IsFinished = true;
             record.SetFinished(true);
+            auto fullDelta = now - State.StartTs;
+            datashard.IncCounter(COUNTER_READ_ITERATOR_LIFETIME_MS, fullDelta.MilliSeconds());
+
+            if (isKeysRequest) {
+                datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_ROW, State.Request->Keys.size());
+                datashard.IncCounter(COUNTER_SELECT_ROWS_PER_REQUEST, State.Request->Keys.size());
+            } else {
+                datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE, State.Request->Ranges.size());
+            }
         }
 
-        BytesInResult = BlockBuilder.Bytes();
+        if (!isKeysRequest)
+            datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROW_SKIPS, InvisibleRowSkips);
 
-        if (BytesInResult = BlockBuilder.Bytes()) {
+        BytesInResult = BlockBuilder.Bytes();
+        if (BytesInResult) {
+            datashard.IncCounter(COUNTER_READ_ITERATOR_ROWS_READ, RowsRead);
+            datashard.IncCounter(COUNTER_READ_ITERATOR_BYTES_READ, BytesInResult);
+            if (isKeysRequest) {
+                // backward compatibility
+                datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_ROW_BYTES, BytesInResult);
+            } else {
+                // backward compatibility
+                datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS, RowsRead);
+                datashard.IncCounter(COUNTER_RANGE_READ_ROWS_PER_REQUEST, RowsRead);
+                datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_BYTES, BytesInResult);
+            }
+
             switch (State.Format) {
             case NKikimrTxDataShard::ARROW: {
                 auto& arrowBuilder = static_cast<NArrow::TArrowBatchBuilder&>(BlockBuilder);
@@ -549,6 +592,7 @@ private:
             BlockBuilder.AddRow(TDbTupleRef(), rowValues);
 
             ++RowsRead;
+            InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
             RowsSinceLastCheck += 1 + ResetRowStats(iter->Stats);
             if (ShouldStop()) {
                 return EReadStatus::StoppedByLimit;
@@ -557,6 +601,7 @@ private:
 
         // last iteration to Page or Gone also might have deleted or invisible rows
         RowsSinceLastCheck += ResetRowStats(iter->Stats);
+        InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
 
         // TODO: consider restart when Page and too few data read
         // (how much is too few, less than user's limit?)
@@ -714,7 +759,7 @@ public:
         Y_ASSERT(Reader);
         Y_ASSERT(BlockBuilder);
 
-        Reader->FillResult(*Result);
+        Reader->FillResult(*Result, *Self, state);
         SendViaSession(state.SessionId, Sender, Self->SelfId(), Result.release());
 
         // note that we save the state only when there're unread queries
@@ -1035,7 +1080,7 @@ private:
         Y_ASSERT(Result);
 
         state.State = TReadIteratorState::EState::Executing;
-        Reader.reset(new TReader(state, *BlockBuilder, TableInfo));
+        Reader.reset(new TReader(state, *BlockBuilder, TableInfo, AppData()->MonotonicTimeProvider->Now()));
 
         finished = false;
     }
@@ -1128,7 +1173,12 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
             << " ReadContinue: " << Ev->Get()->Reader << "," << Ev->Get()->ReadId);
 
-        Reader.reset(new TReader(state, *BlockBuilder, TableInfo));
+        Reader.reset(new TReader(
+            state,
+            *BlockBuilder,
+            TableInfo,
+            AppData()->MonotonicTimeProvider->Now()));
+
         return Reader->Read(txc, ctx);
     }
 
@@ -1175,7 +1225,7 @@ public:
         Y_ASSERT(Reader);
         Y_ASSERT(BlockBuilder);
 
-        Reader->FillResult(*Result);
+        Reader->FillResult(*Result, *Self, state);
         SendViaSession(state.SessionId, request->Reader, Self->SelfId(), Result.release());
 
         if (Reader->HasUnreadQueries()) {
@@ -1237,7 +1287,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         sessionId = ev->InterconnectSession;
     }
 
-    ReadIterators.emplace(readId, new TReadIteratorState(sessionId));
+    ReadIterators.emplace(readId, new TReadIteratorState(sessionId, AppData()->MonotonicTimeProvider->Now()));
     Executor()->Execute(new TTxRead(this, ev), ctx);
 }
 
@@ -1338,15 +1388,33 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " ReadCancel: " << record);
 
     TReadIteratorId readId(ev->Sender, record.GetReadId());
-    DeleteReadIterator(readId);
+    auto it = ReadIterators.find(readId);
+    if (it == ReadIterators.end())
+        return;
+
+    const auto& state = it->second;
+    if (!state->IsFinished) {
+        auto now = AppData()->MonotonicTimeProvider->Now();
+        auto delta = now - state->StartTs;
+        IncCounter(COUNTER_READ_ITERATOR_LIFETIME_MS, delta.MilliSeconds());
+        IncCounter(COUNTER_READ_ITERATOR_CANCEL);
+    }
+
+    DeleteReadIterator(it);
 }
 
 void TDataShard::CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " CancelReadIterators #" << ReadIterators.size());
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " CancelReadIterators#" << ReadIterators.size());
 
+    auto now = AppData()->MonotonicTimeProvider->Now();
     for (const auto& iterator: ReadIterators) {
         const auto& readIteratorId = iterator.first;
+
         const auto& state = iterator.second;
+        if (!state->IsFinished) {
+            auto delta = now - state->StartTs;
+            IncCounter(COUNTER_READ_ITERATOR_LIFETIME_MS, delta.MilliSeconds());
+        }
 
         std::unique_ptr<TEvDataShard::TEvReadResult> result(new TEvDataShard::TEvReadResult());
         SetStatusError(result->Record, code, issue);
@@ -1358,12 +1426,8 @@ void TDataShard::CancelReadIterators(Ydb::StatusIds::StatusCode code, const TStr
 
     ReadIterators.clear();
     ReadIteratorSessions.clear();
-}
 
-void TDataShard::DeleteReadIterator(const TReadIteratorId& readId) {
-    auto it = ReadIterators.find(readId);
-    if (it != ReadIterators.end())
-        DeleteReadIterator(it);
+    SetCounter(COUNTER_READ_ITERATORS_COUNT, 0);
 }
 
 void TDataShard::DeleteReadIterator(TReadIteratorsMap::iterator it) {
@@ -1376,6 +1440,7 @@ void TDataShard::DeleteReadIterator(TReadIteratorsMap::iterator it) {
         }
     }
     ReadIterators.erase(it);
+    SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());
 }
 
 void TDataShard::ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx) {
@@ -1387,13 +1452,25 @@ void TDataShard::ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, cons
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
         << " closed session# " << sessionId << ", iterators# " << session.Iterators.size());
 
+    auto now = AppData()->MonotonicTimeProvider->Now();
     for (const auto& readId: session.Iterators) {
         // we don't send anything to client, because it's up
         // to client to detect disconnect
-        ReadIterators.erase(readId);
+        auto it = ReadIterators.find(readId);
+        if (it == ReadIterators.end())
+            continue;
+
+        const auto& state = it->second;
+        if (!state->IsFinished) {
+            auto delta = now - state->StartTs;
+            IncCounter(COUNTER_READ_ITERATOR_LIFETIME_MS, delta.MilliSeconds());
+        }
+
+        ReadIterators.erase(it);
     }
 
     ReadIteratorSessions.erase(itSession);
+    SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());
 }
 
 } // NKikimr::NDataShard

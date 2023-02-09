@@ -30,6 +30,7 @@ public:
     FEATURE_FLAG_SETTER(EnableMvccSnapshotReads)
     FEATURE_FLAG_SETTER(EnableBackgroundCompaction)
     FEATURE_FLAG_SETTER(EnableBackgroundCompactionServerless)
+    FEATURE_FLAG_SETTER(EnableBorrowedSplitCompaction)
     FEATURE_FLAG_SETTER(EnableNotNullColumns)
     FEATURE_FLAG_SETTER(EnableTtlOnAsyncIndexedTables)
     FEATURE_FLAG_SETTER(EnableBulkUpsertToAsyncIndexedTables)

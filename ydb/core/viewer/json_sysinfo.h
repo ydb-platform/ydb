@@ -39,8 +39,8 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvSystemStateResponse> {
 
     static constexpr bool StaticNodesOnly = false;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>* GetElementsField(TResponseType* response) {
-        return response->Record.MutableSystemStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
+        return *response->Record.MutableSystemStateInfo();
     }
 
     static TString GetDefaultMergeField() {

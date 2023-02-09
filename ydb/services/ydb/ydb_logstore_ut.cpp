@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             NYdb::NLogStore::TAlterLogTableSettings alterLogTableSettings;
             alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("uint_timestamp", NYdb::NTable::TTtlSettings::EUnit::MilliSeconds, TDuration::Seconds(3600)));
             auto res = logStoreClient.AlterLogTable("/Root/LogStore/log1", std::move(alterLogTableSettings)).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
         }
         {
             auto res = logStoreClient.DescribeLogTable("/Root/LogStore/log1").GetValueSync();
@@ -516,7 +516,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             NYdb::NLogStore::TAlterLogTableSettings alterLogTableSettings;
             alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("ingested_at", TDuration::Seconds(86400)));
             auto res = logStoreClient.AlterLogTable("/Root/LogStore/log2", std::move(alterLogTableSettings)).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
         }
         {
             auto res = logStoreClient.DescribeLogTable("/Root/LogStore/log2").GetValueSync();
@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             NYdb::NLogStore::TAlterLogTableSettings alterLogTableSettings;
             alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Drop());
             auto res = logStoreClient.AlterLogTable("/Root/LogStore/log2", std::move(alterLogTableSettings)).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
         }
         {
             auto res = logStoreClient.DescribeLogTable("/Root/LogStore/log2").GetValueSync();
@@ -568,7 +568,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
             NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log3", std::move(tableDescr)).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
         }
 
         // Use column of invalid type for TTL
@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
             NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log4", std::move(tableDescr)).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
         }
 
         // Use non-Timestamp column for TTL
@@ -586,7 +586,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
             NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log5", std::move(tableDescr)).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
         }
     }
 }

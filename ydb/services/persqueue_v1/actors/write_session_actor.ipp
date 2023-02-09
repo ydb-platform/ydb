@@ -286,8 +286,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
 
     if (SessionsActive) {
         SessionsActive.Dec();
-        BytesInflight.Dec(BytesInflight_);
-        BytesInflightTotal.Dec(BytesInflightTotal_);
+        if (BytesInflight && BytesInflightTotal) {
+            BytesInflight.Dec(BytesInflight_);
+            BytesInflightTotal.Dec(BytesInflightTotal_);
+        }
     }
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " is DEAD");
@@ -512,22 +514,19 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& cloudId, const TString& dbId, const TString& folderId)
+void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
 {
     if (SessionsCreated) {
         return;
     }
 
     //now topic is checked, can create group for real topic, not garbage
-    auto subGroup = NPersQueue::GetCountersForStream(Counters);
-    auto aggr = NPersQueue::GetLabelsForStream(FullConverter, cloudId, dbId, folderId);
+    auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
+    auto subgroups = NPersQueue::GetSubgroupsForTopic(FullConverter, cloudId, dbId, dbPath, folderId);
 
-    BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding"}, false, "name");
-    BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding_total"}, false, "name");
-    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_created_per_second"}, true, "name");
-    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_active"}, false, "name");
-    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.errors_per_second"}, true, "name");
-
+    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.sessions_created"}, true, "name");
+    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.sessions_active_count"}, false, "name");
+    Errors = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.errors"}, true, "name");
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
@@ -582,6 +581,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         const auto& tabletConfig = description.GetPQTabletConfig();
         SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
+                        tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
                       tabletConfig.GetYcFolderId());
     } else {
         SetupCounters();
@@ -1022,8 +1022,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     AcceptedRequests.emplace_back(std::move(writeRequest));
 
     BytesInflight_ -= diff;
-    BytesInflight.Dec(diff);
-
+    if (BytesInflight) {
+        BytesInflight.Dec(diff);
+    }
     if (!NextRequestInited && BytesInflight_ < MAX_BYTES_INFLIGHT) { //allow only one big request to be readed but not sended
         NextRequestInited = true;
         if (!Request->GetStreamCtx()->Read()) {
@@ -1177,7 +1178,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     ui64 diff = writeRequest->ByteSize;
 
     BytesInflightTotal_ -= diff;
-    BytesInflightTotal.Dec(diff);
+    if (BytesInflightTotal) {
+        BytesInflightTotal.Dec(diff);
+    }
 
     CheckFinish(ctx);
 }
@@ -1276,8 +1279,10 @@ void TWriteSessionActor<UseMigrationProtocol>::SendRequest(typename TWriteReques
     diff += request->PartitionWriteRequest->Record.ByteSize();
     BytesInflight_ += diff;
     BytesInflightTotal_ += diff;
-    BytesInflight.Inc(diff);
-    BytesInflightTotal.Inc(diff);
+    if (BytesInflight && BytesInflightTotal) {
+        BytesInflight.Inc(diff);
+        BytesInflightTotal.Inc(diff);
+    }
 
     ctx.Send(Writer, std::move(request->PartitionWriteRequest));
     SentRequests.push_back(std::move(request));
@@ -1466,8 +1471,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
     ui64 diff = ev->Get()->Request.ByteSize();
     BytesInflight_ += diff;
     BytesInflightTotal_ += diff;
-    BytesInflight.Inc(diff);
-    BytesInflightTotal.Inc(diff);
+    if (BytesInflight && BytesInflightTotal) {
+        BytesInflight.Inc(diff);
+        BytesInflightTotal.Inc(diff);
+    }
 
     if (BytesInflight_ < MAX_BYTES_INFLIGHT) { //allow only one big request to be readed but not sended
         Y_VERIFY(NextRequestInited);

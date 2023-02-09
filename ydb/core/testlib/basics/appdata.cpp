@@ -197,5 +197,4 @@ namespace NKikimr {
     {
         FeatureFlags.SetEnableDbCounters(value);
     }
-
 }

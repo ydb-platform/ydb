@@ -46,5 +46,9 @@ inline void SetRequestType(TEvTxUserProxy::TEvProposeTransaction* ev, const IReq
     ev->Record.SetRequestType(ctx.GetRequestType().GetOrElse(""));
 }
 
+inline void SetPeerName(TEvTxUserProxy::TEvProposeTransaction* ev, const IRequestCtx& ctx) {
+    ev->Record.SetPeerName(ctx.GetPeerName());
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

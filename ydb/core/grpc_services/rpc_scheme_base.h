@@ -33,6 +33,7 @@ protected:
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest(new TEvTxUserProxy::TEvProposeTransaction());
         SetAuthToken(proposeRequest, *this->Request_);
         SetDatabase(proposeRequest.get(), *this->Request_);
+        SetPeerName(proposeRequest.get(), *this->Request_);
         SetRequestType(proposeRequest.get(), *this->Request_);
         return proposeRequest;
     }

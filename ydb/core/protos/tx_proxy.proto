@@ -194,6 +194,7 @@ message TEvProposeTransaction {
     optional uint64 CancelAfterMs = 6;
     optional string DatabaseName = 7;
     optional string RequestType = 8;
+    optional string PeerName = 9;
 }
 
 message TTxProxyTimings {

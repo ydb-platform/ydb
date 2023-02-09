@@ -58,8 +58,11 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
             databasePath.RiseUntilFirstResolvedParent();
         }
 
+        auto peerName = request.GetPeerName();
+
         AUDIT_LOG(
             AUDIT_PART("txId", std::to_string(request.GetTxId()))
+            AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue) )
             AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
             AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
             AUDIT_PART("operation", logEntry.Operation)

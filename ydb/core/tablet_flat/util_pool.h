@@ -111,7 +111,9 @@ namespace NKikimr::NUtil {
         TMemoryPool(size_t initial)
             : First(AllocateChunk(Max(initial, TChunk::ChunkHeaderSize() + PLATFORM_DATA_ALIGN)))
             , Current(First)
-        { }
+        {
+            Total_ = Current->ChunkSize();
+        }
 
         ~TMemoryPool() {
             TChunk* chunk = First;
@@ -157,6 +159,10 @@ namespace NKikimr::NUtil {
             RollbackState_.reset();
         }
 
+        size_t Total() const noexcept {
+            return Total_;
+        }
+
         size_t Used() const noexcept {
             return Used_ + Current->Used();
         }
@@ -190,6 +196,7 @@ namespace NKikimr::NUtil {
             Y_VERIFY(!Current->Next);
             size_t hint = Max(AlignUp<size_t>(sizeof(TChunk), PLATFORM_DATA_ALIGN) + size, Current->ChunkSize() + 1);
             TChunk* next = AllocateChunk(hint);
+            Total_ += next->ChunkSize();
             Used_ += Current->Used();
             Wasted_ += Current->Wasted();
             Current->Next = next;
@@ -214,14 +221,18 @@ namespace NKikimr::NUtil {
         void DoRollback(TChunk* target, char* ptr) {
             if (target != Current) {
                 TChunk* chunk = target;
+                size_t nextUsed = chunk->Used();
+                size_t nextWasted = chunk->Wasted();
                 do {
                     // Remove previously added stats
-                    Used_ -= chunk->Used();
-                    Wasted_ -= chunk->Wasted();
+                    Used_ -= nextUsed;
+                    Wasted_ -= nextWasted;
                     // Switch to the next chunk in the chain
                     chunk = chunk->Next;
                     Y_VERIFY(chunk, "Rollback cannot find current chunk in the chain");
                     // Reset chunk and add it to stats as wasted/free space
+                    nextUsed = chunk->Used();
+                    nextWasted = chunk->Wasted();
                     chunk->Reset();
                     Wasted_ += chunk->ChunkSize();
                     Available_ += chunk->Left;
@@ -260,6 +271,7 @@ namespace NKikimr::NUtil {
     private:
         TChunk* First;
         TChunk* Current;
+        size_t Total_ = 0;
         size_t Used_ = 0;
         size_t Wasted_ = 0;
         size_t Available_ = 0;

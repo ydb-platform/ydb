@@ -278,7 +278,7 @@ private:
 
         if (OccupiedSpace > ResultBytesLimit) {
             TIssues issues;
-            issues.AddIssue(TStringBuilder() << "Can not write results with size > " << ResultBytesLimit << " byte(s)");
+            issues.AddIssue(TStringBuilder() << "Can not write results with size > " << ResultBytesLimit << " byte(s), please write results to Object Storage by INSERT INTO binding.'' statement");
             SendIssuesAndSetErrorFlag(issues, NYql::NDqProto::StatusIds::LIMIT_EXCEEDED);
             return;
         }

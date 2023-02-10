@@ -758,6 +758,9 @@ private:
             }
         }
 
+        if (IsTransparentIfPresent(body) && &body.Head() == &arg)
+            return GetPathToKey(body.Child(1)->Tail().Head(), body.Child(1)->Head().Head());
+
         return std::nullopt;
     }
 

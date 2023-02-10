@@ -147,14 +147,16 @@ struct TEvPrivate {
             Y_VERIFY(!Blobs.empty());
         }
 
-        TEvExport(ui64 exportNo, const TString& tierName, TActorId dstActor, TBlobDataMap&& blobs)
+        TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, TActorId dstActor, TBlobDataMap&& blobs)
             : ExportNo(exportNo)
             , TierName(tierName)
+            , PathId(pathId)
             , DstActor(dstActor)
             , Blobs(std::move(blobs))
         {
             Y_VERIFY(ExportNo);
             Y_VERIFY(!TierName.empty());
+            Y_VERIFY(PathId);
             Y_VERIFY(DstActor);
             Y_VERIFY(!Blobs.empty());
         }

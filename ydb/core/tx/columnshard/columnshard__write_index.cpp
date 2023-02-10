@@ -34,7 +34,7 @@ private:
 
     TEvPrivate::TEvWriteIndex::TPtr Ev;
     THashMap<TString, TPathIdBlobs> ExportTierBlobs;
-    THashSet<TUnifiedBlobId> BlobsToForget;
+    THashSet<NOlap::TEvictedBlob> BlobsToForget;
     ui64 ExportNo = 0;
 };
 
@@ -193,7 +193,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                     auto evict = Self->BlobManager->GetDropped(blobId, meta);
                     Y_VERIFY(evict.State != EEvictState::UNKNOWN);
 
-                    BlobsToForget.insert(blobId);
+                    BlobsToForget.emplace(std::move(evict));
 
                     if (NOlap::IsDeleted(evict.State)) {
                         LOG_S_DEBUG("Skip delete blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
@@ -269,6 +269,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Self->IncCounter(COUNTER_COMPACTION_TIME, Ev->Get()->Duration.MilliSeconds());
     } else if (changes->IsCleanup()) {
         Self->ActiveCleanup = false;
+
+        Self->BlobManager->GetCleanupBlobs(BlobsToForget);
 
         Self->IncCounter(ok ? COUNTER_CLEANUP_SUCCESS : COUNTER_CLEANUP_FAIL);
     } else if (changes->IsTtl()) {

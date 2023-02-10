@@ -365,7 +365,6 @@ private:
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     TBatchCache BatchCache;
-    THashSet<NOlap::TUnifiedBlobId> DelayedForgetBlobs;
     TTtl Ttl;
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
@@ -452,10 +451,10 @@ private:
     NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
     void MapExternBlobs(const TActorContext& ctx, NOlap::TReadMetadata& metadata);
     TActorId GetS3ActorForTier(const TString& tierId) const;
-    void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
+    void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName, ui64 pathId,
         TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const;
-    void ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const;
-    void ForgetBlobs(const TActorContext& ctx, const THashSet<TUnifiedBlobId>& blobs);
+    void ForgetTierBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const;
+    void ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::TEvictedBlob>& blobs);
     bool GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
                          NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges);
 

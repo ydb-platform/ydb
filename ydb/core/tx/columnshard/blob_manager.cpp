@@ -639,6 +639,17 @@ TEvictedBlob TBlobManager::GetDropped(const TUnifiedBlobId& blobId, TEvictMetada
     return {};
 }
 
+void TBlobManager::GetCleanupBlobs(THashSet<TEvictedBlob>& cleanup) const {
+    TString strBlobs;
+    for (auto& [evict, _] : DroppedEvictedBlobs) {
+        strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
+        cleanup.insert(evict);
+    }
+    if (!strBlobs.empty()) {
+        LOG_S_NOTICE("Cleanup evicted blobs " << strBlobs << "at tablet " << TabletInfo->TabletID);
+    }
+}
+
 void TBlobManager::DeleteSmallBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) {
     LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Small Blob " << blobId);
     db.EraseSmallBlob(blobId);

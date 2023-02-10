@@ -134,6 +134,17 @@ public:
     }
 
     void Handle(TEvPrivate::TEvForget::TPtr& ev) {
+        // It's possible to get several forgets for the same blob (remove + cleanup)
+        for (auto& evict : ev->Get()->Evicted) {
+            if (evict.ExternBlob.IsS3Blob()) {
+                const TString& key = evict.ExternBlob.GetS3Key();
+                if (ForgettingKeys.count(key)) {
+                    LOG_S_NOTICE("[S3] Ignore forget '" << evict.Blob.ToStringNew() << "' at tablet " << TabletId);
+                    return; // TODO: return an error?
+                }
+            }
+        }
+
         ui64 forgetNo = ++ForgetNo;
 
         Forgets[forgetNo] = TS3Forget(ev->Release());
@@ -146,7 +157,7 @@ public:
             }
 
             const TString& key = evict.ExternBlob.GetS3Key();
-            Y_VERIFY(!ForgettingKeys.count(key)); // TODO
+            Y_VERIFY(!ForgettingKeys.count(key));
 
             forget.KeysToDelete.emplace(key);
             ForgettingKeys[key] = forgetNo;

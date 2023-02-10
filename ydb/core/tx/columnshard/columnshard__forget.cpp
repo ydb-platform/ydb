@@ -34,12 +34,16 @@ bool TTxForget::Execute(TTransactionContext& txc, const TActorContext&) {
     if (status == NKikimrProto::OK) {
         TBlobManagerDb blobManagerDb(txc.DB);
 
+        TString strBlobs;
         for (auto& evict : msg.Evicted) {
             bool erased = Self->BlobManager->EraseOneToOne(evict, blobManagerDb);
-            if (!erased) {
+            if (erased) {
+                strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
+            } else {
                 LOG_S_ERROR("Forget unknown blob " << evict.Blob << " at tablet " << Self->TabletID());
             }
         }
+        LOG_S_NOTICE("Forget evicted blobs " << strBlobs << "at tablet " << Self->TabletID());
 
         Self->IncCounter(COUNTER_FORGET_SUCCESS);
     } else {

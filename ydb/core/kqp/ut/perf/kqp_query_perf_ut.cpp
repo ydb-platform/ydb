@@ -157,9 +157,9 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-        for (const auto& phase : stats.query_phases()) {
-            UNIT_ASSERT(phase.affected_shards() <= 1);
-        }
+
+        // TODO: Fix stream lookup case
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), EnableStreamLookup ? 0 : 1);
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(stats.query_plan(), &plan, true);
@@ -174,6 +174,113 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         }
         // TODO: Fix stream lookup case
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, EnableStreamLookup ? 3 : 2);
+    }
+
+    Y_UNIT_TEST_TWIN(RangeLimitRead, EnableSourceRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(EnableSourceRead);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+        TKikimrRunner kikimr{settings};
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$from").Int32(1).Build()
+            .AddParam("$to").Int32(5).Build()
+            .AddParam("$limit").Uint64(3).Build()
+            .Build();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $from AS Int32;
+            DECLARE $to AS Int32;
+            DECLARE $limit AS Uint64;
+
+            SELECT * FROM Join1
+            WHERE Key >= $from AND Key < $to
+            ORDER BY Key
+            LIMIT $limit;
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        // Cerr << stats.query_plan() << Endl;
+
+        AssertTableStats(result, "/Root/Join1", {
+            .ExpectedReads = 3,
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2); // Precompute limit Min(1001,$limit),
+        for (const auto& phase : stats.query_phases()) {
+            UNIT_ASSERT(phase.affected_shards() <= 1);
+        }
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(stats.query_plan(), &plan, true);
+
+        auto stages = FindPlanStages(plan);
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 3);
+
+        i64 totalTasks = 0;
+        for (const auto& stage : stages) {
+            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(totalTasks, 3);
+    }
+
+    Y_UNIT_TEST_TWIN(RangeRead, EnableSourceRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(EnableSourceRead);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+        TKikimrRunner kikimr{settings};
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$from").Int32(2).Build()
+            .AddParam("$to").Int32(7).Build()
+            .Build();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $from AS Int32;
+            DECLARE $to AS Int32;
+
+            SELECT * FROM Join1
+            WHERE Key > $from AND Key <= $to
+            ORDER BY Key;
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        // Cerr << stats.query_plan() << Endl;
+
+        AssertTableStats(result, "/Root/Join1", {
+            .ExpectedReads = 5,
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 2);
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(stats.query_plan(), &plan, true);
+
+        auto stages = FindPlanStages(plan);
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 2);
+
+        i64 totalTasks = 0;
+        for (const auto& stage : stages) {
+            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(totalTasks, 3);
     }
 
     Y_UNIT_TEST(Upsert) {

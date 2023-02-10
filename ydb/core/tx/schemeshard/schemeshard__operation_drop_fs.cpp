@@ -160,28 +160,7 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TDropFileStore AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
-            << ", at schemeshard: " << context.SS->TabletID());
-
-        auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-
-        TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
-
-        TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        Y_VERIFY(path);
-
-        if (path->Dropped()) {
-            for (const auto& shard: txState->Shards) {
-                context.OnComplete.DeleteShard(shard.Idx);
-            }
-        }
-
-        context.OnComplete.DoneOperation(OperationId);
+        AbortUnsafeDropOperation(OperationId, forceDropTxId, context);
     }
 
 private:

@@ -683,5 +683,29 @@ NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& 
     return scheme;
 }
 
+void AbortUnsafeDropOperation(const TOperationId& opId, const TTxId& txId, TOperationContext& context) {
+    TTxState* txState = context.SS->FindTx(opId);
+    Y_VERIFY(txState);
+
+    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, ""
+        << TTxState::TypeName(txState->TxType) << " AbortUnsafe"
+        << ": opId# " << opId
+        << ", txId# " << txId
+        << ", ssId# " << context.SS->TabletID());
+
+    const auto& pathId = txState->TargetPathId;
+    Y_VERIFY(context.SS->PathsById.contains(pathId));
+    auto path = context.SS->PathsById.at(pathId);
+    Y_VERIFY(path);
+
+    if (path->Dropped()) {
+        for (const auto& shard : txState->Shards) {
+            context.OnComplete.DeleteShard(shard.Idx);
+        }
+    }
+
+    context.OnComplete.DoneOperation(opId);
+}
+
 }
 }

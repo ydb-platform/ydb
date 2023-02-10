@@ -362,27 +362,8 @@ public:
         Y_FAIL("no AbortPropose for TDropReplication");
     }
 
-    void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TDropReplication AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-
-        Y_VERIFY(txState);
-        const auto& pathId = txState->TargetPathId;
-
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
-        auto path = context.SS->PathsById.at(pathId);
-
-        Y_VERIFY(path);
-        if (path->Dropped()) {
-            for (auto shard : txState->Shards) {
-                context.OnComplete.DeleteShard(shard.Idx);
-            }
-        }
-
-        context.OnComplete.DoneOperation(OperationId);
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        AbortUnsafeDropOperation(OperationId, forceDropTxId, context);
     }
 
 }; // TDropReplication

@@ -18,6 +18,8 @@ NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& 
 
 THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context);
 
+void AbortUnsafeDropOperation(const TOperationId& operationId, const TTxId& txId, TOperationContext& context);
+
 namespace NTableState {
 
 bool CollectProposeTransactionResults(const TOperationId& operationId, const TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context);
@@ -414,7 +416,6 @@ public:
     }
 };
 
-
 class TDone: public TSubOperationState {
 protected:
     TOperationId OperationId;
@@ -487,7 +488,6 @@ public:
         return true;
     }
 };
-
 
 namespace NPQState {
 
@@ -817,7 +817,7 @@ public:
     }
 };
 
-}
+} // NPQState
 
 namespace NBSVState {
 
@@ -1034,7 +1034,7 @@ public:
     }
 };
 
-}
+} // NBSVState
 
 namespace NCdcStreamState {
 

@@ -672,12 +672,41 @@ NNodes::TExprBase DqPeepholeDropUnusedInputs(const NNodes::TExprBase& node, TExp
     return NNodes::TExprBase(ctx.ChangeChildren(node.Ref(), std::move(children)));
 }
 
-NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprContext& ctx) {
+NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     if (!node.Maybe<TDqPhyLength>()) {
         return node;
     }
 
     auto dqPhyLength = node.Cast<TDqPhyLength>();
+    if (typesCtx.UseBlocks) {
+        return NNodes::TExprBase(ctx.Builder(node.Pos())
+            .Callable("NarrowMap")
+                .Callable(0, "BlockCombineAll")
+                    .Callable(0, "WideToBlocks")
+                        .Add(0, MakeExpandMap(node.Pos(), {}, dqPhyLength.Input().Ptr(), ctx))
+                    .Seal()
+                    .Callable(1, "Void")
+                    .Seal()
+                    .List(2)
+                        .List(0)
+                            .Callable(0, "AggBlockApply")
+                                .Atom(0, "count_all")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Lambda(1)
+                    .Param("value")
+                    .Callable("AsStruct")
+                        .List(0)
+                            .Atom(0, dqPhyLength.Name())
+                            .Arg(1, "value")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build());
+    }
 
     return Build<TCoCondense>(ctx, node.Pos())
         .Input(dqPhyLength.Input())

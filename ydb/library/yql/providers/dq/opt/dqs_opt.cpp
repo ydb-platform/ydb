@@ -45,12 +45,12 @@ namespace NYql::NDqs {
 
     using TStatus = IGraphTransformer::TStatus;
 
-    THolder<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer() {
-        return CreateFunctorTransformer([](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    THolder<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer(TTypeAnnotationContext& typesCtx) {
+        return CreateFunctorTransformer([&typesCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             TOptimizeExprSettings optSettings{nullptr};
             optSettings.VisitLambdas = true;
             return OptimizeExprEx(input, output,
-                [](const TExprNode::TPtr& inputExpr, TExprContext& ctx, IOptimizationContext&) {
+                [&typesCtx](const TExprNode::TPtr& inputExpr, TExprContext& ctx, IOptimizationContext&) {
                     TExprBase node{inputExpr};
                     PERFORM_RULE(DqPeepholeRewriteCrossJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteJoinDict, node, ctx);
@@ -58,15 +58,15 @@ namespace NYql::NDqs {
                     PERFORM_RULE(DqPeepholeRewritePureJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteReplicate, node, ctx);
                     PERFORM_RULE(DqPeepholeDropUnusedInputs, node, ctx);
-                    PERFORM_RULE(DqPeepholeRewriteLength, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewriteLength, node, ctx, typesCtx);
                     return inputExpr;
                 }, ctx, optSettings);
         });
     }
 
-    THolder<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext* typesCtx, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry) {
-        return CreateFunctorTransformer([typesCtx, funcRegistry](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
-            TOptimizeExprSettings settings(typesCtx);
+    THolder<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext& typesCtx, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry) {
+        return CreateFunctorTransformer([&typesCtx, funcRegistry](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
+            TOptimizeExprSettings settings(&typesCtx);
             settings.VisitChecker = [&](const TExprNode& node) {
                 return input.Get() == &node || (!TDqReadWrapBase::Match(&node) && !TDqPhyPrecompute::Match(&node));
             };
@@ -159,7 +159,7 @@ namespace NYql::NDqs {
                     }
                     replaces[node.Get()] = NCommon::ValueToExprLiteral(node->GetTypeAnn(), *value, ctx, node->Pos());
                 }
-                TOptimizeExprSettings settings(typesCtx);
+                TOptimizeExprSettings settings(&typesCtx);
                 settings.VisitStarted = true;
                 YQL_CLOG(DEBUG, ProviderDq) << "DqsReplacePrecomputes";
                 return RemapExpr(output, output, replaces, ctx, settings);

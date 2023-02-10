@@ -34,6 +34,10 @@ namespace NKikimr::NPersQueueTests {
 
     class TPersQueueV1TestServerBase {
     public:
+        TPersQueueV1TestServerBase(bool tenantModeEnabled = false)
+            : TenantMode(tenantModeEnabled)
+        {}
+
         virtual void AlterSettings(NKikimr::Tests::TServerSettings& settings) {
             Y_UNUSED(settings);
         }
@@ -126,8 +130,8 @@ namespace NKikimr::NPersQueueTests {
         }
 
     public:
-        static bool TenantModeEnabled() {
-            return !GetEnv("PERSQUEUE_NEW_SCHEMECACHE").empty();
+        bool TenantModeEnabled() const {
+            return TenantMode;
         }
 
         void ModifyTopicACL(const TString& topic, const NACLib::TDiffACL& acl) {
@@ -158,6 +162,7 @@ namespace NKikimr::NPersQueueTests {
         }
 
     public:
+        const bool TenantMode;
         THolder<NPersQueue::TTestServer> Server;
         TSimpleSharedPtr<TPortManager> PortManager;
         std::shared_ptr<grpc::Channel> InsecureChannel;
@@ -169,8 +174,9 @@ namespace NKikimr::NPersQueueTests {
 
     class TPersQueueV1TestServer : public TPersQueueV1TestServerBase {
     public:
-        TPersQueueV1TestServer(bool checkAcl = false)
-            : CheckACL(checkAcl)
+        TPersQueueV1TestServer(bool checkAcl = false, bool tenantModeEnabled = false)
+            : TPersQueueV1TestServerBase(tenantModeEnabled)
+            , CheckACL(checkAcl)
         {
             InitAll();
         }
@@ -191,8 +197,8 @@ namespace NKikimr::NPersQueueTests {
     private:
         NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity LimitedEntity;
     public:
-        TPersQueueV1TestServerWithRateLimiter()
-            : TPersQueueV1TestServerBase()
+        TPersQueueV1TestServerWithRateLimiter(bool tenantModeEnabled = false)
+            : TPersQueueV1TestServerBase(tenantModeEnabled)
         {}
 
         void AlterSettings(NKikimr::Tests::TServerSettings& settings) override {

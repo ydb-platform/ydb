@@ -2,5 +2,5 @@
 
 
 namespace NKikimr::NPersQueueTests {
-DECLARE_ALL_COMMON_TESTS(false)
+DECLARE_ALL_COMMON_TESTS(true)
 }

@@ -295,8 +295,6 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
         implKeyToImplColumn[implTableColumns.Keys[keyId]] = keyId;
     }
 
-    const TAppData* appData = AppData();
-
     result.ClearColumns();
     for (auto& iter: baseTableInfo->Columns) {
         const NSchemeShard::TTableInfo::TColumn& column = iter.second;
@@ -307,11 +305,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
         if (implTableColumns.Columns.contains(column.Name)) {
             auto item = result.AddColumns();
             item->SetName(column.Name);
-
-            // TODO: support pg types
-            Y_VERIFY(column.PType.GetTypeId() != NScheme::NTypeIds::Pg);
-            item->SetType(appData->TypeRegistry->GetTypeName(column.PType.GetTypeId()));
-
+            item->SetType(NScheme::TypeName(column.PType, column.PTypeMod));
             ui32 order = Max<ui32>();
             if (implKeyToImplColumn.contains(column.Name)) {
                 order = implKeyToImplColumn.at(column.Name);

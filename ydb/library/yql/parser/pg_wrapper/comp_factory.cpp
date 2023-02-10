@@ -15,6 +15,7 @@
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/utils/fp_bits.h>
 #include <library/cpp/yson/detail.h>
+#include <util/string/split.h>
 
 #define TypeName PG_TypeName
 #define SortBy PG_SortBy
@@ -2931,16 +2932,18 @@ void get_type_io_data(Oid typid,
 
 namespace NKikimr::NPg {
 
+constexpr char INTERNAL_TYPE_AND_MOD_SEPARATOR = ':';
+
 class TPgTypeDescriptor
     : public NYql::NPg::TTypeDesc
 {
 public:
     explicit TPgTypeDescriptor(const NYql::NPg::TTypeDesc& desc)
         : NYql::NPg::TTypeDesc(desc)
-        , YdbTypeName(desc.Name + ".pg") // to distinguish from native ydb types (e.g. "int8")
     {
         if (TypeId == ArrayTypeId) {
             const auto& typeDesc = NYql::NPg::LookupType(ElementTypeId);
+            YdbTypeName = TString("_pg") + typeDesc.Name;
             if (typeDesc.CompareProcId) {
                 CompareProcId = NYql::NPg::LookupProc("btarraycmp", { 0, 0 }).ProcId;
             }
@@ -2960,9 +2963,13 @@ public:
                 OutFuncId = NYql::NPg::LookupProc("array_out", { 0 }).ProcId;
             }
         } else {
+            YdbTypeName = TString("pg") + desc.Name;
             StoredSize = TypeLen < 0 ? 0 : TypeLen;
             if (TypeId == NAMEOID) {
                 StoredSize = 0; // store 'name' as usual string
+            }
+            if (NYql::NPg::HasCast(TypeId, TypeId) && TypeModInFuncId != 0) {
+                NeedsCoercion = true;
             }
         }
     }
@@ -3085,7 +3092,7 @@ public:
 
             serialized = (text*)finfo.fn_addr(callInfo);
             Y_ENSURE(!callInfo->isnull);
-            return {TString(NMiniKQL::GetVarBuf(serialized)), ""};
+            return {TString(NMiniKQL::GetVarBuf(serialized)), {}};
         }
         PG_CATCH();
         {
@@ -3127,7 +3134,7 @@ public:
 
             str = (char*)finfo.fn_addr(callInfo);
             Y_ENSURE(!callInfo->isnull);
-            return {TString(str), ""};
+            return {TString(str), {}};
         }
         PG_CATCH();
         {
@@ -3137,6 +3144,198 @@ public:
             FreeErrorData(error_data);
             FlushErrorState();
             return {"", errMsg};
+        }
+        PG_END_TRY();
+    }
+
+    TTypeModResult ReadTypeMod(const TString& str) const {
+        TVector<TString> params;
+        ::Split(str, ",", params);
+
+        if (params.size() > 2) {
+            TStringBuilder errMsg;
+            errMsg << "Error in 'typemodin' function: "
+                << NYql::NPg::LookupProc(TypeModInFuncId).Name
+                << ", reason: too many parameters";
+            return {-1, errMsg};
+        }
+
+        TVector<Datum> dvalues;
+        TVector<bool> dnulls;
+        dnulls.resize(params.size(), false);
+        dvalues.reserve(params.size());
+
+        TString textNumberParam;
+        if (TypeId == INTERVALOID) {
+            i32 typmod = -1;
+            auto ok = NYql::ParsePgIntervalModifier(params[0], typmod);
+            if (!ok) {
+                TStringBuilder errMsg;
+                errMsg << "Error in 'typemodin' function: "
+                    << NYql::NPg::LookupProc(TypeModInFuncId).Name
+                    << ", reason: invalid parameter '" << params[0]
+                    << "' for type pginterval";
+                return {-1, errMsg};
+            }
+            textNumberParam = Sprintf("%d", typmod);
+            dvalues.push_back(PointerGetDatum(textNumberParam.data()));
+            if (params.size() > 1) {
+                dvalues.push_back(PointerGetDatum(params[1].data()));
+            }
+        } else {
+            for (size_t i = 0; i < params.size(); ++i) {
+                dvalues.push_back(PointerGetDatum(params[i].data()));
+            }
+        }
+
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NMiniKQL::TPAllocScope scope;
+        ArrayType* paramsArray = nullptr;
+        Y_DEFER {
+            if (paramsArray) {
+                pfree(paramsArray);
+            }
+        };
+        PG_TRY();
+        {
+            int ndims = 0;
+            int dims[MAXDIM];
+            int lbs[MAXDIM];
+
+            ndims = 1;
+            dims[0] = params.size();
+            lbs[0] = 1;
+
+            const auto& cstringDesc = NYql::NPg::LookupType(CSTRINGOID);
+            paramsArray = construct_md_array(dvalues.data(), dnulls.data(), ndims, dims, lbs,
+                cstringDesc.TypeId,
+                cstringDesc.TypeLen,
+                cstringDesc.PassByValue,
+                cstringDesc.TypeAlign);
+
+            FmgrInfo finfo;
+            InitFunc(TypeModInFuncId, &finfo, 1, 1);
+            LOCAL_FCINFO(callInfo, 1);
+            Zero(*callInfo);
+            callInfo->flinfo = &finfo;
+            callInfo->nargs = 1;
+            callInfo->fncollation = DEFAULT_COLLATION_OID;
+            callInfo->isnull = false;
+            callInfo->args[0] = { PointerGetDatum(paramsArray), false };
+
+            auto result = finfo.fn_addr(callInfo);
+            Y_ENSURE(!callInfo->isnull);
+            return {DatumGetInt32(result), {}};
+        }
+        PG_CATCH();
+        {
+            auto error_data = CopyErrorData();
+            TStringBuilder errMsg;
+            errMsg << "Error in 'typemodin' function: "
+                << NYql::NPg::LookupProc(TypeModInFuncId).Name
+                << ", reason: " << error_data->message;
+            FreeErrorData(error_data);
+            FlushErrorState();
+            return {-1, errMsg};
+        }
+        PG_END_TRY();
+    }
+
+    TMaybe<TString> Validate(const TStringBuf binary) {
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NMiniKQL::TPAllocScope scope;
+        Datum datum = 0;
+        Y_DEFER {
+            if (!PassByValue && datum) {
+                pfree((void*)datum);
+            }
+        };
+        PG_TRY();
+        {
+            datum = Receive(binary.Data(), binary.Size());
+            return {};
+        }
+        PG_CATCH();
+        {
+            auto error_data = CopyErrorData();
+            TStringBuilder errMsg;
+            errMsg << "Error in 'recv' function: "
+                << NYql::NPg::LookupProc(ReceiveFuncId).Name
+                << ", reason: " << error_data->message;
+            FreeErrorData(error_data);
+            FlushErrorState();
+            return errMsg;
+        }
+        PG_END_TRY();
+    }
+
+    TCoerceResult Coerce(const TStringBuf binary, i32 typmod) {
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NMiniKQL::TPAllocScope scope;
+        Datum datum = 0;
+        Datum datumCasted = 0;
+        text* serialized = nullptr;
+        Y_DEFER {
+            if (!PassByValue) {
+                if (datum) {
+                    pfree((void*)datum);
+                }
+                if (datumCasted && datumCasted != datum) {
+                    pfree((void*)datumCasted);
+                }
+            }
+            if (serialized) {
+                pfree(serialized);
+            }
+        };
+        PG_TRY();
+        {
+            datum = Receive(binary.Data(), binary.Size());
+
+            const auto& cast = NYql::NPg::LookupCast(TypeId, TypeId);
+            FmgrInfo finfo;
+            InitFunc(cast.FunctionId, &finfo, 2, 3);
+            LOCAL_FCINFO(callInfo, 3);
+            Zero(*callInfo);
+            callInfo->flinfo = &finfo;
+            callInfo->nargs = 3;
+            callInfo->fncollation = DEFAULT_COLLATION_OID;
+            callInfo->isnull = false;
+            callInfo->args[0] = { datum, false };
+            callInfo->args[1] = { Int32GetDatum(typmod), false };
+            callInfo->args[2] = { BoolGetDatum(false), false };
+
+            datumCasted = finfo.fn_addr(callInfo);
+            Y_ENSURE(!callInfo->isnull);
+
+            if (datum == datumCasted) {
+                return {{}, {}};
+            } else {
+                FmgrInfo finfo;
+                InitFunc(SendFuncId, &finfo, 1, 1);
+                LOCAL_FCINFO(callInfo, 1);
+                Zero(*callInfo);
+                callInfo->flinfo = &finfo;
+                callInfo->nargs = 1;
+                callInfo->fncollation = DEFAULT_COLLATION_OID;
+                callInfo->isnull = false;
+                callInfo->args[0] = { datumCasted, false };
+
+                serialized = (text*)finfo.fn_addr(callInfo);
+                Y_ENSURE(!callInfo->isnull);
+                return {TString(NMiniKQL::GetVarBuf(serialized)), {}};
+            }
+        }
+        PG_CATCH();
+        {
+            auto error_data = CopyErrorData();
+            TStringBuilder errMsg;
+            errMsg << "Error in 'cast' function: "
+                << NYql::NPg::LookupProc(ReceiveFuncId).Name
+                << ", reason: " << error_data->message;
+            FreeErrorData(error_data);
+            FlushErrorState();
+            return {{}, errMsg};
         }
         PG_END_TRY();
     }
@@ -3175,8 +3374,9 @@ private:
     }
 
 public:
-    const TString YdbTypeName;
+    TString YdbTypeName;
     ui32 StoredSize = 0; // size in local db, 0 for variable size
+    bool NeedsCoercion = false;
 };
 
 class TPgTypeDescriptors {
@@ -3230,15 +3430,31 @@ void* TypeDescFromPgTypeId(ui32 pgTypeId) {
     return (void*)TPgTypeDescriptors::Instance().Find(pgTypeId);
 }
 
-const char* PgTypeNameFromTypeDesc(void* typeDesc) {
+TString PgTypeNameFromTypeDesc(void* typeDesc, const TString& typeMod) {
     if (!typeDesc) {
         return "";
     }
-    return static_cast<TPgTypeDescriptor*>(typeDesc)->YdbTypeName.data();
+    auto* pgTypeDesc = static_cast<TPgTypeDescriptor*>(typeDesc);
+    if (typeMod.empty()) {
+        return pgTypeDesc->YdbTypeName;
+    }
+    return pgTypeDesc->YdbTypeName + INTERNAL_TYPE_AND_MOD_SEPARATOR + typeMod;
 }
 
 void* TypeDescFromPgTypeName(const TStringBuf name) {
+    auto space = name.find_first_of(INTERNAL_TYPE_AND_MOD_SEPARATOR);
+    if (space != TStringBuf::npos) {
+        return (void*)TPgTypeDescriptors::Instance().Find(name.substr(0, space));
+    }
     return (void*)TPgTypeDescriptors::Instance().Find(name);
+}
+
+TString TypeModFromPgTypeName(const TStringBuf name) {
+    auto space = name.find_first_of(INTERNAL_TYPE_AND_MOD_SEPARATOR);
+    if (space != TStringBuf::npos) {
+        return TString(name.substr(space + 1));
+    }
+    return {};
 }
 
 bool TypeDescIsComparable(void* typeDesc) {
@@ -3255,12 +3471,40 @@ ui32 TypeDescGetStoredSize(void* typeDesc) {
     return static_cast<TPgTypeDescriptor*>(typeDesc)->StoredSize;
 }
 
+bool TypeDescNeedsCoercion(void* typeDesc) {
+    if (!typeDesc) {
+        return false;
+    }
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->NeedsCoercion;
+}
+
 int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR, void* typeDesc) {
     return static_cast<TPgTypeDescriptor*>(typeDesc)->Compare(dataL, sizeL, dataR, sizeR);
 }
 
 ui64 PgNativeBinaryHash(const char* data, size_t size, void* typeDesc) {
     return static_cast<TPgTypeDescriptor*>(typeDesc)->Hash(data, size);
+}
+
+TTypeModResult BinaryTypeModFromTextTypeMod(const TString& str, void* typeDesc) {
+    if (!typeDesc) {
+        return {-1, "invalid type descriptor"};
+    }
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->ReadTypeMod(str);
+}
+
+TMaybe<TString> PgNativeBinaryValidate(const TStringBuf binary, void* typeDesc) {
+    if (!typeDesc) {
+        return "invalid type descriptor";
+    }
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->Validate(binary);
+}
+
+TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, void* typeDesc, i32 typmod) {
+    if (!typeDesc) {
+        return {{}, "invalid type descriptor"};
+    }
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->Coerce(binary, typmod);
 }
 
 TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {

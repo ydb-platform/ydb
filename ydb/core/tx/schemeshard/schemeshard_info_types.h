@@ -315,8 +315,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         TString DefaultValue;
         bool NotNull = false;
 
-        TColumn(const TString& name, ui32 id, NScheme::TTypeInfo type)
-            : NTable::TScheme::TColumn(name, id, type)
+        TColumn(const TString& name, ui32 id, NScheme::TTypeInfo type, const TString& typeMod)
+            : NTable::TScheme::TColumn(name, id, type, typeMod)
             , CreateVersion(0)
             , DeleteVersion(Max<ui64>())
         {}

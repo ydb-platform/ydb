@@ -178,7 +178,10 @@ private:
             auto& typeInfo = col.second.PType;
             auto* item = colMeta->mutable_type();
             if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-                item->mutable_pg_type()->set_oid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
+                auto* typeDesc = typeInfo.GetTypeDesc();
+                auto* pg = item->mutable_pg_type();
+                pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+                pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
             } else {
                 item->mutable_optional_type()->mutable_item()
                     ->set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());

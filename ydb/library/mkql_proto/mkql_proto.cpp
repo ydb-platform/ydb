@@ -7,6 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/utils/utf8.h>
@@ -278,12 +279,17 @@ void ExportTypeToProtoImpl(TType* type, Ydb::Type& res, const TVector<ui32>* col
         }
 
         case TType::EKind::Pg: {
-            auto pgType = static_cast<TPgType*>(type);
-            auto t = res.mutable_pg_type();
-            t->set_oid(pgType->GetTypeId());
-            t->set_typmod(-1);
+            auto* pgType = static_cast<TPgType*>(type);
+            auto typeId = pgType->GetTypeId();
+            auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(typeId);
+            MKQL_ENSURE(typeDesc, TStringBuilder() << "Unknown PG type id: " << typeId);
+
+            auto* pg = res.mutable_pg_type();
+            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+            pg->set_oid(typeId);
+            pg->set_typmod(-1);
             const i32 typlen = NYql::NPg::LookupType(pgType->GetTypeId()).TypeLen;
-            t->set_typlen(typlen);
+            pg->set_typlen(typlen);
             break;
         }
 
@@ -1323,8 +1329,12 @@ TType* TProtoImporter::ImportTypeFromProto(const Ydb::Type& input) {
             return env.GetTypeOfEmptyList();
         case Ydb::Type::kEmptyDictType:
             return env.GetTypeOfEmptyDict();
-        case Ydb::Type::kPgType:
-            return TPgType::Create(input.pg_type().oid(), env);
+        case Ydb::Type::kPgType: {
+            const auto& typeName = input.pg_type().type_name();
+            auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+            MKQL_ENSURE(typeDesc, TStringBuilder() << "Unknown PG type name: " << typeName);
+            return TPgType::Create(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc), env);
+        }
         case Ydb::Type::kTypeId: {
             MKQL_ENSURE(NUdf::FindDataSlot(input.type_id()), TStringBuilder() << "unknown type id: " << ui32(input.type_id()));
             return TDataType::Create(input.type_id(), env);

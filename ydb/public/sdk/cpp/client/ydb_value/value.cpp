@@ -140,7 +140,11 @@ public:
     TPgType GetPg() const {
         CheckKind(ETypeKind::Pg, "GetPg");
         const auto& pg = GetProto().pg_type();
-        return TPgType(pg.oid(), pg.typlen(), pg.typmod());
+        TPgType type(pg.type_name(), pg.type_modifier());
+        type.Oid = pg.oid();
+        type.Typlen = pg.typlen();
+        type.Typmod = pg.typmod();
+        return type;
     }
 
     template<ETypeKind kind>
@@ -472,7 +476,8 @@ void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
 
         case TTypeParser::ETypeKind::Pg: {
             auto pg = parser.GetPg();
-            out << "Pg("sv << pg.Oid << ',' << pg.Typlen << ',' << pg.Typmod << ')';
+            out << "Pg('"sv << pg.TypeName << "\',\'" << pg.TypeModifier << "\',"
+                << pg.Oid << "," << pg.Typlen << ',' << pg.Typmod << ')';
             break;
         }
 
@@ -603,9 +608,8 @@ public:
 
     void Pg(const TPgType& pgType) {
         auto& pg = *GetProto().mutable_pg_type();
-        pg.set_oid(pgType.Oid);
-        pg.set_typlen(pgType.Typlen);
-        pg.set_typmod(pgType.Typmod);
+        pg.set_type_name(pgType.TypeName);
+        pg.set_type_modifier(pgType.TypeModifier);
     }
 
     void BeginOptional() {

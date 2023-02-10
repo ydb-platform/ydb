@@ -5,9 +5,9 @@
 
 namespace NKikimr::NScheme {
 
-const char* TypeName(const TTypeInfo typeInfo) {
+::TString TypeName(const TTypeInfo typeInfo, const ::TString& typeMod) {
     if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-        return NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
+        return NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc(), typeMod);
     } else {
         return TypeName(typeInfo.GetTypeId());
     }

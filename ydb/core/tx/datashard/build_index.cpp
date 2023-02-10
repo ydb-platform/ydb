@@ -64,7 +64,10 @@ static TTags BuildTags(const TColumnsTags& allTags, const TVector<TString>& inde
 
 static void ProtoYdbTypeFromTypeInfo(Ydb::Type* type, const NScheme::TTypeInfo typeInfo) {
     if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-        type->mutable_pg_type()->set_oid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
+        auto* typeDesc = typeInfo.GetTypeDesc();
+        auto* pg = type->mutable_pg_type();
+        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
     } else {
         type->set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
     }

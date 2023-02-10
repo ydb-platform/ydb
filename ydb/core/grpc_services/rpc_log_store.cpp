@@ -95,10 +95,11 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
         auto* col = to.AddColumns();
         col->SetName(column.name());
         NScheme::TTypeInfo typeInfo;
-        if (!ExtractColumnTypeInfo(typeInfo, column.type(), status, error)) {
+        TString typeMod;
+        if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
             return false;
         }
-        auto typeName = NScheme::TypeName(typeInfo);
+        auto typeName = NScheme::TypeName(typeInfo, typeMod);
         col->SetType(typeName);
         if (key.count(column.name())) {
             col->SetNotNull(true);

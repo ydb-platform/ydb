@@ -214,8 +214,12 @@ void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) 
     auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
     if (typeDesc) {
         Y_VERIFY(!notNull, "It is not allowed to create NOT NULL pg columns");
-        auto pg = protoType.mutable_pg_type();
+        auto* pg = protoType.mutable_pg_type();
+        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+        pg->set_type_modifier(NKikimr::NPg::TypeModFromPgTypeName(typeName));
         pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+        pg->set_typlen(0);
+        pg->set_typmod(0);
         return;
     }
 

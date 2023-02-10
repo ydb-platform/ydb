@@ -447,8 +447,10 @@ TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTrans
     for (const auto& column : meta.GetColumns()) {
         NMiniKQL::TKqpScanComputeContext::TColumn c;
         c.Tag = column.GetId();
-        c.Type = NScheme::TypeInfoFromProtoColumnType(column.GetType(),
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetType(),
             column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+        c.Type = typeInfoMod.TypeInfo;
+        c.TypeMod = typeInfoMod.TypeMod;
 
         if (!IsSystemColumn(c.Tag)) {
             Columns.emplace_back(std::move(c));
@@ -465,8 +467,10 @@ TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTrans
         for (const auto& resColumn : meta.GetResultColumns()) {
             NMiniKQL::TKqpScanComputeContext::TColumn c;
             c.Tag = resColumn.GetId();
-            c.Type = NScheme::TypeInfoFromProtoColumnType(resColumn.GetType(),
+            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(resColumn.GetType(),
                 resColumn.HasTypeInfo() ? &resColumn.GetTypeInfo() : nullptr);
+            c.Type = typeInfoMod.TypeInfo;
+            c.TypeMod = typeInfoMod.TypeMod;
 
             if (!IsSystemColumn(c.Tag)) {
                 ResultColumns.emplace_back(std::move(c));

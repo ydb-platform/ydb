@@ -527,9 +527,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         columnOrderTypes.reserve(Scheme.GetColumns().size());
 
         for (const auto& column : Scheme.GetColumns()) {
-            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(column.GetTypeId(),
+            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
                 column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-            columnOrderTypes.emplace_back(TableInfo.KeyOrder(column.GetName()), typeInfo);
+            columnOrderTypes.emplace_back(TableInfo.KeyOrder(column.GetName()), typeInfoMod.TypeInfo);
         }
 
         TVector<TCell> keys;
@@ -627,14 +627,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                     << ": name# " << column.GetName());
             }
 
-            const auto typeInfo = TableInfo.GetColumnType(column.GetName());
-            auto columnTypeInfo = NScheme::TypeInfoFromProtoColumnType(column.GetTypeId(),
+            const auto type = TableInfo.GetColumnType(column.GetName());
+            auto schemeType = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
                 column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-            if (typeInfo != columnTypeInfo) {
+            if (type.first != schemeType.TypeInfo || type.second != schemeType.TypeMod) {
                 return finish(TStringBuilder() << "Scheme mismatch: column type mismatch"
                     << ": name# " << column.GetName()
-                    << ", expected# " << NScheme::TypeName(typeInfo)
-                    << ", got# " << NScheme::TypeName(columnTypeInfo));
+                    << ", expected# " << NScheme::TypeName(type.first, type.second)
+                    << ", got# " << NScheme::TypeName(schemeType.TypeInfo, schemeType.TypeMod));
             }
         }
 

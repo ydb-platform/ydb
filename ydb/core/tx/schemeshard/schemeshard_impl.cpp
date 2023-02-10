@@ -2376,7 +2376,7 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
         ui32 colId = col.first;
         const TTableInfo::TColumn& cinfo = col.second;
         TString typeData;
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(cinfo.PType);
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
         if (columnType.TypeInfo) {
             Y_VERIFY(columnType.TypeInfo->SerializeToString(&typeData));
         }
@@ -2434,7 +2434,7 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
         ui32 colId = col.first;
         const TTableInfo::TColumn& cinfo = col.second;
         TString typeData;
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(cinfo.PType);
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
         if (columnType.TypeInfo) {
             Y_VERIFY(columnType.TypeInfo->SerializeToString(&typeData));
         }
@@ -2575,7 +2575,7 @@ void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, con
         ui32 colId = col.first;
         const TTableInfo::TColumn& cinfo = col.second;
         TString typeData;
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(cinfo.PType);
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
         if (columnType.TypeInfo) {
             Y_VERIFY(columnType.TypeInfo->SerializeToString(&typeData));
         }
@@ -5944,7 +5944,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             auto descr = proto->AddDropColumns();
             descr->SetName(colInfo.Name);
             descr->SetId(colInfo.Id);
-            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(colInfo.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(colInfo.PType, colInfo.PTypeMod);
             descr->SetTypeId(columnType.TypeId);
             if (columnType.TypeInfo) {
                 *descr->MutableTypeInfo() = *columnType.TypeInfo;
@@ -5953,7 +5953,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             auto descr = proto->AddColumns();
             descr->SetName(colInfo.Name);
             descr->SetId(colInfo.Id);
-            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(colInfo.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(colInfo.PType, colInfo.PTypeMod);
             descr->SetTypeId(columnType.TypeId);
             if (columnType.TypeInfo) {
                 *descr->MutableTypeInfo() = *columnType.TypeInfo;
@@ -6137,6 +6137,7 @@ void TSchemeShard::FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64
 }
 
 bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeInfo firstKeyColType, ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr) {
+    Y_UNUSED(typeRegistry);
     if (partitionCount > 1) {
         // RangeEnd key will have first cell with non-NULL value and rest of the cells with NULLs
         TVector<TCell> rangeEnd(keySize);
@@ -6155,7 +6156,7 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
             valSz = 8;
             break;
         default:
-            errStr = TStringBuilder() << "Unsupported first key column type " << typeRegistry->GetTypeName(typeId) << ", only Uint32 and Uint64 are supported";
+            errStr = TStringBuilder() << "Unsupported first key column type " << NScheme::TypeName(firstKeyColType) << ", only Uint32 and Uint64 are supported";
             return false;
         }
 

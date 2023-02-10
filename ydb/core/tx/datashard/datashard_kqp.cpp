@@ -314,9 +314,10 @@ using TWriteOpMeta = NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta::TWriteO
 using TColumnMeta = NKikimrTxDataShard::TKqpTransaction::TColumnMeta;
 
 NTable::TColumn GetColumn(const TColumnMeta& columnMeta) {
-    auto typeInfo = NScheme::TypeInfoFromProtoColumnType(columnMeta.GetType(),
+    auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnMeta.GetType(),
         columnMeta.HasTypeInfo() ? &columnMeta.GetTypeInfo() : nullptr);
-    return NTable::TColumn(columnMeta.GetName(), columnMeta.GetId(), typeInfo);
+    return NTable::TColumn(columnMeta.GetName(), columnMeta.GetId(),
+        typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
 }
 
 TVector<NTable::TColumn> GetColumns(const TReadOpMeta& readMeta) {

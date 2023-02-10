@@ -3,24 +3,32 @@
 
 namespace NKikimr::NScheme {
 
-TProtoColumnType ProtoColumnTypeFromTypeInfo(const TTypeInfo typeInfo) {
+TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const ::TString& typeMod) {
     TProtoColumnType columnType;
     columnType.TypeId = (ui32)typeInfo.GetTypeId();
     if (typeInfo.GetTypeId() == NTypeIds::Pg) {
         Y_VERIFY(typeInfo.GetTypeDesc(), "no pg type descriptor");
         columnType.TypeInfo = NKikimrProto::TTypeInfo();
         columnType.TypeInfo->SetPgTypeId(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
+        if (typeMod) {
+            columnType.TypeInfo->SetPgTypeMod(typeMod);
+        }
     }
     return columnType;
 }
 
-TTypeInfo TypeInfoFromProtoColumnType(ui32 typeId, const NKikimrProto::TTypeInfo* typeInfo) {
+TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTypeInfo* typeInfo) {
     auto type = (TTypeId)typeId;
     if (type == NTypeIds::Pg) {
-        Y_VERIFY(typeInfo);
-        return TTypeInfo(type, NPg::TypeDescFromPgTypeId(typeInfo->GetPgTypeId()));
+        Y_VERIFY(typeInfo, "no type info for pg type");
+        TTypeInfoMod res;
+        res.TypeInfo = TTypeInfo(type, NPg::TypeDescFromPgTypeId(typeInfo->GetPgTypeId()));
+        if (typeInfo->HasPgTypeMod()) {
+            res.TypeMod = typeInfo->GetPgTypeMod();
+        }
+        return res;
     }
-    return TTypeInfo(type);
+    return {TTypeInfo(type), ""};
 }
 
 } // namespace NKikimr::NScheme

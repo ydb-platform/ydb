@@ -526,6 +526,7 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
             auto& column = *rs.add_columns();
             column.set_name("column0");
             auto& pg_type = *column.mutable_type()->mutable_pg_type();
+            pg_type.set_type_name("pgbool");
             pg_type.set_oid(16);
             pg_type.set_typlen(234);
             pg_type.set_typmod(-987);

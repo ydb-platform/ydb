@@ -11,14 +11,16 @@ struct TSysTables {
         TString Name;
         ui32 Id = 0;
         NScheme::TTypeInfo PType;
+        TString PTypeMod;
         i32 KeyOrder = -1;
 
         TTableColumnInfo() = default;
 
-        TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type, i32 keyOrder = -1)
+        TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type, const TString& typeMod = {}, i32 keyOrder = -1)
             : Name(name)
             , Id(colId)
             , PType(type)
+            , PTypeMod(typeMod)
             , KeyOrder(keyOrder)
         {}
     };
@@ -118,8 +120,8 @@ struct TSysTables {
             auto type = NScheme::TTypeInfo(NScheme::TUint64::TypeId);
             auto typeUi32 = NScheme::TTypeInfo(NScheme::TUint32::TypeId);
 
-            columns[0] = TTableColumnInfo(GetColName(EColumns::LockId), (ui32)EColumns::LockId, type, 0);
-            columns[1] = TTableColumnInfo(GetColName(EColumns::DataShard), (ui32)EColumns::DataShard, type, 1);
+            columns[0] = TTableColumnInfo(GetColName(EColumns::LockId), (ui32)EColumns::LockId, type, "", 0);
+            columns[1] = TTableColumnInfo(GetColName(EColumns::DataShard), (ui32)EColumns::DataShard, type, "", 1);
             columns[2] = TTableColumnInfo(GetColName(EColumns::Generation), (ui32)EColumns::Generation, typeUi32);
             columns[3] = TTableColumnInfo(GetColName(EColumns::Counter), (ui32)EColumns::Counter, type);
 
@@ -127,8 +129,8 @@ struct TSysTables {
             keyTypes.push_back(type);
 
             if (v2) {
-                columns[4] = TTableColumnInfo(GetColName(EColumns::SchemeShard), (ui32)EColumns::SchemeShard, type, 2);
-                columns[5] = TTableColumnInfo(GetColName(EColumns::PathId), (ui32)EColumns::PathId, type, 3);
+                columns[4] = TTableColumnInfo(GetColName(EColumns::SchemeShard), (ui32)EColumns::SchemeShard, type, "", 2);
+                columns[5] = TTableColumnInfo(GetColName(EColumns::PathId), (ui32)EColumns::PathId, type, "", 3);
                 keyTypes.push_back(type);
                 keyTypes.push_back(type);
             }

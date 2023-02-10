@@ -123,9 +123,9 @@ public:
         , ResultStream(ResultString)
     {
         for (auto &col : request.GetColumns()) {
-            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
                 col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-            ColTypes.push_back(typeInfo);
+            ColTypes.push_back(typeInfoMod.TypeInfo);
         }
     }
 
@@ -257,12 +257,17 @@ private:
             auto *meta = res.add_columns();
             meta->set_name(col.GetName());
 
-            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
                 col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
 
             if (col.GetTypeId() == NScheme::NTypeIds::Pg) {
-                auto pgType = meta->mutable_type()->mutable_pg_type();
-                pgType->set_oid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
+                auto* pg = meta->mutable_type()->mutable_pg_type();
+                auto* typeDesc = typeInfoMod.TypeInfo.GetTypeDesc();
+                pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+                pg->set_type_modifier(typeInfoMod.TypeMod);
+                pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+                pg->set_typlen(0);
+                pg->set_typmod(0);
             } else {
                 auto id = static_cast<NYql::NProto::TypeIds>(col.GetTypeId());
                 if (id == NYql::NProto::Decimal) {

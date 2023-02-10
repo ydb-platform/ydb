@@ -553,7 +553,7 @@ private:
                 const auto& tableInfo = TableKeys.GetTable(stageInfo.Meta.TableId);
                 for (const auto& keyColumnName : tableInfo.KeyColumns) {
                     const auto& keyColumn = tableInfo.Columns.at(keyColumnName);
-                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(keyColumn.Type);
+                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn.Type, keyColumn.TypeMod);
                     protoTaskMeta.AddKeyColumnTypes(columnType.TypeId);
                     if (columnType.TypeInfo) {
                         *protoTaskMeta.AddKeyColumnTypeInfos() = *columnType.TypeInfo;
@@ -603,7 +603,7 @@ private:
                     for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
                         auto* protoResultColumn = protoTaskMeta.AddResultColumns();
                         protoResultColumn->SetId(0);
-                        auto protoColumnType = NScheme::ProtoColumnTypeFromTypeInfo(columnType);
+                        auto protoColumnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnType, "");
                         protoResultColumn->SetType(protoColumnType.TypeId);
                         if (protoColumnType.TypeInfo) {
                             *protoResultColumn->MutableTypeInfo() = *protoColumnType.TypeInfo;
@@ -624,7 +624,7 @@ private:
                     for (auto& column : task.Meta.Reads->front().Columns) {
                         auto* protoColumn = protoTaskMeta.AddColumns();
                         protoColumn->SetId(column.Id);
-                        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+                        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, "");
                         protoColumn->SetType(columnType.TypeId);
                         if (columnType.TypeInfo) {
                             *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;

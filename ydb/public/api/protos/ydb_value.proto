@@ -51,12 +51,15 @@ message TaggedType {
 }
 
 message PgType {
+    string type_name = 10;
+    string type_modifier = 11;
+
     // pg object id of the type
     // full registry could be found here: https://github.com/postgres/postgres/blob/master/src/include/catalog/pg_type.dat
-    uint32 oid = 1; // required
+    uint32 oid = 1;
     // advanced type details useful for pg wire format proxying
-    int32 typlen = 2; // optional, set to 0 by default
-    int32 typmod = 3; // optional, set to 0 by default
+    int32 typlen = 2;
+    int32 typmod = 3;
 }
 
 message Type {

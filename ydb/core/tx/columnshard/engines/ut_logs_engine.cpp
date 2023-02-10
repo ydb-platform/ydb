@@ -180,7 +180,7 @@ TIndexInfo TestTableInfo(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema
         auto& name = ydbSchema[i].first;
         auto& type = ydbSchema[i].second;
 
-        indexInfo.Columns[id] = NTable::TColumn(name, id, type);
+        indexInfo.Columns[id] = NTable::TColumn(name, id, type, "");
         indexInfo.ColumnNames[name] = id;
     }
 

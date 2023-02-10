@@ -64,7 +64,7 @@ set_yunittest_property(
   ydb-core-kqp-ut-pg
   PROPERTY
   LABELS
-  SMALL
+  MEDIUM
 )
 set_yunittest_property(
   TEST

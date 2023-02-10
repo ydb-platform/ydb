@@ -779,7 +779,8 @@ void TPathDescriber::DescribeBlobDepot(const TPath& path) {
 }
 
 void TPathDescriber::DescribeExternalTable(const TActorContext& ctx, TPathId pathId, TPathElement::TPtr pathEl) {
-    const NScheme::TTypeRegistry* typeRegistry = AppData(ctx)->TypeRegistry;
+    Y_UNUSED(ctx);
+
     auto it = Self->ExternalTables.FindPtr(pathId);
     Y_VERIFY(it, "ExternalTable is not found");
     TExternalTableInfo::TPtr externalTableInfo = *it;
@@ -800,8 +801,8 @@ void TPathDescriber::DescribeExternalTable(const TActorContext& ctx, TPathId pat
 
         auto colDescr = entry->AddColumns();
         colDescr->SetName(cinfo.Name);
-        colDescr->SetType(typeRegistry->GetTypeName(cinfo.PType.GetTypeId())); // TODO: no pg type details in string type
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(cinfo.PType);
+        colDescr->SetType(NScheme::TypeName(cinfo.PType, cinfo.PTypeMod));
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
         colDescr->SetTypeId(columnType.TypeId);
         if (columnType.TypeInfo) {
             *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
@@ -982,6 +983,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
 void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme::TTypeRegistry* typeRegistry,
                                      bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TTableDescription* entry) const
 {
+    Y_UNUSED(typeRegistry);
     THashMap<ui32, TString> familyNames;
     bool familyNamesBuilt = false;
 
@@ -994,8 +996,8 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
 
         auto colDescr = entry->AddColumns();
         colDescr->SetName(cinfo.Name);
-        colDescr->SetType(typeRegistry->GetTypeName(cinfo.PType.GetTypeId())); // TODO: no pg type details in string type
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(cinfo.PType);
+        colDescr->SetType(NScheme::TypeName(cinfo.PType, cinfo.PTypeMod));
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
         colDescr->SetTypeId(columnType.TypeId);
         if (columnType.TypeInfo) {
             *colDescr->MutableTypeInfo() = *columnType.TypeInfo;

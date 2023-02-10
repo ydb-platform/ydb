@@ -1433,7 +1433,7 @@ private:
             auto &c = *tx.AddColumns();
             c.SetId(col.Id);
             c.SetName(col.Name);
-            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(col.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(col.PType, col.PTypeMod);
             c.SetTypeId(columnType.TypeId);
             if (columnType.TypeInfo) {
                 *c.MutableTypeInfo() = *columnType.TypeInfo;
@@ -1731,8 +1731,10 @@ private:
                     meta->set_name(col.Name);
 
                     if (col.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                        auto pgType = meta->mutable_type()->mutable_pg_type();
-                        pgType->set_oid(NPg::PgTypeIdFromTypeDesc(col.PType.GetTypeDesc()));
+                        auto* typeDesc = col.PType.GetTypeDesc();
+                        auto* pg = meta->mutable_type()->mutable_pg_type();
+                        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+                        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
                     } else {
                         auto id = static_cast<NYql::NProto::TypeIds>(col.PType.GetTypeId());
                         if (id == NYql::NProto::Decimal) {

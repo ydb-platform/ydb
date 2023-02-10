@@ -3883,7 +3883,6 @@ void TExecutor::RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
 void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
     auto cgi = ev->Get()->Cgi();
     TStringStream str;
-    const NScheme::TTypeRegistry& tr = *AppData()->TypeRegistry;
 
     if (cgi.Has("force_compaction")) {
         bool ok;
@@ -3971,7 +3970,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                             TABLER() {
                                 TABLED() {str << col.Name;}
                                 TABLED() {str << col.Id;}
-                                TABLED() {str << tr.GetTypeName(col.PType.GetTypeId());}
+                                TABLED() {str << NScheme::TypeName(col.PType, col.PTypeMod);}
                                 TABLED() {str << (isKey ? ToString(col.KeyOrder) : "");}
                             }
                         }

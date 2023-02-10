@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
     }
 
     Y_UNIT_TEST(PgValue) {
-        TPgType pgType(1, 2, 3);
+        TPgType pgType("");
         TPgValue v1(TPgValue::VK_TEXT, "text_value", pgType);
         TPgValue v2(TPgValue::VK_BINARY, "binary_value", pgType);
         TPgValue v3(TPgValue::VK_TEXT, "", pgType);

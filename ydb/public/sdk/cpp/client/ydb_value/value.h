@@ -70,14 +70,16 @@ struct TDecimalType {
 };
 
 struct TPgType {
-    ui32 Oid;
-    i32 Typlen;
-    i32 Typmod;
+    TString TypeName;
+    TString TypeModifier;
 
-    TPgType(ui32 oid, i32 typlen, i32 typmod)
-        : Oid(oid)
-        , Typlen(typlen)
-        , Typmod(typmod)
+    ui32 Oid = 0;
+    i32 Typlen = 0;
+    i32 Typmod = 0;
+
+    TPgType(const TString& typeName, const TString& typeModifier = {})
+        : TypeName(typeName)
+        , TypeModifier(typeModifier)
     {}
 };
 

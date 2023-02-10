@@ -740,7 +740,7 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
 
             auto& keyComponent = *pqConfig.AddPartitionKeySchema();
             keyComponent.SetName(column.Name);
-            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.PType, column.PTypeMod);
             keyComponent.SetTypeId(columnType.TypeId);
             if (columnType.TypeInfo) {
                 *keyComponent.MutableTypeInfo() = *columnType.TypeInfo;

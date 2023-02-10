@@ -15,6 +15,7 @@ public:
     struct TColumn {
         NTable::TTag Tag;
         NScheme::TTypeInfo Type;
+        TString TypeMod;
     };
 
     // used only at then building of a computation graph, to inject taskId in runtime nodes

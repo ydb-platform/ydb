@@ -93,7 +93,7 @@ TExternalTableInfo::TPtr CreateExternalTable(const NKikimrSchemeOp::TExternalTab
         nextColumnId = colId + 1 > nextColumnId ? colId + 1 : nextColumnId;
 
         TTableInfo::TColumn& column = externalTableInfo->Columns[colId];
-        column = TTableInfo::TColumn(colName, colId, typeInfo);
+        column = TTableInfo::TColumn(colName, colId, typeInfo, ""); // TODO: do we need typeMod here?
         column.NotNull = col.GetNotNull();
     }
 

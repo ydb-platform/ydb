@@ -173,7 +173,7 @@ struct TTestSchema {
         NKikimrSchemeOp::TOlapColumnDescription col;
         col.SetId(id);
         col.SetName(name);
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(type);
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(type, "");
         col.SetTypeId(columnType.TypeId);
         if (columnType.TypeInfo) {
             *col.MutableTypeInfo() = *columnType.TypeInfo;

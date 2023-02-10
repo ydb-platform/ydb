@@ -1,6 +1,7 @@
 #include "flat_dbase_apply.h"
 
 #include <ydb/core/base/localdb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -32,9 +33,11 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             null = TCell(raw.data(), raw.size());
         }
 
-        ui32 pgTypeId = delta.HasColumnTypeInfo() ? delta.GetColumnTypeInfo().GetPgTypeId() : 0;
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(delta.GetColumnType(),
+            delta.HasColumnTypeInfo() ? &delta.GetColumnTypeInfo() : nullptr);
+        ui32 pgTypeId = NPg::PgTypeIdFromTypeDesc(typeInfoMod.TypeInfo.GetTypeDesc());
         changes = AddPgColumn(table, delta.GetColumnName(), delta.GetColumnId(),
-            delta.GetColumnType(), pgTypeId, delta.GetNotNull(), null);
+            delta.GetColumnType(), pgTypeId, typeInfoMod.TypeMod, delta.GetNotNull(), null);
     } else if (action == TAlterRecord::DropColumn) {
         changes = DropColumn(table, delta.GetColumnId());
     } else if (action == TAlterRecord::AddColumnToKey) {
@@ -224,10 +227,10 @@ bool TSchemeModifier::DropTable(ui32 id)
 bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null)
 {
     Y_VERIFY(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
-    return AddPgColumn(tid, name, id, type, 0, notNull, null);
+    return AddPgColumn(tid, name, id, type, 0, "", notNull, null);
 }
 
-bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 type, ui32 pgType, bool notNull, TCell null)
+bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 type, ui32 pgType, const TString& pgTypeMod, bool notNull, TCell null)
 {
     auto *table = Table(tid);
 
@@ -259,9 +262,10 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
         Y_VERIFY_S(itName->second == id, describeFailure());
         // Sanity check that this column exists and types match
         Y_VERIFY(it != table->Columns.end() && it->second.Name == name);
-        Y_VERIFY_S(it->second.PType == typeInfo,
+        Y_VERIFY_S(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << name
-            << "' expected type " << NScheme::TypeName(typeInfo) << ", existing type " << NScheme::TypeName(it->second.PType));
+            << "' expected type " << NScheme::TypeName(typeInfo, pgTypeMod)
+            << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
         return false;
     }
 
@@ -269,16 +273,17 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
 
     // We assume column is renamed when the same id already exists
     if (it != table->Columns.end()) {
-        Y_VERIFY_S(it->second.PType == typeInfo,
+        Y_VERIFY_S(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << it->second.Name << "' renamed to '" << name << "'"
-            << " with type " << NScheme::TypeName(typeInfo) << ", existing type " << NScheme::TypeName(it->second.PType));
+            << " with type " << NScheme::TypeName(typeInfo, pgTypeMod)
+            << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
         table->ColumnNames.erase(it->second.Name);
         it->second.Name = name;
         table->ColumnNames.emplace(name, id);
         return true;
     }
 
-    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, notNull));
+    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, pgTypeMod, notNull));
     Y_VERIFY(pr.second);
     it = pr.first;
     table->ColumnNames.emplace(name, id);

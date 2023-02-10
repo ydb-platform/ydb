@@ -130,7 +130,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const TVector<
     auto ydbSchema = PrimaryIndexStatsSchema;
     for (const auto& col : ydbSchema.Columns) {
         record.AddColumnTags(col.second.Id);
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(col.second.PType);
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(col.second.PType, col.second.PTypeMod);
         record.AddColumnTypes(columnType.TypeId);
         if (columnType.TypeInfo) {
             *record.AddColumnTypeInfos() = *columnType.TypeInfo;

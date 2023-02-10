@@ -434,8 +434,9 @@ void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     const NKikimrSchemeOp::TPathDescription& descr = record.GetPathDescription();
     THashMap<ui32, NScheme::TTypeInfo> colTypes;
     for (const auto& col : descr.GetTable().GetColumns()) {
-        colTypes[col.GetId()] = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
             col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+        colTypes[col.GetId()] = typeInfoMod.TypeInfo;
     }
     TVector<NScheme::TTypeInfo> keyColTypes;
     for (const auto& ki : descr.GetTable().GetKeyColumnIds()) {

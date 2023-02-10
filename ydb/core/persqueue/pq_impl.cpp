@@ -634,9 +634,9 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         KeySchema.clear();
         KeySchema.reserve(Config.PartitionKeySchemaSize());
         for (const auto& component : Config.GetPartitionKeySchema()) {
-            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(component.GetTypeId(),
+            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(component.GetTypeId(),
                 component.HasTypeInfo() ? &component.GetTypeInfo() : nullptr);
-            KeySchema.push_back(typeInfo);
+            KeySchema.push_back(typeInfoMod.TypeInfo);
         }
 
         Y_VERIFY(TopicName.size(), "Need topic name here");
@@ -759,9 +759,9 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         KeySchema.clear();
         KeySchema.reserve(Config.PartitionKeySchemaSize());
         for (const auto& component : Config.GetPartitionKeySchema()) {
-            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(component.GetTypeId(),
+            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(component.GetTypeId(),
                 component.HasTypeInfo() ? &component.GetTypeInfo() : nullptr);
-            KeySchema.push_back(typeInfo);
+            KeySchema.push_back(typeInfoMod.TypeInfo);
         }
 
         ui32 cacheSize = CACHE_SIZE;

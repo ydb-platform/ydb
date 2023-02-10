@@ -103,9 +103,8 @@ class TDescribeReq : public TActor<TDescribeReq> {
         for (const auto& [id, column] : entry.Columns) {
             auto* col = table->AddColumns();
             col->SetName(column.Name);
-            // TODO: support pg types (name)
-            col->SetType(AppData(ctx)->TypeRegistry->GetTypeName(column.PType.GetTypeId()));
-            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.PType);
+            col->SetType(NScheme::TypeName(column.PType, column.PTypeMod));
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.PType, column.PTypeMod);
             col->SetTypeId(columnType.TypeId);
             if (columnType.TypeInfo) {
                 *col->MutableTypeInfo() = *columnType.TypeInfo;

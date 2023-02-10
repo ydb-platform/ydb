@@ -107,6 +107,7 @@ struct TTaskMeta {
     struct TColumn {
         ui32 Id = 0;
         NScheme::TTypeInfo Type;
+        TString TypeMod;
         TString Name;
     };
 
@@ -180,8 +181,10 @@ TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, const TKqpTableKeys
 
     for (const auto& column : op.GetColumns()) {
         TTaskMeta::TColumn c;
+        const auto& tableColumn = table.Columns.at(column.GetName());
         c.Id = column.GetId();
-        c.Type = table.Columns.at(column.GetName()).Type;
+        c.Type = tableColumn.Type;
+        c.TypeMod = tableColumn.TypeMod;
         c.Name = column.GetName();
 
         columns.emplace_back(std::move(c));

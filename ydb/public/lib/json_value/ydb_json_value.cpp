@@ -658,7 +658,7 @@ namespace {
                 break;
 
             case TTypeParser::ETypeKind::Pg: {
-                    TPgType pgType(0, -1, -1);
+                    TPgType pgType(""); // TODO: correct type?
                     if (jsonValue.GetType() == NJson::JSON_STRING) {
                         ValueBuilder.Pg(TPgValue(TPgValue::VK_TEXT, jsonValue.GetString(), pgType));
                     } else if (jsonValue.GetType() == NJson::JSON_NULL) {

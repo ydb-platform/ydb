@@ -13,19 +13,17 @@ extern "C" {
 
 namespace {
     struct TPgTypeTestSpec {
+        ui32 TypeId;
         bool IsKey;
         std::function<TString(size_t)> TextIn, TextOut;
-        std::function<TString(TString)> ArrayPrint;
-        TPgTypeTestSpec() = default;
-        TPgTypeTestSpec(
-            bool isKey,
-            std::function<TString(size_t)> in,
-            std::function<TString(size_t)> out,
-            std::function<TString(TString)> print = [] (auto s) { return Sprintf("{%s,%s}", s.c_str(), s.c_str()); })
-        : IsKey(isKey)
-        , TextIn(in)
-        , TextOut(out)
-        , ArrayPrint(print) {}
+        std::function<TString(TString)> ArrayPrint = [] (auto s) { return Sprintf("{%s,%s}", s.c_str(), s.c_str()); };
+    };
+
+    struct TPgTypeCoercionTestSpec {
+        ui32 TypeId;
+        TString TypeMod;
+        bool ShouldPass;
+        std::function<TString()> TextIn, TextOut;
     };
 }
 
@@ -35,8 +33,9 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-NYdb::NScripting::TExecuteYqlResult
-ExecutePgSelect(NKikimr::NKqp::TKikimrRunner& kikimr, const TString& tableName) {
+NYdb::NScripting::TExecuteYqlResult ExecutePgSelect(
+    NKikimr::NKqp::TKikimrRunner& kikimr, const TString& tableName)
+{
     NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
     auto result = client.ExecuteYqlScript(
         TStringBuilder() << R"(
@@ -44,23 +43,22 @@ ExecutePgSelect(NKikimr::NKqp::TKikimrRunner& kikimr, const TString& tableName) 
         SELECT * FROM ")"
         << tableName << "\""
     ).GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     return result;
 }
 
 void ExecutePgInsert(
     NKikimr::NKqp::TKikimrRunner& kikimr,
     const TString& tableName,
-    ui32 id,
-    const TPgTypeTestSpec& spec
-) {
+    const TPgTypeTestSpec& spec)
+{
     NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-    auto valType = NYql::NPg::LookupType(id).Name;
+    auto valType = NYql::NPg::LookupType(spec.TypeId).Name;
     auto keyType = (spec.IsKey) ? valType : "int2";
-    if (id == BITOID) {
+    if (spec.TypeId == BITOID) {
         valType.append("(4)");
     }
-    for (size_t i = 0; i < ((id == BOOLOID) ? 2 : 3); i++) {
+    for (size_t i = 0; i < ((spec.TypeId == BOOLOID) ? 2 : 3); i++) {
         auto keyIn = (spec.IsKey) ? spec.TextIn(i) : ToString(i);
         TString req = Sprintf("\
         --!syntax_pg\n\
@@ -69,23 +67,22 @@ void ExecutePgInsert(
         )", tableName.Data(), keyIn.Data(), keyType.Data(), spec.TextIn(i).Data(), valType.Data());
         Cerr << req << Endl;
         auto result = client.ExecuteYqlScript(req).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
 
 void ExecutePgArrayInsert(
     NKikimr::NKqp::TKikimrRunner& kikimr,
     const TString& tableName,
-    ui32 id,
-    const TPgTypeTestSpec& spec
-) {
+    const TPgTypeTestSpec& spec)
+{
     NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-    auto valType = NYql::NPg::LookupType(id).Name;
-    if (id == BITOID) {
+    auto valType = NYql::NPg::LookupType(spec.TypeId).Name;
+    if (spec.TypeId == BITOID) {
         valType.append("(4)");
     }
-    for (size_t i = 0; i < ((id == BOOLOID) ? 2 : 3); i++) {
-        auto keyEntry = Sprintf("'%d'::int2", i);
+    for (size_t i = 0; i < ((spec.TypeId == BOOLOID) ? 2 : 3); i++) {
+        auto keyEntry = Sprintf("'%u'::int2", i);
         auto valueEntry = Sprintf(
             "ARRAY ['%s'::%s, '%s'::%s]",
             spec.TextIn(i).Data(),
@@ -100,7 +97,7 @@ void ExecutePgArrayInsert(
         );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
         Cerr << req << Endl;
         auto result = client.ExecuteYqlScript(req).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
 
@@ -125,293 +122,540 @@ void ValidatePgYqlResult(const NYdb::NScripting::TExecuteYqlResult& result, cons
 
 Y_UNIT_TEST_SUITE(KqpPg) {
 
-    auto makePgType = [] (ui32 oid, i32 typlen = -1) { return TPgType(oid, typlen, -1); };
-
-    TMap<
-        ui32,
-        TPgTypeTestSpec
-    > typeSpecs ={
-        { BOOLOID, {
+    TVector<TPgTypeTestSpec> typeSpecs = {
+        {
+            BOOLOID,
             true,
             [] (auto i) { return TString(i ? "true" : "false"); },
             [] (auto i) { return TString(i ? "t" : "f"); }
-            }
         },
-        { CHAROID, {
+        {
+            CHAROID,
             true,
             [] (auto i) { return Sprintf("%c", (char)(i + '0')); },
             [] (auto i) { return Sprintf("%c", (char)(i + '0')); }
-            }
         },
-        { INT2OID, {
+        {
+            INT2OID,
             true,
             [] (auto i) { return Sprintf("%u", i); },
             [] (auto i) { return Sprintf("%u", i); }
-            }
         },
-        { INT4OID, {
+        {
+            INT4OID,
             true,
             [] (auto i) { return Sprintf("%u", i); },
             [] (auto i) { return Sprintf("%u", i); }
-            }
         },
-        { INT8OID, {
+        {
+            INT8OID,
             true,
             [] (auto i) { return Sprintf("%u", i); },
             [] (auto i) { return Sprintf("%u", i); }
-            }
         },
-        { FLOAT4OID, {
+        {
+            FLOAT4OID,
             true,
             [] (auto i) { return Sprintf("%g", i + 0.5f); },
             [] (auto i) { return Sprintf("%g", i + 0.5f); }
-            }
         },
-        { FLOAT8OID, {
+        {
+            FLOAT8OID,
             true,
             [] (auto i) { return Sprintf("%lg", i + 0.5); },
             [] (auto i) { return Sprintf("%lg", i + 0.5); }
-            }
         },
-        { TEXTOID, {
+        {
+            TEXTOID,
             true,
             [] (auto i) { return Sprintf("text %u", i); },
             [] (auto i) { return Sprintf("text %u", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { BPCHAROID, {
+        {
+            BPCHAROID,
             true,
             [] (auto i) { return Sprintf("bpchar %u", i); },
             [] (auto i) { return Sprintf("bpchar %u", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { VARCHAROID, {
+        {
+            VARCHAROID,
             false,
             [] (auto i) { return Sprintf("varchar %u", i); },
             [] (auto i) { return Sprintf("varchar %u", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { NAMEOID, {
+        {
+            NAMEOID,
             true,
             [] (auto i) { return Sprintf("name %u", i); },
             [] (auto i) { return Sprintf("name %u", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { NUMERICOID, {
+        {
+            NUMERICOID,
             true,
             [] (auto i) { return Sprintf("%lg", i + 0.12345); },
             [] (auto i) { return Sprintf("%lg", i + 0.12345); }
-            }
         },
-        { MONEYOID, {
-            true,
+        {
+            MONEYOID,
+            false, // no HashProcId
             [] (auto i) { return Sprintf("%lg", i + i / 100.); },
             [] (auto i) { return Sprintf("$%.2lf", i + i / 100.); }
-            }
         },
-        { DATEOID, {
+        {
+            DATEOID,
             true,
             [] (auto i) { return Sprintf("1970-01-%02u", i + 1); },
             [] (auto i) { return Sprintf("1970-01-%02u", i + 1); }
-            }
         },
-        { TIMEOID, {
+        {
+            TIMEOID,
             true,
             [] (auto i) { return Sprintf("%02u:01:02.345", i); },
             [] (auto i) { return Sprintf("%02u:01:02.345", i); }
-            }
         },
-        { TIMESTAMPOID, {
+        {
+            TIMESTAMPOID,
             true,
             [] (auto i) { return Sprintf("1970-01-01 %02u:01:02.345", i); },
             [] (auto i) { return Sprintf("1970-01-01 %02u:01:02.345", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { TIMETZOID, {
+        {
+            TIMETZOID,
             true,
             [] (auto i) { return Sprintf("%02u:01:02.345-03", i); },
             [] (auto i) { return Sprintf("%02u:01:02.345-03", i); }
-            }
         },
-        { TIMESTAMPTZOID, {
+        {
+            TIMESTAMPTZOID,
             true,
             [] (auto i) { return Sprintf("1970-01-01 %02u:01:02.345 -3:00", i); },
             [] (auto i) { return Sprintf("1970-01-01 %02u:01:02.345+00", i + 3); }, // TODO: investigate
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { INTERVALOID, {
+        {
+            INTERVALOID,
             true,
             [] (auto i) { return Sprintf("P01-02-03T04:05:%02u", i); },
             [] (auto i) { return Sprintf("1 year 2 mons 3 days 04:05:%02u", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { BITOID, {
-            true,
+        {
+            BITOID,
+            false, // no HashProcId
             [] (auto i) { return Sprintf("%c%c%c%c", (i&8)?'1':'0', (i&4)?'1':'0', (i&2)?'1':'0', (i&1)?'1':'0'); },
             [] (auto i) { return Sprintf("%c%c%c%c", (i&8)?'1':'0', (i&4)?'1':'0', (i&2)?'1':'0', (i&1)?'1':'0'); }
-            }
         },
-        { VARBITOID, {
-            true,
+        {
+            VARBITOID,
+            false, // no HashProcId
             [] (auto i) { return Sprintf("%c%c%c%c", (i&8)?'1':'0', (i&4)?'1':'0', (i&2)?'1':'0', (i&1)?'1':'0'); },
             [] (auto i) { return Sprintf("%c%c%c%c", (i&8)?'1':'0', (i&4)?'1':'0', (i&2)?'1':'0', (i&1)?'1':'0'); }
-            }
         },
-        { POINTOID, {
+        {
+            POINTOID,
             false,
             [] (auto i) { return Sprintf("(10, %u)", i); },
             [] (auto i) { return Sprintf("(10,%u)", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { LINEOID, {
+        {
+            LINEOID,
             false,
             [] (auto i) { return Sprintf("{1, 2, %u}", i); },
             [] (auto i) { return Sprintf("{1,2,%u}", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { LSEGOID, {
+        {
+            LSEGOID,
             false,
             [] (auto i) { return Sprintf("[(0, 0), (1, %u)]", i); },
             [] (auto i) { return Sprintf("[(0,0),(1,%u)]", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { BOXOID, {
+        {
+            BOXOID,
             false,
             [] (auto i) { return Sprintf("(1, %u), (0, 0)", i + 1); },
             [] (auto i) { return Sprintf("(1,%u),(0,0)", i + 1); },
             [] (auto s) { return Sprintf("{%s;%s}", s.c_str(), s.c_str()); }
-            }
         },
-        { PATHOID, {
+        {
+            PATHOID,
             false,
             [] (auto i) { return Sprintf("((0, 1), (2, 3), (4, %u))", i); },
             [] (auto i) { return Sprintf("((0,1),(2,3),(4,%u))", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { POLYGONOID, {
+        {
+            POLYGONOID,
             false,
             [] (auto i) { return Sprintf("((0, 1), (2, 3), (4, %u))", i); },
             [] (auto i) { return Sprintf("((0,1),(2,3),(4,%u))", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { CIRCLEOID, {
+        {
+            CIRCLEOID,
             false,
             [] (auto i) { return Sprintf("<(0, 1), %u>", i); },
             [] (auto i) { return Sprintf("<(0,1),%u>", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { INETOID, {
+        {
+            INETOID,
             false,
             [] (auto i) { return Sprintf("128.%u.0.0/16", i); },
             [] (auto i) { return Sprintf("128.%u.0.0/16", i); }
-            }
         },
-        { CIDROID, {
+        {
+            CIDROID,
             false,
             [] (auto i) { return Sprintf("128.%u.0.0/16", i); },
             [] (auto i) { return Sprintf("128.%u.0.0/16", i); }
-            }
         },
-        { MACADDROID, {
+        {
+            MACADDROID,
             false,
             [] (auto i) { return Sprintf("08:00:2b:01:02:%02u", i); },
             [] (auto i) { return Sprintf("08:00:2b:01:02:%02u", i); }
-            }
         },
-        { MACADDR8OID, {
+        {
+            MACADDR8OID,
             false,
             [] (auto i) { return Sprintf("08:00:2b:01:02:03:04:%02u", i); },
             [] (auto i) { return Sprintf("08:00:2b:01:02:03:04:%02u", i); }
-            }
         },
-        { UUIDOID, {
+        {
+            UUIDOID,
             false,
             [] (auto i) { return Sprintf("00000000-0000-0000-0000-0000000000%02u", i); },
             [] (auto i) { return Sprintf("00000000-0000-0000-0000-0000000000%02u", i); }
-            }
         },
-        { JSONOID, {
+        {
+            JSONOID,
             false,
             [] (auto i) { return Sprintf("[%u]", i); },
             [] (auto i) { return Sprintf("[%u]", i); }
-            }
         },
-        { JSONBOID, {
+        {
+            JSONBOID,
             false,
             [] (auto i) { return Sprintf("[%u]", i); },
             [] (auto i) { return Sprintf("[%u]", i); }
-            }
         },
-        { JSONPATHOID, {
+        {
+            JSONPATHOID,
             false,
             [] (auto i) { return Sprintf("$[%u]", i); },
             [] (auto i) { return Sprintf("$[%u]", i); }
-            }
         },
-        { XMLOID, {
+        {
+            XMLOID,
             false,
             [] (auto i) { return Sprintf("<a>%u</a>", i); },
             [] (auto i) { return Sprintf("<a>%u</a>", i); }
-            }
         },
-        { TSQUERYOID, {
+        {
+            TSQUERYOID,
             false,
             [] (auto i) { return Sprintf("a&b%u", i); },
             [] (auto i) { return Sprintf("'a' & 'b%u'", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { TSVECTOROID, {
+        {
+            TSVECTOROID,
             false,
             [] (auto i) { return Sprintf("a:1 b:%u", i + 2); },
             [] (auto i) { return Sprintf("'a':1 'b':%u", i + 2); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         },
-        { INT2VECTOROID, {
+        {
+            INT2VECTOROID,
             false,
             [] (auto i) { return Sprintf("%u %u %u", i, i + 1, i + 2); },
             [] (auto i) { return Sprintf("%u %u %u", i, i + 1, i + 2); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-            }
         }
     };
+
+    TPgTypeTestSpec typeByteaSpec{
+        BYTEAOID,
+        true,
+        [] (auto i) { return Sprintf("bytea %u", i); },
+        [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); }
+    };
+
+    TPgTypeTestSpec typeByteaArraySpec{
+        BYTEAARRAYOID,
+        true,
+        [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
+        [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); }
+    };
+
+
+#define SUCCESS true
+#define FAIL false
+
+    TVector<TPgTypeCoercionTestSpec> typeCoercionSpecs = {
+        {
+            BPCHAROID, "2",
+            FAIL,
+            [] () { return TString("abcd"); },
+            [] () { return TString(""); }
+        },
+        {
+            BPCHAROID, "4",
+            SUCCESS,
+            [] () { return TString("abcd"); },
+            [] () { return TString("abcd"); }
+        },
+        {
+            BPCHAROID, "6",
+            SUCCESS,
+            [] () { return TString("abcd"); },
+            [] () { return TString("abcd  "); }
+        },
+
+        {
+            VARCHAROID, "2",
+            FAIL,
+            [] () { return TString("abcd"); },
+            [] () { return TString(""); }
+        },
+        {
+            VARCHAROID, "4",
+            SUCCESS,
+            [] () { return TString("abcd"); },
+            [] () { return TString("abcd"); }
+        },
+        {
+            VARCHAROID, "6",
+            SUCCESS,
+            [] () { return TString("abcd"); },
+            [] () { return TString("abcd"); }
+        },
+
+        {
+            BITOID, "2",
+            FAIL,
+            [] () { return TString("1111"); },
+            [] () { return TString(""); }
+        },
+        {
+            BITOID, "4",
+            SUCCESS,
+            [] () { return TString("1111"); },
+            [] () { return TString("1111"); }
+        },
+        {
+            BITOID, "6",
+            FAIL,
+            [] () { return TString("1111"); },
+            [] () { return TString(""); }
+        },
+
+        {
+            VARBITOID, "2",
+            FAIL,
+            [] () { return TString("1111"); },
+            [] () { return TString(""); }
+        },
+        {
+            VARBITOID, "4",
+            SUCCESS,
+            [] () { return TString("1111"); },
+            [] () { return TString("1111"); }
+        },
+        {
+            VARBITOID, "6",
+            SUCCESS,
+            [] () { return TString("1111"); },
+            [] () { return TString("1111"); }
+        },
+
+        {
+            NUMERICOID, "2",
+            FAIL,
+            [] () { return TString("9999"); },
+            [] () { return TString(""); }
+        },
+        {
+            NUMERICOID, "4",
+            SUCCESS,
+            [] () { return TString("9999.1234"); },
+            [] () { return TString("9999"); }
+        },
+        {
+            NUMERICOID, "4",
+            SUCCESS,
+            [] () { return TString("9999"); },
+            [] () { return TString("9999"); }
+        },
+        {
+            NUMERICOID, "6",
+            SUCCESS,
+            [] () { return TString("9999"); },
+            [] () { return TString("9999"); }
+        },
+        {
+            NUMERICOID, "20,2",
+            SUCCESS,
+            [] () { return TString("99.1234"); },
+            [] () { return TString("99.12"); }
+        },
+        {
+            NUMERICOID, "20,4",
+            SUCCESS,
+            [] () { return TString("99.1234"); },
+            [] () { return TString("99.1234"); }
+        },
+        {
+            NUMERICOID, "20,6",
+            SUCCESS,
+            [] () { return TString("99.1234"); },
+            [] () { return TString("99.123400"); }
+        },
+
+        {
+            TIMEOID, "2",
+            SUCCESS,
+            [] () { return TString("01:02:03.1234"); },
+            [] () { return TString("01:02:03.12"); }
+        },
+        {
+            TIMEOID, "4",
+            SUCCESS,
+            [] () { return TString("01:02:03.1234"); },
+            [] () { return TString("01:02:03.1234"); }
+        },
+        {
+            TIMEOID, "6",
+            SUCCESS,
+            [] () { return TString("01:02:03.1234"); },
+            [] () { return TString("01:02:03.1234"); }
+        },
+
+        {
+            TIMETZOID, "2",
+            SUCCESS,
+            [] () { return TString("01:02:03.1234+00"); },
+            [] () { return TString("01:02:03.12+00"); }
+        },
+        {
+            TIMETZOID, "4",
+            SUCCESS,
+            [] () { return TString("01:02:03.1234+00"); },
+            [] () { return TString("01:02:03.1234+00"); }
+        },
+        {
+            TIMETZOID, "6",
+            SUCCESS,
+            [] () { return TString("01:02:03.1234+00"); },
+            [] () { return TString("01:02:03.1234+00"); }
+        },
+
+        {
+            TIMESTAMPOID, "2",
+            SUCCESS,
+            [] () { return TString("2001-01-01 01:02:03.1234"); },
+            [] () { return TString("2001-01-01 01:02:03.12"); }
+        },
+        {
+            TIMESTAMPOID, "4",
+            SUCCESS,
+            [] () { return TString("2001-01-01 01:02:03.1234"); },
+            [] () { return TString("2001-01-01 01:02:03.1234"); }
+        },
+        {
+            TIMESTAMPOID, "6",
+            SUCCESS,
+            [] () { return TString("2001-01-01 01:02:03.1234"); },
+            [] () { return TString("2001-01-01 01:02:03.1234"); }
+        },
+
+        {
+            TIMESTAMPTZOID, "2",
+            SUCCESS,
+            [] () { return TString("2001-01-01 01:02:03.1234+00"); },
+            [] () { return TString("2001-01-01 01:02:03.12+00"); }
+        },
+        {
+            TIMESTAMPTZOID, "4",
+            SUCCESS,
+            [] () { return TString("2001-01-01 01:02:03.1234+00"); },
+            [] () { return TString("2001-01-01 01:02:03.1234+00"); }
+        },
+        {
+            TIMESTAMPTZOID, "6",
+            SUCCESS,
+            [] () { return TString("2001-01-01 01:02:03.1234+00"); },
+            [] () { return TString("2001-01-01 01:02:03.1234+00"); }
+        },
+
+        {
+            INTERVALOID, "day",
+            SUCCESS,
+            [] () { return TString("100 01:02:03.1234"); },
+            [] () { return TString("100 days"); }
+        },
+        {
+            INTERVALOID, "day to minute",
+            SUCCESS,
+            [] () { return TString("100 01:02:03.1234"); },
+            [] () { return TString("100 days 01:02:00"); }
+        },
+        {
+            INTERVALOID, "day to second,2",
+            SUCCESS,
+            [] () { return TString("100 01:02:03.1234"); },
+            [] () { return TString("100 days 01:02:03.12"); }
+        },
+        {
+            INTERVALOID, "day to second,6",
+            SUCCESS,
+            [] () { return TString("100 01:02:03.1234"); },
+            [] () { return TString("100 days 01:02:03.1234"); }
+        },
+        {
+            INTERVALOID, "day to second,6",
+            SUCCESS,
+            [] () { return TString("100 01:02:03.1234"); },
+            [] () { return TString("100 days 01:02:03.1234"); }
+        },
+    };
+
+#undef SUCCESS
+#undef FAIL
 
     auto createTable = [] (
         NYdb::NTable::TTableClient& db,
         NYdb::NTable::TSession& session,
-        ui32 id,
+        ui32 typeId,
         bool isKey,
         bool isText,
         std::function<TString(size_t)> textIn,
         TString setTableName = "",
         ui16 rowCount = 10,
-        TVector <TString> colNames = {"key", "value"}
+        TVector<TString> colNames = {"key", "value"}
     ) {
+        auto* typeDesc = NPg::TypeDescFromPgTypeId(typeId);
+        auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
+
         TTableBuilder builder;
         if (isKey) {
-            builder.AddNullableColumn(colNames[0], makePgType(id));
+            builder.AddNullableColumn(colNames[0], TPgType(typeName));
         } else {
-            builder.AddNullableColumn(colNames[0], makePgType(INT2OID));
+            builder.AddNullableColumn(colNames[0], TPgType("pgint2"));
         }
-        builder.AddNullableColumn(colNames[1], makePgType(id));
+        builder.AddNullableColumn(colNames[1], TPgType(typeName));
         builder.SetPrimaryKeyColumn(colNames[0]);
 
         auto tableName = (setTableName.empty()) ?
-            Sprintf("/Root/Pg%u_%s", id, isText ? "t" : "b") : setTableName;
+            Sprintf("/Root/Pg%u_%s", typeId, isText ? "t" : "b") : setTableName;
 
         auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -419,20 +663,20 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         NYdb::TValueBuilder rows;
         rows.BeginList();
         for (size_t i = 0; i < rowCount; ++i) {
-            auto str = isText ? textIn(i) : NPg::PgNativeBinaryFromNativeText(textIn(i), id).Str;
+            auto str = isText ? textIn(i) : NPg::PgNativeBinaryFromNativeText(textIn(i), typeId).Str;
             auto mode = isText ? TPgValue::VK_TEXT : TPgValue::VK_BINARY;
             if (isKey) {
                 rows.AddListItem()
                     .BeginStruct()
-                    .AddMember(colNames[0]).Pg(TPgValue(mode, str, makePgType(id)))
-                    .AddMember(colNames[1]).Pg(TPgValue(mode, str, makePgType(id)))
+                    .AddMember(colNames[0]).Pg(TPgValue(mode, str, TPgType(typeName)))
+                    .AddMember(colNames[1]).Pg(TPgValue(mode, str, TPgType(typeName)))
                     .EndStruct();
             } else {
                 auto int2Str = NPg::PgNativeBinaryFromNativeText(Sprintf("%u", i), INT2OID).Str;
                 rows.AddListItem()
                     .BeginStruct()
-                    .AddMember(colNames[0]).Pg(TPgValue(TPgValue::VK_BINARY, int2Str, makePgType(INT2OID)))
-                    .AddMember(colNames[1]).Pg(TPgValue(mode, str, makePgType(id)))
+                    .AddMember(colNames[0]).Pg(TPgValue(TPgValue::VK_BINARY, int2Str,  TPgType("pgint2")))
+                    .AddMember(colNames[1]).Pg(TPgValue(mode, str, TPgType(typeName)))
                     .EndStruct();
             }
         }
@@ -450,16 +694,71 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         return tableName;
     };
 
+    auto createCoercionTable = [] (
+        NYdb::NTable::TTableClient& db,
+        NYdb::NTable::TSession& session,
+        ui32 typeId,
+        const TString& typeMod,
+        std::function<TString()> textIn,
+        size_t rowCount = 1
+    ) {
+        auto* typeDesc = NPg::TypeDescFromPgTypeId(typeId);
+        auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
+
+        TTableBuilder builder;
+        builder.AddNullableColumn("key", TPgType("pgint2"));
+        builder.AddNullableColumn("value", TPgType(typeName, typeMod));
+        builder.SetPrimaryKeyColumn("key");
+
+        auto paramsHash = THash<TString>()(typeMod);
+        auto tableName = Sprintf("/Root/Coerce_%s_%" PRIu64, typeName.c_str(), paramsHash);
+        auto createResult = session.CreateTable(tableName, builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+
+        auto describeResult = session.DescribeTable(tableName).GetValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+        auto tableColumns = describeResult.GetTableDescription().GetTableColumns();
+        for (const auto& column : tableColumns) {
+            const auto& name = column.Name;
+            const auto& type = column.Type;
+            if (name == "value") {
+                TTypeParser parser(type);
+                auto pgType = parser.GetPg();
+                UNIT_ASSERT(pgType.TypeName == typeName);
+                UNIT_ASSERT(pgType.TypeModifier == typeMod);
+            }
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < rowCount; ++i) {
+            auto str = NPg::PgNativeBinaryFromNativeText(textIn(), typeId).Str;
+            auto int2Str = NPg::PgNativeBinaryFromNativeText(Sprintf("%u", i), INT2OID).Str;
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("key").Pg(TPgValue(TPgValue::VK_BINARY, int2Str, TPgType("pgint2")))
+                .AddMember("value").Pg(TPgValue(TPgValue::VK_BINARY, str, TPgType(typeName, typeMod)))
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto upsertResult = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        if (!upsertResult.IsSuccess()) {
+            Cerr << upsertResult.GetIssues().ToString() << Endl;
+            return std::make_pair(tableName, false);
+        }
+
+        return std::make_pair(tableName, true);
+    };
+
+
     Y_UNIT_TEST(CreateTableBulkUpsertAndRead) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
-        auto testSingleType = [&kikimr] (ui32 id, bool isKey, bool isText,
-            std::function<TString(size_t)> textIn,
-            std::function<TString(size_t)> textOut)
-        {
+        auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec, bool isText) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
-            auto tableName = createTable(db, session, id, isKey, isText, textIn);
+            auto tableName = createTable(db, session, spec.TypeId, spec.IsKey, isText, spec.TextIn);
 
             auto readSettings = TReadTableSettings()
                 .AppendColumns("key")
@@ -479,15 +778,15 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 auto resultSet = part.ExtractPart();
                 TResultSetParser parser(resultSet);
                 for (size_t i = 0; parser.TryNextRow(); ++i) {
-                    auto check = [&parser, &id, &i] (const TString& column, const TString& expected) {
+                    auto check = [&parser, &spec, &i] (const TString& column, const TString& expected) {
                         auto& c = parser.ColumnParser(column);
-                        auto result = NPg::PgNativeTextFromNativeBinary(c.GetPg().Content_, id);
-                        UNIT_ASSERT_C(result.Error.empty(), result.Error);
+                        auto result = NPg::PgNativeTextFromNativeBinary(c.GetPg().Content_, spec.TypeId);
+                        UNIT_ASSERT_C(!result.Error, *result.Error);
                         UNIT_ASSERT_VALUES_EQUAL(expected, result.Str);
                         Cerr << expected << Endl;
                     };
-                    auto expected = textOut(i);
-                    if (isKey) {
+                    auto expected = spec.TextOut(i);
+                    if (spec.IsKey) {
                         check("key", expected);
                     }
                     check("value", expected);
@@ -497,53 +796,92 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             session.Close().GetValueSync();
         };
 
-        auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec)
-        {
-            testSingleType(id, typeSpec.IsKey, false, typeSpec.TextIn, typeSpec.TextOut);
-            testSingleType(id, typeSpec.IsKey, true, typeSpec.TextIn, typeSpec.TextOut);
-
-            auto arrayId = NYql::NPg::LookupType(id).ArrayTypeId;
-
-            auto textInArray = [&typeSpec] (auto i) {
-                auto str = typeSpec.TextIn(i);
-                return typeSpec.ArrayPrint(str);
+        auto testType = [&] (const TPgTypeTestSpec& spec) {
+            auto textInArray = [&spec] (auto i) {
+                auto str = spec.TextIn(i);
+                return spec.ArrayPrint(str);
             };
 
-            auto textOutArray = [&typeSpec] (auto i) {
-                auto str = typeSpec.TextOut(i);
-                return typeSpec.ArrayPrint(str);
+            auto textOutArray = [&spec] (auto i) {
+                auto str = spec.TextOut(i);
+                return spec.ArrayPrint(str);
             };
 
-            testSingleType(arrayId, typeSpec.IsKey, false, textInArray, textOutArray);
-            testSingleType(arrayId, typeSpec.IsKey, true, textInArray, textOutArray);
+            auto arrayTypeId = NYql::NPg::LookupType(spec.TypeId).ArrayTypeId;
+            TPgTypeTestSpec arraySpec{arrayTypeId, spec.IsKey, textInArray, textOutArray};
+
+            testSingleType(spec, false);
+            testSingleType(spec, true);
+            testSingleType(arraySpec, false);
+            testSingleType(arraySpec, true);
         };
 
         auto testByteaType = [&] () {
-            testSingleType(BYTEAOID, true, false,
-                [] (auto i) { return Sprintf("bytea %u", i); },
-                [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); });
-
-            testSingleType(BYTEAOID, true, true,
-                [] (auto i) { return Sprintf("bytea %u", i); },
-                [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); });
-
-            testSingleType(BYTEAARRAYOID, true, false,
-                [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
-                [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); });
-
-            testSingleType(BYTEAARRAYOID, true, true,
-                [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
-                [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); });
+            testSingleType(typeByteaSpec, false);
+            testSingleType(typeByteaSpec, true);
+            testSingleType(typeByteaArraySpec, false);
+            testSingleType(typeByteaArraySpec, true);
         };
 
         testByteaType();
 
-        for (const auto& [oid, spec] : typeSpecs) {
-            testType(oid, spec);
+        for (const auto& spec : typeSpecs) {
+            testType(spec);
         }
 
         // TODO: varchar as a key
         // TODO: native range/multirange types (use get_range_io_data())
+    }
+
+    Y_UNIT_TEST(TypeCoercionBulkUpsert) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+
+        auto testType = [&kikimr] (const TPgTypeCoercionTestSpec& spec) {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            TString tableName;
+            bool success;
+            std::tie(tableName, success) = createCoercionTable(db, session, spec.TypeId, spec.TypeMod, spec.TextIn);
+
+            UNIT_ASSERT_VALUES_EQUAL(success, spec.ShouldPass);
+            if (!success) {
+                return;
+            }
+
+            auto readSettings = TReadTableSettings()
+                .AppendColumns("key")
+                .AppendColumns("value");
+
+            auto it = session.ReadTable(tableName, readSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            bool eos = false;
+            while (!eos) {
+                auto part = it.ReadNext().ExtractValueSync();
+                if (!part.IsSuccess()) {
+                    eos = true;
+                    Y_ENSURE(part.EOS());
+                    continue;
+                }
+                auto resultSet = part.ExtractPart();
+                TResultSetParser parser(resultSet);
+                for (size_t i = 0; parser.TryNextRow(); ++i) {
+                    auto expected = spec.TextOut();
+                    auto& c = parser.ColumnParser("value");
+                    auto result = NPg::PgNativeTextFromNativeBinary(c.GetPg().Content_, spec.TypeId);
+                    UNIT_ASSERT_C(!result.Error, *result.Error);
+                    UNIT_ASSERT_VALUES_EQUAL(expected, result.Str);
+                    Cerr << expected << Endl;
+                }
+            }
+
+            session.Close().GetValueSync();
+        };
+
+        for (const auto& spec : typeCoercionSpecs) {
+            testType(spec);
+        }
     }
 
     Y_UNIT_TEST(EmptyQuery) {
@@ -554,7 +892,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             --!syntax_pg
         )").GetValueSync();
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         Y_ENSURE(result.GetResultSets().empty());
     }
 
@@ -571,7 +909,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             ) AS t (int8, varchar);
         )").GetValueSync();
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         CompareYson(R"([
             ["1";"one"];
@@ -582,55 +920,46 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(TableSelect) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
-        auto testSingleType = [&kikimr] (ui32 id, const TPgTypeTestSpec& spec)
-        {
+
+        auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
-            auto tableName = createTable(db, session, id, spec.IsKey, false, spec.TextIn);
+            auto tableName = createTable(db, session, spec.TypeId, spec.IsKey, false, spec.TextIn);
             session.Close().GetValueSync();
+
             NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
             auto result = ExecutePgSelect(kikimr, tableName);
             ValidatePgYqlResult(result, spec);
         };
 
-
-        auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec)
-        {
-            testSingleType(id, typeSpec);
-
-            auto arrayId = NYql::NPg::LookupType(id).ArrayTypeId;
-            auto textInArray = [&typeSpec] (auto i) {
-                auto str = typeSpec.TextIn(i);
-                return typeSpec.ArrayPrint(str);
+        auto testType = [&] (const TPgTypeTestSpec& spec) {
+            auto textInArray = [&spec] (auto i) {
+                auto str = spec.TextIn(i);
+                return spec.ArrayPrint(str);
             };
-            auto textOutArray = [&typeSpec] (auto i) {
-                auto str = typeSpec.TextOut(i);
-                return typeSpec.ArrayPrint(str);
-            };
-            TPgTypeTestSpec arraySpec(typeSpec.IsKey, textInArray, textOutArray);
 
-            testSingleType(arrayId, arraySpec);
+            auto textOutArray = [&spec] (auto i) {
+                auto str = spec.TextOut(i);
+                return spec.ArrayPrint(str);
+            };
+
+            auto arrayTypeId = NYql::NPg::LookupType(spec.TypeId).ArrayTypeId;
+            TPgTypeTestSpec arraySpec{arrayTypeId, spec.IsKey, textInArray, textOutArray};
+
+            testSingleType(spec);
+            testSingleType(arraySpec);
         };
 
         auto testByteaType = [&] () {
-            TPgTypeTestSpec byteaSpec(
-                true,
-                [] (auto i) { return Sprintf("bytea %u", i); },
-                [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); }
-            );
-
-            TPgTypeTestSpec bytearrSpec(
-                false,
-                [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
-                [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); }
-            );
-            testSingleType(BYTEAOID, byteaSpec);
-            testSingleType(BYTEAARRAYOID, bytearrSpec);
+            testSingleType(typeByteaSpec);
+            testSingleType(typeByteaArraySpec);
         };
+
         testByteaType();
-        for (const auto& [oid, spec] : typeSpecs) {
-            Cerr << oid << Endl;
-            testType(oid, spec);
+
+        for (const auto& spec : typeSpecs) {
+            Cerr << spec.TypeId << Endl;
+            testType(spec);
         }
     }
 
@@ -644,88 +973,56 @@ Y_UNIT_TEST_SUITE(KqpPg) {
     Y_UNIT_TEST(TableInsert) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
-        auto testSingleType = [&kikimr] (ui32 id, const TPgTypeTestSpec& spec) {
+        auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
-            auto tableName = createTable(
-                db,
-                session,
-                id,
-                spec.IsKey,
-                false,
-                spec.TextIn,
-                "",
-                0
-            );
+            auto tableName = createTable(db, session, spec.TypeId, spec.IsKey, false, spec.TextIn, "", 0);
             session.Close().GetValueSync();
 
-            ExecutePgInsert(kikimr, tableName, id, spec);
+            ExecutePgInsert(kikimr, tableName, spec);
             auto result = ExecutePgSelect(kikimr, tableName);
             ValidatePgYqlResult(result, spec);
         };
 
-        auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec)
-        {
-            testSingleType(id, typeSpec);
-        };
         auto testByteaType = [&] () {
-            TPgTypeTestSpec byteaSpec(
-                true,
-                [] (auto i) { return Sprintf("bytea %u", i); },
-                [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); }
-            );
+            testSingleType(typeByteaSpec);
 
-            TPgTypeTestSpec bytearrSpec(
-                false,
-                [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
-                [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); }
-            );
-            testSingleType(BYTEAOID, byteaSpec);
-            testSingleType(BYTEAARRAYOID, bytearrSpec);
+            TPgTypeTestSpec typeByteaArraySpecForInsert{
+                BYTEAARRAYOID, false, typeByteaArraySpec.TextIn, typeByteaArraySpec.TextOut};
+
+            testSingleType(typeByteaArraySpecForInsert);
         };
+
         testByteaType();
-        for (auto [oid, spec] : typeSpecs) {
-            Cerr << oid << Endl;
-            if (oid == CHAROID) {
+
+        for (const auto& spec : typeSpecs) {
+            Cerr << spec.TypeId << Endl;
+            if (spec.TypeId == CHAROID) {
                 continue;
                 // I cant come up with a query with explicit char conversion.
                 // ::char, ::character casts to pg_bpchar
             }
-            if (oid == MONEYOID || oid == BITOID || oid == VARBITOID) {
-                spec.IsKey = false;
-                // Those types do not have HashProcId, so are not hashable,
-                // And we can not validate their uniqueness as keys in INSERT.
-            }
-            testType(oid, spec);
+            testSingleType(spec);
         }
     }
 
     Y_UNIT_TEST(TableArrayInsert) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
-        auto testSingleType = [&kikimr] (ui32 id, const TPgTypeTestSpec& spec) {
+        auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
-            auto arrayId = NYql::NPg::LookupType(id).ArrayTypeId;
-            auto tableName = createTable(
-                db,
-                session,
-                arrayId,
-                spec.IsKey/*false*/,
-                false,
-                spec.TextIn,
-                "",
-                0
-            );
+            auto arrayId = NYql::NPg::LookupType(spec.TypeId).ArrayTypeId;
+            auto tableName = createTable(db, session, arrayId, spec.IsKey, false, spec.TextIn, "", 0);
             session.Close().GetValueSync();
 
-            ExecutePgArrayInsert(kikimr, tableName, id, spec);
+            ExecutePgArrayInsert(kikimr, tableName, spec);
 
             auto result = ExecutePgSelect(kikimr, tableName);
 
             TResultSetParser parser(result.GetResultSetParser(0));
             for (size_t i = 0; parser.TryNextRow(); ++i) {
-                auto check = [&parser, &id, &spec] (const TString& column, const TString& expected) {
+                auto check = [&parser] (const TString& column, const TString& expected) {
                     auto& c = parser.ColumnParser(column);
                     UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
                 };
@@ -734,45 +1031,37 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             }
         };
 
-
-        auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec) {
-            auto textOutArray = [&typeSpec] (auto i) {
-                auto str = typeSpec.TextOut(i);
-                return typeSpec.ArrayPrint(str);
+        auto testType = [&] (const TPgTypeTestSpec& spec) {
+            auto textOutArray = [&spec] (auto i) {
+                auto str = spec.TextOut(i);
+                return spec.ArrayPrint(str);
             };
-            TPgTypeTestSpec arraySpec(false, typeSpec.TextIn, textOutArray);
-            testSingleType(id, arraySpec);
+            TPgTypeTestSpec arraySpec{spec.TypeId, false, spec.TextIn, textOutArray};
+            testSingleType(arraySpec);
         };
 
-        for (auto [oid, spec] : typeSpecs) {
-            Cerr << oid << Endl;
-            if (oid == CHAROID) {
+        for (const auto& spec : typeSpecs) {
+            Cerr << spec.TypeId << Endl;
+            if (spec.TypeId == CHAROID) {
                 continue;
                 // I cant come up with a query with explicit char conversion.
                 // ::char, ::character casts to pg_bpchar
             }
-            if (oid == MONEYOID || oid == BITOID || oid == VARBITOID) {
-                spec.IsKey = false;
-                // Those types do not have HashProcId, so are not hashable,
-                // And we can not validate their uniqueness as keys in INSERT.
-            }
-            testType(oid, spec);
+            testType(spec);
         }
     }
 
     Y_UNIT_TEST(InsertFromSelect) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
-        auto testSingleType = [&kikimr] (ui32 id, bool isKey,
-            std::function<TString(size_t)> textIn,
-            std::function<TString(size_t)> textOut)
-        {
+        auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
-            auto tableName = createTable(db, session, id, isKey, false, textIn, "", 10, {"key1", "value1"});
-            TString emptyTableName = "/Root/PgEmpty" + ToString(id);
-            createTable(db, session, id, isKey, false, textIn, emptyTableName, 0);
+            auto tableName = createTable(db, session, spec.TypeId, spec.IsKey, false, spec.TextIn, "", 10, {"key1", "value1"});
+            TString emptyTableName = "/Root/PgEmpty" + ToString(spec.TypeId);
+            createTable(db, session, spec.TypeId, spec.IsKey, false, spec.TextIn, emptyTableName, 0);
             session.Close().GetValueSync();
+
             NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
             auto result = client.ExecuteYqlScript(
                 TStringBuilder() << R"(
@@ -782,22 +1071,25 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
         };
 
-        auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec)
-        {
-            testSingleType(id, typeSpec.IsKey, typeSpec.TextIn, typeSpec.TextOut);
-        };
-
-        testType(INT2OID, typeSpecs[INT2OID]);
+        for (const auto& spec : typeSpecs) {
+            Cerr << spec.TypeId << Endl;
+            if (spec.TypeId == CHAROID) {
+                continue;
+                // I cant come up with a query with explicit char conversion.
+                // ::char, ::character casts to pg_bpchar
+            }
+            testSingleType(spec);
+        }
     }
 
     Y_UNIT_TEST(CreateTable) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
-        auto testSingleType = [&kikimr] (ui32 id, const TPgTypeTestSpec& spec, bool isArray)
-        {
+
+        auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec, bool isArray) {
             NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
 
-            auto tableName = "/Root/Pg" + ToString(id) + (isArray ? "array" : "");
-            auto typeName = ((isArray) ? "_pg" : "pg") + NYql::NPg::LookupType(id).Name;
+            auto tableName = "/Root/Pg" + ToString(spec.TypeId) + (isArray ? "array" : "");
+            auto typeName = ((isArray) ? "_pg" : "pg") + NYql::NPg::LookupType(spec.TypeId).Name;
             auto keyEntry = spec.IsKey ? ("key "+ typeName) : "key pgint2";
             auto valueEntry = "value " + typeName;
             auto req = Sprintf("\
@@ -808,17 +1100,18 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
             Cerr << req << Endl;
             auto result = client.ExecuteYqlScript(req).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
             if (!isArray) {
-                ExecutePgInsert(kikimr, tableName, id, spec);
+                ExecutePgInsert(kikimr, tableName, spec);
                 result = ExecutePgSelect(kikimr, tableName);
                 ValidatePgYqlResult(result, spec);
             } else {
-                ExecutePgArrayInsert(kikimr, tableName, id, spec);
+                ExecutePgArrayInsert(kikimr, tableName, spec);
                 result = ExecutePgSelect(kikimr, tableName);
                 TResultSetParser parser(result.GetResultSetParser(0));
                 for (size_t i = 0; parser.TryNextRow(); ++i) {
-                    auto check = [&parser, &id, &spec] (const TString& column, const TString& expected) {
+                    auto check = [&parser, &spec] (const TString& column, const TString& expected) {
                         auto& c = parser.ColumnParser(column);
                         UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
                     };
@@ -828,34 +1121,26 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             }
         };
 
-        auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec)
-        {
-            testSingleType(id, typeSpec, false);
-
-            auto textOutArray = [&typeSpec] (auto i) {
-                auto str = typeSpec.TextOut(i);
-                return typeSpec.ArrayPrint(str);
+        auto testType = [&] (const TPgTypeTestSpec& spec) {
+            auto textOutArray = [&spec] (auto i) {
+                auto str = spec.TextOut(i);
+                return spec.ArrayPrint(str);
             };
-            TPgTypeTestSpec arraySpec(false, typeSpec.TextIn, textOutArray);
 
-            testSingleType(id, arraySpec, true);
+            TPgTypeTestSpec arraySpec{spec.TypeId, false, spec.TextIn, textOutArray};
 
+            testSingleType(spec, false);
+            testSingleType(arraySpec, true);
         };
-        for (auto [oid, spec] : typeSpecs) {
-            if (oid == CHAROID) {
-                continue;
-            }
-            if (oid == CHAROID) {
+
+        for (const auto& spec : typeSpecs) {
+            Cerr << spec.TypeId << Endl;
+            if (spec.TypeId == CHAROID) {
                 continue;
                 // I cant come up with a query with explicit char conversion.
                 // ::char, ::character casts to pg_bpchar
             }
-            if (oid == MONEYOID || oid == BITOID || oid == VARBITOID) {
-                spec.IsKey = false;
-                // Those types do not have HashProcId, so are not hashable,
-                // And we can not validate their uniqueness as keys in INSERT.
-            }
-            testType(oid, spec);
+            testType(spec);
         }
     }
 
@@ -863,7 +1148,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
         TTableBuilder builder;
-        UNIT_ASSERT_EXCEPTION(builder.AddNonNullableColumn("key", makePgType(INT2OID)), yexception);
+        UNIT_ASSERT_EXCEPTION(builder.AddNonNullableColumn("key", TPgType("pgint2")), yexception);
 
         NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
         auto req = TStringBuilder() << R"(

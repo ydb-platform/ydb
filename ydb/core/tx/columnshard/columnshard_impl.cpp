@@ -989,9 +989,9 @@ NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTabl
     for (const auto& col : schema.GetColumns()) {
         const ui32 id = col.GetId();
         const TString& name = col.GetName();
-        auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
             col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-        indexInfo.Columns[id] = NTable::TColumn(name, id, typeInfo);
+        indexInfo.Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
         indexInfo.ColumnNames[name] = id;
     }
 

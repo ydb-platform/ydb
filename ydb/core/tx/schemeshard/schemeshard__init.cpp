@@ -388,7 +388,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeInfo, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool> TColumnRec;
+    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeInfo, TString, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool> TColumnRec;
     typedef TDeque<TColumnRec> TColumnRows;
 
     bool LoadColumns(NIceDb::TNiceDb& db, TColumnRows& columnRows) const {
@@ -413,17 +413,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = rowSet.GetValue<Schema::Columns::DefaultValue>();
                 auto notNull = rowSet.GetValueOrDefault<Schema::Columns::NotNull>(false);
 
-                NScheme::TTypeInfo typeInfo;
+                NScheme::TTypeInfoMod typeInfoMod;
                 if (typeData) {
                     NKikimrProto::TTypeInfo protoType;
                     Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
-                    typeInfo = NScheme::TypeInfoFromProtoColumnType(typeId, &protoType);
+                    typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
                 } else {
-                    typeInfo = NScheme::TTypeInfo(typeId);
+                    typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
                 }
 
                 columnRows.emplace_back(pathId, colId,
-                                        colName, typeInfo, keyOrder, createVersion, deleteVersion,
+                                        colName, typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
+                                        keyOrder, createVersion, deleteVersion,
                                         family, defaultKind, defaultValue, notNull);
 
                 if (!rowSet.Next()) {
@@ -455,17 +456,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = rowSet.GetValue<Schema::MigratedColumns::DefaultValue>();
                 auto notNull = rowSet.GetValueOrDefault<Schema::MigratedColumns::NotNull>(false);
 
-                NScheme::TTypeInfo typeInfo;
+                NScheme::TTypeInfoMod typeInfoMod;
                 if (typeData) {
                     NKikimrProto::TTypeInfo protoType;
                     Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
-                    typeInfo = NScheme::TypeInfoFromProtoColumnType(typeId, &protoType);
+                    typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
                 } else {
-                    typeInfo = NScheme::TTypeInfo(typeId);
+                    typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
                 }
 
                 columnRows.emplace_back(pathId, colId,
-                                        colName, typeInfo, keyOrder, createVersion, deleteVersion,
+                                        colName, typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
+                                        keyOrder, createVersion, deleteVersion,
                                         family, defaultKind, defaultValue, notNull);
 
                 if (!rowSet.Next()) {
@@ -499,17 +501,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = rowSet.GetValue<Schema::ColumnAlters::DefaultValue>();
                 auto notNull = rowSet.GetValueOrDefault<Schema::ColumnAlters::NotNull>(false);
 
-                NScheme::TTypeInfo typeInfo;
+                NScheme::TTypeInfoMod typeInfoMod;
                 if (typeData) {
                     NKikimrProto::TTypeInfo protoType;
                     Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
-                    typeInfo = NScheme::TypeInfoFromProtoColumnType(typeId, &protoType);
+                    typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
                 } else {
-                    typeInfo = NScheme::TTypeInfo(typeId);
+                    typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
                 }
 
                 columnRows.emplace_back(pathId, colId,
-                                        colName, typeInfo, keyOrder, createVersion, deleteVersion,
+                                        colName, typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
+                                        keyOrder, createVersion, deleteVersion,
                                         family, defaultKind, defaultValue, notNull);
 
                 if (!rowSet.Next()) {
@@ -541,17 +544,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = rowSet.GetValue<Schema::MigratedColumnAlters::DefaultValue>();
                 auto notNull = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::NotNull>(false);
 
-                NScheme::TTypeInfo typeInfo;
+                NScheme::TTypeInfoMod typeInfoMod;
                 if (typeData) {
                     NKikimrProto::TTypeInfo protoType;
                     Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
-                    typeInfo = NScheme::TypeInfoFromProtoColumnType(typeId, &protoType);
+                    typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
                 } else {
-                    typeInfo = NScheme::TTypeInfo(typeId);
+                    typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
                 }
 
                 columnRows.emplace_back(pathId, colId,
-                                        colName, typeInfo, keyOrder, createVersion, deleteVersion,
+                                        colName, typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
+                                        keyOrder, createVersion, deleteVersion,
                                         family, defaultKind, defaultValue, notNull);
 
                 if (!rowSet.Next()) {
@@ -1919,19 +1923,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 colId = std::get<1>(rec);
                 TString colName = std::get<2>(rec);
                 NScheme::TTypeInfo typeInfo = std::get<3>(rec);
-                ui32 keyOrder = std::get<4>(rec);
-                ui64 createVersion = std::get<5>(rec);
-                ui64 deleteVersion = std::get<6>(rec);
-                ui32 family = std::get<7>(rec);
-                auto defaultKind = std::get<8>(rec);
-                auto defaultValue = std::get<9>(rec);
-                auto notNull = std::get<10>(rec);
+                TString typeMod = std::get<4>(rec);
+                ui32 keyOrder = std::get<5>(rec);
+                ui64 createVersion = std::get<6>(rec);
+                ui64 deleteVersion = std::get<7>(rec);
+                ui32 family = std::get<8>(rec);
+                auto defaultKind = std::get<9>(rec);
+                auto defaultValue = std::get<10>(rec);
+                auto notNull = std::get<11>(rec);
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable() || Self->PathsById.at(pathId)->IsExternalTable(), "Path is not a table or external table, pathId: " << pathId);
                 Y_VERIFY_S(Self->Tables.FindPtr(pathId) || Self->ExternalTables.FindPtr(pathId), "Table or external table don't exist, pathId: " << pathId);
 
-                TTableInfo::TColumn colInfo(colName, colId, typeInfo);
+                TTableInfo::TColumn colInfo(colName, colId, typeInfo, typeMod);
                 colInfo.KeyOrder = keyOrder;
                 colInfo.CreateVersion = createVersion;
                 colInfo.DeleteVersion = deleteVersion;
@@ -1976,13 +1981,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 colId = std::get<1>(rec);
                 TString colName = std::get<2>(rec);
                 NScheme::TTypeInfo typeInfo = std::get<3>(rec);
-                ui32 keyOrder = std::get<4>(rec);
-                ui64 createVersion = std::get<5>(rec);
-                ui64 deleteVersion = std::get<6>(rec);
-                ui32 family = std::get<7>(rec);
-                auto defaultKind = std::get<8>(rec);
-                auto defaultValue = std::get<9>(rec);
-                auto notNull = std::get<10>(rec);
+                TString typeMod = std::get<4>(rec);
+                ui32 keyOrder = std::get<5>(rec);
+                ui64 createVersion = std::get<6>(rec);
+                ui64 deleteVersion = std::get<7>(rec);
+                ui32 family = std::get<8>(rec);
+                auto defaultKind = std::get<9>(rec);
+                auto defaultValue = std::get<10>(rec);
+                auto notNull = std::get<11>(rec);
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable(), "Path is not a table, pathId: " << pathId);
@@ -1995,7 +2001,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     tableInfo->AlterData->NextColumnId = colId + 1; // calc next NextColumnId
                 }
 
-                TTableInfo::TColumn colInfo(colName, colId, typeInfo);
+                TTableInfo::TColumn colInfo(colName, colId, typeInfo, typeMod);
                 colInfo.KeyOrder = keyOrder;
                 colInfo.CreateVersion = createVersion;
                 colInfo.DeleteVersion = deleteVersion;

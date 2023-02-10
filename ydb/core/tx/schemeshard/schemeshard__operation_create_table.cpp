@@ -112,7 +112,7 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
 
         if (!IsAllowedKeyType(type)) {
             errStr = Sprintf("Column %s has wrong key type %s",
-                tableInfo->Columns[ki].Name.c_str(), NScheme::TypeName(type));
+                tableInfo->Columns[ki].Name.c_str(), NScheme::TypeName(type).c_str());
             return false;
         }
 

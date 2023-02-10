@@ -199,9 +199,9 @@ void TTester::RegisterTableInResolver(const TString& schemeText)
                 keyIdx = ki;
             }
         }
-        auto typeInfo = NScheme::TypeInfoFromProtoColumnType(c.GetTypeId(),
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(c.GetTypeId(),
             c.HasTypeInfo() ? &c.GetTypeInfo() : nullptr);
-        table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, typeInfo, 0, EColumnTypeConstraint::Nullable}));
+        table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, typeInfoMod.TypeInfo, 0, EColumnTypeConstraint::Nullable}));
     }
     DbSchemeResolver.AddTable(table);
 }

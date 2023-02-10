@@ -37,9 +37,9 @@ std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumn
     TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
     for (auto& col : schema.GetColumns()) {
         Y_VERIFY(col.HasTypeId());
-        auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
             col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-        columns.emplace_back(col.GetName(), typeInfo);
+        columns.emplace_back(col.GetName(), typeInfoMod.TypeInfo);
     }
 
     return NArrow::MakeArrowSchema(columns);

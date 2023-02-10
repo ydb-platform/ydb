@@ -24,6 +24,7 @@ public:
     struct TColumn {
         ui32 Id;
         NScheme::TTypeInfo Type;
+        TString TypeMod;
     };
 
     struct TTable {

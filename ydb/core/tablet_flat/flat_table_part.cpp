@@ -53,8 +53,8 @@ TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bo
 
         cols.emplace_back();
         cols.back().Tag = one.GetTag();
-        cols.back().TypeInfo = NScheme::TypeInfoFromProtoColumnType(one.GetType(),
-            one.HasTypeInfo() ? &one.GetTypeInfo() : nullptr);
+        cols.back().TypeInfo = NScheme::TypeInfoModFromProtoColumnType(one.GetType(),
+            one.HasTypeInfo() ? &one.GetTypeInfo() : nullptr).TypeInfo;
         cols.back().Pos = cols.size() - 1;
         cols.back().Group = one.GetGroup();
 
@@ -193,7 +193,7 @@ TSharedData TPartScheme::Serialize() const
     for (const auto& col : AllColumns) {
         auto* pb = proto.AddColumns();
         pb->SetTag(col.Tag);
-        auto protoType = NScheme::ProtoColumnTypeFromTypeInfo(col.TypeInfo);
+        auto protoType = NScheme::ProtoColumnTypeFromTypeInfoMod(col.TypeInfo, "");
         pb->SetType(protoType.TypeId);
         if (protoType.TypeInfo) {
             *pb->MutableTypeInfo() = *protoType.TypeInfo;

@@ -96,9 +96,9 @@ TColumnTableInfo::TPtr ParseParams(
     for (const auto& col : tableSchema->GetColumns()) {
         ui32 id = col.GetId();
         TString name = col.GetName();
-        auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
             col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-        columns[id] = TOlapSchema::TColumn{id, name, typeInfo, Max<ui32>()};
+        columns[id] = TOlapSchema::TColumn{id, name, typeInfoMod.TypeInfo, Max<ui32>()};
         columnsByName[name] = id;
 
         // TODO: add checks for compatibility with new schema after we allow such changes

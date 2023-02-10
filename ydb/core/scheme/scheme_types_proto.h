@@ -10,8 +10,13 @@ struct TProtoColumnType {
     std::optional<NKikimrProto::TTypeInfo> TypeInfo;
 };
 
-TProtoColumnType ProtoColumnTypeFromTypeInfo(const TTypeInfo typeInfo);
+TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const ::TString& typeMod);
 
-TTypeInfo TypeInfoFromProtoColumnType(ui32 typeId, const NKikimrProto::TTypeInfo* typeInfo);
+struct TTypeInfoMod {
+    TTypeInfo TypeInfo;
+    ::TString TypeMod;
+};
+
+TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTypeInfo* typeInfo);
 
 } // namespace NKikimr::NScheme

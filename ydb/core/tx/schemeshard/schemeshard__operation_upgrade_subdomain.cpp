@@ -220,7 +220,7 @@ public:
             auto colDescr = descr.AddColumns();
             colDescr->SetId(columnId);
             colDescr->SetName(column.Name);
-            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.PType, column.PTypeMod);
             colDescr->SetColType(columnType.TypeId);
             if (columnType.TypeInfo) {
                 *colDescr->MutableColTypeInfo() = *columnType.TypeInfo;

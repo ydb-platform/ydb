@@ -182,16 +182,19 @@ struct TKikimrColumnMetadata {
     TString Type;
     bool NotNull = false;
     NKikimr::NScheme::TTypeInfo TypeInfo;
+    TString TypeMod;
     TVector<TString> Families;
 
     TKikimrColumnMetadata() = default;
 
-    TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull, NKikimr::NScheme::TTypeInfo typeInfo = {})
+    TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
+        NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {})
         : Name(name)
         , Id(id)
         , Type(type)
         , NotNull(notNull)
         , TypeInfo(typeInfo)
+        , TypeMod(typeMod)
     {}
 
     explicit TKikimrColumnMetadata(const NKikimrKqp::TKqpColumnMetadataProto* message)
@@ -201,8 +204,10 @@ struct TKikimrColumnMetadata {
         , NotNull(message->GetNotNull())
         , Families(message->GetFamily().begin(), message->GetFamily().end())
     {
-        TypeInfo = NKikimr::NScheme::TypeInfoFromProtoColumnType(message->GetTypeId(),
+        auto typeInfoMod = NKikimr::NScheme::TypeInfoModFromProtoColumnType(message->GetTypeId(),
             message->HasTypeInfo() ? &message->GetTypeInfo() : nullptr);
+        TypeInfo = typeInfoMod.TypeInfo;
+        TypeMod = typeInfoMod.TypeMod;
     }
 
     void ToMessage(NKikimrKqp::TKqpColumnMetadataProto* message) const {
@@ -210,7 +215,7 @@ struct TKikimrColumnMetadata {
         message->SetId(Id);
         message->SetType(Type);
         message->SetNotNull(NotNull);
-        auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfo(TypeInfo);
+        auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(TypeInfo, TypeMod);
         message->SetTypeId(columnType.TypeId);
         if (columnType.TypeInfo) {
             *message->MutableTypeInfo() = *columnType.TypeInfo;

@@ -1162,7 +1162,7 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
             auto &c = *tx.AddColumns();
             c.SetId(col.Id);
             c.SetName(col.Name);
-            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(col.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(col.PType, col.PTypeMod);
             c.SetTypeId(columnType.TypeId);
             if (columnType.TypeInfo) {
                 *c.MutableTypeInfo() = *columnType.TypeInfo;

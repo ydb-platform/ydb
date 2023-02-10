@@ -705,7 +705,7 @@ protected:
             FillTableMeta(stageInfo, settings.MutableTable());
 
             for (auto& keyColumn : keyTypes) {
-                auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(keyColumn);
+                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn, "");
                 if (columnType.TypeInfo) {
                     *settings.AddKeyColumnTypeInfos() = *columnType.TypeInfo;
                 } else {
@@ -717,7 +717,7 @@ protected:
             for (auto& column : columns) {
                 auto* protoColumn = settings.AddColumns();
                 protoColumn->SetId(column.Id);
-                auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
                 protoColumn->SetType(columnType.TypeId);
                 if (columnType.TypeInfo) {
                     *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;

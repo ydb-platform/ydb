@@ -114,7 +114,7 @@ private:
             static void Fill(TSchema& schema) {
                 schema.Columns[Column::ColumnId] = TSysTables::TTableColumnInfo(
                     Table::template TableColumns<Column>::GetColumnName(),
-                    Column::ColumnId, NScheme::TTypeInfo(Column::ColumnType), -1);
+                    Column::ColumnId, NScheme::TTypeInfo(Column::ColumnType), "", -1);
             }
         };
 

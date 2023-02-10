@@ -15,9 +15,11 @@ namespace NTable {
 
         TColumn() = default;
 
-        TColumn(const TString& name, TTag tag, NScheme::TTypeInfo type, bool notNull = false)
+        TColumn(const TString& name, TTag tag, NScheme::TTypeInfo type,
+            const TString& typeMod, bool notNull = false)
             : Id(tag)
             , PType(type)
+            , PTypeMod(typeMod)
             , Name(name)
             , NotNull(notNull)
         {
@@ -29,6 +31,7 @@ namespace NTable {
             return
                 Id == col.Id
                 && PType == col.PType
+                && PTypeMod == col.PTypeMod
                 && KeyOrder == col.KeyOrder
                 && Name == col.Name
                 && Family == col.Family
@@ -48,6 +51,7 @@ namespace NTable {
 
         NTable::TTag Id = Max<TTag>();
         NScheme::TTypeInfo PType;
+        TString PTypeMod;
         TString Name;
         ui32 Family = LeaderFamily;
         NTable::TPos KeyOrder = Max<TPos>();

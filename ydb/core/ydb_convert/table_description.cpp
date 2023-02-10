@@ -35,29 +35,40 @@ static void FillStoragePool(TStoragePoolHolder* out, TAddStoragePoolFunc<TStorag
 
 template <typename TColumn>
 static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& column) {
-    NYql::NProto::TypeIds protoType;
-    if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
-        throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
-            << "Got invalid type: " << column.GetType() << " for column: " << column.GetName();
-    }
-
     newColumn->set_name(column.GetName());
 
     Ydb::Type* columnType = nullptr;
-    if (column.GetNotNull() || protoType == NScheme::NTypeIds::Pg) {
+    auto* typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
+    if (typeDesc) {
         columnType = newColumn->mutable_type();
+        auto* pg = columnType->mutable_pg_type();
+        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+        pg->set_type_modifier(NPg::TypeModFromPgTypeName(column.GetType()));
+        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+        pg->set_typlen(0);
+        pg->set_typmod(0);
     } else {
-        columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
-    }
+        NYql::NProto::TypeIds protoType;
+        if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
+            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
+                << "Got invalid type: " << column.GetType() << " for column: " << column.GetName();
+        }
 
-    Y_ENSURE(columnType);
-    if (protoType == NYql::NProto::TypeIds::Decimal) {
-        auto typeParams = columnType->mutable_decimal_type();
-        // TODO: Change TEvDescribeSchemeResult to return decimal params
-        typeParams->set_precision(22);
-        typeParams->set_scale(9);
-    } else {
-        NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
+        if (column.GetNotNull()) {
+            columnType = newColumn->mutable_type();
+        } else {
+            columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
+        }
+
+        Y_ENSURE(columnType);
+        if (protoType == NYql::NProto::TypeIds::Decimal) {
+            auto typeParams = columnType->mutable_decimal_type();
+            // TODO: Change TEvDescribeSchemeResult to return decimal params
+            typeParams->set_precision(22);
+            typeParams->set_scale(9);
+        } else {
+            NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
+        }
     }
     return columnType;
 }
@@ -164,7 +175,9 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
     }
 }
 
-bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error) {
+bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
+    const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error)
+{
     ui32 typeId = 0;
     auto itemType = inType.has_optional_type() ? inType.optional_type().item() : inType;
     switch (itemType.type_case()) {
@@ -192,14 +205,16 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, const Ydb::Type& inT
             break;
         }
         case Ydb::Type::kPgType: {
-            ui32 pgTypeId = itemType.pg_type().oid();
-            auto* desc = NPg::TypeDescFromPgTypeId(pgTypeId);
+            const auto& pgType = itemType.pg_type();
+            const auto& typeName = pgType.type_name();
+            auto* desc = NPg::TypeDescFromPgTypeName(typeName);
             if (!desc) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Invalid PG typeId: " << pgTypeId;
+                error = TStringBuilder() << "Invalid PG type name: " << typeName;
                 return false;
             }
             outTypeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, desc);
+            outTypeMod = pgType.type_modifier();
             return true;
         }
 
@@ -239,10 +254,11 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
         }
 
         NScheme::TTypeInfo typeInfo;
-        if (!ExtractColumnTypeInfo(typeInfo, column.type(), status, error)) {
+        TString typeMod;
+        if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
             return false;
         }
-        cd->SetType(NScheme::TypeName(typeInfo));
+        cd->SetType(NScheme::TypeName(typeInfo, typeMod));
 
         if (!column.family().empty()) {
             cd->SetFamilyName(column.family());

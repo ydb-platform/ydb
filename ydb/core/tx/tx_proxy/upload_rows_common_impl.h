@@ -137,6 +137,7 @@ protected:
         TString ColName;
         ui32 PositionInStruct;
         NScheme::TTypeInfo Type;
+        i32 Typmod;
         bool NotNull = false;
     };
     TVector<TString> KeyColumnNames;
@@ -335,13 +336,15 @@ private:
         if (!errorMessage.empty()) {
             return false;
         } else if (reqColumns.empty()) {
-            for (auto& [name, type] : SrcColumns) {
+            for (auto& [name, typeInfo] : SrcColumns) {
                 Ydb::Type ydbType;
-                if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    Ydb::PgType* pgType = ydbType.mutable_pg_type();
-                    pgType->set_oid(NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
+                if (typeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
+                    ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
                 } else {
-                    ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)type.GetTypeId());
+                    auto* typeDesc = typeInfo.GetTypeDesc();
+                    auto* pg = ydbType.mutable_pg_type();
+                    pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+                    pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
                 }
                 reqColumns.emplace_back(name, std::move(ydbType));
             }
@@ -354,6 +357,7 @@ private:
                 errorMessage = Sprintf("Unknown column: %s", name.c_str());
                 return false;
             }
+            i32 typmod = -1;
             ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
@@ -364,8 +368,8 @@ private:
                 bool ok = SameDstType(typeInRequest, ci.PType, GetSourceType() != EUploadSource::ProtoValues);
                 if (!ok) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
-                                           name.c_str(), NScheme::TypeName(ci.PType),
-                                           NScheme::TypeName(typeInRequest));
+                                           name.c_str(), NScheme::TypeName(ci.PType).c_str(),
+                                           NScheme::TypeName(typeInRequest).c_str());
                     return false;
                 }
             } else if (typeInProto.has_decimal_type() && ci.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
@@ -380,24 +384,34 @@ private:
                     return false;
                 }
             } else if (typeInProto.has_pg_type()) {
-                auto pgTypeId = typeInProto.pg_type().oid();
-                auto* typeDesc = NPg::TypeDescFromPgTypeId(pgTypeId);
+                const auto& typeName = typeInProto.pg_type().type_name();
+                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
-                    errorMessage = Sprintf("Unknown pg type for column %s: %u",
-                                           name.c_str(), pgTypeId);
+                    errorMessage = Sprintf("Unknown pg type for column %s: %s",
+                                           name.c_str(), typeName.c_str());
                     return false;
                 }
                 auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
                 bool ok = SameDstType(typeInRequest, ci.PType, false);
                 if (!ok) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
-                                           name.c_str(), NScheme::TypeName(ci.PType),
-                                           NScheme::TypeName(typeInRequest));
+                                           name.c_str(), NScheme::TypeName(ci.PType).c_str(),
+                                           NScheme::TypeName(typeInRequest).c_str());
                     return false;
+                }
+                if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeDesc)) {
+                    auto result = NPg::BinaryTypeModFromTextTypeMod(ci.PTypeMod, typeDesc);
+                    if (result.Error) {
+                        errorMessage = Sprintf("Invalid typemod for column %s: type %s, error %s",
+                            name.c_str(), NScheme::TypeName(ci.PType, ci.PTypeMod).c_str(),
+                            result.Error->c_str());
+                        return false;
+                    }
+                    typmod = result.Typmod;
                 }
             } else {
                 errorMessage = Sprintf("Unexpected type for column %s: expected %s",
-                                       name.c_str(), NScheme::TypeName(ci.PType));
+                                       name.c_str(), NScheme::TypeName(ci.PType).c_str());
                 return false;
             }
 
@@ -407,11 +421,11 @@ private:
             }
 
             if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, notNull};
+                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, typmod, notNull};
                 keyColumnsLeft.erase(ci.Name);
                 KeyColumnNames[ci.KeyOrder] = ci.Name;
             } else {
-                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, notNull});
+                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, typmod, notNull});
                 ValueColumnNames.emplace_back(ci.Name);
                 ValueColumnTypes.emplace_back(ci.PType);
             }

@@ -43,6 +43,7 @@ public:
                     keyColumn.GetName(),
                     keyColumn.GetId(),
                     NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(keyColumn.GetTypeId())},
+                    "",
                     keyOrder++
                 }
             );

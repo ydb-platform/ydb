@@ -285,12 +285,18 @@ void* TypeDescFromPgTypeId(ui32 pgTypeId) {
     return {};
 }
 
-const char* PgTypeNameFromTypeDesc(void* typeDesc) {
+TString PgTypeNameFromTypeDesc(void* typeDesc, const TString& typeMod) {
     Y_UNUSED(typeDesc);
+    Y_UNUSED(typeMod);
     return "";
 }
 
 void* TypeDescFromPgTypeName(const TStringBuf name) {
+    Y_UNUSED(name);
+    return {};
+}
+
+TString TypeModFromPgTypeName(const TStringBuf name) {
     Y_UNUSED(name);
     return {};
 }
@@ -301,6 +307,11 @@ bool TypeDescIsComparable(void* typeDesc) {
 }
 
 ui32 TypeDescGetStoredSize(void* typeDesc) {
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+bool TypeDescNeedsCoercion(void* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
@@ -318,6 +329,25 @@ ui64 PgNativeBinaryHash(const char* data, size_t size, void* typeDesc) {
     Y_UNUSED(data);
     Y_UNUSED(size);
     Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+TTypeModResult BinaryTypeModFromTextTypeMod(const TString& str, void* typeDesc) {
+    Y_UNUSED(str);
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+TMaybe<TString> PgNativeBinaryValidate(const TStringBuf binary, void* typeDesc) {
+    Y_UNUSED(binary);
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, void* typeDesc, i32 typmod) {
+    Y_UNUSED(binary);
+    Y_UNUSED(typeDesc);
+    Y_UNUSED(typmod);
     throw yexception() << "PG types are not supported";
 }
 

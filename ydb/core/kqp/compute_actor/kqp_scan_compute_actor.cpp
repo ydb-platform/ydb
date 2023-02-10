@@ -303,7 +303,7 @@ private:
         ev->Record.SetLocalPathId(ScanData->TableId.PathId.LocalPathId);
         for (auto& column: ScanData->GetColumns()) {
             ev->Record.AddColumnTags(column.Tag);
-            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
             ev->Record.AddColumnTypes(columnType.TypeId);
             if (columnType.TypeInfo) {
                 *ev->Record.AddColumnTypeInfos() = *columnType.TypeInfo;

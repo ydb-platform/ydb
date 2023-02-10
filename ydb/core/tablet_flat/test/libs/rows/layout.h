@@ -23,7 +23,7 @@ namespace NTest{
             Tags_.push_back(tag);
 
             // pg types are not supported
-            Cols.emplace_back("", tag, NScheme::TTypeInfo(type));
+            Cols.emplace_back("", tag, NScheme::TTypeInfo(type), "");
             Cols.back().Family = group;
             Cols.back().SetDefault(null);
 

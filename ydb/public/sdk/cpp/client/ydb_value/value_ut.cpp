@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                     .AddElement()
                         .Decimal(TDecimalType(8, 13))
                     .AddElement()
-                        .Pg(TPgType(1, 2, -3))
+                        .Pg(TPgType("pgint2"))
                     .AddElement()
                         .BeginOptional()
                             .Primitive(EPrimitiveType::Utf8)
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             .Build();
 
         UNIT_ASSERT_NO_DIFF(FormatType(type),
-            R"(Struct<'Member1':List<Uint32?>,'Member2':Dict<Int64,Tuple<Decimal(8,13),Pg(1,2,-3),Utf8?>>>)");
+            R"(Struct<'Member1':List<Uint32?>,'Member2':Dict<Int64,Tuple<Decimal(8,13),Pg('pgint2','',0,0,0),Utf8?>>>)");
     }
 
     Y_UNIT_TEST(BuildTypeReuse) {

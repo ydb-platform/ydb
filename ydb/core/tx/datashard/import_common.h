@@ -81,10 +81,11 @@ public:
         return ColumnNameIndex.contains(name);
     }
 
-    NScheme::TTypeInfo GetColumnType(const TString& name) const {
+    std::pair<NScheme::TTypeInfo, TString> GetColumnType(const TString& name) const {
         auto it = ColumnNameIndex.find(name);
         Y_VERIFY(it != ColumnNameIndex.end());
-        return it->second->second.Type;
+        auto& column = it->second->second;
+        return {column.Type, column.TypeMod};
     }
 
     const TVector<ui32>& GetKeyColumnIds() const {

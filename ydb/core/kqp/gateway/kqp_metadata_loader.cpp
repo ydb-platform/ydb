@@ -156,12 +156,12 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
         } else {
             Y_VERIFY(columnDesc.PType.GetTypeDesc(), "no pg type descriptor");
             Y_VERIFY(!notNull, "pg not null types are not allowed");
-            typeName = NPg::PgTypeNameFromTypeDesc(columnDesc.PType.GetTypeDesc());
+            typeName = NPg::PgTypeNameFromTypeDesc(columnDesc.PType.GetTypeDesc(), columnDesc.PTypeMod);
         }
         tableMeta->Columns.emplace(
             columnDesc.Name,
             NYql::TKikimrColumnMetadata(
-                columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType
+                columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType, columnDesc.PTypeMod
             )
         );
         if (columnDesc.KeyOrder >= 0) {

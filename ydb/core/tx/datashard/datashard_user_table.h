@@ -233,13 +233,15 @@ struct TUserTable : public TThrRefBase {
 
     struct TUserColumn {
         NScheme::TTypeInfo Type;
+        TString TypeMod;
         TString Name;
         bool IsKey;
         ui32 Family = 0;
         bool NotNull = false;
 
-        TUserColumn(NScheme::TTypeInfo type, TString name, bool isKey = false)
+        TUserColumn(NScheme::TTypeInfo type, TString typeMod, TString name, bool isKey = false)
             : Type(type)
+            , TypeMod(typeMod)
             , Name(name)
             , IsKey(isKey)
         {}

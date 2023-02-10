@@ -746,8 +746,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 auto& column = Columns[columnDesc.GetId()];
                 column.Id = columnDesc.GetId();
                 column.Name = columnDesc.GetName();
-                column.PType = NScheme::TypeInfoFromProtoColumnType(columnDesc.GetTypeId(),
+                auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnDesc.GetTypeId(),
                     columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
+                column.PType = typeInfoMod.TypeInfo;
+                column.PTypeMod = typeInfoMod.TypeMod;
+
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());
                 }
@@ -807,8 +810,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 auto& column = Columns[columnDesc.GetId()];
                 column.Id = columnDesc.GetId();
                 column.Name = columnDesc.GetName();
-                column.PType = NScheme::TypeInfoFromProtoColumnType(columnDesc.GetTypeId(),
+                auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnDesc.GetTypeId(),
                     columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
+                column.PType = typeInfoMod.TypeInfo;
+                column.PTypeMod = typeInfoMod.TypeMod;
                 nameToId[column.Name] = column.Id;
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());

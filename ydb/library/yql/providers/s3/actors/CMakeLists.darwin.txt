@@ -28,11 +28,13 @@ target_link_libraries(providers-s3-actors PUBLIC
   cpp-string_utils-quote
   cpp-xml-document
   yql-minikql-computation
-  common-token_accessor-client
-  common-schema-mkql
   yql-public-types
   dq-actors-compute
+  common-token_accessor-client
+  common-schema-mkql
   providers-common-http_gateway
+  providers-common-arrow
+  common-arrow-interface
   providers-s3-common
   providers-s3-compressors
   providers-s3-proto

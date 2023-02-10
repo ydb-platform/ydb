@@ -6,6 +6,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
+#include <ydb/library/yql/providers/common/arrow/interface/arrow_reader.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 
 #include <util/generic/size_literals.h>
@@ -24,6 +25,7 @@ void RegisterS3ReadActorFactory(
     IHTTPGateway::TPtr gateway = IHTTPGateway::Make(),
     const IRetryPolicy<long>::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy(),
     const TS3ReadActorFactoryConfig& = {},
-    ::NMonitoring::TDynamicCounterPtr counters = nullptr);
+    ::NMonitoring::TDynamicCounterPtr counters = nullptr,
+    IArrowReader::TPtr arrowReader = MakeArrowReader(TArrowReaderSettings()));
 
 }

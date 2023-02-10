@@ -480,7 +480,7 @@ public:
             if (src->HasAggregations()) {
                 ctx.Warning(Pos,
                     TIssuesIds::YQL_EMPTY_TABLENAME_RESULT) << "TableName() will produce empty result when used with aggregation.\n"
-                                                               "Please consult https://yql.yandex-team.ru/docs/yt/builtins/basic/#tablepath for possible workaround";
+                                                               "Please consult documentation for possible workaround";
             }
 
             Args.push_back(Y("TablePath", Y("DependsOn", "row")));
@@ -496,7 +496,7 @@ public:
             Args[1] = BuildQuotedAtom(Args[1]->GetPos(), *literal);
         } else {
             if (Service.empty()) {
-                ctx.Error(GetPos()) << GetOpName() << " requires either one of \"yt\"/\"kikimr\"/\"rtmr\" as second argument or current cluster name";
+                ctx.Error(GetPos()) << GetOpName() << " requires either service name as second argument or current cluster name";
                 return false;
             }
 

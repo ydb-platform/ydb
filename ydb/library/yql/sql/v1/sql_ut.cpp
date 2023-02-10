@@ -3195,7 +3195,7 @@ select FormatType($f());
 
         auto res = SqlToYql("select TableName() from plato.Input;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: TableName requires either one of \"yt\"/\"kikimr\"/\"rtmr\" as second argument or current cluster name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: TableName requires either service name as second argument or current cluster name\n");
 
         res = SqlToYql("use plato;\n"
                        "select TableName() from Input1 as a join Input2 as b using(key);");
@@ -3206,7 +3206,7 @@ select FormatType($f());
                        "select SOME(TableName()), key from Input group by key;");
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:13: Warning: TableName() will produce empty result when used with aggregation.\n"
-                                          "Please consult https://yql.yandex-team.ru/docs/yt/builtins/basic/#tablepath for possible workaround, code: 4525\n");
+                                          "Please consult documentation for possible workaround, code: 4525\n");
     }
 
     Y_UNIT_TEST(WarnOnDistincWithHavingWithoutAggregations) {

@@ -15,7 +15,6 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <algorithm>
 #include <random>
 
 // * Scheme is hardcoded and it is like default YCSB setup:
@@ -37,16 +36,20 @@ class TReadIteratorPoints : public TActorBootstrapped<TReadIteratorPoints> {
     const TActorId Parent;
     const TSubLoadId Id;
 
+    const TVector<TOwnedCellVec>& Points;
+    const ui64 ReadCount = 0;
+    const bool Infinite;
+
+    ui64 PointsRead = 0;
+
+    std::default_random_engine Rng;
+
     TActorId Pipe;
     bool WasConnected = false;
     ui64 ReconnectLimit = RECONNECT_LIMIT;
 
     TInstant StartTs; // actor started to send requests
 
-    TVector<TOwnedCellVec> Points;
-    ui64 ReadCount = 0;
-    const bool Infinite;
-    size_t CurrentPoint = 0;
     THPTimer RequestTimer;
 
     TVector<TDuration> RequestTimes;
@@ -77,11 +80,7 @@ public:
 
         Become(&TReadIteratorPoints::StateFunc);
 
-        auto rng = std::default_random_engine {};
-        rng.seed(SelfId().Hash());
-
-        std::shuffle(Points.begin(), Points.end(), rng);
-        Points.resize(ReadCount);
+        Rng.seed(SelfId().Hash());
 
         Connect(ctx);
     }
@@ -139,19 +138,35 @@ private:
     }
 
     void SendRead(const TActorContext &ctx) {
-        Y_VERIFY(CurrentPoint < Points.size());
+        auto index = Rng() % Points.size();
+
+        const auto& currentKeyCells = Points[index];
+
+        if (currentKeyCells.size() != 1) {
+            TStringStream ss;
+            ss << "Wrong keyNum: " << PointsRead << " with cells count: " << currentKeyCells.size();
+            return StopWithError(ctx, ss.Str());
+        }
 
         auto request = std::make_unique<TEvDataShard::TEvRead>();
         request->Record = BaseRequest->Record;
-        AddKeyQuery(*request, Points[CurrentPoint++]);
+        AddKeyQuery(*request, currentKeyCells);
+
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " sends request# " << PointsRead << ": " << request->ToString());
 
         RequestTimer.Reset();
         NTabletPipe::SendData(ctx, Pipe, request.release());
+
+        ++PointsRead;
     }
 
     void Handle(const TEvDataShard::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
+
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " received from " << ev->Sender << ": " << msg->ToString());
 
         if (record.HasStatus() && record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             TStringStream ss;
@@ -170,16 +185,19 @@ private:
         }
 
         if (msg->GetRowsCount() != 1) {
-            return StopWithError(ctx, "Empty reply with data");
+            TStringStream ss;
+            ss << "Wrong reply with data, rows: " << msg->GetRowsCount();
+
+            return StopWithError(ctx, ss.Str());
         }
 
         RequestTimes.push_back(TDuration::Seconds(RequestTimer.Passed()));
 
-        if (Infinite && CurrentPoint >= Points.size()) {
-            CurrentPoint = 0;
+        if (Infinite && PointsRead >= ReadCount) {
+            PointsRead = 0;
         }
 
-        if (CurrentPoint < Points.size()) {
+        if (PointsRead < ReadCount) {
             SendRead(ctx);
             return;
         }

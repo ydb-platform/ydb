@@ -17,6 +17,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <random>
+
 // * Scheme is hardcoded and it is like default YCSB setup:
 // 1 Text "id" column, 10 Bytes "field0" - "field9" columns
 // * row is ~ 1 KB, keys are like user1000385178204227360
@@ -88,8 +90,6 @@ class TKqpSelectActor : public TActorBootstrapped<TKqpSelectActor> {
     const TString Database;
     const TString TableName;
     const TVector<TString>& Keys;
-    const size_t FromKey;
-    size_t CurrentKey = 0;
     const size_t ReadCount;
     const bool Infinite;
 
@@ -97,6 +97,8 @@ class TKqpSelectActor : public TActorBootstrapped<TKqpSelectActor> {
     TString Session;
 
     size_t KeysRead = 0;
+
+    std::default_random_engine Rng;
 
     TInstant StartTs;
     TInstant EndTs;
@@ -109,7 +111,6 @@ public:
                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                     const TSubLoadId& id,
                     const TVector<TString>& keys,
-                    size_t fromKey,
                     size_t readCount,
                     bool infinite)
         : Target(target)
@@ -118,8 +119,6 @@ public:
         , Database(Target.GetWorkingDir())
         , TableName(Target.GetTableName())
         , Keys(keys)
-        , FromKey(fromKey)
-        , CurrentKey(fromKey)
         , ReadCount(readCount)
         , Infinite(infinite)
     {
@@ -130,6 +129,7 @@ public:
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
             << " Bootstrap called");
 
+        Rng.seed(SelfId().Hash());
         KqpProxyId = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
 
         Become(&TKqpSelectActor::StateFunc);
@@ -159,25 +159,24 @@ private:
     }
 
     void ReadRow(const TActorContext &ctx) {
-        auto request = GenerateSelectRequest(Database, TableName, Keys[CurrentKey]);
+        auto index = Rng() % Keys.size();
+        const auto& key = Keys[index];
+
+        auto request = GenerateSelectRequest(Database, TableName, key);
         request->Record.MutableRequest()->SetSessionId(Session);
 
         LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
-            << " send request# " << CurrentKey
+            << " send request# " << KeysRead
             << " to proxy# " << KqpProxyId << ": " << request->ToString());
 
         ctx.Send(KqpProxyId, request.release());
-        ++CurrentKey;
         ++KeysRead;
     }
 
     void OnRequestDone(const TActorContext& ctx) {
         if (Infinite && KeysRead == ReadCount) {
             KeysRead = 0;
-            CurrentKey = FromKey;
         }
-
-        CurrentKey = CurrentKey % Keys.size();
 
         if (KeysRead < ReadCount) {
             ReadRow(ctx);
@@ -242,7 +241,7 @@ private:
         TStringStream str;
         HTML(str) {
             str << "TKqpSelectActor# " << Id << " started on " << StartTs
-                << " sent " << CurrentKey << " out of " << ReadCount;
+                << " sent " << KeysRead << " out of " << ReadCount;
             TInstant ts = EndTs ? EndTs : TInstant::Now();
             auto delta = ts - StartTs;
             auto throughput = ReadCount * 1000 / (delta.MilliSeconds() ? delta.MilliSeconds() : 1);
@@ -437,7 +436,6 @@ private:
                 Counters,
                 subId,
                 Keys,
-                0, // keyFrom
                 ReadCount,
                 Config.GetInfinite());
             Actors.emplace_back(ctx.Register(kqpActor));

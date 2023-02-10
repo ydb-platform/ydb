@@ -60,24 +60,22 @@ TUploadRequest GenerateBulkRowRequest(ui64 tableId, ui64 keyStart, ui64 n) {
 }
 
 TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum, const TString& table) {
-    static TString programWithoutKey;
+    TString programWithoutKey;
 
-    if (!programWithoutKey) {
-        TString fields;
-        for (size_t i = 0; i < 10; ++i) {
-            fields += Sprintf("'('field%lu (String '%s))", i, Value.data());
-        }
-        TString rowUpd = "(let upd_ '(" + fields + "))";
-
-        programWithoutKey = rowUpd;
-
-        programWithoutKey += Sprintf(R"(
-            (let ret_ (AsList
-                (UpdateRow '__user__%s row1_ upd_
-            )))
-            (return ret_)
-        ))", table.c_str());
+    TString fields;
+    for (size_t i = 0; i < 10; ++i) {
+        fields += Sprintf("'('field%lu (String '%s))", i, Value.data());
     }
+    TString rowUpd = "(let upd_ '(" + fields + "))";
+
+    programWithoutKey = rowUpd;
+
+    programWithoutKey += Sprintf(R"(
+        (let ret_ (AsList
+            (UpdateRow '__user__%s row1_ upd_
+        )))
+        (return ret_)
+    ))", table.c_str());
 
     TString key = GetKey(keyNum);
 
@@ -154,7 +152,8 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
-            << " TUpsertActor Bootstrap called: " << ConfingString << " with type# " << int(RequestType));
+            << " TUpsertActor Bootstrap called: " << ConfingString << " with type# " << int(RequestType)
+            << ", target# " << Target.DebugString());
 
         Become(&TUpsertActor::StateFunc);
         Connect(ctx);

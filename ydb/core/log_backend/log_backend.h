@@ -10,6 +10,10 @@ TAutoPtr<TLogBackend> CreateLogBackendWithUnifiedAgent(
     const TKikimrRunConfig& runConfig,
     NMonitoring::TDynamicCounterPtr counters);
 
+TAutoPtr<TLogBackend> CreateMeteringLogBackendWithUnifiedAgent(
+    const TKikimrRunConfig& runConfig,
+    NMonitoring::TDynamicCounterPtr counters);
+
 TAutoPtr<TLogBackend> CreateAuditLogBackendWithUnifiedAgent(
     const TKikimrRunConfig& runConfig,
     NMonitoring::TDynamicCounterPtr counters);

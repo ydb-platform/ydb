@@ -484,15 +484,16 @@ public:
     TMeteringWriterInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+private:
+    const TKikimrRunConfig& KikimrRunConfig;
 };
 
 class TAuditWriterInitializer : public IKikimrServicesInitializer {
 public:
-    TAuditWriterInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
+    TAuditWriterInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 private:
-    std::shared_ptr<TModuleFactories> Factories;
     const TKikimrRunConfig& KikimrRunConfig;
 };
 

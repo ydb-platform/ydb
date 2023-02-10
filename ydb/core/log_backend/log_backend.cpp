@@ -26,6 +26,42 @@ TAutoPtr<TLogBackend> CreateLogBackendWithUnifiedAgent(
     return NActors::CreateStderrBackend();
 }
 
+TAutoPtr<TLogBackend> CreateMeteringLogBackendWithUnifiedAgent(
+        const TKikimrRunConfig& runConfig,
+        NMonitoring::TDynamicCounterPtr counters)
+{
+    TAutoPtr<TLogBackend> logBackend;
+    if (!runConfig.AppConfig.HasMeteringConfig())
+        return logBackend;
+
+    const auto& meteringConfig = runConfig.AppConfig.GetMeteringConfig();
+    if (meteringConfig.HasMeteringFilePath()) {
+        const auto& filePath = meteringConfig.GetMeteringFilePath();
+        try {
+            logBackend = new TFileLogBackend(filePath);
+        } catch (const TFileError& ex) {
+            Cerr << "CreateMeteringLogBackendWithUnifiedAgent: failed to open file '" << filePath << "': " << ex.what() << Endl;
+            exit(1);
+        }
+    }
+
+    if (meteringConfig.GetUnifiedAgentEnable() && runConfig.AppConfig.HasLogConfig() && runConfig.AppConfig.GetLogConfig().HasUAClientConfig()) {
+        const auto& logConfig = runConfig.AppConfig.GetLogConfig();
+        const auto& uaClientConfig = logConfig.GetUAClientConfig();
+        auto uaCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "ua_client");
+        auto logName = meteringConfig.HasLogName()
+            ? meteringConfig.GetLogName()
+            : uaClientConfig.GetLogName();
+        TAutoPtr<TLogBackend> uaLogBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(uaClientConfig, uaCounters, logName);
+        logBackend = logBackend ? NActors::CreateCompositeLogBackend({logBackend, uaLogBackend}) : uaLogBackend;
+    }
+
+    if (logBackend) {
+        return logBackend;
+    }
+    return NActors::CreateStderrBackend();
+}
+
 TAutoPtr<TLogBackend> CreateAuditLogBackendWithUnifiedAgent(
         const TKikimrRunConfig& runConfig,
         NMonitoring::TDynamicCounterPtr counters)
@@ -40,7 +76,7 @@ TAutoPtr<TLogBackend> CreateAuditLogBackendWithUnifiedAgent(
         try {
             logBackend = new TFileLogBackend(filePath);
         } catch (const TFileError& ex) {
-            Cerr << "TAuditLogBackendFactoryWithUnifiedAgent: failed to open file '" << filePath << "': " << ex.what() << Endl;
+            Cerr << "CreateAuditLogBackendWithUnifiedAgent: failed to open file '" << filePath << "': " << ex.what() << Endl;
             exit(1);
         }
     }

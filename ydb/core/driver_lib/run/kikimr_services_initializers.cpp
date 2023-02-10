@@ -2326,24 +2326,15 @@ void TSysViewServiceInitializer::InitializeServices(NActors::TActorSystemSetup* 
 
 TMeteringWriterInitializer::TMeteringWriterInitializer(const TKikimrRunConfig &runConfig)
     : IKikimrServicesInitializer(runConfig)
+    , KikimrRunConfig(runConfig)
 {
 }
 
 void TMeteringWriterInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData)
 {
-    if (!Config.HasMeteringConfig() || !Config.GetMeteringConfig().HasMeteringFilePath()) {
-        return;
-    }
-
-    const auto& filePath = Config.GetMeteringConfig().GetMeteringFilePath();
-
-    THolder<TFileLogBackend> fileBackend;
-    try {
-        fileBackend = MakeHolder<TFileLogBackend>(filePath);
-    } catch (const TFileError& ex) {
-        Cerr << "TMeteringWriterInitializer: failed to open file '" << filePath << "': " << ex.what() << Endl;
-        exit(1);
-    }
+    auto fileBackend = CreateMeteringLogBackendWithUnifiedAgent(KikimrRunConfig, appData->Counters);
+    if (!fileBackend)
+            return;
 
     auto actor = NMetering::CreateMeteringWriter(std::move(fileBackend));
 
@@ -2352,9 +2343,8 @@ void TMeteringWriterInitializer::InitializeServices(TActorSystemSetup* setup, co
         TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->IOPoolId)));
 }
 
-TAuditWriterInitializer::TAuditWriterInitializer(const TKikimrRunConfig &runConfig, std::shared_ptr<TModuleFactories> factories)
+TAuditWriterInitializer::TAuditWriterInitializer(const TKikimrRunConfig &runConfig)
     : IKikimrServicesInitializer(runConfig)
-    , Factories(factories)
     , KikimrRunConfig(runConfig)
 {
 }

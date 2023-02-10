@@ -1776,8 +1776,6 @@ private:
 
     void Handle(TEvPrivate::TEvDropDonor::TPtr ev);
 
-    Schema::PDisk::Guid::Type CheckStaticPDisk(TConfigState &state, TPDiskId pdiskId, const TPDiskCategory& category,
-            const TMaybe<Schema::PDisk::PDiskConfig::Type>& pdiskConfig, ui32 *staticSlotUsage);
     void AllocatePDiskWithSerial(TConfigState& state, ui32 nodeId, const TSerial& serial, TDriveSerialInfo *driveInfo);
     void ValidatePDiskWithSerial(TConfigState& state, ui32 nodeId, const TSerial& serial, const TDriveSerialInfo& driveInfo,
             std::function<TDriveSerialInfo*()> getMutableItem);

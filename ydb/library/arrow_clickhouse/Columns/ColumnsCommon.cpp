@@ -259,27 +259,27 @@ bool insertData(MutableColumn & column, const StringRef & value)
     switch (column.type()->id())
     {
         case arrow::Type::UINT8:
-            return insertNumber(column, *reinterpret_cast<const UInt8 *>(value.data));
+            return insertNumber(column, unalignedLoad<UInt8>(value.data));
         case arrow::Type::UINT16:
-            return insertNumber(column, *reinterpret_cast<const UInt16 *>(value.data));
+            return insertNumber(column, unalignedLoad<UInt16>(value.data));
         case arrow::Type::UINT32:
-            return insertNumber(column, *reinterpret_cast<const UInt32 *>(value.data));
+            return insertNumber(column, unalignedLoad<UInt32>(value.data));
         case arrow::Type::UINT64:
-            return insertNumber(column, *reinterpret_cast<const UInt64 *>(value.data));
+            return insertNumber(column, unalignedLoad<UInt64>(value.data));
 
         case arrow::Type::INT8:
-            return insertNumber(column, *reinterpret_cast<const Int8 *>(value.data));
+            return insertNumber(column, unalignedLoad<Int8>(value.data));
         case arrow::Type::INT16:
-            return insertNumber(column, *reinterpret_cast<const Int16 *>(value.data));
+            return insertNumber(column, unalignedLoad<Int16>(value.data));
         case arrow::Type::INT32:
-            return insertNumber(column, *reinterpret_cast<const Int32 *>(value.data));
+            return insertNumber(column, unalignedLoad<Int32>(value.data));
         case arrow::Type::INT64:
-            return insertNumber(column, *reinterpret_cast<const Int64 *>(value.data));
+            return insertNumber(column, unalignedLoad<Int64>(value.data));
 
         case arrow::Type::FLOAT:
-            return insertNumber(column, *reinterpret_cast<const float *>(value.data));
+            return insertNumber(column, unalignedLoad<float>(value.data));
         case arrow::Type::DOUBLE:
-            return insertNumber(column, *reinterpret_cast<const double *>(value.data));
+            return insertNumber(column, unalignedLoad<double>(value.data));
 
         case arrow::Type::FIXED_SIZE_BINARY:
             return insertFixedString(column, value);
@@ -289,9 +289,9 @@ bool insertData(MutableColumn & column, const StringRef & value)
             return insertString(column, value);
 
         case arrow::Type::TIMESTAMP:
-            return insertTimestamp(column, *reinterpret_cast<const Int64 *>(value.data));
+            return insertTimestamp(column, unalignedLoad<Int64>(value.data));
         case arrow::Type::DURATION:
-            return insertDuration(column, *reinterpret_cast<const Int64 *>(value.data));
+            return insertDuration(column, unalignedLoad<Int64>(value.data));
         case arrow::Type::DECIMAL:
             return insertDecimal(column, value);
 

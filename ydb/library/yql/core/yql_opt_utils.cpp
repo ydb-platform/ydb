@@ -1697,4 +1697,51 @@ bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContex
     return !FindNonYieldTransparentNode(root, typeCtx);
 }
 
+bool IsStrict(const TExprNode::TPtr& root) {
+    // TODO: add TExprNode::IsStrict() method (with corresponding flag). Fill it as part of type annotation pass
+    bool isStrict = true;
+    size_t insideAssumeStrict = 0;
+
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("AssumeStrict")) {
+            ++insideAssumeStrict;
+        } else if (isStrict && !insideAssumeStrict && node->IsCallable({"Udf", "ScriptUdf", "Unwrap", "Ensure"})) {
+            if (!node->IsCallable("Udf") || !HasSetting(*node->Child(TCoUdf::idx_Settings), "strict")) {
+                isStrict = false;
+            }
+        }
+        return isStrict;
+    }, [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("AssumeStrict")) {
+            YQL_ENSURE(insideAssumeStrict > 0);
+            --insideAssumeStrict;
+        }
+        return true;
+    });
+
+    return isStrict;
+}
+
+bool HasDependsOn(const TExprNode::TPtr& root, const TExprNode::TPtr& arg) {
+    bool withDependsOn = false;
+    size_t insideDependsOn = 0;
+
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("DependsOn")) {
+            ++insideDependsOn;
+        } else if (insideDependsOn && node == arg) {
+            withDependsOn = true;
+        }
+        return !withDependsOn;
+    }, [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("DependsOn")) {
+            YQL_ENSURE(insideDependsOn > 0);
+            --insideDependsOn;
+        }
+        return true;
+    });
+
+    return withDependsOn;
+}
+
 }

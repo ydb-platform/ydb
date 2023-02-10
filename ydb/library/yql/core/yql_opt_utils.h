@@ -127,4 +127,7 @@ TExprNode::TPtr MakeNarrowMap(TPositionHandle pos, const TVector<TString>& colum
 TExprNode::TPtr FindNonYieldTransparentNode(const TExprNode::TPtr& root, const TTypeAnnotationContext& typeCtx);
 bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContext& typeCtx);
 
+bool IsStrict(const TExprNode::TPtr& node);
+bool HasDependsOn(const TExprNode::TPtr& node, const TExprNode::TPtr& arg);
+
 }

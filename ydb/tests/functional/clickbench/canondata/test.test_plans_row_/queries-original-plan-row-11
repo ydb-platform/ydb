@@ -1,0 +1,156 @@
+{
+    "meta": {
+        "type": "script",
+        "version": "0.2"
+    },
+    "queries": [
+        {
+            "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
+                "Plans": [
+                    {
+                        "Node Type": "ResultSet",
+                        "PlanNodeId": 8,
+                        "PlanNodeType": "ResultSet",
+                        "Plans": [
+                            {
+                                "Node Type": "Limit",
+                                "Operators": [
+                                    {
+                                        "Limit": "10",
+                                        "Name": "Limit"
+                                    }
+                                ],
+                                "PlanNodeId": 7,
+                                "Plans": [
+                                    {
+                                        "Node Type": "Merge",
+                                        "PlanNodeId": 6,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TopSort-Aggregate",
+                                                "Operators": [
+                                                    {
+                                                        "Limit": "10",
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "$17.u"
+                                                    },
+                                                    {
+                                                        "Name": "Aggregate"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 5,
+                                                "Plans": [
+                                                    {
+                                                        "KeyColumns": [
+                                                            "MobilePhone",
+                                                            "MobilePhoneModel"
+                                                        ],
+                                                        "Node Type": "HashShuffle",
+                                                        "PlanNodeId": 4,
+                                                        "PlanNodeType": "Connection",
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "Aggregate-Aggregate",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Aggregation": "{_yql_agg_0: COUNT(item.UserID)}",
+                                                                        "GroupBy": "",
+                                                                        "Name": "Aggregate"
+                                                                    },
+                                                                    {
+                                                                        "Name": "Aggregate"
+                                                                    }
+                                                                ],
+                                                                "PlanNodeId": 3,
+                                                                "Plans": [
+                                                                    {
+                                                                        "KeyColumns": [
+                                                                            "MobilePhone",
+                                                                            "MobilePhoneModel",
+                                                                            "UserID"
+                                                                        ],
+                                                                        "Node Type": "HashShuffle",
+                                                                        "PlanNodeId": 2,
+                                                                        "PlanNodeType": "Connection",
+                                                                        "Plans": [
+                                                                            {
+                                                                                "Node Type": "Aggregate-Filter-TableFullScan",
+                                                                                "Operators": [
+                                                                                    {
+                                                                                        "Aggregation": "state",
+                                                                                        "GroupBy": "",
+                                                                                        "Name": "Aggregate"
+                                                                                    },
+                                                                                    {
+                                                                                        "Name": "Filter",
+                                                                                        "Predicate": "item.MobilePhoneModel != \"\""
+                                                                                    },
+                                                                                    {
+                                                                                        "Name": "TableFullScan",
+                                                                                        "ReadColumns": [
+                                                                                            "MobilePhone",
+                                                                                            "MobilePhoneModel",
+                                                                                            "UserID"
+                                                                                        ],
+                                                                                        "ReadRanges": [
+                                                                                            "EventTime (-\u221e, +\u221e)",
+                                                                                            "CounterID (-\u221e, +\u221e)",
+                                                                                            "EventDate (-\u221e, +\u221e)",
+                                                                                            "UserID (-\u221e, +\u221e)",
+                                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                                        ],
+                                                                                        "Table": "clickbench/plans/row/hits"
+                                                                                    }
+                                                                                ],
+                                                                                "PlanNodeId": 1,
+                                                                                "Tables": [
+                                                                                    "clickbench/plans/row/hits"
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ],
+                                        "SortColumns": [
+                                            "u (Desc)"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "tables": [
+                {
+                    "name": "/local/clickbench/plans/row/hits",
+                    "reads": [
+                        {
+                            "columns": [
+                                "MobilePhone",
+                                "MobilePhoneModel",
+                                "UserID"
+                            ],
+                            "scan_by": [
+                                "EventTime (-\u221e, +\u221e)",
+                                "CounterID (-\u221e, +\u221e)",
+                                "EventDate (-\u221e, +\u221e)",
+                                "UserID (-\u221e, +\u221e)",
+                                "WatchID (-\u221e, +\u221e)"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

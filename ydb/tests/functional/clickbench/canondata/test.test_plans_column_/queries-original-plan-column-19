@@ -1,0 +1,140 @@
+{
+    "meta": {
+        "type": "script",
+        "version": "0.2"
+    },
+    "queries": [
+        {
+            "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
+                "Plans": [
+                    {
+                        "Node Type": "ResultSet",
+                        "PlanNodeId": 4,
+                        "PlanNodeType": "ResultSet",
+                        "Plans": [
+                            {
+                                "Node Type": "Limit",
+                                "Operators": [
+                                    {
+                                        "Limit": "1001",
+                                        "Name": "Limit"
+                                    }
+                                ],
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeId": 2,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Limit-TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Limit": "1001",
+                                                        "Name": "Limit"
+                                                    },
+                                                    {
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": [
+                                                            "UserID"
+                                                        ],
+                                                        "ReadLimit": "1001",
+                                                        "ReadRanges": [
+                                                            "EventTime (-\u221e, +\u221e)",
+                                                            "CounterID (-\u221e, +\u221e)",
+                                                            "EventDate (-\u221e, +\u221e)",
+                                                            "UserID (-\u221e, +\u221e)",
+                                                            "WatchID (-\u221e, +\u221e)"
+                                                        ],
+                                                        "SsaProgram": {
+                                                            "Command": [
+                                                                {
+                                                                    "Assign": {
+                                                                        "Column": {
+                                                                            "Id": 106
+                                                                        },
+                                                                        "Constant": {
+                                                                            "Int64": 435090932899640449
+                                                                        }
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "Assign": {
+                                                                        "Column": {
+                                                                            "Id": 107
+                                                                        },
+                                                                        "Function": {
+                                                                            "Arguments": [
+                                                                                {
+                                                                                    "Id": 10
+                                                                                },
+                                                                                {
+                                                                                    "Id": 106
+                                                                                }
+                                                                            ],
+                                                                            "Id": 1
+                                                                        }
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "Filter": {
+                                                                        "Predicate": {
+                                                                            "Id": 107
+                                                                        }
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "Projection": {
+                                                                        "Columns": [
+                                                                            {
+                                                                                "Id": 10
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                }
+                                                            ],
+                                                            "Version": 2
+                                                        },
+                                                        "Table": "clickbench/plans/column/hits"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "clickbench/plans/column/hits"
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "tables": [
+                {
+                    "name": "/local/clickbench/plans/column/hits",
+                    "reads": [
+                        {
+                            "columns": [
+                                "UserID"
+                            ],
+                            "limit": "1001",
+                            "scan_by": [
+                                "EventTime (-\u221e, +\u221e)",
+                                "CounterID (-\u221e, +\u221e)",
+                                "EventDate (-\u221e, +\u221e)",
+                                "UserID (-\u221e, +\u221e)",
+                                "WatchID (-\u221e, +\u221e)"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

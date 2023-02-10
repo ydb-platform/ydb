@@ -1,0 +1,26 @@
+[
+    {
+        "MobilePhoneModel": "iPad",
+        "u": 157
+    },
+    {
+        "MobilePhoneModel": "iPhone",
+        "u": 12
+    },
+    {
+        "MobilePhoneModel": "GT-P7300B",
+        "u": 3
+    },
+    {
+        "MobilePhoneModel": "A500",
+        "u": 2
+    },
+    {
+        "MobilePhoneModel": "HTC Desire",
+        "u": 1
+    },
+    {
+        "MobilePhoneModel": "GT-I9100",
+        "u": 1
+    }
+]

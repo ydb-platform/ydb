@@ -4,6 +4,7 @@ import ydb
 import json
 from json import encoder
 import yatest.common
+import pytest
 from hamcrest import assert_that, is_
 encoder.FLOAT_REPR = lambda o: format(o, '{:e}')
 
@@ -89,13 +90,15 @@ def save_canonical_data(data, fname):
     )
 
 
-def test_queries():
-    ret = run_cli(["workload", "clickbench", "init", "--store", "column"])
+@pytest.mark.parametrize("store", ["row", "column"])
+def test_run_benchmark(store):
+    path = "clickbench/benchmark/{}/hits".format(store)
+    ret = run_cli(["workload", "clickbench", "init", "--store", store, "--path", path])
     assert_that(ret.exit_code, is_(0))
 
     ret = run_cli(
         [
-            "import", "file", "csv", "--path", "clickbench/hits",
+            "import", "file", "csv", "--path", path,
             "--input-file",
             yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
         ]
@@ -103,8 +106,23 @@ def test_queries():
     assert_that(ret.exit_code, is_(0))
 
     # just validating that benchmark can be executed successfully on this data.
-    out_fpath = os.path.join(yatest.common.output_path(), 'click_bench.results')
-    ret = run_cli(["workload", "clickbench", "run", "--output", out_fpath])
+    out_fpath = os.path.join(yatest.common.output_path(), 'click_bench.{}.results'.format(store))
+    ret = run_cli(["workload", "clickbench", "run", "--output", out_fpath, "--table", path])
+    assert_that(ret.exit_code, is_(0))
+
+
+@pytest.mark.parametrize("store", ["row", "column"])
+def test_run_determentistic(store):
+    path = "clickbench/determentistic/{}/hits".format(store)
+    ret = run_cli(["workload", "clickbench", "init", "--store", store, "--path", path])
+    assert_that(ret.exit_code, is_(0))
+    ret = run_cli(
+        [
+            "import", "file", "csv", "--path", path,
+            "--input-file",
+            yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
+        ]
+    )
     assert_that(ret.exit_code, is_(0))
 
     driver = ydb.Driver(
@@ -118,15 +136,33 @@ def test_queries():
 
     final_results = {}
     for query_id, query in enumerate(get_queries("data/queries-deterministic.sql")):
-        results_to_canonize = execute_scan_query(driver, query, "`/local/clickbench/hits`")
+        results_to_canonize = execute_scan_query(driver, query, "`/local/clickbench/determentistic/{}/hits`".format(store))
         key = "queries-deterministic-results-%s" % str(query_id)
         final_results[key] = save_canonical_data(results_to_canonize, key)
+    return final_results
+
+
+@pytest.mark.parametrize("store", ["row", "column"])
+def test_plans(store):
+    ret = run_cli(
+        ["workload", "clickbench", "init", "--store", store, "--path", "clickbench/plans/{}/hits".format(store)]
+    )
+    assert_that(ret.exit_code, is_(0))
+
+    driver = ydb.Driver(
+        ydb.DriverConfig(
+            database="/" + os.getenv("YDB_DATABASE"),
+            endpoint=os.getenv("YDB_ENDPOINT"),
+        )
+    )
+
+    driver.wait(5)
+
+    final_results = {}
 
     for query_id, query in enumerate(get_queries("data/queries-original.sql")):
-        if not query:
-            raise ValueError(query_id)
-        plan = explain_scan_query(driver, query, "`/local/clickbench/hits`")
-        key = "queries-original-plan-%s" % str(query_id)
+        plan = explain_scan_query(driver, query, "`/local/clickbench/plans/{}/hits`".format(store))
+        key = "queries-original-plan-{}-{}".format(store, str(query_id))
         final_results[key] = save_canonical_data(plan, key)
 
     return final_results

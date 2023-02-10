@@ -1,0 +1,72 @@
+[
+    {
+        "ClientIP": 1124827693,
+        "SearchEngineID": 2,
+        "c": 154,
+        "column3": 77,
+        "column4": "1.750000e+03"
+    },
+    {
+        "ClientIP": 1388696273,
+        "SearchEngineID": 2,
+        "c": 50,
+        "column3": 25,
+        "column4": "1.917000e+03"
+    },
+    {
+        "ClientIP": 1707103414,
+        "SearchEngineID": 3,
+        "c": 31,
+        "column3": 23,
+        "column4": "1.638000e+03"
+    },
+    {
+        "ClientIP": -1691584608,
+        "SearchEngineID": 2,
+        "c": 28,
+        "column3": 10,
+        "column4": "1.638000e+03"
+    },
+    {
+        "ClientIP": 1320087367,
+        "SearchEngineID": 2,
+        "c": 28,
+        "column3": 14,
+        "column4": "1.368000e+03"
+    },
+    {
+        "ClientIP": 1760151079,
+        "SearchEngineID": 2,
+        "c": 28,
+        "column3": 14,
+        "column4": "1.638000e+03"
+    },
+    {
+        "ClientIP": -928401671,
+        "SearchEngineID": 2,
+        "c": 24,
+        "column3": 10,
+        "column4": "1.750000e+03"
+    },
+    {
+        "ClientIP": -1265832712,
+        "SearchEngineID": 2,
+        "c": 23,
+        "column3": 12,
+        "column4": "1.087000e+03"
+    },
+    {
+        "ClientIP": -1104629711,
+        "SearchEngineID": 2,
+        "c": 21,
+        "column3": 10,
+        "column4": "1.996000e+03"
+    },
+    {
+        "ClientIP": -430621593,
+        "SearchEngineID": 2,
+        "c": 21,
+        "column3": 12,
+        "column4": "1.368000e+03"
+    }
+]

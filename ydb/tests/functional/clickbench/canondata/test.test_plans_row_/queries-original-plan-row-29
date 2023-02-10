@@ -1,0 +1,127 @@
+{
+    "meta": {
+        "type": "script",
+        "version": "0.2"
+    },
+    "queries": [
+        {
+            "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
+                "Plans": [
+                    {
+                        "Node Type": "ResultSet_1",
+                        "PlanNodeId": 9,
+                        "PlanNodeType": "ResultSet",
+                        "Plans": [
+                            {
+                                "Node Type": "Collect",
+                                "PlanNodeId": 8,
+                                "Plans": [
+                                    {
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeId": 7,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "CTE Name": "tx_result_binding_1_0",
+                                                "Node Type": "ConstantExpr",
+                                                "Operators": [
+                                                    {
+                                                        "Iterator": "[{column0: %kqp%tx_result_binding_0_0.Sum0,column1: %kqp%tx_result_binding_0_0.Sum1,column10: %kqp%tx_result_binding_0_0.Sum10,column11: %kqp%tx_result_binding_0_0.Sum11,column12: %kqp%tx_result_binding_0_0.Sum12,column13: %kqp%tx_result_binding_0_0.Sum13,column14: %kqp%tx_result_binding_0_0.Sum14,column15: %kqp%tx_result_binding_0_0.Sum15,column16: %kqp%tx_result_binding_0_0.Sum16,column17: %kqp%tx_result_binding_0_0.Sum17,column18: %kqp%tx_result_binding_0_0.Sum18,column19: %kqp%tx_result_binding_0_0.Sum19,column2: %kqp%tx_result_binding_0_0.Sum2,column20: %kqp%tx_result_binding_0_0.Sum20,column21: %kqp%tx_result_binding_0_0.Sum21,column22: %kqp%tx_result_binding_0_0.Sum22,column23: %kqp%tx_result_binding_0_0.Sum23,column24: %kqp%tx_result_binding_0_0.Sum24,column25: %kqp%tx_result_binding_0_0.Sum25,column26: %kqp%tx_result_binding_0_0.Sum26,column27: %kqp%tx_result_binding_0_0.Sum27,column28: %kqp%tx_result_binding_0_0.Sum28,column29: %kqp%tx_result_binding_0_0.Sum29,column3: %kqp%tx_result_binding_0_0.Sum3,column30: %kqp%tx_result_binding_0_0.Sum30,column31: %kqp%tx_result_binding_0_0.Sum31,column32: %kqp%tx_result_binding_0_0.Sum32,column33: %kqp%tx_result_binding_0_0.Sum33,column34: %kqp%tx_result_binding_0_0.Sum34,column35: %kqp%tx_result_binding_0_0.Sum35,column36: %kqp%tx_result_binding_0_0.Sum36,column37: %kqp%tx_result_binding_0_0.Sum37,column38: %kqp%tx_result_binding_0_0.Sum38,column39: %kqp%tx_result_binding_0_0.Sum39,column4: %kqp%tx_result_binding_0_0.Sum4,column40: %kqp%tx_result_binding_0_0.Sum40,column41: %kqp%tx_result_binding_0_0.Sum41,column42: %kqp%tx_result_binding_0_0.Sum42,column43: %kqp%tx_result_binding_0_0.Sum43,column44: %kqp%tx_result_binding_0_0.Sum44,column45: %kqp%tx_result_binding_0_0.Sum45,column46: %kqp%tx_result_binding_0_0.Sum46,column47: %kqp%tx_result_binding_0_0.Sum47,column48: %kqp%tx_result_binding_0_0.Sum48,column49: %kqp%tx_result_binding_0_0.Sum49,column5: %kqp%tx_result_binding_0_0.Sum5,column50: %kqp%tx_result_binding_0_0.Sum50,column51: %kqp%tx_result_binding_0_0.Sum51,column52: %kqp%tx_result_binding_0_0.Sum52,column53: %kqp%tx_result_binding_0_0.Sum53,column54: %kqp%tx_result_binding_0_0.Sum54,column55: %kqp%tx_result_binding_0_0.Sum55,column56: %kqp%tx_result_binding_0_0.Sum56,column57: %kqp%tx_result_binding_0_0.Sum57,column58: %kqp%tx_result_binding_0_0.Sum58,column59: %kqp%tx_result_binding_0_0.Sum59,column6: %kqp%tx_result_binding_0_0.Sum6,column60: %kqp%tx_result_binding_0_0.Sum60,column61: %kqp%tx_result_binding_0_0.Sum61,column62: %kqp%tx_result_binding_0_0.Sum62,column63: %kqp%tx_result_binding_0_0.Sum63,column64: %kqp%tx_result_binding_0_0.Sum64,column65: %kqp%tx_result_binding_0_0.Sum65,column66: %kqp%tx_result_binding_0_0.Sum66,column67: %kqp%tx_result_binding_0_0.Sum67,column68: %kqp%tx_result_binding_0_0.Sum68,column69: %kqp%tx_result_binding_0_0.Sum69,column7: %kqp%tx_result_binding_0_0.Sum7,column70: %kqp%tx_result_binding_0_0.Sum70,column71: %kqp%tx_result_binding_0_0.Sum71,column72: %kqp%tx_result_binding_0_0.Sum72,column73: %kqp%tx_result_binding_0_0.Sum73,column74: %kqp%tx_result_binding_0_0.Sum74,column75: %kqp%tx_result_binding_0_0.Sum75,column76: %kqp%tx_result_binding_0_0.Sum76,column77: %kqp%tx_result_binding_0_0.Sum77,column78: %kqp%tx_result_binding_0_0.Sum78,column79: %kqp%tx_result_binding_0_0.Sum79,column8: %kqp%tx_result_binding_0_0.Sum8,column80: %kqp%tx_result_binding_0_0.Sum80,column81: %kqp%tx_result_binding_0_0.Sum81,column82: %kqp%tx_result_binding_0_0.Sum82,column83: %kqp%tx_result_binding_0_0.Sum83,column84: %kqp%tx_result_binding_0_0.Sum84,column85: %kqp%tx_result_binding_0_0.Sum85,column86: %kqp%tx_result_binding_0_0.Sum86,column87: %kqp%tx_result_binding_0_0.Sum87,column88: %kqp%tx_result_binding_0_0.Sum88,column89: %kqp%tx_result_binding_0_0.Sum89,column9: %kqp%tx_result_binding_0_0.Sum9}]",
+                                                        "Name": "Iterator"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 6
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "Node Type": "Precompute_0",
+                        "Parent Relationship": "InitPlan",
+                        "PlanNodeId": 4,
+                        "PlanNodeType": "Materialize",
+                        "Plans": [
+                            {
+                                "Node Type": "Aggregate-Limit-Aggregate",
+                                "Operators": [
+                                    {
+                                        "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Limit": "1",
+                                        "Name": "Limit"
+                                    },
+                                    {
+                                        "Name": "Aggregate"
+                                    }
+                                ],
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeId": 2,
+                                        "PlanNodeType": "Connection",
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Aggregate-TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Name": "Aggregate"
+                                                    },
+                                                    {
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": [
+                                                            "ResolutionWidth"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "EventTime (-\u221e, +\u221e)",
+                                                            "CounterID (-\u221e, +\u221e)",
+                                                            "EventDate (-\u221e, +\u221e)",
+                                                            "UserID (-\u221e, +\u221e)",
+                                                            "WatchID (-\u221e, +\u221e)"
+                                                        ],
+                                                        "Table": "clickbench/plans/row/hits"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "clickbench/plans/row/hits"
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ],
+                        "Subplan Name": "CTE tx_result_binding_0_0"
+                    }
+                ]
+            },
+            "tables": [
+                {
+                    "name": "/local/clickbench/plans/row/hits",
+                    "reads": [
+                        {
+                            "columns": [
+                                "ResolutionWidth"
+                            ],
+                            "scan_by": [
+                                "EventTime (-\u221e, +\u221e)",
+                                "CounterID (-\u221e, +\u221e)",
+                                "EventDate (-\u221e, +\u221e)",
+                                "UserID (-\u221e, +\u221e)",
+                                "WatchID (-\u221e, +\u221e)"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

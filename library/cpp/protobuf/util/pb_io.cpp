@@ -180,26 +180,15 @@ void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
     NProtoBuf::TextFormat::Parser p;
     ConfigureParser(options, p);
 
-    bool writeErrorToException = !(options & EParseFromTextFormatOption::ForceWriteParsingErrorsToCerr);
     TStringStream errorLog;
     THolder<TErrorCollector> errorCollector;
-
-    if (writeErrorToException) {
-        errorCollector = MakeHolder<TErrorCollector>(m, &errorLog, warningStream);
-        p.RecordErrorsTo(errorCollector.Get());
-    } else if (warningStream) {
-        errorCollector = MakeHolder<TErrorCollector>(m, &Cerr, warningStream);
-        p.RecordErrorsTo(errorCollector.Get());
-    }
+    errorCollector = MakeHolder<TErrorCollector>(m, &errorLog, warningStream);
+    p.RecordErrorsTo(errorCollector.Get());
 
     if (!p.Parse(&adaptor, &m)) {
         // remove everything that may have been read
         m.Clear();
-        if (Y_LIKELY(writeErrorToException)) {
-            ythrow yexception() << errorLog.Str();
-        } else {
-            ythrow yexception() << "ParseFromTextFormat failed on Parse for " << m.GetTypeName();
-        }
+        ythrow yexception() << errorLog.Str();
     }
 }
 

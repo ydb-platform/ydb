@@ -243,7 +243,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
 
             if (statusMessage.empty()) {
                 if (auto event = Self->SetupTtl(pathTtls, true)) {
-                    if (event->NeedWrites()) {
+                    if (event->NeedDataReadWrite()) {
                         ctx.Send(Self->EvictionActor, event.release());
                     } else {
                         ctx.Send(Self->SelfId(), event->TxEvent.release());

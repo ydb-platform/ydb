@@ -515,7 +515,7 @@ bool TBlobManager::ExportOneToOne(const TUnifiedBlobId& blobId, const NKikimrTxC
         .Blob = blobId
     };
 
-    if (EvictedBlobs.count(evict)) {
+    if (EvictedBlobs.count(evict) || DroppedEvictedBlobs.count(evict)) {
         return false;
     }
 
@@ -691,11 +691,6 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
     }
 
     NBlobCache::ForgetBlob(blobId);
-}
-
-bool TBlobManager::IsEvicting(const TUnifiedBlobId& id) {
-    TEvictMetadata meta;
-    return GetEvicted(id, meta).State == EEvictState::EVICTING;
 }
 
 bool TBlobManager::ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped /*= false*/) {

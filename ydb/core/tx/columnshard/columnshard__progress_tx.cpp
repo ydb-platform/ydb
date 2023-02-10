@@ -17,6 +17,12 @@ private:
         { }
     };
 
+    enum class ETriggerActivities {
+        NONE,
+        POST_INSERT,
+        POST_SCHEMA
+    };
+
 public:
     TTxProgressTx(TColumnShard* self)
         : TTransactionBase(self)
@@ -76,6 +82,7 @@ public:
                             MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(Self->TabletID(), txId));
                     }
                     Self->AltersInFlight.erase(txId);
+                    Trigger = ETriggerActivities::POST_SCHEMA;
                     break;
                 }
                 case NKikimrTxColumnShard::TX_KIND_COMMIT: {
@@ -107,7 +114,7 @@ public:
                     }
                     Self->CommitsInFlight.erase(txId);
                     Self->UpdateInsertTableCounters();
-                    StartBackgroundActivities = true;
+                    Trigger = ETriggerActivities::POST_INSERT;
                     break;
                 }
                 default: {
@@ -147,14 +154,22 @@ public:
             Self->Execute(Self->CreateTxRunGc(), ctx);
         }
 
-        if (StartBackgroundActivities) {
-            Self->EnqueueBackgroundActivities(false, true);
+        switch (Trigger) {
+            case ETriggerActivities::POST_INSERT:
+                Self->EnqueueBackgroundActivities(false, true);
+                break;
+            case ETriggerActivities::POST_SCHEMA:
+                Self->EnqueueBackgroundActivities();
+                break;
+            case ETriggerActivities::NONE:
+            default:
+                break;
         }
     }
 
 private:
     TVector<TEvent> TxEvents;
-    bool StartBackgroundActivities{false};
+    ETriggerActivities Trigger{ETriggerActivities::NONE};
 };
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {

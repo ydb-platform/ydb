@@ -15,6 +15,7 @@ public:
     void CreateTestOlapStore(TActorId sender, TString scheme);
     void CreateTestOlapTable(TActorId sender, TString storeOrDirName, TString scheme);
     void SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount);
+    void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch);
 
     virtual std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) = 0;
 };

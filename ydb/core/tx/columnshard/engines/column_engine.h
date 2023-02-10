@@ -17,6 +17,7 @@ struct TPredicate;
 struct TCompactionLimits {
     static constexpr const ui32 MIN_GOOD_BLOB_SIZE = 256 * 1024; // some BlobStorage constant
     static constexpr const ui32 MAX_BLOB_SIZE = 8 * 1024 * 1024; // some BlobStorage constant
+    static constexpr const ui64 EVICT_HOT_PORTION_BYTES = 1 * 1024 * 1024;
     static constexpr const ui64 DEFAULT_EVICTION_BYTES = 64 * 1024 * 1024;
     static constexpr const ui64 MAX_BLOBS_TO_DELETE = 10000;
 

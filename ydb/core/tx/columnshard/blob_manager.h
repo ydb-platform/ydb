@@ -226,7 +226,6 @@ public:
         CountersUpdate = TBlobManagerCounters();
         return res;
     }
-    bool IsEvicting(const TUnifiedBlobId& id);
 
     // Implementation of IBlobManager interface
     TBlobBatch StartBlobBatch(ui32 channel = BLOB_CHANNEL) override;

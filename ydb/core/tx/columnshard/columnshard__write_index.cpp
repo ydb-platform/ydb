@@ -24,7 +24,7 @@ public:
 
 private:
     struct TPathIdBlobs {
-        THashSet<TUnifiedBlobId> Blobs;
+        THashMap<TUnifiedBlobId, TString> Blobs;
         ui64 PathId;
         TPathIdBlobs(const ui64 pathId)
             : PathId(pathId) {
@@ -213,7 +213,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
             Self->UpdateIndexCounters();
         } else {
-            LOG_S_INFO("TTxWriteIndex (" << changes->TypeString()
+            LOG_S_NOTICE("TTxWriteIndex (" << changes->TypeString()
                 << ") cannot apply changes: " << *changes << " at tablet " << Self->TabletID());
 
             // TODO: delayed insert
@@ -230,7 +230,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
             if (it == ExportTierBlobs.end()) {
                 it = ExportTierBlobs.emplace(evFeatures.TargetTierName, TPathIdBlobs(evFeatures.PathId)).first;
             }
-            it->second.Blobs.emplace(blobId);
+            it->second.Blobs.emplace(blobId, TString());
         }
         blobsToExport.clear();
 
@@ -297,17 +297,12 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
         Self->EnqueueBackgroundActivities();
     }
 
-    for (auto& [tierName, blobIds] : ExportTierBlobs) {
+    for (auto& [tierName, pathBlobs] : ExportTierBlobs) {
         Y_VERIFY(ExportNo);
+        Y_VERIFY(pathBlobs.PathId);
 
-        TEvPrivate::TEvExport::TBlobDataMap blobsData;
-        for (auto&& i : blobIds.Blobs) {
-            TEvPrivate::TEvExport::TExportBlobInfo info(blobIds.PathId);
-            info.Evicting = Self->BlobManager->IsEvicting(i);
-            blobsData.emplace(i, std::move(info));
-        }
-
-        ctx.Send(Self->SelfId(), new TEvPrivate::TEvExport(ExportNo, tierName, std::move(blobsData)));
+        ctx.Send(Self->SelfId(),
+                 new TEvPrivate::TEvExport(ExportNo, tierName, pathBlobs.PathId, std::move(pathBlobs.Blobs)));
         ++ExportNo;
     }
 

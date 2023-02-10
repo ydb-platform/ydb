@@ -116,24 +116,20 @@ public:
     void Handle(TEvPrivate::TEvExport::TPtr& ev) {
         auto& msg = *ev->Get();
         ui64 exportNo = msg.ExportNo;
-        Y_VERIFY(ev->Get()->DstActor == ShardActor);
+        Y_VERIFY(msg.DstActor == ShardActor);
 
         Y_VERIFY(!Exports.count(exportNo));
         Exports[exportNo] = TS3Export(ev->Release());
         auto& ex = Exports[exportNo];
 
-        for (auto& [blobId, blob] : ex.Blobs()) {
-            TString key = ex.AddExported(blobId, blob.PathId).GetS3Key();
+        for (auto& [blobId, blobData] : ex.Blobs()) {
+            TString key = ex.AddExported(blobId, msg.PathId).GetS3Key();
             Y_VERIFY(!ExportingKeys.count(key)); // TODO
 
             ex.RegisterKey(key);
             ExportingKeys[key] = exportNo;
 
-            if (blob.Evicting) {
-                SendPutObjectIfNotExists(key, std::move(blob.Data));
-            } else {
-                SendPutObject(key, std::move(blob.Data));
-            }
+            SendPutObjectIfNotExists(key, std::move(blobData));
         }
     }
 

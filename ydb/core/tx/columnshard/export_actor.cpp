@@ -52,7 +52,7 @@ public:
         {
             auto it = Event->Blobs.find(blobId);
             Y_VERIFY(it != Event->Blobs.end());
-            it->second.Data = blobData;
+            it->second = blobData;
         }
 
         if (BlobsToRead.empty()) {

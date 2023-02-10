@@ -215,6 +215,13 @@ public:
         LAST_TX_ID,
     };
 
+    enum class EStatsUpdateType {
+        DEFAULT = 0,
+        ERASE,
+        LOAD,
+        EVICT
+    };
+
     TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, const TCompactionLimits& limits = {});
 
     const TIndexInfo& GetIndexInfo() const override { return IndexInfo; }
@@ -343,9 +350,9 @@ private:
     bool UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
     bool ErasePortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
     void AddColumnRecord(const TColumnRecord& row);
-    void UpdatePortionStats(const TPortionInfo& portionInfo, bool isErase = false, bool isLoad = false);
+    void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT);
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
-                            bool isErase = false, bool isLoad = false) const;
+                            EStatsUpdateType updateType) const;
 
     bool CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const;
     TMap<TSnapshot, TVector<ui64>> GetOrderedPortions(ui64 granule, const TSnapshot& snapshot = TSnapshot::Max()) const;

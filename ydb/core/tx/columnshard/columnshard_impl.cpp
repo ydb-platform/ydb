@@ -715,7 +715,7 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
     }
 
     if (auto event = SetupTtl()) {
-        if (event->NeedWrites()) {
+        if (event->NeedDataReadWrite()) {
             ctx.Send(EvictionActor, event.release());
         } else {
             ctx.Send(SelfId(), event->TxEvent.release());

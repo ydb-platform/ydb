@@ -110,7 +110,7 @@ struct TEvPrivate {
             }
         }
 
-        bool NeedWrites() const {
+        bool NeedDataReadWrite() const {
             return (TxEvent->PutStatus != NKikimrProto::OK);
         }
     };
@@ -124,33 +124,26 @@ struct TEvPrivate {
     };
 
     struct TEvExport : public TEventLocal<TEvExport, EvExport> {
-        struct TExportBlobInfo {
-            const ui64 PathId = 0;
-            TString Data;
-            bool Evicting = false;
-            TExportBlobInfo(const ui64 pathId)
-                : PathId(pathId)
-            {
-
-            }
-        };
-        using TBlobDataMap = THashMap<TUnifiedBlobId, TExportBlobInfo>;
+        using TBlobDataMap = THashMap<TUnifiedBlobId, TString>;
 
         NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
         ui64 ExportNo = 0;
         TString TierName;
+        ui64 PathId = 0;
         TActorId DstActor;
         TBlobDataMap Blobs;
         THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
         TMap<TString, TString> ErrorStrings;
 
-        explicit TEvExport(ui64 exportNo, const TString& tierName, TBlobDataMap&& tierBlobs)
+        explicit TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, TBlobDataMap&& tierBlobs)
             : ExportNo(exportNo)
             , TierName(tierName)
+            , PathId(pathId)
             , Blobs(std::move(tierBlobs))
         {
             Y_VERIFY(ExportNo);
             Y_VERIFY(!TierName.empty());
+            Y_VERIFY(PathId);
             Y_VERIFY(!Blobs.empty());
         }
 

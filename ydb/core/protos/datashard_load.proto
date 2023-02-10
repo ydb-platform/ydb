@@ -29,7 +29,7 @@ message TEvYCSBTestLoadRequest {
         optional bool Infinite = 4;
 
         // only for bulk upsert
-        optional uint32 BatchSize = 5;
+        optional uint32 BatchSize = 5 [default = 1];
     }
 
     message TReadStart {

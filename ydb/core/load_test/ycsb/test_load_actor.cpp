@@ -105,7 +105,7 @@ public:
 
     void CreateSession(const TActorContext& ctx) {
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
             << " sends event for session creation to proxy# " << kqpProxy.ToString());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
@@ -118,7 +118,7 @@ public:
             return;
 
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
             << " sends session close query to proxy: " << kqpProxy);
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
@@ -131,7 +131,7 @@ public:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Session = response.GetResponse().GetSessionId();
-            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag << " session: " << Session);
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag << " session: " << Session);
             PrepareTable(ctx);
         } else {
             StopWithError(ctx, "failed to create session: " + ev->Get()->ToString());
@@ -443,7 +443,7 @@ public:
             return PrepareTable(ctx);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
             << " received finished from actor# " << ev->Sender << " with tag# " << record.GetTag());
 
         FinishedTests.push_back({record.GetTag(), record.GetErrorReason(), TAppData::TimeProvider->Now(), record.GetReport()});
@@ -461,11 +461,15 @@ public:
         ui64 oks = 0;
         ui64 errors = 0;
         ui64 subtestCount = 0;
+        ui64 actualDurationMs = 0; // i.e. time for RPS calculation
         for (const auto& test: FinishedTests) {
             oks += test.Report.GetOperationsOK();
             errors += test.Report.GetOperationsError();
             subtestCount += test.Report.GetSubtestCount();
+            actualDurationMs += test.Report.GetDurationMs();
         }
+
+        size_t rps = oks * 1000 / actualDurationMs ? actualDurationMs : 1;
 
         TIntrusivePtr<TEvLoad::TLoadReport> report(new TEvLoad::TLoadReport());
         report->Duration = duration;
@@ -475,11 +479,49 @@ public:
         value["oks"] = oks;
         value["errors"] = errors;
         value["subtests"] = subtestCount;
+        value["rps"] = rps;
+
+        TString configString;
+        google::protobuf::TextFormat::PrintToString(Request, &configString);
+
+#define PARAM(NAME, VALUE) \
+    TABLER() { \
+        TABLED() { str << NAME; } \
+        TABLED() { str << VALUE; } \
+    }
+
+        TStringStream str;
+        HTML(str) {
+            TABLE_CLASS("table table-condensed") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { str << "Parameter"; }
+                        TABLEH() { str << "Value"; }
+                    }
+                }
+                TABLEBODY() {
+                    PARAM("Elapsed time total", duration.Seconds() << "s");
+                    PARAM("Elapsed RPS time (all actors)", TDuration::MilliSeconds(actualDurationMs).Seconds() << "s");
+                    PARAM("RPS", rps);
+                    PARAM("OKs", oks);
+                    PARAM("Errors", errors);
+                    PARAM("Finished subactors", FinishedTests.size())
+                }
+            }
+            DIV() {
+                str << configString;
+            }
+        }
+
+#undef PARAM
 
         auto finishEv = std::make_unique<TEvLoad::TEvLoadTestFinished>(Tag, report);
         finishEv->JsonResult = std::move(value);
+        finishEv->LastHtmlPage = str.Str();
+
         ctx.Send(Parent, finishEv.release());
-        Die(ctx);
+
+        Stop(ctx);
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
@@ -550,13 +592,13 @@ public:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
             << " actor recieved PoisonPill, going to die with subactorsCount# " << LoadActors.size());
         Stop(ctx);
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+        LOG_ERROR_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
             << " stopped with error: " << reason << ", killing subactorsCount# " << LoadActors.size());
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Tag, reason));

@@ -26,6 +26,8 @@ namespace NKikimr::NDataShardLoad {
 
 namespace {
 
+const ui64 RECONNECT_LIMIT = 10;
+
 // TReadIteratorPoints
 
 class TReadIteratorPoints : public TActorBootstrapped<TReadIteratorPoints> {
@@ -37,7 +39,7 @@ class TReadIteratorPoints : public TActorBootstrapped<TReadIteratorPoints> {
 
     TActorId Pipe;
     bool WasConnected = false;
-    ui64 ReconnectLimit = 10;
+    ui64 ReconnectLimit = RECONNECT_LIMIT;
 
     TInstant StartTs; // actor started to send requests
 
@@ -70,7 +72,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
             << " Bootstrap called, will read keys# " << Points.size());
 
         Become(&TReadIteratorPoints::StateFunc);
@@ -86,8 +88,15 @@ public:
 
 private:
     void Connect(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
-            << " Connect to# " << TabletId << " called");
+        if (ReconnectLimit != RECONNECT_LIMIT) {
+            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+                << " will reconnect to tablet# " << TabletId
+                << " retries left# " << (ReconnectLimit - 1));
+        } else {
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+                << " will connect to tablet# " << TabletId);
+        }
+
         --ReconnectLimit;
         if (ReconnectLimit == 0) {
             TStringStream ss;
@@ -100,7 +109,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
             << " Handle TEvClientConnected called, Status# " << msg->Status);
 
         if (msg->Status != NKikimrProto::OK) {
@@ -181,7 +190,7 @@ private:
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+        LOG_ERROR_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
             << ", stopped with error: " << reason);
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(0, reason));
@@ -190,7 +199,7 @@ private:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
             << " tablet recieved PoisonPill, going to die");
 
         // TODO: cancel iterator
@@ -407,7 +416,7 @@ private:
         auto* actor = CreateReadIteratorScan(request.release(), TabletId, SelfId(), subId, sampleKeys);
         StartedActors.emplace_back(ctx.Register(actor));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "started fullscan actor# " << StartedActors.back());
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "started fullscan actor# " << StartedActors.back());
     }
 
     void Handle(const TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
@@ -451,7 +460,7 @@ private:
             return StopWithError(ctx, TStringBuilder() << "TEvTestLoadFinished while in " << State);
         case EState::ReadHeadPoints: {
             Y_VERIFY(Inflight == 0);
-            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "headread with inflight# " << Inflights[InflightIndex]
+            LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "headread with inflight# " << Inflights[InflightIndex]
                 << " finished: " << ev->Get()->ToString());
             Errors += record.GetReport().GetOperationsError();
             Oks += record.GetReport().GetOperationsOK();
@@ -602,7 +611,7 @@ private:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
             << " tablet recieved PoisonPill, going to die");
         Stop(ctx);
     }

@@ -58,6 +58,27 @@ TQueryInfo GenerateSelect(const TString& table, const TString& key) {
     return TQueryInfo(str.Str(), std::move(params));
 }
 
+std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> GenerateSelectRequest(const TString& db, const TString& table, const TString& key) {
+    auto queryInfo = GenerateSelect(table, key);
+
+    auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+    request->Record.MutableRequest()->SetKeepSession(true);
+    request->Record.MutableRequest()->SetDatabase(db);
+
+    request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+    request->Record.MutableRequest()->SetQuery(queryInfo.Query);
+
+    request->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
+    request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+
+    const auto& params = NYdb::TProtoAccessor::GetProtoMap(queryInfo.Params);
+    request->Record.MutableRequest()->MutableYdbParameters()->insert(params.begin(), params.end());
+
+    return request;
+}
+
 // it's a partial copy-paste from TUpsertActor: logic slightly differs, so that
 // it seems better to have copy-paste rather if/else for different loads
 class TKqpSelectActor : public TActorBootstrapped<TKqpSelectActor> {
@@ -65,12 +86,17 @@ class TKqpSelectActor : public TActorBootstrapped<TKqpSelectActor> {
     const TActorId Parent;
     const TSubLoadId Id;
     const TString Database;
+    const TString TableName;
+    const TVector<TString>& Keys;
+    const size_t FromKey;
+    size_t CurrentKey = 0;
+    const size_t ReadCount;
+    const bool Infinite;
 
+    TActorId KqpProxyId;
     TString Session;
-    TRequestsVector Requests;
-    bool Infinite;
 
-    size_t CurrentRequest = 0;
+    size_t KeysRead = 0;
 
     TInstant StartTs;
     TInstant EndTs;
@@ -82,21 +108,29 @@ public:
                     const TActorId& parent,
                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                     const TSubLoadId& id,
-                    TRequestsVector requests,
+                    const TVector<TString>& keys,
+                    size_t fromKey,
+                    size_t readCount,
                     bool infinite)
         : Target(target)
         , Parent(parent)
         , Id(id)
         , Database(Target.GetWorkingDir())
-        , Requests(std::move(requests))
+        , TableName(Target.GetTableName())
+        , Keys(keys)
+        , FromKey(fromKey)
+        , CurrentKey(fromKey)
+        , ReadCount(readCount)
         , Infinite(infinite)
     {
         Y_UNUSED(counters);
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
             << " Bootstrap called");
+
+        KqpProxyId = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
 
         Become(&TKqpSelectActor::StateFunc);
         CreateSession(ctx);
@@ -104,54 +138,48 @@ public:
 
 private:
     void CreateSession(const TActorContext& ctx) {
-        auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
-            << " sends event for session creation to proxy: " << kqpProxy.ToString());
+            << " sends event for session creation to proxy: " << KqpProxyId.ToString());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
         ev->Record.MutableRequest()->SetDatabase(Database);
-        Send(kqpProxy, ev.Release());
+        Send(KqpProxyId, ev.Release());
     }
 
     void CloseSession(const TActorContext& ctx) {
         if (!Session)
             return;
 
-        auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
-            << " sends session close query to proxy: " << kqpProxy);
+            << " sends session close query to proxy: " << KqpProxyId);
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(Session);
-        ctx.Send(kqpProxy, ev.Release());
+        ctx.Send(KqpProxyId, ev.Release());
     }
 
     void ReadRow(const TActorContext &ctx) {
-        auto* request = static_cast<NKqp::TEvKqp::TEvQueryRequest*>(Requests[CurrentRequest].get());
+        auto request = GenerateSelectRequest(Database, TableName, Keys[CurrentKey]);
         request->Record.MutableRequest()->SetSessionId(Session);
 
-        auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
         LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
-            << " send request# " << CurrentRequest
-            << " to proxy# " << kqpProxy << ": " << request->ToString());
+            << " send request# " << CurrentKey
+            << " to proxy# " << KqpProxyId << ": " << request->ToString());
 
-        if (!Infinite) {
-            ctx.Send(kqpProxy, Requests[CurrentRequest].release());
-        } else {
-            auto requestCopy = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
-            requestCopy->Record = request->Record;
-            ctx.Send(kqpProxy, requestCopy.release());
-        }
-
-        ++CurrentRequest;
+        ctx.Send(KqpProxyId, request.release());
+        ++CurrentKey;
+        ++KeysRead;
     }
 
     void OnRequestDone(const TActorContext& ctx) {
-        if (Infinite && CurrentRequest >= Requests.size()) {
-            CurrentRequest = 0;
+        if (Infinite && KeysRead == ReadCount) {
+            KeysRead = 0;
+            CurrentKey = FromKey;
         }
 
-        if (CurrentRequest < Requests.size()) {
+        CurrentKey = CurrentKey % Keys.size();
+
+        if (KeysRead < ReadCount) {
             ReadRow(ctx);
         } else {
             EndTs = TInstant::Now();
@@ -161,7 +189,7 @@ private:
             auto& report = *response->Record.MutableReport();
             report.SetTag(Id.SubTag);
             report.SetDurationMs(delta.MilliSeconds());
-            report.SetOperationsOK(Requests.size() - Errors);
+            report.SetOperationsOK(ReadCount - Errors);
             report.SetOperationsError(Errors);
 
             ctx.Send(Parent, response.release());
@@ -185,6 +213,7 @@ private:
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Session = response.GetResponse().GetSessionId();
             LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id << " session: " << Session);
+            StartTs = TInstant::Now();
             ReadRow(ctx);
         } else {
             StopWithError(ctx, "failed to create session: " + ev->Get()->ToString());
@@ -213,10 +242,10 @@ private:
         TStringStream str;
         HTML(str) {
             str << "TKqpSelectActor# " << Id << " started on " << StartTs
-                << " sent " << CurrentRequest << " out of " << Requests.size();
+                << " sent " << CurrentKey << " out of " << ReadCount;
             TInstant ts = EndTs ? EndTs : TInstant::Now();
             auto delta = ts - StartTs;
-            auto throughput = Requests.size() / delta.Seconds();
+            auto throughput = ReadCount * 1000 / (delta.MilliSeconds() ? delta.MilliSeconds() : 1);
             str << " in " << delta << " (" << throughput << " op/s)"
                 << " errors=" << Errors;
         }
@@ -252,7 +281,7 @@ class TKqpSelectActorMultiSession : public TActorBootstrapped<TKqpSelectActorMul
     TVector<ui32> KeyColumnIds;
     TVector<ui32> AllColumnIds;
 
-    TVector<TOwnedCellVec> Keys;
+    TVector<TString> Keys;
 
     ui64 LastReadId = 0;
     ui64 LastSubTag = 0;
@@ -373,9 +402,15 @@ private:
     }
 
     void Handle(TEvPrivate::TEvKeys::TPtr& ev, const TActorContext& ctx) {
-        Keys = std::move(ev->Get()->Keys);
-        if (Keys.size() == 0) {
-            return StopWithError(ctx, "Failed to read keys");
+        const auto& keyCells = ev->Get()->Keys;
+        if (keyCells.size() == 0) {
+            return StopWithError(ctx, "Failed to read keys or no keys");
+        }
+
+        Keys.reserve(keyCells.size());
+        for (const auto& keyCell: keyCells) {
+            TStringBuf keyBuf = keyCell[0].AsBuf();
+            Keys.emplace_back(keyBuf.data(), keyBuf.size());
         }
 
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
@@ -390,38 +425,6 @@ private:
         TVector<TRequestsVector> perActorRequests;
         perActorRequests.reserve(Inflight);
 
-        size_t keyCounter = 0;
-        for (size_t i = 0; i < Inflight; ++i) {
-            TRequestsVector requests;
-
-            const auto& keyCell = Keys[keyCounter++ % Keys.size()][0];
-            TStringBuf keyBuf = keyCell.AsBuf();
-            TString key(keyBuf.data(), keyBuf.size());
-
-            requests.reserve(ReadCount);
-            for (size_t i = 0; i < ReadCount; ++i) {
-                auto queryInfo = GenerateSelect(Target.GetTableName(), key);
-
-                auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
-                request->Record.MutableRequest()->SetKeepSession(true);
-                request->Record.MutableRequest()->SetDatabase(Database);
-
-                request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-                request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-                request->Record.MutableRequest()->SetQuery(queryInfo.Query);
-
-                request->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
-                request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-                request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
-
-                const auto& params = NYdb::TProtoAccessor::GetProtoMap(queryInfo.Params);
-                request->Record.MutableRequest()->MutableYdbParameters()->insert(params.begin(), params.end());
-
-                requests.emplace_back(std::move(request));
-            }
-            perActorRequests.emplace_back(std::move(requests));
-        }
-
         StartTs = TInstant::Now();
 
         Actors.reserve(Inflight);
@@ -433,7 +436,9 @@ private:
                 SelfId(),
                 Counters,
                 subId,
-                std::move(perActorRequests[i]),
+                Keys,
+                0, // keyFrom
+                ReadCount,
                 Config.GetInfinite());
             Actors.emplace_back(ctx.Register(kqpActor));
         }

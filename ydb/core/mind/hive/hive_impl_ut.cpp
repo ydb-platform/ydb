@@ -29,7 +29,7 @@ using duration_nano_t = std::chrono::duration<ui64, std::nano>;
 using duration_t = std::chrono::duration<double>;
 
 duration_t GetBasePerformance() {
-    duration_nano_t accm;
+    duration_nano_t accm{};
     for (int i = 0; i < 1000000; ++i) {
         accm += duration_nano_t(NActors::MeasureTaskDurationNs());
     }

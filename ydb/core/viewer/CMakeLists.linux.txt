@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-viewer PUBLIC
   yutil
   library-cpp-resource
   cpp-actors-core
+  cpp-actors-helpers
   library-cpp-archive
   cpp-mime-types
   cpp-protobuf-json
@@ -65,6 +66,7 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   yutil
   library-cpp-resource
   cpp-actors-core
+  cpp-actors-helpers
   library-cpp-archive
   cpp-mime-types
   cpp-protobuf-json

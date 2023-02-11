@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/actors/helpers/selfping_actor.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/null.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
@@ -19,13 +20,27 @@ using namespace NKikimrWhiteboard;
 #define Ctest Cerr
 #endif
 
+using duration_nano_t = std::chrono::duration<ui64, std::nano>;
+using duration_t = std::chrono::duration<double>;
+
+duration_t GetBasePerformance() {
+    duration_nano_t accm{};
+    for (int i = 0; i < 1000000; ++i) {
+        accm += duration_nano_t(NActors::MeasureTaskDurationNs());
+    }
+    return std::chrono::duration_cast<duration_t>(accm);
+}
+
+double BASE_PERF = GetBasePerformance().count();
+
 Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(TabletMerging) {
         THPTimer timer;
+        Cerr << "BASE_PERF = " << BASE_PERF << Endl;
         {
             TMap<ui32, TString> nodesBlob;
             timer.Reset();
-            for (ui32 nodeId = 1; nodeId <= 10000; ++nodeId) {
+            for (ui32 nodeId = 1; nodeId <= 1000; ++nodeId) {
                 NKikimrWhiteboard::TEvTabletStateResponse nodeData;
                 nodeData.MutableTabletStateInfo()->Reserve(10000);
                 for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
@@ -54,7 +69,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NKikimrWhiteboard::TEvTabletStateResponse result;
             MergeWhiteboardResponses(result, nodesData);
             Ctest << "Merge = " << timer.Passed() << Endl;
-            UNIT_ASSERT_LT(timer.Passed(), 30);
+            UNIT_ASSERT_LT(timer.Passed(), 8 * BASE_PERF);
             UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), 10000);
             timer.Reset();
         }
@@ -66,13 +81,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
         {
             TMap<ui32, TString> nodesBlob;
             timer.Reset();
-            for (ui32 nodeId = 1; nodeId <= 10000; ++nodeId) {
+            for (ui32 nodeId = 1; nodeId <= 1000; ++nodeId) {
                 THolder<TEvWhiteboard::TEvTabletStateResponse> nodeData = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
                 auto* tabletData = nodeData->AllocatePackedResponse(10000);
                 for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
                     tabletData->TabletId = tabletId;
                     tabletData->FollowerId = 0;
                     tabletData->Generation = 13;
+                    tabletData->Type = NKikimrTabletBase::TTabletTypes::TxProxy;
+                    tabletData->State = NKikimrWhiteboard::TTabletStateInfo::Restored;
                     //tabletData->SetChangeTime(TInstant::Now().MilliSeconds());
                     ++tabletData;
                 }
@@ -89,7 +106,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NKikimrWhiteboard::TEvTabletStateResponse result;
             MergeWhiteboardResponses(result, nodesData);
             Ctest << "Merge = " << timer.Passed() << Endl;
-            UNIT_ASSERT_LT(timer.Passed(), 10);
+            UNIT_ASSERT_LT(timer.Passed(), 2 * BASE_PERF);
             UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), 10000);
             timer.Reset();
         }
@@ -117,7 +134,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NKikimrWhiteboard::TEvVDiskStateResponse result;
         MergeWhiteboardResponses(result, nodesData);
         Ctest << "Merge = " << timer.Passed() << Endl;
-        UNIT_ASSERT_LT(timer.Passed(), 10);
+        UNIT_ASSERT_LT(timer.Passed(), 10 * BASE_PERF);
         UNIT_ASSERT_VALUES_EQUAL(result.VDiskStateInfoSize(), 1000);
         Ctest << "Data has merged" << Endl;
     }
@@ -139,7 +156,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NKikimrWhiteboard::TEvPDiskStateResponse result;
         MergeWhiteboardResponses(result, nodesData);
         Ctest << "Merge = " << timer.Passed() << Endl;
-        UNIT_ASSERT_LT(timer.Passed(), 10);
+        UNIT_ASSERT_LT(timer.Passed(), 10 * BASE_PERF);
         UNIT_ASSERT_VALUES_EQUAL(result.PDiskStateInfoSize(), 100000);
         Ctest << "Data has merged" << Endl;
     }

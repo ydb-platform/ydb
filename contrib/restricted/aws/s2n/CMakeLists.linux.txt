@@ -85,7 +85,10 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_network_order.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_pem.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_text.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_cert_status.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_cert_status_response.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_alpn.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_cert_status_request.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_cookie.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_early_data_indication.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_ems.c
@@ -98,7 +101,6 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_server_name.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_session_ticket.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_signature_algorithms.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_status_request.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_supported_groups.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_client_supported_versions.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_ec_point_format.c
@@ -111,7 +113,6 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_psk_key_exchange_modes.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_quic_transport_params.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_alpn.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_certificate_status.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_cookie.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_early_data_indication.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_ems.c
@@ -123,7 +124,6 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_server_name.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_session_ticket.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_signature_algorithms.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_status_request.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_supported_versions.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_supported_versions.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_aead.c

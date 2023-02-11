@@ -1629,6 +1629,10 @@ private:
             graphParams["Precompute"] = ToString(true);
             MarkProgressStarted(publicIds->AllPublicIds, State->ProgressWriter);
 
+            if (const auto optLLVM = State->TypeCtx->OptLLVM) {
+                settings->OptLLVM = *optLLVM;
+            }
+
             IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);
 
             auto future = State->ExecutePlan(State->SessionId, executionPlanner->GetPlan(), {}, secureParams, graphParams,

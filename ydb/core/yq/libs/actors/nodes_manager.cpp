@@ -1,9 +1,10 @@
 #include "nodes_manager.h"
 #include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/process_stats.h>
 #include <library/cpp/actors/interconnect/events_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -64,6 +65,8 @@ public:
 
     {
         InstanceId = GetGuidAsString(RandomProvider->GenUuid4());
+        AnonRssSize = ServiceCounters.Counters->GetCounter("AnonRssSize");
+        AnonRssLimit = ServiceCounters.Counters->GetCounter("AnonRssLimit");
     }
 
     static constexpr char ActorName[] = "YQ_NODES_MANAGER";
@@ -215,6 +218,11 @@ private:
 
         ServiceCounters.Counters->GetCounter("NodesHealthCheck", true)->Inc();
 
+        NActors::TProcStat procStat;
+        procStat.Fill(getpid());
+        AnonRssSize->Set(procStat.AnonRss);
+        AnonRssLimit->Set(procStat.CGroupMemLim);
+
         Fq::Private::NodesHealthCheckRequest request;
         request.set_tenant(Tenant);
         auto& node = *request.mutable_node();
@@ -315,6 +323,8 @@ private:
     TString InstanceId;
     TActorId InternalServiceId;
     TString Address;
+    ::NMonitoring::TDynamicCounters::TCounterPtr AnonRssSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr AnonRssLimit;
 };
 
 TActorId MakeNodesManagerId() {

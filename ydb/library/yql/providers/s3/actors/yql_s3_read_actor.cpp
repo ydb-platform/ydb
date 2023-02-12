@@ -986,6 +986,7 @@ private:
                     columnIndices.push_back(srcFieldIndex);
                 }
 
+                fileDesc.Cookie = result.Cookie;
                 TArrowParquetBatchReader reader(std::move(fileDesc), 
                                                 ArrowReader,
                                                 result.NumRowGroups,

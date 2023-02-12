@@ -140,6 +140,14 @@ public:
     std::shared_ptr<arrow::io::RandomAccessFile> ArrowFile;
 };
 
+struct TArrowFileCookie {
+    TFileReaderWrapper Wrapper;
+
+    TArrowFileCookie(const TArrowFileDesc& desc)
+        : Wrapper(desc)
+    {}
+};
+
 NThreading::TFuture<IArrowReader::TSchemaResponse> TArrowReader::GetSchema(const TArrowFileDesc& desc) const
 {
     auto promise = NThreading::NewPromise<TSchemaResponse>();
@@ -150,13 +158,16 @@ NThreading::TFuture<IArrowReader::TSchemaResponse> TArrowReader::GetSchema(const
     if (!ThreadPool->AddFunc([desc, promise] () mutable {
         YQL_ENSURE(desc.Format == "parquet");    
         try {
-            TFileReaderWrapper wrapper(desc);
+            auto cookie = desc.Cookie;
+            if (!cookie) {
+                cookie = std::make_shared<TArrowFileCookie>(desc);
+            }
             
             std::shared_ptr<arrow::Schema> schema;
             
-            THROW_ARROW_NOT_OK(wrapper.FileReader->GetSchema(&schema));
+            THROW_ARROW_NOT_OK(cookie->Wrapper.FileReader->GetSchema(&schema));
             
-            promise.SetValue(TSchemaResponse(schema, wrapper.FileReader->num_row_groups()));
+            promise.SetValue(TSchemaResponse(schema, cookie->Wrapper.FileReader->num_row_groups(), cookie));
         } catch (const std::exception&) {
             promise.SetException(std::current_exception());
         }
@@ -177,11 +188,14 @@ NThreading::TFuture<std::shared_ptr<arrow::Table>> TArrowReader::ReadRowGroup(co
     if (!ThreadPool->AddFunc([desc, promise, rowGroupIndex, columnIndices] () mutable {
         YQL_ENSURE(desc.Format == "parquet");
         try {
-            TFileReaderWrapper wrapper(desc);
+            auto cookie = desc.Cookie;
+            if (!cookie) {
+                cookie = std::make_shared<TArrowFileCookie>(desc);
+            }
 
             std::shared_ptr<arrow::Table> currentTable;
 
-            THROW_ARROW_NOT_OK(wrapper.FileReader->ReadRowGroup(rowGroupIndex, columnIndices, &currentTable));
+            THROW_ARROW_NOT_OK(cookie->Wrapper.FileReader->ReadRowGroup(rowGroupIndex, columnIndices, &currentTable));
 
             promise.SetValue(currentTable);
         } catch (const std::exception&) {

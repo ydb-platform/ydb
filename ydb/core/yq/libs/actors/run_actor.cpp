@@ -282,6 +282,7 @@ public:
         , CreatedAt(Params.CreatedAt)
         , QueryCounters(queryCounters)
         , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.CheckpointCoordinatorConfig.GetEnabled())
+        , MaxTasksPerStage(Params.CommonConfig.GetMaxTasksPerStage() ? Params.CommonConfig.GetMaxTasksPerStage() : 500)
         , MaxTasksPerOperation(Params.CommonConfig.GetMaxTasksPerOperation() ? Params.CommonConfig.GetMaxTasksPerOperation() : 40)
         , Compressor(Params.CommonConfig.GetQueryArtifactsCompressionMethod(), Params.CommonConfig.GetQueryArtifactsCompressionMinSize())
     {
@@ -1415,7 +1416,7 @@ private:
             }
         };
 
-        apply("MaxTasksPerStage", "500");
+        apply("MaxTasksPerStage", ToString(MaxTasksPerStage));
         apply("MaxTasksPerOperation", ToString(MaxTasksPerOperation));
         apply("EnableComputeActor", "1");
         apply("ComputeActorType", "async");
@@ -1963,6 +1964,7 @@ private:
     bool EnableCheckpointCoordinator = false;
     Fq::Private::PingTaskRequest QueryStateUpdateRequest;
 
+    const ui64 MaxTasksPerStage;
     const ui64 MaxTasksPerOperation;
     const TCompressor Compressor;
 

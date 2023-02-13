@@ -26,6 +26,7 @@ target_link_libraries(yql-minikql-computation PUBLIC
   parser-pg_wrapper-interface
   yql-public-udf
   library-yql-utils
+  cpp-threading-future
   yql-minikql-codegen
   llvm12-lib-IR
   lib-ExecutionEngine-MCJIT
@@ -69,6 +70,7 @@ target_link_libraries(yql-minikql-computation.global PUBLIC
   parser-pg_wrapper-interface
   yql-public-udf
   library-yql-utils
+  cpp-threading-future
   yql-minikql-codegen
   llvm12-lib-IR
   lib-ExecutionEngine-MCJIT

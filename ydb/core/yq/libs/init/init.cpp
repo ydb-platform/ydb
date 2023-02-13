@@ -201,7 +201,7 @@ void Init(
         NYql::NDqs::TLocalWorkerManagerOptions lwmOptions;
         lwmOptions.Counters = workerManagerCounters;
         lwmOptions.DqTaskCounters = protoConfig.GetEnableTaskCounters() ? appData->Counters->GetSubgroup("counters", "dq_tasks") : nullptr;
-        lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, false);
+        lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, nullptr, false);
         lwmOptions.AsyncIoFactory = asyncIoFactory;
         lwmOptions.FunctionRegistry = appData->FunctionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NYql::NDqs::TTaskRunnerInvokerFactory();

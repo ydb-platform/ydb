@@ -417,16 +417,21 @@ public:
         std::shared_ptr<TPatternCacheEntry> entry;
         if (UseSeparatePatternAlloc() && Context.PatternCache) {
             auto& cache = Context.PatternCache;
-            entry = cache->Find(program.GetRaw());
-            if (!entry) {
+            auto ticket = cache->FindOrSubscribe(program.GetRaw());
+            if (!ticket.HasFuture()) {
                 entry = CreateComputationPattern(task, program.GetRaw());
                 if (entry->Pattern->GetSuitableForCache()) {
                     cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
+                    ticket.Close();
                 } else {
                     cache->IncNotSuitablePattern();
                 }
+            } else {
+                entry = ticket.GetValueSync();
             }
-        } else {
+        } 
+
+        if (!entry) {
             entry = CreateComputationPattern(task, program.GetRaw());
         }
 

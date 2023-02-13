@@ -8,6 +8,7 @@ namespace NYql::NTaskRunnerProxy {
 
 IProxyFactory::TPtr CreateFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory, TTaskTransformFactory taskTransformFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> patternCache,
     bool terminateOnError
 );
 

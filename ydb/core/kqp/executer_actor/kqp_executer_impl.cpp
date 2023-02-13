@@ -151,7 +151,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
         YQL_ENSURE(request.EraseLocks);
-        return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false);
+        return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerDelayToRetryMs);
     }
 
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
@@ -167,13 +167,13 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     switch (*txsType) {
         case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
         case NKqpProto::TKqpPhyTx::TYPE_DATA:
-            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false);
+            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerDelayToRetryMs);
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
             return CreateKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerDelayToRetryMs);
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
-            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, true);
+            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, true, executerDelayToRetryMs);
 
         default:
             YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);

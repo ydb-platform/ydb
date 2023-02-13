@@ -48,19 +48,6 @@ class TKqpDataExecuter : public TKqpExecuterBase<TKqpDataExecuter, EExecType::Da
     using TBase = TKqpExecuterBase<TKqpDataExecuter, EExecType::Data>;
     using TKqpSnapshot = IKqpGateway::TKqpSnapshot;
 
-    struct TEvPrivate {
-        enum EEv {
-            EvReattachToShard = EventSpaceBegin(TEvents::ES_PRIVATE),
-        };
-
-        struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
-            const ui64 TabletId;
-
-            explicit TEvReattachToShard(ui64 tabletId)
-                : TabletId(tabletId) {}
-        };
-    };
-
     struct TReattachState {
         TDuration Delay;
         TInstant Deadline;
@@ -136,8 +123,8 @@ public:
     }
 
     TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
-        TKqpRequestCounters::TPtr counters, bool streamResult)
-        : TBase(std::move(request), database, userToken, counters, TWilsonKqp::DataExecuter, "DataExecuter")
+        TKqpRequestCounters::TPtr counters, bool streamResult, ui32 executerDelayToRetryMs)
+        : TBase(std::move(request), database, userToken, counters, executerDelayToRetryMs, TWilsonKqp::DataExecuter, "DataExecuter")
         , StreamResult(streamResult)
     {
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
@@ -788,6 +775,7 @@ private:
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleExecute);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
+                hFunc(TEvPrivate::TEvRetry, HandleRetry);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandleExecute);
@@ -2028,34 +2016,10 @@ private:
             }
         }
 
-        for (auto& [nodeId, tasks] : tasksPerNode) {
-            auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksRequest>();
-
-            ev->Record.SetTxId(TxId);
-            ActorIdToProto(SelfId(), ev->Record.MutableExecuterActorId());
-
-            if (Deadline) {
-                TDuration timeout = *Deadline - TAppData::TimeProvider->Now();
-                ev->Record.MutableRuntimeSettings()->SetTimeoutMs(timeout.MilliSeconds());
-            }
-
-            ev->Record.MutableRuntimeSettings()->SetExecType(NDqProto::TComputeRuntimeSettings::DATA);
-            ev->Record.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(Request.StatsMode));
-            ev->Record.MutableRuntimeSettings()->SetUseLLVM(false);
-            ev->Record.SetStartAllOrFail(true);
-
-            for (auto&& task : tasks) {
-                ev->Record.AddTasks()->Swap(&task);
-            }
-
-            auto target = MakeKqpNodeServiceID(nodeId);
-
-            ui32 flags = IEventHandle::FlagTrackDelivery;
-            if (SubscribedNodes.emplace(nodeId).second) {
-                flags |= IEventHandle::FlagSubscribeOnSession;
-            }
-            TlsActivationContext->Send(new IEventHandle(target, SelfId(), ev.Release(), flags, nodeId));
-        }
+        Planner = CreateKqpPlanner(TxId, SelfId(), {}, std::move(tasksPerNode), Request.Snapshot,
+            Database, Nothing(), Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
+            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, false, Nothing(), ExecuterSpan, {});
+        Planner->ProcessTasksForDataExecuter();
 
         // then start data tasks with known actor ids of compute tasks
         for (auto& [shardId, shardTx] : DatashardTxs) {
@@ -2363,9 +2327,9 @@ private:
 } // namespace
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
-    TKqpRequestCounters::TPtr counters, bool streamResult)
+    TKqpRequestCounters::TPtr counters, bool streamResult, ui32 executerDelayToRetryMs)
 {
-    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult);
+    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerDelayToRetryMs);
 }
 
 } // namespace NKqp

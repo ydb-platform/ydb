@@ -1,7 +1,6 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_partition_helper.h"
-#include "kqp_planner.h"
 #include "kqp_result_channel.h"
 #include "kqp_tasks_graph.h"
 #include "kqp_tasks_validate.h"
@@ -40,29 +39,6 @@ namespace {
 class TKqpScanExecuter : public TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan> {
     using TBase = TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan>;
 
-    struct TEvPrivate {
-        enum EEv {
-            EvResourcesSnapshot = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvRetry
-        };
-
-        struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EEv::EvResourcesSnapshot> {
-            TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
-
-            TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
-                : Snapshot(std::move(snapshot)) {}
-        };
-
-        struct TEvRetry : public TEventLocal<TEvRetry, EEv::EvRetry> {
-            ui32 RequestId;
-            TActorId Target;
-
-            TEvRetry(ui64 requestId, const TActorId& target)
-                : RequestId(requestId)
-                , Target(target) {}
-        };
-    };
-
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
@@ -72,10 +48,8 @@ public:
         const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, 
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         ui32 executerDelayToRetryMs)
-        : TBase(std::move(request), database, userToken, counters, TWilsonKqp::ScanExecuter, "ScanExecuter")
+        : TBase(std::move(request), database, userToken, counters, executerDelayToRetryMs, TWilsonKqp::ScanExecuter, "ScanExecuter")
         , AggregationSettings(aggregation)
-        , Planner(nullptr)
-        , ExecuterDelayToRetryMs(executerDelayToRetryMs)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
         YQL_ENSURE(Request.DataShardLocks.empty());
@@ -749,38 +723,9 @@ private:
             std::move(scanTasks), Request.Snapshot,
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
             Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath, ExecuterSpan, std::move(snapshot));
-        LOG_D("Execute scan tx, computeTasks: " << Planner->GetComputeTasksNumber() << ", scanTasks: " << Planner->GetScanTasksNumber());
+        LOG_D("Execute scan tx, computeTasks: " << Planner->GetComputeTasksNumber() << ", scanTasks: " << Planner->GetMainTasksNumber());
 
-        Planner->Process();
-    }
-
-    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) override {
-        ui32 eventType = ev->Get()->SourceType;
-        auto reason = ev->Get()->Reason;
-        switch (eventType) {
-            case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
-                if (reason == TEvents::TEvUndelivered::EReason::ReasonActorUnknown) {
-                    LOG_D("Schedule a retry by ActorUnknown reason, nodeId:" << ev->Sender.NodeId() << " requestId: " << ev->Cookie);
-                    Schedule(TDuration::MilliSeconds(ExecuterDelayToRetryMs), new TEvPrivate::TEvRetry(ev->Cookie, ev->Sender));
-                    return;
-                }
-                InvalidateNode(ev->Sender.NodeId());
-                return InternalError(TStringBuilder()
-                    << "TEvKqpNode::TEvStartKqpTasksRequest lost: " << reason);
-            }
-            default: {
-                LOG_E("Event lost, type: " << eventType << ", reason: " << reason);
-            }
-        }
-    }
-
-    void HandleRetry(TEvPrivate::TEvRetry::TPtr& ev) {
-        if (Planner->SendKqpTasksRequest(ev->Get()->RequestId, ev->Get()->Target)) {
-            return;
-        }
-        InvalidateNode(Target.NodeId());
-        return InternalError(TStringBuilder()
-            << "TEvKqpNode::TEvStartKqpTasksRequest lost: ActorUnknown");
+        Planner->ProcessTasksForScanExecuter();
     }
 
 private:
@@ -846,8 +791,6 @@ public:
     }
 private:
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
-    std::unique_ptr<TKqpPlanner> Planner;
-    ui32 ExecuterDelayToRetryMs;
 };
 
 } // namespace

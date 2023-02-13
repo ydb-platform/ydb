@@ -31,12 +31,13 @@ public:
         const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages,
         bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& ExecuterSpan,
         TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot);
-    bool SendKqpTasksRequest(ui32 requestId, const TActorId& target);
+    bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
 
-    void Process();
+    void ProcessTasksForScanExecuter();
+    void ProcessTasksForDataExecuter();
 
     ui64 GetComputeTasksNumber() const;
-    ui64 GetScanTasksNumber() const;
+    ui64 GetMainTasksNumber() const;
 private:
     void PrepareToProcess();
 
@@ -52,7 +53,7 @@ private:
     const ui64 TxId;
     const TActorId ExecuterId;
     TVector<NYql::NDqProto::TDqTask> ComputeTasks;
-    THashMap<ui64, TVector<NYql::NDqProto::TDqTask>> ScanTasks;
+    THashMap<ui64, TVector<NYql::NDqProto::TDqTask>> MainTasksPerNode;
     const IKqpGateway::TKqpSnapshot Snapshot;
     TString Database;
     const TMaybe<TString> UserToken;

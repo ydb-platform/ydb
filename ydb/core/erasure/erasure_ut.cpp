@@ -7,8 +7,6 @@ namespace NKikimr {
 void TestMissingPartWithRandomData(TErasureType &groupType, ui32 *missingPartIdx, ui32 missingParts,
                         ui32 dataSize, bool isRestoreParts, bool isRestoreFullData, TString &info) {
 
-    NPrivate::TMersenne64 randGen(Seed());
-
     ui32 partMask = ~(ui32)0;
     for (ui32 i = 0; i < missingParts; ++i) {
         partMask &= ~(ui32)(1ul << missingPartIdx[i]);
@@ -18,18 +16,8 @@ void TestMissingPartWithRandomData(TErasureType &groupType, ui32 *missingPartIdx
             (isRestoreParts ? "true" : "false"),
             (isRestoreFullData ? "true" : "false"));
     VERBOSE_COUT(" dataSize# " << dataSize << Endl);
-    TString testString;
-    testString.resize(dataSize);
-    char *writePosChar = (char *)testString.data();
-    ui32 charParts = testString.size() % sizeof(ui64);
-    for (ui32 i = 0; i < charParts; ++i) {
-        writePosChar[i] = (char)randGen.GenRand();
-    }
-    ui64 *writePos64 = (ui64 *)writePosChar;
-    ui32 ui64Parts = testString.size() / sizeof(ui64);
-    for (ui32 i = 0; i < ui64Parts; ++i) {
-        writePos64[i] = randGen.GenRand();
-    }
+    TString testString = TString::Uninitialized(dataSize);
+    Seed().Read(testString.Detach(), testString.size());
 
     // Split the data into parts
     TDataPartSet partSet;

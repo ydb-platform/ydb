@@ -262,7 +262,7 @@ void TQueryPlanPrinter::Print(const TString& plan) {
 }
 
 void TQueryPlanPrinter::PrintJson(const TString& plan) {
-    Cout << NJson::PrettifyJson(plan, true) << Endl;
+    Cout << NJson::PrettifyJson(plan, false) << Endl;
 }
 
 void TQueryPlanPrinter::PrintPretty(const NJson::TJsonValue& plan) {

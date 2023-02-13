@@ -2,19 +2,19 @@
 
 namespace NKikimr::NReplication::NController {
 
-class TController::TTxCreateStreamResult: public TTxBase {
-    TEvPrivate::TEvCreateStreamResult::TPtr Ev;
+class TController::TTxDropStreamResult: public TTxBase {
+    TEvPrivate::TEvDropStreamResult::TPtr Ev;
     TReplication::TPtr Replication;
 
 public:
-    explicit TTxCreateStreamResult(TController* self, TEvPrivate::TEvCreateStreamResult::TPtr& ev)
-        : TTxBase("TxCreateStreamResult", self)
+    explicit TTxDropStreamResult(TController* self, TEvPrivate::TEvDropStreamResult::TPtr& ev)
+        : TTxBase("TxDropStreamResult", self)
         , Ev(ev)
     {
     }
 
     TTxType GetTxType() const override {
-        return TXTYPE_CREATE_STREAM_RESULT;
+        return TXTYPE_DROP_STREAM_RESULT;
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -38,7 +38,7 @@ public:
             return true;
         }
 
-        if (target->GetStreamState() != TReplication::EStreamState::Creating) {
+        if (target->GetStreamState() != TReplication::EStreamState::Removing) {
             CLOG_W(ctx, "Stream state mismatch"
                 << ": rid# " << rid
                 << ", tid# " << tid
@@ -47,21 +47,12 @@ public:
         }
 
         if (Ev->Get()->IsSuccess()) {
-            target->SetStreamState(TReplication::EStreamState::Ready);
-
-            CLOG_N(ctx, "Stream created"
+            CLOG_N(ctx, "Stream dropped"
                 << ": rid# " << rid
                 << ", tid# " << tid);
         } else {
             const auto& status = Ev->Get()->Status;
-
-            Replication->SetState(TReplication::EState::Error);
-            target->SetStreamState(TReplication::EStreamState::Error);
-            target->SetIssue(TStringBuilder() << "Create stream error"
-                << ": " << status.GetStatus()
-                << ", " << status.GetIssues().ToOneLineString());
-
-            CLOG_E(ctx, "Create stream error"
+            CLOG_E(ctx, "Drop stream error"
                 << ": rid# " << rid
                 << ", tid# " << tid
                 << ", status# " << status.GetStatus()
@@ -69,9 +60,8 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        target->SetStreamState(TReplication::EStreamState::Removed);
         db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
-        db.Table<Schema::Targets>().Key(rid, tid).Update<Schema::Targets::Issue>(target->GetIssue());
-        db.Table<Schema::Replications>().Key(rid).Update<Schema::Replications::State>(Replication->GetState());
 
         return true;
     }
@@ -84,10 +74,10 @@ public:
         }
     }
 
-}; // TTxCreateStreamResult
+}; // TTxDropStreamResult
 
-void TController::RunTxCreateStreamResult(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx) {
-    Execute(new TTxCreateStreamResult(this, ev), ctx);
+void TController::RunTxDropStreamResult(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxDropStreamResult(this, ev), ctx);
 }
 
 }

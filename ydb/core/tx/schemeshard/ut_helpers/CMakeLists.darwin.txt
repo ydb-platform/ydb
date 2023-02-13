@@ -32,6 +32,7 @@ target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
   core-tx-tx_allocator
   core-tx-tx_proxy
   public-lib-scheme_types
+  cpp-client-ydb_driver
 )
 target_sources(tx-schemeshard-ut_helpers PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/export_reboots_common.cpp

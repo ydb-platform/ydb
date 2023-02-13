@@ -23,12 +23,14 @@ enum EPercentileCounters {
 }
 
 enum ETxTypes {
-    TXTYPE_INIT_SCHEMA = 0          [(TxTypeOpts) = {Name: "TxInitSchema"}];
-    TXTYPE_INIT = 1                 [(TxTypeOpts) = {Name: "TxInit"}];
-    TXTYPE_CREATE_REPLICATION = 2   [(TxTypeOpts) = {Name: "TxCreateReplication"}];
-    TXTYPE_DROP_REPLICATION = 3     [(TxTypeOpts) = {Name: "TxDropReplication"}];
-    TXTYPE_DISCOVERY_RESULT = 4     [(TxTypeOpts) = {Name: "TxDiscoveryResult"}];
-    TXTYPE_ASSIGN_STREAM_NAME = 5   [(TxTypeOpts) = {Name: "TxAssignStreamName"}];
+    TXTYPE_INIT_SCHEMA = 0 [(TxTypeOpts) = {Name: "TxInitSchema"}];
+    TXTYPE_INIT = 1 [(TxTypeOpts) = {Name: "TxInit"}];
+    TXTYPE_CREATE_REPLICATION = 2 [(TxTypeOpts) = {Name: "TxCreateReplication"}];
+    TXTYPE_DROP_REPLICATION = 3 [(TxTypeOpts) = {Name: "TxDropReplication"}];
+    TXTYPE_DISCOVERY_RESULT = 4 [(TxTypeOpts) = {Name: "TxDiscoveryResult"}];
+    TXTYPE_ASSIGN_STREAM_NAME = 5 [(TxTypeOpts) = {Name: "TxAssignStreamName"}];
     TXTYPE_CREATE_STREAM_RESULT = 6 [(TxTypeOpts) = {Name: "TxCreateStreamResult"}];
-    TXTYPE_CREATE_DST_RESULT = 7    [(TxTypeOpts) = {Name: "TxCreateDstResult"}];
+    TXTYPE_CREATE_DST_RESULT = 7 [(TxTypeOpts) = {Name: "TxCreateDstResult"}];
+    TXTYPE_DROP_STREAM_RESULT = 8 [(TxTypeOpts) = {Name: "TxDropStreamResult"}];
+    TXTYPE_DROP_DST_RESULT = 9 [(TxTypeOpts) = {Name: "TxDropDstResult"}];
 }

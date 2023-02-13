@@ -1,4 +1,5 @@
 #include "dst_creator.h"
+#include "dst_remover.h"
 #include "target_base.h"
 #include "util.h"
 
@@ -93,7 +94,11 @@ void TTargetBase::Progress(ui64 schemeShardId, const TActorId& proxy, const TAct
     case EDstState::Ready:
         break; // TODO
     case EDstState::Removing:
-        break; // TODO
+        if (!DstRemover) {
+            DstRemover = ctx.Register(CreateDstRemover(ctx.SelfID, schemeShardId, proxy,
+                ReplicationId, TargetId, DstPathId));
+        }
+        break;
     case EDstState::Error:
         break;
     }

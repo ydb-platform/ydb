@@ -27,10 +27,12 @@ target_sources(tx-replication-controller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/controller.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/discoverer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_creator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_remover.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/logging.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/private_events.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/replication.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_creator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_remover.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/sys_params.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/target_base.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/target_table.cpp
@@ -40,7 +42,9 @@ target_sources(tx-replication-controller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_replication.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_stream_result.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_discovery_result.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_dst_result.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_replication.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_stream_result.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_init.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_init_schema.cpp
 )

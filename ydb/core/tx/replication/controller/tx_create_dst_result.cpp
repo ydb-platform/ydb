@@ -38,6 +38,14 @@ public:
             return true;
         }
 
+        if (target->GetDstState() != TReplication::EDstState::Creating) {
+            CLOG_W(ctx, "Dst state mismatch"
+                << ": rid# " << rid
+                << ", tid# " << tid
+                << ", state# " << target->GetDstState());
+            return true;
+        }
+
         if (Ev->Get()->IsSuccess()) {
             target->SetDstPathId(Ev->Get()->DstPathId);
             target->SetDstState(TReplication::EDstState::Ready);

@@ -1,5 +1,6 @@
 #include "private_events.h"
 #include "stream_creator.h"
+#include "stream_remover.h"
 #include "target_with_stream.h"
 
 #include <library/cpp/actors/core/events.h>
@@ -18,8 +19,13 @@ void TTargetWithStream::Progress(ui64 schemeShardId, const TActorId& proxy, cons
         }
         return;
     case EStreamState::Removing:
-        return; // TODO
+        if (!StreamRemover) {
+            StreamRemover = ctx.Register(CreateStreamRemover(ctx.SelfID, proxy,
+                GetReplicationId(), GetTargetId(), GetTargetKind(), GetSrcPath(), GetStreamName()));
+        }
+        return;
     case EStreamState::Ready:
+    case EStreamState::Removed:
     case EStreamState::Error:
         break;
     }

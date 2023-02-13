@@ -49,10 +49,13 @@ STFUNC(TController::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvController::TEvCreateReplication, Handle);
         HFunc(TEvController::TEvDropReplication, Handle);
+        HFunc(TEvPrivate::TEvDropReplication, Handle);
         HFunc(TEvPrivate::TEvDiscoveryResult, Handle);
         HFunc(TEvPrivate::TEvAssignStreamName, Handle);
         HFunc(TEvPrivate::TEvCreateStreamResult, Handle);
+        HFunc(TEvPrivate::TEvDropStreamResult, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
+        HFunc(TEvPrivate::TEvDropDstResult, Handle);
         HFunc(TEvents::TEvPoison, Handle);
     }
 }
@@ -84,6 +87,11 @@ void TController::Handle(TEvController::TEvDropReplication::TPtr& ev, const TAct
     RunTxDropReplication(ev, ctx);
 }
 
+void TController::Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxDropReplication(ev, ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvDiscoveryResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDiscoveryResult(ev, ctx);
@@ -99,9 +107,19 @@ void TController::Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TAct
     RunTxCreateStreamResult(ev, ctx);
 }
 
+void TController::Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxDropStreamResult(ev, ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxCreateDstResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxDropDstResult(ev, ctx);
 }
 
 void TController::Handle(TEvents::TEvPoison::TPtr& ev, const TActorContext& ctx) {
@@ -131,6 +149,16 @@ TReplication::TPtr TController::Find(const TPathId& pathId) {
     }
 
     return it->second;
+}
+
+void TController::Remove(ui64 id) {
+    auto it = Replications.find(id);
+    if (it == Replications.end()) {
+        return;
+    }
+
+    ReplicationsByPathId.erase(it->second->GetPathId());
+    Replications.erase(it);
 }
 
 } // NController

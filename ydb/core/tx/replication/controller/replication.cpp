@@ -1,4 +1,5 @@
 #include "discoverer.h"
+#include "private_events.h"
 #include "replication.h"
 #include "target_table.h"
 #include "util.h"
@@ -79,6 +80,10 @@ public:
             : nullptr;
     }
 
+    void RemoveTarget(ui64 id) {
+        Targets.erase(id);
+    }
+
     void Progress(const TActorContext& ctx) {
         if (!YdbProxy) {
             THolder<IActor> ydbProxy;
@@ -104,7 +109,11 @@ public:
                 return ProgressTargets(ctx);
             }
         case EState::Removing:
-            return; // TODO
+            if (!Targets) {
+                return (void)ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropReplication(ReplicationId));
+            } else {
+                return ProgressTargets(ctx);
+            }
         case EState::Error:
             return;
         }
@@ -183,6 +192,10 @@ TReplication::ITarget* TReplication::FindTarget(ui64 id) {
     return Impl->FindTarget(id);
 }
 
+void TReplication::RemoveTarget(ui64 id) {
+    return Impl->RemoveTarget(id);
+}
+
 void TReplication::Progress(const TActorContext& ctx) {
     Impl->Progress(ctx);
 }
@@ -193,6 +206,10 @@ void TReplication::Shutdown(const TActorContext& ctx) {
 
 ui64 TReplication::GetId() const {
     return Impl->ReplicationId;
+}
+
+const TPathId& TReplication::GetPathId() const {
+    return Impl->PathId;
 }
 
 void TReplication::SetState(EState state, TString issue) {
@@ -213,6 +230,14 @@ void TReplication::SetNextTargetId(ui64 value) {
 
 ui64 TReplication::GetNextTargetId() const {
     return Impl->NextTargetId;
+}
+
+void TReplication::SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>& opId) {
+    DropOp = {sender, opId};
+}
+
+const std::optional<TReplication::TDropOp>& TReplication::GetDropOp() const {
+    return DropOp;
 }
 
 }

@@ -15,6 +15,9 @@ struct TEvPrivate {
         EvAssignStreamName,
         EvCreateStreamResult,
         EvCreateDstResult,
+        EvDropStreamResult,
+        EvDropDstResult,
+        EvDropReplication,
 
         EvEnd,
     };
@@ -68,6 +71,37 @@ struct TEvPrivate {
         TString ToString() const override;
 
         bool IsSuccess() const;
+    };
+
+    struct TEvDropStreamResult: public TEventLocal<TEvDropStreamResult, EvDropStreamResult> {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+        const NYdb::TStatus Status;
+
+        explicit TEvDropStreamResult(ui64 rid, ui64 tid, NYdb::TStatus&& status);
+        TString ToString() const override;
+
+        bool IsSuccess() const;
+    };
+
+    struct TEvDropDstResult: public TEventLocal<TEvDropDstResult, EvDropDstResult> {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+        const NKikimrScheme::EStatus Status;
+        const TString Error;
+
+        explicit TEvDropDstResult(ui64 rid, ui64 tid,
+            NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
+        TString ToString() const override;
+
+        bool IsSuccess() const;
+    };
+
+    struct TEvDropReplication: public TEventLocal<TEvDropReplication, EvDropReplication> {
+        const ui64 ReplicationId;
+
+        explicit TEvDropReplication(ui64 rid);
+        TString ToString() const override;
     };
 
 }; // TEvPrivate

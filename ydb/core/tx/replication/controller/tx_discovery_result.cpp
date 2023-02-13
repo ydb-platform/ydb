@@ -32,6 +32,13 @@ public:
             return true;
         }
 
+        if (Replication->GetState() != TReplication::EState::Ready) {
+            CLOG_W(ctx, "Replication state mismatch"
+                << ": rid# " << rid
+                << ", state# " << Replication->GetState());
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         if (Ev->Get()->IsSuccess()) {

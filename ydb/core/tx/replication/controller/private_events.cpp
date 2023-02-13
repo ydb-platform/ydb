@@ -93,6 +93,58 @@ bool TEvPrivate::TEvCreateDstResult::IsSuccess() const {
     return Status == NKikimrScheme::StatusSuccess;
 }
 
+TEvPrivate::TEvDropStreamResult::TEvDropStreamResult(ui64 rid, ui64 tid, NYdb::TStatus&& status)
+    : ReplicationId(rid)
+    , TargetId(tid)
+    , Status(std::move(status))
+{
+}
+
+TString TEvPrivate::TEvDropStreamResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " ReplicationId: " << ReplicationId
+        << " TargetId: " << TargetId
+        << " Status: " << Status.GetStatus()
+        << " Issues: " << Status.GetIssues().ToOneLineString()
+    << " }";
+}
+
+bool TEvPrivate::TEvDropStreamResult::IsSuccess() const {
+    return Status.IsSuccess();
+}
+
+TEvPrivate::TEvDropDstResult::TEvDropDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error)
+    : ReplicationId(rid)
+    , TargetId(tid)
+    , Status(status)
+    , Error(error)
+{
+}
+
+TString TEvPrivate::TEvDropDstResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " ReplicationId: " << ReplicationId
+        << " TargetId: " << TargetId
+        << " Status: " << NKikimrScheme::EStatus_Name(Status)
+        << " Error: " << Error
+    << " }";
+}
+
+bool TEvPrivate::TEvDropDstResult::IsSuccess() const {
+    return Status == NKikimrScheme::StatusSuccess;
+}
+
+TEvPrivate::TEvDropReplication::TEvDropReplication(ui64 rid)
+    : ReplicationId(rid)
+{
+}
+
+TString TEvPrivate::TEvDropReplication::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " ReplicationId: " << ReplicationId
+    << " }";
+}
+
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryResult::TAddEntry, stream, value) {

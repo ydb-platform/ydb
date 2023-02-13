@@ -8,6 +8,7 @@
 #include <util/generic/ptr.h>
 
 #include <memory>
+#include <optional>
 
 namespace NKikimrReplication {
     class TReplicationConfig;
@@ -41,6 +42,7 @@ public:
         Creating,
         Ready,
         Removing,
+        Removed,
         Error = 255
     };
 
@@ -70,6 +72,11 @@ public:
         virtual void Shutdown(const TActorContext& ctx) = 0;
     };
 
+    struct TDropOp {
+        TActorId Sender;
+        std::pair<ui64, ui32> OperationId; // txId, partId
+    };
+
 public:
     explicit TReplication(ui64 id, const TPathId& pathId, const NKikimrReplication::TReplicationConfig& config);
     explicit TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config);
@@ -79,11 +86,13 @@ public:
     ITarget* AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const TString& dstPath);
     const ITarget* FindTarget(ui64 id) const;
     ITarget* FindTarget(ui64 id);
+    void RemoveTarget(ui64 id);
 
     void Progress(const TActorContext& ctx);
     void Shutdown(const TActorContext& ctx);
 
     ui64 GetId() const;
+    const TPathId& GetPathId() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
     const TString& GetIssue() const;
@@ -91,9 +100,13 @@ public:
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
 
+    void SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>& opId);
+    const std::optional<TDropOp>& GetDropOp() const;
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl;
+    std::optional<TDropOp> DropOp;
 
 }; // TReplication
 

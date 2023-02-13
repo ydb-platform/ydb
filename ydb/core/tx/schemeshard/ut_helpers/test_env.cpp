@@ -561,6 +561,11 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         }
     }
 
+    if (opts.InitYdbDriver_) {
+        YdbDriver = MakeHolder<NYdb::TDriver>(NYdb::TDriverConfig());
+        runtime.GetAppData().YdbDriver = YdbDriver.Get();
+    }
+
     TActorId sender = runtime.AllocateEdgeActor();
     //CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(TTestTxConfig::DomainUid), TTabletTypes::BSController), &CreateFlatBsController);
     BootSchemeShard(runtime, schemeRoot);

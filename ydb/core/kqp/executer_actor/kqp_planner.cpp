@@ -21,6 +21,7 @@ using namespace NYql;
 // Task can allocate extra memory during execution.
 // So, we estimate total memory amount required for task as apriori task size multiplied by this constant.
 constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
+constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 4;
 
 TKqpPlanner::TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::TDqTask>&& computeTasks,
     THashMap<ui64, TVector<NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
@@ -95,8 +96,10 @@ void TKqpPlanner::Process() {
     PrepareToProcess();
 
     auto localResources = GetKqpResourceManager()->GetLocalResources();
+    Y_UNUSED(MEMORY_ESTIMATION_OVERFLOW);
     if (LocalRunMemoryEst * MEMORY_ESTIMATION_OVERFLOW <= localResources.Memory[NRm::EKqpMemoryPool::ScanQuery] &&
-        ResourceEstimations.size() <= localResources.ExecutionUnits)
+        ResourceEstimations.size() <= localResources.ExecutionUnits &&
+        ResourceEstimations.size() <= MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT)
     {
         RunLocal(ResourcesSnapshot);
         return;

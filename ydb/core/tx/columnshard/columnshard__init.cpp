@@ -294,24 +294,45 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
 
-    // Load primary index
-    if (Self->PrimaryIndex) {
-        TBlobGroupSelector dsGroupSelector(Self->Info());
-        NOlap::TDbWrapper idxDB(txc.DB, &dsGroupSelector);
-        if (!Self->PrimaryIndex->Load(idxDB, Self->PathsToDrop)) {
+    // There could be extern blobs that are evicting & dropped.
+    // Load info from export tables and check if we have such blobs in index to find them
+    THashSet<TUnifiedBlobId> lostEvictions;
+    TBlobManagerDb blobManagerDb(txc.DB);
+
+    // Initialize the BlobManager
+    {
+        if (!Self->BlobManager->LoadState(blobManagerDb)) {
+            return false;
+        }
+        if (!Self->BlobManager->LoadOneToOneExport(blobManagerDb, lostEvictions)) {
             return false;
         }
     }
 
-    // Initialize the BlobManager
-    {
-        TBlobManagerDb blobManagerDb(txc.DB);
-        if (!Self->BlobManager->LoadState(blobManagerDb)) {
+    // Load primary index
+    if (Self->PrimaryIndex) {
+        TBlobGroupSelector dsGroupSelector(Self->Info());
+        NOlap::TDbWrapper idxDB(txc.DB, &dsGroupSelector);
+        if (!Self->PrimaryIndex->Load(idxDB, lostEvictions, Self->PathsToDrop)) {
             return false;
         }
-        if (!Self->BlobManager->LoadOneToOneExport(blobManagerDb)) {
-            return false;
+    }
+
+    // Clear dropped evicting records
+    // TODO: better cleanup logic. Check if blob exists in external storage (and remove it if so).
+    TString strBlobs;
+    for (auto& blobId : lostEvictions) {
+        TEvictMetadata meta;
+        auto evict = Self->BlobManager->GetDropped(blobId, meta);
+        bool erased = Self->BlobManager->EraseOneToOne(evict, blobManagerDb);
+        if (erased) {
+            strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
+        } else {
+            LOG_S_ERROR("Forget unknown dropped evicting blob " << evict.Blob << " at tablet " << Self->TabletID());
         }
+    }
+    if (!strBlobs.empty()) {
+        LOG_S_NOTICE("Forget dropped evicting blobs " << strBlobs << "at tablet " << Self->TabletID());
     }
 
     Self->UpdateInsertTableCounters();

@@ -248,7 +248,7 @@ public:
         return MarkType;
     }
 
-    bool Load(IDbWrapper& db, const THashSet<ui64>& pathsToDrop = {}) override;
+    bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
     std::shared_ptr<TColumnEngineChanges> StartInsert(TVector<TInsertedData>&& dataToIndex) override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
                                                           const TSnapshot& outdatedSnapshot) override;
@@ -341,7 +341,7 @@ private:
     }
 
     bool LoadGranules(IDbWrapper& db);
-    bool LoadColumns(IDbWrapper& db);
+    bool LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs);
     bool LoadCounters(IDbWrapper& db);
     bool ApplyChanges(IDbWrapper& db, const TChanges& changes, const TSnapshot& snapshot, bool apply);
 

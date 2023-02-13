@@ -543,13 +543,13 @@ void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndex
     IndexInfo.SetAllKeys();
 }
 
-bool TColumnEngineForLogs::Load(IDbWrapper& db, const THashSet<ui64>& pathsToDrop) {
+bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop) {
     ClearIndex();
 
     if (!LoadGranules(db)) {
         return false;
     }
-    if (!LoadColumns(db)) {
+    if (!LoadColumns(db, lostBlobs)) {
         return false;
     }
     if (!LoadCounters(db)) {
@@ -622,8 +622,9 @@ bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
     return GranulesTable->Load(db, callback);
 }
 
-bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
+bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs) {
     auto callback = [&](TColumnRecord&& row) {
+        lostBlobs.erase(row.BlobRange.BlobId); // We have such a blob in index. It isn't lost.
         AddColumnRecord(row);
     };
 

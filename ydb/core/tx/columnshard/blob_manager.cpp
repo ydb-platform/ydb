@@ -593,7 +593,7 @@ bool TBlobManager::EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) 
     return DroppedEvictedBlobs.erase(evict);
 }
 
-bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db) {
+bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobId>& droppedEvicting) {
     EvictedBlobs.clear();
     DroppedEvictedBlobs.clear();
 
@@ -612,6 +612,11 @@ bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db) {
     }
 
     for (auto& [evict, metadata] : dropped) {
+        if (evict.IsEvicting()) {
+            droppedEvicting.insert(evict.Blob);
+            //continue; // keep them in DroppedEvictedBlobs till next tablet restart
+        }
+
         NKikimrTxColumnShard::TEvictMetadata meta;
         Y_VERIFY(meta.ParseFromString(metadata));
 

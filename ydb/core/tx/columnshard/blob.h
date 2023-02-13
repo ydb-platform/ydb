@@ -338,6 +338,10 @@ struct TEvictedBlob {
         return Blob.Hash();
     }
 
+    bool IsEvicting() const {
+        return State == EEvictState::EVICTING;
+    }
+
     bool IsExternal() const {
         return ExternBlob.IsValid();
     }

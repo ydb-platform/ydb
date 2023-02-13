@@ -1,57 +1,59 @@
 # Перевоз VDisk'ов
 
-## Увезти один из VDisk'ов с блочного устройства {#moving_vdisk}
+Иногда бывает нужно освободить блочное устройство для замены оборудования. Или один из VDisk'ов интенсивно используется и влияет на производительность остальных VDisk'ов, находящихся на том же PDisk'е. В этих случаях необходимо выполнить перевоз VDisk'ов.
 
-Для того чтобы перевезти VDisk'и с блочного устройства, надо зайти на узел по ssh и выполнить следующую команду.
+## Перевезти один из VDisk'ов с блочного устройства {#moving_vdisk}
+
+Получите список идентификаторов VDisk'ов с помощью утилиты [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
 
 ```bash
-ydb-dstool.py -e ydb.endpoint vdisk evict --vdisk-ids VDISK_ID1 ... VDISK_IDN
-kikimr admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <ID группы хранения> GroupGeneration: <Поколение группы хранения> FailRealmIdx: <FailRealm> FailDomainIdx: <FailDomain> VDiskIdx: <Номер слота> } }'
+ydb-dstool -e <bs_endpoint> vdisk list --format tsv --columns VDiskId --no-header
 ```
-, где ```VDISK_ID1 ... VDISK_IDN``` - это список айдишников вдисков, разделенных пробелами, вида ```[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx], а
 
-* GroupId: <ID группы хранения>
-* GroupGeneration: <Поколение группы хранения>
-* FailRealmIdx: <FailRealm>
-* FailDomainIdx: <FailDomain>
-* VDiskIdx: <Номер слота>
+Чтобы перевезти VDisk'и с блочного устройства, выполните на узле следующие команды:
 
-Список айдишников вдисков можно получить, например, при помощи команды:
-
+```bash
+ydb-dstool -e <bs_endpoint> vdisk evict --vdisk-ids VDISK_ID1 ... VDISK_IDN
+ydbd admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <ID группы хранения> GroupGeneration: <Поколение группы хранения> FailRealmIdx: <FailRealm> FailDomainIdx: <FailDomain> VDiskIdx: <Номер слота> } }'
 ```
-ydb-dstool.py -e ydb.endpoint vdisk list --format tsv --columns VDiskId --no-header
-```
+
+* `VDISK_ID1 ... VDISK_IDN` — список идентификаторов VDisk'ов, вида `[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx]`. Идентификаторы разделяются пробелами.
+* `GroupId` — ID группы хранения.
+* `GroupGeneration` — поколение группы хранения.
+* `FailRealmIdx` — номер fail realm.
+* `FailDomainIdx` — номер fail domain.
+* `VDiskIdx` — номер слота.
 
 ## Перевезти VDisk'и со сломанного/отсутствующего устройства {#removal_from_a_broken_device}
 
-В случае если SelfHeal выключен или не перевозит VDisk'и, данную операцию придется выполнить вручную.
+В случае, если SelfHeal выключен или не перевозит VDisk'и автоматически, перевоз нужно выполнить вручную:
 
-1. Убедиться в мониторинге, что VDisk действительно в нерабочем состоянии.
-
-2. Получить ```[NodeId:PDiskId]``` нужного диска, например, с помощью команды
+1. Откройте [мониторинг](../../maintenance/embedded_monitoring/ydb_monitoring.md) и убедитесь, что VDisk в нерабочем состоянии.
+1. Получите `[NodeId:PDiskId]` нужного диска с помощью утилиты [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
 
     ```bash
-    ydb-dstool.py -e ydb.endpoint vdisk list | fgrep VDISK_ID
+    ydb-dstool -e <bs_endpoint> vdisk list | fgrep VDISK_ID
     ```
 
-3. Выполнить перевоз VDisk'а
+1. Перевезите VDisk:
 
     ```bash
-    ydb-dstool.py -e ydb.endpoint pdisk set --status BROKEN --pdisk-ids "[NodeId:PDiskId]"
+    ydb-dstool -e <bs_endpoint> pdisk set --status BROKEN --pdisk-ids "[NodeId:PDiskId]"
     ```
 
 ## Вернуть PDisk после развоза  {#return_a_device_to_work}
 
-1. Убедиться в мониторинге, что PDisk в рабочем состоянии
+Чтобы вернуть PDisk после развоза:
 
-2. Получить ```[NodeId:PDiskId]``` нужного диска, например, с помощью команды
+1. Откройте [мониторинг](../../maintenance/embedded_monitoring/ydb_monitoring.md) и убедитесь, что PDisk в рабочем состоянии.
+1. Получите `[NodeId:PDiskId]` нужного диска с помощью утилиты [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
 
     ```bash
-    ydb-dstool.py -e ydb.endpoint pdisk list
+    ydb-dstool -e <bs_endpoint> pdisk list
     ```
 
-3. Вернуть PDisk
+1. Верните PDisk:
 
     ```bash
-    ydb-dstool.py -e ydb.endpoint pdisk set --status ACTIVE --pdisk-ids "[NodeId:PDiskId]"
+    ydb-dstool -e <bs_endpoint> pdisk set --status ACTIVE --pdisk-ids "[NodeId:PDiskId]"
     ```

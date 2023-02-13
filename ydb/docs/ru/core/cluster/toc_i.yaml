@@ -3,7 +3,7 @@ items:
   include: { mode: link, path: ../deploy/toc_p.yaml }
 - name: Управление доступом
   href: access.md
-- name: Обслуживание дисковой подсистемы кластера
+- name: Управление дисковой подсистемой кластера
   include: { mode: link, path: ../maintenance/manual/toc_p.yaml }
 - name: Встроенный UI
   include: { mode: link, path: ../maintenance/embedded_monitoring/toc_p.yaml }
@@ -19,3 +19,7 @@ items:
       href: ../administration/grafana-dashboards.md
 - name: Обновление YDB
   href: ../administration/upgrade.md
+- name: Изменение конфигурации актор-системы
+  href: ../maintenance/manual/change_actorsystem_configs.md
+- name: Изменение конфигураций через CMS
+  href: ../maintenance/manual/cms.md

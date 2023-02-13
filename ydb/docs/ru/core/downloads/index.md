@@ -2,7 +2,7 @@
 
 ## {{ ydb-short-name }} CLI
 
-[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) — утилита командной строки для работы с базами данных YDB.
+[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) — утилита командной строки для работы с базами данных {{ ydb-short-name }}.
 
 {% list tabs %}
 
@@ -26,7 +26,7 @@
 
 ## {{ ydb-short-name }} Server
 
-{{ ydb-short-name }} Server - сборка для запуска узла [кластера YDB](../concepts/databases.md#cluster).
+{{ ydb-short-name }} Server — сборка для запуска узла [кластера YDB](../concepts/databases.md#cluster).
 
 {% list tabs %}
 
@@ -43,3 +43,9 @@
   {% include notitle [docker](_includes/server/source_code.md) %}
 
 {% endlist %}
+
+## {{ ydb-short-name }} DSTool {#ydb-dstool}
+
+{{ ydb-short-name }} DSTool — утилита командной строки для [управления дисковой подсистемой](../maintenance/manual/index.md) кластера {{ ydb-short-name }}.
+
+Для использования утилиты установите Python-пакет [ydb-dstool](https://pypi.org/project/ydb-dstool/).

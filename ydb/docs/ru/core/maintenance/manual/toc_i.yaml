@@ -1,27 +1,27 @@
 items:
-- name: Установка ydb-dstool
-  href: ydb-dstool.md
-- name: Способы предотвращения выхода за модель отказа
-  href: failure_model.md
-- name: Балансировка нагрузки на диски
-  href: balancing_load.md
-- name: Способы освобождения места на физических устройствах
-  href: disk_end_space.md
+- name: "{{ ydb-short-name }} DSTool"
+  items:
+  - name: Обзор
+    href: ../../administration/ydb-dstool-overview.md
+  - name: Установка
+    href: ../../administration/ydb-dstool-setup.md
 - name: Расширение кластера
   href: cluster_expansion.md
 - name: Добавление групп хранения
   href: adding_storage_groups.md
-- name: Безопасные рестарт и выключение узлов
+- name: Безопасный рестарт и выключение узлов
   href: node_restarting.md
+- name: Включение и выключение Scrubbing
+  href: scrubbing.md
 - name: Работа с SelfHeal
   href: selfheal.md
-- name: Включение/выключение Scrubbing
-  href: scrubbing.md
-- name: Перевоз VDisk'ов
-  href: moving_vdisks.md
-- name: Изменение конфигураций через CMS
-  href: cms.md
-- name: Изменение конфигурации акторсистемы
-  href: change_actorsystem_configs.md
 - name: Декомиссия части кластера
   href: ../../administration/decommissioning.md
+- name: Перевоз VDisk'ов
+  href: moving_vdisks.md
+- name: Предотвращение выхода за модель отказа
+  href: failure_model.md
+- name: Балансировка нагрузки на диски
+  href: balancing_load.md
+- name: Освобождение места на физических устройствах
+  href: disk_end_space.md

@@ -5,30 +5,27 @@
 SelfHeal используется для сохранения работоспособности и отказоустойчивости кластера, если невозможно быстро восстановить вышедшие из строя узлы или устройства.
 
 SelfHeal позволяет:
+
 * обнаружить неисправные элементы системы;
 * перенести неисправные элементы в щадящем режиме без потери данных и расформирования групп хранения.
 
-По умолчанию SelfHeal включен.
+SelfHeal включен по умолчанию.
 
 ## Включение и выключение SelfHeal {#on-off}
 
-{% list tabs %}
+Вы можете включать и выключать SelfHeal с помощью утилиты [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md).
 
-- Включить SelfHeal
+Чтобы включить SelfHeal выполните команду:
 
-  Чтобы включить ```self-healing``` выполните команду:
+```bash
+ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
+```
 
-  ```bash
-  ydb-dstool.py -e ydb.endpoint cluster set --enable-self-heal
-  ```
+Чтобы выключить SelfHeal выполните команду:
 
-- Выключить SelfHeal
-
-  Чтобы выключить ```self-healing``` выполните команду:
-
-  ```bash
-  ydb-dstool.py -e ydb.endpoint cluster set --disable-self-heal
-  ```
+```bash
+ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
+```
 
 {% endlist %}
 
@@ -73,11 +70,11 @@ SelfHeal позволяет:
 Диск-донор — это предыдущий VDisk после переноса данных, который продолжает хранить свои данные и отвечает только на запросы чтения от нового VDisk'а. При переносе с включенными дисками-донорами предыдущие VDisk'и продолжают функционировать до тех пор, пока данные не будут полностью перенесены на новые диски. Чтобы предотвратить потерю данных при переносе VDisk'а, включите возможность использования дисков-доноров:
 
 ```bash
-ydb-dstool.py -e ydb.endpoint cluster set --enable-donor-mode
+ydb-dstool -e <bs_endpoint> cluster set --enable-donor-mode
 ```
 
 Чтобы выключить диски-доноры, введите команду:
 
 ```bash
-ydb-dstool.py -e ydb.endpoint cluster set --disable-donor-mode
+ydb-dstool -e <bs_endpoint> cluster set --disable-donor-mode
 ```

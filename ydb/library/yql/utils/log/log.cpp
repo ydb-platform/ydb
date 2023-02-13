@@ -5,7 +5,7 @@
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/logger/system.h>
 #include <library/cpp/logger/composite.h>
-
+#include <library/cpp/logger/backend_creator.h>
 #include <util/datetime/systime.h>
 #include <util/generic/strbuf.h>
 #include <util/stream/format.h>
@@ -150,6 +150,33 @@ NYql::NProto::TLoggingConfig::TLogDestination CreateLogDestination(const TString
     return destination;
 }
 
+class TYqlUaLogBackendCreatorInitContext : public ILogBackendCreator::IInitContext {
+public:
+    TYqlUaLogBackendCreatorInitContext(const TString& loggerType, const TString& target = TString())
+        : LoggerType(loggerType)
+        , Target(target)
+    {}
+
+    virtual bool GetValue(TStringBuf name, TString& var) const override {
+        if (name == "LoggerType" && !LoggerType.empty()) {
+            var = LoggerType;
+            return true;
+        } else if (name == "Target" && !Target.empty()) {
+            var = Target;
+            return true;
+        }
+        return false;
+    }
+
+    virtual TVector<THolder<IInitContext>> GetChildren(TStringBuf /*name*/) const override {
+        return TVector<THolder<IInitContext>>();
+    }
+
+private:
+    TString LoggerType;
+    TString Target;
+};
+
 } // namspace
 
 namespace NYql {
@@ -280,23 +307,31 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
             backends.emplace_back(CreateLogBackend("cerr", LOG_MAX_PRIORITY, false));
         }
 
-        for (const auto& logDestionation : config.GetLogDest()) {
+        for (const auto& logDest : config.GetLogDest()) {
             // Generate the backend we need and temporary store it
-            switch (logDestionation.GetType()) {
+            switch (logDest.GetType()) {
                 case NProto::TLoggingConfig::STDERR:
                 case NProto::TLoggingConfig::STDOUT:
                 case NProto::TLoggingConfig::CONSOLE: {
                     if (!startAsDaemon) {
-                        backends.emplace_back(CreateLogBackend(ConvertDestinationType(logDestionation.GetType()), LOG_MAX_PRIORITY, false));
+                        backends.emplace_back(CreateLogBackend(ConvertDestinationType(logDest.GetType()), LOG_MAX_PRIORITY, false));
                     }
                     break;
                 }
                 case NProto::TLoggingConfig::FILE: {
-                    backends.emplace_back(CreateLogBackend(logDestionation.GetTarget(), LOG_MAX_PRIORITY, false));
+                    backends.emplace_back(CreateLogBackend(logDest.GetTarget(), LOG_MAX_PRIORITY, false));
                     break;
                 }
                 case NProto::TLoggingConfig::SYSLOG: {
                     backends.emplace_back(MakeHolder<TSysLogBackend>(GetProgramName().data(), TSysLogBackend::TSYSLOG_LOCAL1));
+                    break;
+                }
+                default: {
+                    TYqlUaLogBackendCreatorInitContext creatorContext(NProto::TLoggingConfig::ELogTo_Name(logDest.GetType()),
+                                                                      logDest.GetTarget());
+                    if (auto creator = ILogBackendCreator::Create(creatorContext)) {
+                        backends.emplace_back(creator->CreateLogBackend());
+                    }
                     break;
                 }
             }

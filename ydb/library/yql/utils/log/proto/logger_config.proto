@@ -8,6 +8,7 @@ message TLoggingConfig {
         CONSOLE = 3;
         FILE = 4;
         SYSLOG = 5;
+        YQL_UA_LOGGER = 6;
     }
 
     enum ELevel {

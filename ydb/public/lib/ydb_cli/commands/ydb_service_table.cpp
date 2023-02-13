@@ -396,14 +396,14 @@ void TCommandExecuteQuery::Parse(TConfig& config) {
             config.ParseResult->Has("batch")) && QueryType == "scheme") {
         throw TMisuseException() << "Scheme queries does not support parameters.";
     }
+    CheckQueryOptions();
+    CheckQueryFile();
     ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
         ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
     ParseParameters(config);
-    CheckQueryOptions();
 }
 
 int TCommandExecuteQuery::Run(TConfig& config) {
-    CheckQueryFile();
     if (QueryType) {
         if (QueryType == "data") {
             return ExecuteDataQuery(config);
@@ -421,6 +421,7 @@ int TCommandExecuteQuery::Run(TConfig& config) {
 int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
     auto defaultStatsMode = BasicStats ? NTable::ECollectQueryStatsMode::Basic : NTable::ECollectQueryStatsMode::None;
     NTable::TExecDataQuerySettings settings;
+    settings.KeepInQueryCache(true);
     settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, defaultStatsMode));
 
     NTable::TTxSettings txSettings;

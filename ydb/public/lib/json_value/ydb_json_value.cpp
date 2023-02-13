@@ -716,7 +716,6 @@ namespace {
                 TypeParser.OpenStruct();
                 ValueBuilder.BeginStruct();
 
-                size_t counter = 0;
                 const auto& jsonMap = jsonValue.GetMap();
                 while (TypeParser.TryNextMember()) {
                     const TString& memberName = TypeParser.GetMemberName();
@@ -727,10 +726,6 @@ namespace {
                     }
                     ValueBuilder.AddMember(memberName);
                     ParseValue(it->second);
-                    ++counter;
-                }
-                if (counter != jsonMap.size()) {
-                    ThrowFatalError("Map in json string contains more members than YDB struct does");
                 }
 
                 ValueBuilder.EndStruct();

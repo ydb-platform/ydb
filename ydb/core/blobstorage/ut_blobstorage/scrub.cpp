@@ -226,15 +226,19 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             BROKEN_HUGE_BLOB,
         };
 
+        const ui32 brokenChunks = 2;
+        const ui32 brokenIndices = 2;
+        const ui32 brokenBlobs = 10;
+
         std::map<ECheckpoint, std::pair<ui32, ui32>> checkpoints{
-            {ECheckpoint::BROKEN_CHUNK_L0, {0, 5}},
-            {ECheckpoint::BROKEN_INDEX_L0, {0, 5}},
-            {ECheckpoint::BROKEN_CHUNK_L1_8, {0, 5}},
-            {ECheckpoint::BROKEN_INDEX_L1_8, {0, 5}},
-            {ECheckpoint::BROKEN_CHUNK_L17, {0, 5}},
-            {ECheckpoint::BROKEN_INDEX_L17, {0, 5}},
-            {ECheckpoint::BROKEN_INPLACE_BLOB, {0, 100}},
-            {ECheckpoint::BROKEN_HUGE_BLOB, {0, 100}},
+            {ECheckpoint::BROKEN_CHUNK_L0, {0, brokenChunks}},
+            {ECheckpoint::BROKEN_INDEX_L0, {0, brokenIndices}},
+            {ECheckpoint::BROKEN_CHUNK_L1_8, {0, brokenChunks}},
+            {ECheckpoint::BROKEN_INDEX_L1_8, {0, brokenIndices}},
+            {ECheckpoint::BROKEN_CHUNK_L17, {0, brokenChunks}},
+            {ECheckpoint::BROKEN_INDEX_L17, {0, brokenIndices}},
+            {ECheckpoint::BROKEN_INPLACE_BLOB, {0, brokenBlobs}},
+            {ECheckpoint::BROKEN_HUGE_BLOB, {0, brokenBlobs}},
         };
 
         ui32 passedCheckpoints = 0; // from TEvScrubNotify

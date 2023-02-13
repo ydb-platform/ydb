@@ -299,7 +299,7 @@ TExprNode::TPtr ExpandFlattenEquiJoin(const TExprNode::TPtr& node, TExprContext&
     return ctx.NewCallable(node->Pos(), "Map", { std::move(newJoin), std::move(mapLambda) });
 }
 
-void GatherEquiJoinKeyColumnsFromEquality(TExprNode::TPtr columns, TSet<TString>& keyColumns) {
+void GatherEquiJoinKeyColumnsFromEquality(TExprNode::TPtr columns, THashSet<TString>& keyColumns) {
     for (ui32 i = 0; i < columns->ChildrenSize(); i += 2) {
         auto table = columns->Child(i)->Content();
         auto column = columns->Child(i + 1)->Content();
@@ -307,82 +307,21 @@ void GatherEquiJoinKeyColumnsFromEquality(TExprNode::TPtr columns, TSet<TString>
     }
 }
 
-TExprNode::TPtr DoMarkUnusedKeyColumns(const TExprNode::TPtr& joinTree, THashSet<TString>& drops, THashSet<TString>& keyColumns, bool& needRebuild, bool topLevel, TExprContext& ctx) {
-    auto joinKind = joinTree->ChildPtr(0);
-    auto left = joinTree->ChildPtr(1);
-    auto right = joinTree->ChildPtr(2);
+void GatherEquiJoinKeyColumns(TExprNode::TPtr joinTree, THashSet<TString>& keyColumns) {
+    auto left = joinTree->Child(1);
+    if (!left->IsAtom()) {
+        GatherEquiJoinKeyColumns(left, keyColumns);
+    }
+
+    auto right = joinTree->Child(2);
+    if (!right->IsAtom()) {
+        GatherEquiJoinKeyColumns(right, keyColumns);
+    }
+
     auto leftColumns = joinTree->Child(3);
     auto rightColumns = joinTree->Child(4);
-    auto settings = joinTree->ChildPtr(5);
-
-    TSet<TString> unusedKeys;
-
-    TSet<TString> leftKeys;
-    GatherEquiJoinKeyColumnsFromEquality(leftColumns, leftKeys);
-    if (joinKind->Content() != "RightOnly" && joinKind->Content() != "RightSemi") {
-        for (auto& key : leftKeys) {
-            if (drops.contains(key)) {
-                unusedKeys.insert(key);
-            }
-        }
-    }
-    for (auto& key : leftKeys) {
-        drops.erase(key);
-    }
-    keyColumns.insert(leftKeys.begin(), leftKeys.end());
-
-    TSet<TString> rightKeys;
-    GatherEquiJoinKeyColumnsFromEquality(rightColumns, rightKeys);
-    if (joinKind->Content() != "LeftOnly" && joinKind->Content() != "LeftSemi") {
-        for (auto& key : rightKeys) {
-            if (drops.contains(key)) {
-                unusedKeys.insert(key);
-            }
-        }
-    }
-    for (auto& key : rightKeys) {
-        drops.erase(key);
-    }
-    keyColumns.insert(rightKeys.begin(), rightKeys.end());
-
-    if (!left->IsAtom()) {
-        left = DoMarkUnusedKeyColumns(left, drops, keyColumns, needRebuild, false, ctx);
-    }
-
-    if (!right->IsAtom()) {
-        right = DoMarkUnusedKeyColumns(right, drops, keyColumns, needRebuild, false, ctx);
-    }
-
-    TSet<TString> currentUnusedKeys;
-    if (auto setting = GetSetting(*settings, "unusedKeys")) {
-        for (ui32 i = 1; i < setting->ChildrenSize(); ++i) {
-            currentUnusedKeys.insert(ToString(setting->Child(i)->Content()));
-        }
-    }
-
-    if (!topLevel && currentUnusedKeys != unusedKeys) {
-        TExprNodeList settingValues;
-        settingValues.reserve(unusedKeys.size() + 1);
-        settingValues.push_back(ctx.NewAtom(settings->Pos(), "unusedKeys", TNodeFlags::Default));
-        for (auto& key : unusedKeys) {
-            settingValues.push_back(ctx.NewAtom(settings->Pos(), key));
-        }
-        settings = ReplaceSetting(*settings, ctx.NewList(settings->Pos(), std::move(settingValues)), ctx);
-        needRebuild = true;
-    }
-
-    if (needRebuild) {
-        return ctx.NewList(joinTree->Pos(), { joinKind, left, right, leftColumns, rightColumns, settings });
-    }
-
-    return joinTree;
-}
-
-TExprNode::TPtr MarkUnusedKeyColumns(const TExprNode::TPtr& joinTree, const TSet<TString>& drops, THashSet<TString>& keyColumns, TExprContext& ctx) {
-    bool needRebuild = false;
-    bool topLevel = true;
-    THashSet<TString> mutableDrops(drops.begin(), drops.end());
-    return DoMarkUnusedKeyColumns(joinTree, mutableDrops, keyColumns, needRebuild, topLevel, ctx);
+    GatherEquiJoinKeyColumnsFromEquality(leftColumns, keyColumns);
+    GatherEquiJoinKeyColumnsFromEquality(rightColumns, keyColumns);
 }
 
 void GatherDroppedSingleTableColumns(TExprNode::TPtr joinTree, const TJoinLabels& labels, TSet<TString>& drops) {
@@ -447,18 +386,14 @@ TExprNode::TPtr RemoveDeadPayloadColumns(const TExprNode::TPtr& node, TExprConte
         }
     }
 
-    auto joinTree = node->ChildPtr(node->ChildrenSize() - 2);
+    auto joinTree = node->Child(node->ChildrenSize() - 2);
     GatherDroppedSingleTableColumns(joinTree, labels, drops);
     if (drops.empty()) {
         return node;
     }
 
     THashSet<TString> keyColumns;
-    if (auto newTree = MarkUnusedKeyColumns(joinTree, drops, keyColumns, ctx); newTree != joinTree) {
-        YQL_CLOG(DEBUG, Core) << "MarkUnusedKeyColumns in EquiJoin";
-        return ctx.ChangeChild(*node, node->ChildrenSize() - 2, std::move(newTree));
-    }
-
+    GatherEquiJoinKeyColumns(joinTree, keyColumns);
     for (auto& keyColumn : keyColumns) {
         drops.erase(keyColumn);
     }

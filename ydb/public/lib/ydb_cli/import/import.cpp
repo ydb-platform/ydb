@@ -55,6 +55,7 @@ TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand
         .ClientTimeout(TDuration::Seconds(TImportFileSettings::ClientTimeoutSec));
     RetrySettings
         .MaxRetries(TImportFileSettings::MaxRetries)
+        .Idempotent(true)
         .Verbose(rootConfig.IsVerbose());
 }
 

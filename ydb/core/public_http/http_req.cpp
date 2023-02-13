@@ -1,6 +1,7 @@
 #include "http_req.h"
 
 #include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 #include <ydb/core/http_proxy/http_req.h>
 
 #include <util/generic/guid.h>
@@ -12,9 +13,90 @@ namespace NKikimr::NPublicHttp {
     constexpr TStringBuf REQUEST_CONTENT_TYPE_HEADER = "content-type";
     constexpr TStringBuf REQUEST_FORWARDED_FOR = "x-forwarded-for";
     constexpr TStringBuf IDEMPOTENCY_KEY_HEADER = "idempotency-key";
-    
+
     constexpr TStringBuf APPLICATION_JSON = "application/json";
     constexpr TStringBuf TEXT_PLAIN_UTF8 = "text/plain;charset=UTF-8";
+
+
+        TString StatusToErrorType(NYdb::EStatus status) {
+        switch(status) {
+        case NYdb::EStatus::SUCCESS:
+            return "OK";
+        case NYdb::EStatus::BAD_REQUEST:
+            return "InvalidParameterValueException"; //TODO: bring here issues and parse from them
+        case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
+        case NYdb::EStatus::UNAUTHORIZED:
+            return "AccessDeniedException";
+        case NYdb::EStatus::INTERNAL_ERROR:
+            return "InternalFailureException";
+        case NYdb::EStatus::ABORTED:
+            return "RequestExpiredException"; //TODO: find better code
+        case NYdb::EStatus::UNAVAILABLE:
+            return "ServiceUnavailableException";
+        case NYdb::EStatus::OVERLOADED:
+            return "ThrottlingException";
+        case NYdb::EStatus::SCHEME_ERROR:
+            return "ResourceNotFoundException";
+        case NYdb::EStatus::GENERIC_ERROR:
+            return "InternalFailureException"; //TODO: find better code
+        case NYdb::EStatus::TIMEOUT:
+            return "RequestTimeoutException";
+        case NYdb::EStatus::BAD_SESSION:
+            return "AccessDeniedException";
+        case NYdb::EStatus::PRECONDITION_FAILED:
+        case NYdb::EStatus::ALREADY_EXISTS:
+            return "ValidationErrorException"; //TODO: find better code
+        case NYdb::EStatus::NOT_FOUND:
+            return "ResourceNotFoundException";
+        case NYdb::EStatus::SESSION_EXPIRED:
+            return "AccessDeniedException";
+        case NYdb::EStatus::UNSUPPORTED:
+            return "InvalidActionException";
+        default:
+            return "InternalFailureException";
+        }
+
+    }
+
+    HttpCodes StatusToHttpCode(NYdb::EStatus status) {
+        switch(status) {
+        case NYdb::EStatus::SUCCESS:
+            return HTTP_OK;
+        case NYdb::EStatus::UNSUPPORTED:
+        case NYdb::EStatus::BAD_REQUEST:
+            return HTTP_BAD_REQUEST;
+        case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
+        case NYdb::EStatus::UNAUTHORIZED:
+            return HTTP_FORBIDDEN;
+        case NYdb::EStatus::INTERNAL_ERROR:
+            return HTTP_INTERNAL_SERVER_ERROR;
+        case NYdb::EStatus::ABORTED:
+            return HTTP_CONFLICT;
+        case NYdb::EStatus::UNAVAILABLE:
+            return HTTP_SERVICE_UNAVAILABLE;
+        case NYdb::EStatus::OVERLOADED:
+            return HTTP_BAD_REQUEST;
+        case NYdb::EStatus::SCHEME_ERROR:
+            return HTTP_NOT_FOUND;
+        case NYdb::EStatus::GENERIC_ERROR:
+            return HTTP_BAD_REQUEST;
+        case NYdb::EStatus::TIMEOUT:
+            return HTTP_GATEWAY_TIME_OUT;
+        case NYdb::EStatus::BAD_SESSION:
+            return HTTP_UNAUTHORIZED;
+        case NYdb::EStatus::PRECONDITION_FAILED:
+            return HTTP_PRECONDITION_FAILED;
+        case NYdb::EStatus::ALREADY_EXISTS:
+            return HTTP_CONFLICT;
+        case NYdb::EStatus::NOT_FOUND:
+            return HTTP_NOT_FOUND;
+        case NYdb::EStatus::SESSION_EXPIRED:
+            return HTTP_UNAUTHORIZED;
+        default:
+            return HTTP_INTERNAL_SERVER_ERROR;
+        }
+    }
+
 
     TString GenerateRequestId(const TString& sourceReqId) {
         if (sourceReqId.empty()) {
@@ -98,8 +180,8 @@ namespace NKikimr::NPublicHttp {
 
     void THttpRequestContext::DoResponseBadRequest(Ydb::StatusIds::StatusCode status, const TString& errorText, TStringBuf contentType) const {
         const NYdb::EStatus ydbStatus = static_cast<NYdb::EStatus>(status);
-        const TString httpCodeStr = ToString((int)NKikimr::NHttpProxy::StatusToHttpCode(ydbStatus));
-        DoResponse(httpCodeStr, NKikimr::NHttpProxy::StatusToErrorType(ydbStatus), errorText, contentType);
+        const TString httpCodeStr = ToString((int)StatusToHttpCode(ydbStatus));
+        DoResponse(httpCodeStr, StatusToErrorType(ydbStatus), errorText, contentType);
     }
 
     void THttpRequestContext::ResponseOK() const {

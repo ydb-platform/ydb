@@ -11,6 +11,7 @@
 
 #include <library/cpp/digest/md5/md5.h>
 
+
 namespace NKikimr::NGRpcProxy::V1 {
 
     constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
@@ -65,7 +66,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         return "";
     }
 
-    TString AddReadRuleToConfig(
+    TMsgPqCodes AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig* config,
         const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr,
         const TClientServiceTypes& supportedClientServiceTypes,
@@ -73,66 +74,96 @@ namespace NKikimr::NGRpcProxy::V1 {
     ) {
 
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.consumer_name(), ctx);
+        if (consumerName.empty()) {
+            return TMsgPqCodes(TStringBuilder() << "consumer with empty name is forbidden", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        }
         if(consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
-            return TStringBuilder() << "consumer '" << rr.consumer_name() << "' has illegal symbols";
+            return TMsgPqCodes(
+                TStringBuilder() << "consumer '" << rr.consumer_name() << "' has illegal symbols",
+                Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
+            );
         }
         {
             TString migrationError = ReadRuleServiceTypeMigration(config, ctx);
             if (migrationError) {
-                return migrationError;
+                return TMsgPqCodes(migrationError, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
         }
 
         config->AddReadRules(consumerName);
 
         if (rr.starting_message_timestamp_ms() < 0) {
-            return TStringBuilder() << "starting_message_timestamp_ms in read_rule can't be negative, provided " << rr.starting_message_timestamp_ms();
+            return TMsgPqCodes(
+                TStringBuilder() << "starting_message_timestamp_ms in read_rule can't be negative, provided " << rr.starting_message_timestamp_ms(),
+                Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+            );
         }
         config->AddReadFromTimestampsMs(rr.starting_message_timestamp_ms());
 
         if (!Ydb::PersQueue::V1::TopicSettings::Format_IsValid((int)rr.supported_format()) || rr.supported_format() == 0) {
-            return TStringBuilder() << "Unknown format version with value " << (int)rr.supported_format()  << " for " << rr.consumer_name();
+            return TMsgPqCodes(
+                TStringBuilder() << "Unknown format version with value " << (int)rr.supported_format()  << " for " << rr.consumer_name(),
+                Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
+            );
         }
         config->AddConsumerFormatVersions(rr.supported_format() - 1);
 
         if (rr.version() < 0) {
-            return TStringBuilder() << "version in read_rule can't be negative, provided " << rr.version();
+            return TMsgPqCodes(
+                TStringBuilder() << "version in read_rule can't be negative, provided " << rr.version(),
+                Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+            );
         }
         config->AddReadRuleVersions(rr.version());
         auto ct = config->AddConsumerCodecs();
         if (rr.supported_codecs().size() > MAX_SUPPORTED_CODECS_COUNT) {
-            return TStringBuilder() << "supported_codecs count cannot be more than "
-                                    << MAX_SUPPORTED_CODECS_COUNT << ", provided " << rr.supported_codecs().size();
+            return TMsgPqCodes(
+                TStringBuilder() << "supported_codecs count cannot be more than "
+                                    << MAX_SUPPORTED_CODECS_COUNT << ", provided " << rr.supported_codecs().size(),
+                Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+            );
         }
         for (const auto& codec : rr.supported_codecs()) {
             if (!Ydb::PersQueue::V1::Codec_IsValid(codec) || codec == 0)
-                return TStringBuilder() << "Unknown codec with value " << codec  << " for " << rr.consumer_name();
+                return TMsgPqCodes(
+                    TStringBuilder() << "Unknown codec with value " << codec  << " for " << rr.consumer_name(),
+                    Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
+                );
             ct->AddIds(codec - 1);
             ct->AddCodecs(to_lower(Ydb::PersQueue::V1::Codec_Name((Ydb::PersQueue::V1::Codec)codec)).substr(6));
         }
 
         if (rr.important()) {
             if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                return TStringBuilder() << "important flag is forbiden for consumer " << rr.consumer_name();
+                return TMsgPqCodes(
+                    TStringBuilder() << "important flag is forbiden for consumer " << rr.consumer_name(),
+                    Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+                );
             }
             config->MutablePartitionConfig()->AddImportantClientId(consumerName);
         }
 
         if (!rr.service_type().empty()) {
             if (!supportedClientServiceTypes.contains(rr.service_type())) {
-                return TStringBuilder() << "Unknown read rule service type '" << rr.service_type()
-                                        << "' for consumer '" << rr.consumer_name() << "'";
+                return TMsgPqCodes(
+                    TStringBuilder() << "Unknown read rule service type '" << rr.service_type()
+                                        << "' for consumer '" << rr.consumer_name() << "'",
+                    Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
+                );
             }
             config->AddReadRuleServiceTypes(rr.service_type());
         } else {
             const auto& pqConfig = AppData(ctx)->PQConfig;
             if (pqConfig.GetDisallowDefaultClientServiceType()) {
-                return TStringBuilder() << "service type cannot be empty for consumer '" << rr.consumer_name() << "'";
+                return TMsgPqCodes(
+                    TStringBuilder() << "service type cannot be empty for consumer '" << rr.consumer_name() << "'",
+                    Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+                );
             }
             const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
             config->AddReadRuleServiceTypes(defaultCientServiceType);
         }
-        return "";
+        return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
 
 
@@ -151,7 +182,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
     }
 
-    TString AddReadRuleToConfig(
+    TMsgPqCodes AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig* config,
         const Ydb::Topic::Consumer& rr,
         const TClientServiceTypes& supportedClientServiceTypes,
@@ -160,22 +191,25 @@ namespace NKikimr::NGRpcProxy::V1 {
     ) {
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.name(), ctx);
         if (consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
-            return TStringBuilder() << "consumer '" << rr.name() << "' has illegal symbols";
+            return TMsgPqCodes(TStringBuilder() << "consumer '" << rr.name() << "' has illegal symbols", Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
         }
         if (consumerName.empty()) {
-            return TStringBuilder() << "consumer with empty name is forbidden";
+            return TMsgPqCodes(TStringBuilder() << "consumer with empty name is forbidden", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
         {
             TString migrationError = ReadRuleServiceTypeMigration(config, ctx);
             if (migrationError) {
-                return migrationError;
+                return TMsgPqCodes(migrationError, migrationError.empty() ? Ydb::PersQueue::ErrorCode::OK : Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);  //find better issueCode
             }
         }
 
         config->AddReadRules(consumerName);
 
         if (rr.read_from().seconds() < 0) {
-            return TStringBuilder() << "starting_message_timestamp_ms in read_rule can't be negative, provided " << rr.read_from().seconds();
+            return TMsgPqCodes(
+                TStringBuilder() << "starting_message_timestamp_ms in read_rule can't be negative, provided " << rr.read_from().seconds(),
+                Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+            );
         }
         config->AddReadFromTimestampsMs(rr.read_from().seconds() * 1000);
 
@@ -196,13 +230,16 @@ namespace NKikimr::NGRpcProxy::V1 {
                     if (!pair.second.empty())
                         version = FromString<ui32>(pair.second);
                 } catch(...) {
-                    return TStringBuilder() << "Attribute for consumer '" << rr.name() << "' _version is " << pair.second << ", which is not ui32";
+                    return TMsgPqCodes(
+                        TStringBuilder() << "Attribute for consumer '" << rr.name() << "' _version is " << pair.second << ", which is not ui32",
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+                    );
                 }
             } else if (pair.first == "_service_type") {
                 if (!pair.second.empty()) {
                     if (!supportedClientServiceTypes.contains(pair.second)) {
-                        return TStringBuilder() << "Unknown _service_type '" << pair.second
-                                                << "' for consumer '" << rr.name() << "'";
+                        return TMsgPqCodes(TStringBuilder() << "Unknown _service_type '" << pair.second
+                                                << "' for consumer '" << rr.name() << "'", Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
                     }
                     serviceType = pair.second;
                 }
@@ -213,7 +250,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
         if (serviceType.empty()) {
-            return TStringBuilder() << "service type cannot be empty for consumer '" << rr.name() << "'";
+            return TMsgPqCodes(TStringBuilder() << "service type cannot be empty for consumer '" << rr.name() << "'", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
 
         Y_VERIFY(supportedClientServiceTypes.find(serviceType) != supportedClientServiceTypes.end());
@@ -229,10 +266,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
             if (!found) {
                 if (hasPassword) {
-                    return "incorrect client service type password";
+                    return TMsgPqCodes("incorrect client service type password", Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
                 }
                 if (AppData(ctx)->PQConfig.GetForceClientServiceTypePasswordCheck()) { // no password and check is required
-                    return "no client service type password provided";
+                    return TMsgPqCodes("no client service type password provided", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
                 }
             }
         }
@@ -244,7 +281,10 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         for(const auto& codec : rr.supported_codecs().codecs()) {
             if ((!Ydb::Topic::Codec_IsValid(codec) && codec < Ydb::Topic::CODEC_CUSTOM) || codec == 0) {
-                return TStringBuilder() << "Unknown codec for consumer '" << rr.name() << "' with value " << codec;
+                return TMsgPqCodes(
+                    TStringBuilder() << "Unknown codec for consumer '" << rr.name() << "' with value " << codec,
+                    Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
+                );
             }
             ct->AddIds(codec - 1);
             ct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
@@ -252,12 +292,12 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         if (rr.important()) {
             if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                return TStringBuilder() << "important flag is forbiden for consumer " << rr.name();
+                return TMsgPqCodes(TStringBuilder() << "important flag is forbiden for consumer " << rr.name(), Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
             config->MutablePartitionConfig()->AddImportantClientId(consumerName);
         }
 
-        return "";
+        return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
 
 
@@ -433,10 +473,15 @@ namespace NKikimr::NGRpcProxy::V1 {
         return error.empty() ? Ydb::StatusIds::SUCCESS : (hasDuplicates ? dubsStatus : Ydb::StatusIds::BAD_REQUEST);
     }
 
-    NYql::TIssue FillIssue(const TString &errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode) {
+    NYql::TIssue FillIssue(const TString& errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode) {
         NYql::TIssue res(NYql::TPosition(), errorReason);
         res.SetCode(errorCode, NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
+        return res;
+    }
 
+    NYql::TIssue FillIssue(const TString& errorReason, const size_t errorCode) {
+        NYql::TIssue res(NYql::TPosition(), errorReason);
+        res.SetCode(errorCode, NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
         return res;
     }
 
@@ -752,8 +797,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);
         for (const auto& rr : settings.read_rules()) {
-            error = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, ctx);
-            if (!error.Empty()) {
+            auto messageAndCode = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, ctx);
+            if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
+                error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }
@@ -879,7 +925,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         return true;
     }
 
-    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
+    TYdbPqCodes FillProposeRequestImpl(
             const TString& name, const Ydb::Topic::CreateTopicRequest& request,
             NKikimrSchemeOp::TModifyScheme& modifyScheme, const TActorContext& ctx,
             TString& error, const TString& path, const TString& database, const TString& localDc
@@ -894,7 +940,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (request.has_partitioning_settings()) {
             if (request.partitioning_settings().min_active_partitions() < 0) {
                 error = TStringBuilder() << "Partitions count must be positive, provided " << request.partitioning_settings().min_active_partitions();
-                return Ydb::StatusIds::BAD_REQUEST;
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
             parts = request.partitioning_settings().min_active_partitions();
             if (parts == 0) parts = 1;
@@ -916,7 +962,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         auto res = ProcessAttributes(request.attributes(), pqDescr, error, false);
         if (res != Ydb::StatusIds::SUCCESS) {
-            return res;
+            return TYdbPqCodes(res, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
 
         bool local = true; // TODO: check here cluster;
@@ -930,7 +976,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             if (!converter->IsValid()) {
                 error = TStringBuilder() << "Bad topic: " << converter->GetReason();
-                return Ydb::StatusIds::BAD_REQUEST;
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
             config->SetLocalDC(local);
             config->SetDC(converter->GetCluster());
@@ -951,6 +997,11 @@ namespace NKikimr::NGRpcProxy::V1 {
             partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);
         }
         if (request.has_retention_period()) {
+            if (request.retention_period().seconds() <= 0) {
+                error = TStringBuilder() << "retention_period must be not negative, provided " <<
+                        request.retention_period().DebugString();
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+            }
             partConfig->SetLifetimeSeconds(request.retention_period().seconds());
         } else {
             partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
@@ -979,7 +1030,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         for(const auto& codec : request.supported_codecs().codecs()) {
             if ((!Ydb::Topic::Codec_IsValid(codec) && codec < Ydb::Topic::CODEC_CUSTOM) || codec == 0) {
                 error = TStringBuilder() << "Unknown codec with value " << codec;
-                return Ydb::StatusIds::BAD_REQUEST;
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
             ct->AddIds(codec - 1);
             ct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
@@ -988,32 +1039,33 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (request.consumers_size() > MAX_READ_RULES_COUNT) {
             error = TStringBuilder() << "consumers count cannot be more than "
                                      << MAX_READ_RULES_COUNT << ", provided " << request.consumers_size();
-            return Ydb::StatusIds::BAD_REQUEST;
+            return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
 
         {
             error = ReadRuleServiceTypeMigration(config, ctx);
             if (error) {
-                return Ydb::StatusIds::INTERNAL_ERROR;
+                return TYdbPqCodes(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
         }
 
         Ydb::StatusIds::StatusCode code;
         if (!FillMeteringMode(request.metering_mode(), *config, pqConfig.GetBillingMeteringConfig().GetEnabled(), false, code, error)) {
-            return code;
+            return TYdbPqCodes(code, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
         }
 
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);
 
 
         for (const auto& rr : request.consumers()) {
-            error = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, true, ctx);
-            if (!error.Empty()) {
-                return Ydb::StatusIds::BAD_REQUEST;
+            auto messageAndCode = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, true, ctx);
+            if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
+                error = messageAndCode.Message;
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
             }
         }
 
-        return CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::BAD_REQUEST);
+        return TYdbPqCodes(CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::BAD_REQUEST), Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
 
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
@@ -1183,8 +1235,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->ClearReadRuleVersions();
 
         for (const auto& rr : consumers) {
-            error = AddReadRuleToConfig(config, rr.second, supportedClientServiceTypes, rr.first, ctx);
-            if (!error.Empty()) {
+            auto messageAndCode = AddReadRuleToConfig(config, rr.second, supportedClientServiceTypes, rr.first, ctx);
+            if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
+                error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }

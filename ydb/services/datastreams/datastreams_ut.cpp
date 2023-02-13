@@ -253,6 +253,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_status(),
                                      YDS_V1::StreamDescription::ACTIVE);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_name(), streamName);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_arn(), streamName);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 1_KB);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 24);
 
@@ -1782,7 +1783,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetResult().next_token().size(), 0);
 
             auto nextToken = result.GetResult().next_token();
-            result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
+            result = testServer.DataStreamsClient->ListStreamConsumers("",
                 NYDS_V1::TListStreamConsumersSettings().NextToken(nextToken)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -1813,26 +1814,26 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             };
 
             auto nextToken = makeNextToken(TInstant::Now().MilliSeconds() - 300001);
-            result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
+            result = testServer.DataStreamsClient->ListStreamConsumers("",
                 NYDS_V1::TListStreamConsumersSettings().NextToken(nextToken)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
 
             nextToken = makeNextToken(TInstant::Now().MilliSeconds() + 1000);
-            result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
+            result = testServer.DataStreamsClient->ListStreamConsumers("",
                 NYDS_V1::TListStreamConsumersSettings().NextToken(nextToken)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
 
             nextToken = makeNextToken(0);
-            result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
+            result = testServer.DataStreamsClient->ListStreamConsumers("",
                 NYDS_V1::TListStreamConsumersSettings().NextToken(nextToken)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
 
-            result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
+            result = testServer.DataStreamsClient->ListStreamConsumers("",
                 NYDS_V1::TListStreamConsumersSettings().NextToken("some_garbage")).ExtractValueSync();
-            result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
+            result = testServer.DataStreamsClient->ListStreamConsumers("",
                 NYDS_V1::TListStreamConsumersSettings().NextToken("some_garbage")).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
@@ -2511,7 +2512,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         }
 
-/*        { //TODO: datastreams api uses only one retention parameter
+        /*
+        { //TODO: datastreams api uses only one retention parameter
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(shardCount)
                                                 .RetentionStorageMegabytes(55_KB).RetentionPeriodHours(8 * 24)).ExtractValueSync();
@@ -2610,6 +2612,20 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(ListStreamsValidation) {
+        TInsecureDatastreamsTestServer testServer;
+
+        {
+            auto result = testServer.DataStreamsClient->ListStreams(
+                NYdb::NDataStreams::V1::TListStreamsSettings().Limit(1000000000).Recurse(false)
+                ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         }
     }
 }

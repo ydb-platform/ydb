@@ -237,14 +237,17 @@ void TAddReadRuleActor::ModifyPersqueueConfig(
         rule.set_version(selfInfo.GetVersion().GetPQVersion());
     }
     auto serviceTypes = GetSupportedClientServiceTypes(ctx);
-    TString error = AddReadRuleToConfig(pqConfig, rule, serviceTypes, ctx);
-    auto status = error.empty() ? CheckConfig(*pqConfig, serviceTypes, error, ctx, Ydb::StatusIds::ALREADY_EXISTS)
+
+    TString error;
+    auto messageAndCode = AddReadRuleToConfig(pqConfig, rule, serviceTypes, ctx);
+    auto status = messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK ?
+                                CheckConfig(*pqConfig, serviceTypes, messageAndCode.Message, ctx, Ydb::StatusIds::ALREADY_EXISTS)
                                 : Ydb::StatusIds::BAD_REQUEST;
     if (status != Ydb::StatusIds::SUCCESS) {
         return ReplyWithError(status,
                               status == Ydb::StatusIds::ALREADY_EXISTS ? Ydb::PersQueue::ErrorCode::OK
                                                                        : Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                              error, ctx);
+                              messageAndCode.Message, ctx);
     }
 }
 
@@ -333,7 +336,6 @@ void TPQCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransacti
 
     {
         TString error;
-
         auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, false, error,
                                              workingDir, proposal.Record.GetDatabaseName(), LocalCluster);
         if (!error.empty()) {
@@ -367,7 +369,7 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
         TString error;
 
         auto status = FillProposeRequestImpl(name, *GetProtoRequest(), modifyScheme, ctx, error,
-                                             workingDir, proposal.Record.GetDatabaseName(), LocalCluster);
+                                             workingDir, proposal.Record.GetDatabaseName(), LocalCluster).YdbCode;
 
         if (!error.empty()) {
             Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));

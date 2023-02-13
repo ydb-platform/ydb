@@ -29,6 +29,7 @@ target_link_libraries(ydb-core-public_http PUBLIC
   core-viewer-json
   yq-libs-result_formatter
   yql-public-issue
+  cpp-client-ydb_types
 )
 target_sources(ydb-core-public_http PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_req.cpp
@@ -57,6 +58,7 @@ target_link_libraries(ydb-core-public_http.global PUBLIC
   core-viewer-json
   yq-libs-result_formatter
   yql-public-issue
+  cpp-client-ydb_types
 )
 target_sources(ydb-core-public_http.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp

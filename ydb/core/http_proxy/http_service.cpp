@@ -100,10 +100,10 @@ namespace NKikimr::NHttpProxy {
         try {
             auto signature = context.GetSignature();
             Processors->Execute(context.MethodName, std::move(context), std::move(signature), ctx);
-        } catch (NKikimr::NSQS::TSQSException& e) {
+        } catch (const NKikimr::NSQS::TSQSException& e) {
             context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
             context.ResponseData.ErrorText = e.what();
-            context.DoReply(ctx);
+            context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::ACCESS_DENIED));
             return;
         }
     }

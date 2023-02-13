@@ -42,6 +42,7 @@ namespace NKikimr::NHttpProxy {
             EvListEndpointsRequest,
             EvListEndpointsResponse,
             EvError,
+            EvErrorWithIssue,
             EvCounter,
             EvHistCounter,
             EvToken,
@@ -136,6 +137,18 @@ namespace NKikimr::NHttpProxy {
 
             TEvError(const NYdb::EStatus status, const TString& response)
             : Status(status)
+            , Response(response)
+            {}
+        };
+
+        struct TEvErrorWithIssue : public TEventLocal<TEvErrorWithIssue, EvErrorWithIssue> {
+            NYdb::EStatus Status;
+            size_t IssueCode;
+            TString Response;
+
+            TEvErrorWithIssue(const NYdb::EStatus status, const TString& response,  size_t issueCode=0)
+            : Status(status)
+            , IssueCode(issueCode)
             , Response(response)
             {}
         };

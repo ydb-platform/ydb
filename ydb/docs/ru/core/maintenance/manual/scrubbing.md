@@ -1,7 +1,5 @@
 # Включение/выключение Scrubbing
 
-{% if  feature_ydb-tool %}
-
 Scrubbing процесс работает на кластере в бэкграунде. Он читает данные, проверяет их на целостность и, если нужно, востанавливает их целостность. Scrubbing работает циклами. У пользователя есть возможность регулировать интервал времени, который проходит от начала предыдущего цикла диска до начала следующего. Например, чтобы задать интервал равный 48 часам, введите команду:
 
 ```
@@ -19,12 +17,3 @@ ydb-dstool.py -e ydb.endpoint cluster set --scrub-periodicity disable
 ```
 ydb-dstool.py -e ydb.endpoint cluster set --max-scrubbed-disks-at-once
 ```
-
-{% else %}
-
-Настройки Scrub позволяют регулировать интервал времени, который проходит от начала предыдущего цикла скраббинга диска до начала следующего, а также максимальное число дисков, которые могут скрабиться одновременно. Значение по умолчанию — 1 месяц.
-`$ kikimr admin bs config invoke --proto 'Command { UpdateSettings { ScrubPeriodicitySeconds: 86400 MaxScrubbedDisksAtOnce: 1 } }'`
-
-В случае, если ScrubPeriodicitySeconds равен 0, то Scrubbing выключен.
-
-{% endif %}

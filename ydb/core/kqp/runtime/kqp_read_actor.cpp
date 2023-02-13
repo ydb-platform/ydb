@@ -94,6 +94,8 @@ public:
         TMaybe<ui32> ReadId;
         ui64 TabletId;
 
+        TVector<Ydb::Issue::IssueMessage> Issues;
+
         size_t ResolveAttempt = 0;
         size_t RetryAttempt = 0;
 
@@ -485,7 +487,11 @@ public:
 
         if (keyDesc->GetPartitions().size() == 1 && !state->NeedResolve) {
             // we re-resolved the same shard
-            RuntimeError(TStringBuilder() << "too many retries for shard " << state->TabletId, NDqProto::StatusIds::StatusIds::INTERNAL_ERROR);
+            NYql::TIssues issues;
+            for (auto& issue : state->Issues) {
+                issues.AddIssue(issue.message());
+            }
+            RuntimeError(TStringBuilder() << "Too many retries for shard " << state->TabletId, NDqProto::StatusIds::StatusIds::INTERNAL_ERROR, issues);
             PendingShards.PushBack(state.Release());
             return;
         }
@@ -691,6 +697,7 @@ public:
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             for (auto& issue : record.GetStatus().GetIssues()) {
                 CA_LOG_D("read id #" << id << " got issue " << issue.Getmessage());
+                Reads[id].Shard->Issues.push_back(issue);
             }
             return RetryRead(id);
         }

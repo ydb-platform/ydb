@@ -12,46 +12,6 @@ using namespace NSchemeShard;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDeleteParts: public TSubOperationState {
-private:
-    const TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropFileStore::TDeleteParts"
-            << ", operationId: " << OperationId;
-    }
-
-public:
-    TDeleteParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {});
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " ProgressState"
-            << ", at schemeshard: " << ssId);
-
-        auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxDropFileStore);
-
-        // Initiate asynchronous deletion of all shards
-        for (const auto& shard: txState->Shards) {
-            context.OnComplete.DeleteShard(shard.Idx);
-        }
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        return true;
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;

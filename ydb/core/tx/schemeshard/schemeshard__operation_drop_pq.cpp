@@ -118,43 +118,15 @@ public:
     }
 };
 
-class TDeleteParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropPQ TProposedDeletePart"
-                << ", operationId: " << OperationId;
-    }
-
+class TDeleteParts: public ::NKikimr::NSchemeShard::TDeleteParts {
 public:
-    TDeleteParts(TOperationId id)
-        : OperationId(id)
+    explicit TDeleteParts(const TOperationId& id)
+        : ::NKikimr::NSchemeShard::TDeleteParts(id)
     {
-        IgnoreMessages(DebugHint(), {TEvPersQueue::TEvDropTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {
+            TEvPersQueue::TEvDropTabletReply::EventType,
+        });
     }
-
-    bool ProgressState(TOperationContext& context) override {
-        auto ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-
-        // Initiate asynchronous deletion of all shards
-        for (auto shard : txState->Shards) {
-            context.OnComplete.DeleteShard(shard.Idx);
-        }
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        context.OnComplete.ActivateTx(OperationId);
-        return true;
-    }
-
 };
 
 class TPropose: public TSubOperationState {

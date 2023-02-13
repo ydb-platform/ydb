@@ -132,17 +132,15 @@ public:
 } // namespace NTableState
 
 class TCreateParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
+    const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateParts"
-                << " operationId: " << OperationId;
+        return TStringBuilder() << "TCreateParts"
+            << " opId# " << OperationId;
     }
 
 public:
-    TCreateParts(TOperationId id)
+    explicit TCreateParts(const TOperationId& id)
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {});
@@ -416,39 +414,91 @@ public:
     }
 };
 
-class TDone: public TSubOperationState {
+class TDeleteParts: public TSubOperationState {
 protected:
-    TOperationId OperationId;
+    const TOperationId OperationId;
+    const TTxState::ETxState NextState;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDone operationId#" << OperationId;
+        return TStringBuilder() << "TDeleteParts"
+            << " opId# " << OperationId << " ";
+    }
+
+    void DeleteShards(TOperationContext& context) {
+        const auto* txState = context.SS->FindTx(OperationId);
+
+        // Initiate asynchronous deletion of all shards
+        for (const auto& shard : txState->Shards) {
+            context.OnComplete.DeleteShard(shard.Idx);
+        }
     }
 
 public:
-    TDone(TOperationId id)
+    explicit TDeleteParts(const TOperationId& id, TTxState::ETxState nextState = TTxState::Propose)
+        : OperationId(id)
+        , NextState(nextState)
+    {
+        IgnoreMessages(DebugHint(), {});
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+        DeleteShards(context);
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->ChangeTxState(db, OperationId, NextState);
+        return true;
+    }
+};
+
+class TDeletePartsAndDone: public TDeleteParts {
+public:
+    explicit TDeletePartsAndDone(const TOperationId& id)
+        : TDeleteParts(id)
+    {
+        Y_UNUSED(NextState);
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+        DeleteShards(context);
+
+        context.OnComplete.DoneOperation(OperationId);
+        return true;
+    }
+};
+
+class TDone: public TSubOperationState {
+protected:
+    const TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder() << "TDone"
+            << " opId# " << OperationId;
+    }
+
+public:
+    explicit TDone(const TOperationId& id)
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), AllIncomingEvents());
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard" << ssId);
+            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
 
-        TTxState* txState = context.SS->FindTx(OperationId);
+        const auto* txState = context.SS->FindTx(OperationId);
 
-        TPathId pathId = txState->TargetPathId;
+        const auto& pathId = txState->TargetPathId;
         Y_VERIFY(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        Y_VERIFY_S(path->PathState != TPathElement::EPathState::EPathStateNoChanges,
-                   "with context"
-                       << ", PathState: " << NKikimrSchemeOp::EPathState_Name(path->PathState)
-                       << ", PathId: " << path->PathId
-                       << ", PathName: " << path->Name);
+        Y_VERIFY_S(path->PathState != TPathElement::EPathState::EPathStateNoChanges, "with context"
+            << ", PathState: " << NKikimrSchemeOp::EPathState_Name(path->PathState)
+            << ", PathId: " << path->PathId
+            << ", PathName: " << path->Name);
 
         if (path->IsPQGroup() && txState->IsCreate()) {
             TPathElement::TPtr parentDir = context.SS->PathsById.at(path->ParentPathId);

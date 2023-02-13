@@ -105,44 +105,16 @@ private:
 
 }; // TDropParts
 
-class TDeleteParts: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropReplication TDeleteParts"
-            << " opId# " << OperationId << " ";
-    }
-
+class TDeleteParts: public ::NKikimr::NSchemeShard::TDeleteParts {
 public:
-    explicit TDeleteParts(TOperationId id)
-        : OperationId(id)
+    explicit TDeleteParts(const TOperationId& id)
+        : ::NKikimr::NSchemeShard::TDeleteParts(id)
     {
         IgnoreMessages(DebugHint(), {
             NReplication::TEvController::TEvDropReplicationResult::EventType,
         });
     }
-
-    bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropReplication);
-
-        for (const auto& shard : txState->Shards) {
-            context.OnComplete.DeleteShard(shard.Idx);
-        }
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        context.OnComplete.ActivateTx(OperationId);
-
-        return true;
-    }
-
-private:
-    const TOperationId OperationId;
-
-}; // TDeleteParts
+};
 
 class TPropose: public TSubOperationState {
     TString DebugHint() const override {

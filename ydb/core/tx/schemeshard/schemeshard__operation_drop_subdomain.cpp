@@ -9,39 +9,14 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TDeleteParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropSubdomain TDeleteParts"
-                << " operationId#" << OperationId;
-    }
-
+class TDeleteParts: public TDeletePartsAndDone {
 public:
-    TDeleteParts(TOperationId id)
-        : OperationId(id)
+    explicit TDeleteParts(const TOperationId& id)
+        : TDeletePartsAndDone(id)
     {
-        IgnoreMessages(DebugHint(), {TEvPrivate::TEvOperationPlan::EventType});
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-
-        // Initiate asynchronous deletion of all shards
-        for (auto shard : txState->Shards) {
-            context.OnComplete.DeleteShard(shard.Idx);
-        }
-
-        context.OnComplete.DoneOperation(OperationId);
-        return true;
+        IgnoreMessages(DebugHint(), {
+            TEvPrivate::TEvOperationPlan::EventType,
+        });
     }
 };
 

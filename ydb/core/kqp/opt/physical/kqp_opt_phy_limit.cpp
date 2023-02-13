@@ -8,8 +8,30 @@ namespace NKikimr::NKqp::NOpt {
 using namespace NYql;
 using namespace NYql::NNodes;
 
+THashSet<const TExprNode*> CollectConnections(TDqStage stage, TExprBase node) {
+    THashSet<const TExprNode*> args;
+    for (auto&& arg : stage.Program().Args()) {
+        args.insert(arg.Raw());
+    }
+
+    THashSet<const TExprNode*> result;
+    TNodeOnNodeOwnedMap replaceMap;
+    VisitExpr(node.Ptr(), 
+        [&](const TExprNode::TPtr& exprPtr) -> bool {
+            TExprBase expr(exprPtr);
+            if (expr.Maybe<TDqConnection>()) {
+                return false;
+            }
+            if (args.contains(exprPtr.Get())) {
+                result.insert(exprPtr.Get());
+            }
+            return true;
+        });
+    return result;
+}
+
 //FIXME: simplify KIKIMR-16987
-TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
     auto stage = node.Cast<TDqStage>();
     TMaybe<size_t> tableSourceIndex;
     for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
@@ -25,14 +47,6 @@ TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, cons
     auto source = stage.Inputs().Item(*tableSourceIndex).Cast<TDqSource>();
     auto readRangesSource = source.Settings().Cast<TKqpReadRangesSourceSettings>();
     auto settings = TKqpReadTableSettings::Parse(readRangesSource.Settings());
-
-    if (kqpCtx.IsScanQuery()) {
-        auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readRangesSource.Table().Path());
-
-        if (tableDesc.Metadata->Kind != EKikimrTableKind::Olap) {
-            return node;
-        }
-    }
 
     if (settings.ItemsLimit) {
         return node; // already set?
@@ -100,6 +114,41 @@ TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, cons
     if (limitValue.Maybe<TCoUint64>()) {
         settings.SetItemsLimit(limitValue.Cast().Ptr());
     } else {
+        if (auto args = CollectConnections(stage, limitValue.Cast())) {
+            TVector<TCoArgument> stageArgs;
+            TVector<TExprBase> inputs;
+            TNodeOnNodeOwnedMap replaces;
+
+            size_t index = 0;
+            for (auto&& arg : stage.Program().Args()) {
+                if (args.contains(arg.Raw())) {
+                    TCoArgument replace{ctx.NewArgument(node.Pos(), TStringBuilder() << "_kqp_pc_arg_" << index)};
+                    inputs.push_back(stage.Inputs().Item(index));
+                    stageArgs.push_back(replace);
+                    replaces[arg.Raw()] = replace.Ptr();
+                }
+                index += 1;
+            }
+
+            limitValue = Build<TDqCnValue>(ctx, node.Pos())
+                    .Output()
+                        .Stage<TDqStage>()
+                            .Settings().Build()
+                            .Inputs().Add(inputs).Build()
+                            .Program<TCoLambda>()
+                                .Args(stageArgs)
+                                .Body<TCoToStream>()
+                                    .Input<TCoJust>()
+                                        .Input(ctx.ReplaceNodes(limitValue.Cast().Ptr(), replaces))
+                                        .Build()
+                                    .Build()
+                                .Build()
+                            .Build()
+                        .Index().Build("0")
+                        .Build()
+                    .Done();
+        }
+
         settings.SetItemsLimit(Build<TDqPrecompute>(ctx, node.Pos())
             .Input(limitValue.Cast())
             .Done().Ptr());

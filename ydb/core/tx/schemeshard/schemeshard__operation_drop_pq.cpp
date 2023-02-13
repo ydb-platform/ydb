@@ -85,7 +85,7 @@ public:
         TString topicName = context.SS->PathsById.at(txState->TargetPathId)->Name;
         Y_VERIFY_S(topicName.size(), "topicName is empty. PathId: " << txState->TargetPathId);
 
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(txState->TargetPathId);
+        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(txState->TargetPathId);
         Y_VERIFY_S(pqGroup, "pqGroup is null. PathId: " << txState->TargetPathId);
 
         bool haveWork = false;
@@ -167,7 +167,7 @@ public:
         Y_VERIFY(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(pathId);
+        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(pathId);
         Y_VERIFY(pqGroup);
 
         // KIKIMR-13173
@@ -274,7 +274,7 @@ class TDropPQ: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    void SetPQBalancer(TPersQueueGroupInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
+    void SetPQBalancer(TTopicInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
         auto shardId = pqGroup->BalancerShardIdx;
         auto tabletId = pqGroup->BalancerTabletID;
 
@@ -290,11 +290,11 @@ public:
         }
     }
 
-    void SetPQShards(TPersQueueGroupInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
+    void SetPQShards(TTopicInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
         ui32 drops = 0;
         for (auto shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
-            TPQShardInfo::TPtr info = shard.second;
+            TTopicTabletInfo::TPtr info = shard.second;
 
             auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
 
@@ -399,7 +399,7 @@ public:
             return result;
         }
 
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(path.Base()->PathId);
+        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(path.Base()->PathId);
         Y_VERIFY(pqGroup);
 
         if (pqGroup->AlterData) {

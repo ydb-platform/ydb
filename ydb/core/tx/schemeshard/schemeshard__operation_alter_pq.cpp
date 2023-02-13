@@ -49,13 +49,13 @@ class TAlterPQ: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    TPersQueueGroupInfo::TPtr ParseParams(
+    TTopicInfo::TPtr ParseParams(
             TOperationContext& context,
             NKikimrPQ::TPQTabletConfig* tabletConfig,
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        TPersQueueGroupInfo::TPtr params = new TPersQueueGroupInfo();
+        TTopicInfo::TPtr params = new TTopicInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
 
         if (alter.HasTotalGroupCount()) {
@@ -182,7 +182,7 @@ public:
     TTxState& PrepareChanges(
             TOperationId operationId,
             const TPath& path,
-            TPersQueueGroupInfo::TPtr pqGroup,
+            TTopicInfo::TPtr pqGroup,
             ui64 shardsToCreate,
             const TChannelsBindings& rbChannelsBinding,
             const TChannelsBindings& pqChannelsBinding,
@@ -204,7 +204,7 @@ public:
 
         for (auto& shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
-            for (const auto& pqInfo : shard.second->PQInfos) {
+            for (const auto& pqInfo : shard.second->Partitions) {
                 context.SS->PersistPersQueue(db, item->PathId, shardIdx, pqInfo);
             }
         }
@@ -262,7 +262,7 @@ public:
     bool ApplySharding(
             TTxId txId,
             const TPathId& pathId,
-            TPersQueueGroupInfo::TPtr pqGroup,
+            TTopicInfo::TPtr pqGroup,
             TTxState& txState,
             const TChannelsBindings& rbBindedChannels,
             const TChannelsBindings& pqBindedChannels,
@@ -318,7 +318,7 @@ public:
             txState.Shards.emplace_back(idx, ETabletType::PersQueue, TTxState::CreateParts);
 
             context.SS->RegisterShardInfo(idx, defaultShardInfo);
-            pqGroup->Shards[idx] = new TPQShardInfo();
+            pqGroup->Shards[idx] = new TTopicTabletInfo();
         }
 
         if (!hasBalancer) {
@@ -344,7 +344,7 @@ public:
         return shardsToCreate > 0;
     }
 
-    void ReassignIds(TPersQueueGroupInfo::TPtr pqGroup) {
+    void ReassignIds(TTopicInfo::TPtr pqGroup) {
         Y_VERIFY(pqGroup->TotalPartitionCount >= pqGroup->TotalGroupCount);
         ui32 numOld = pqGroup->TotalPartitionCount;
         ui32 numNew = pqGroup->AlterData->PartitionsToAdd.size() + numOld;
@@ -357,15 +357,15 @@ public:
         auto it = pqGroup->Shards.begin();
 
         for (const auto& p : pqGroup->AlterData->PartitionsToAdd) {
-            TPQShardInfo::TPersQueueInfo pqInfo;
+            TTopicTabletInfo::TTopicPartitionInfo pqInfo;
             pqInfo.PqId = p.PartitionId;
             pqInfo.GroupId = p.GroupId;
             pqInfo.KeyRange = p.KeyRange;
             pqInfo.AlterVersion = alterVersion;
-            while (it->second->PQInfos.size() >= average) {
+            while (it->second->Partitions.size() >= average) {
                 ++it;
             }
-            it->second->PQInfos.push_back(pqInfo);
+            it->second->Partitions.push_back(pqInfo);
         }
     }
 
@@ -421,7 +421,7 @@ public:
             }
         }
 
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(path.Base()->PathId);
+        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(path.Base()->PathId);
         Y_VERIFY(pqGroup);
 
         if (pqGroup->AlterVersion == 0) {
@@ -440,7 +440,7 @@ public:
         }
         newTabletConfig = tabletConfig;
 
-        TPersQueueGroupInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
+        TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
 
         if (!alterData) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);

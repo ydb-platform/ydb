@@ -985,8 +985,8 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
     }
 };
 
-struct TPQShardInfo : TSimpleRefCount<TPQShardInfo> {
-    using TPtr = TIntrusivePtr<TPQShardInfo>;
+struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
+    using TPtr = TIntrusivePtr<TTopicTabletInfo>;
     using TKeySchema = TVector<NScheme::TTypeInfo>;
 
     struct TKeyRange {
@@ -996,17 +996,17 @@ struct TPQShardInfo : TSimpleRefCount<TPQShardInfo> {
         void SerializeToProto(NKikimrPQ::TPartitionKeyRange& proto) const;
     };
 
-    struct TPersQueueInfo {
+    struct TTopicPartitionInfo {
         ui32 PqId = 0;
         ui32 GroupId = 0;
         ui64 AlterVersion = 0;
         TMaybe<TKeyRange> KeyRange;
     };
 
-    TVector<TPersQueueInfo> PQInfos;
+    TVector<TTopicPartitionInfo> Partitions;
 
     size_t PartsCount() const {
-        return PQInfos.size();
+        return Partitions.size();
     }
 };
 
@@ -1122,12 +1122,18 @@ struct TShardInfo {
     }
 };
 
-struct TPersQueueGroupInfo : TSimpleRefCount<TPersQueueGroupInfo> {
-    using TPtr = TIntrusivePtr<TPersQueueGroupInfo>;
-    using TKeySchema = TPQShardInfo::TKeySchema;
+/**
+ * TTopicInfo -> TTopicTabletInfo -> TTopicPartitionInfo
+ *
+ * Each topic may contains many tablets.
+ * Each tablet may serve many partitions.
+ */
+struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
+    using TPtr = TIntrusivePtr<TTopicInfo>;
+    using TKeySchema = TTopicTabletInfo::TKeySchema;
 
     struct TPartitionToAdd {
-        using TKeyRange = TPQShardInfo::TKeyRange;
+        using TKeyRange = TTopicTabletInfo::TKeyRange;
 
         ui32 PartitionId;
         ui32 GroupId;
@@ -1162,9 +1168,9 @@ struct TPersQueueGroupInfo : TSimpleRefCount<TPersQueueGroupInfo> {
     ui64 AlterVersion = 0;
     TString TabletConfig;
     TString BootstrapConfig;
-    THashMap<TShardIdx, TPQShardInfo::TPtr> Shards; // key - shardIdx
+    THashMap<TShardIdx, TTopicTabletInfo::TPtr> Shards; // key - shardIdx
     TKeySchema KeySchema;
-    TPersQueueGroupInfo::TPtr AlterData; // changes to be applied
+    TTopicInfo::TPtr AlterData; // changes to be applied
     TTabletId BalancerTabletID = InvalidTabletId;
     TShardIdx BalancerShardIdx = InvalidShardIdx;
 
@@ -1201,7 +1207,7 @@ struct TPersQueueGroupInfo : TSimpleRefCount<TPersQueueGroupInfo> {
         return Shards.size();
     }
 
-    void PrepareAlter(TPersQueueGroupInfo::TPtr alterData) {
+    void PrepareAlter(TTopicInfo::TPtr alterData) {
         Y_VERIFY(alterData, "No alter data at Alter prepare");
         alterData->AlterVersion = AlterVersion + 1;
         Y_VERIFY(alterData->TotalGroupCount);

@@ -1862,7 +1862,7 @@ const TString &TColumnFamiliesMerger::CanonizeName(const TString &familyName) {
     return familyName;
 }
 
-void TPQShardInfo::TKeyRange::SerializeToProto(NKikimrPQ::TPartitionKeyRange& proto) const {
+void TTopicTabletInfo::TKeyRange::SerializeToProto(NKikimrPQ::TPartitionKeyRange& proto) const {
     if (FromBound) {
         proto.SetFromBound(*FromBound);
     }
@@ -1872,7 +1872,7 @@ void TPQShardInfo::TKeyRange::SerializeToProto(NKikimrPQ::TPartitionKeyRange& pr
     }
 }
 
-bool TPersQueueGroupInfo::FillKeySchema(const NKikimrPQ::TPQTabletConfig& tabletConfig, TString& error) {
+bool TTopicInfo::FillKeySchema(const NKikimrPQ::TPQTabletConfig& tabletConfig, TString& error) {
     KeySchema.clear();
     KeySchema.reserve(tabletConfig.PartitionKeySchemaSize());
 
@@ -1891,7 +1891,7 @@ bool TPersQueueGroupInfo::FillKeySchema(const NKikimrPQ::TPQTabletConfig& tablet
     return true;
 }
 
-bool TPersQueueGroupInfo::FillKeySchema(const TString& tabletConfig) {
+bool TTopicInfo::FillKeySchema(const TString& tabletConfig) {
     NKikimrPQ::TPQTabletConfig proto;
     if (!proto.ParseFromString(tabletConfig)) {
         return false;

@@ -2346,7 +2346,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueueGroups::PathId>();
                 TPathId pathId(selfId, localPathId);
 
-                TPersQueueGroupInfo::TPtr pqGroup = new TPersQueueGroupInfo();
+                TTopicInfo::TPtr pqGroup = new TTopicInfo();
                 pqGroup->TabletConfig = rowset.GetValue<Schema::PersQueueGroups::TabletConfig>();
                 pqGroup->MaxPartsPerTablet = rowset.GetValue<Schema::PersQueueGroups::MaxPQPerShard>();
                 pqGroup->AlterVersion = rowset.GetValue<Schema::PersQueueGroups::AlterVersion>();
@@ -2356,7 +2356,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const bool ok = pqGroup->FillKeySchema(pqGroup->TabletConfig);
                 Y_VERIFY(ok);
 
-                Self->PersQueueGroups[pathId] = pqGroup;
+                Self->Topics[pathId] = pqGroup;
                 Self->IncrementPathDbRefCount(pathId);
 
                 auto it = pqBalancers.find(pathId);
@@ -2379,7 +2379,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!rowset.IsReady())
                 return false;
             while (!rowset.EndOfSet()) {
-                TPQShardInfo::TPersQueueInfo pqInfo;
+                TTopicTabletInfo::TTopicPartitionInfo pqInfo;
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueues::PathId>();
                 TPathId pathId(selfId, localPathId);
                 pqInfo.PqId = rowset.GetValue<Schema::PersQueues::PqId>();
@@ -2404,10 +2404,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     pqInfo.KeyRange->ToBound = rowset.GetValue<Schema::PersQueues::RangeEnd>();
                 }
 
-                auto it = Self->PersQueueGroups.find(pathId);
-                Y_VERIFY(it != Self->PersQueueGroups.end());
+                auto it = Self->Topics.find(pathId);
+                Y_VERIFY(it != Self->Topics.end());
                 Y_VERIFY(it->second);
-                TPersQueueGroupInfo::TPtr pqGroup = it->second;
+                TTopicInfo::TPtr pqGroup = it->second;
                 if (pqInfo.AlterVersion <= pqGroup->AlterVersion)
                     ++pqGroup->TotalPartitionCount;
                 if (pqInfo.PqId >= pqGroup->NextPartitionId) {
@@ -2415,11 +2415,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     pqGroup->TotalGroupCount = pqInfo.PqId + 1;
                 }
 
-                TPQShardInfo::TPtr& pqShard = pqGroup->Shards[shardIdx];
+                TTopicTabletInfo::TPtr& pqShard = pqGroup->Shards[shardIdx];
                 if (!pqShard) {
-                    pqShard.Reset(new TPQShardInfo());
+                    pqShard.Reset(new TTopicTabletInfo());
                 }
-                pqShard->PQInfos.push_back(pqInfo);
+                pqShard->Partitions.push_back(pqInfo);
 
                 if (!rowset.Next())
                     return false;
@@ -2435,7 +2435,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueueGroupAlters::PathId>();
                 TPathId pathId(selfId, localPathId);
 
-                TPersQueueGroupInfo::TPtr alterData = new TPersQueueGroupInfo();
+                TTopicInfo::TPtr alterData = new TTopicInfo();
                 alterData->TabletConfig = rowset.GetValue<Schema::PersQueueGroupAlters::TabletConfig>();
                 alterData->MaxPartsPerTablet = rowset.GetValue<Schema::PersQueueGroupAlters::MaxPQPerShard>();
                 alterData->AlterVersion = rowset.GetValue<Schema::PersQueueGroupAlters::AlterVersion>();
@@ -2446,8 +2446,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const bool ok = alterData->FillKeySchema(alterData->TabletConfig);
                 Y_VERIFY(ok);
 
-                auto it = Self->PersQueueGroups.find(pathId);
-                Y_VERIFY(it != Self->PersQueueGroups.end());
+                auto it = Self->Topics.find(pathId);
+                Y_VERIFY(it != Self->Topics.end());
 
                 alterData->TotalPartitionCount = it->second->GetTotalPartitionCountWithAlter();
                 alterData->BalancerTabletID = it->second->BalancerTabletID;
@@ -3936,7 +3936,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Self->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Add(path->UserAttrs->Size());
 
             if (path->IsPQGroup()) {
-                auto pqGroup = Self->PersQueueGroups.at(path->PathId);
+                auto pqGroup = Self->Topics.at(path->PathId);
                 auto delta = pqGroup->AlterData ? pqGroup->AlterData->TotalPartitionCount : pqGroup->TotalPartitionCount;
                 auto tabletConfig = pqGroup->AlterData ? (pqGroup->AlterData->TabletConfig.empty() ? pqGroup->TabletConfig : pqGroup->AlterData->TabletConfig)
                                                        : pqGroup->TabletConfig;

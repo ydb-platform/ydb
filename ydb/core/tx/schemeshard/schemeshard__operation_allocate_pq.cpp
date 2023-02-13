@@ -135,7 +135,7 @@ public:
             return result;
         }
 
-        TPersQueueGroupInfo::TPtr pqGroupInfo = new TPersQueueGroupInfo;
+        TTopicInfo::TPtr pqGroupInfo = new TTopicInfo;
 
         pqGroupInfo->TotalGroupCount = allocateDesc.GetTotalGroupCount();
         if (pqGroupInfo->TotalGroupCount == 0 || pqGroupInfo->TotalGroupCount > TSchemeShard::MaxPQGroupPartitionsCount) {
@@ -355,8 +355,8 @@ public:
             context.SS->TabletIdToShardIdx[tabletId] = idx;
 
 
-            TPQShardInfo::TPtr pqShard = new TPQShardInfo();
-            pqShard->PQInfos.reserve(pqGroupInfo->MaxPartsPerTablet);
+            TTopicTabletInfo::TPtr pqShard = new TTopicTabletInfo();
+            pqShard->Partitions.reserve(pqGroupInfo->MaxPartsPerTablet);
             pqGroupInfo->Shards[idx] = pqShard;
         }
 
@@ -366,13 +366,13 @@ public:
             auto tabletId = item.second.second;
 
             auto idx = context.SS->TabletIdToShardIdx.at(tabletId);
-            TPQShardInfo::TPtr pqShard = pqGroupInfo->Shards.at(idx);
+            TTopicTabletInfo::TPtr pqShard = pqGroupInfo->Shards.at(idx);
 
-            TPQShardInfo::TPersQueueInfo pqInfo;
+            TTopicTabletInfo::TTopicPartitionInfo pqInfo;
             pqInfo.PqId = partId;
             pqInfo.GroupId = groupId;
             pqInfo.AlterVersion = pqGroupInfo->AlterVersion;
-            pqShard->PQInfos.push_back(pqInfo);
+            pqShard->Partitions.push_back(pqInfo);
         }
 
         {
@@ -393,17 +393,17 @@ public:
 
         for (auto& shard : pqGroupInfo->Shards) {
             auto shardIdx = shard.first;
-            for (const auto& pqInfo : shard.second->PQInfos) {
+            for (const auto& pqInfo : shard.second->Partitions) {
                 context.SS->PersistPersQueue(db, pathId, shardIdx, pqInfo);
             }
         }
 
-        TPersQueueGroupInfo::TPtr emptyGroup = new TPersQueueGroupInfo;
+        TTopicInfo::TPtr emptyGroup = new TTopicInfo;
         emptyGroup->Shards.swap(pqGroupInfo->Shards);
 
-        context.SS->PersQueueGroups[pathId] = emptyGroup;
-        context.SS->PersQueueGroups[pathId]->AlterData = pqGroupInfo;
-        context.SS->PersQueueGroups[pathId]->AlterVersion = pqGroupInfo->AlterVersion;
+        context.SS->Topics[pathId] = emptyGroup;
+        context.SS->Topics[pathId]->AlterData = pqGroupInfo;
+        context.SS->Topics[pathId]->AlterVersion = pqGroupInfo->AlterVersion;
 
         context.SS->IncrementPathDbRefCount(pathId);
 

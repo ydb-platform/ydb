@@ -339,7 +339,7 @@ void TSchemeShard::Clear() {
 
     ShardsWithBorrowed.clear();
     ShardsWithLoaned.clear();
-    PersQueueGroups.clear();
+    Topics.clear();
     RtmrVolumes.clear();
     SubDomains.clear();
     BlockStoreVolumes.clear();
@@ -505,8 +505,8 @@ void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool f
     node->PreSerializedChildrenListing.clear();
 
     if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup) {
-        Y_VERIFY(PersQueueGroups.contains(node->PathId));
-        TPersQueueGroupInfo::TPtr pqGroup = PersQueueGroups.at(node->PathId);
+        Y_VERIFY(Topics.contains(node->PathId));
+        TTopicInfo::TPtr pqGroup = Topics.at(node->PathId);
         pqGroup->PreSerializedPathDescription.clear();
         pqGroup->PreSerializedPartitionsDescription.clear();
     } else if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypeTable) {
@@ -2466,7 +2466,7 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
     }
 }
 
-void TSchemeShard::PersistPersQueueGroup(NIceDb::TNiceDb& db, TPathId pathId, const TPersQueueGroupInfo::TPtr pqGroup) {
+void TSchemeShard::PersistPersQueueGroup(NIceDb::TNiceDb& db, TPathId pathId, const TTopicInfo::TPtr pqGroup) {
     Y_VERIFY(IsLocalId(pathId));
 
     db.Table<Schema::PersQueueGroups>().Key(pathId.LocalPathId).Update(
@@ -2480,28 +2480,28 @@ void TSchemeShard::PersistPersQueueGroup(NIceDb::TNiceDb& db, TPathId pathId, co
 void TSchemeShard::PersistRemovePersQueueGroup(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_VERIFY(IsLocalId(pathId));
 
-    auto it = PersQueueGroups.find(pathId);
-    if (it != PersQueueGroups.end()) {
-        TPersQueueGroupInfo::TPtr pqGroup = it->second;
+    auto it = Topics.find(pathId);
+    if (it != Topics.end()) {
+        TTopicInfo::TPtr pqGroup = it->second;
 
         if (pqGroup->AlterData) {
             PersistRemovePersQueueGroupAlter(db, pathId);
         }
 
         for (const auto& shard : pqGroup->Shards) {
-            for (const auto& pqInfo : shard.second->PQInfos) {
+            for (const auto& pqInfo : shard.second->Partitions) {
                 PersistRemovePersQueue(db, pathId, pqInfo.PqId);
             }
         }
 
-        PersQueueGroups.erase(it);
+        Topics.erase(it);
         DecrementPathDbRefCount(pathId);
     }
 
     db.Table<Schema::PersQueueGroups>().Key(pathId.LocalPathId).Delete();
 }
 
-void TSchemeShard::PersistAddPersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId pathId, const TPersQueueGroupInfo::TPtr alterData) {
+void TSchemeShard::PersistAddPersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId pathId, const TTopicInfo::TPtr alterData) {
     Y_VERIFY(IsLocalId(pathId));
 
     db.Table<Schema::PersQueueGroupAlters>().Key(pathId.LocalPathId).Update(
@@ -2519,7 +2519,7 @@ void TSchemeShard::PersistRemovePersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId
     db.Table<Schema::PersQueueGroupAlters>().Key(pathId.LocalPathId).Delete();
 }
 
-void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardIdx shardIdx, const TPQShardInfo::TPersQueueInfo& pqInfo) {
+void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardIdx shardIdx, const TTopicTabletInfo::TTopicPartitionInfo& pqInfo) {
     Y_VERIFY(IsLocalId(pathId));
 
     db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, pqInfo.PqId).Update(
@@ -3744,8 +3744,8 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetTablePartitionVersion();
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup:
-                Y_VERIFY(PersQueueGroups.contains(pathId));
-                result.SetPQVersion(PersQueueGroups.at(pathId)->AlterVersion);
+                Y_VERIFY(Topics.contains(pathId));
+                result.SetPQVersion(Topics.at(pathId)->AlterVersion);
                 generalVersion += result.GetPQVersion();
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:

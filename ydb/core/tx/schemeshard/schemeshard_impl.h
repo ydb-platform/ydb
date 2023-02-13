@@ -201,7 +201,7 @@ public:
 
     THashMap<TPathId, TTxId> LockedPaths;
 
-    THashMap<TPathId, TPersQueueGroupInfo::TPtr> PersQueueGroups;
+    THashMap<TPathId, TTopicInfo::TPtr> Topics;
     THashMap<TPathId, TRtmrVolumeInfo::TPtr> RtmrVolumes;
     THashMap<TPathId, TSolomonVolumeInfo::TPtr> SolomonVolumes;
     THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
@@ -621,11 +621,11 @@ public:
     void PersistTableAlterVersion(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
     void PersistTableAltered(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
     void PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, const TTableInfo::TAlterDataPtr alter);
-    void PersistPersQueueGroup(NIceDb::TNiceDb &db, TPathId pathId, const TPersQueueGroupInfo::TPtr);
+    void PersistPersQueueGroup(NIceDb::TNiceDb &db, TPathId pathId, const TTopicInfo::TPtr);
     void PersistRemovePersQueueGroup(NIceDb::TNiceDb &db, TPathId pathId);
-    void PersistAddPersQueueGroupAlter(NIceDb::TNiceDb &db, TPathId pathId, const TPersQueueGroupInfo::TPtr);
+    void PersistAddPersQueueGroupAlter(NIceDb::TNiceDb &db, TPathId pathId, const TTopicInfo::TPtr);
     void PersistRemovePersQueueGroupAlter(NIceDb::TNiceDb &db, TPathId pathId);
-    void PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardIdx shardIdx, const TPQShardInfo::TPersQueueInfo& pqInfo);
+    void PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardIdx shardIdx, const TTopicTabletInfo::TTopicPartitionInfo& pqInfo);
     void PersistRemovePersQueue(NIceDb::TNiceDb &db, TPathId pathId, ui32 pqId);
     void PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const TRtmrVolumeInfo::TPtr rtmrVol);
     void PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId);

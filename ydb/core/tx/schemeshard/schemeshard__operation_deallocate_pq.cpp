@@ -88,7 +88,7 @@ public:
         }
 
         auto pathId = path.Base()->PathId;
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(pathId);
+        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(pathId);
         Y_VERIFY(pqGroup);
 
         if (pqGroup->AlterData) {

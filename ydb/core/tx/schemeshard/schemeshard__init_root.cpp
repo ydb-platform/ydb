@@ -734,7 +734,7 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                 NIceDb::TUpdate<Schema::MigratedKesusInfos::Version>(kesusDescr.GetVersion()));
         }
 
-//            PersQueueGroups,
+//            Topics,
 //            PersQueues,
 //            RtmrVolumes,
 //            RTMRPartitions,

@@ -149,6 +149,29 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5);
     }
 
+    Y_UNIT_TEST(LimitOnShard) {
+        TKikimrRunner kikimr;
+        TScriptingClient client(kikimr.GetDriver());
+
+        NYdb::NScripting::TExecuteYqlRequestSettings execSettings;
+        execSettings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Basic);
+
+        auto result = client.ExecuteYqlScript(R"(
+            SELECT * FROM `/Root/KeyValue`  WHERE Key > 0 ORDER BY Key LIMIT 1;
+        )", execSettings).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/KeyValue");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+    }
+
     Y_UNIT_TEST(QueryStats) {
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());
@@ -514,6 +537,37 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         )").GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(R"([[[[1]];[[3]]]])", StreamResultToYson(it));
+    }
+
+    Y_UNIT_TEST(ExecuteYqlScriptScanScalar) {
+        TKikimrRunner kikimr;
+        TScriptingClient client(kikimr.GetDriver());
+
+        NYdb::NScripting::TExecuteYqlRequestSettings execSettings;
+        execSettings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Basic);
+
+        auto result = client.ExecuteYqlScript(R"(
+            PRAGMA kikimr.ScanQuery = "true";
+            $key1 = (SELECT Fk21 FROM `/Root/Join1` WHERE Key = 1);
+            $key2 = (SELECT Fk21 FROM `/Root/Join1` WHERE Key = 2);
+            $limit = (SELECT Key FROM `/Root/Join1` WHERE Fk21 = 105);
+
+            SELECT Data FROM `/Root/EightShard` WHERE Key = $key1 OR Key = $key2 LIMIT COALESCE($limit, 1u);
+        )", execSettings).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[[1]];[[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+        for (const auto& phase : stats.query_phases()) {
+            if (phase.table_access().size()) {
+                if (phase.table_access(0).name() == "/Root/EightShard") {
+                    UNIT_ASSERT_VALUES_EQUAL(phase.table_access(0).reads().rows(), 2);
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptData) {

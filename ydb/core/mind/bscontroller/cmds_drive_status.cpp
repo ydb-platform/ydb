@@ -183,6 +183,8 @@ namespace NKikimr::NBsController {
         driveInfoMutable->PDiskId.Clear();
         driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED_FROM_BSC;
         driveInfoMutable->Path.Clear();
+        driveInfoMutable->PDiskType = NKikimrBlobStorage::UNKNOWN_TYPE;
+        driveInfoMutable->BoxId = 0;
 
         Fit.Boxes.insert(driveInfo->BoxId);
 

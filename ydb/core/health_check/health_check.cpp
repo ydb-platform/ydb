@@ -202,7 +202,7 @@ public:
         TVector<TString> StoragePoolNames;
         THashMap<std::pair<TTabletId, NNodeWhiteboard::TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
         THashMap<TNodeId, TNodeTabletState> MergedNodeTabletState;
-        ui64 StorageLimit;
+        ui64 StorageQuota;
         ui64 StorageUsage;
     };
 
@@ -900,10 +900,10 @@ public:
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         TabletRequests.CompleteRequest(ev->Cookie);
-        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
-            TString path = ev->Get()->GetRecord().GetPath();
+        if (ev->Get()->GetRecord().status() == NKikimrScheme::StatusSuccess) {
+            TString path = ev->Get()->GetRecord().path();
             TDatabaseState& state(DatabaseState[path]);
-            for (const auto& storagePool : ev->Get()->GetRecord().GetPathDescription().GetDomainDescription().GetStoragePools()) {
+            for (const auto& storagePool : ev->Get()->GetRecord().pathdescription().domaindescription().storagepools()) {
                 TString storagePoolName = storagePool.name();
                 state.StoragePoolNames.emplace_back(storagePoolName);
                 StoragePoolState[storagePoolName].Kind = storagePool.kind();
@@ -912,8 +912,8 @@ public:
             if (path == DomainPath) {
                 state.StoragePoolNames.emplace_back(STATIC_STORAGE_POOL_NAME);
             }
-            state.StorageUsage = ev->Get()->GetRecord().GetPathDescription().GetDomainDescription().GetDiskSpaceUsage().GetTables().GetTotalSize();
-            state.StorageLimit = ev->Get()->GetRecord().GetPathDescription().GetDomainDescription().GetDatabaseQuotas().Getdata_stream_reserved_storage_quota();
+            state.StorageUsage = ev->Get()->GetRecord().pathdescription().domaindescription().diskspaceusage().tables().totalsize();
+            state.StorageQuota = ev->Get()->GetRecord().pathdescription().domaindescription().databasequotas().data_size_hard_quota();
 
             DescribeByPath[path] = ev->Release();
         }
@@ -2172,13 +2172,15 @@ public:
                     break;
             }
         }
-        auto usage = (float)databaseState.StorageUsage / databaseState.StorageLimit;
-        if (usage > 0.9) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Storage usage over 90%", ETags::StorageState);
-        } else if (usage > 0.85) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Storage usage over 85%", ETags::StorageState);
-        } else if (usage > 0.75) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Storage usage over 75%", ETags::StorageState);
+        if (databaseState.StorageQuota > 0) {
+            auto usage = (float)databaseState.StorageUsage / databaseState.StorageQuota;
+            if (usage > 0.9) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Storage usage over 90%", ETags::StorageState);
+            } else if (usage > 0.85) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Storage usage over 85%", ETags::StorageState);
+            } else if (usage > 0.75) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Storage usage over 75%", ETags::StorageState);
+            }
         }
         storageStatus.set_overall(context.GetOverallStatus());
     }

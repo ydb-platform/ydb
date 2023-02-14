@@ -85,19 +85,15 @@ public:
         THolder<TEvInterconnect::TEvNodesInfo> NodesInfoReply;
         THashMap<ui32, TString> HostNames;
         THashMap<TString, ui32> MinNodeIdByHost;
-        THashMap<ui32, ui32> DynToStaticNode;
+        std::shared_ptr<THashMap<ui32, ui32>> DynToStaticNode;
+
         bool Ready = false;
-        void PingReply(TInterconnectProxyTCP::TEvStats::TPtr& ev, const TActorContext& ctx);
-        void PingFailed(const TActorContext& ctx);
+        void ProcessNodesMapping(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev,
+                                 const TActorContext& ctx);
         explicit TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply, const TActorContext& ctx);
     private:
         void FinalizeWhenReady(const TActorContext& ctx);
         void Finalize(const TActorContext& ctx);
-
-        ui64 NodesPingsPending = 0;
-        ui64 MaxStaticNodeId = 0;
-        TVector<ui32> DynNodes;
-        TSet<ui64> StaticNodes;
     };
 
 public:
@@ -107,6 +103,7 @@ public:
     bool NeedChildrenCreation = false;
 
     ui32 ChildrenCreated = 0;
+    bool ChildrenCreationDone = false;
 
     std::deque<THolder<TPerTopicInfo>> ChildrenToCreate;
 
@@ -143,8 +140,7 @@ protected:
     virtual STFUNC(StateFunc);
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx);
-    void Handle(TInterconnectProxyTCP::TEvStats::TPtr& ev, const TActorContext& ctx);
-    void HandleUndelivered(const TActorContext& ctx);
+    void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);

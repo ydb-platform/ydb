@@ -214,10 +214,9 @@ void TPersQueueBaseRequestProcessor::Die(const TActorContext& ctx) {
 STFUNC(TPersQueueBaseRequestProcessor::StateFunc) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvInterconnect::TEvNodesInfo, Handle);
-        HFunc(TInterconnectProxyTCP::TEvStats, Handle)
-        CFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse, Handle);
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse, Handle);
+        HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse, Handle);
         HFunc(TEvPersQueue::TEvResponse, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
@@ -251,17 +250,10 @@ void TPersQueueBaseRequestProcessor::Handle(TEvInterconnect::TEvNodesInfo::TPtr&
     }
 }
 
-void TPersQueueBaseRequestProcessor::Handle(TInterconnectProxyTCP::TEvStats::TPtr& ev, const TActorContext& ctx) {
-    NodesInfo->PingReply(ev, ctx);
-    if (ReadyToCreateChildren()) {
-        if (CreateChildren(ctx)) {
-            return;
-        }
-    }
-}
-
-void TPersQueueBaseRequestProcessor::HandleUndelivered(const TActorContext& ctx) {
-    NodesInfo->PingFailed(ctx);
+void TPersQueueBaseRequestProcessor::Handle(
+        TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev, const TActorContext& ctx
+) {
+    NodesInfo->ProcessNodesMapping(ev, ctx);
     if (ReadyToCreateChildren()) {
         if (CreateChildren(ctx)) {
             return;
@@ -337,10 +329,14 @@ void TPersQueueBaseRequestProcessor::Handle(
 }
 
 bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const {
-    return TopicsDescription && (!ListNodes || (NodesInfo.get() != nullptr && NodesInfo->Ready));
+    return TopicsDescription
+           && (!ListNodes || (NodesInfo.get() != nullptr && NodesInfo->Ready));
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
+    if (ChildrenCreationDone)
+        return false;
+    ChildrenCreationDone = true;
     Y_VERIFY(TopicsDescription->ResultSet.size() == TopicsConverters.size());
     ui32 i = 0;
     for (const auto& entry : TopicsDescription->ResultSet) {
@@ -379,6 +375,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
     NeedChildrenCreation = false;
 
     THashSet<TString> topics;
+
     while (!ChildrenToCreate.empty()) {
         THolder<TPerTopicInfo> perTopicInfo(ChildrenToCreate.front().Release());
         ChildrenToCreate.pop_front();
@@ -402,7 +399,6 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
             Children.emplace(actorId, std::move(perTopicInfo));
         }
     }
-
     Y_VERIFY(topics.size() == Children.size());
 
     if (!TopicsToRequest.empty() && TopicsToRequest.size() != topics.size()) {
@@ -442,22 +438,15 @@ TPersQueueBaseRequestProcessor::TNodesInfo::TNodesInfo(
     : NodesInfoReply(std::move(nodesInfoReply))
 {
     const auto& pqConfig = AppData(ctx)->PQConfig;
-    bool useMapping = pqConfig.GetDynNodePartitionLocationsMapping();
+    bool useMapping = pqConfig.GetPQDiscoveryConfig().GetUseDynNodesMapping();
     HostNames.reserve(NodesInfoReply->Nodes.size());
     for (const NActors::TEvInterconnect::TNodeInfo& info : NodesInfoReply->Nodes) {
         HostNames.emplace(info.NodeId, info.Host);
         if (useMapping) {
-            TActorSystem* const as = ctx.ExecutorThread.ActorSystem;
-             if (info.NodeId > pqConfig.GetMaxStorageNodeId()) {
-                DynNodes.push_back(info.NodeId);
-            } else {
-                ctx.Send(as->InterconnectProxy(info.NodeId), new TInterconnectProxyTCP::TEvQueryStats,
-                         IEventHandle::FlagTrackDelivery);
-                ++NodesPingsPending;
-                if (MaxStaticNodeId < info.NodeId) {
-                    MaxStaticNodeId = info.NodeId;
-                }
-            }
+            ctx.Send(
+                    CreatePersQueueMetaCacheV2Id(),
+                    new TEvPqNewMetaCache::TEvGetNodesMappingRequest()
+            );
         } else {
             Ready = true;
             auto insRes = MinNodeIdByHost.insert(std::make_pair(info.Host, info.NodeId));
@@ -478,34 +467,13 @@ TTopicInfoBasedActor::TTopicInfoBasedActor(const TSchemeEntry& topicEntry, const
 {
 }
 
-void TPersQueueBaseRequestProcessor::TNodesInfo::PingReply(
-        TInterconnectProxyTCP::TEvStats::TPtr& ev, const TActorContext& ctx
+void TPersQueueBaseRequestProcessor::TNodesInfo::ProcessNodesMapping(
+        TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev, const TActorContext&
 ) {
-    --NodesPingsPending;
-    if (ev->Get()->ProxyStats.Connected) {
-        StaticNodes.insert(ev->Get()->PeerNodeId);
-    }
-    FinalizeWhenReady(ctx);
-}
-
-void TPersQueueBaseRequestProcessor::TNodesInfo::PingFailed(const TActorContext& ctx) {
-    --NodesPingsPending;
-    FinalizeWhenReady(ctx);
-}
-
-
-void TPersQueueBaseRequestProcessor::TNodesInfo::FinalizeWhenReady(const TActorContext& ctx) {
-    if (NodesPingsPending)
-        Finalize(ctx);
-}
-
-void TPersQueueBaseRequestProcessor::TNodesInfo::Finalize(const TActorContext&) {
-    for (auto& dynNodeId : DynNodes) {
-        ui32 hash_ = dynNodeId % (MaxStaticNodeId + 1);
-        DynToStaticNode[dynNodeId] = *StaticNodes.lower_bound(hash_);
-    }
+    DynToStaticNode = std::move(ev->Get()->NodesMapping);
     Ready = true;
 }
+
 
 void TTopicInfoBasedActor::Bootstrap(const TActorContext &ctx) {
     Become(&TTopicInfoBasedActor::StateFunc);

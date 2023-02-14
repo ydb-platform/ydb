@@ -173,6 +173,8 @@ message TPQConfig {
         optional bool LBFrontEnabled = 3 [default = true];
         optional bool UseLbAccountAlias = 4 [default = true];
         optional string LbUserDatabaseRoot = 5 [default = ""];
+        optional bool UseDynNodesMapping = 6 [default = false];
+        optional uint64 NodesMappingRescanIntervalMilliSeconds = 7 [default = 10000];
     }
     optional TPQDiscoveryConfig PQDiscoveryConfig = 46;
 
@@ -184,7 +186,6 @@ message TPQConfig {
     }
 
     optional TMoveTopicActorConfig MoveTopicActorConfig = 51;
-    optional bool DynNodePartitionLocationsMapping = 54 [default = false];
 }
 
 message TChannelProfile {

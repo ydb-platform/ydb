@@ -415,21 +415,27 @@ void TPersQueueGetPartitionLocationsTopicWorker::Answer(
             bool statusInitializing = false;
             if (ansIt->second.Get() != nullptr && ansIt->second->Get()->Status == NKikimrProto::OK) {
                 const ui32 nodeId = ansIt->second->Get()->ServerId.NodeId();
-                const auto hostName = NodesInfo->HostNames.find(nodeId);
-                if (hostName != NodesInfo->HostNames.end()) {
-                    location.SetHost(hostName->second);
+                const auto hostNameIter = NodesInfo->HostNames.find(nodeId);
+                if (hostNameIter != NodesInfo->HostNames.end()) {
+                    const auto& hostName = hostNameIter->second;
+                    location.SetHost(hostName);
+                    location.SetHostId(nodeId);
+
                     location.SetErrorCode(NPersQueue::NErrorCode::OK);
-                    if (nodeId < pqConfig.GetMaxStorageNodeId()) {
-                        location.SetHostId(nodeId);
-                    } else if (pqConfig.GetDynNodePartitionLocationsMapping()) {
-                        auto dynNodeIdIter = NodesInfo->DynToStaticNode.find(nodeId);
-                        Y_VERIFY(!dynNodeIdIter.IsEnd());
-                        auto statNodeIdIter = NodesInfo->HostNames.find(dynNodeIdIter->second);
-                        Y_VERIFY(!statNodeIdIter.IsEnd());
-                        location.SetHostId(statNodeIdIter->first);
-                        location.SetHost(statNodeIdIter->second);
-                    } else {
-                        auto minIter = NodesInfo->MinNodeIdByHost.find(hostName->second);
+                    if (pqConfig.GetPQDiscoveryConfig().GetUseDynNodesMapping()) {
+                        auto dynNodeIdIter = NodesInfo->DynToStaticNode->find(nodeId);
+                        if (!dynNodeIdIter.IsEnd()) {
+                            auto statNodeIdIter = NodesInfo->HostNames.find(dynNodeIdIter->second);
+                            if (statNodeIdIter.IsEnd()) {
+                                statusInitializing = true;
+                            } else {
+                                location.SetHostId(statNodeIdIter->first);
+                                location.SetHost(statNodeIdIter->second);
+                            }
+                        }
+                    } else if (nodeId > pqConfig.GetMaxStorageNodeId()) {
+                        auto minIter = NodesInfo->MinNodeIdByHost.find(hostName);
+                        // location.SetHost(hostName); - already done before
                         if (minIter.IsEnd()) {
                             location.SetHostId(nodeId);
                         } else {

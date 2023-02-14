@@ -306,13 +306,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, true, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(QueryClientTimeout, WithMvcc) {
+    Y_UNIT_TEST_TWIN(QueryClientTimeout, EnableImmediateEffects) {
         NKikimrConfig::TAppConfig app;
         app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
-            .SetEnableKqpImmediateEffects(WithMvcc)
+            .SetEnableKqpImmediateEffects(EnableImmediateEffects)
             .SetAppConfig(app);
 
         TKikimrRunner kikimr(serverSettings);

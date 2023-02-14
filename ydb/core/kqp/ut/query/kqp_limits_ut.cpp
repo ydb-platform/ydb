@@ -359,42 +359,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(TotalReadSizeLimit) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-
-        auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
-        queryLimits.MutablePhaseLimits()->SetTotalReadSizeLimitBytes(100'000'000);
-
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetEnableMvccSnapshotReads(false);
-
-        TKikimrRunner kikimr(serverSettings);
-        CreateLargeTable(kikimr, 20, 10, 1'000'000, 1);
-
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT Key, KeyText, SUBSTRING(DataText, 0, 10) AS DataText
-            FROM `/Root/LargeTable`;
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Transaction total read size");
-            }));
-
-        result = session.ExecuteDataQuery(Q_(R"(
-            SELECT Key, KeyText, SUBSTRING(DataText, 0, 10) AS DataText
-            FROM `/Root/LargeTable`
-            WHERE Key < 4000000;
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    }
-
     Y_UNIT_TEST(ComputeNodeMemoryLimit) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000);

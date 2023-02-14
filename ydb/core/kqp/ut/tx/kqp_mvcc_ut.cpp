@@ -11,8 +11,6 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST(TestSnapshotExpiration) {
         auto settings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetKeepSnapshotTimeout(TDuration::Seconds(1));
 
         TKikimrRunner kikimr(settings);
@@ -79,8 +77,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
         );
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
@@ -139,7 +135,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST(ReadOnlyTxWithIndexCommitsOnConcurrentWrite) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
+        TKikimrRunner kikimr;
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -200,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite1) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
+        TKikimrRunner kikimr;
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -237,7 +233,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite2) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
+        TKikimrRunner kikimr;
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -284,8 +280,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         TKikimrRunner kikimr(
             TKikimrSettings()
-                .SetEnableMvcc(true)
-                .SetEnableMvccSnapshotReads(true)
                 .SetAppConfig(appConfig)
         );
 

@@ -18,8 +18,6 @@ namespace NYql {
 struct TExprContext;
 class TTypeAnnotationNode;
 class TStructExprType;
-class TTupleExprType;
-class TMultiExprType;
 class TVariantExprType;
 
 class TConstraintNode {
@@ -29,6 +27,7 @@ protected:
 
 public:
     using TPathType = std::deque<std::string_view>;
+    using TSetType = NSorted::TSimpleSet<TPathType>;
     using TListType = std::vector<const TConstraintNode*>;
     using TPathFilter = std::function<bool(const TPathType&)>;
     using TPathReduce = std::function<std::vector<TPathType>(const TPathType&)>;
@@ -142,6 +141,9 @@ public:
     void AddConstraint(const TConstraintNode* node);
     const TConstraintNode* RemoveConstraint(std::string_view name);
 
+    using TPredicate = std::function<bool(const std::string_view& name)>;
+    bool FilterConstraints(const TPredicate& predicate);
+
     void ToJson(NJson::TJsonWriter& writer) const;
 private:
     TConstraintNode::TListType Constraints_;
@@ -175,7 +177,6 @@ protected:
 
 class TSortedConstraintNode final: public TConstraintNode {
 public:
-    using TSetType = NSorted::TSimpleSet<TPathType>;
     using TContainerType = TSmallVec<std::pair<TSetType, bool>>;
     using TFullSetType = NSorted::TSimpleSet<TSetType>;
 private:
@@ -218,7 +219,6 @@ protected:
 template<bool Distinct>
 class TUniqueConstraintNodeBase final: public TConstraintNode {
 public:
-    using TSetType = NSorted::TSimpleSet<TPathType>;
     using TFullSetType = NSorted::TSimpleSet<TSetType>;
 protected:
     friend struct TExprContext;
@@ -343,8 +343,7 @@ private:
     friend struct TExprContext;
 
     TPassthroughConstraintNode(TExprContext& ctx, const TStructExprType& itemType);
-    TPassthroughConstraintNode(TExprContext& ctx, const TTupleExprType& itemType);
-    TPassthroughConstraintNode(TExprContext& ctx, const TMultiExprType& itemType);
+    TPassthroughConstraintNode(TExprContext& ctx, const ui32 width);
     TPassthroughConstraintNode(TPassthroughConstraintNode&& constr);
     TPassthroughConstraintNode(TExprContext& ctx, TMapType&& mapping);
 public:
@@ -454,6 +453,8 @@ public:
     void ToJson(NJson::TJsonWriter& out) const override;
 
     static const TMultiConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
+
+    const TMultiConstraintNode* FilterConstraints(TExprContext& ctx, const TConstraintSet::TPredicate& predicate) const;
 
     bool FilteredIncludes(const TConstraintNode& node, const THashSet<TString>& blacklist) const;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;

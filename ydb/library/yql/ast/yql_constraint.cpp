@@ -102,6 +102,16 @@ void TConstraintSet::ToJson(NJson::TJsonWriter& writer) const {
     writer.CloseMap();
 }
 
+bool TConstraintSet::FilterConstraints(const TPredicate& predicate) {
+    const auto size = Constraints_.size();
+    for (auto it = Constraints_.begin(); Constraints_.end() != it;)
+        if (predicate((*it)->GetName()))
+            ++it;
+        else
+            it = Constraints_.erase(it);
+    return Constraints_.size() != size;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TColumnSetConstraintNodeBase::TColumnSetConstraintNodeBase(TExprContext& ctx, TStringBuf name, const TSetType& columns)
@@ -334,6 +344,8 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const std::vector
 const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const TSortedConstraintNode* other, TExprContext& ctx) const {
     if (!other) {
         return nullptr;
+    } else if (this == other) {
+        return this;
     }
 
     auto content = other->GetContent();
@@ -605,7 +617,8 @@ const TUniqueConstraintNodeBase<Distinct>* TUniqueConstraintNodeBase<Distinct>::
                 sets = uniq->GetAllSets();
             else {
                 TFullSetType both;
-                std::set_intersection(sets.cbegin(), sets.cend(), uniq->GetAllSets().cbegin(), uniq->GetAllSets().cend(), both.end());
+                both.reserve(std::min(sets.size(), uniq->GetAllSets().size()));
+                std::set_intersection(sets.cbegin(), sets.cend(), uniq->GetAllSets().cbegin(), uniq->GetAllSets().cend(), std::back_inserter(both));
                 if (both.empty()) {
                     if (!c->GetConstraint<TEmptyConstraintNode>())
                         return nullptr;
@@ -1075,25 +1088,11 @@ TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, const 
     YQL_ENSURE(!mapping.empty());
 }
 
-TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, const TTupleExprType& itemType)
+TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, const ui32 width)
     : TConstraintNode(ctx, Name())
 {
     auto& mapping = Mapping_[nullptr];
-    for (ui32 i = 0U; i < itemType.GetSize(); ++i) {
-        const auto name = ctx.GetIndexAsString(i);
-        Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as name
-        Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as value
-        mapping.push_back(std::make_pair(TPathType(1U, name), name)); // Struct items are sorted
-    }
-
-    YQL_ENSURE(!mapping.empty());
-}
-
-TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, const TMultiExprType& itemType)
-    : TConstraintNode(ctx, Name())
-{
-    auto& mapping = Mapping_[nullptr];
-    for (ui32 i = 0U; i < itemType.GetSize(); ++i) {
+    for (ui32 i = 0U; i < width; ++i) {
         const auto name = ctx.GetIndexAsString(i);
         Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as name
         Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as value
@@ -1642,6 +1641,17 @@ const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const std::vector<c
     }
 
     return nullptr;
+}
+
+const TMultiConstraintNode* TMultiConstraintNode::FilterConstraints(TExprContext& ctx, const TConstraintSet::TPredicate& predicate) const {
+    auto items = Items_;
+    bool hasContent = false, hasChanges = false;
+    for (auto& item : items) {
+        hasChanges = hasChanges || item.second.FilterConstraints(predicate);
+        hasContent = hasContent || item.second;
+    }
+
+    return hasContent ? hasChanges ? ctx.MakeConstraint<TMultiConstraintNode>(std::move(items)) : this : nullptr;
 }
 
 const TConstraintNode* TMultiConstraintNode::OnlySimpleColumns(TExprContext& ctx) const {

@@ -49,7 +49,7 @@ public:
     TCommonTests(bool tenantModeEnabled)
         : TenantModeEnabled(tenantModeEnabled)
     {}
-    
+
     TPersQueueV1TestServer CreateServer() {
         return TPersQueueV1TestServer(false, TenantModeEnabled);
     }
@@ -126,7 +126,6 @@ public:
     void WriteSessionWithValidTokenAndACEAndThenRemoveACEAndSendWriteRequest() {
         TPersQueueV1TestServer server = CreateServer();
 
-        //setup.GetPQConfig().SetACLRetryTimeoutSec(0);
         NACLib::TDiffACL acl;
         const auto token = GenerateValidToken();
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, token);
@@ -143,10 +142,6 @@ public:
         AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
         UNIT_ASSERT_C(serverMessage.server_message_case() == StreamingWriteServerMessage::kInitResponse,
                       serverMessage);
-
-        acl.ClearAccess();
-        Cerr << "===ModifyAcl\n";
-        server.ModifyTopicACL(server.GetTopic(), acl);
 
         clientMessage = StreamingWriteClientMessage();
         auto *writeRequest = clientMessage.mutable_write_request();
@@ -168,6 +163,9 @@ public:
         AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
         UNIT_ASSERT_C(serverMessage.server_message_case() == StreamingWriteServerMessage::kBatchWriteResponse,
                       serverMessage);
+        acl.ClearAccess();
+        Cerr << "===ModifyAcl\n";
+        server.ModifyTopicACL(server.GetTopic(), acl);
 
         Cerr << "===Wait for session created with token with removed ACE to die";
         AssertStreamingSessionDead(stream, Ydb::StatusIds::UNAUTHORIZED,

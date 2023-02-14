@@ -947,7 +947,7 @@ void TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
         NumPartitionsFromTopic[holder.FullConverter->GetInternalName()] = 0;
     }
 
-    ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));
+    ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()), new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));
 }
 
 template <bool UseMigrationProtocol>
@@ -1841,9 +1841,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& e
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& ctx) {
-    ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));
-
     const auto timeout = TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec());
+
+    ctx.Schedule(timeout, new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));
+
     const bool authTimedOut = (ctx.Now() - LastACLCheckTimestamp) > timeout;
 
     if (Token && !AuthInitActor && (ForceACLCheck || (authTimedOut && RequestNotChecked))) {

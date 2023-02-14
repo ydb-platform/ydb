@@ -18,6 +18,8 @@ namespace NKikimr::NPersQueueTests {
 
 
 
+
+
 #define SET_LOCALS                                              \
     auto& pqClient = server.Server->AnnoyingClient;             \
     Y_UNUSED(pqClient);                                         \
@@ -41,14 +43,19 @@ namespace NKikimr::NPersQueueTests {
         virtual void AlterSettings(NKikimr::Tests::TServerSettings& settings) {
             Y_UNUSED(settings);
         }
+
+
         void InitializePQ() {
             Y_VERIFY(Server == nullptr);
             PortManager = new TPortManager();
             Server = MakeHolder<NPersQueue::TTestServer>(false, PortManager);
             Server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(TenantModeEnabled());
             Server->ServerSettings.PQConfig.MutablePQDiscoveryConfig()->SetLBFrontEnabled(true);
+            Server->ServerSettings.PQConfig.SetACLRetryTimeoutSec(1);
+
             AlterSettings(Server->ServerSettings);
             Server->StartServer(false);
+
             if (TenantModeEnabled()) {
                 Server->AnnoyingClient->SetNoConfigMode();
                 Server->ServerSettings.PQConfig.SetSourceIdTablePath("some unused path");
@@ -58,6 +65,7 @@ namespace NKikimr::NPersQueueTests {
             EnablePQLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::FLAT_TX_SCHEMESHARD});
             EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_INFO);
             EnablePQLogs({NKikimrServices::KQP_PROXY}, NLog::EPriority::PRI_EMERG);
+
 
             Server->AnnoyingClient->FullInit();
             Server->AnnoyingClient->CreateConsumer("user");

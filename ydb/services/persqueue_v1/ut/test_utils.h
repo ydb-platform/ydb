@@ -70,7 +70,9 @@ void AssertStreamingSessionDead(std::unique_ptr<grpc::ClientReaderWriter<TClient
     const Ydb::StatusIds::StatusCode expectedStatus, const Ydb::PersQueue::ErrorCode::ErrorCode expectedErrorCode)
 {
     TServerMessage serverMessage;
-    AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
+    auto res = stream->Read(&serverMessage);
+    Cerr << serverMessage.DebugString() << "\n";
+    AssertSuccessfullStreamingOperation(res, stream);
     UNIT_ASSERT_VALUES_EQUAL(expectedStatus, serverMessage.status());
     UNIT_ASSERT_LE(1, serverMessage.issues_size());
     // TODO: Why namespace duplicates enum name "ErrorCode::ErrorCode"?

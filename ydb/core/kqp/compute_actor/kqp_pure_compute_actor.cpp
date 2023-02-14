@@ -77,6 +77,7 @@ public:
         settings.CollectBasicStats = RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC;
         settings.CollectProfileStats = RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
         settings.OptLLVM = GetUseLLVM() ? "--compile-options=disable-opt" : "OFF";
+        settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
         settings.AllowGeneratorsInUnboxedValues = false;
 
         auto taskRunner = MakeDqTaskRunner(execCtx, settings, logger);

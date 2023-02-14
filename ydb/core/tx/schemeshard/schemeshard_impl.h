@@ -257,7 +257,7 @@ public:
     bool EnableBackgroundCompaction = false;
     bool EnableBackgroundCompactionServerless = false;
     bool EnableBorrowedSplitCompaction = false;
-    bool EnableMoveIndex = false;
+    bool EnableMoveIndex = true;
     bool EnableAlterDatabaseCreateHiveFirst = false;
 
     TShardDeleter ShardDeleter;

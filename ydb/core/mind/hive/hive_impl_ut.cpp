@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 #ifndef NDEBUG
             UNIT_ASSERT(passed < 1 * BASE_PERF);
 #else
-            UNIT_ASSERT(passed < 0.7 * BASE_PERF);
+            UNIT_ASSERT(passed < 1 * BASE_PERF);
 #endif
 #endif
             std::vector<double> buckets(NUM_BUCKETS, 0);

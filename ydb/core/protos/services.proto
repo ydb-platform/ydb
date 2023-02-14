@@ -355,6 +355,10 @@ enum EServiceKikimr {
 
     // Background tasks
     BG_TASKS = 1700;
+
+    // Discovery
+    DISCOVERY = 1800;
+    DISCOVERY_CACHE = 1801;
 };
 
 message TActivity {
@@ -966,5 +970,7 @@ message TActivity {
         SCHEMESHARD_CDC_STREAM_SCAN_FINALIZER = 603;
         REPLICATION_CONTROLLER_STREAM_REMOVER = 604;
         REPLICATION_CONTROLLER_DST_REMOVER = 605;
+        DISCOVERY_ACTOR = 607;
+        DISCOVERY_CACHE_ACTOR = 608;
     };
 };

@@ -225,17 +225,24 @@ void ServerInterface::RegisteredAsyncRequest::IssueRequest(
 ServerInterface::GenericAsyncRequest::GenericAsyncRequest(
     ServerInterface* server, GenericServerContext* context,
     internal::ServerAsyncStreamingInterface* stream, CompletionQueue* call_cq,
-    ServerCompletionQueue* notification_cq, void* tag, bool delete_on_finalize)
+    ServerCompletionQueue* notification_cq, void* tag, bool delete_on_finalize,
+    bool delay_start)
     : BaseAsyncRequest(server, context, stream, call_cq, notification_cq, tag,
                        delete_on_finalize) {
   grpc_call_details_init(&call_details_);
-  GPR_ASSERT(notification_cq);
-  GPR_ASSERT(call_cq);
+  if (!delay_start) {
+    Start();
+  }
+}
+
+void ServerInterface::GenericAsyncRequest::Start() {
+  GPR_ASSERT(notification_cq_);
+  GPR_ASSERT(call_cq_);
   // The following call_start_batch is internally-generated so no need for an
   // explanatory log on failure.
-  GPR_ASSERT(grpc_server_request_call(server->server(), &call_, &call_details_,
-                                      context->client_metadata_.arr(),
-                                      call_cq->cq(), notification_cq->cq(),
+  GPR_ASSERT(grpc_server_request_call(server_->server(), &call_, &call_details_,
+                                      context_->client_metadata_.arr(),
+                                      call_cq_->cq(), notification_cq_->cq(),
                                       this) == GRPC_CALL_OK);
 }
 
@@ -303,7 +310,9 @@ class Server::UnimplementedAsyncRequest final
   UnimplementedAsyncRequest(ServerInterface* server,
                             grpc::ServerCompletionQueue* cq)
       : GenericAsyncRequest(server, &server_context_, &generic_stream_, cq, cq,
-                            nullptr, false) {}
+                            nullptr, false, true) {
+    Start();
+  }
 
   bool FinalizeResult(void** tag, bool* status) override;
 

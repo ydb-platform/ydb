@@ -1,6 +1,6 @@
-#include "discoverer.h"
 #include "private_events.h"
 #include "replication.h"
+#include "target_discoverer.h"
 #include "target_table.h"
 #include "util.h"
 
@@ -37,7 +37,7 @@ class TReplication::TImpl {
                     paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
                 }
 
-                Discoverer = ctx.Register(CreateDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths)));
+                Discoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths)));
                 break;
             }
 

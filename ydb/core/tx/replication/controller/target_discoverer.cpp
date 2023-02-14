@@ -1,6 +1,6 @@
-#include "discoverer.h"
 #include "logging.h"
 #include "private_events.h"
+#include "target_discoverer.h"
 #include "util.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -12,7 +12,7 @@
 
 namespace NKikimr::NReplication::NController {
 
-class TDiscoverer: public TActorBootstrapped<TDiscoverer> {
+class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     void DescribePath(ui32 idx) {
         Y_VERIFY(idx < Paths.size());
         Send(YdbProxy, new TEvYdbProxy::TEvDescribePathRequest(Paths.at(idx).first, {}), 0, idx);
@@ -97,15 +97,15 @@ class TDiscoverer: public TActorBootstrapped<TDiscoverer> {
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::REPLICATION_CONTROLLER_DISCOVERER;
+        return NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DISCOVERER;
     }
 
-    explicit TDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy, TVector<std::pair<TString, TString>>&& paths)
+    explicit TTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy, TVector<std::pair<TString, TString>>&& paths)
         : Parent(parent)
         , ReplicationId(rid)
         , YdbProxy(proxy)
         , Paths(std::move(paths))
-        , LogPrefix("Discoverer", ReplicationId)
+        , LogPrefix("TargetDiscoverer", ReplicationId)
     {
     }
 
@@ -137,12 +137,12 @@ private:
     TVector<TEvPrivate::TEvDiscoveryResult::TAddEntry> ToAdd;
     TVector<TEvPrivate::TEvDiscoveryResult::TFailedEntry> Failed;
 
-}; // TDiscoverer
+}; // TTargetDiscoverer
 
-IActor* CreateDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
+IActor* CreateTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
     TVector<std::pair<TString, TString>>&& specificPaths)
 {
-    return new TDiscoverer(parent, rid, proxy, std::move(specificPaths));
+    return new TTargetDiscoverer(parent, rid, proxy, std::move(specificPaths));
 }
 
 }

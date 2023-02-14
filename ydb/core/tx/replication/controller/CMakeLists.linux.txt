@@ -26,7 +26,6 @@ target_link_libraries(tx-replication-controller PUBLIC
 )
 target_sources(tx-replication-controller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/controller.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/discoverer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_creator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_remover.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/logging.cpp
@@ -36,6 +35,7 @@ target_sources(tx-replication-controller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_remover.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/sys_params.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/target_base.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/target_discoverer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/target_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/target_with_stream.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_assign_stream_name.cpp

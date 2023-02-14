@@ -19,18 +19,6 @@
 /* Define to 1 if you have the std::atomic_* overloads for std::shared_ptr. */
 #define HAVE_ATOMIC_STD_SHARED_PTR 1
 
-/* define if the Boost library is available */
-/* #undef HAVE_BOOST */
-
-/* define if the Boost::ASIO library is available */
-/* #undef HAVE_BOOST_ASIO */
-
-/* define if the Boost::System library is available */
-/* #undef HAVE_BOOST_SYSTEM */
-
-/* define if the Boost::Thread library is available */
-/* #undef HAVE_BOOST_THREAD */
-
 /* Define to 1 if you have enum bpf_stats_type in linux/bpf.h. */
 /* #undef HAVE_BPF_STATS_TYPE */
 
@@ -125,9 +113,6 @@
 
 /* Define to 1 if you have the <pwd.h> header file. */
 #define HAVE_PWD_H 1
-
-/* If available, contains the Python version number currently in use. */
-/* #undef HAVE_PYTHON */
 
 /* Define to 1 if struct sockaddr_in6 has sin6_len member. */
 /* #undef HAVE_SOCKADDR_IN6_SIN6_LEN */
@@ -259,7 +244,7 @@
 #define PACKAGE_NAME "nghttp2"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "nghttp2 1.51.0"
+#define PACKAGE_STRING "nghttp2 1.52.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "nghttp2"
@@ -268,7 +253,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.51.0"
+#define PACKAGE_VERSION "1.52.0"
 
 /* The size of `int *', as computed by sizeof. */
 #define SIZEOF_INT_P 8
@@ -373,7 +358,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.51.0"
+#define VERSION "1.52.0"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

@@ -103,19 +103,6 @@ To mitigate heap fragmentation in long running server programs
      Alpine Linux currently does not support malloc replacement
      due to musl limitations. See details in issue `#762 <https://github.com/nghttp2/nghttp2/issues/762>`_.
 
-libnghttp2_asio C++ library (deprecated, has moved to
-https://github.com/nghttp2/nghttp2-asio) requires the following
-packages:
-
-* libboost-dev >= 1.54.0
-* libboost-thread-dev >= 1.54.0
-
-The Python bindings (deprecated) require the following packages:
-
-* cython >= 0.19
-* python >= 3.8
-* python-setuptools
-
 To enable mruby support for nghttpx, `mruby
 <https://github.com/mruby/mruby>`_ is required.  We need to build
 mruby with C++ ABI explicitly turned on, and probably need other
@@ -140,10 +127,10 @@ To enable the experimental HTTP/3 support for h2load and nghttpx, the
 following libraries are required:
 
 * `OpenSSL with QUIC support
-  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1s+quic>`_; or
+  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1t+quic>`_; or
   `BoringSSL <https://boringssl.googlesource.com/boringssl/>`_ (commit
-  b2536a2c6234496ef609e7c909936bbf828dac6d)
-* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 0.10.0
+  80a243e07ef77156af66efa7d22ac35aba44c1b3)
+* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 0.13.0
 * `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 0.7.0
 
 Use ``--enable-http3`` configure option to enable HTTP/3 feature for
@@ -159,7 +146,7 @@ Use ``--with-libbpf`` configure option to build eBPF program.
 libelf-dev is needed to build libbpf.
 
 For Ubuntu 20.04, you can build libbpf from `the source code
-<https://github.com/libbpf/libbpf/releases/tag/v1.0.1>`_.  nghttpx
+<https://github.com/libbpf/libbpf/releases/tag/v1.1.0>`_.  nghttpx
 requires eBPF program for reloading its configuration and hot swapping
 its executable.
 
@@ -356,7 +343,7 @@ Build custom OpenSSL:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b OpenSSL_1_1_1s+quic https://github.com/quictls/openssl
+   $ git clone --depth 1 -b OpenSSL_1_1_1t+quic https://github.com/quictls/openssl
    $ cd openssl
    $ ./config --prefix=$PWD/build --openssldir=/etc/ssl
    $ make -j$(nproc)
@@ -367,7 +354,7 @@ Build nghttp3:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v0.7.1 https://github.com/ngtcp2/nghttp3
+   $ git clone --depth 1 -b v0.8.0 https://github.com/ngtcp2/nghttp3
    $ cd nghttp3
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only
@@ -379,7 +366,7 @@ Build ngtcp2:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v0.11.0 https://github.com/ngtcp2/ngtcp2
+   $ git clone --depth 1 -b v0.13.1 https://github.com/ngtcp2/ngtcp2
    $ cd ngtcp2
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only \
@@ -393,7 +380,7 @@ from source:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.0.1 https://github.com/libbpf/libbpf
+   $ git clone --depth 1 -b v1.1.0 https://github.com/libbpf/libbpf
    $ cd libbpf
    $ PREFIX=$PWD/build make -C src install
    $ cd ..
@@ -407,7 +394,6 @@ Build nghttp2:
    $ git submodule update --init
    $ autoreconf -i
    $ ./configure --with-mruby --with-neverbleed --enable-http3 --with-libbpf \
-         --disable-python-bindings \
          CC=clang-14 CXX=clang++-14 \
          PKG_CONFIG_PATH="$PWD/../openssl/build/lib/pkgconfig:$PWD/../nghttp3/build/lib/pkgconfig:$PWD/../ngtcp2/build/lib/pkgconfig:$PWD/../libbpf/build/lib64/pkgconfig" \
          LDFLAGS="$LDFLAGS -Wl,-rpath,$PWD/../openssl/build/lib -Wl,-rpath,$PWD/../libbpf/build/lib64"
@@ -1431,224 +1417,6 @@ With the ``-d`` option, the extra ``header_table`` key is added and its
 associated value includes the state of the dynamic header table after the
 corresponding header set was processed.  The format is the same as
 ``deflatehd``.
-
-libnghttp2_asio: High level HTTP/2 C++ library
-----------------------------------------------
-
-libnghttp2_asio has been deprecated, and moved to
-https://github.com/nghttp2/nghttp2-asio.
-
-libnghttp2_asio is C++ library built on top of libnghttp2 and provides
-high level abstraction API to build HTTP/2 applications.  It depends
-on the Boost::ASIO library and OpenSSL.  Currently libnghttp2_asio
-provides both client and server APIs.
-
-libnghttp2_asio is not built by default.  Use the ``--enable-asio-lib``
-configure flag to build libnghttp2_asio.  The required Boost libraries
-are:
-
-* Boost::Asio
-* Boost::System
-* Boost::Thread
-
-The server API is designed to build an HTTP/2 server very easily to utilize
-C++14 anonymous functions and closures.  The bare minimum example of
-an HTTP/2 server looks like this:
-
-.. code-block:: cpp
-
-    #include <iostream>
-
-    #include <nghttp2/asio_http2_server.h>
-
-    using namespace nghttp2::asio_http2;
-    using namespace nghttp2::asio_http2::server;
-
-    int main(int argc, char *argv[]) {
-      boost::system::error_code ec;
-      http2 server;
-
-      server.handle("/", [](const request &req, const response &res) {
-        res.write_head(200);
-        res.end("hello, world\n");
-      });
-
-      if (server.listen_and_serve(ec, "localhost", "3000")) {
-        std::cerr << "error: " << ec.message() << std::endl;
-      }
-    }
-
-Here is sample code to use the client API:
-
-.. code-block:: cpp
-
-    #include <iostream>
-
-    #include <nghttp2/asio_http2_client.h>
-
-    using boost::asio::ip::tcp;
-
-    using namespace nghttp2::asio_http2;
-    using namespace nghttp2::asio_http2::client;
-
-    int main(int argc, char *argv[]) {
-      boost::system::error_code ec;
-      boost::asio::io_service io_service;
-
-      // connect to localhost:3000
-      session sess(io_service, "localhost", "3000");
-
-      sess.on_connect([&sess](tcp::resolver::iterator endpoint_it) {
-        boost::system::error_code ec;
-
-        auto req = sess.submit(ec, "GET", "http://localhost:3000/");
-
-        req->on_response([](const response &res) {
-          // print status code and response header fields.
-          std::cerr << "HTTP/2 " << res.status_code() << std::endl;
-          for (auto &kv : res.header()) {
-            std::cerr << kv.first << ": " << kv.second.value << "\n";
-          }
-          std::cerr << std::endl;
-
-          res.on_data([](const uint8_t *data, std::size_t len) {
-            std::cerr.write(reinterpret_cast<const char *>(data), len);
-            std::cerr << std::endl;
-          });
-        });
-
-        req->on_close([&sess](uint32_t error_code) {
-          // shutdown session after first request was done.
-          sess.shutdown();
-        });
-      });
-
-      sess.on_error([](const boost::system::error_code &ec) {
-        std::cerr << "error: " << ec.message() << std::endl;
-      });
-
-      io_service.run();
-    }
-
-For more details, see the documentation of libnghttp2_asio.
-
-Python bindings
----------------
-
-Python bindings have been deprecated.
-
-The ``python`` directory contains nghttp2 Python bindings.  The
-bindings currently provide HPACK compressor and decompressor classes
-and an HTTP/2 server.
-
-The extension module is called ``nghttp2``.
-
-``make`` will build the bindings and target Python version is
-determined by the ``configure`` script.  If the detected Python version is not
-what you expect, specify a path to Python executable in a ``PYTHON``
-variable as an argument to configure script (e.g., ``./configure
-PYTHON=/usr/bin/python3.8``).
-
-The following example code illustrates basic usage of the HPACK compressor
-and decompressor in Python:
-
-.. code-block:: python
-
-    import binascii
-    import nghttp2
-
-    deflater = nghttp2.HDDeflater()
-    inflater = nghttp2.HDInflater()
-
-    data = deflater.deflate([(b'foo', b'bar'),
-                             (b'baz', b'buz')])
-    print(binascii.b2a_hex(data))
-
-    hdrs = inflater.inflate(data)
-    print(hdrs)
-
-The ``nghttp2.HTTP2Server`` class builds on top of the asyncio event
-loop.  On construction, *RequestHandlerClass* must be given, which
-must be a subclass of ``nghttp2.BaseRequestHandler`` class.
-
-The ``BaseRequestHandler`` class is used to handle the HTTP/2 stream.
-By default, it does nothing.  It must be subclassed to handle each
-event callback method.
-
-The first callback method invoked is ``on_headers()``.  It is called
-when HEADERS frame, which includes the request header fields, has arrived.
-
-If the request has a request body, ``on_data(data)`` is invoked for each
-chunk of received data.
-
-Once the entire request is received, ``on_request_done()`` is invoked.
-
-When the stream is closed, ``on_close(error_code)`` is called.
-
-The application can send a response using ``send_response()`` method.
-It can be used in ``on_headers()``, ``on_data()`` or
-``on_request_done()``.
-
-The application can push resources using the ``push()`` method.  It must be
-used before the ``send_response()`` call.
-
-The following instance variables are available:
-
-client_address
-    Contains a tuple of the form (host, port) referring to the
-    client's address.
-
-stream_id
-    Stream ID of this stream.
-
-scheme
-    Scheme of the request URI.  This is a value of :scheme header
-    field.
-
-method
-    Method of this stream.  This is a value of :method header field.
-
-host
-    This is a value of :authority or host header field.
-
-path
-    This is a value of :path header field.
-
-The following example illustrates the HTTP2Server and
-BaseRequestHandler usage:
-
-.. code-block:: python
-
-    #!/usr/bin/env python3
-
-    import io, ssl
-    import nghttp2
-
-    class Handler(nghttp2.BaseRequestHandler):
-
-        def on_headers(self):
-            self.push(path='/css/bootstrap.css',
-                      request_headers = [('content-length', '3')],
-                      status=200,
-                      body='foo')
-
-            self.push(path='/js/bootstrap.js',
-                      method='GET',
-                      request_headers = [('content-length', '10')],
-                      status=200,
-                      body='foobarbuzz')
-
-            self.send_response(status=200,
-                               headers = [('content-type', 'text/plain')],
-                               body=io.BytesIO(b'nghttp2-python FTW'))
-
-    ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    ctx.options = ssl.OP_ALL | ssl.OP_NO_SSLv2
-    ctx.load_cert_chain('server.crt', 'server.key')
-
-    # give None to ssl to make the server non-SSL/TLS
-    server = nghttp2.HTTP2Server(('127.0.0.1', 8443), Handler, ssl=ctx)
-    server.serve_forever()
 
 Contribution
 ------------

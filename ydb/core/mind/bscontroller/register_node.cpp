@@ -98,6 +98,7 @@ class TBlobStorageController::TTxUpdateNodeDrives
                 newInfo->LifeStage = NKikimrBlobStorage::TDriveLifeStage::SEEN_ON_NODE;
                 newInfo->NodeId = nodeId;
                 newInfo->Path = data.GetPath();
+                newInfo->PDiskType = data.GetDeviceType();
                 Self->DrivesSerials.emplace(serial, std::move(newInfo));
             } else if (it->second->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_TO_BSC) {
                 if (it->second->NodeId != nodeId) {
@@ -110,9 +111,10 @@ class TBlobStorageController::TTxUpdateNodeDrives
                         "Received drive by NewPath, but drive is reported as placed by OldPath",
                         (NewPath, data.GetPath()), (OldPath, it->second->Path), (Serial, serial));
                 }
-            } else if (it->second->LifeStage == NKikimrBlobStorage::TDriveLifeStage::SEEN_ON_NODE) {
+            } else {
                 it->second->NodeId = nodeId;
                 it->second->Path = data.GetPath();
+                it->second->PDiskType = data.GetDeviceType();
             }
             NPDisk::TDriveData driveData;
             DriveDataToDriveData(data, driveData);

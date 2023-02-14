@@ -96,8 +96,6 @@ namespace NKikimr::NBsController {
             TStatus& /*status*/) {
 
         const auto& serial = cmd.GetSerial();
-        auto boxId = cmd.GetBoxId();
-
         auto driveInfo = DrivesSerials.Find(serial);
         if (!driveInfo) {
             throw TExError() << "Couldn't get drive info for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
@@ -115,35 +113,15 @@ namespace NKikimr::NBsController {
             throw TExError() << "Couldn't get node id for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
         }
 
-        auto nodeId = driveInfo->NodeId.GetRef();
-
-        const auto& nodes = Nodes.Get();
-        auto nodeIt = nodes.find(nodeId);
-        if (nodeIt == nodes.end()) {
-            throw TExError() << "Couldn't find node by node id" << TErrorParams::NodeId(nodeId) << " for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
+        if (!driveInfo->Path) {
+            throw TExError() << "Couldn't get path for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
         }
 
-        const auto& nodeInfo = nodeIt->second;
-        auto driveIt = nodeInfo.KnownDrives.find(serial);
-        if (driveIt == nodeInfo.KnownDrives.end()) {
-            throw TExError() << "Couldn't find disk on node" << TErrorParams::NodeId(nodeId) << " by serial number" << TErrorParams::DiskSerialNumber(serial);
-        }
-
-        // delete SEEN or REMOVED entry, if any, but keep its GUID
-        auto guid = driveInfo ? std::make_optional(driveInfo->Guid) : std::nullopt;
-        if (driveInfo) {
-            DrivesSerials.DeleteExistingEntry(serial);
-        }
-
-        auto driveInfoMutable = DrivesSerials.ConstructInplaceNewEntry(serial, boxId);
-        if (guid) {
-            driveInfoMutable->Guid = *guid;
-        }
+        auto driveInfoMutable = DrivesSerials.FindForUpdate(serial);
+        driveInfoMutable->BoxId = cmd.GetBoxId();
         driveInfoMutable->Kind = cmd.GetKind();
         if (cmd.GetPDiskType() != NKikimrBlobStorage::UNKNOWN_TYPE) {
             driveInfoMutable->PDiskType = cmd.GetPDiskType();
-        } else {
-            driveInfoMutable->PDiskType = PDiskTypeToPDiskType(driveIt->second.DeviceType);
         }
         TString config;
         if (!cmd.GetPDiskConfig().SerializeToString(&config)) {
@@ -151,13 +129,11 @@ namespace NKikimr::NBsController {
         }
         driveInfoMutable->PDiskConfig = config;
         driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::ADDED_TO_BSC;
-        driveInfoMutable->NodeId = nodeId;
-        driveInfoMutable->Path = driveIt->second.Path;
 
-        Fit.Boxes.insert(boxId);
+        Fit.Boxes.insert(cmd.GetBoxId());
 
         STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA00, "AddDriveSerial", (UniqueId, UniqueId), (Serial, serial),
-            (BoxId, boxId));
+            (BoxId, cmd.GetBoxId()));
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRemoveDriveSerial& cmd,
@@ -179,12 +155,7 @@ namespace NKikimr::NBsController {
         }
 
         auto driveInfoMutable = DrivesSerials.FindForUpdate(serial);
-        driveInfoMutable->NodeId.Clear();
-        driveInfoMutable->PDiskId.Clear();
         driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED_FROM_BSC;
-        driveInfoMutable->Path.Clear();
-        driveInfoMutable->PDiskType = NKikimrBlobStorage::UNKNOWN_TYPE;
-        driveInfoMutable->BoxId = 0;
 
         Fit.Boxes.insert(driveInfo->BoxId);
 

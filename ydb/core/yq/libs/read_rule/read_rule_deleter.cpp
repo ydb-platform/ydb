@@ -1,5 +1,6 @@
 #include "read_rule_deleter.h"
 
+#include <ydb/core/yq/libs/common/util.h>
 #include <ydb/core/yq/libs/events/events.h>
 
 #include <ydb/core/protos/services.pb.h>
@@ -183,14 +184,14 @@ public:
         NActors::TActorId owner,
         TString queryId,
         NYdb::TDriver ydbDriver,
-        TVector<Fq::Private::TopicConsumer> topics,
+        const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
         TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials,
         size_t maxRetries
     )
         : Owner(owner)
         , QueryId(std::move(queryId))
         , YdbDriver(std::move(ydbDriver))
-        , Topics(std::move(topics))
+        , Topics(VectorFromProto(topicConsumers))
         , Credentials(std::move(credentials))
         , MaxRetries(maxRetries)
     {
@@ -271,7 +272,7 @@ NActors::IActor* MakeReadRuleDeleterActor(
     NActors::TActorId owner,
     TString queryId,
     NYdb::TDriver ydbDriver,
-    TVector<Fq::Private::TopicConsumer> topics,
+    const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
     TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials, // For each topic
     size_t maxRetries
 )
@@ -280,7 +281,7 @@ NActors::IActor* MakeReadRuleDeleterActor(
         owner,
         std::move(queryId),
         std::move(ydbDriver),
-        std::move(topics),
+        topicConsumers,
         std::move(credentials),
         maxRetries
     );

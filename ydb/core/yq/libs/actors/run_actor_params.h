@@ -60,7 +60,6 @@ struct TRunActorParams { // TODO2 : Change name
         TVector<YandexQuery::ResultSetMeta> resultSetMetas,
         TVector<TString> dqGraphs,
         int32_t dqGraphIndex,
-        TVector<Fq::Private::TopicConsumer> createdTopicConsumers,
         bool automatic,
         const TString& queryName,
         const TInstant& deadline,
@@ -117,7 +116,6 @@ struct TRunActorParams { // TODO2 : Change name
     const TVector<YandexQuery::ResultSetMeta> ResultSetMetas;
     const TVector<TString> DqGraphs;
     const int32_t DqGraphIndex;
-    TVector<Fq::Private::TopicConsumer> CreatedTopicConsumers;
 
     const bool Automatic = false;
     const TString QueryName;

@@ -45,6 +45,7 @@
 
 #include <ydb/core/yq/libs/common/compression.h>
 #include <ydb/core/yq/libs/common/entity_id.h>
+#include <ydb/core/yq/libs/common/util.h>
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/yq/libs/config/protos/pinger.pb.h>
@@ -98,11 +99,6 @@ struct TEvPrivate {
         const NActors::TActorId RunActorId;
     };
 };
-
-template <class TElement>
-TVector<TElement> VectorFromProto(const ::google::protobuf::RepeatedPtrField<TElement>& field) {
-    return { field.begin(), field.end() };
-}
 
 constexpr auto CLEANUP_PERIOD = TDuration::Seconds(60);
 
@@ -352,6 +348,13 @@ private:
             // todo: remove after migration
             dqGraphs = VectorFromProto(task.dq_graph());
         }
+
+        Fq::Private::TaskResources resources(task.resources());
+        if (task.created_topic_consumers_size()) {
+            // todo: remove after migration
+            *resources.mutable_topic_consumers() = task.created_topic_consumers();
+        }
+
         TRunActorParams params(
             YqSharedResources, CredentialsProviderFactory, S3Gateway,
             FunctionRegistry, RandomProvider,
@@ -378,7 +381,6 @@ private:
             VectorFromProto(task.result_set_meta()),
             std::move(dqGraphs),
             task.dq_graph_index(),
-            VectorFromProto(task.created_topic_consumers()),
             task.automatic(),
             task.query_name(),
             NProtoInterop::CastFromProto(task.deadline()),
@@ -390,7 +392,7 @@ private:
             NProtoInterop::CastFromProto(task.request_started_at()),
             task.restart_count(),
             task.job_id().value(),
-            task.resources()
+            resources
             );
 
         auto runActorId = Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));

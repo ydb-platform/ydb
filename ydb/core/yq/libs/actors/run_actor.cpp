@@ -26,6 +26,7 @@
 #include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
@@ -492,15 +493,15 @@ private:
             return;
         }
 
-        if (QueryStateUpdateRequest.resources().read_rules() == Fq::Private::TaskResources::PREPARE) {
+        if (QueryStateUpdateRequest.resources().topic_consumers_state() == Fq::Private::TaskResources::PREPARE) {
             if (!ReadRulesCreatorId) {
                 ReadRulesCreatorId = Register(
                     ::NYq::MakeReadRuleCreatorActor(
                         SelfId(),
                         Params.QueryId,
                         Params.YqSharedResources->UserSpaceYdbDriver,
-                        std::move(TopicsForConsumersCreation),
-                        std::move(CredentialsForConsumersCreation)
+                        Params.Resources.topic_consumers(),
+                        PrepareReadRuleCredentials()
                     )
                 );
             }
@@ -580,7 +581,7 @@ private:
         Issues.AddIssue("Internal Error");
 
         if (!ConsumersAreDeleted) {
-            for (const Fq::Private::TopicConsumer& c : Params.CreatedTopicConsumers) {
+            for (const Fq::Private::TopicConsumer& c : Params.Resources.topic_consumers()) {
                 TransientIssues.AddIssue(TStringBuilder() << "Created read rule `" << c.consumer_name() << "` for topic `" << c.topic_path() << "` (database id " << c.database_id() << ") maybe was left undeleted: internal error occurred");
                 TransientIssues.back().Severity = NYql::TSeverityIds::S_WARNING;
             }
@@ -668,7 +669,6 @@ private:
             LOG_D("Graph " << graphIndex);
             graphIndex++;
             const TString consumerNamePrefix = graphIndex == 1 ? Params.QueryId : TStringBuilder() << Params.QueryId << '-' << graphIndex; // Simple name in simple case
-            const auto& secureParams = graphParams.GetSecureParams();
             for (NYql::NDqProto::TDqTask& task : *graphParams.MutableTasks()) {
                 for (NYql::NDqProto::TTaskInput& taskInput : *task.MutableInputs()) {
                     if (taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == "PqSource") {
@@ -684,18 +684,16 @@ private:
                             srcDesc.SetConsumerName(consumerName);
                             settingsAny.PackFrom(srcDesc);
                             if (isNewConsumer) {
-                                auto s = consumerName;
-                                LOG_D("Create consumer \"" << s << "\" for topic \"" << srcDesc.GetTopicPath() << "\"");
-                                if (const TString& tokenName = srcDesc.GetToken().GetName()) {
-                                    const auto token = secureParams.find(tokenName);
-                                    YQL_ENSURE(token != secureParams.end(), "Token " << tokenName << " was not found in secure params");
-                                    CredentialsForConsumersCreation.emplace_back(
-                                        CreateCredentialsProviderFactoryForStructuredToken(Params.CredentialsFactory, token->second, srcDesc.GetAddBearerToToken()));
-                                } else {
-                                    CredentialsForConsumersCreation.emplace_back(NYdb::CreateInsecureCredentialsProviderFactory());
-                                }
-
-                                TopicsForConsumersCreation.emplace_back(std::move(srcDesc));
+                                LOG_D("Create consumer \"" << srcDesc.GetConsumerName() << "\" for topic \"" << srcDesc.GetTopicPath() << "\"");
+                                auto& consumer = *QueryStateUpdateRequest.mutable_resources()->add_topic_consumers();
+                                consumer.set_database_id(srcDesc.GetDatabaseId());
+                                consumer.set_database(srcDesc.GetDatabase());
+                                consumer.set_topic_path(srcDesc.GetTopicPath());
+                                consumer.set_consumer_name(srcDesc.GetConsumerName());
+                                consumer.set_cluster_endpoint(srcDesc.GetEndpoint());
+                                consumer.set_use_ssl(srcDesc.GetUseSsl());
+                                consumer.set_token_name(srcDesc.GetToken().GetName());
+                                consumer.set_add_bearer_to_token(srcDesc.GetAddBearerToToken());
                             }
                         }
                     }
@@ -726,8 +724,8 @@ private:
 
         if (ev->Cookie == SaveQueryInfoCookie) {
             QueryStateUpdateRequest.mutable_resources()->set_compilation(Fq::Private::TaskResources::READY);
-            QueryStateUpdateRequest.mutable_resources()->set_read_rules(
-                TopicsForConsumersCreation.size() ? Fq::Private::TaskResources::PREPARE : Fq::Private::TaskResources::NOT_NEEDED);
+            QueryStateUpdateRequest.mutable_resources()->set_topic_consumers_state(
+                QueryStateUpdateRequest.resources().topic_consumers().size() ? Fq::Private::TaskResources::PREPARE : Fq::Private::TaskResources::NOT_NEEDED);
             ProcessQuery();
         } else if (ev->Cookie == SetLoadFromCheckpointModeCookie) {
             Send(ControlId, new TEvCheckpointCoordinator::TEvRunGraph());
@@ -897,23 +895,6 @@ private:
         *request.mutable_result_set_meta() = QueryStateUpdateRequest.result_set_meta();
 
         CheckForConsumers();
-
-        Params.CreatedTopicConsumers.clear();
-        Params.CreatedTopicConsumers.reserve(TopicsForConsumersCreation.size());
-        for (const NYql::NPq::NProto::TDqPqTopicSource& src : TopicsForConsumersCreation) {
-            auto& consumer = *request.add_created_topic_consumers();
-            consumer.set_database_id(src.GetDatabaseId());
-            consumer.set_database(src.GetDatabase());
-            consumer.set_topic_path(src.GetTopicPath());
-            consumer.set_consumer_name(src.GetConsumerName());
-            consumer.set_cluster_endpoint(src.GetEndpoint());
-            consumer.set_use_ssl(src.GetUseSsl());
-            consumer.set_token_name(src.GetToken().GetName());
-            consumer.set_add_bearer_to_token(src.GetAddBearerToToken());
-
-            // Save for deletion
-            Params.CreatedTopicConsumers.push_back(consumer);
-        }
 
         for (const auto& graphParams : DqGraphParams) {
             const TString& serializedGraph = graphParams.SerializeAsString();
@@ -1175,7 +1156,7 @@ private:
             LOG_D(Issues.ToOneLineString());
             Finish(YandexQuery::QueryMeta::FAILED);
         } else {
-            QueryStateUpdateRequest.mutable_resources()->set_read_rules(Fq::Private::TaskResources::READY);
+            QueryStateUpdateRequest.mutable_resources()->set_topic_consumers_state(Fq::Private::TaskResources::READY);
             ProcessQuery();
         }
     }
@@ -1204,17 +1185,18 @@ private:
     }
 
     bool NeedDeleteReadRules() const {
-        return !Params.CreatedTopicConsumers.empty();
+        return Params.Resources.topic_consumers_state() == Fq::Private::TaskResources::PREPARE
+            || Params.Resources.topic_consumers_state() == Fq::Private::TaskResources::READY;
     }
 
     bool CanRunReadRulesDeletionActor() const {
         return !ReadRulesCreatorId && FinalizingStatusIsWritten && QueryResponseArrived;
     }
 
-    void RunReadRulesDeletionActor() {
+    TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> PrepareReadRuleCredentials() {
         TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials;
-        credentials.reserve(Params.CreatedTopicConsumers.size());
-        for (const Fq::Private::TopicConsumer& c : Params.CreatedTopicConsumers) {
+        credentials.reserve(Params.Resources.topic_consumers().size());
+        for (const Fq::Private::TopicConsumer& c : Params.Resources.topic_consumers()) {
             if (const TString& tokenName = c.token_name()) {
                 credentials.emplace_back(
                     CreateCredentialsProviderFactoryForStructuredToken(Params.CredentialsFactory, FindTokenByName(tokenName), c.add_bearer_to_token()));
@@ -1222,14 +1204,17 @@ private:
                 credentials.emplace_back(NYdb::CreateInsecureCredentialsProviderFactory());
             }
         }
+        return credentials;
+    }
 
+    void RunReadRulesDeletionActor() {
         Register(
             ::NYq::MakeReadRuleDeleterActor(
                 SelfId(),
                 Params.QueryId,
                 Params.YqSharedResources->UserSpaceYdbDriver,
-                Params.CreatedTopicConsumers,
-                std::move(credentials)
+                Params.Resources.topic_consumers(),
+                PrepareReadRuleCredentials()
             )
         );
     }
@@ -1933,7 +1918,7 @@ private:
             << " Status: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status)
             << " DqGraphs: " << Params.DqGraphs.size()
             << " DqGraphIndex: " << Params.DqGraphIndex
-            << " CreatedTopicConsumers: " << Params.CreatedTopicConsumers.size()
+            << " Resource.TopicConsumers: " << Params.Resources.topic_consumers().size()
             << " }");
     }
 
@@ -1969,8 +1954,6 @@ private:
     const TCompressor Compressor;
 
     // Consumers creation
-    TVector<NYql::NPq::NProto::TDqPqTopicSource> TopicsForConsumersCreation;
-    TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> CredentialsForConsumersCreation;
     TMap<TString, TString> Statistics;
     NActors::TActorId ReadRulesCreatorId;
 

@@ -11,7 +11,7 @@ NActors::IActor* MakeReadRuleDeleterActor(
     NActors::TActorId owner,
     TString queryId,
     NYdb::TDriver ydbDriver,
-    TVector<Fq::Private::TopicConsumer> topics,
+    const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
     TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials, // For each topic
     size_t maxRetries = 15
 );

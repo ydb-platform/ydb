@@ -27,16 +27,17 @@ message TaskResources {
     enum ResourceState {
         UNSPECIFIED = 0; // on start
         NOT_NEEDED = 1;  // is not configured to use - skip it
-        PREPARE = 2;    // resource creating in progress (retriable)
-        READY = 3;     // created and ready to go
-        CLEANUP = 4;   // is being destroyin (cleanup)
+        PREPARE = 2;     // resource creating in progress (retriable)
+        READY = 3;       // created and ready to go
+        CLEANUP = 4;     // is being destroyed (cleanup), may be removed
     }
 
     ResourceState rate_limiter = 1;
     ResourceState compilation = 2;
-    ResourceState read_rules = 3;
+    ResourceState topic_consumers_state = 3;
 
     string rate_limiter_path = 10;
+    repeated TopicConsumer topic_consumers = 11;
 }
 
 message GetTaskRequest {

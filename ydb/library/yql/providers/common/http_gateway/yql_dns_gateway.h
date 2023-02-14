@@ -52,14 +52,10 @@ public:
         ::NMonitoring::TDynamicCounterPtr counters)
         : IsStopped(false)
         , UpdateInterval(std::chrono::milliseconds(dnsResolverConfig.GetRefreshMs()))
-        , TotalResolutionCounter(
-              counters->GetCounter("DNSGateway_TotalResolutions"))
-        , ResolutionSuccessCounter(
-              counters->GetCounter("DNSGateway_ResolutionSuccesses"))
-        , ResolutionErrorCounter(
-              counters->GetCounter("DNSGateway_ResolutionErrors"))
-        , ResolvedToNotExpectedIP(
-              counters->GetCounter("DNSGateway_ResolvedToNotExpectedIP")) {
+        , TotalResolutionCounter(counters->GetCounter("TotalResolutions", true))
+        , ResolutionSuccessCounter(counters->GetCounter("ResolutionSuccesses", true))
+        , ResolutionErrorCounter(counters->GetCounter("ResolutionErrors", true))
+        , ResolvedToNotExpectedIP(counters->GetCounter("ResolvedToNotExpectedIP", true)) {
         if (dnsResolverConfig.HasRefreshMs()) {
             UpdateInterval = std::chrono::milliseconds(dnsResolverConfig.GetRefreshMs());
         }

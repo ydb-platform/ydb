@@ -473,7 +473,7 @@ public:
     explicit THTTPMultiGateway(
         const THttpGatewayConfig* httpGatewaysCfg,
         ::NMonitoring::TDynamicCounterPtr counters)
-        : DnsGateway(httpGatewaysCfg ? httpGatewaysCfg->GetDnsResolverConfig(): TDnsResolverConfig{}, counters)
+        : DnsGateway(httpGatewaysCfg ? httpGatewaysCfg->GetDnsResolverConfig(): TDnsResolverConfig{}, counters->GetSubgroup("subsystem", "dns_gateway"))
         , Counters(std::move(counters))
         , Rps(Counters->GetCounter("Requests", true))
         , InFlight(Counters->GetCounter("InFlight"))

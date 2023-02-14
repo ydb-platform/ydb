@@ -59,13 +59,13 @@ message TTVMConfig {
 }
 
 message TStaffApiTvmSettings {
-    optional string Host = 1 [default = "https://tvm-api.yandex.net"];
-    optional uint32 Port = 2 [default = 443];
-    optional uint32 SelfTvmId = 3 [default = 2002716];
-    optional string DiskCacheDir = 4 [default = "./tvm_api_client_cache"];
-    optional uint32 StaffAppId = 5 [default = 2001974];
+    optional string Host = 1;
+    optional uint32 Port = 2;
+    optional uint32 SelfTvmId = 3;
+    optional string DiskCacheDir = 4;
+    optional uint32 StaffAppId = 5;
     oneof Secret {
-        string SecretEnvironmentVariable = 6 [default = "TVM_SECRET"];
+        string SecretEnvironmentVariable = 6;
         string PlainTextSecret = 7;
     }
 }

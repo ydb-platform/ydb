@@ -13,10 +13,6 @@
 #include <cstdio>
 
 #if defined(_win32_)
-#include <util/system/env.h>
-#endif
-
-#if defined(_win32_)
 #include <io.h>
 #elif defined(_unix_)
 #include <unistd.h>
@@ -26,13 +22,6 @@
 namespace NYdb::NConsoleClient {
 
 namespace {
-#if defined(_darwin_)
-    const TString HomeDir = GetHomeDir();
-#elif defined(_win32_)
-    const TString HomeDir = GetEnv("USERPROFILE");
-#else
-    const TString HomeDir = GetHomeDir();
-#endif
 
     bool IsStdinInteractive() {
 #if defined(_win32_)

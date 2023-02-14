@@ -448,7 +448,11 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         if (IsVerbose()) {
             PrintSettingFromProfile("service account key file (sa-key-file)", profile, explicitOption);
         }
-        config.SaKeyFile = authData.as<TString>();
+        TString filePath = authData.as<TString>();
+        if (filePath.StartsWith("~")) {
+            filePath = HomeDir + filePath.substr(1);
+        }
+        config.SaKeyFile = filePath;
     } else if (authMethod == "ydb-token") {
         if (IsVerbose()) {
             PrintSettingFromProfile("OAuth token (ydb-token)", profile, explicitOption);

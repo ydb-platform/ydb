@@ -4,7 +4,7 @@
 #include <util/folder/path.h>
 #include <util/string/strip.h>
 
-#ifdef _unix_
+#if defined(_unix_)
 #include <sys/ioctl.h>
 #include <termios.h>
 
@@ -60,6 +60,9 @@ void TProfileConfig::ReadFromFile() {
 }
 
 bool ReadFromFileIfExists(TString& filePath, const TString& fileName, TString& output, bool allowEmpty) {
+    if (filePath.StartsWith("~")) {
+        filePath = HomeDir + filePath.substr(1);
+    }
     TFsPath fsPath(filePath);
     if (!fsPath.Exists()) {
         correctpath(filePath);

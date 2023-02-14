@@ -254,10 +254,30 @@ struct TEvKqp {
 
     struct TEvQueryRequest : public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
     public:
-        using TSerializerCb = void (*)(std::shared_ptr<NGRpcService::IRequestCtxMtSafe>&, NKikimrKqp::TEvQueryRequest*) noexcept;
-        TEvQueryRequest(std::shared_ptr<NGRpcService::IRequestCtxMtSafe> ctx, TSerializerCb cb, TActorId actorId)
+        TEvQueryRequest(
+            std::shared_ptr<NGRpcService::IRequestCtxMtSafe> ctx,
+            const TString& sessionId,
+            TActorId actorId,
+            TString&& yqlText,
+            TString&& queryId,
+            NKikimrKqp::EQueryAction queryAction,
+            NKikimrKqp::EQueryType queryType,
+            const ::Ydb::Table::TransactionControl* txControl,
+            const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>* ydbParameters,
+            const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
+            const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
+            const ::Ydb::Operations::OperationParams* operationParams)
             : RequestCtx(ctx)
-            , SerializerCb(cb)
+            , SessionId(sessionId)
+            , YqlText(std::move(yqlText))
+            , QueryId(std::move(queryId))
+            , QueryAction(queryAction)
+            , QueryType(queryType)
+            , TxControl(txControl)
+            , YdbParameters(ydbParameters)
+            , CollectStats(collectStats)
+            , QueryCachePolicy(queryCachePolicy)
+            , OperationParams(operationParams)
         {
             ActorIdToProto(actorId, Record.MutableCancelationActor());
         }
@@ -271,6 +291,168 @@ struct TEvKqp {
 
         // Same as TEventPBBase but without Rope (but can contain Payload and will lose some data after all)
         TEventSerializationInfo CreateSerializationInfo() const override { return {}; }
+
+        bool HasYdbStatus() const {
+            if (RequestCtx) {
+                return false;
+            }
+
+            return Record.HasYdbStatus();
+        }
+
+        bool HasTopicOperations() const {
+            return Record.GetRequest().HasTopicOperations();
+        }
+
+        bool HasAction() const {
+            if (RequestCtx) {
+                // passed directly to constructor.
+                return true;
+            } else {
+                return Record.GetRequest().HasAction();
+            }
+        }
+
+        const TString& GetSessionId() const {
+            if (RequestCtx) {
+                return SessionId;
+            }
+
+            return Record.GetRequest().GetSessionId();
+        }
+
+        NKikimrKqp::EQueryAction GetAction() const {
+            if (RequestCtx) {
+                return QueryAction;
+            }
+
+            return Record.GetRequest().GetAction();
+
+        }
+
+        NKikimrKqp::EQueryType GetType() const {
+            if (RequestCtx) {
+                return QueryType;
+            }
+
+            return Record.GetRequest().GetType();
+        }
+
+        bool HasPreparedQuery() const {
+            if (!QueryId.empty()) {
+                return true;
+            }
+
+            return Record.GetRequest().HasPreparedQuery();
+        }
+
+        const TString& GetPreparedQuery() const {
+            if (!QueryId.empty()) {
+                return QueryId;
+            }
+
+            return Record.GetRequest().GetPreparedQuery();
+        }
+
+        const TString& GetQuery() const {
+            if (!YqlText.empty()) {
+                return YqlText;
+            }
+
+            return Record.GetRequest().GetQuery();
+        }
+
+        const ::NKikimrMiniKQL::TParams& GetParameters() const {
+            return Record.GetRequest().GetParameters();
+        }
+
+        const ::Ydb::Table::TransactionControl& GetTxControl() const {
+            if (TxControl) {
+                return *TxControl;
+            }
+
+            return Record.GetRequest().GetTxControl();
+        }
+
+        bool GetUsePublicResponseDataFormat() const {
+            if (RequestCtx) {
+                return true;
+            }
+
+            return Record.GetRequest().GetUsePublicResponseDataFormat();
+        }
+
+        const ::Ydb::Table::QueryCachePolicy& GetQueryCachePolicy() const {
+            if (QueryCachePolicy) {
+                return *QueryCachePolicy;
+            }
+
+            return Record.GetRequest().GetQueryCachePolicy();
+        }
+
+        bool HasTxControl() const {
+            if (TxControl) {
+                return true;
+            }
+
+            return Record.GetRequest().HasTxControl();
+        }
+
+        TActorId GetRequestActorId() const {
+            return ActorIdFromProto(Record.GetRequestActorId());
+        }
+
+        const TString& GetTraceId() const {
+            if (RequestCtx) {
+                if (auto traceId = RequestCtx->GetTraceId()) {
+                    return traceId.GetRef();
+                }
+            }
+
+            return Record.GetTraceId();
+        }
+
+        const TString& GetRequestType() const {
+            if (RequestCtx) {
+                if (auto requestType = RequestCtx->GetRequestType()) {
+                    return requestType.GetRef();
+                }
+            }
+
+            return Record.GetRequestType();
+        }
+
+        const TString& GetUserToken() const {
+            if (RequestCtx && RequestCtx->GetInternalToken()) {
+                return RequestCtx->GetInternalToken();
+            }
+
+            return Record.GetUserToken();
+        }
+
+        const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
+            if (YdbParameters) {
+                return *YdbParameters;
+            }
+
+            return Record.GetRequest().GetYdbParameters();
+        }
+
+        Ydb::StatusIds::StatusCode GetYdbStatus() const {
+            return Record.GetYdbStatus();
+        }
+
+        ::Ydb::Table::QueryStatsCollection::Mode GetCollectStats() const {
+            if (RequestCtx) {
+                return CollectStats;
+            }
+
+            return Record.GetRequest().GetCollectStats();
+        }
+
+        const ::google::protobuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>& GetQueryIssues() const {
+            return Record.GetQueryIssues();
+        }
 
         ui64 GetRequestSize() const {
             return Record.GetRequest().ByteSizeLong();
@@ -322,18 +504,23 @@ struct TEvKqp {
             }
         }
 
-        void PrepareRemote() const {
-            if (RequestCtx) {
-                Y_VERIFY(SerializerCb);
-                SerializerCb(RequestCtx, &Record);
-                RequestCtx.reset();
-            }
-        }
-        mutable ui64 ParametersSize = 0;
+        void PrepareRemote() const;
+
         mutable NKikimrKqp::TEvQueryRequest Record;
+
     private:
+        mutable ui64 ParametersSize = 0;
         mutable std::shared_ptr<NGRpcService::IRequestCtxMtSafe> RequestCtx;
-        TSerializerCb SerializerCb;
+        TString SessionId;
+        TString YqlText;
+        TString QueryId;
+        NKikimrKqp::EQueryAction QueryAction;
+        NKikimrKqp::EQueryType QueryType;
+        const ::Ydb::Table::TransactionControl* TxControl = nullptr;
+        const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>* YdbParameters = nullptr;
+        const ::Ydb::Table::QueryStatsCollection::Mode CollectStats = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        const ::Ydb::Table::QueryCachePolicy* QueryCachePolicy = nullptr;
+        const ::Ydb::Operations::OperationParams* OperationParams = nullptr;
     };
 
     struct TEvCloseSessionRequest : public TEventPB<TEvCloseSessionRequest,

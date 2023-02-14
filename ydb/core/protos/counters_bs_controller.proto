@@ -17,8 +17,8 @@ enum ESimpleCounters {
     COUNTER_SLOTS_ON_TO_BE_REMOVED_DISKS = 7 [(CounterOpts) = {Name: "SlotsOnToBeRemovedDisks"}];
     COUNTER_BYTES_ON_TO_BE_REMOVED_DISKS = 8 [(CounterOpts) = {Name: "BytesOnToBeRemovedDisks"}];
     COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL = 9 [(CounterOpts) = {Name: "PDisksWithoutExpectedSerial"}];
-    COUNTER_DRIVE_SERIAL_NOT_SEEN = 10 [(CounterOpts) = {Name: "DriveSerialNotSeen"}];
-    COUNTER_DRIVE_SERIAL_REMOVED = 11 [(CounterOpts) = {Name: "DriveSerialRemoved"}];
+    COUNTER_DRIVE_SERIAL_SEEN_ON_NODE = 10 [(CounterOpts) = {Name: "DriveSerialSeenOnNode"}];
+    COUNTER_DRIVE_SERIAL_REMOVED_FROM_BSC = 11 [(CounterOpts) = {Name: "DriveSerialRemovedFromBsc"}];
     COUNTER_DRIVE_SERIAL_ERROR = 12 [(CounterOpts) = {Name: "DriveSerialError"}];
     COUNTER_DISK_SCRUB_WAITING_FOR_START = 13 [(CounterOpts) = {Name: "DiskScrubWaitingForStart"}];
     COUNTER_DISK_SCRUB_RUNNING = 14 [(CounterOpts) = {Name: "DiskScrubRunning"}];
@@ -28,6 +28,8 @@ enum ESimpleCounters {
     COUNTER_DISK_SCRUB_CUR_DISKS = 18 [(CounterOpts) = {Name: "CurrentlyScrubbedDisks"}];
     COUNTER_DISK_SCRUB_CUR_GROUPS = 19 [(CounterOpts) = {Name: "CurrentlyScrubbedGroups"}];
     COUNTER_SELF_HEAL_UNREASSIGNABLE_GROUPS = 20 [(CounterOpts) = {Name: "SelfHealUnreassignableGroups"}];
+    COUNTER_DRIVE_SERIAL_UNKNOWN = 21 [(CounterOpts) = {Name: "DriveSerialUnknown"}];
+    COUNTER_DRIVE_SERIAL_ADDED_TO_BSC = 22 [(CounterOpts) = {Name: "DriveSerialAddedToBsc"}];
 }
 
 enum ECumulativeCounters {

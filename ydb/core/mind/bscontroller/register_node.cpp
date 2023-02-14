@@ -85,18 +85,34 @@ class TBlobStorageController::TTxUpdateNodeDrives
             }
         }
 
-        TNodeInfo& nodeInfo = Self->GetNode(nodeId);
+        auto& nodeInfo = Self->GetNode(nodeId);
         Self->EraseKnownDrivesOnDisconnected(&nodeInfo);
 
-        // Update NodeIdByDiskSerialNumber and KnownDrives
+        // Update DrivesSerials and KnownDrives
         for (const auto& data : Record.GetDrivesData()) {
             const auto& serial = data.GetSerialNumber();
-            if (auto it = Self->NodeIdByDiskSerialNumber.find(serial); it != Self->NodeIdByDiskSerialNumber.end() && it->second != nodeId) {
-                STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN03,
+
+            auto it = Self->DrivesSerials.find(serial);
+            if (it == Self->DrivesSerials.end()) {
+                auto newInfo = MakeHolder<TDriveSerialInfo>();
+                newInfo->LifeStage = NKikimrBlobStorage::TDriveLifeStage::SEEN_ON_NODE;
+                newInfo->NodeId = nodeId;
+                newInfo->Path = data.GetPath();
+                Self->DrivesSerials.emplace(serial, std::move(newInfo));
+            } else if (it->second->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_TO_BSC) {
+                if (it->second->NodeId != nodeId) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN03,
                         "Received drive from NewNodeId, but drive is reported as placed in OldNodeId",
-                        (NewNodeId, nodeId), (OldNodeId, it->second), (Serial, serial));
-            } else {
-                Self->NodeIdByDiskSerialNumber[serial] = nodeId;
+                        (NewNodeId, nodeId), (OldNodeId, it->second->NodeId), (Serial, serial));
+                }
+                if (it->second->Path != data.GetPath()) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN04,
+                        "Received drive by NewPath, but drive is reported as placed by OldPath",
+                        (NewPath, data.GetPath()), (OldPath, it->second->Path), (Serial, serial));
+                }
+            } else if (it->second->LifeStage == NKikimrBlobStorage::TDriveLifeStage::SEEN_ON_NODE) {
+                it->second->NodeId = nodeId;
+                it->second->Path = data.GetPath();
             }
             NPDisk::TDriveData driveData;
             DriveDataToDriveData(data, driveData);
@@ -491,9 +507,6 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
 }
 
 void TBlobStorageController::EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo) {
-    for (const auto& [serial, driveData] : nodeInfo->KnownDrives) {
-        NodeIdByDiskSerialNumber.erase(serial);
-    }
     nodeInfo->KnownDrives.clear();
 }
 

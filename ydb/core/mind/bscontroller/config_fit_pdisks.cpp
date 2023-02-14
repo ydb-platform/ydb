@@ -217,6 +217,10 @@ namespace NKikimr {
                     return true;
                 }
 
+                if (driveInfo.LifeStage != NKikimrBlobStorage::TDriveLifeStage::ADDED_TO_BSC) {
+                    return true;
+                }
+
                 if (serial.Serial.empty()) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSCFP04, "Missing disks's serial number");
                     return true;

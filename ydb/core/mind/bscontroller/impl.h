@@ -848,7 +848,6 @@ public:
 
     };
 
-    std::unordered_map<TString, TNodeId> NodeIdByDiskSerialNumber;
     TMap<ui32, TSet<ui32>> NodesAwaitingKeysForGroup;
 
     struct THostConfigInfo {
@@ -1291,7 +1290,6 @@ public:
 
         TDriveSerialInfo(Table::BoxId::Type boxId)
           : BoxId(boxId)
-          , LifeStage(NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN)
         {}
 
         template<typename T>
@@ -1972,28 +1970,36 @@ public:
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutSlotCount);
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL].Set(numWithoutSerial);
 
-        ui32 numNotSeen = 0;
+        ui32 numUnknown = 0;
+        ui32 numSeen = 0;
+        ui32 numAdded = 0;
         ui32 numRemoved = 0;
         ui32 numError = 0;
         for (const auto& [serial, driveInfo] : DrivesSerials) {
             switch (driveInfo->LifeStage) {
-                case NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN:
-                    ++numNotSeen;
+                case NKikimrBlobStorage::TDriveLifeStage::SEEN_ON_NODE:
+                    ++numSeen;
                     break;
-                case NKikimrBlobStorage::TDriveLifeStage::REMOVED:
+                case NKikimrBlobStorage::TDriveLifeStage::ADDED_TO_BSC:
+                    ++numAdded;
+                    break;
+                case NKikimrBlobStorage::TDriveLifeStage::REMOVED_FROM_BSC:
                     ++numRemoved;
                     break;
                 case NKikimrBlobStorage::TDriveLifeStage::ERROR:
                     ++numError;
                     break;
                 default:
+                    ++numUnknown;
                     break;
             }
         }
 
-        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_NOT_SEEN].Set(numNotSeen);
-        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_REMOVED].Set(numRemoved);
+        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_SEEN_ON_NODE].Set(numSeen);
+        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_ADDED_TO_BSC].Set(numAdded);
+        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_REMOVED_FROM_BSC].Set(numRemoved);
         counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_ERROR].Set(numError);
+        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_UNKNOWN].Set(numUnknown);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

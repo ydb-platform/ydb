@@ -297,12 +297,12 @@ namespace NKikimr {
         return AllocState->GetAllocatedMemoryEstimate();
     }
 
-    double TAllocState::GetMemoryUsage() {
+    TMemoryUsage TAllocState::GetMemoryUsage() {
         NActors::TProcStat procStat;
         procStat.Fill(getpid());
-        if (!procStat.CGroupMemLim) {
-            return 0;
-        }
-        return (double)procStat.AnonRss / procStat.CGroupMemLim;
+        return TMemoryUsage {
+            .AnonRss = procStat.AnonRss,
+            .CGroupLimit = procStat.CGroupMemLim
+        };
     }
 }

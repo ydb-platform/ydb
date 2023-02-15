@@ -46,5 +46,6 @@ namespace NKikimr {
 
     NActors::IActor* CreateMemProfMonitor(
         ui32 intervalSec,
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+        const TString& filePathPrefix = "");
 }

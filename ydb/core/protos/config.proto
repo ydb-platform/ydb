@@ -512,6 +512,7 @@ message TMonitoringConfig {
     optional string RedirectMainPageTo = 13 [default = "monitoring/"];
     optional string MonitoringCertificate = 14;
     optional string MonitoringCertificateFile = 15;
+    optional string MemAllocDumpPathPrefix = 16;
 }
 
 message TRestartsCountConfig {

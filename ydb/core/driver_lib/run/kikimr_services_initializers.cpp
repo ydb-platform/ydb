@@ -1974,9 +1974,16 @@ void TMemProfMonitorInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData)
 {
+    TString filePathPrefix;
+
+    if (Config.HasMonitoringConfig()) {
+        filePathPrefix = Config.GetMonitoringConfig().GetMemAllocDumpPathPrefix();
+    }
+
     IActor* monitorActor = CreateMemProfMonitor(
         1, // seconds
-        appData->Counters);
+        appData->Counters,
+        filePathPrefix);
 
     setup->LocalServices.emplace_back(
         MakeMemProfMonitorID(NodeId),

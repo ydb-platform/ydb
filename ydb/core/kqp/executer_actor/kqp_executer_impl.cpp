@@ -146,12 +146,12 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    ui32 executerDelayToRetryMs)
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
         YQL_ENSURE(request.EraseLocks);
-        return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerDelayToRetryMs);
+        return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerRetriesConfig);
     }
 
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
@@ -167,13 +167,13 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     switch (*txsType) {
         case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
         case NKqpProto::TKqpPhyTx::TYPE_DATA:
-            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerDelayToRetryMs);
+            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerRetriesConfig);
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-            return CreateKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerDelayToRetryMs);
+            return CreateKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig);
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
-            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, true, executerDelayToRetryMs);
+            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, true, executerRetriesConfig);
 
         default:
             YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);

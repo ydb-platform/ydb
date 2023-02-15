@@ -85,7 +85,8 @@ struct TEvKqpExecuter {
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, 
-    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation, ui32 executerDelayToRetryMs);
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecutePure(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner);

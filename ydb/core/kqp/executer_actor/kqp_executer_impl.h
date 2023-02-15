@@ -110,15 +110,17 @@ protected:
     };
 
 public:
-    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
-        TKqpRequestCounters::TPtr counters, ui32 executerDelayToRetryMs, ui64 spanVerbosity = 0, TString spanName = "no_name")
+    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken, 
+        TKqpRequestCounters::TPtr counters, 
+        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+        ui64 spanVerbosity = 0, TString spanName = "no_name")
         : Request(std::move(request))
         , Database(database)
         , UserToken(userToken)
         , Counters(counters)
         , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
         , Planner(nullptr)
-        , ExecuterDelayToRetryMs(executerDelayToRetryMs)
+        , ExecuterRetriesConfig(executerRetriesConfig)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
         ResponseEv->Orbit = std::move(Request.Orbit);
@@ -417,7 +419,7 @@ protected:
             case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
                 if (reason == TEvents::TEvUndelivered::EReason::ReasonActorUnknown) {
                     LOG_D("Schedule a retry by ActorUnknown reason, nodeId:" << ev->Sender.NodeId() << " requestId: " << ev->Cookie);
-                    this->Schedule(TDuration::MilliSeconds(ExecuterDelayToRetryMs), new typename TEvPrivate::TEvRetry(ev->Cookie, ev->Sender));
+                    this->Schedule(TDuration::MilliSeconds(Planner->GetCurrentRetryDelay(ev->Cookie)), new typename TEvPrivate::TEvRetry(ev->Cookie, ev->Sender));
                     return;
                 }
                 InvalidateNode(ev->Sender.NodeId());
@@ -1180,7 +1182,7 @@ protected:
     TString LastComputeActorId = "";
 
     std::unique_ptr<TKqpPlanner> Planner;
-    ui32 ExecuterDelayToRetryMs;
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig ExecuterRetriesConfig;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
@@ -1191,11 +1193,13 @@ private:
 IActor* CreateKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters);
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult, ui32 executerDelayToRetryMs);
+    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, 
-    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation, ui32 executerDelayToRetryMs);
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
 
 } // namespace NKqp
 } // namespace NKikimr

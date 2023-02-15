@@ -1204,6 +1204,12 @@ message TTableServiceConfig {
         optional double AggregationJoinThreadsKff = 36 [default = 1];
     }
 
+    message TExecuterRetriesConfig {
+        optional uint32 MinDelayToRetryMs = 1 [default = 10];
+        optional uint32 MaxDelayToRetryMs = 2 [default = 400];
+        optional uint32 MaxRetryNumber = 3 [default = 10];
+    }
+
     optional uint32 QueryLimitBytes = 1;
     optional uint32 ParametersLimitBytes = 2;
     optional uint32 SessionsLimitPerNode = 3;
@@ -1236,7 +1242,7 @@ message TTableServiceConfig {
     optional TAggregationConfig AggregationConfig = 29;
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = false];
     optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
-    optional uint32 ExecuterDelayToRetryMs = 32 [default = 400];
+    optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
     optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
 };
 

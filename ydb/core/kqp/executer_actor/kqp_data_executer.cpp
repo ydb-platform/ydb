@@ -123,8 +123,9 @@ public:
     }
 
     TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
-        TKqpRequestCounters::TPtr counters, bool streamResult, ui32 executerDelayToRetryMs)
-        : TBase(std::move(request), database, userToken, counters, executerDelayToRetryMs, TWilsonKqp::DataExecuter, "DataExecuter")
+        TKqpRequestCounters::TPtr counters, bool streamResult,
+        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
+        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, TWilsonKqp::DataExecuter, "DataExecuter")
         , StreamResult(streamResult)
     {
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
@@ -2018,7 +2019,8 @@ private:
 
         Planner = CreateKqpPlanner(TxId, SelfId(), {}, std::move(tasksPerNode), Request.Snapshot,
             Database, Nothing(), Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
-            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, false, Nothing(), ExecuterSpan, {});
+            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, false, Nothing(), 
+            ExecuterSpan, {}, ExecuterRetriesConfig);
         Planner->ProcessTasksForDataExecuter();
 
         // then start data tasks with known actor ids of compute tasks
@@ -2327,9 +2329,9 @@ private:
 } // namespace
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
-    TKqpRequestCounters::TPtr counters, bool streamResult, ui32 executerDelayToRetryMs)
+    TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
 {
-    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerDelayToRetryMs);
+    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig);
 }
 
 } // namespace NKqp

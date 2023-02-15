@@ -69,8 +69,8 @@ public:
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-        ui32 executerDelayToRetryMs)
-        : TBase(std::move(request), database, userToken, counters, executerDelayToRetryMs, TWilsonKqp::ScanExecuter, "ScanExecuter")
+        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
+        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, TWilsonKqp::ScanExecuter, "ScanExecuter")
         , AggregationSettings(aggregation)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
@@ -746,7 +746,8 @@ private:
         Planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
             std::move(scanTasks), Request.Snapshot,
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
-            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath, ExecuterSpan, std::move(snapshot));
+            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling,
+            Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig);
         LOG_D("Execute scan tx, computeTasks: " << Planner->GetComputeTasksNumber() << ", scanTasks: " << Planner->GetMainTasksNumber());
 
         Planner->ProcessTasksForScanExecuter();
@@ -822,9 +823,9 @@ private:
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    ui32 executerDelayToRetryMs)
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
 {
-    return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerDelayToRetryMs);
+    return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig);
 }
 
 } // namespace NKqp

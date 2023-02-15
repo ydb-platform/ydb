@@ -28,7 +28,8 @@ TKqpPlanner::TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::
     const TString& database, const TMaybe<TString>& userToken, TInstant deadline,
     const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages, bool enableLlvm,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
-    TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot)
+    TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
     : TxId(txId)
     , ExecuterId(executer)
     , ComputeTasks(std::move(computeTasks))
@@ -44,6 +45,7 @@ TKqpPlanner::TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::
     , RlPath(rlPath)
     , ResourcesSnapshot(std::move(resourcesSnapshot))
     , ExecuterSpan(executerSpan)
+    , ExecuterRetriesConfig(executerRetriesConfig)
 {
     if (!Database) {
         // a piece of magic for tests
@@ -57,16 +59,15 @@ TKqpPlanner::TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::
 bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& target) {
     auto& requestData = Requests[requestId];
 
-    if (requestData.RetryNumber == 3) {
+    if (requestData.RetryNumber == ExecuterRetriesConfig.GetMaxRetryNumber() + 1) {
         return false;
     }
 
     auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksRequest>();
     ev->Record = requestData.request;
 
-    if (requestData.RetryNumber == 1) {
-        LOG_D("Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
-    } else if (requestData.RetryNumber == 2) {
+    if (requestData.RetryNumber == ExecuterRetriesConfig.GetMaxRetryNumber()) {
+        LOG_E("Retry failed by retries limit, requestId: " << requestId);
         TMaybe<ui32> targetNode;
         for (size_t i = 0; i < ResourcesSnapshot.size(); ++i) {
             if (!TrackingNodes.contains(ResourcesSnapshot[i].nodeid())) {
@@ -85,6 +86,11 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
         LOG_E("Retry failed because all nodes are busy, requestId: " << requestId);
         return false;
     }
+
+    if (requestData.RetryNumber >= 1) {
+        LOG_D("Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
+    }
+
     requestData.RetryNumber++;
 
     TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.Release(),
@@ -128,6 +134,18 @@ void TKqpPlanner::ProcessTasksForDataExecuter() {
     if (ExecuterSpan) {
         ExecuterSpan.Attribute("requestsCnt", requestsCnt);
     }
+}
+
+ui32 TKqpPlanner::GetCurrentRetryDelay(ui32 requestId) {
+    auto& requestData = Requests[requestId];
+    if (requestData.CurrentDelay == 0) {
+        requestData.CurrentDelay = ExecuterRetriesConfig.GetMinDelayToRetryMs();
+        return requestData.CurrentDelay;
+    }
+    requestData.CurrentDelay *= 2;
+    requestData.CurrentDelay = Min(requestData.CurrentDelay, ExecuterRetriesConfig.GetMaxDelayToRetryMs());
+    requestData.CurrentDelay = requestData.CurrentDelay * AppData()->RandomProvider->Uniform(100, 120) / 100;
+    return requestData.CurrentDelay;
 }
 
 void TKqpPlanner::ProcessTasksForScanExecuter() {
@@ -434,10 +452,11 @@ std::unique_ptr<TKqpPlanner> CreateKqpPlanner(ui64 txId, const TActorId& execute
     const TString& database, const TMaybe<TString>& userToken, TInstant deadline,
     const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages, bool enableLlvm,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
-    TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot)
+    TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
 {
     return std::make_unique<TKqpPlanner>(txId, executer, std::move(tasks), std::move(mainTasksPerNode), snapshot,
-        database, userToken, deadline, statsMode, disableLlvmForUdfStages, enableLlvm, withSpilling, rlPath, executerSpan, std::move(resourcesSnapshot));
+        database, userToken, deadline, statsMode, disableLlvmForUdfStages, enableLlvm, withSpilling, rlPath, executerSpan, 
+        std::move(resourcesSnapshot), executerRetriesConfig);
 }
 
 } // namespace NKikimr::NKqp

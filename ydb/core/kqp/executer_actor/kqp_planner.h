@@ -22,6 +22,7 @@ class TKqpPlanner {
         NKikimrKqp::TEvStartKqpTasksRequest request;
         ui32 flag;
         ui32 RetryNumber = 0;
+        ui32 CurrentDelay = 0;
     };
 
 public:
@@ -30,7 +31,7 @@ public:
         const TString& database, const TMaybe<TString>& userToken, TInstant deadline,
         const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages,
         bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& ExecuterSpan,
-        TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot);
+        TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
 
     void ProcessTasksForScanExecuter();
@@ -38,6 +39,8 @@ public:
 
     ui64 GetComputeTasksNumber() const;
     ui64 GetMainTasksNumber() const;
+
+    ui32 GetCurrentRetryDelay(ui32 requestId);
 private:
     void PrepareToProcess();
 
@@ -66,6 +69,7 @@ private:
     THashSet<ui32> TrackingNodes;
     const TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
     NWilson::TSpan& ExecuterSpan;
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
     ui64 LocalRunMemoryEst;
     TVector<TTaskResourceEstimation> ResourceEstimations;
     TVector<RequestData> Requests;
@@ -76,6 +80,7 @@ std::unique_ptr<TKqpPlanner> CreateKqpPlanner(ui64 txId, const TActorId& execute
     const TString& database, const TMaybe<TString>& userToken, TInstant deadline,
     const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages, bool enableLlvm,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
-    TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot);
+    TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig);
 
 } // namespace NKikimr::NKqp

@@ -1079,14 +1079,15 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::T
         auto& blobId = ev.Blob;
         TEvictMetadata meta;
         auto evict = BlobManager->GetDropped(blobId, meta);
-        Y_VERIFY(evict.Blob == blobId);
 
         if (evict.State == EEvictState::UNKNOWN) {
             LOG_S_ERROR("Forget unknown blob '" << blobId.ToStringNew() << "' at tablet " << TabletID());
         } else if (NOlap::IsExported(evict.State)) {
+            Y_VERIFY(evict.Blob == blobId);
             strBlobs += "'" + blobId.ToStringNew() + "' ";
             tierBlobs[meta.GetTierName()].emplace_back(std::move(evict));
         } else {
+            Y_VERIFY(evict.Blob == blobId);
             strBlobsDelayed += "'" + blobId.ToStringNew() + "' ";
         }
     }

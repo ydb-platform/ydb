@@ -3,8 +3,8 @@
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 
-#include <ydb/core/base/discovery.h>
 #include <ydb/core/base/location.h>
+#include <ydb/core/discovery/discovery.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -41,7 +41,8 @@ public:
 
     void Bootstrap() {
         // request endpoints
-        Discoverer = Register(CreateDiscoverer(Request->GetProtoRequest()->database(), SelfId(), CacheId));
+        Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
+            Request->GetProtoRequest()->database(), SelfId(), CacheId));
 
         // request self node info
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));

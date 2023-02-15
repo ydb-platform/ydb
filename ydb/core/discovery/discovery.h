@@ -1,7 +1,8 @@
 #pragma once
 
-#include "defs.h"
-#include "events.h"
+#include <ydb/core/base/events.h>
+
+#include <library/cpp/actors/core/actor.h>
 
 namespace NKikimr {
 
@@ -30,10 +31,12 @@ struct TEvDiscovery {
     };
 };
 
+using TLookupPathFunc = std::function<TString(const TString&)>;
+
 // Reply with:
 // - in case of success: TEvStateStorage::TEvBoardInfo
 // - otherwise: TEvDiscovery::TEvError
-IActor* CreateDiscoverer(const TString& database, const TActorId& replyTo, const TActorId& cacheId);
+IActor* CreateDiscoverer(TLookupPathFunc f, const TString& database, const TActorId& replyTo, const TActorId& cacheId);
 
 // Used to reduce number of requests to Board
 IActor* CreateDiscoveryCache();

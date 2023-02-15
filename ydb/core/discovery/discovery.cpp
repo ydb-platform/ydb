@@ -133,6 +133,7 @@ namespace NDiscoveryPrivate {
 }
 
 class TDiscoverer: public TActorBootstrapped<TDiscoverer> {
+    TLookupPathFunc MakeLookupPath;
     const TString Database;
     const TActorId ReplyTo;
     const TActorId CacheId;
@@ -153,8 +154,9 @@ public:
         return NKikimrServices::TActivity::DISCOVERY_ACTOR;
     }
 
-    explicit TDiscoverer(const TString& database, const TActorId& replyTo, const TActorId& cacheId)
-        : Database(database)
+    explicit TDiscoverer(TLookupPathFunc f, const TString& database, const TActorId& replyTo, const TActorId& cacheId)
+        : MakeLookupPath(f)
+        , Database(database)
         , ReplyTo(replyTo)
         , CacheId(cacheId)
     {
@@ -291,7 +293,7 @@ public:
         }
 
         const auto stateStorageGroupId = domainInfo->DefaultStateStorageGroup;
-        const auto reqPath = MakeEndpointsBoardPath(database);
+        const auto reqPath = MakeLookupPath(database);
 
         Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(reqPath, stateStorageGroupId), 0, ++LookupCookie);
         LookupResponse.Reset();
@@ -324,8 +326,8 @@ public:
     }
 };
 
-IActor* CreateDiscoverer(const TString& database, const TActorId& replyTo, const TActorId& cacheId) {
-    return new TDiscoverer(database, replyTo, cacheId);
+IActor* CreateDiscoverer(TLookupPathFunc f, const TString& database, const TActorId& replyTo, const TActorId& cacheId) {
+    return new TDiscoverer(f, database, replyTo, cacheId);
 }
 
 IActor* CreateDiscoveryCache() {

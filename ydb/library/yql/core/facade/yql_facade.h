@@ -341,6 +341,7 @@ private:
     TString TakeSessionId();
 
     NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges);
+    void SaveExprRoot();
 
 private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;

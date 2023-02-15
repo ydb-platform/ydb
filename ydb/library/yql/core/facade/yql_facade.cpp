@@ -605,7 +605,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
 
-    SavedExprRoot_ = ExprRoot_;
+    SaveExprRoot();
 
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
@@ -679,6 +679,8 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
     if (!openSession.Initialized())
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
 
+    SaveExprRoot();
+
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
         try {
@@ -748,7 +750,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     if (!openSession.Initialized())
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
 
-    SavedExprRoot_ = ExprRoot_;
+    SaveExprRoot();
 
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
@@ -830,7 +832,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
 
-    SavedExprRoot_ = ExprRoot_;
+    SaveExprRoot();
 
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
@@ -902,7 +904,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
 
-    SavedExprRoot_ = ExprRoot_;
+    SaveExprRoot();
 
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
@@ -915,6 +917,11 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
         }
         return AsyncTransformWithFallback(false);
     });
+}
+
+void TProgram::SaveExprRoot() {
+    TNodeOnNodeOwnedMap deepClones;
+    SavedExprRoot_ = ExprCtx_->DeepCopy(*ExprRoot_, *ExprCtx_, deepClones, /*internStrings*/false, /*copyTypes*/true, /*copyResult*/false, {});
 }
 
 TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool applyAsyncChanges)

@@ -5,7 +5,7 @@
 
 namespace NYql {
 
-TUserDataTable GetYqlDefaultMounts();
+void LoadYqlDefaultMounts(TUserDataTable& userData);
 
 bool GetYqlDefaultModuleResolver(
         TExprContext& ctx,

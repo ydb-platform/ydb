@@ -4,6 +4,23 @@ title: Deploy YDB OSS docs
 # https://abc.yandex-team.ru/services/market/, market - это slug
 service: kikimr
 
+arcanum:
+  review:
+    min_approvers_count: 1
+    ignore_self_ship: true
+    disable_sticky_ships: true
+    auto_assign: false
+    groups:
+    - name: kikimr
+      roles:
+      - "kikimr:@scope=development"
+      - "kikimr:@scope=administration"
+      - "edition_90_ydb_cs:@scope=content_manager"
+    rules:
+    - reviewers:
+        name: kikimr
+        ship: 1
+
 ci:
   permissions:
     start-flow:

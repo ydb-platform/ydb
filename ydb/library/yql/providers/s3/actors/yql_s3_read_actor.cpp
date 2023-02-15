@@ -1090,7 +1090,7 @@ private:
         if (auto* eventBase = ev->GetBase()) {
             message << " (" << eventBase->ToStringHeader() << ")";
         }
-        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(message)}));
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(message)}, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
     }
 
     TString GetLastDataAsText() {

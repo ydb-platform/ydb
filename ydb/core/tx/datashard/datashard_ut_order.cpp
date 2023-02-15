@@ -215,29 +215,26 @@ static void ZigZag(const TTester::TOptions& opts, bool symmetric, ui32 limit = 4
     ZigZag(proxy, symmetric, limit);
 }
 
-Y_UNIT_TEST_WITH_MVCC(ZigZag) {
+Y_UNIT_TEST(ZigZag) {
     TTester::TOptions opts;
-    opts.EnableMvcc(WithMvcc);
     ZigZag(opts, true);
     ZigZag(opts, false);
 }
 
-Y_UNIT_TEST_WITH_MVCC(ZigZag_oo) {
+Y_UNIT_TEST(ZigZag_oo) {
     TVector<ui32> variants = {4, 8, 16};
     for (ui32 var : variants) {
         TTester::TOptions opts;
         opts.EnableOutOfOrder(var);
-        opts.EnableMvcc(WithMvcc);
         ZigZag(opts, true);
         ZigZag(opts, false);
     }
 }
 
-Y_UNIT_TEST_WITH_MVCC(ZigZag_oo8_dirty) {
+Y_UNIT_TEST(ZigZag_oo8_dirty) {
     TTester::TOptions opts;
     opts.EnableOutOfOrder(8);
     opts.EnableSoftUpdates();
-    opts.EnableMvcc(WithMvcc);
     ZigZag(opts, true);
     ZigZag(opts, false);
 }
@@ -313,48 +310,41 @@ static void ImmediateBetweenOnline(const TTester::TOptions& opts, bool forceOnli
     proxy.ExecQueue();
 }
 
-Y_UNIT_TEST_WITH_MVCC(ImmediateBetweenOnline) {
+Y_UNIT_TEST(ImmediateBetweenOnline) {
     TTester::TOptions opts;
-    opts.EnableMvcc(WithMvcc);
     ImmediateBetweenOnline(opts, false);
 }
 
-Y_UNIT_TEST_WITH_MVCC(ImmediateBetweenOnline_Init) {
+Y_UNIT_TEST(ImmediateBetweenOnline_Init) {
     TTester::TOptions opts;
-    opts.EnableMvcc(WithMvcc);
     ImmediateBetweenOnline(opts, false);
 }
 
-Y_UNIT_TEST_WITH_MVCC(ForceOnlineBetweenOnline) {
+Y_UNIT_TEST(ForceOnlineBetweenOnline) {
     TTester::TOptions opts;
-    opts.EnableMvcc(WithMvcc);
     ImmediateBetweenOnline(opts, true);
 }
 
-Y_UNIT_TEST_WITH_MVCC(ImmediateBetweenOnline_oo8) {
+Y_UNIT_TEST(ImmediateBetweenOnline_oo8) {
     TTester::TOptions opts;
-    opts.EnableMvcc(WithMvcc);
     opts.EnableOutOfOrder(8);
     ImmediateBetweenOnline(opts, false);
 }
 
-Y_UNIT_TEST_WITH_MVCC(ImmediateBetweenOnline_Init_oo8) {
+Y_UNIT_TEST(ImmediateBetweenOnline_Init_oo8) {
     TTester::TOptions opts(1);
-    opts.EnableMvcc(WithMvcc);
     opts.EnableOutOfOrder(8);
     ImmediateBetweenOnline(opts, false);
 }
 
-Y_UNIT_TEST_WITH_MVCC(ForceOnlineBetweenOnline_oo8) {
+Y_UNIT_TEST(ForceOnlineBetweenOnline_oo8) {
     TTester::TOptions opts;
-    opts.EnableMvcc(WithMvcc);
     opts.EnableOutOfOrder(8);
     ImmediateBetweenOnline(opts, true);
 }
 
-Y_UNIT_TEST_WITH_MVCC(ImmediateBetweenOnline_oo8_dirty) {
+Y_UNIT_TEST(ImmediateBetweenOnline_oo8_dirty) {
     TTester::TOptions opts;
-    opts.EnableMvcc(WithMvcc);
     opts.EnableOutOfOrder(8);
     opts.EnableSoftUpdates();
     ImmediateBetweenOnline(opts, false);
@@ -379,9 +369,8 @@ static void EvictShardCache(TFakeMiniKQLProxy& proxy, ui32 count = 500) {
     proxy.ExecQueue();
 }
 
-Y_UNIT_TEST_WITH_MVCC(DelayData) {
+Y_UNIT_TEST(DelayData) {
     TTester::TOptions opts;
-    opts.EnableMvcc(WithMvcc);
     opts.EnableOutOfOrder(2);
     opts.ExecutorCacheSize = 0;
     TTester t(TTester::ESchema_MultiShardKV, opts);
@@ -408,10 +397,9 @@ Y_UNIT_TEST_WITH_MVCC(DelayData) {
     proxy.ExecQueue();
 }
 
-Y_UNIT_TEST_WITH_MVCC(ReadWriteReorder) {
+Y_UNIT_TEST(ReadWriteReorder) {
     TTester::TOptions opts;
     opts.EnableOutOfOrder(10);
-    opts.EnableMvcc(WithMvcc);
 
     TTester t(TTester::ESchema_MultiShardKV, opts);
     TFakeMiniKQLProxy proxy(t);
@@ -785,12 +773,11 @@ static void RandomTxDeps(const TTester::TOptions& opts, ui32 numTxs, ui32 maxKey
 
 static constexpr ui32 NumRun() { return 2; }
 
-Y_UNIT_TEST_WITH_MVCC(RandomPoints_ReproducerDelayData1) {
+Y_UNIT_TEST(RandomPoints_ReproducerDelayData1) {
     TTester::TOptions opts;
     opts.DelayData = true;
     opts.ExecutorCacheSize = 0;
     opts.EnableOutOfOrder(8);
-    opts.EnableMvcc(WithMvcc);
 
     RandomTxDeps(opts, 8, 8, false, false,
                  {5, 5, 6, 7, 3, 6, 5, 6},
@@ -798,11 +785,10 @@ Y_UNIT_TEST_WITH_MVCC(RandomPoints_ReproducerDelayData1) {
                  {11, 30, 10, 12, 5, 23, 30, 32});
 }
 
-Y_UNIT_TEST_WITH_MVCC(RandomPoints_ReproducerDelayRS1) {
+Y_UNIT_TEST(RandomPoints_ReproducerDelayRS1) {
     TTester::TOptions opts;
     opts.DelayReadSet = true;
     opts.EnableOutOfOrder(8);
-    opts.EnableMvcc(WithMvcc);
 
     RandomTxDeps(opts, 8, 8, true, false,
                  {2, 7, 7, 7, 6, 3, 2, 4},
@@ -810,11 +796,10 @@ Y_UNIT_TEST_WITH_MVCC(RandomPoints_ReproducerDelayRS1) {
                  {0, 40, 2, 33, 8, 4, 1, 3});
 }
 
-Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS) {
+Y_UNIT_TEST(RandomPoints_DelayRS) {
     TTester::TOptions opts;
     opts.DelayReadSet = true;
     opts.EnableOutOfOrder(8);
-    opts.EnableMvcc(WithMvcc);
 
     TVector<std::pair<ui32, ui32>> variants;
     variants.push_back({8, 8});
@@ -834,11 +819,10 @@ Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS) {
     }
 }
 
-Y_UNIT_TEST_WITH_MVCC(RandomDotRanges_DelayRS) {
+Y_UNIT_TEST(RandomDotRanges_DelayRS) {
     TTester::TOptions opts;
     opts.DelayReadSet = true;
     opts.EnableOutOfOrder(8);
-    opts.EnableMvcc(WithMvcc);
 
     TVector<std::pair<ui32, ui32>> variants;
     variants.push_back({8, 8});
@@ -858,12 +842,11 @@ Y_UNIT_TEST_WITH_MVCC(RandomDotRanges_DelayRS) {
     }
 }
 
-Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS_Reboot) {
+Y_UNIT_TEST(RandomPoints_DelayRS_Reboot) {
     TTester::TOptions opts;
     opts.DelayReadSet = true;
     opts.RebootOnDelay = true;
     opts.EnableOutOfOrder(8);
-    opts.EnableMvcc(WithMvcc);
 
     TVector<std::pair<ui32, ui32>> variants;
     variants.push_back({8, 8});
@@ -883,13 +866,12 @@ Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS_Reboot) {
     }
 }
 
-Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS_Reboot_Dirty) {
+Y_UNIT_TEST(RandomPoints_DelayRS_Reboot_Dirty) {
     TTester::TOptions opts;
     opts.DelayReadSet = true;
     opts.RebootOnDelay = true;
     opts.EnableSoftUpdates();
     opts.EnableOutOfOrder(8);
-    opts.EnableMvcc(WithMvcc);
 
     TVector<std::pair<ui32, ui32>> variants;
     variants.push_back({8, 8});
@@ -909,12 +891,11 @@ Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS_Reboot_Dirty) {
     }
 }
 
-Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayData) {
+Y_UNIT_TEST(RandomPoints_DelayData) {
     TTester::TOptions opts;
     opts.DelayData = true;
     opts.ExecutorCacheSize = 0;
     opts.EnableOutOfOrder(8);
-    opts.EnableMvcc(WithMvcc);
 
     TVector<std::pair<ui32, ui32>> variants;
     variants.push_back({8, 8});
@@ -1139,11 +1120,10 @@ static void RandomPointsAndRanges(const TTester::TOptions& opts, ui32 numTxs, ui
     RandomPointsAndRanges(proxy, numTxs, maxWrites, maxReads, maxRanges);
 }
 
-Y_UNIT_TEST_WITH_MVCC(RandomPointsAndRanges) {
+Y_UNIT_TEST(RandomPointsAndRanges) {
     TTester::TOptions opts;
     opts.ExecutorCacheSize = 0;
     opts.EnableOutOfOrder(8);
-    opts.EnableMvcc(WithMvcc);
 
     TVector<TVector<ui32>> variants;
     variants.push_back(TVector<ui32>() = {100, 20, 20, 20});
@@ -1160,11 +1140,10 @@ Y_UNIT_TEST_WITH_MVCC(RandomPointsAndRanges) {
 ///
 Y_UNIT_TEST_SUITE(DataShardScan) {
 
-Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
+Y_UNIT_TEST(ScanFollowedByUpdate) {
     TTester::TOptions opts;
     opts.ExecutorCacheSize = 0;
     opts.EnableOutOfOrder(8);
-    opts.EnableMvcc(WithMvcc);
 
     TTester t(TTester::ESchema_MultiShardKV, opts);
     TFakeMiniKQLProxy proxy(t);
@@ -1236,14 +1215,13 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
     proxy.ExecQueue();
 }
 
-Y_UNIT_TEST_TWIN(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc) {
+Y_UNIT_TEST(TestDelayedTxWaitsForWriteActiveTxOnly) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false)
         .SetAppConfig(app);
 
@@ -1332,13 +1310,12 @@ Y_UNIT_TEST_TWIN(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOnlyDataTxLagCausesRejects, UseMvcc) {
+Y_UNIT_TEST(TestOnlyDataTxLagCausesRejects) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false)
         .SetAppConfig(app);
 
@@ -1420,14 +1397,13 @@ Y_UNIT_TEST_TWIN(TestOnlyDataTxLagCausesRejects, UseMvcc) {
 
 Y_UNIT_TEST_SUITE(DataShardOutOfOrder) {
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, UseMvcc) {
+Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false)
         .SetAppConfig(app);
 
@@ -1553,7 +1529,6 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
         .SetAppConfig(app)
         .SetUseRealThreads(false);
 
@@ -1680,14 +1655,13 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, UseMvcc) {
+Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, StreamLookup) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false)
         .SetAppConfig(app);
 
@@ -1781,13 +1755,12 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, UseMvcc) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, UseMvcc) {
+Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetAppConfig(app)
         .SetUseRealThreads(false);
 
@@ -1888,145 +1861,10 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, UseMvcc) {
     }
 }
 
-Y_UNIT_TEST(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
-    TPortManager pm;
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(false) // intentionally, because we test non-mvcc locks logic
-        .SetAppConfig(app)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    // This test requires barrier to be disabled
-    runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true);
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-    auto table1shards = GetTableShards(server, sender, "/Root/table-1");
-    auto table2shards = GetTableShards(server, sender, "/Root/table-2");
-
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
-
-    TString sessionId = CreateSessionRPC(runtime);
-
-    TString txId;
-    {
-        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
-            SELECT * FROM `/Root/table-1` WHERE key = 1
-            UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
-        UNIT_ASSERT_VALUES_EQUAL(
-            result,
-            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 2 } items { uint32_value: 1 } }");
-    }
-
-    // Capture and block all readset messages
-    TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
-        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-            readSets.push_back(std::move(event));
-            return TTestActorRuntime::EEventAction::DROP;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
-
-    // Send a commit request, it would block on readset exchange
-    SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
-
-    // Wait until we captured both readsets
-    if (readSets.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Reboot table-1 tablet
-    readSets.clear();
-    RebootTablet(runtime, table1shards[0], sender);
-
-    // Wait until we captured both readsets again
-    if (readSets.size() < 2) {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(
-            [&](IEventHandle &) -> bool {
-                return readSets.size() >= 2;
-            });
-        runtime.DispatchEvents(options);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
-
-    // Select keys 1 and 3, we expect this immediate tx to succeed
-    // Note that key 3 is not written yet, but we pretend immediate tx
-    // executes before that waiting transaction (no key 3 yet).
-    {
-        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 1 OR key = 3;"));
-        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
-    }
-
-    // Upsert key 1, we expect this immediate tx to timeout
-    // Another tx has already checked locks for that key, we must never
-    // pretend some other conflicting write happened before that tx completes.
-    {
-        TString tmpSessionId = CreateSessionRPC(runtime);
-        TString tmpTxId;
-        auto req = MakeSimpleRequestRPC(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3);"), tmpSessionId, tmpTxId, true);
-        req.mutable_operation_params()->mutable_cancel_after()->set_seconds(1);
-        req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
-        auto response = AwaitResponse(runtime, SendRequest(runtime, std::move(req)));
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::TIMEOUT);
-    }
-
-    // Upsert key 5, this immediate tx should timeout because we currently
-    // lose information on locked keys after reboot and it acts as a global
-    // barrier.
-    {
-        TString tmpSessionId = CreateSessionRPC(runtime);
-        TString tmpTxId;
-        auto req = MakeSimpleRequestRPC(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);"), tmpSessionId, tmpTxId, true);
-        req.mutable_operation_params()->mutable_cancel_after()->set_seconds(1);
-        req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
-        auto response = AwaitResponse(runtime, SendRequest(runtime, std::move(req)));
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::TIMEOUT);
-    }
-
-    // Release readsets allowing tx to progress
-    runtime.SetObserverFunc(prevObserverFunc);
-    for (auto& ev : readSets) {
-        runtime.Send(ev.Release(), 0, /* viaActorSystem */ true);
-    }
-
-    // Select key 3, we expect a success
-    {
-        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
-        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 3 } items { uint32_value: 2 } }");
-    }
-}
-
 Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2139,13 +1977,12 @@ Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc) {
+Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, StreamLookup) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetAppConfig(app)
         .SetUseRealThreads(false);
 
@@ -2272,13 +2109,12 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc) {
+Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, StreamLookup) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetAppConfig(app)
         .SetUseRealThreads(false);
 
@@ -2455,13 +2291,12 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestCopyTableNoDeadlock, UseMvcc) {
+Y_UNIT_TEST(TestCopyTableNoDeadlock) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false)
         .SetAppConfig(app);
 
@@ -2828,11 +2663,10 @@ Y_UNIT_TEST(TestPlannedCancelSplit) {
         "Split needed " << elapsed.ToString() << " to complete, which is too long");
 }
 
-Y_UNIT_TEST_TWIN(TestPlannedTimeoutSplit, UseMvcc) {
+Y_UNIT_TEST(TestPlannedTimeoutSplit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2946,11 +2780,10 @@ Y_UNIT_TEST_TWIN(TestPlannedTimeoutSplit, UseMvcc) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestPlannedHalfOverloadedSplit, UseMvcc) {
+Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3328,11 +3161,10 @@ Y_UNIT_TEST(TestReadTableImmediateWriteBlock) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestReadTableSingleShardImmediate, WithMvcc) {
+Y_UNIT_TEST(TestReadTableSingleShardImmediate) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3544,14 +3376,13 @@ Y_UNIT_TEST(TestImmediateQueueThenSplit) {
         << failures << " failures");
 }
 
-void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query, bool enableMvcc = false) {
+void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(enableMvcc)
         .SetUseRealThreads(false)
         .SetAppConfig(app);
 
@@ -3661,14 +3492,14 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query, bool 
     }
 }
 
-Y_UNIT_TEST_WITH_MVCC(TestLateKqpScanAfterColumnDrop) {
-    TestLateKqpQueryAfterColumnDrop(false, "SELECT SUM(value2) FROM `/Root/table-1`", WithMvcc);
+Y_UNIT_TEST(TestLateKqpScanAfterColumnDrop) {
+    TestLateKqpQueryAfterColumnDrop(false, "SELECT SUM(value2) FROM `/Root/table-1`");
 }
 
-Y_UNIT_TEST_WITH_MVCC(TestLateKqpDataReadAfterColumnDrop) {
+Y_UNIT_TEST(TestLateKqpDataReadAfterColumnDrop) {
     TestLateKqpQueryAfterColumnDrop(true, R"(
             SELECT SUM(value2) FROM `/Root/table-1`
-        )", WithMvcc);
+        )");
 }
 
 Y_UNIT_TEST(MvccTestSnapshotRead) {
@@ -3677,7 +3508,6 @@ Y_UNIT_TEST(MvccTestSnapshotRead) {
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
         .SetAppConfig(app)
         .SetUseRealThreads(false);
 
@@ -3880,14 +3710,13 @@ Y_UNIT_TEST(TestSecondaryClearanceAfterShardRestartRace) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);"));
 }
 
-Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, UseMvcc) {
+Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, StreamLookup) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false)
         .SetAppConfig(app);
 
@@ -3987,14 +3816,13 @@ Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, UseMvcc) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, UseMvcc) {
+Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, StreamLookup) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(WithMvcc)
         .SetUseRealThreads(false)
         .SetAppConfig(app);
 
@@ -4082,8 +3910,6 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -4228,8 +4054,6 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLock) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -4295,8 +4119,6 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -4417,8 +4239,6 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -4514,8 +4334,6 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
     controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(UnprotectedReads ? 1 : 0);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
         .SetControls(controls)
         .SetUseRealThreads(false);
 
@@ -4788,8 +4606,6 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetNodeCount(2)
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
         .SetControls(controls)
         .SetUseRealThreads(false);
 
@@ -5202,8 +5018,6 @@ Y_UNIT_TEST(UncommittedReads) {
 
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(true)
-        .SetEnableMvccSnapshotReads(true)
         .SetControls(controls)
         .SetUseRealThreads(false);
 

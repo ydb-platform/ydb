@@ -1877,7 +1877,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(true)
             .SetUseRealThreads(false);
 
         const ui64 shardCount = 1;
@@ -1895,7 +1894,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(true)
             .SetUseRealThreads(false);
 
         const ui64 shardCount = 1;
@@ -1982,7 +1980,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(true)
             .SetUseRealThreads(false);
 
         const ui64 shardCount = 1;
@@ -2037,7 +2034,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(true)
             .SetUseRealThreads(false);
 
         const ui64 shardCount = 1;
@@ -2133,7 +2129,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(true)
             .SetUseRealThreads(false);
 
         const ui64 shardCount = 1;
@@ -2288,7 +2283,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(true)
             .SetUseRealThreads(false);
 
         TTestHelper helper(serverSettings);

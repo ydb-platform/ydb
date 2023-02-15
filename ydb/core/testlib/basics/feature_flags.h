@@ -45,18 +45,6 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardVolatileTransactions)
     FEATURE_FLAG_SETTER(EnableTopicServiceTx)
 
-    TDerived& SetEnableMvcc(std::optional<bool> value) {
-        if (value) {
-            if (*value) {
-                FeatureFlags.SetEnableMvcc(NKikimrConfig::TFeatureFlags::VALUE_TRUE);
-            } else {
-                FeatureFlags.SetEnableMvcc(NKikimrConfig::TFeatureFlags::VALUE_FALSE);
-            }
-        }
-
-        return *static_cast<TDerived*>(this);
-    }
-
     #undef FEATURE_FLAG_SETTER
 };
 

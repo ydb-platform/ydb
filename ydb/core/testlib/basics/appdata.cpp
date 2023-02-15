@@ -58,13 +58,8 @@ namespace NKikimr {
         app->MeteringConfig = MeteringConfig;
         app->FeatureFlags = FeatureFlags;
 
-        if (app->FeatureFlags.GetEnableMvcc() && !*app->FeatureFlags.GetEnableMvcc()) {
-            // Make sure we don't try to use snapshot isolation without mvcc
-            app->FeatureFlags.SetEnableMvccSnapshotReadsForTest(false);
-        } else {
-            // This is a special setting active in test runtime only
-            app->EnableMvccSnapshotWithLegacyDomainRoot = true;
-        }
+        // This is a special setting active in test runtime only
+        app->EnableMvccSnapshotWithLegacyDomainRoot = true;
 
         auto tempKeys = std::move(Keys);
         auto keyGenerator = [tempKeys] (ui32 node) {

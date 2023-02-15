@@ -51,48 +51,6 @@ TString GetTablePath(TTestActorRuntime &runtime,
 }
 
 Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
-    Y_UNIT_TEST(TestMvccStateSwitch) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(true)
-            .SetUseRealThreads(false);
-
-        Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-        InitRoot(server, sender);
-
-        CreateShardedTable(server, sender, "/Root", "table-1", 1);
-
-        auto tabletId = GetTableShards(server, sender, "/Root/table-1")[0];
-        auto actorId = ResolveTablet(runtime, tabletId);
-        auto datashard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(actorId));
-
-        UNIT_ASSERT_EQUAL(datashard->GetSnapshotManager().GetMvccState(), NDataShard::EMvccState::MvccEnabled);
-
-        runtime.GetAppData().FeatureFlags.SetEnableMvccForTest(false);
-
-        GracefulRestartTablet(runtime, tabletId, sender);
-
-        auto waitFor = [&](const auto& condition, const TString& description) {
-            if (!condition()) {
-                Cerr << "... waiting for " << description << Endl;
-                TDispatchOptions options;
-                options.CustomFinalCondition = [&]() {
-                    return condition();
-                };
-                runtime.DispatchEvents(options);
-                UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
-            }
-        };
-
-        actorId = ResolveTablet(runtime, tabletId);
-        datashard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(actorId));
-
-        waitFor([&]{ return datashard->GetSnapshotManager().GetMvccState() == NDataShard::EMvccState::MvccDisabled; }, "mvcc disabled");
-    }
 
     Y_UNIT_TEST(TestGetShardStateAfterInitialization) {
         TTestBasicRuntime runtime;

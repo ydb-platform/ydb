@@ -30,6 +30,7 @@ const bool ENABLE_DATASHARD_LOG = true;
 const bool DUMP_RESULT = false;
 
 void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
+    Y_UNUSED(opts);
     if (ENABLE_DATASHARD_LOG) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     }
@@ -40,7 +41,6 @@ void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
 
     TAppPrepare app;
 
-    app.SetEnableMvcc(opts.Mvcc);
 
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                       "dc-1", domainId, FAKE_SCHEMESHARD_TABLET_ID,

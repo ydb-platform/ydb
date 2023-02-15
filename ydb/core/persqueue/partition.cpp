@@ -764,7 +764,7 @@ void TPartition::Bootstrap(const TActorContext& ctx) {
                                                                      Partition));
     }
 
-    UsersInfoStorage.Init(Tablet, SelfId());
+    UsersInfoStorage.Init(Tablet, SelfId(), ctx);
 
     Y_VERIFY(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
     ui32 border = LEVEL0;
@@ -1036,7 +1036,6 @@ void TPartition::UpdateAvailableSize(const TActorContext& ctx) {
         }
     }
     ScheduleUpdateAvailableSize(ctx);
-    ReportCounters(ctx);
 }
 
 void TPartition::HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActorContext& ctx) {
@@ -1829,6 +1828,8 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         CreateMirrorerActor();
     }
+
+    ReportCounters(ctx);
 }
 
 
@@ -2385,7 +2386,6 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp.ByteSize());
     }
     ctx.Send(info.Destination != 0 ? Tablet : ctx.SelfID, answer.Event.Release());
-    ReportCounters(ctx);
     OnReadRequestFinished(std::move(info), answer.Size);
 }
 
@@ -3026,13 +3026,11 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
         }
 
         TabletCounters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_OFFSET_IS_LOST].Increment(1);
-        ReportCounters(ctx);
         return;
     }
 
     if (userInfo.Offset >= (i64)EndOffset || StartOffset == EndOffset) {
         userInfo.ReadScheduled = false;
-        ReportCounters(ctx);
         return;
     }
 
@@ -3149,7 +3147,6 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
         ReadTimestampForOffset(user, *userInfo, ctx);
     }
     Y_VERIFY(ReadingTimestamp || UpdateUserInfoTimestamp.empty());
-    ReportCounters(ctx);
 }
 
 
@@ -3386,18 +3383,6 @@ void TPartition::ReportCounters(const TActorContext& ctx) {
             userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_BYTES].Set(speed);
         }
 
-        ui64 availSec = userInfo.ReadQuota.GetAvailableAvgSec(ctx.Now());
-        if (availSec != userInfo.LabeledCounters->GetCounters()[METRIC_MIN_READ_QUOTA_BYTES_AVAIL_SEC].Get()) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_MIN_READ_QUOTA_BYTES_AVAIL_SEC].Set(availSec);
-        }
-
-        ui64 availMin = userInfo.ReadQuota.GetAvailableAvgMin(ctx.Now());
-        if (availMin != userInfo.LabeledCounters->GetCounters()[METRIC_MIN_READ_QUOTA_BYTES_AVAIL_MIN].Get()) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_MIN_READ_QUOTA_BYTES_AVAIL_MIN].Set(availMin);
-        }
-
         ui64 readOffsetRewindSum = userInfo.ReadOffsetRewindSum;
         if (readOffsetRewindSum != userInfo.LabeledCounters->GetCounters()[METRIC_READ_OFFSET_REWIND_SUM].Get()) {
             haveChanges = true;
@@ -3458,18 +3443,6 @@ void TPartition::ReportCounters(const TActorContext& ctx) {
     if (speed != PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_BYTES].Get()) {
         haveChanges = true;
         PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_BYTES].Set(speed);
-    }
-
-    ui64 availSec = WriteQuota->GetAvailableAvgSec(ctx.Now());
-    if (availSec != PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_SEC].Get()) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_SEC].Set(availSec);
-    }
-
-    ui64 availMin = WriteQuota->GetAvailableAvgMin(ctx.Now());
-    if (availMin != PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_MIN].Get()) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_MIN].Set(availMin);
     }
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
@@ -3942,6 +3915,8 @@ void TPartition::BeginChangePartitionConfig(const TEvPQ::TEvChangePartitionConfi
 
         ProcessUserAct(act, ctx);
     }
+
+    ReportCounters(ctx);
 }
 
 void TPartition::EndChangePartitionConfig(const TEvPQ::TEvChangePartitionConfig& event,
@@ -3985,6 +3960,7 @@ void TPartition::EndChangePartitionConfig(const TEvPQ::TEvChangePartitionConfig&
     }
 
     SchedulePartitionConfigChanged();
+    ReportCounters(ctx);
 }
 
 void TPartition::InitPendingUserInfoForImportantClients(const TEvPQ::TEvChangePartitionConfig& event,
@@ -4572,21 +4548,6 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
     ctx.Schedule(UPDATE_AVAIL_SIZE_INTERVAL, new TEvPQ::TEvUpdateAvailableSize());
 }
 
-
-void TQuotaTracker::Update(const TInstant& timestamp) {
-    ui64 ms = (timestamp - LastUpdateTime).MilliSeconds();
-    LastUpdateTime += TDuration::MilliSeconds(ms);
-
-    if (AvailableSize < 0) {
-        QuotedTime += ms;
-    }
-
-    AvailableSize = Min<i64>(AvailableSize + (ui64)SpeedPerSecond * ms / 1000, MaxBurst);
-    AvgMin.Update(AvailableSize, timestamp.MilliSeconds());
-    AvgSec.Update(AvailableSize, timestamp.MilliSeconds());
-}
-
-
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     Y_VERIFY(CurrentStateFunc() == &TThis::StateWrite);
@@ -4655,8 +4616,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     ProcessHasDataRequests(ctx);
 
     ProcessTimestampsForNewData(prevEndOffset, ctx);
-
-    ReportCounters(ctx);
 
     HandleWrites(ctx);
 }
@@ -5625,7 +5584,6 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_HEAD_ONLY].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp.ByteSize());
         ctx.Send(info.Destination != 0 ? Tablet : ctx.SelfID, answer.Event.Release());
-        ReportCounters(ctx);
         OnReadRequestFinished(std::move(info), answer.Size);
         return;
     }

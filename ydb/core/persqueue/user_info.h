@@ -3,6 +3,7 @@
 #include "working_time_counter.h"
 #include "subscriber.h"
 #include "percentile_counter.h"
+#include "quota_tracker.h"
 #include "read_speed_limiter.h"
 #include "metering_sink.h"
 
@@ -31,111 +32,6 @@ static const ui64 MIN_TIMESTAMP_MS = 1'000'000'000'000ll; // around 2002 year
 static const TString CLIENTID_WITHOUT_CONSUMER = "$without_consumer";
 
 typedef TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor> TUserLabeledCounters;
-
-
-class TQuotaTracker {
-
-    class TAvgTracker {
-    public:
-        TAvgTracker(ui64 duration)
-            : Duration(duration)
-            , Sum(0)
-        {
-            Y_VERIFY(duration > 0);
-        }
-
-        void Update(i64 value, i64 ts)
-        {
-            Values.push_back(std::make_pair(value, ts));
-            i64 newStart = ts - Duration;
-            if (Values.size() > 1) {
-                Sum += GetSum(Values.size() - 2);
-                Y_VERIFY(Values.back().second >= Values.back().second);
-            }
-            while (Values.size() > 2 && newStart > Values[1].second) {
-                Sum -= GetSum(0);
-                Values.pop_front();
-            }
-        }
-
-        ui64 GetAvg() {
-             return (Values.size() > 1 && Values.back().second > Values.front().second)
-                            ? Max<i64>(0, Sum / (Values.back().second - Values.front().second))
-                            : 0;
-        }
-
-    private:
-
-        i64 GetSum(ui32 pos) {
-            Y_VERIFY(pos + 1 < Values.size());
-            return (Values[pos + 1].first + Values[pos].first) * (Values[pos + 1].second - Values[pos].second) / 2;
-        }
-
-    private:
-        ui64 Duration;
-        i64 Sum;
-        std::deque<std::pair<i64, i64>> Values;
-    };
-
-
-public:
-    TQuotaTracker(const ui64 maxBurst, const ui64 speedPerSecond, const TInstant& timestamp)
-        : AvailableSize(maxBurst)
-        , SpeedPerSecond(speedPerSecond)
-        , LastUpdateTime(timestamp)
-        , MaxBurst(maxBurst)
-        , AvgMin(60'000) //avg avail in bytes per sec for last minute
-        , AvgSec(1000) //avg avail in bytes per sec
-        , QuotedTime(0)
-    {}
-
-    ui64 GetQuotedTime() const {
-        return QuotedTime;
-    }
-
-    void UpdateConfig(const ui64 maxBurst, const ui64 speedPerSecond) {
-        SpeedPerSecond = speedPerSecond;
-        MaxBurst = maxBurst;
-        AvailableSize = maxBurst;
-    }
-
-    void Update(const TInstant& timestamp);
-
-    bool CanExaust() const {
-        return AvailableSize > 0;
-    }
-
-    void Exaust(const ui64 size, const TInstant& timestamp) {
-        Update(timestamp);
-        AvailableSize -= (i64)size;
-        Update(timestamp);
-    }
-
-    ui64 GetAvailableAvgSec(const TInstant& timestamp) {
-        Update(timestamp);
-        return AvgSec.GetAvg();
-    }
-
-    ui64 GetAvailableAvgMin(const TInstant& timestamp) {
-        Update(timestamp);
-        return AvgMin.GetAvg();
-    }
-
-    ui64 GetTotalSpeed() const {
-        return SpeedPerSecond;
-    }
-
-private:
-    i64 AvailableSize;
-    ui64 SpeedPerSecond;
-    TInstant LastUpdateTime;
-    ui64 MaxBurst;
-
-    TAvgTracker AvgMin;
-    TAvgTracker AvgSec;
-
-    ui64 QuotedTime;
-};
 
 struct TReadSpeedLimiterHolder {
     TReadSpeedLimiterHolder(const TActorId& actor, const TTabletCountersBase& baseline)
@@ -262,11 +158,12 @@ struct TUserInfo {
     }
 
     TUserInfo(
-        const TActorContext& ctx, THolder<TReadSpeedLimiterHolder> readSpeedLimiter, const TString& user,
+        const TActorContext& ctx,
+        NMonitoring::TDynamicCounterPtr streamCountersSubgroup, THolder<TReadSpeedLimiterHolder> readSpeedLimiter, const TString& user,
         const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
         const ui32 partition, const TString &session, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
-        const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId, bool meterRead,
+        const TString& dbPath, bool meterRead,
         ui64 burst = 1'000'000'000, ui64 speed = 1'000'000'000
     )
         : ReadSpeedLimiter(std::move(readSpeedLimiter))
@@ -305,7 +202,7 @@ struct TUserInfo {
                 LabeledCounters.Reset(new TUserLabeledCounters(
                     user + "||" + topicConverter->GetClientsideName(), partition, dbPath));
 
-                SetupStreamCounters(ctx, dcId, ToString<ui32>(partition), cloudId, dbId, dbPath, isServerless, folderId);
+                SetupStreamCounters(streamCountersSubgroup);
             } else {
                 LabeledCounters.Reset(new TUserLabeledCounters(
                     user + "/" + (important ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
@@ -316,13 +213,9 @@ struct TUserInfo {
         }
     }
 
-    void SetupStreamCounters(
-        const TActorContext& ctx, const TString& dcId, const TString& partition,
-        const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId
-    ) {
-        auto subgroup = NPersQueue::GetCountersForTopic(AppData(ctx)->Counters, isServerless);
-        auto subgroups =
-            NPersQueue::GetSubgroupsForTopic(TopicConverter, cloudId, dbId, dbPath, folderId);
+    void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {
+        Y_VERIFY(subgroup);
+        TVector<std::pair<TString, TString>> subgroups;
         if (DoInternalRead) {
             subgroups.push_back({"consumer", User});
 
@@ -338,20 +231,11 @@ struct TUserInfo {
             MsgsRead = TMultiCounter(subgroup, {}, subgroups,
                                       {"topic.read.messages"}, true, "name");
         }
-            Y_UNUSED(dcId);
-            Y_UNUSED(partition);
-        /*
-            Counter.SetCounter(subgroup,
-                               {{"database", dbPath}, {"cloud_id", cloudId}, {"folder_id", folderId}, {"database_id", dbId},
-                                {"topic", TopicConverter->GetFederationPath()},
-                                {"consumer", User}, {"host", dcId}, {"partition", partition}},
-                               {"name", "topic.read.awaiting_consume_milliseconds", true});
-        */
 
-        subgroups.push_back({"name", "topic.read.lag_milliseconds"});
+        subgroups.emplace_back("name", "topic.read.lag_milliseconds");
         ReadTimeLag.reset(new TPercentileCounter(
-                     NPersQueue::GetCountersForTopic(AppData(ctx)->Counters, isServerless), {}, subgroups, "bin",
-                     TVector<std::pair<ui64, TString>>{{100, "100"}, {200, "200"}, {500, "500"},
+                        subgroup, {}, subgroups, "bin",
+                        TVector<std::pair<ui64, TString>>{{100, "100"}, {200, "200"}, {500, "500"},
                                                         {1000, "1000"}, {2000, "2000"},
                                                         {5000, "5000"}, {10'000, "10000"},
                                                         {30'000, "30000"}, {60'000, "60000"},
@@ -496,7 +380,7 @@ public:
                       const TTabletCountersBase& counters, const NKikimrPQ::TPQTabletConfig& config,
                       const TString& CloudId, const TString& DbId, const TString& DbPath, const bool isServerless, const TString& FolderId);
 
-    void Init(TActorId tabletActor, TActorId partitionActor);
+    void Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx);
 
     void ParseDeprecated(const TString& key, const TString& data, const TActorContext& ctx);
     void Parse(const TString& key, const TString& data, const TActorContext& ctx);
@@ -541,6 +425,7 @@ private:
     NPersQueue::TTopicConverterPtr TopicConverter;
     const ui32 Partition;
     TTabletCountersBase Counters;
+    NMonitoring::TDynamicCounterPtr StreamCountersSubgroup;
 
     TMaybe<TActorId> TabletActor;
     TMaybe<TActorId> PartitionActor;

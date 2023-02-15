@@ -56,16 +56,19 @@ TUsersInfoStorage::TUsersInfoStorage(
     Counters.Populate(counters);
 }
 
-void TUsersInfoStorage::Init(TActorId tabletActor, TActorId partitionActor) {
+void TUsersInfoStorage::Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx) {
+    Y_VERIFY(UsersInfo.empty());
     Y_VERIFY(!TabletActor);
     Y_VERIFY(!PartitionActor);
     TabletActor = tabletActor;
     PartitionActor = partitionActor;
 
-    for (auto& userInfoPair : UsersInfo) {
-        auto& userInfo = userInfoPair.second;
-        Y_VERIFY(!userInfo.ReadSpeedLimiter);
-        userInfo.ReadSpeedLimiter = CreateReadSpeedLimiter(userInfo.User);
+    if (AppData(ctx)->Counters && AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        StreamCountersSubgroup = NPersQueue::GetCountersForTopic(AppData(ctx)->Counters, IsServerless);
+        auto subgroups = NPersQueue::GetSubgroupsForTopic(TopicConverter, CloudId, DbId, DbPath, FolderId);
+        for (auto& group : subgroups) {
+            StreamCountersSubgroup = StreamCountersSubgroup->GetSubgroup(group.first, group.second);
+        }
     }
 }
 
@@ -181,8 +184,8 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
 
 
     return {
-        ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicConverter, Partition,
-        session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, DbPath, IsServerless, FolderId,
+        ctx, StreamCountersSubgroup, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicConverter, Partition,
+        session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
         meterRead, burst, speed
     };
 }

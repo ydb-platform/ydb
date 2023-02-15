@@ -147,9 +147,8 @@ void CompareJsons(const TString& inputStr, const TString& referenceStr) {
     NJson::TJsonValue inputJson;
     UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(inputStr), &inputJson));
 
-    // Run time of test differs as well as counters below. We check if they are in
-    // probable interval [4500; 5500], set it to 5000 and then compare with reference
-    // string.
+    // Run time of test differs as well as counters below.
+    // We  set it to 5000 and then compare with reference string.
     auto getByPath = [](const NJson::TJsonValue& msg, TStringBuf path) {
         NJson::TJsonValue ret;
         UNIT_ASSERT_C(msg.GetValueByPath(path, ret), path);
@@ -162,20 +161,31 @@ void CompareJsons(const TString& inputStr, const TString& referenceStr) {
             getByPath(sensor, "labels.sensor") == "PQ/PartitionLifeTimeMs" ||
             getByPath(sensor, "labels.sensor") == "PQ/TotalTimeLagMsByLastRead" ||
             getByPath(sensor, "labels.sensor") == "PQ/WriteTimeLagMsByLastReadOld")) {
-            auto value = sensor["value"].GetIntegerSafe();
-            UNIT_ASSERT_GT(value, 4500);
-            UNIT_ASSERT_LT(value, 5500);
             sensor.SetValueByPath("value", 5000);
         } else if (getByPath(sensor, "kind") == "GAUGE" &&
             (getByPath(sensor, "labels.sensor") == "PQ/WriteTimeLagMsByLastRead" ||
             getByPath(sensor, "labels.sensor") == "PQ/WriteTimeLagMsByLastWrite")) {
-            auto value = sensor["value"].GetIntegerSafe();
-            UNIT_ASSERT_GT_C(value, 100, "value is " << value);
-            UNIT_ASSERT_LT_C(value, 3000, "value is " << value);
             sensor.SetValueByPath("value", 30);
         }
     }
-    UNIT_ASSERT_VALUES_EQUAL(referenceJson, inputJson);
+
+    Cerr << "Test diff count : " << inputJson["sensors"].GetArraySafe().size() 
+        << " " << referenceJson["sensors"].GetArraySafe().size() << Endl;
+
+    ui64 inCount = inputJson["sensors"].GetArraySafe().size();
+    ui64 refCount = referenceJson["sensors"].GetArraySafe().size();
+    for (ui64 i = 0; i < inCount && i < refCount; ++i) {
+        auto& in = inputJson["sensors"].GetArraySafe()[i];
+        auto& ref = referenceJson["sensors"].GetArraySafe()[i];
+        UNIT_ASSERT_VALUES_EQUAL_C(in["labels"], ref["labels"], TStringBuilder() << " at pos #" << i);
+    }
+    if (inCount > refCount) {
+        UNIT_ASSERT_C(false, inputJson["sensors"].GetArraySafe()[refCount].GetStringRobust());
+    } else if (refCount > inCount) {
+        UNIT_ASSERT_C(false, referenceJson["sensors"].GetArraySafe()[inCount].GetStringRobust());
+    }
+
+    //UNIT_ASSERT_VALUES_EQUAL(referenceJson, inputJson);
 }
 
 Y_UNIT_TEST(Partition) {

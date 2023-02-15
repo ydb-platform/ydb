@@ -232,6 +232,20 @@ public:
         return promise.GetFuture();
     }
 
+    TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
+        const TCommitOffsetSettings& settings) {
+        Ydb::Topic::CommitOffsetRequest request = MakeOperationRequest<Ydb::Topic::CommitOffsetRequest>(settings);
+        request.set_path(path);
+        request.set_partition_id(partitionId);
+        request.set_consumer(consumerName);
+        request.set_offset(offset);
+
+        return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::CommitOffsetRequest, Ydb::Topic::CommitOffsetResponse>(
+            std::move(request),
+            &Ydb::Topic::V1::TopicService::Stub::AsyncCommitOffset,
+            TRpcRequestSettings::Make(settings));
+    }
+
     // Runtime API.
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleWriteSession(const TWriteSessionSettings& settings);

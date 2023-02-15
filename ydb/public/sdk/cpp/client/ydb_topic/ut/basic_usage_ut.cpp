@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // Create read session.
         NYdb::NTopic::TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName(setup->GetTestClient())
+            .ConsumerName("shared/user")
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic());
 
@@ -93,6 +93,19 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         f.GetValueSync();
         ReadSession->Close(TDuration::MilliSeconds(10));
         AtomicSet(check, 0);
+
+        auto status = topicClient.CommitOffset(setup->GetTestTopic(), 0, "shared/user", 50);
+        UNIT_ASSERT(status.GetValueSync().IsSuccess());
+
+        auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
+        auto result = topicClient.DescribeConsumer("/Root/PQ/rt3.dc1--topic1", "shared/user", describeConsumerSettings).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        auto description = result.GetConsumerDescription();
+        UNIT_ASSERT(description.GetPartitions().size() == 1);
+        auto stats = description.GetPartitions().front().GetPartitionConsumerStats();
+        UNIT_ASSERT(stats.Defined());
+        UNIT_ASSERT(stats->GetCommittedOffset() == 50);
     }
 
 

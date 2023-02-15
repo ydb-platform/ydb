@@ -319,12 +319,18 @@ std::shared_ptr<IReadSession> TTopicClient::CreateReadSession(const TReadSession
     return Impl_->CreateReadSession(settings);
 }
 
-std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings) {
+std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::CreateSimpleBlockingWriteSession(
+    const TWriteSessionSettings& settings) {
     return Impl_->CreateSimpleWriteSession(settings);
 }
 
 std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSessionSettings& settings) {
     return Impl_->CreateWriteSession(settings);
+}
+
+TAsyncStatus TTopicClient::CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
+    const TCommitOffsetSettings& settings) {
+    return Impl_->CommitOffset(path, partitionId, consumerName, offset, settings);
 }
 
 } // namespace NYdb::NTopic

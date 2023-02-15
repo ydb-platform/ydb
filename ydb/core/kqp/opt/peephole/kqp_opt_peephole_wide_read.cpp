@@ -9,7 +9,7 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
-TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx) {
+TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     if (!node.Maybe<TKqpReadTable>() &&
         !node.Maybe<TKqpReadOlapTableRanges>() &&
         !node.Maybe<TKqpReadTableRanges>())
@@ -58,14 +58,27 @@ TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx) {
     } else if (auto maybeRead = node.Maybe<TKqpReadOlapTableRanges>()) {
         auto read = maybeRead.Cast();
 
-        wideRead = Build<TKqpWideReadOlapTableRanges>(ctx, node.Pos())
-            .Table(read.Table())
-            .Ranges(read.Ranges())
-            .Columns(read.Columns())
-            .Settings(read.Settings())
-            .ExplainPrompt(read.ExplainPrompt())
-            .Process(read.Process())
-            .Done();
+        if (typesCtx.UseBlocks) {
+            wideRead = Build<TCoWideFromBlocks>(ctx, node.Pos())
+                .Input<TKqpBlockReadOlapTableRanges>()
+                    .Table(read.Table())
+                    .Ranges(read.Ranges())
+                    .Columns(read.Columns())
+                    .Settings(read.Settings())
+                    .ExplainPrompt(read.ExplainPrompt())
+                    .Process(read.Process())
+                    .Build()
+                .Done();
+        } else {
+            wideRead = Build<TKqpWideReadOlapTableRanges>(ctx, node.Pos())
+                .Table(read.Table())
+                .Ranges(read.Ranges())
+                .Columns(read.Columns())
+                .Settings(read.Settings())
+                .ExplainPrompt(read.ExplainPrompt())
+                .Process(read.Process())
+                .Done();
+        }
     } else {
         YQL_ENSURE(false, "Unknown read table operation: " << node.Ptr()->Content());
     }

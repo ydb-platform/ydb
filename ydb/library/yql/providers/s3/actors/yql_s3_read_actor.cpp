@@ -47,6 +47,7 @@
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/library/yql/providers/s3/common/util.h>
@@ -674,35 +675,6 @@ private:
     std::function<void()> WaitForFutureResolve;
 };
 
-ui64 GetSizeOfData(const arrow::ArrayData& data) {
-    ui64 size = sizeof(data);
-    size += data.buffers.size() * sizeof(void*);
-    size += data.child_data.size() * sizeof(void*);
-    for (const auto& b : data.buffers) {
-        if (b) {
-            size += b->size();
-        }
-    }
-
-    for (const auto& c : data.child_data) {
-        if (c) {
-            size += GetSizeOfData(*c);
-        }
-    }
-
-    return size;
-}
-
-ui64 GetSizeOfBatch(const arrow::RecordBatch& batch) {
-    ui64 size = sizeof(batch);
-    size += batch.num_columns() * sizeof(void*);
-    for (int i = 0; i < batch.num_columns(); ++i) {
-        size += GetSizeOfData(*batch.column_data(i));
-    }
-
-    return size;
-}
-
 class TS3ReadCoroImpl : public TActorCoroImpl {
     friend class TS3StreamReadActor;
 private:
@@ -728,15 +700,15 @@ private:
 
     static constexpr std::string_view TruncatedSuffix = "... [truncated]"sv;
 public:
-    TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId, 
-        const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex, 
-        const TString& path, const TString& url, const std::size_t maxBlocksInFly, IArrowReader::TPtr arrowReader, 
+    TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId,
+        const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex,
+        const TString& path, const TString& url, const std::size_t maxBlocksInFly, IArrowReader::TPtr arrowReader,
         const TS3ReadActorFactoryConfig& readActorFactoryCfg,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deferredQueueSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps)
-        : TActorCoroImpl(256_KB), ReadActorFactoryCfg(readActorFactoryCfg), InputIndex(inputIndex), 
-        TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId), 
+        : TActorCoroImpl(256_KB), ReadActorFactoryCfg(readActorFactoryCfg), InputIndex(inputIndex),
+        TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId),
         PathIndex(pathIndex), Path(path), Url(url), MaxBlocksInFly(maxBlocksInFly), ArrowReader(arrowReader),
         DeferredQueueSize(deferredQueueSize), HttpInflightSize(httpInflightSize), HttpDataRps(httpDataRps)
     {}
@@ -913,7 +885,7 @@ private:
                     } else {
                         buffer = std::make_unique<TReadBufferFromStream>(this);
                     }
-                    
+
                     const auto decompress(MakeDecompressor(*buffer, ReadSpec->Compression));
                     YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " << ReadSpec->Compression << " compression.");
                     auto& readBuffer = decompress ? *decompress : *buffer;
@@ -949,7 +921,7 @@ private:
                                                 otherEvents.push_back(event->ReleaseBase());
                                                 event = WaitForSpecificEvent<TEvPrivate::TEvFutureResolved, TEvPrivate::TEvBlockProcessed, NActors::TEvents::TEvPoison>();
                                             }
-                                            
+
                                             for (auto &e: otherEvents) {
                                                 Send(SelfActorId, e.Release());
                                             }
@@ -987,7 +959,7 @@ private:
                 }
 
                 fileDesc.Cookie = result.Cookie;
-                TArrowParquetBatchReader reader(std::move(fileDesc), 
+                TArrowParquetBatchReader reader(std::move(fileDesc),
                                                 ArrowReader,
                                                 result.NumRowGroups,
                                                 std::move(columnIndices),
@@ -1002,10 +974,10 @@ private:
                 } else {
                     buffer = std::make_unique<TReadBufferFromStream>(this);
                 }
-                
+
                 const auto decompress(MakeDecompressor(*buffer, ReadSpec->Compression));
                 YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " << ReadSpec->Compression << " compression.");
-            
+
                 auto stream = std::make_unique<NDB::InputStreamFromInputFormat>(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : *buffer, NDB::Block(ReadSpec->CHColumns), nullptr, ReadActorFactoryCfg.RowsInBatch, ReadSpec->Settings));
                 TBlockReader reader(std::move(stream));
                 ProcessBatches<NDB::Block, TEvPrivate::TEvNextBlock>(reader, isLocal);
@@ -1082,7 +1054,7 @@ private:
                     Send(SelfActorId, e.Release());
                 }
             };
-            
+
             for (;;) {
                 T batch;
 
@@ -1348,7 +1320,7 @@ private:
     }
 
     ui64 GetBlockSize(const TReadyBlock& block) const {
-        return ReadSpec->Arrow ? GetSizeOfBatch(*block.Batch) : block.Block.bytes();
+        return ReadSpec->Arrow ? NUdf::GetSizeOfArrowBatchInBytes(*block.Batch) : block.Block.bytes();
     }
 
     void ReportMemoryUsage() const {
@@ -1525,7 +1497,7 @@ private:
     void HandleNextRecordBatch(TEvPrivate::TEvNextRecordBatch::TPtr& next) {
         YQL_ENSURE(ReadSpec->Arrow);
         IngressBytes += next->Get()->IngressDelta;
-        auto size = GetSizeOfBatch(*next->Get()->Batch);
+        auto size = NUdf::GetSizeOfArrowBatchInBytes(*next->Get()->Batch);
         QueueTotalDataSize += size;
         if (Counters) {
             QueueBlockCount->Inc();

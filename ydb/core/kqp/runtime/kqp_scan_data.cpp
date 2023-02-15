@@ -6,6 +6,7 @@
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
+#include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NKikimr {
@@ -118,9 +119,20 @@ NUdf::TUnboxedValue MakeUnboxedValue(arrow::Array* column, ui32 row) {
     auto array = reinterpret_cast<TArrayType*>(column);
     return NUdf::TUnboxedValuePod(static_cast<TValueType>(array->Value(row)));
 }
+
+TKqpScanComputeContext::TScanData::EReadType ReadTypeFromProto(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::EReadType& type) {
+    switch (type) {
+        case NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::ROWS:
+            return TKqpScanComputeContext::TScanData::EReadType::Rows;
+        case NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::BLOCKS:
+            return TKqpScanComputeContext::TScanData::EReadType::Blocks;
+        default:
+            YQL_ENSURE(false, "Invalid read type from TScanTaskMeta protobuf.");
+    }
+}
 } // namespace
 
-ui32 TKqpScanComputeContext::TScanData::RowBatch::FillUnboxedCells(NUdf::TUnboxedValue* const* result) {
+ui32 TKqpScanComputeContext::TScanData::TRowBatchReader::TRowBatch::FillUnboxedCells(NUdf::TUnboxedValue* const* result) {
     ui32 resultColumnsCount = 0;
     if (ColumnsCount) {
         auto* data = &Cells[CurrentRow * CellsCountForRow];
@@ -133,6 +145,13 @@ ui32 TKqpScanComputeContext::TScanData::RowBatch::FillUnboxedCells(NUdf::TUnboxe
     }
     ++CurrentRow;
     return resultColumnsCount;
+}
+
+ui32 TKqpScanComputeContext::TScanData::TBlockBatchReader::TBlockBatch::FillBlockValues(NUdf::TUnboxedValue* const* result) {
+    for (ui32 i = 0; i < ColumnsCount; ++i) {
+        *result[i] = std::move(BatchValues[i]);
+    }
+    return ColumnsCount;
 }
 
 namespace {
@@ -409,7 +428,11 @@ std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& val
     return {sizes.AllocatedBytes, sizes.DataBytes};
 }
 
-ui32 TKqpScanComputeContext::TScanData::FillUnboxedCells(NUdf::TUnboxedValue* const* result) {
+ui32 TKqpScanComputeContext::TScanData::FillDataValues(NUdf::TUnboxedValue* const* result) {
+    return BatchReader->FillDataValues(result);
+}
+
+ui32 TKqpScanComputeContext::TScanData::TRowBatchReader::FillDataValues(NUdf::TUnboxedValue* const* result) {
     YQL_ENSURE(!RowBatches.empty());
     auto& batch = RowBatches.front();
     const ui32 resultColumnsCount = batch.FillUnboxedCells(result);
@@ -422,15 +445,22 @@ ui32 TKqpScanComputeContext::TScanData::FillUnboxedCells(NUdf::TUnboxedValue* co
     return resultColumnsCount;
 }
 
+ui32 TKqpScanComputeContext::TScanData::TBlockBatchReader::FillDataValues(NUdf::TUnboxedValue* const* result) {
+    YQL_ENSURE(!BlockBatches.empty());
+    auto& batch = BlockBatches.front();
+    const ui32 resultColumnsCount = batch.FillBlockValues(result);
+    BlockBatches.pop();
+
+    StoredBytes -= batch.BytesForRecordEstimation();
+    YQL_ENSURE(BlockBatches.empty() == (StoredBytes < 1), "StoredBytes miscalculated!");
+    return resultColumnsCount;
+}
+
 TKqpScanComputeContext::TScanData::TScanData(const TTableId& tableId, const TTableRange& range,
-    const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys,
-    const TSmallVec<TColumn>& resultColumns)
+    const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<TColumn>& resultColumns)
     : TableId(tableId)
     , Range(range)
-    , SkipNullKeys(skipNullKeys)
-    , Columns(columns)
-    , SystemColumns(systemColumns)
-    , ResultColumns(resultColumns)
+    , BatchReader(new TRowBatchReader(columns, systemColumns, resultColumns))
 {}
 
 TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
@@ -441,8 +471,170 @@ TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTrans
                        tableMeta.GetSysViewInfo(), tableMeta.GetSchemaVersion());
     TablePath = meta.GetTable().GetTablePath();
 
-    std::copy(meta.GetSkipNullKeys().begin(), meta.GetSkipNullKeys().end(), std::back_inserter(SkipNullKeys));
+    switch(ReadTypeFromProto(meta.GetReadType())) {
+        case TKqpScanComputeContext::TScanData::EReadType::Rows:
+            BatchReader.reset(new TRowBatchReader(meta));
+            break;
+        case TKqpScanComputeContext::TScanData::EReadType::Blocks:
+            BatchReader.reset(new TBlockBatchReader(meta));
+            break;
+    }
 
+    if (statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC) {
+        BasicStats = std::make_unique<TBasicStats>();
+    }
+
+    if (Y_UNLIKELY(statsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE)) {
+        ProfileStats = std::make_unique<TProfileStats>();
+    }
+}
+
+TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(const TVector<TOwnedCellVec>& batch,
+    TMaybe<ui64> shardId, const THolderFactory& holderFactory)
+{
+    TBytesStatistics stats;
+    TUnboxedValueVector cells;
+    if (TotalColumnsCount == 0u) {
+        cells.resize(batch.size(), holderFactory.GetEmptyContainer());
+        stats.AddStatistics({ sizeof(ui64) * batch.size(), sizeof(ui64) * batch.size() });
+    } else {
+        cells.resize(batch.size() * TotalColumnsCount);
+
+        for (size_t rowIndex = 0; rowIndex < batch.size(); ++rowIndex) {
+            auto& row = batch[rowIndex];
+
+            auto* vectorStart = &cells.data()[rowIndex * TotalColumnsCount];
+            for (ui32 i = 0; i < ResultColumns.size(); ++i) {
+                vectorStart[i] = GetCellValue(row[i], ResultColumns[i].Type);
+            }
+            FillSystemColumns(vectorStart + ResultColumns.size(), shardId, SystemColumns);
+
+            stats += GetRowSize(vectorStart, ResultColumns, SystemColumns);
+        }
+    }
+    if (cells.size()) {
+        RowBatches.emplace(TRowBatch(TotalColumnsCount, batch.size(), std::move(cells), stats.AllocatedBytes));
+    }
+    StoredBytes += stats.AllocatedBytes;
+
+    return stats;
+}
+
+TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(const TVector<TOwnedCellVec>& /*batch*/,
+    TMaybe<ui64> /*shardId*/, const THolderFactory& /*holderFactory*/)
+{
+    Y_VERIFY(false, "Batch of TOwnedCellVec should never be called for BlockBatchReader!");
+    return TBytesStatistics();
+}
+
+ui64 TKqpScanComputeContext::TScanData::AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) {
+    if (Finished || batch.empty()) {
+        return 0;
+    }
+
+    TBytesStatistics stats = BatchReader->AddData(batch, shardId, holderFactory);
+    if (BasicStats) {
+        BasicStats->Rows += batch.size();
+        BasicStats->Bytes += stats.DataBytes;
+    }
+
+    return stats.AllocatedBytes;
+}
+
+TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(const arrow::RecordBatch& batch, TMaybe<ui64> shardId,
+    const THolderFactory& holderFactory)
+{
+    TBytesStatistics stats;
+    TUnboxedValueVector cells;
+
+    if (TotalColumnsCount == 0u) {
+        cells.resize(batch.num_rows(), holderFactory.GetEmptyContainer());
+        stats.AddStatistics({ sizeof(ui64) * batch.num_rows(), sizeof(ui64) * batch.num_rows() });
+    } else {
+        cells.resize(batch.num_rows() * TotalColumnsCount);
+
+        for (size_t columnIndex = 0; columnIndex < ResultColumns.size(); ++columnIndex) {
+            stats.AddStatistics(
+                WriteColumnValuesFromArrow(cells.data(), batch, columnIndex, TotalColumnsCount, ResultColumns[columnIndex].Type)
+            );
+        }
+
+        if (!SystemColumns.empty()) {
+            for (i64 rowIndex = 0; rowIndex < batch.num_rows(); ++rowIndex) {
+                FillSystemColumns(&cells[rowIndex * TotalColumnsCount + ResultColumns.size()], shardId, SystemColumns);
+            }
+
+            stats.AllocatedBytes += batch.num_rows() * SystemColumns.size() * sizeof(NUdf::TUnboxedValue);
+        }
+    }
+
+    if (cells.size()) {
+        RowBatches.emplace(TRowBatch(TotalColumnsCount, batch.num_rows(), std::move(cells), stats.AllocatedBytes));
+    }
+
+    StoredBytes += stats.AllocatedBytes;
+
+    return stats;
+}
+
+TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(const arrow::RecordBatch& batch, TMaybe<ui64> /*shardId*/,
+    const THolderFactory& holderFactory)
+{
+    TBytesStatistics stats;
+    auto totalColsCount = TotalColumnsCount + 1;
+    TUnboxedValueVector batchValues;
+    batchValues.resize(totalColsCount);
+
+    for (int i = 0; i < batch.num_columns(); ++i) {
+        batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(batch.column_data(i)));
+    }
+    ui64 batchByteSize = NYql::NUdf::GetSizeOfArrowBatchInBytes(batch);
+    stats.AddStatistics({batchByteSize, batchByteSize});
+
+    // !!! TODO !!!
+    // if (!SystemColumns.empty()) {
+    //     for (i64 rowIndex = 0; rowIndex < batch.num_rows(); ++rowIndex) {
+    //         FillSystemColumns(&cells[rowIndex * ColumnsCount() + ResultColumns.size()], shardId, SystemColumns);
+    //     }
+
+    //     stats.AllocatedBytes += batch.num_rows() * SystemColumns.size() * sizeof(NUdf::TUnboxedValue);
+    // }
+
+    batchValues[totalColsCount - 1] = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch.num_rows())));
+    stats.AddStatistics({ sizeof(ui64) * batch.num_rows(), sizeof(ui64) * batch.num_rows() });
+
+    BlockBatches.emplace(TBlockBatch(totalColsCount, batch.num_rows(), std::move(batchValues), stats.AllocatedBytes));
+    StoredBytes += stats.AllocatedBytes;
+
+    return stats;
+}
+
+ui64 TKqpScanComputeContext::TScanData::AddData(const arrow::RecordBatch& batch, TMaybe<ui64> shardId,
+    const THolderFactory& holderFactory)
+{
+    // RecordBatch hasn't empty method so check the number of rows
+    if (Finished || batch.num_rows() == 0) {
+        return 0;
+    }
+
+    TBytesStatistics stats = BatchReader->AddData(batch, shardId, holderFactory);
+    if (BasicStats) {
+        BasicStats->Rows += batch.num_rows();
+        BasicStats->Bytes += stats.DataBytes;
+    }
+
+    return stats.AllocatedBytes;
+}
+
+TKqpScanComputeContext::TScanData::IDataBatchReader::IDataBatchReader(const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns,
+    const TSmallVec<TColumn>& resultColumns)
+    : Columns(columns)
+    , SystemColumns(systemColumns)
+    , ResultColumns(resultColumns)
+    , TotalColumnsCount(resultColumns.size() + systemColumns.size())
+{}
+
+TKqpScanComputeContext::TScanData::IDataBatchReader::IDataBatchReader(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta) {
     Columns.reserve(meta.GetColumns().size());
     for (const auto& column : meta.GetColumns()) {
         NMiniKQL::TKqpScanComputeContext::TColumn c;
@@ -474,106 +666,11 @@ TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTrans
 
             if (!IsSystemColumn(c.Tag)) {
                 ResultColumns.emplace_back(std::move(c));
-            } else {
-                SystemColumns.emplace_back(std::move(c));
             }
         }
     }
 
-    if (statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC) {
-        BasicStats = std::make_unique<TBasicStats>();
-    }
-    if (Y_UNLIKELY(statsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE)) {
-        ProfileStats = std::make_unique<TProfileStats>();
-    }
-}
-
-
-ui64 TKqpScanComputeContext::TScanData::AddRows(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) {
-    if (Finished || batch.empty()) {
-        return 0;
-    }
-
-    TBytesStatistics stats;
-
-    TVector<ui64> bytesList;
-    bytesList.reserve(batch.size());
-
-    TUnboxedValueVector cells;
-    if (!ColumnsCount()) {
-        cells.resize(batch.size(), holderFactory.GetEmptyContainer());
-        stats.AddStatistics({ sizeof(ui64) * batch.size(), sizeof(ui64) * batch.size() });
-    } else {
-        cells.resize(batch.size() * ColumnsCount());
-
-        for (size_t rowIndex = 0; rowIndex < batch.size(); ++rowIndex) {
-            auto& row = batch[rowIndex];
-
-            auto* vectorStart = &cells.data()[rowIndex * ColumnsCount()];
-            for (ui32 i = 0; i < ResultColumns.size(); ++i) {
-                vectorStart[i] = GetCellValue(row[i], ResultColumns[i].Type);
-            }
-            FillSystemColumns(vectorStart + ResultColumns.size(), shardId, SystemColumns);
-
-            stats += GetRowSize(vectorStart, ResultColumns, SystemColumns);
-        }
-    }
-    if (cells.size()) {
-        RowBatches.emplace(RowBatch(ColumnsCount(), batch.size(), std::move(cells), shardId, stats.AllocatedBytes));
-    }
-
-    StoredBytes += stats.AllocatedBytes;
-    if (BasicStats) {
-        BasicStats->Rows += batch.size();
-        BasicStats->Bytes += stats.DataBytes;
-    }
-
-    return stats.AllocatedBytes;
-}
-
-ui64 TKqpScanComputeContext::TScanData::AddRows(const arrow::RecordBatch& batch, TMaybe<ui64> shardId,
-    const THolderFactory& holderFactory)
-{
-    // RecordBatch hasn't empty method so check the number of rows
-    if (Finished || batch.num_rows() == 0) {
-        return 0;
-    }
-
-    TBytesStatistics stats;
-    TUnboxedValueVector cells;
-
-    if (!ColumnsCount()) {
-        cells.resize(batch.num_rows(), holderFactory.GetEmptyContainer());
-        stats.AddStatistics({ sizeof(ui64) * batch.num_rows(), sizeof(ui64) * batch.num_rows() });
-    } else {
-        cells.resize(batch.num_rows() * ColumnsCount());
-
-        for (size_t columnIndex = 0; columnIndex < ResultColumns.size(); ++columnIndex) {
-            stats.AddStatistics(
-                WriteColumnValuesFromArrow(cells.data(), batch, columnIndex, ColumnsCount(), ResultColumns[columnIndex].Type)
-            );
-        }
-
-        if (!SystemColumns.empty()) {
-            for (i64 rowIndex = 0; rowIndex < batch.num_rows(); ++rowIndex) {
-                FillSystemColumns(&cells[rowIndex * ColumnsCount() + ResultColumns.size()], shardId, SystemColumns);
-            }
-
-            stats.AllocatedBytes += batch.num_rows() * SystemColumns.size() * sizeof(NUdf::TUnboxedValue);
-        }
-    }
-
-    if (cells.size()) {
-        RowBatches.emplace(RowBatch(ColumnsCount(), batch.num_rows(), std::move(cells), shardId, stats.AllocatedBytes));
-    }
-
-    StoredBytes += stats.AllocatedBytes;
-    if (BasicStats) {
-        BasicStats->Rows += batch.num_rows();
-        BasicStats->Bytes += stats.DataBytes;
-    }
-
-    return stats.AllocatedBytes;
+    TotalColumnsCount = ResultColumns.size() + SystemColumns.size();
 }
 
 void TKqpScanComputeContext::AddTableScan(ui32, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
@@ -635,7 +732,7 @@ public:
             return EFetchResult::Yield;
         }
 
-        ScanData.FillUnboxedCells(result);
+        ScanData.FillDataValues(result);
         return EFetchResult::One;
     }
 

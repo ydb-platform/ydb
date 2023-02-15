@@ -31,9 +31,7 @@ struct TBytesStatistics {
     TBytesStatistics(const ui64 allocated, const ui64 data)
         : AllocatedBytes(allocated)
         , DataBytes(data)
-    {
-
-    }
+    {}
 
     TBytesStatistics operator+(const TBytesStatistics& item) const {
         return TBytesStatistics(AllocatedBytes + item.AllocatedBytes, DataBytes + item.DataBytes);
@@ -83,45 +81,27 @@ public:
     public:
         TScanData(TScanData&&) = default; // needed to create TMap<ui32, TScanData> Scans
         TScanData(const TTableId& tableId, const TTableRange& range, const TSmallVec<TColumn>& columns,
-            const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys,
-            const TSmallVec<TColumn>& resultColumns);
+            const TSmallVec<TColumn>& systemColumns, const TSmallVec<TColumn>& resultColumns);
 
-        ui32 ColumnsCount() const {
-            return ResultColumns.size() + SystemColumns.size();
-        }
-
-        ui32 FillUnboxedCells(NUdf::TUnboxedValue* const* result);
+        ui32 FillDataValues(NUdf::TUnboxedValue* const* result);
 
         TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, NYql::NDqProto::EDqStatsMode statsMode);
 
-        ~TScanData() {
-            Y_VERIFY_DEBUG_S(RowBatches.empty(), "Buffer in TScanData was not cleared, data is leaking. "
-                << "Queue of UnboxedValues must be emptied under allocator using Clear() method, but has "
-                << RowBatches.size() << " elements!");
-        }
+        ~TScanData() = default;
 
         const TSmallVec<TColumn>& GetColumns() const {
-            return Columns;
+            return BatchReader->GetColumns();
         }
 
-        const TSmallVec<TColumn>& GetSystemColumns() const {
-            return SystemColumns;
-        }
-
-        const TSmallVec<TColumn>& GetResultColumns() const {
-            return ResultColumns;
-        }
-
-        ui64 AddRows(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
-
-        ui64 AddRows(const arrow::RecordBatch& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
+        ui64 AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
+        ui64 AddData(const arrow::RecordBatch& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
 
         bool IsEmpty() const {
-            return RowBatches.empty();
+            return BatchReader->IsEmpty();
         }
 
         ui64 GetStoredBytes() const {
-            return StoredBytes;
+            return BatchReader->GetStoredBytes();
         }
 
         void Finish() {
@@ -133,8 +113,7 @@ public:
         }
 
         void Clear() {
-            TQueue<RowBatch> newQueue;
-            std::swap(newQueue, RowBatches);
+            BatchReader->Clear();
         }
 
     public:
@@ -142,7 +121,6 @@ public:
         TTableId TableId;
         TString TablePath;
         TSerializedTableRange Range;
-        TSmallVec<bool> SkipNullKeys;
 
         // shared with actor via TableReader
         TIntrusivePtr<IKqpTableReader> TableReader;
@@ -163,53 +141,168 @@ public:
             TDuration ScanWaitTime;   // IScan waiting data time
         };
 
+        enum class EReadType {
+            Rows,
+            Blocks
+        };
+
         std::unique_ptr<TBasicStats> BasicStats;
         std::unique_ptr<TProfileStats> ProfileStats;
 
     private:
-        class RowBatch {
-        private:
-            const ui32 CellsCountForRow;
-            const ui32 ColumnsCount;
-            const ui32 RowsCount;
-            TUnboxedValueVector Cells;
-            ui64 CurrentRow = 0;
-            const ui64 AllocatedBytes;
+        class IDataBatchReader {
         public:
-            TMaybe<ui64> ShardId;
+            IDataBatchReader(const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns,
+                const TSmallVec<TColumn>& resultColumns);
 
-            explicit RowBatch(const ui32 columnsCount, const ui32 rowsCount, TUnboxedValueVector&& cells, TMaybe<ui64> shardId, const ui64 allocatedBytes)
-                : CellsCountForRow(columnsCount ? columnsCount : 1)
-                , ColumnsCount(columnsCount)
-                , RowsCount(rowsCount)
-                , Cells(std::move(cells))
-                , AllocatedBytes(allocatedBytes)
-                , ShardId(shardId)
-            {
-                Y_VERIFY(AllocatedBytes);
-                Y_VERIFY(RowsCount);
+            IDataBatchReader(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta);
+
+            virtual ~IDataBatchReader() = default;
+
+            const TSmallVec<TColumn>& GetColumns() const {
+                return Columns;
             }
 
-            double BytesForRecordEstimation() {
-                return 1.0 * AllocatedBytes / RowsCount;
+            ui64 GetStoredBytes() const {
+                return StoredBytes;
             }
 
-            const NUdf::TUnboxedValue* GetCurrentData() const {
-                return Cells.data() + CurrentRow * CellsCountForRow;
-            }
-
-            bool IsFinished() {
-                return CurrentRow * CellsCountForRow == Cells.size();
-            }
-
-            ui32 FillUnboxedCells(NUdf::TUnboxedValue* const* result);
+            virtual TBytesStatistics AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) = 0;
+            virtual TBytesStatistics AddData(const arrow::RecordBatch& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) = 0;
+            virtual ui32 FillDataValues(NUdf::TUnboxedValue* const* result) = 0;
+            virtual void Clear() = 0;
+            virtual bool IsEmpty() const = 0;
+        protected:
+            TSmallVec<TColumn> Columns;
+            TSmallVec<TColumn> SystemColumns;
+            TSmallVec<TColumn> ResultColumns;
+            ui32 TotalColumnsCount;
+            double StoredBytes = 0;
         };
 
-        TSmallVec<TColumn> Columns;
-        TSmallVec<TColumn> SystemColumns;
-        TSmallVec<TColumn> ResultColumns;
-        TQueue<RowBatch> RowBatches;
-        double StoredBytes = 0;
+        class TRowBatchReader : public IDataBatchReader {
+        public:
+            TRowBatchReader(const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns,
+                const TSmallVec<TColumn>& resultColumns)
+                : IDataBatchReader(columns, systemColumns, resultColumns)
+            {}
+
+            TRowBatchReader(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta)
+                : IDataBatchReader(meta)
+            {}
+
+            ~TRowBatchReader() {
+                Y_VERIFY_DEBUG_S(RowBatches.empty(), "Buffer in TRowBatchReader was not cleared, data is leaking. "
+                    << "Queue of UnboxedValues must be emptied under allocator using Clear() method, but has "
+                    << RowBatches.size() << " elements!");
+            }
+
+            TBytesStatistics AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) override;
+            TBytesStatistics AddData(const arrow::RecordBatch& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) override;
+            ui32 FillDataValues(NUdf::TUnboxedValue* const* result) override;
+
+            void Clear() override {
+                TQueue<TRowBatch> newQueue;
+                std::swap(newQueue, RowBatches);
+            }
+
+            bool IsEmpty() const override {
+                return RowBatches.empty();
+            }
+        private:
+            class TRowBatch {
+            private:
+                const ui32 CellsCountForRow;
+                const ui32 ColumnsCount;
+                const ui32 RowsCount;
+                TUnboxedValueVector Cells;
+                ui64 CurrentRow = 0;
+                const ui64 AllocatedBytes;
+            public:
+
+                explicit TRowBatch(const ui32 columnsCount, const ui32 rowsCount, TUnboxedValueVector&& cells, const ui64 allocatedBytes)
+                    : CellsCountForRow(columnsCount ? columnsCount : 1)
+                    , ColumnsCount(columnsCount)
+                    , RowsCount(rowsCount)
+                    , Cells(std::move(cells))
+                    , AllocatedBytes(allocatedBytes)
+                {
+                    Y_VERIFY(AllocatedBytes);
+                    Y_VERIFY(RowsCount);
+                }
+
+                double BytesForRecordEstimation() {
+                    return 1.0 * AllocatedBytes / RowsCount;
+                }
+
+                bool IsFinished() {
+                    return CurrentRow * CellsCountForRow == Cells.size();
+                }
+
+                ui32 FillUnboxedCells(NUdf::TUnboxedValue* const* result);
+            };
+
+            TQueue<TRowBatch> RowBatches;
+        };
+
+        class TBlockBatchReader : public IDataBatchReader {
+        public:
+            TBlockBatchReader(const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns,
+                const TSmallVec<TColumn>& resultColumns)
+                : IDataBatchReader(columns, systemColumns, resultColumns)
+            {}
+
+            TBlockBatchReader(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta)
+                : IDataBatchReader(meta)
+            {}
+
+            ~TBlockBatchReader() {
+                Y_VERIFY_DEBUG_S(BlockBatches.empty(), "Buffer in TBlockBatchReader was not cleared, data is leaking. "
+                    << "Queue of UnboxedValues must be emptied under allocator using Clear() method, but has "
+                    << BlockBatches.size() << " elements!");
+            }
+
+            TBytesStatistics AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) override;
+            TBytesStatistics AddData(const arrow::RecordBatch& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) override;
+            ui32 FillDataValues(NUdf::TUnboxedValue* const* result) override;
+
+            void Clear() override {
+                TQueue<TBlockBatch> newQueue;
+                std::swap(newQueue, BlockBatches);
+            }
+
+            bool IsEmpty() const override {
+                return BlockBatches.empty();
+            }
+        private:
+            class TBlockBatch {
+            private:
+                const ui32 ColumnsCount;
+                const ui32 RowsCount;
+                TUnboxedValueVector BatchValues;
+                const ui64 AllocatedBytes;
+            public:
+                explicit TBlockBatch(const ui32 columnsCount, const ui32 rowsCount, TUnboxedValueVector&& value, const ui64 allocatedBytes)
+                    : ColumnsCount(columnsCount)
+                    , RowsCount(rowsCount)
+                    , BatchValues(std::move(value))
+                    , AllocatedBytes(allocatedBytes)
+                {
+                    Y_VERIFY(AllocatedBytes);
+                    Y_VERIFY(RowsCount);
+                }
+
+                double BytesForRecordEstimation() {
+                    return 1.0 * AllocatedBytes;
+                }
+
+                ui32 FillBlockValues(NUdf::TUnboxedValue* const* result);
+            };
+
+            TQueue<TBlockBatch> BlockBatches;
+        };
+
+        std::unique_ptr<IDataBatchReader> BatchReader;
         bool Finished = false;
     };
 

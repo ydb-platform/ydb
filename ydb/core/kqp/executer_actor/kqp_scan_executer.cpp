@@ -36,6 +36,28 @@ using namespace NYql::NDq;
 
 namespace {
 
+NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::EReadType ReadTypeToProto(const TTaskMeta::TReadInfo::EReadType& type) {
+    switch (type) {
+        case TTaskMeta::TReadInfo::EReadType::Rows:
+            return NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::ROWS;
+        case TTaskMeta::TReadInfo::EReadType::Blocks:
+            return NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::BLOCKS;
+    }
+
+    YQL_ENSURE(false, "Invalid read type in task meta.");
+}
+
+TTaskMeta::TReadInfo::EReadType ReadTypeFromProto(const NKqpProto::TKqpPhyOpReadOlapRanges::EReadType& type) {
+    switch (type) {
+        case NKqpProto::TKqpPhyOpReadOlapRanges::ROWS:
+            return TTaskMeta::TReadInfo::EReadType::Rows;
+        case NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS:
+            return TTaskMeta::TReadInfo::EReadType::Blocks;
+        default:
+            YQL_ENSURE(false, "Invalid read type from TKqpPhyOpReadOlapRanges protobuf.");
+    }
+}
+
 class TKqpScanExecuter : public TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan> {
     using TBase = TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan>;
 
@@ -45,7 +67,7 @@ public:
     }
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-        const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, 
+        const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         ui32 executerDelayToRetryMs)
         : TBase(std::move(request), database, userToken, counters, executerDelayToRetryMs, TWilsonKqp::ScanExecuter, "ScanExecuter")
@@ -153,6 +175,7 @@ private:
         taskMeta.ReadInfo.ItemsLimit = itemsLimit;
         taskMeta.ReadInfo.Reverse = reverse;
         taskMeta.ReadInfo.Sorted = sorted;
+        taskMeta.ReadInfo.ReadType = TTaskMeta::TReadInfo::EReadType::Rows;
 
         if (resultType) {
             YQL_ENSURE(resultType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct
@@ -179,8 +202,8 @@ private:
             return;
         }
 
+        taskMeta.ReadInfo.ReadType = ReadTypeFromProto(readOlapRange->GetReadType());
         taskMeta.ReadInfo.OlapProgram.Program = readOlapRange->GetOlapProgram();
-
         for (auto& name: readOlapRange->GetOlapProgramParameterNames()) {
             taskMeta.ReadInfo.OlapProgram.ParameterNames.insert(name);
         }
@@ -573,6 +596,7 @@ private:
                     protoTaskMeta.SetReverse(task.Meta.ReadInfo.Reverse);
                     protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
                     protoTaskMeta.SetSorted(task.Meta.ReadInfo.Sorted);
+                    protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
 
                     for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
                         auto* protoResultColumn = protoTaskMeta.AddResultColumns();

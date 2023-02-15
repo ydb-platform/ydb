@@ -506,13 +506,13 @@ private:
                 case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
                 case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
                     if (!msg.Rows.empty()) {
-                        bytes += ScanData->AddRows(msg.Rows, state->TabletId, TaskRunner->GetHolderFactory());
+                        bytes += ScanData->AddData(msg.Rows, state->TabletId, TaskRunner->GetHolderFactory());
                         rowsCount += msg.Rows.size();
                     }
                     break;
                 case NKikimrTxDataShard::EScanDataFormat::ARROW:
-                    if (!!msg.ArrowBatch) {
-                        bytes += ScanData->AddRows(*msg.ArrowBatch, state->TabletId, TaskRunner->GetHolderFactory());
+                    if (msg.ArrowBatch) {
+                        bytes += ScanData->AddData(*msg.ArrowBatch, state->TabletId, TaskRunner->GetHolderFactory());
                         rowsCount += msg.ArrowBatch->num_rows();
                     }
                     break;

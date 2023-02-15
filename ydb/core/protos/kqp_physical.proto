@@ -148,6 +148,10 @@ message TKqpPhyOpLookup {
 }
 
 message TKqpPhyOpReadOlapRanges {
+    enum EReadType {
+        ROWS = 0;
+        BLOCKS = 1;
+    }
     // Parameter come here from computation stage. It has type Tuple(List(Tuple(RangeBegin, RangeEnd))))
     // Where RangeBegin and RangeEnd are Tuple(KeyColumns, Inclusive)
     // Where KeyColumns is values of start/end of range for corresponding key column in table
@@ -170,6 +174,9 @@ message TKqpPhyOpReadOlapRanges {
 
     // Stores type of read result from Column Shard
     Ydb.Type ResultType = 7;
+
+    // Type of read result: unboxed values or Arrow blocks of data
+    EReadType ReadType = 13;
 }
 
 message TKqpPhyOpReadRanges {

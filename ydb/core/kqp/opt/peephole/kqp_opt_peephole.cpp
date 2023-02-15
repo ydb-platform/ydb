@@ -132,7 +132,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildWideReadTable(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildWideReadTable(node, ctx);
+        TExprBase output = KqpBuildWideReadTable(node, ctx, TypesCtx);
         DumpAppliedRule("BuildWideReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

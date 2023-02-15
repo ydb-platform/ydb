@@ -34,6 +34,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return WrapKqpScanWideReadTableRanges(callable, ctx, *computeCtx);
             }
 
+            if (name == "KqpBlockReadTableRanges"sv) {
+                return WrapKqpScanBlockReadTableRanges(callable, ctx, *computeCtx);
+            }
+
             // only for _pure_ compute actors!
             if (name == "KqpEnsure"sv) {
                 return WrapKqpEnsure(callable, ctx);

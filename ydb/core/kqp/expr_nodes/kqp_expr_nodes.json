@@ -133,6 +133,11 @@
             "Match": {"Type": "Callable", "Name": "KqpWideReadOlapTableRanges"}
         },
         {
+            "Name": "TKqpBlockReadOlapTableRanges",
+            "Base": "TKqpReadOlapTableRangesBase",
+            "Match": {"Type": "Callable", "Name": "KqpBlockReadOlapTableRanges"}
+        },
+        {
             "Name": "TKqlLookupTableBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},

@@ -453,6 +453,7 @@ private:
         if (name == "Switch" || // KIKIMR-16457
             name == "KqpWideReadTable" ||
             name == "KqpWideReadTableRanges" ||
+            name == "KqpBlockReadTableRanges" ||
             name == "KqpLookupTable" ||
             name == "KqpReadTable" ||
             name == "RangeMultiply" ||

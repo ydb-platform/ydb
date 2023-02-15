@@ -245,14 +245,14 @@ private:
                 case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
                 case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
                     if (!msg.Rows.empty()) {
-                        bytes = ScanData->AddRows(msg.Rows, {}, TaskRunner->GetHolderFactory());
+                        bytes = ScanData->AddData(msg.Rows, {}, TaskRunner->GetHolderFactory());
                         rowsCount = msg.Rows.size();
                     }
                     break;
                 }
                 case NKikimrTxDataShard::EScanDataFormat::ARROW: {
                     if(msg.ArrowBatch != nullptr) {
-                        bytes = ScanData->AddRows(*msg.ArrowBatch, {}, TaskRunner->GetHolderFactory());
+                        bytes = ScanData->AddData(*msg.ArrowBatch, {}, TaskRunner->GetHolderFactory());
                         rowsCount = msg.ArrowBatch->num_rows();
                     }
                     break;

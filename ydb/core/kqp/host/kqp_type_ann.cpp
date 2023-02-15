@@ -143,6 +143,24 @@ const TFlowExprType* GetWideRowsType(TExprContext& ctx, const TStructExprType* r
     return ctx.MakeType<TFlowExprType>(wideRowType);
 }
 
+const TFlowExprType* GetBlockRowsType(TExprContext& ctx, const TStructExprType* rowType) {
+    YQL_ENSURE(rowType);
+
+    const auto& columns = rowType->GetItems();
+
+    TTypeAnnotationNode::TListType items;
+    items.reserve(columns.size());
+
+    for (const auto& column: columns) {
+        items.push_back(ctx.MakeType<TBlockExprType>(column->GetItemType()));
+    }
+    // Last item is height of block
+    items.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+
+    auto blockRowType = ctx.MakeType<TMultiExprType>(items);
+    return ctx.MakeType<TFlowExprType>(blockRowType);
+}
+
 bool CalcKeyColumnsCount(TExprContext& ctx, const TPositionHandle pos, const TStructExprType& structType,
     const TKikimrTableDescription& tableDesc, const TKikimrTableMetadata& metadata, ui32& keyColumnsCount)
 {
@@ -348,6 +366,8 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
             node->SetTypeAnn(ctx.MakeType<TFlowExprType>(processRowType));
         } else if (TKqpWideReadOlapTableRanges::Match(node.Get())) {
             node->SetTypeAnn(GetWideRowsType(ctx, processRowType->Cast<TStructExprType>()));
+        } else if (TKqpBlockReadOlapTableRanges::Match(node.Get())) {
+            node->SetTypeAnn(GetBlockRowsType(ctx, processRowType->Cast<TStructExprType>()));
         } else {
             YQL_ENSURE(false, "Unexpected ReadOlapTable callable." << node->Content());
         }

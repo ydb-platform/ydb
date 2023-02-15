@@ -523,7 +523,7 @@ public:
                 [](const TItemExprType* first, const TItemExprType* second) {
                     return first->GetName() < second->GetName();
                 });
-            inputsParams.erase(std::unique(inputsParams.begin(), inputsParams.end(), 
+            inputsParams.erase(std::unique(inputsParams.begin(), inputsParams.end(),
                 [](const TItemExprType* first, const TItemExprType* second) {
                     return first->GetName() == second->GetName();
                 }),
@@ -638,6 +638,20 @@ private:
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 FillOlapProgram(readTableRanges.Process(), miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange());
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
+            } else if (auto maybeReadBlockTableRanges = node.Maybe<TKqpBlockReadOlapTableRanges>()) {
+                auto readTableRanges = maybeReadBlockTableRanges.Cast();
+                auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
+                YQL_ENSURE(tableMeta);
+
+                auto& tableOp = *stageProto.AddTableOps();
+                FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
+                FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
+                FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
+                auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
+                FillOlapProgram(readTableRanges.Process(), miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange());
+                FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
+                tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
             } else if (node.Maybe<TCoSort>()) {
                 hasSort = true;
             } else if (node.Maybe<TCoFilterBase>()) {

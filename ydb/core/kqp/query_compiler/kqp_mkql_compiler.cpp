@@ -253,6 +253,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             );
         });
 
+    // TODO: Rewrite to DqSource https://st.yandex-team.ru/KIKIMR-17161
     compiler->AddCallable(TKqpWideReadOlapTableRanges::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             TKqpWideReadOlapTableRanges readTable(&node);
@@ -274,6 +275,37 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             // We anyway move to explicit sources as external nodes in KQP program, so all the information
             // about read settings will be passed in a side channel, not the program.
             auto result = ctx.PgmBuilder().KqpWideReadTableRanges(
+                MakeTableId(readTable.Table()),
+                ranges,
+                GetKqpColumns(tableMeta, readTable.Columns(), true),
+                returnType
+            );
+
+            return result;
+        });
+
+    // TODO: Rewrite to DqSource https://st.yandex-team.ru/KIKIMR-17161
+    compiler->AddCallable(TKqpBlockReadOlapTableRanges::CallableName(),
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            TKqpBlockReadOlapTableRanges readTable(&node);
+
+            const auto& tableMeta = ctx.GetTableMeta(readTable.Table());
+            ValidateRangesType(readTable.Ranges().Ref().GetTypeAnn(), tableMeta);
+
+            TKqpKeyRanges ranges = MakeComputedKeyRanges(readTable, ctx, buildCtx);
+
+            // Return type depends on the process program, so it is built explicitly.
+            TStringStream errorStream;
+            auto returnType = NCommon::BuildType(*readTable.Ref().GetTypeAnn(), ctx.PgmBuilder(), errorStream);
+            YQL_ENSURE(returnType, "Failed to build type: " << errorStream.Str());
+
+            // Process program for OLAP read is not present in MKQL, it is passed in range description
+            // in physical plan directly to executer. Read callables in MKQL only used to associate
+            // input stream of the graph with the external scans, so it doesn't make much sense to pass
+            // the process program through callable.
+            // We anyway move to explicit sources as external nodes in KQP program, so all the information
+            // about read settings will be passed in a side channel, not the program.
+            auto result = ctx.PgmBuilder().KqpBlockReadTableRanges(
                 MakeTableId(readTable.Table()),
                 ranges,
                 GetKqpColumns(tableMeta, readTable.Columns(), true),

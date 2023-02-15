@@ -212,6 +212,11 @@ message TKqpTransaction {
              repeated NKikimrTx.TKeyRange KeyRanges = 2;
          }
 
+         enum EReadType {
+             ROWS = 0;
+             BLOCKS = 1;
+         }
+
          optional TTableMeta Table = 1;
          repeated TColumnMeta Columns = 2;
          repeated uint32 KeyColumnTypes = 3; // for debug logs only
@@ -225,6 +230,8 @@ message TKqpTransaction {
          optional NKikimrSSA.TOlapProgram OlapProgram = 10; // Currently only for OLAP tables
          optional bool Sorted = 11;
          repeated TColumnMeta ResultColumns = 12;
+         // Type of read result: unboxed values or Arrow blocks of data
+         optional EReadType ReadType = 14;
     }
 
     optional EKqpTransactionType Type = 1;

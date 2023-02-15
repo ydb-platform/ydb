@@ -4,6 +4,7 @@
 
 #include <arrow/array/array_base.h>
 #include <arrow/chunked_array.h>
+#include <arrow/record_batch.h>
 
 namespace NYql {
 namespace NUdf {
@@ -66,6 +67,25 @@ public:
 private:
     arrow::MemoryPool* Pool;
 };
+
+ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data) {
+    ui64 size = sizeof(data);
+    size += data.buffers.size() * sizeof(void*);
+    size += data.child_data.size() * sizeof(void*);
+    for (const auto& b : data.buffers) {
+        if (b) {
+            size += b->size();
+        }
+    }
+
+    for (const auto& c : data.child_data) {
+        if (c) {
+            size += GetSizeOfArrayDataInBytes(*c);
+        }
+    }
+
+    return size;
+}
 
 } // namespace
 
@@ -148,6 +168,16 @@ std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t size, arr
         result->ZeroPadding();
     }
     return result;
+}
+
+ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch) {
+    ui64 size = sizeof(batch);
+    size += batch.num_columns() * sizeof(void*);
+    for (int i = 0; i < batch.num_columns(); ++i) {
+        size += GetSizeOfArrayDataInBytes(*batch.column_data(i));
+    }
+
+    return size;
 }
 
 }

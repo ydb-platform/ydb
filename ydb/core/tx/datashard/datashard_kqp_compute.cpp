@@ -59,6 +59,7 @@ struct TKqpScanComputationMap {
     TKqpScanComputationMap() {
         Map["KqpWideReadTable"] = &WrapKqpScanWideReadTable;
         Map["KqpWideReadTableRanges"] = &WrapKqpScanWideReadTableRanges;
+        Map["KqpBlockReadTableRanges"] = &WrapKqpScanBlockReadTableRanges;
     }
 
     THashMap<TString, TCallableScanBuilderFunc> Map;

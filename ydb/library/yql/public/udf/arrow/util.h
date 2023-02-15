@@ -32,6 +32,8 @@ inline bool IsNull(const arrow::ArrayData& data, size_t index) {
 /// \brief same as arrow::AllocateResizableBuffer, but allows to control zero padding
 std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t size, arrow::MemoryPool* pool, bool zeroPad = false);
 
+ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch);
+
 // similar to arrow::TypedBufferBuilder, but:
 // 1) with UnsafeAdvance() method
 // 2) shrinkToFit = false

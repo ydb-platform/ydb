@@ -2331,6 +2331,11 @@
                 {"Index": 1, "Name": "KeySelectorLambda", "Type": "TCoLambda"},
                 {"Index": 2, "Name": "ListHandlerLambda", "Type": "TCoLambda"}
             ]
+        },
+        {
+            "Name": "TCoWideFromBlocks",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "WideFromBlocks"}
         }
     ]
 }

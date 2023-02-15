@@ -96,6 +96,7 @@ namespace NKikimr::NTesting {
             struct TInFlightCollect {
                 bool Hard;
                 TValue Value;
+                std::set<TLogoBlobID> Flags[2]; // doNotKeep, keep
 
                 friend bool operator <(const TInFlightCollect& x, const TInFlightCollect& y) { return x.Value < y.Value; }
             };

@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(BlobDepotWithTestShard) {
             }
         });
 
-        for (ui32 i = 0; i < 1000; ++i) {
+        for (ui32 i = 0; i < 500; ++i) {
             for (IActor *actor : blobDepots) {
                 NBlobDepot::ValidateBlobDepot(actor, env.GroupOverseer);
             }

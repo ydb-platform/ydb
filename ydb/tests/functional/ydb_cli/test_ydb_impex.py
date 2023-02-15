@@ -2,9 +2,9 @@
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.oss_canonical import set_canondata_root
+from ydb.tests.ydb_sdk_import import ydb
 
 import pytest
-import ydb
 import logging
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -123,8 +123,7 @@ class TestImpex(BaseTestTableService):
         self.clear_table()
         with open("tempinput.parquet", "w"):
             pq.write_table(data, "tempinput.parquet", version="2.4")
-        output = self.execute_ydb_cli_command(["import", "file", "parquet", "-p", self.table_path, "-i", "tempinput.parquet"])
-        return self.canonical_result(output)
+        self.execute_ydb_cli_command(["import", "file", "parquet", "-p", self.table_path, "-i", "tempinput.parquet"])
 
     def run_export(self, format):
         query = "SELECT `key`, `id`, `value` FROM `{}` ORDER BY `key`".format(self.table_path)
@@ -143,7 +142,7 @@ class TestImpex(BaseTestTableService):
         self.run_import_json(DATA_JSON)
         return self.run_export("json-unicode")
 
-    @pytest.skip("test is failing right now")
+    @pytest.mark.skip("test is failing right now")
     def test_format_parquet(self):
         self.run_import_parquet(DATA_PARQUET)
         return self.run_export("csv")

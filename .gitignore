@@ -1,0 +1,9 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Generated protos
+*_pb2.py
+*_pb2_grpc.py
+*_pb2.pyi

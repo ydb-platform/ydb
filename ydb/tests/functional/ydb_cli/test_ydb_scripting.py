@@ -3,8 +3,8 @@
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.oss_canonical import set_canondata_root
+from ydb.tests.ydb_sdk_import import ydb
 
-import ydb
 import os
 import logging
 

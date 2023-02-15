@@ -11,8 +11,7 @@ from ydb.tests.library.common.protobuf_console import (
     RemoveTenantRequest, GetOperationRequest)
 import ydb.public.api.protos.ydb_cms_pb2 as cms_tenants_pb
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
-from ydb import issues
-
+from ydb.tests.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -171,7 +170,7 @@ class KiKiMRClusterInterface(object):
         if not operation.ready:
             operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds)
         if operation.status != StatusIds.SUCCESS:
-            raise RuntimeError('create_database failed: %s, %s' % (operation.status, issues._format_issues(operation.issues)))
+            raise RuntimeError('create_database failed: %s, %s' % (operation.status, ydb.issues._format_issues(operation.issues)))
 
         self.__wait_tenant_up(
             database_name,

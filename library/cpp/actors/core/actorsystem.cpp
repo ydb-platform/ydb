@@ -253,9 +253,6 @@ namespace NActors {
             }
         }
 
-        // ok, setup complete, we could destroy setup config
-        SystemSetup.Destroy();
-
         Scheduler->PrepareStart();
         CpuManager->Start();
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));

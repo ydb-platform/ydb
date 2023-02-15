@@ -122,16 +122,21 @@ namespace NActors {
         }
 
         ui32 GetThreads(ui32 poolId) const {
-            return Executors ? Executors[poolId]->GetThreads() : CpuManager.GetThreads(poolId);
+            auto result = GetThreadsOptional(poolId);
+            Y_VERIFY(result, "undefined pool id: %" PRIu32, (ui32)poolId);
+            return *result;
         }
 
-        std::optional<ui32> GetThreads(const TString& poolName) const {
-            for (ui32 i = 0; i < GetExecutorsCount(); ++i) {
-                if (GetPoolName(i) == poolName) {
-                    return GetThreads(i);
+        std::optional<ui32> GetThreadsOptional(const ui32 poolId) const {
+            if (Y_LIKELY(Executors)) {
+                if (Y_LIKELY(poolId < ExecutorsCount)) {
+                    return Executors[poolId]->GetThreads();
+                } else {
+                    return {};
                 }
+            } else {
+                return CpuManager.GetThreadsOptional(poolId);
             }
-            return {};
         }
     };
 
@@ -293,11 +298,12 @@ namespace NActors {
         }
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
-        std::optional<ui32> GetPoolThreadsCount(const TString& poolName) const {
+
+        std::optional<ui32> GetPoolThreadsCount(const ui32 poolId) const {
             if (!SystemSetup) {
                 return {};
             }
-            return SystemSetup->GetThreads(poolName);
+            return SystemSetup->GetThreadsOptional(poolId);
         }
 
         void DeferPreStop(std::function<void()> fn) {

@@ -217,7 +217,7 @@ private:
             } else {
                 std::optional<ui32> userPoolSize;
                 if (TlsActivationContext && TlsActivationContext->ActorSystem()) {
-                    userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount("user");
+                    userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount(AppData()->UserPoolId);
                 }
                 if (!userPoolSize) {
                     ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";

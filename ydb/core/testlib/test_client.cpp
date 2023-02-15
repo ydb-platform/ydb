@@ -237,8 +237,23 @@ namespace Tests {
 
         // WARNING: must be careful about modifying app data after actor system starts
 
-        for (ui32 nodeIdx = 0; nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
+        // NOTE: Setup of the static and dynamic nodes is mostly common except for the "local" service,
+        // which _must not_ be started up on dynamic nodes.
+        //
+        // This is because static nodes should be active and must serve root subdomain right from the start.
+        // Unlike static nodes, dynamic nodes are vacant. In this testing framework they are intended
+        // to serve tenant subdomains that will be created in tests. Dynamic node will be "activated" then
+        // by call to SetupDynamicLocalService() which will start "local" service exclusively to serve
+        // requested tenant subdomain.
+        //
+        // And while single "local" service is capable of serving more than one subdomain, there are never
+        // should be more than one "local" service on a node. Otherwise two "locals" will be competing
+        // and tests might have unexpected flaky behaviour.
+        //
+        for (ui32 nodeIdx = 0; nodeIdx < StaticNodes(); ++nodeIdx) {
             SetupDomainLocalService(nodeIdx);
+        }
+        for (ui32 nodeIdx = 0; nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
             SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
         }

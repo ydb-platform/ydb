@@ -340,6 +340,15 @@ class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
         )
         return self.canonical_result(output)
 
+    def script_from_file(self, query_type):
+        query = "DECLARE $a AS Uint64; " \
+                "SELECT $a AS a; "
+        self.write_data(query, "query.yql")
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-f", "query.yql", "--param", "$a=3"]
+        )
+        return self.canonical_result(output)
+
     def test_data_query_uint32(self):
         return self.uint32("data")
 
@@ -358,6 +367,9 @@ class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
     def test_data_ignore_excess_parameters(self):
         return self.ignore_excess_parameters("data")
 
+    def test_data_query_script_from_file(self):
+        return self.script_from_file("data")
+
     def test_scan_query_uint32(self):
         return self.uint32("scan")
 
@@ -375,6 +387,9 @@ class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
 
     def test_scan_ignore_excess_parameters(self):
         return self.ignore_excess_parameters("scan")
+
+    def test_scan_query_script_from_file(self):
+        return self.script_from_file("scan")
 
 
 class TestExecuteQueryWithParamsFromStdin(BaseTestTableService):

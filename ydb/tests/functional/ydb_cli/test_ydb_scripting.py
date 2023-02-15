@@ -300,6 +300,15 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
         )
         return self.canonical_result(output)
 
+    def script_from_file(self, command):
+        script = "DECLARE $a AS Uint64; " \
+                 "SELECT $a AS a; "
+        self.write_data(script, "script.yql")
+        output = self.execute_ydb_cli_command_with_db(
+            command + ["-f", "script.yql", "--param", "$a=3"]
+        )
+        return self.canonical_result(output)
+
     def test_uint32(self):
         return self.uint32(["scripting", "yql"])
 
@@ -318,6 +327,9 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
     def test_ignore_excess_parameters(self):
         return self.ignore_excess_parameters(["scripting", "yql"])
 
+    def test_script_from_file(self):
+        return self.script_from_file(["scripting", "yql"])
+
     def test_stream_uint32(self):
         return self.uint32(["yql"])
 
@@ -335,6 +347,9 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
 
     def test_stream_ignore_excess_parameters(self):
         return self.ignore_excess_parameters(["yql"])
+
+    def test_stream_script_from_file(self):
+        return self.script_from_file(["yql"])
 
 
 class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase):

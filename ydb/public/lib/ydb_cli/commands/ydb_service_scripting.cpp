@@ -82,15 +82,15 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
             << "and \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
     }
+    if (ScriptFile) {
+        Script = ReadFromFile(ScriptFile, "script");
+    }
     ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
         ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
     ParseParameters(config);
 }
 
 int TCommandExecuteYqlScript::Run(TConfig& config) {
-    if (ScriptFile) {
-        Script = ReadFromFile(ScriptFile, "script");
-    }
     NScripting::TScriptingClient client(CreateDriver(config));
 
     if (Explain) {

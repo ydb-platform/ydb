@@ -247,7 +247,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
                     .Index(indexName.Cast())
                     .Done();
             } else {
-                if (kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
+                if (kqpCtx.Config->EnableKqpDataQueryStreamPointLookup) {
                     readInput = Build<TKqlStreamLookupTable>(ctx, read.Pos())
                         .Table(read.Table())
                         .LookupKeys(lookupKeys)

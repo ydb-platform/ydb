@@ -122,7 +122,7 @@ TParams BuildInsertIndexParams(TTableClient& client) {
 Y_UNIT_TEST_SUITE(KqpQueryPerf) {
     Y_UNIT_TEST_TWIN(KvRead, EnableStreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(EnableStreamLookup);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamPointLookup(EnableStreamLookup);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig);
         TKikimrRunner kikimr{settings};

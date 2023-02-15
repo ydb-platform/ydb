@@ -30,7 +30,7 @@ mirror3+1
 
 
 
-LEGENDA:
+LEGEND:
 =======
 w(id)               write TLogoBlob=id
 wk(id)              write keep flags for TLogoBlob=id

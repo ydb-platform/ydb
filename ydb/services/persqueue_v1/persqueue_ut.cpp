@@ -759,6 +759,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Ydb::Topic::StreamReadMessage::FromClient req;
         Ydb::Topic::StreamReadMessage::FromServer resp;
 
+        NACLib::TDiffACL acl;
+        for (ui32 i = 0; i < 10; ++i) {
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN);
+        }
+        server.Server->AnnoyingClient->ModifyACL("/Root/PQ", "acc/topic1", acl.SerializeAsString());
+        WaitACLModification();
+
         for (ui32 i = 0; i < 10; ++i) {
             resp.Clear();
             UNIT_ASSERT(readStream->Read(&resp));
@@ -766,7 +773,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
 
             // send update token request, await response
-            const TString token = TString("test_user_" + ToString(i) + "@") + BUILTIN_ACL_DOMAIN;;
+            const TString token = "test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN;
             req.Clear();
             resp.Clear();
             req.mutable_update_token_request()->set_token(token);

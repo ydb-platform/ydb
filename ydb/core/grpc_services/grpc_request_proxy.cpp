@@ -266,14 +266,20 @@ private:
     }
 
     virtual void PassAway() override {
-        for (auto& [database, queue] : DeferredEvents) {
+        for (auto& [_, queue] : DeferredEvents) {
             for (TEventReqHolder& req : queue) {
                 req.Ctx->ReplyUnavaliable();
             }
         }
-        for (const auto& [database, actor] : Subscribers) {
+
+        for (const auto& [_, actor] : Subscribers) {
             Send(actor, new TEvents::TEvPoisonPill());
         }
+
+        if (DiscoveryCacheActorID) {
+            Send(DiscoveryCacheActorID, new TEvents::TEvPoisonPill());
+        }
+
         TBase::PassAway();
     }
 

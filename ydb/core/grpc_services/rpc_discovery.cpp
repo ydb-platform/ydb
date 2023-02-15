@@ -50,6 +50,14 @@ public:
         Become(&TThis::StateWait);
     }
 
+    void PassAway() override {
+        if (Discoverer) {
+            Send(Discoverer, new TEvents::TEvPoisonPill());
+        }
+
+        TActorBootstrapped<TListEndpointsRPC>::PassAway();
+    }
+
     STATEFN(StateWait) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
@@ -59,6 +67,8 @@ public:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr &ev) {
+        Discoverer = {};
+
         LookupResponse.Reset(ev->Release().Release());
         TryReplyAndDie();
     }
@@ -69,11 +79,12 @@ public:
     }
 
     void Handle(TEvDiscovery::TEvError::TPtr &ev) {
+        Discoverer = {};
+
         auto issue = MakeIssue(ErrorToIssueCode(ev->Get()->Status), ev->Get()->Error);
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages;
         NYql::IssueToMessage(issue, issueMessages.Add());
-        Request->SendResult(ErrorToStatusCode(ev->Get()->Status), issueMessages);
-        PassAway();
+        Reply(ErrorToStatusCode(ev->Get()->Status), issueMessages);
     }
 
     static NKikimrIssues::TIssuesIds::EIssueCode ErrorToIssueCode(TEvDiscovery::TEvError::EStatus status) {
@@ -202,8 +213,12 @@ public:
                 result->set_self_location(location);
         }
 
+        Reply(*result, Ydb::StatusIds::SUCCESS);
+    }
 
-        Request->SendResult(*result, Ydb::StatusIds::SUCCESS);
+    template <typename... Args>
+    void Reply(Args&&... args) {
+        Request->SendResult(std::forward<Args>(args)...);
         PassAway();
     }
 

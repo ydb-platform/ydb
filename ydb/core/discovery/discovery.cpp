@@ -51,6 +51,22 @@ namespace NDiscoveryPrivate {
         THashMap<TString, TVector<TWaiter>> Requested;
         bool Scheduled = false;
 
+        auto Request(const TString& database, ui32 groupId) {
+            auto result = Requested.emplace(database, TVector<TWaiter>());
+            if (result.second) {
+                CLOG_D("Lookup"
+                    << ": path# " << database);
+                Register(CreateBoardLookupActor(database, SelfId(), groupId, EBoardLookupMode::Second, false, false));
+            }
+
+            return result.first;
+        }
+
+        void Request(const TString& database, ui32 groupId, const TWaiter& waiter) {
+            auto it = Request(database, groupId);
+            it->second.push_back(waiter);
+        }
+
         void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
             CLOG_T("Handle " << ev->Get()->ToString());
 
@@ -65,6 +81,7 @@ namespace NDiscoveryPrivate {
                 Requested.erase(it);
             }
 
+            OldInfo.erase(path);
             NewInfo.emplace(path, std::move(msg));
 
             if (!Scheduled) {
@@ -90,25 +107,18 @@ namespace NDiscoveryPrivate {
 
             const auto* msg = ev->Get();
 
-            if (const auto* x = OldInfo.FindPtr(msg->Database)) {
-                Send(ev->Sender, new TEvStateStorage::TEvBoardInfo(**x), 0, ev->Cookie);
-                return;
-            }
-
             if (const auto* x = NewInfo.FindPtr(msg->Database)) {
                 Send(ev->Sender, new TEvStateStorage::TEvBoardInfo(**x), 0, ev->Cookie);
                 return;
             }
 
-            auto& requested = Requested[msg->Database];
-            if (requested.empty()) {
-                CLOG_D("Lookup"
-                    << ": path# " << msg->Database);
-
-                Register(CreateBoardLookupActor(msg->Database, SelfId(), msg->StateStorageId, EBoardLookupMode::Second, false, false));
+            if (const auto* x = OldInfo.FindPtr(msg->Database)) {
+                Request(msg->Database, msg->StateStorageId);
+                Send(ev->Sender, new TEvStateStorage::TEvBoardInfo(**x), 0, ev->Cookie);
+                return;
             }
 
-            requested.push_back({ev->Sender, ev->Cookie});
+            Request(msg->Database, msg->StateStorageId, {ev->Sender, ev->Cookie});
         }
 
     public:
@@ -335,10 +345,3 @@ IActor* CreateDiscoveryCache() {
 }
 
 }
-
-#undef DLOG_T
-#undef DLOG_D
-#undef CLOG_T
-#undef CLOG_D
-#undef LOG_T
-#undef LOG_D

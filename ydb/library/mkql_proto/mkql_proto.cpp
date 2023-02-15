@@ -1677,9 +1677,18 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
         return unboxedValue;
     }
 
-    case TType::EKind::Pg:
-        // TODO: support pg types
-        MKQL_ENSURE(false, "pg types are not supported");
+    case TType::EKind::Pg: {
+        const TPgType* pgType = static_cast<const TPgType*>(type);
+        NYql::NUdf::TUnboxedValue unboxedValue;
+        if (value.Hastext_value()) {
+            unboxedValue = NYql::NCommon::PgValueFromNativeText(value.Gettext_value(), pgType->GetTypeId());
+        } else if (value.Hasbytes_value()) {
+            unboxedValue = NYql::NCommon::PgValueFromNativeBinary(value.Getbytes_value(), pgType->GetTypeId());
+        } else {
+            MKQL_ENSURE(false, "empty pg value proto");
+        }
+        return unboxedValue;
+    }
 
     default:
         MKQL_ENSURE(false, TStringBuilder() << "Unknown kind: " << type->GetKindAsStr());

@@ -460,7 +460,10 @@ const TTypeAnnotationNode* ParseTypeFromKikimrProto(const NKikimrMiniKQL::TType&
 
             return ctx.MakeType<TDictExprType>(keyType, payloadType);
         }
-
+        case NKikimrMiniKQL::ETypeKind::Pg: {
+            const NKikimrMiniKQL::TPgType& protoData = type.GetPg();
+            return ctx.MakeType<TPgExprType>(protoData.Getoid());
+        }
         default: {
             ctx.AddError(TIssue(TPosition(), TStringBuilder() << "Unsupported protobuf type: "
                 << type.ShortDebugString()));
@@ -547,6 +550,13 @@ bool ExportTypeToKikimrProto(const TTypeAnnotationNode& type, NKikimrMiniKQL::TT
             return true;
         }
 
+        case ETypeAnnotationKind::Pg: {
+            protoType.SetKind(NKikimrMiniKQL::ETypeKind::Pg);
+            auto pgTypeId = type.Cast<TPgExprType>()->GetId();
+            auto pgTypeName = type.Cast<TPgExprType>()->GetName();
+            protoType.MutablePg()->Setoid(pgTypeId);
+            return true;
+        }
         default: {
             ctx.AddError(TIssue(TPosition(), TStringBuilder() << "Unsupported protobuf type: " << type));
             return false;
@@ -705,4 +715,3 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
 }
 
 } // namespace NYql
-

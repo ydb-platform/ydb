@@ -1043,7 +1043,6 @@ public:
                 QueryState->QueryData->AddMkqlParam(name, type, value);
                 return;
             }
-
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << "Missing value for parameter: " << name;
         }
 

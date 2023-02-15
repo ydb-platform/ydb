@@ -1163,6 +1163,73 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
         UNIT_ASSERT(result.GetIssues().begin()->GetMessage().EndsWith("notNull is forbidden for pg types"));
     }
+
+    Y_UNIT_TEST(ValuesInsert) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto tableName = createTable(tableClient, session, spec.TypeId, spec.IsKey, true, spec.TextIn, "", 0);
+            auto* typeDesc = NPg::TypeDescFromPgTypeId(spec.TypeId);
+            auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
+            auto keyType = spec.IsKey ? typeName : "pgint2";
+            auto req = Sprintf("\
+            --!syntax_v1\n\
+            DECLARE $key0 as %s;\n\
+            DECLARE $key1 as %s;\n\
+            DECLARE $value0 as %s;\n\
+            DECLARE $value1 as %s;\n\
+            INSERT INTO `%s` (key, value) VALUES ($key0, $value0), ($key1, $value1);\n\
+            ", keyType.c_str(), keyType.c_str(), typeName.c_str(), typeName.c_str(), tableName.c_str());
+            Cerr << req << Endl;
+            auto key0Value = TPgValue(TPgValue::VK_TEXT, spec.IsKey ? spec.TextIn(0) : "0", TPgType(keyType));
+            auto key1Value = TPgValue(TPgValue::VK_TEXT, spec.IsKey ? spec.TextIn(1) : "1", TPgType(keyType));
+            auto params = tableClient.GetParamsBuilder()
+                .AddParam("$key0")
+                    .Pg(key0Value)
+                    .Build()
+                .AddParam("$value0")
+                    .Pg(TPgValue(TPgValue::VK_TEXT, spec.TextIn(0), TPgType(typeName)))
+                    .Build()
+                .AddParam("$key1")
+                    .Pg(key1Value)
+                    .Build()
+                .AddParam("$value1")
+                    .Pg(TPgValue(TPgValue::VK_TEXT, spec.TextIn(1), TPgType(typeName)))
+                    .Build()
+                .Build();
+            auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto selectResult = ExecutePgSelect(kikimr, tableName);
+            ValidatePgYqlResult(selectResult, spec);
+        };
+        auto testType = [&] (const TPgTypeTestSpec& spec) {
+            auto textInArray = [&spec] (auto i) {
+                auto str = spec.TextIn(i);
+                return spec.ArrayPrint(str);
+            };
+
+            auto textOutArray = [&spec] (auto i) {
+                auto str = spec.TextOut(i);
+                return spec.ArrayPrint(str);
+            };
+
+            auto arrayTypeId = NYql::NPg::LookupType(spec.TypeId).ArrayTypeId;
+            TPgTypeTestSpec arraySpec{arrayTypeId, false, textInArray, textOutArray};
+            testSingleType(spec);
+            testSingleType(arraySpec);
+        };
+
+        for (const auto& spec : typeSpecs) {
+            Cerr << spec.TypeId << Endl;
+            if (spec.TypeId == CHAROID) {
+                continue;
+                // I cant come up with a query with explicit char conversion.
+                // ::char, ::character casts to pg_bpchar
+            }
+            testType(spec);
+        }
+    }
 }
 
 } // namespace NKqp

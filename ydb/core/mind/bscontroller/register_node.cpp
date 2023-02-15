@@ -60,14 +60,29 @@ class TBlobStorageController::TTxUpdateNodeDrives
                     // the disk on the node with the same label (path) as pdisk has a different serial number
                     TStringStream log;
 
-                    if (Self->SerialManagementStage == NKikimrBlobStorage::TSerialManagementStage::CHECK_SERIAL) {
+                    switch (Self->SerialManagementStage) {
+                    case NKikimrBlobStorage::TSerialManagementStage::CHECK_SERIAL:
+                        if (!pdiskInfo.ExpectedSerial && serial) {
+                            // update ExpectedSerial
+                            pdiskInfo.ExpectedSerial = serial;
+                            db.Table<T>().Key(key).Update<T::ExpectedSerial>(serial);
+                            log << "Set ExpectedSerial for pdisk";
+                        } else {
+                            log << "disk's serial reported by the node doesn't match pdisk's serial, don't update anything";
+                        }
+                        break;
+                    case NKikimrBlobStorage::TSerialManagementStage::ONLY_SERIAL:
                         // don't update ExpectedSerial so that the corresponding PDisk wouldn't be able to start next time
                         log << "disk's serial reported by the node doesn't match pdisk's serial, don't update anything";
-                    } else {
-                        log << "disk's serial reported by the node doesn't match pdisk's serial, update the later";
-                        // update ExpectedSerial
-                        pdiskInfo.ExpectedSerial = serial;
-                        db.Table<T>().Key(key).Update<T::ExpectedSerial>(serial);
+                        break;
+                    default:
+                        if (serial) {
+                            // update ExpectedSerial
+                            pdiskInfo.ExpectedSerial = serial;
+                            db.Table<T>().Key(key).Update<T::ExpectedSerial>(serial);
+                            log << "disk's serial reported by the node doesn't match pdisk's serial, update ExpectedSerial for pdisk";
+                        }
+                        break;
                     }
 
                     STLOG(NLog::PRI_ERROR, BS_CONTROLLER, BSCTXRN06, log.Str(), (PDiskId, pdiskId), (Path, pdiskInfo.Path),

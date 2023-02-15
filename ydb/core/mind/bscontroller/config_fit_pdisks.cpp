@@ -247,7 +247,7 @@ namespace NKikimr {
                 disk.BoxId = driveInfo.BoxId;
                 disk.HostId = *hostId;
                 disk.LastSeenPath = GetDiskPathFromNode(*nodeId, serial, state, /* throwOnError */ false);
-                disk.LastSeenSerial = TString();
+                disk.LastSeenSerial = serial;
                 disk.NodeId = *nodeId;
                 disk.Path = *path;
                 disk.PDiskCategory = TPDiskCategory(PDiskTypeToPDiskType(driveInfo.PDiskType), driveInfo.Kind);

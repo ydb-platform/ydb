@@ -190,11 +190,17 @@ namespace NKikimr::NBsController {
             break;
         case NKikimrBlobStorage::TSerialManagementStage::CHECK_SERIAL:
             PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
-                TString expected = pdiskInfo.ExpectedSerial;
-                if (pdiskInfo.Path && (!expected || expected != pdiskInfo.LastSeenSerial)) {
-                    throw TExError() << "pdisk has not ExpectedSerial or ExpectedSerial not equals to LastSeenSerial"
-                        << " pdiskId# " << pdiskId << " expected# " << expected.Quote()
-                        << " lastSeen# " << pdiskInfo.LastSeenSerial;
+                if (pdiskInfo.ExpectedSerial && pdiskInfo.LastSeenSerial && pdiskInfo.ExpectedSerial != pdiskInfo.LastSeenSerial) {
+                    throw TExError() << "LastSeenSerial doesn't match ExpectedSerial for pdisk"
+                        << TErrorParams::NodeId(pdiskId.NodeId) << TErrorParams::PDiskId(pdiskId.PDiskId);
+                }
+            });
+            break;
+        case NKikimrBlobStorage::TSerialManagementStage::ONLY_SERIAL:
+            PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
+                if (pdiskInfo.ExpectedSerial != pdiskInfo.LastSeenSerial) {
+                    throw TExError() << "LastSeenSerial doesn't match ExpectedSerial for pdisk"
+                        << TErrorParams::NodeId(pdiskId.NodeId) << TErrorParams::PDiskId(pdiskId.PDiskId);
                 }
             });
             break;

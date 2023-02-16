@@ -242,6 +242,11 @@ ui64 ConvertSafeCastToColumn(const TExprBase& colName, const std::string& target
 ui64 ConvertSafeCastToColumn(const TCoSafeCast& cast, TKqpOlapCompileContext& ctx)
 {
     auto maybeDataType = cast.Type().Maybe<TCoDataType>();
+    if (!maybeDataType) {
+        if (const auto maybeOptionalType = cast.Type().Maybe<TCoOptionalType>()) {
+            maybeDataType = maybeOptionalType.Cast().ItemType().Maybe<TCoDataType>();
+        }
+    }
     YQL_ENSURE(maybeDataType.IsValid());
     return ConvertSafeCastToColumn(cast.Value(), maybeDataType.Cast().Type().StringValue(), ctx);
 }

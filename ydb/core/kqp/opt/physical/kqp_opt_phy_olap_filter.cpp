@@ -100,6 +100,11 @@ bool IsSupportedDataType(const TCoDataCtor& node) {
 
 bool IsSupportedCast(const TCoSafeCast& cast) {
     auto maybeDataType = cast.Type().Maybe<TCoDataType>();
+    if (!maybeDataType) {
+        if (const auto maybeOptionalType = cast.Type().Maybe<TCoOptionalType>()) {
+            maybeDataType = maybeOptionalType.Cast().ItemType().Maybe<TCoDataType>();
+        }
+    }
     YQL_ENSURE(maybeDataType.IsValid());
 
     auto dataType = maybeDataType.Cast();

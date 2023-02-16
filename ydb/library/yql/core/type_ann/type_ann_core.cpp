@@ -4184,11 +4184,17 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            input->SetTypeAnn(type);
-            if (IsSameAnnotation(*sourceType, *input->GetTypeAnn())) {
+            if (IsSameAnnotation(*sourceType, *type)) {
                 output = input->HeadPtr();
                 return IGraphTransformer::TStatus::Repeat;
             }
+
+            if (!IsSameAnnotation(*type, *targetType)) {
+                output = ctx.Expr.ChangeChild(*input, 1U, ExpandType(input->Tail().Pos(), *type, ctx.Expr));
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            input->SetTypeAnn(type);
 
             const TDataExprType* sourceDataType  = nullptr;
             const TDataExprType* targetDataType  = nullptr;

@@ -672,7 +672,7 @@ namespace NKikimr::NDataStreams::V1 {
         ui32 writeSpeed = pqConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() / 1_KB;
         auto& description = *result.mutable_stream_description();
         description.set_stream_name(GetProtoRequest()->stream_name());
-        description.set_stream_arn(GetProtoRequest()->stream_name());  // Added by lpetrov02 for testing
+        description.set_stream_arn(GetProtoRequest()->stream_name());
         ui32 retentionPeriodHours = TInstant::Seconds(pqConfig.GetPartitionConfig().GetLifetimeSeconds()).Hours();
         description.set_retention_period_hours(retentionPeriodHours);
         description.set_write_quota_kb_per_sec(writeSpeed);

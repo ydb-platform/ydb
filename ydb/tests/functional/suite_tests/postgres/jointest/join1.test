@@ -176,7 +176,8 @@ SELECT '' AS "xxx", *
 
 statement query
 SELECT J1_TBL.i as i, j, t, k
-  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = J2_TBL.i);
+  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = J2_TBL.i)
+ORDER BY i, j, t, k;
 
 statement query
 SELECT J1_TBL.i as i, j, t, k

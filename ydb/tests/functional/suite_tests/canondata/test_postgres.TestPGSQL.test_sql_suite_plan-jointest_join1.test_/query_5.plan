@@ -19,17 +19,18 @@
                         "PlanNodeId": 11,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
+                                "Node Type": "Merge",
                                 "PlanNodeId": 10,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
                                         "CTE Name": "tx_result_binding_2_0",
-                                        "Node Type": "Limit-InnerJoin (MapJoin)-Filter-TablePointLookup-ConstantExpr",
+                                        "Node Type": "TopSort-InnerJoin (MapJoin)-Filter-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Name": "TopSort",
+                                                "TopSortBy": ""
                                             },
                                             {
                                                 "Name": "InnerJoin (MapJoin)"
@@ -56,6 +57,12 @@
                                             "postgres_jointest/join1.test_plan/J2_TBL"
                                         ]
                                     }
+                                ],
+                                "SortColumns": [
+                                    "i (Asc)",
+                                    "j (Asc)",
+                                    "t (Asc)",
+                                    "k (Asc)"
                                 ]
                             }
                         ]

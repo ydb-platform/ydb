@@ -31,8 +31,8 @@ def mute_sdk_loggers():
         'ydb.resolver.DiscoveryEndpointsResolver'
     )
 
-    for l in loggers:
-        li = logging.getLogger(l)
+    for logger_name in loggers:
+        li = logging.getLogger(logger_name)
         li.setLevel(logging.CRITICAL)
 
 

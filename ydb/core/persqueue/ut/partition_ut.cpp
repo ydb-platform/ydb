@@ -25,15 +25,6 @@ Y_UNIT_TEST_SUITE(TPartitionTests) {
 
 namespace NHelpers {
 
-struct TCreatePartitionParams {
-    ui32 Partition = 1;
-    ui64 Begin = 0;
-    ui64 End = 0;
-    TMaybe<ui64> PlanStep;
-    TMaybe<ui64> TxId;
-    TVector<TTransaction> Transactions;
-};
-
 struct TCreateConsumerParams {
     TString Consumer;
     ui64 Offset = 0;
@@ -44,15 +35,39 @@ struct TCreateConsumerParams {
     ui64 ReadRuleGeneration = 0;
 };
 
+struct TConfigParams {
+    ui64 Version = 0;
+    TVector<TCreateConsumerParams> Consumers;
+};
+
+struct TCreatePartitionParams {
+    ui32 Partition = 1;
+    ui64 Begin = 0;
+    ui64 End = 0;
+    TMaybe<ui64> PlanStep;
+    TMaybe<ui64> TxId;
+    TVector<TTransaction> Transactions;
+    TConfigParams Config;
+};
+
 }
 
 class TPartitionFixture : public NUnitTest::TBaseFixture {
 protected:
     struct TUserInfoMatcher {
+        TMaybe<TString> Consumer;
         TMaybe<TString> Session;
         TMaybe<ui64> Offset;
         TMaybe<ui32> Generation;
         TMaybe<ui32> Step;
+        TMaybe<ui64> ReadRuleGeneration;
+    };
+
+    struct TDeleteRangeMatcher {
+        TMaybe<char> TypeInfo;
+        TMaybe<ui32> Partition;
+        TMaybe<char> Mark;
+        TMaybe<TString> Consumer;
     };
 
     struct TCmdWriteMatcher {
@@ -60,6 +75,7 @@ protected:
         TMaybe<ui64> PlanStep;
         TMaybe<ui64> TxId;
         THashMap<size_t, TUserInfoMatcher> UserInfos;
+        THashMap<size_t, TDeleteRangeMatcher> DeleteRanges;
     };
 
     struct TProxyResponseMatcher {
@@ -93,6 +109,10 @@ protected:
         TMaybe<ui32> Partition;
     };
 
+    struct TChangePartitionConfigMatcher {
+        TMaybe<ui32> Partition;
+    };
+
     struct TTxOperationMatcher {
         TMaybe<ui32> Partition;
         TMaybe<TString> Consumer;
@@ -110,16 +130,17 @@ protected:
 
     using TCreatePartitionParams = NHelpers::TCreatePartitionParams;
     using TCreateConsumerParams = NHelpers::TCreateConsumerParams;
+    using TConfigParams = NHelpers::TConfigParams;
 
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
 
     void CreatePartitionActor(ui32 partition,
-                              const TVector<TCreateConsumerParams>& consumers,
+                              const TConfigParams& config,
                               bool newPartition,
                               TVector<TTransaction> txs);
     void CreatePartition(const TCreatePartitionParams& params = {},
-                         const TVector<TCreateConsumerParams>& consumers = {});
+                         const TConfigParams& config = {});
 
     void CreateSession(const TString& clientId,
                        const TString& sessionId,
@@ -148,6 +169,8 @@ protected:
     void WaitProxyResponse(const TProxyResponseMatcher &matcher = {});
     void WaitErrorResponse(const TErrorMatcher& matcher = {});
 
+    void WaitConfigRequest();
+    void SendConfigResponse(const TConfigParams& config);
     void WaitDiskStatusRequest();
     void SendDiskStatusResponse();
     void WaitMetaReadRequest();
@@ -179,15 +202,26 @@ protected:
     void SendRollbackTx(ui64 step, ui64 txId);
     void WaitCommitTxDone(const TCommitTxDoneMatcher& matcher = {});
 
+    void SendChangePartitionConfig(const TConfigParams& config = {});
+    void WaitPartitionConfigChanged(const TChangePartitionConfigMatcher& matcher = {});
+
     TTransaction MakeTransaction(ui64 step, ui64 txId,
                                  TString consumer,
                                  ui64 begin, ui64 end,
                                  TMaybe<bool> predicate = Nothing());
 
+    static NKikimrPQ::TPQTabletConfig MakeConfig(ui64 version,
+                                                 const TVector<TCreateConsumerParams>& consumers);
+
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
 
     TActorId ActorId;
+
+    NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimrPQ::TPQTabletConfig Config;
+
+    TAutoPtr<TTabletCountersBase> TabletCounters;
 };
 
 void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
@@ -203,8 +237,10 @@ void TPartitionFixture::TearDown(NUnitTest::TTestContext&)
 {
 }
 
+
+
 void TPartitionFixture::CreatePartitionActor(ui32 id,
-                                             const TVector<TCreateConsumerParams>& consumers,
+                                             const TConfigParams& config,
                                              bool newPartition,
                                              TVector<TTransaction> txs)
 {
@@ -225,46 +261,42 @@ void TPartitionFixture::CreatePartitionActor(ui32 id,
     >;
 
     TAutoPtr<TCounters> counters(new TCounters());
-    TAutoPtr<TTabletCountersBase> tabletCounters = counters->GetSecondTabletCounters().Release();
+    TabletCounters = counters->GetSecondTabletCounters().Release();
+
+    Config = MakeConfig(config.Version,
+                        config.Consumers);
 
     NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/PQ", "dc1");
-    NPersQueue::TTopicConverterPtr topicConverter;
-    NKikimrPQ::TPQTabletConfig config;
-
-    for (auto& c : consumers) {
-        config.AddReadRules(c.Consumer);
-    }
-
-    config.SetTopicName("rt3.dc1--account--topic");
-    config.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
-    config.SetFederationAccount("account");
-    config.SetLocalDC(true);
-    config.SetYdbDatabasePath("");
-
-    topicConverter = factory.MakeTopicConverter(config);
+    TopicConverter = factory.MakeTopicConverter(Config);
 
     auto actor = new NPQ::TPartition(Ctx->TabletId,
                                      id,
                                      Ctx->Edge,
                                      Ctx->Edge,
-                                     topicConverter,
+                                     TopicConverter,
                                      true,
                                      "dcId",
                                      false,
-                                     config,
-                                     *tabletCounters,
+                                     Config,
+                                     *TabletCounters,
                                      newPartition,
                                      std::move(txs));
     ActorId = Ctx->Runtime->Register(actor);
 }
 
 void TPartitionFixture::CreatePartition(const TCreatePartitionParams& params,
-                                        const TVector<TCreateConsumerParams>& consumers)
+                                        const TConfigParams& config)
 {
     if ((params.Begin == 0) && (params.End == 0)) {
-        CreatePartitionActor(params.Partition, consumers, true, {});
+        CreatePartitionActor(params.Partition, config, true, {});
+
+        WaitConfigRequest();
+        SendConfigResponse(params.Config);
     } else {
-        CreatePartitionActor(params.Partition, consumers, false, params.Transactions);
+        CreatePartitionActor(params.Partition, config, false, params.Transactions);
+
+        WaitConfigRequest();
+        SendConfigResponse(params.Config);
 
         WaitDiskStatusRequest();
         SendDiskStatusResponse();
@@ -273,7 +305,7 @@ void TPartitionFixture::CreatePartition(const TCreatePartitionParams& params,
         SendMetaReadResponse(params.PlanStep, params.TxId);
 
         WaitInfoRangeRequest();
-        SendInfoRangeResponse(params.Partition, consumers);
+        SendInfoRangeResponse(params.Partition, params.Config.Consumers);
 
         WaitDataRangeRequest();
         SendDataRangeResponse(params.Begin, params.End);
@@ -349,8 +381,13 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetCookie(), 1);             // SET_OFFSET_COOKIE
 
     if (matcher.Count.Defined()) {
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Count, event->Record.CmdWriteSize());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Count,
+                                 event->Record.CmdWriteSize() + event->Record.CmdDeleteRangeSize());
     }
+
+    //
+    // TxMeta
+    //
     if (matcher.PlanStep.Defined()) {
         NKikimrPQ::TPartitionTxMeta meta;
         UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(0).GetValue()));
@@ -363,10 +400,12 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 
         UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, meta.GetTxId());
     }
+
+    //
+    // CmdWrite
+    //
     for (auto& [index, userInfo] : matcher.UserInfos) {
-        if (matcher.Count.Defined()) {
-            UNIT_ASSERT(index < *matcher.Count);
-        }
+        UNIT_ASSERT(index < event->Record.CmdWriteSize());
 
         NKikimrPQ::TUserInfo ud;
         UNIT_ASSERT(ud.ParseFromString(event->Record.GetCmdWrite(index).GetValue()));
@@ -386,6 +425,31 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
         if (userInfo.Offset) {
             UNIT_ASSERT(ud.HasOffset());
             UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
+        }
+        if (userInfo.ReadRuleGeneration) {
+            UNIT_ASSERT(ud.HasReadRuleGeneration());
+            UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
+        }
+    }
+
+    //
+    // CmdDeleteRange
+    //
+    for (auto& [index, deleteRange] : matcher.DeleteRanges) {
+        UNIT_ASSERT(index < event->Record.CmdDeleteRangeSize());
+        UNIT_ASSERT(event->Record.GetCmdDeleteRange(index).HasRange());
+
+        auto& range = event->Record.GetCmdDeleteRange(index).GetRange();
+        TString key = range.GetFrom();
+        UNIT_ASSERT(key.Size() > (1 + 10 + 1)); // type + partition + mark + consumer
+
+        if (deleteRange.Partition.Defined()) {
+            auto partition = FromString<ui32>(key.substr(1, 10));
+            UNIT_ASSERT_VALUES_EQUAL(*deleteRange.Partition, partition);
+        }
+        if (deleteRange.Consumer.Defined()) {
+            TString consumer = key.substr(12);
+            UNIT_ASSERT_VALUES_EQUAL(*deleteRange.Consumer, consumer);
         }
     }
 }
@@ -451,6 +515,35 @@ void TPartitionFixture::WaitErrorResponse(const TErrorMatcher& matcher)
     if (matcher.Error) {
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Error, event->Error);
     }
+}
+
+void TPartitionFixture::WaitConfigRequest()
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
+    UNIT_ASSERT(event != nullptr);
+
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 1);
+}
+
+void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
+{
+    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+
+    auto read = event->Record.AddReadResult();
+    if (config.Consumers.empty()) {
+        read->SetStatus(NKikimrProto::NODATA);
+    } else {
+        read->SetStatus(NKikimrProto::OK);
+
+        TString out;
+        Y_VERIFY(MakeConfig(config.Version,
+                            config.Consumers).SerializeToString(&out));
+
+        read->SetValue(out);
+    }
+
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitDiskStatusRequest()
@@ -688,6 +781,23 @@ void TPartitionFixture::WaitCommitTxDone(const TCommitTxDoneMatcher& matcher)
     }
 }
 
+void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
+{
+    auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakeConfig(config.Version,
+                                                                                        config.Consumers));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::WaitPartitionConfigChanged(const TChangePartitionConfigMatcher& matcher)
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvPartitionConfigChanged>();
+    UNIT_ASSERT(event != nullptr);
+
+    if (matcher.Partition) {
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Partition, event->Partition);
+    }
+}
+
 TTransaction TPartitionFixture::MakeTransaction(ui64 step, ui64 txId,
                                                 TString consumer,
                                                 ui64 begin, ui64 end,
@@ -697,6 +807,27 @@ TTransaction TPartitionFixture::MakeTransaction(ui64 step, ui64 txId,
     event->AddOperation(std::move(consumer), begin, end);
 
     return TTransaction(event, predicate);
+}
+
+NKikimrPQ::TPQTabletConfig TPartitionFixture::MakeConfig(ui64 version,
+                                                         const TVector<TCreateConsumerParams>& consumers)
+{
+    NKikimrPQ::TPQTabletConfig config;
+
+    config.SetVersion(version);
+
+    for (auto& c : consumers) {
+        config.AddReadRules(c.Consumer);
+        config.AddReadRuleGenerations(c.Generation);
+    }
+
+    config.SetTopicName("rt3.dc1--account--topic");
+    config.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
+    config.SetFederationAccount("account");
+    config.SetLocalDC(true);
+    config.SetYdbDatabasePath("");
+
+    return config;
 }
 
 Y_UNIT_TEST_F(Batching, TPartitionFixture)
@@ -986,12 +1117,14 @@ Y_UNIT_TEST_F(AfterRestart_1, TPartitionFixture)
     txs.push_back(MakeTransaction(step, 11111, consumer, 0, 2, true));
     txs.push_back(MakeTransaction(step, 22222, consumer, 2, 4));
 
-    CreatePartition({.Partition=partition,
+    CreatePartition({
+                    .Partition=partition,
                     .Begin=begin,
                     .End=end,
                     .PlanStep=step, .TxId=10000,
-                    .Transactions=std::move(txs)},
-                    {{.Consumer=consumer, .Offset=0, .Session=session}});
+                    .Transactions=std::move(txs),
+                    .Config={.Consumers={{.Consumer=consumer, .Offset=0, .Session=session}}}
+                    });
 
     SendCommitTx(step, 11111);
 
@@ -1015,12 +1148,14 @@ Y_UNIT_TEST_F(AfterRestart_2, TPartitionFixture)
     txs.push_back(MakeTransaction(step, 11111, consumer, 0, 2));
     txs.push_back(MakeTransaction(step, 22222, consumer, 2, 4));
 
-    CreatePartition({.Partition=partition,
+    CreatePartition({
+                    .Partition=partition,
                     .Begin=begin,
                     .End=end,
                     .PlanStep=step, .TxId=10000,
-                    .Transactions=std::move(txs)},
-                    {{.Consumer=consumer, .Offset=0, .Session=session}});
+                    .Transactions=std::move(txs),
+                    .Config={.Consumers={{.Consumer=consumer, .Offset=0, .Session=session}}}
+                    });
 
     WaitCalcPredicateResult({.Step=step, .TxId=11111, .Partition=partition, .Predicate=true});
 }
@@ -1083,6 +1218,86 @@ Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
     SendRollbackTx(step, txId_1);
 
     WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=true});
+}
+
+Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
+{
+    const ui32 partition = 3;
+    const ui64 begin = 0;
+    const ui64 end = 10;
+    const TString client = "client";
+    const TString session = "session";
+
+    const ui64 step = 12345;
+    const ui64 txId_1 = 67890;
+    const ui64 txId_2 = 67891;
+
+    CreatePartition({
+                    .Partition=partition, .Begin=begin, .End=end,
+                    .Config={.Consumers={
+                    {.Consumer="client-1", .Offset=0, .Session="session-1"},
+                    {.Consumer="client-2", .Offset=0, .Session="session-2"},
+                    {.Consumer="client-3", .Offset=0, .Session="session-3"}
+                    }}
+                    });
+
+    SendCalcPredicate(step, txId_1, "client-1", 0, 2);
+    SendChangePartitionConfig({.Version=2,
+                              .Consumers={
+                              {.Consumer="client-1", .Generation=0},
+                              {.Consumer="client-3", .Generation=7}
+                              }});
+    //
+    // consumer 'client-2' will be deleted
+    //
+    SendCalcPredicate(step, txId_2, "client-2", 0, 2);
+
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
+    SendCommitTx(step, txId_1);
+
+    //
+    // consumer 'client-2' was deleted
+    //
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
+    SendRollbackTx(step, txId_2);
+
+    WaitCmdWrite({.Count=8,
+                 .PlanStep=step, .TxId=txId_2,
+                 .UserInfos={
+                 {1, {.Consumer="client-1", .Session="", .Offset=2}},
+                 {3, {.Consumer="client-3", .Session="", .Offset=0, .ReadRuleGeneration=7}}
+                 },
+                 .DeleteRanges={
+                 {0, {.Partition=3, .Consumer="client-2"}}
+                 }});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitPartitionConfigChanged({.Partition=partition});
+}
+
+Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)
+{
+    CreatePartition({
+                    .Partition=3,
+                    .Begin=0, .End=10,
+                    //
+                    // конфиг партиции
+                    //
+                    .Config={.Version=1, .Consumers={{.Consumer="client-1", .Offset=3}}}
+                    },
+                    //
+                    // конфиг таблетки
+                    //
+                    {.Version=2, .Consumers={{.Consumer="client-2"}}});
+
+    WaitCmdWrite({.Count=5,
+                 .UserInfos={
+                 {0, {.Consumer="client-2", .Session="", .Offset=0, .ReadRuleGeneration=0}}
+                 },
+                 .DeleteRanges={
+                 {0, {.Partition=3, .Consumer="client-1"}}
+                 }});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 }
 
 }

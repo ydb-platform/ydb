@@ -48,8 +48,10 @@ struct TTransaction {
         Y_VERIFY(Tx);
     }
 
-    explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> changeConfig) :
-        ChangeConfig(changeConfig)
+    TTransaction(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> changeConfig,
+                 bool sendReply) :
+        ChangeConfig(changeConfig),
+        SendReply(sendReply)
     {
         Y_VERIFY(ChangeConfig);
     }
@@ -58,6 +60,7 @@ struct TTransaction {
     TMaybe<bool> Predicate;
 
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
+    bool SendReply;
 };
 
 class TPartition : public TActorBootstrapped<TPartition> {
@@ -205,8 +208,9 @@ private:
     void ProcessTxsAndUserActs(const TActorContext& ctx);
     void ContinueProcessTxsAndUserActs(const TActorContext& ctx);
 
-    void AddDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event);
-    void AddDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
+    void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event);
+    void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
+    void PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
     void RemoveDistrTx();
     void ProcessDistrTxs(const TActorContext& ctx);
     void ProcessDistrTx(const TActorContext& ctx);
@@ -249,6 +253,7 @@ private:
     void AddCmdWriteTxMeta(NKikimrClient::TKeyValueRequest& request,
                            ui64 step, ui64 txId);
     void AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request);
+    void AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request);
     void AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
                            const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated);
 
@@ -277,9 +282,14 @@ private:
                                     const TActorContext& ctx);
     void EndChangePartitionConfig(const TEvPQ::TEvChangePartitionConfig& event,
                                   const TActorContext& ctx);
+    TString GetKeyConfig() const;
 
     void InitPendingUserInfoForImportantClients(const TEvPQ::TEvChangePartitionConfig& event,
                                                 const TActorContext& ctx);
+
+    void RequestConfig(const TActorContext& ctx);
+    void HandleConfig(const NKikimrClient::TResponse& res, const TActorContext& ctx);
+    void Initialize(const TActorContext& ctx);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -454,6 +464,7 @@ private:
     }
 private:
     enum EInitState {
+        WaitConfig,
         WaitDiskStatus,
         WaitInfoRange,
         WaitDataRange,
@@ -465,6 +476,8 @@ private:
     ui64 TabletID;
     ui32 Partition;
     NKikimrPQ::TPQTabletConfig Config;
+    NKikimrPQ::TPQTabletConfig TabletConfig;
+    const TTabletCountersBase& Counters;
     NPersQueue::TTopicConverterPtr TopicConverter;
     bool IsLocalDC;
     TString DCId;
@@ -514,7 +527,7 @@ private:
     bool IsServerless;
     TString FolderId;
 
-    TUsersInfoStorage UsersInfoStorage;
+    TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
     //
     // user actions and transactions
@@ -535,6 +548,7 @@ private:
     TMaybe<ui64> TxId;
     bool TxIdHasChanged = false;
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
+    bool SendChangeConfigReply = true;
     //
     //
     //

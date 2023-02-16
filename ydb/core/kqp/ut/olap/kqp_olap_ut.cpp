@@ -3848,6 +3848,19 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TestTableWithNulls({ testCase });
     }
+
+    Y_UNIT_TEST(Blocks_NoAggPushdown) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                PRAGMA UseBlocks;
+                SELECT
+                    COUNT(DISTINCT id)
+                FROM `/Root/tableWithNulls`;
+            )")
+            .SetExpectedReply("[[10u]]");
+
+        TestTableWithNulls({ testCase });
+    }
 }
 
 } // namespace NKqp

@@ -499,10 +499,10 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
         .Build();
 }
 
-TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& streamArg, TExprNode::TListType& keyIdxs,
+TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& stream, TExprNode::TListType& keyIdxs,
     TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, ui32* streamIdxColumn) {
-    auto flow = Ctx.NewCallable(Node->Pos(), "ToFlow", { streamArg });
     TVector<TString> inputColumns;
+    auto flow = Ctx.NewCallable(Node->Pos(), "ToFlow", { stream });
     for (ui32 i = 0; i < RowType->GetSize(); ++i) {
         inputColumns.push_back(TString(RowType->GetItems()[i]->GetName()));
     }
@@ -623,12 +623,18 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     }
 
     const bool hashed = (KeyColumns->ChildrenSize() > 0);
+    const bool isInputList = (AggList->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List);
 
-    auto streamArg = Ctx.NewArgument(Node->Pos(), "stream");
     TExprNode::TListType keyIdxs;
     TVector<TString> outputColumns;
     TExprNode::TListType aggs;
-    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, false, false);
+    TExprNode::TPtr stream = nullptr;
+    if (isInputList) {
+        stream = Ctx.NewArgument(Node->Pos(), "stream");
+    } else {
+        stream = AggList;
+    }
+    auto blocks = MakeInputBlocks(stream, keyIdxs, outputColumns, aggs, false, false);
     if (!blocks) {
         return nullptr;
     }
@@ -658,15 +664,19 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     }
 
     auto finalFlow = MakeNarrowMap(Node->Pos(), outputColumns, aggWideFlow, Ctx);
-    auto root = Ctx.NewCallable(Node->Pos(), "FromFlow", { finalFlow });
-    auto lambdaStream = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), { streamArg }), std::move(root));
+    if (isInputList) {
+        auto root = Ctx.NewCallable(Node->Pos(), "FromFlow", { finalFlow });
+        auto lambdaStream = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), { stream }), std::move(root));
 
-    return Ctx.Builder(Node->Pos())
-        .Callable("LMap")
-            .Add(0, AggList)
-            .Add(1, lambdaStream)
-        .Seal()
-        .Build();
+        return Ctx.Builder(Node->Pos())
+            .Callable("LMap")
+                .Add(0, AggList)
+                .Add(1, lambdaStream)
+            .Seal()
+            .Build();
+    } else {
+        return finalFlow;
+    }
 }
 
 TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const TExprNode::TPtr& keyExtractor, const TExprNode::TPtr& pickleTypeNode)

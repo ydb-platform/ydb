@@ -639,11 +639,19 @@ message TBaseConfig {
         uint64 LastSeenTimestamp = 7; // when seen working for the last time
         ENodeType Type = 8;
     }
+    message TDevice {
+        string SerialNumber = 1;
+        uint64 BoxId = 2;
+        uint32 NodeId = 3;
+        TDriveLifeStage.E LifeStage = 4;
+        string Path = 5;
+    }
 
     repeated TPDisk PDisk = 1;
     repeated TVSlot VSlot = 2;
     repeated TGroup Group = 3;
     repeated TNode Node = 4;
+    repeated TDevice Device = 5;
 }
 
 message TMoveCommand {

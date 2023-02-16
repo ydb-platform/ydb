@@ -450,6 +450,18 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& /*cmd*/, TStatus& status) {
         NKikimrBlobStorage::TBaseConfig *pb = status.MutableBaseConfig();
+        DrivesSerials.ForEach([&](const auto& serial, const auto& driveInfo) {
+            auto device = pb->AddDevice();
+            device->SetSerialNumber(serial.Serial);
+            device->SetBoxId(driveInfo.BoxId);
+            if (driveInfo.NodeId) {
+                device->SetNodeId(driveInfo.NodeId.GetRef());
+            }
+            if (driveInfo.Path) {
+                device->SetPath(driveInfo.Path.GetRef());
+            }
+            device->SetLifeStage(driveInfo.LifeStage);
+        });
         PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
             Serialize(pb->AddPDisk(), pdiskId, pdiskInfo);
         });

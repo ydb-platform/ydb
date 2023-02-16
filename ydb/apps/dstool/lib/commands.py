@@ -1,3 +1,5 @@
+import ydb.apps.dstool.lib.dstool_cmd_device_list as device_list
+
 import ydb.apps.dstool.lib.dstool_cmd_pdisk_add_by_serial as pdisk_add_by_serial
 import ydb.apps.dstool.lib.dstool_cmd_pdisk_remove_by_serial as pdisk_remove_by_serial
 import ydb.apps.dstool.lib.dstool_cmd_pdisk_set as pdisk_set
@@ -41,9 +43,11 @@ modules = [
     group_check, group_show_blob_info, group_show_usage_by_tablets, group_state, group_take_snapshot, group_add, group_list,
     pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list,
     vdisk_remove_donor, vdisk_evict, vdisk_list, vdisk_wipe,
+    device_list,
 ]
 
 default_structure = [
+    ('device', ['list']),
     ('pdisk', ['add-by-serial', 'remove-by-serial', 'set', 'list']),
     ('vdisk', ['evict', 'remove-donor', 'wipe', 'list']),
     ('group', ['add', 'check', ('show', ['blob-info', 'usage-by-tablets']), 'state', 'take-snapshot', 'list']),

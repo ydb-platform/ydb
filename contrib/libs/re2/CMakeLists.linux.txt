@@ -23,6 +23,7 @@ target_link_libraries(contrib-libs-re2 PUBLIC
   yutil
 )
 target_sources(contrib-libs-re2 PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/bitmap256.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/bitstate.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/compile.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/dfa.cc

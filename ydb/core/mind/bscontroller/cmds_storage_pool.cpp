@@ -461,6 +461,7 @@ namespace NKikimr::NBsController {
                 device->SetPath(driveInfo.Path.GetRef());
             }
             device->SetLifeStage(driveInfo.LifeStage);
+            device->SetType(driveInfo.PDiskType);
         });
         PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
             Serialize(pb->AddPDisk(), pdiskId, pdiskInfo);

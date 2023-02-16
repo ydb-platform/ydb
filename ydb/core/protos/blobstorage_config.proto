@@ -645,6 +645,7 @@ message TBaseConfig {
         uint32 NodeId = 3;
         TDriveLifeStage.E LifeStage = 4;
         string Path = 5;
+        EPDiskType Type = 6;
     }
 
     repeated TPDisk PDisk = 1;

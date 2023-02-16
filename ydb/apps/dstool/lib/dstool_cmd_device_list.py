@@ -18,14 +18,16 @@ def do(args):
         'NodeId',
         'FQDN',
         'Path',
+        'Type',
         'StorageStatus',
         'BoxId',
     ]
     visible_columns = [
         'SerialNumber',
         'FQDN',
-        'StorageStatus',
         'Path',
+        'Type',
+        'StorageStatus',
     ]
 
     table_output = table.TableOutput(
@@ -38,6 +40,7 @@ def do(args):
         row['SerialNumber'] = device.SerialNumber
         row['NodeId'] = device.NodeId
         row['FQDN'] = node_to_fqdn[device.NodeId]
+        row['Type'] = kikimr_bsconfig.EPDiskType.Name(device.Type)
         row['StorageStatus'] = kikimr_bsconfig.TDriveLifeStage.E.Name(device.LifeStage)
         row['Path'] = device.Path
         row['BoxId'] = device.BoxId

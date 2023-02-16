@@ -310,11 +310,11 @@ public:
     void StartDownload(size_t index) {
         DownloadInflight++;
         const TPath& path = Paths[index];
-        auto url = Url + std::get<TString>(path);
+        auto url = Url + path.Path;
         auto id = index + StartPathIndex;
         const TString requestId = CreateGuidAsString();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
-        Gateway->Download(url, MakeHeaders(Token, requestId), 0U, std::min(std::get<size_t>(path), SizeLimit),
+        Gateway->Download(url, MakeHeaders(Token, requestId), 0U, std::min(path.Size, SizeLimit),
             std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id), {}, RetryPolicy);
     }
 
@@ -392,7 +392,7 @@ private:
     void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
         ++IsDoneCounter;
         const auto id = result->Get()->PathIndex;
-        const auto path = std::get<TString>(Paths[id - StartPathIndex]);
+        const auto path = Paths[id - StartPathIndex].Path;
         const auto httpCode = result->Get()->Result.HttpResponseCode;
         const auto requestId = result->Get()->RequestId;
         IngressBytes += result->Get()->Result.size();
@@ -427,7 +427,7 @@ private:
         ++IsDoneCounter;
         auto id = result->Get()->PathIndex;
         const auto requestId = result->Get()->RequestId;
-        const auto path = std::get<TString>(Paths[id - StartPathIndex]);
+        const auto path = Paths[id - StartPathIndex].Path;
         LOG_W("TS3ReadActor", "Error while reading file " << path << ", details: ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString() << ", request id: [" << requestId << "]");
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path << " with request id [" << requestId << "]", TIssues{result->Get()->Error});
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
@@ -1266,15 +1266,14 @@ public:
         DownloadInflight++;
         const TPath& path = Paths[index];
         const TString requestId = CreateGuidAsString();
-        ui64 fileSize = std::get<std::size_t>(path);
-        auto stuff = std::make_shared<TRetryStuff>(Gateway, Url + std::get<TString>(path), MakeHeaders(Token, requestId), fileSize, TxId, requestId, RetryPolicy);
+        auto stuff = std::make_shared<TRetryStuff>(Gateway, Url + path.Path, MakeHeaders(Token, requestId), path.Size, TxId, requestId, RetryPolicy);
         auto pathIndex = index + StartPathIndex;
         RetryStuffForFile.emplace(pathIndex, stuff);
         if (TaskCounters) {
             HttpInflightLimit->Add(Gateway->GetBuffersSizePerStream());
         }
         ::NMonitoring::TDynamicCounters::TCounterPtr inflightCounter;
-        auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, stuff, ReadSpec, pathIndex, std::get<TString>(path), Url, MaxBlocksInFly, ArrowReader, ReadActorFactoryCfg, DeferredQueueSize, HttpInflightSize, HttpDataRps);
+        auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, stuff, ReadSpec, pathIndex, path.Path, Url, MaxBlocksInFly, ArrowReader, ReadActorFactoryCfg, DeferredQueueSize, HttpInflightSize, HttpDataRps);
         CoroActors.insert(RegisterWithSameMailbox(std::make_unique<TS3ReadCoroActor>(std::move(impl), std::move(stuff), pathIndex, impl->IsDownloadNeeded(), impl->HttpInflightSize).release()));
     }
 

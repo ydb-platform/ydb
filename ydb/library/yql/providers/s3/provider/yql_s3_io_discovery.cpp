@@ -177,7 +177,7 @@ private:
 
                 const auto& listEntries = std::get<IS3Lister::TListEntries>(listResult);
                 for (auto& entry : listEntries) {
-                    listedPaths.emplace_back(entry.Path, entry.Size);
+                    listedPaths.emplace_back(entry.Path, entry.Size, false);
                 }
             }
 
@@ -340,7 +340,7 @@ private:
                     }
 
                     auto& pathList = pathsByExtraValues[extraValues];
-                    pathList.emplace_back(entry.Path, entry.Size);
+                    pathList.emplace_back(entry.Path, entry.Size, false);
                     readSize += entry.Size;
                 }
 
@@ -512,7 +512,7 @@ private:
             req.Token = tokenStr;
             req.Url = url;
             for (const auto& directory : directories) {
-                req.Pattern = NS3::NormalizePath(TStringBuilder() << std::get<0>(directory) << "/" << effectiveFilePattern);
+                req.Pattern = NS3::NormalizePath(TStringBuilder() << directory.Path << "/" << effectiveFilePattern);
                 RequestsByNode_[source.Raw()].push_back(req);
                 if (PendingRequests_.find(req) == PendingRequests_.end()) {
                     auto future = Lister_->List(req.Token, req.Url, req.Pattern);

@@ -13,5 +13,6 @@ message TRange {
         repeated TPath Children = 2;
         uint64 Size = 3;
         bool Read = 4; // Read this path
+        bool IsDirectory = 5;
     }
 }

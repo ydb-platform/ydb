@@ -24,7 +24,9 @@ static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS
         const size_t prevSize = currentPath.size();
         currentPath += path.GetName();
         if (path.GetRead()) {
-            paths.emplace_back(currentPath, path.GetSize());
+            auto isDirectory = path.GetIsDirectory();
+            auto readPath = isDirectory ? currentPath + "/" : currentPath;
+            paths.emplace_back(TPath{readPath, path.GetSize(), path.GetIsDirectory()});
         }
         BuildPathsFromTree(path.GetChildren(), paths, currentPath, currentDepth + 1);
         currentPath.resize(prevSize);
@@ -53,19 +55,22 @@ void ReadPathsList(const NS3::TSource& sourceDesc, const THashMap<TString, TStri
             const auto& path = range.GetDeprecatedPath().Get(i);
             auto it = map.find(path);
             YQL_ENSURE(it != map.end());
-            paths.emplace_back(path, it->second);
+            paths.emplace_back(TPath{path, it->second, false});
         }
     } else {
         for (auto i = 0; i < sourceDesc.GetDeprecatedPath().size(); ++i) {
-            paths.emplace_back(sourceDesc.GetDeprecatedPath().Get(i).GetPath(), sourceDesc.GetDeprecatedPath().Get(i).GetSize());
+            paths.emplace_back(TPath{
+                sourceDesc.GetDeprecatedPath().Get(i).GetPath(),
+                sourceDesc.GetDeprecatedPath().Get(i).GetSize(),
+                false});
         }
     }
 }
 
 void PackPathsList(const TPathList& paths, TString& packed, bool& isTextEncoded) {
     TFileTreeBuilder builder;
-    for (auto& item : paths) {
-        builder.AddPath(std::get<0>(item), std::get<1>(item));
+    for (const auto& [path, size, isDirectory] : paths) {
+        builder.AddPath(path, size, isDirectory);
     }
     NS3::TRange range;
     builder.Save(&range);

@@ -9,7 +9,16 @@
 
 namespace NYql::NS3Details {
 
-using TPath = std::tuple<TString, size_t>;
+struct TPath {
+    TString Path;
+    size_t Size = 0;
+    bool IsDirectory = false;
+
+    TPath(TString path, size_t size, bool isDirectory)
+        : Path(std::move(path))
+        , Size(size)
+        , IsDirectory(isDirectory) { }
+};
 using TPathList = std::vector<TPath>;
 
 void ReadPathsList(const NS3::TSource& sourceDesc, const THashMap<TString, TString>& taskParams, TPathList& paths, ui64& startPathIndex);

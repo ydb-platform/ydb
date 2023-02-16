@@ -62,17 +62,20 @@ public:
 
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
         TString cluster;
-        std::vector<std::vector<std::pair<TString, ui64>>> parts;
+        std::vector<std::vector<TPath>> parts;
         if (const TMaybeNode<TDqSource> source = &node) {
             cluster = source.Cast().DataSource().Cast<TS3DataSource>().Cluster().Value();
             const auto settings = source.Cast().Settings().Cast<TS3SourceSettingsBase>();
             for (auto i = 0u; i < settings.Paths().Size(); ++i) {
-                const auto& path = settings.Paths().Item(i);
+                const auto& packed = settings.Paths().Item(i);
                 TPathList paths;
-                UnpackPathsList(path.Data().Literal().Value(), FromString<bool>(path.IsText().Literal().Value()), paths);
+                UnpackPathsList(
+                    packed.Data().Literal().Value(),
+                    FromString<bool>(packed.IsText().Literal().Value()),
+                    paths);
                 parts.reserve(parts.size() + paths.size());
-                for (auto& p : paths) {
-                    parts.emplace_back(1U, std::pair(std::get<0>(p), std::get<1>(p)));
+                for (const auto& path : paths) {
+                    parts.emplace_back(1U, path);
                 }
             }
         }
@@ -104,7 +107,10 @@ public:
             NS3::TRange range;
             range.SetStartPathIndex(startIdx);
             TFileTreeBuilder builder;
-            std::for_each(part.cbegin(), part.cend(), [&builder, &startIdx](const std::pair<TString, ui64>& f) { builder.AddPath(f.first, f.second); ++startIdx; });
+            std::for_each(part.cbegin(), part.cend(), [&builder, &startIdx](const TPath& f) {
+                builder.AddPath(f.Path, f.Size, f.IsDirectory);
+                ++startIdx;
+            });
             builder.Save(&range);
 
             partitions.emplace_back();

@@ -38,11 +38,13 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL(startPathIndex, 42);
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
 
-        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(paths[0]), "my/path");
-        UNIT_ASSERT_VALUES_EQUAL(std::get<ui64>(paths[0]), 100500);
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "my/path");
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].Size, 100500);
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].IsDirectory, false);
 
-        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(paths[1]), "other/path");
-        UNIT_ASSERT_VALUES_EQUAL(std::get<ui64>(paths[1]), 1);
+        UNIT_ASSERT_VALUES_EQUAL(paths[1].Path, "other/path");
+        UNIT_ASSERT_VALUES_EQUAL(paths[1].Size, 1);
+        UNIT_ASSERT_VALUES_EQUAL(paths[1].IsDirectory, false);
     }
 
     Y_UNIT_TEST(ReadsFilesListFromParamsAndSourceSettings) {
@@ -69,8 +71,9 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL(startPathIndex, 42);
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1);
 
-        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(paths[0]), "my/path");
-        UNIT_ASSERT_VALUES_EQUAL(std::get<ui64>(paths[0]), 100500);
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "my/path");
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].Size, 100500);
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].IsDirectory, false);
     }
 
     NYql::NS3::TRange::TPath* SetPath(NYql::NS3::TRange::TPath* path, const TString& name = {}, ui64 size = 0, bool read = false) {
@@ -114,20 +117,25 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL(startPathIndex, 42);
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 5);
 
-        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(paths[0]), "root");
-        UNIT_ASSERT_VALUES_EQUAL(std::get<ui64>(paths[0]), 1);
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "root");
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].Size, 1);
+        UNIT_ASSERT_VALUES_EQUAL(paths[0].IsDirectory, false);
 
-        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(paths[1]), "root/folder/f1");
-        UNIT_ASSERT_VALUES_EQUAL(std::get<ui64>(paths[1]), 42);
+        UNIT_ASSERT_VALUES_EQUAL(paths[1].Path, "root/folder/f1");
+        UNIT_ASSERT_VALUES_EQUAL(paths[1].Size, 42);
+        UNIT_ASSERT_VALUES_EQUAL(paths[1].IsDirectory, false);
 
-        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(paths[2]), "root/folder/f2");
-        UNIT_ASSERT_VALUES_EQUAL(std::get<ui64>(paths[2]), 100500);
+        UNIT_ASSERT_VALUES_EQUAL(paths[2].Path, "root/folder/f2");
+        UNIT_ASSERT_VALUES_EQUAL(paths[2].Size, 100500);
+        UNIT_ASSERT_VALUES_EQUAL(paths[2].IsDirectory, false);
 
-        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(paths[3]), "root/f3");
-        UNIT_ASSERT_VALUES_EQUAL(std::get<ui64>(paths[3]), 0);
+        UNIT_ASSERT_VALUES_EQUAL(paths[3].Path, "root/f3");
+        UNIT_ASSERT_VALUES_EQUAL(paths[3].Size, 0);
+        UNIT_ASSERT_VALUES_EQUAL(paths[3].IsDirectory, false);
 
-        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(paths[4]), "root2/f4");
-        UNIT_ASSERT_VALUES_EQUAL(std::get<ui64>(paths[4]), 42);
+        UNIT_ASSERT_VALUES_EQUAL(paths[4].Path, "root2/f4");
+        UNIT_ASSERT_VALUES_EQUAL(paths[4].Size, 42);
+        UNIT_ASSERT_VALUES_EQUAL(paths[4].IsDirectory, false);
     }
 }
 

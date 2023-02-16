@@ -22,7 +22,7 @@ bool ValidateS3PackedPaths(TPositionHandle pos, TStringBuf blob, bool isTextEnco
         TPathList paths;
         UnpackPathsList(blob, isTextEncoded, paths);
         for (size_t i = 0; i < paths.size(); ++i) {
-            if (std::get<0>(paths[i]).empty()) {
+            if (paths[i].Path.empty()) {
                 ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Expected non-empty path (index " << i << ")"));
                 return false;
             }

@@ -4772,7 +4772,7 @@ TExprNode::TPtr OptimizeWideCondense1(const TExprNode::TPtr& node, TExprContext&
     TStructExpandMap structExpandMap(originalSize);
 
     const auto inputWidth = node->Child(1U)->Head().ChildrenSize();
-    const auto needFlatten = GetExpandMapsForLambda<true>(node->Tail(), tupleExpandMap, structExpandMap);
+    const auto needFlatten = GetExpandMapsForLambda<false>(node->Tail(), tupleExpandMap, structExpandMap);
 
     if (needFlatten.front()) {
         const auto flattenSize = *needFlatten.front();

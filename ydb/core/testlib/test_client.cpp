@@ -976,7 +976,6 @@ namespace Tests {
                 YqSharedResources,
                 NKikimr::NFolderService::CreateMockFolderServiceActor,
                 NYq::CreateMockYqAuditServiceActor,
-                ydbCredFactory,
                 /*IcPort = */0,
                 {}
                 );

@@ -36,6 +36,7 @@ target_link_libraries(yq-libs-init PUBLIC
   yq-libs-test_connection
   ydb-library-folder_service
   library-folder_service-proto
+  ydb-library-security
   yql-minikql-comp_nodes
   yql-utils-actor_log
   dq-actors-compute

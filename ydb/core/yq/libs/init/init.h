@@ -36,7 +36,6 @@ void Init(
     const IYqSharedResources::TPtr& yqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig, const ::NMonitoring::TDynamicCounterPtr& counters)>& auditServiceFactory,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     ui32 icPort,
     const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories
 );

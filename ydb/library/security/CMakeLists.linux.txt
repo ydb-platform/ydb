@@ -13,6 +13,7 @@ target_link_libraries(ydb-library-security PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-client-iam
   cpp-digest-crc32c
   client-ydb_types-credentials
 )

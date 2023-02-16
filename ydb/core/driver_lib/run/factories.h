@@ -19,8 +19,6 @@
 
 #include <library/cpp/actors/core/actorsystem.h>
 
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
@@ -45,7 +43,6 @@ struct TModuleFactories {
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
 
     std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig, const ::NMonitoring::TDynamicCounterPtr& counters)> YqAuditServiceFactory;
-    NKikimr::TYdbCredentialsProviderFactory YdbCredentialProviderFactory;
     // Factory for grpc services
     TGrpcServiceFactory GrpcServiceFactory;
 

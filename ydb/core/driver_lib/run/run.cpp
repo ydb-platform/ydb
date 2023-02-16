@@ -121,6 +121,7 @@
 
 #include <library/cpp/actors/util/memory_track.h>
 #include <library/cpp/actors/prof/tag.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/charset/wide.h>
@@ -1491,8 +1492,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetFederatedQueryConfig().GetEnabled()) {
-        YqSharedResources = NYq::CreateYqSharedResources(runConfig.AppConfig.GetFederatedQueryConfig(),
-            ModuleFactories->YdbCredentialProviderFactory, Counters->GetSubgroup("counters", "yq"));
+        YqSharedResources = NYq::CreateYqSharedResources(
+            runConfig.AppConfig.GetFederatedQueryConfig(),
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            Counters->GetSubgroup("counters", "yq"));
         sil->AddServiceInitializer(new TFederatedQueryInitializer(runConfig, ModuleFactories, YqSharedResources));
     }
 

@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TUrlBuilder) {
                         .AddUrlParam("param2", "val2")
                         .Build();
 
-        UNIT_ASSERT_VALUES_EQUAL(url, "https://localhost/abc?param1=%3D!@%23$%25^%26*%28%29%7B%7D%5B%5D%22+&param2=val2");
+        UNIT_ASSERT_VALUES_EQUAL(url, "https://localhost/abc?param1=%3D!@%23$%25%5E%26*%28%29%7B%7D%5B%5D%22+&param2=val2");
     }
 
     Y_UNIT_TEST(EmptyPathComponent) {

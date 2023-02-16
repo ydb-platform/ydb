@@ -397,7 +397,7 @@ Y_UNIT_TEST(ResultSetStringPrintTest) {
         << "\"simplestring\","
            "\"Space_And_Underscore+Containing+String\","
            "\"String%22with%22quote%22marks\"" << Endl
-        << "\"~Allowed.symbols_string;!*@$^/\","
+        << "\"~Allowed.symbols_string;!*@$%5E/\","
            "\"NotAllowed%22%3A%0A%23%25%26%28%29%2C%5C%7C\","
            "\"String%2Cwith%2Ccommas.and.dots\"" << Endl;
     TestResultSetParsedOk(resultSetStr, expect);

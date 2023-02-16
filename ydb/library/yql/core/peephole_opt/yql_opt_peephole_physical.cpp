@@ -4538,11 +4538,67 @@ TExprNode::TPtr UnpickleInput(TExprNode::TPtr originalLambda, TListExpandMap& li
 
 TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto originalKeySize = node->Child(2U)->ChildrenSize() - 1U;
+    const auto originalStateSize = node->Child(3U)->ChildrenSize() - 1U;
+    const auto originalItemSize = node->Child(2U)->Head().ChildrenSize();
     TTupleExpandMap tupleExpandMap(originalKeySize);
     TStructExpandMap structExpandMap(originalKeySize);
 
     TListExpandMap listExpandMap;
     const auto needKeyFlatten = GetExpandMapsForLambda<false>(*node->Child(2U), tupleExpandMap, structExpandMap, &listExpandMap);
+
+    if (const auto selector = node->Child(2); selector != selector->Tail().GetDependencyScope()->second && originalKeySize == 1) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << " by constant key.";
+        return ctx.Builder(node->Pos())
+            .Callable("WideMap")
+                .Callable(0, "WideCondense1")
+                    .Add(0, node->HeadPtr())
+                    .Lambda(1)
+                        .Params("item", selector->Head().ChildrenSize())
+                        .Apply(*node->Child(3))
+                            .With(0, selector->TailPtr())
+                            .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& {
+                                for (size_t i = 0; i < selector->Head().ChildrenSize(); ++i) {
+                                    parent.With(i + 1, "item", i);
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                    .Seal()
+                    .Lambda(2)
+                        .Params("item", originalItemSize + originalStateSize)
+                        .Callable("Bool")
+                            .Atom(0, "false", TNodeFlags::Default)
+                        .Seal()
+                    .Seal()
+                    .Lambda(3)
+                        .Params("item", originalItemSize + originalStateSize)
+                        .Apply(*node->Child(4))
+                            .With(0, selector->TailPtr())
+                            .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& {
+                                for (size_t i = 0; i < originalItemSize + originalStateSize; ++i) {
+                                    parent.With(i + 1, "item", i);
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Lambda(1)
+                    .Params("state", originalStateSize)
+                    .Apply(*node->Child(5))
+                        .With(0, selector->TailPtr())
+                        .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& {
+                            for (size_t i = 0; i < originalStateSize; ++i) {
+                                parent.With(i + 1, "state", i);
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Build();
+    }
+
 
     if (!listExpandMap.empty()) {
         auto children = node->ChildrenList();
@@ -4589,7 +4645,6 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
 
     tupleExpandMap.clear();
     structExpandMap.clear();
-    const auto originalStateSize = node->Child(3U)->ChildrenSize() - 1U;
     tupleExpandMap.resize(originalStateSize);
     structExpandMap.resize(originalStateSize);
 

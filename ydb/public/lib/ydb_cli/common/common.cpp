@@ -138,7 +138,7 @@ TString InputPassword() {
         if (c == '\b' || c == 0x7F) {
             // Backspace. Remove last char if there is any
             if (password.size()) {
-                Cout << "\b \b";
+                Cerr << "\b \b";
                 password.pop_back();
             }
         } else if (c == 0x03) {
@@ -151,11 +151,11 @@ TString InputPassword() {
 #endif
             exit(EXIT_FAILURE);
         } else {
-            Cout << '*';
+            Cerr << '*';
             password.push_back(c);
         }
     }
-    Cout << Endl;
+    Cerr << Endl;
 
 #if defined(_unix_)
     tcsetattr(STDIN_FILENO, TCSANOW, &oldState);

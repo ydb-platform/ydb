@@ -654,7 +654,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
     if (config.UseStaticCredentials) {
         if (config.StaticCredentials.User) {
             if (!config.StaticCredentials.Password && !DoNotAskForPassword) {
-                Cout << "Enter password for user " << config.StaticCredentials.User << ": ";
+                Cerr << "Enter password for user " << config.StaticCredentials.User << ": ";
                 config.StaticCredentials.Password = InputPassword();
             }
         } else {

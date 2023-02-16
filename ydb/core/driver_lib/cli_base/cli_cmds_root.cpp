@@ -109,7 +109,7 @@ void TClientCommandRootKikimrBase::ParseCredentials(TConfig& config) {
         if (PasswordFile) {
             config.StaticCredentials.Password = ReadFromFile(PasswordFile, "password", true);
         } else if (!DoNotAskForPassword) {
-            Cout << "Enter password for user " << UserName << ": ";
+            Cerr << "Enter password for user " << UserName << ": ";
             config.StaticCredentials.Password = InputPassword();
         }
         return;
@@ -132,7 +132,7 @@ void TClientCommandRootKikimrBase::ParseCredentials(TConfig& config) {
         if (!envPassword.empty()) {
             config.StaticCredentials.Password = envPassword;
         } else if (!DoNotAskForPassword) {
-            Cout << "Enter password for user " << envUser << ": ";
+            Cerr << "Enter password for user " << envUser << ": ";
             config.StaticCredentials.Password = InputPassword();
         }
         return;

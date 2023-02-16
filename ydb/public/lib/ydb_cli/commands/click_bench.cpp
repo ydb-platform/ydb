@@ -80,6 +80,15 @@ static void ThrowOnError(const TStatus& status) {
     }
 }
 
+static bool HasCharsInString(const TString& str) {
+    for (auto c : str) {
+        if (std::isalpha(c)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static std::pair<TString, TString> ResultToYson(NTable::TScanQueryPartIterator& it) {
     TStringStream out;
     TStringStream err_out;
@@ -190,6 +199,9 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
             continue;
         }
 
+        if (!HasCharsInString(qtokens[queryN])) {
+            continue;
+        }
         const TString query = PatchQuery(qtokens[queryN]);
 
         std::vector<TDuration> timings;

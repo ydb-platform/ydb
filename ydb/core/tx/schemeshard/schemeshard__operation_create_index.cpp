@@ -267,11 +267,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewTableIndex(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewTableIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateTableIndex>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewTableIndex(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewTableIndex(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateTableIndex>(id, state);
 }
 

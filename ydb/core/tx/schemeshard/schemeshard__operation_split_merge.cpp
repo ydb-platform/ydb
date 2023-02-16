@@ -1005,11 +1005,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateSplitMerge(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateSplitMerge(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TSplitMerge>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateSplitMerge(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateSplitMerge(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TSplitMerge>(id, state);
 }

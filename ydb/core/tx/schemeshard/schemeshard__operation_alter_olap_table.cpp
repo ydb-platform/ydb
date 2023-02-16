@@ -574,11 +574,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterColumnTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterColumnTable>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterColumnTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TAlterColumnTable>(id, state);
 }

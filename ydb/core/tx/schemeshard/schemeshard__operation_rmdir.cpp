@@ -94,7 +94,7 @@ public:
         Y_FAIL("no AbortPropose for TRmDir");
     }
 
-    void ProgressState(TOperationContext& context) override {
+    bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "TRmDir ProgressState"
                        << ", opId: " << OperationId
@@ -103,9 +103,10 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+        return true;
     }
 
-    void HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -123,7 +124,7 @@ public:
                        "txState is nullptr, considered as duplicate PlanStep"
                            << ", opId: " << OperationId
                            << ", at schemeshard: " << ssId);
-            return;
+            return true;
         }
 
         if (txState->State != TTxState::Propose) {
@@ -132,7 +133,7 @@ public:
                            << ", opId: " << OperationId
                            << ", state: " << TTxState::StateName(txState->State)
                            << ", at schemeshard: " << ssId);
-            return;
+            return true;
         }
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -167,6 +168,7 @@ public:
                         << ", at schemeshard: " << ssId);
 
         context.OnComplete.DoneOperation(OperationId);
+        return true;
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -184,11 +186,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateRmDir(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateRmDir(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TRmDir>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateRmDir(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateRmDir(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
     return MakeSubOperation<TRmDir>(id);
 }

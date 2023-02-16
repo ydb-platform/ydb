@@ -1,18 +1,16 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_path_describer.h"
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
-template<class T>
+template <typename T>
 struct TDebugEvent {
     static TString ToString(const typename T::TPtr& ev) {
         return ev->Get()->Record.ShortDebugString();
     }
 };
 
-template<>
+template <>
 struct TDebugEvent<NBackgroundTasks::TEvAddTaskResult> {
     static TString ToString(const NBackgroundTasks::TEvAddTaskResult::TPtr& ev) {
         return ev->Get()->GetDebugString();
@@ -21,7 +19,7 @@ struct TDebugEvent<NBackgroundTasks::TEvAddTaskResult> {
 
 template <>
 struct TDebugEvent<TEvPrivate::TEvOperationPlan> {
-    static TString ToString (const TEvPrivate::TEvOperationPlan::TPtr& ev) {
+    static TString ToString(const TEvPrivate::TEvOperationPlan::TPtr& ev) {
         return TStringBuilder() << "TEvOperationPlan {"
                                 << " StepId: " << ev->Get()->StepId
                                 << " TxId: " << ev->Get()->TxId
@@ -31,72 +29,66 @@ struct TDebugEvent<TEvPrivate::TEvOperationPlan> {
 
 template <>
 struct TDebugEvent<TEvPrivate::TEvCompletePublication> {
-    static TString ToString (const TEvPrivate::TEvCompletePublication::TPtr& ev) {
+    static TString ToString(const TEvPrivate::TEvCompletePublication::TPtr& ev) {
         return ev->Get()->ToString();
     }
 };
 
 template <>
 struct TDebugEvent<TEvPrivate::TEvCompleteBarrier> {
-    static TString ToString (const TEvPrivate::TEvCompleteBarrier::TPtr& ev) {
+    static TString ToString(const TEvPrivate::TEvCompleteBarrier::TPtr& ev) {
         return ev->Get()->ToString();
     }
 };
 
 template <>
 struct TDebugEvent<TEvPrivate::TEvCommitTenantUpdate> {
-    static TString ToString (const TEvPrivate::TEvCommitTenantUpdate::TPtr& /*ev*/) {
-        return TStringBuilder() << "TEvCommitTenantUpdate {" << " }";
+    static TString ToString(const TEvPrivate::TEvCommitTenantUpdate::TPtr&) {
+        return "TEvCommitTenantUpdate { }";
     }
 };
 
 template <>
 struct TDebugEvent<TEvPrivate::TEvUndoTenantUpdate> {
-    static TString ToString (const TEvPrivate::TEvUndoTenantUpdate::TPtr& /*ev*/) {
-        return TStringBuilder() << "TEvUndoTenantUpdate {" << " }";
+    static TString ToString(const TEvPrivate::TEvUndoTenantUpdate::TPtr&) {
+        return "TEvUndoTenantUpdate { }";
     }
 };
 
-#define DefaultDebugReply(TEvType, ...)                 \
-    TString IOperationBase::DebugReply(const TEvType::TPtr& ev) {  \
-        return TDebugEvent<TEvType>::ToString(ev);                  \
-    }                                                               \
-    TString TSubOperationState::DebugReply(const TEvType::TPtr& ev) {  \
-       return TDebugEvent<TEvType>::ToString(ev);                   \
+#define DefaultDebugReply(TEvType, ...) \
+    TString ISubOperationState::DebugReply(TEvType::TPtr& ev) { \
+        return TDebugEvent<TEvType>::ToString(ev);              \
     }
 
     SCHEMESHARD_INCOMING_EVENTS(DefaultDebugReply)
 #undef DefaultDebugReply
 
+static TString LogMessage(const TString& ev, TOperationContext& context, bool ignore) {
+    return TStringBuilder() << (ignore ? "Unexpected" : "Ignore") << " message"
+        << ": tablet# " << context.SS->SelfTabletId()
+        << ", ev# " << ev;
+}
 
-#define DefaultHandleReply(TEvType, ...)  \
-    void IOperationBase::HandleReply(TEvType::TPtr& ev, TOperationContext& context) {   \
-        TStringBuilder msg;                                                    \
-        msg << "Unexpected message,"                                           \
-            << " TEvType# " << #TEvType                                        \
-            << " debug msg# " << DebugReply(ev)                                \
-            << " at tablet# " << context.SS->SelfTabletId();                       \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, msg);    \
-        Y_FAIL_S(msg);                                                         \
-    }                                                                          \
-    bool TSubOperationState::HandleReply(TEvType::TPtr& ev, TOperationContext& context) {   \
-        if (!MsgToIgnore.empty() && MsgToIgnore.contains(TEvType::EventType)) {             \
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,      \
-               "Superfluous message, " << LogHint                               \
-               << " TEvType# " << #TEvType                                     \
-               << " debug msg# " << DebugReply(ev)                             \
-               << " at tablet# " << context.SS->TabletID());                   \
-            return false;                                                      \
-        }                                                                      \
-        TStringBuilder msg;                                                    \
-        msg << "Unexpected message, "                                          \
-            << LogHint                                                         \
-            << " TEvType# " << #TEvType                                        \
-            << " debug msg# " << DebugReply(ev)                                \
-            << " at tablet# " << context.SS->SelfTabletId();                       \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, msg);    \
-        Y_FAIL_S(msg);                                                         \
-        return false;                                                          \
+#define DefaultHandleReply(TEvType, ...) \
+    bool ISubOperationState::HandleReply(TEvType::TPtr& ev, TOperationContext& context) { \
+        const auto msg = LogMessage(DebugReply(ev), context, false);                      \
+        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, msg);               \
+        Y_FAIL_S(msg);                                                                    \
+    } \
+    \
+    bool TSubOperationState::HandleReply(TEvType::TPtr& ev, TOperationContext& context) { \
+        const bool ignore = MsgToIgnore.contains(TEvType::EventType);                     \
+        const auto msg = LogMessage(DebugReply(ev), context, ignore);                     \
+        if (ignore) {                                                                     \
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, msg);           \
+            return false;                                                                 \
+        }                                                                                 \
+        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, msg);               \
+        Y_FAIL_S(msg);                                                                    \
+    } \
+    \
+    bool TSubOperation::HandleReply(TEvType::TPtr& ev, TOperationContext& context) { \
+        return Progress(context, &ISubOperationState::HandleReply, ev, context);     \
     }
 
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
@@ -107,5 +99,4 @@ void TSubOperationState::IgnoreMessages(TString debugHint, TSet<ui32> mgsIds) {
     MsgToIgnore.swap(mgsIds);
 }
 
-}
 }

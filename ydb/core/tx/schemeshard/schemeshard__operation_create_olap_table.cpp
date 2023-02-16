@@ -877,11 +877,11 @@ public:
 
 }
 
-ISubOperationBase::TPtr CreateNewColumnTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewColumnTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateColumnTable>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewColumnTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewColumnTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateColumnTable>(id, state);
 }

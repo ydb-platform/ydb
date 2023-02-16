@@ -437,11 +437,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewSolomon(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewSolomon(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateSolomon>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewSolomon(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewSolomon(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateSolomon>(id, state);
 }

@@ -645,11 +645,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateOlapStore>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewOlapStore(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateOlapStore>(id, state);
 }

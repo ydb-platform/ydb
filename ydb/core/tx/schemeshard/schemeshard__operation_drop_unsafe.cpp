@@ -279,20 +279,20 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateForceDropUnsafe(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropForceUnsafe>(id, tx, TPathElement::EPathType::EPathTypeInvalid);
 }
 
-ISubOperationBase::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropForceUnsafe>(id, state);
 }
 
-ISubOperationBase::TPtr CreateForceDropSubDomain(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateForceDropSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropForceUnsafe>(id, tx, TPathElement::EPathType::EPathTypeSubDomain);
 }
 
-ISubOperationBase::TPtr CreateForceDropSubDomain(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateForceDropSubDomain(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropForceUnsafe>(id, state);
 }

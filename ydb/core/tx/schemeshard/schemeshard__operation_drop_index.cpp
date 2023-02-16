@@ -382,15 +382,15 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropIndexAtMainTable>(id, state);
 }
 
-ISubOperationBase::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropIndexAtMainTable>(id, tx);
 }
 
-TVector<ISubOperationBase::TPtr> CreateDropIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex);
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -452,7 +452,7 @@ TVector<ISubOperationBase::TPtr> CreateDropIndex(TOperationId nextId, const TTxT
         return {CreateReject(nextId, NKikimrScheme::StatusMultipleModifications, errStr)};
     }
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
 
     {
         auto mainTableIndexDropping = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable);

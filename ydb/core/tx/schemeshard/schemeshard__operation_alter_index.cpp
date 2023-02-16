@@ -229,11 +229,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterTableIndex>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TAlterTableIndex>(id, state);
 }
 

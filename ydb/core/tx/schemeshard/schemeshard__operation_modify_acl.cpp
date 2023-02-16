@@ -119,7 +119,7 @@ public:
         Y_FAIL("no AbortPropose for TModifyACL");
     }
 
-    void ProgressState(TOperationContext&) override {
+    bool ProgressState(TOperationContext&) override {
         Y_FAIL("no ProgressState for TModifyACL");
     }
 
@@ -132,11 +132,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateModifyACL(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateModifyACL(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TModifyACL>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateModifyACL(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateModifyACL(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid);
     return MakeSubOperation<TModifyACL>(id);
 }

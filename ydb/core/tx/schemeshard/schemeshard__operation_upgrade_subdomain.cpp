@@ -1481,25 +1481,25 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateUpgradeSubDomain(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateUpgradeSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TUpgradeSubDomain>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateUpgradeSubDomain(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateUpgradeSubDomain(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TUpgradeSubDomain>(id, state);
 }
 
-ISubOperationBase::TPtr CreateUpgradeSubDomainDecision(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateUpgradeSubDomainDecision(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TUpgradeSubDomainDecision>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateUpgradeSubDomainDecision(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateUpgradeSubDomainDecision(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TUpgradeSubDomainDecision>(id, state);
 }
 
-ISubOperationBase::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx) {
     const auto& info = tx.GetDrop();
 
     const TString& parentPathStr = tx.GetWorkingDir();
@@ -1526,7 +1526,7 @@ ISubOperationBase::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperati
     return CreateForceDropSubDomain(id, tx);
 }
 
-ISubOperationBase::TPtr CreateCompatibleSubdomainAlter(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateCompatibleSubdomainAlter(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx) {
     const auto& info = tx.GetSubDomain();
 
     const TString& parentPathStr = tx.GetWorkingDir();

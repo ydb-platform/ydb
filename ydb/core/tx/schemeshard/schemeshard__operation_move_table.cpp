@@ -749,11 +749,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TMoveTable>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TMoveTable>(id, state);
 }

@@ -229,11 +229,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropSolomon(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropSolomon(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropSolomon>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropSolomon(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropSolomon(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropSolomon>(id, state);
 }

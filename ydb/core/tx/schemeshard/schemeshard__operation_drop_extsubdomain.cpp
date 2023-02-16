@@ -362,11 +362,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateForceDropExtSubDomain(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropExtSubdomain>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateForceDropExtSubDomain(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropExtSubdomain>(id, state);
 }

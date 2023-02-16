@@ -545,11 +545,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateMoveTableIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TMoveTableIndex>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateMoveTableIndex(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TMoveTableIndex>(id, state);
 }

@@ -512,11 +512,11 @@ public:
 
 }
 
-ISubOperationBase::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateSequence>(id ,tx);
 }
 
-ISubOperationBase::TPtr CreateNewSequence(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewSequence(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateSequence>(id, state);
 }
 

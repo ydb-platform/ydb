@@ -222,11 +222,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropSubdomain(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropSubdomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropSubdomain>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropSubdomain(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropSubdomain(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropSubdomain>(id, state);
 }

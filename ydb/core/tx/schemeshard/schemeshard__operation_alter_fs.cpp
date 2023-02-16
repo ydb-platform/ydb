@@ -533,11 +533,11 @@ void TAlterFileStore::ApplyChannelBindings(
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterFileStore(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterFileStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterFileStore>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterFileStore(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterFileStore(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TAlterFileStore>(id, state);
 }

@@ -428,11 +428,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewKesus(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewKesus(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateKesus>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewKesus(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewKesus(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateKesus>(id, state);
 }

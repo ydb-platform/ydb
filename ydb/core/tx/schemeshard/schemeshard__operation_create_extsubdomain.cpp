@@ -282,11 +282,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateExtSubDomain(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateExtSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateExtSubDomain>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateExtSubDomain(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateExtSubDomain(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateExtSubDomain>(id, state);
 }

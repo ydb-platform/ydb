@@ -147,7 +147,7 @@ public:
         return result;
     }
 
-    void ProgressState(TOperationContext&) override {
+    bool ProgressState(TOperationContext&) override {
         Y_FAIL("no progress state for TDeallocatePQ");
     }
 
@@ -164,11 +164,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDeallocatePQ(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDeallocatePQ(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDeallocatePQ>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDeallocatePQ(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDeallocatePQ(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid);
     return MakeSubOperation<TDeallocatePQ>(id);
 }

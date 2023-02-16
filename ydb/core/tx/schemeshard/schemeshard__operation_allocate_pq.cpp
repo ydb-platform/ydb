@@ -488,11 +488,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAllocatePQ(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAllocatePQ(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAllocatePQ>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAllocatePQ(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAllocatePQ(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TAllocatePQ>(id, state);
 }

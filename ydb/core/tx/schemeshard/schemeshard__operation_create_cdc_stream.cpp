@@ -557,23 +557,23 @@ private:
 
 } // anonymous
 
-ISubOperationBase::TPtr CreateNewCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TNewCdcStream>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewCdcStreamImpl(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewCdcStreamImpl(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TNewCdcStream>(id, state);
 }
 
-ISubOperationBase::TPtr CreateNewCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool initialScan) {
+ISubOperation::TPtr CreateNewCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool initialScan) {
     return MakeSubOperation<TNewCdcStreamAtTable>(id, tx, initialScan);
 }
 
-ISubOperationBase::TPtr CreateNewCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool initialScan) {
+ISubOperation::TPtr CreateNewCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool initialScan) {
     return MakeSubOperation<TNewCdcStreamAtTable>(id, state, initialScan);
 }
 
-TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
 
     LOG_D("CreateNewCdcStream"
@@ -676,7 +676,7 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
             << "Initial scan is not supported yet")};
     }
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
 
     if (initialScan) {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);

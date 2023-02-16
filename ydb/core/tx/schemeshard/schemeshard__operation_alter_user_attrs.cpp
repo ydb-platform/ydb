@@ -90,7 +90,7 @@ public:
         Y_FAIL("no AbortPropose for TAlterUserAttrs");
     }
 
-    void ProgressState(TOperationContext& context) override {
+    bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "TAlterUserAttrs ProgressState"
                        << ", opId: " << OperationId
@@ -100,9 +100,10 @@ public:
         Y_VERIFY(txState);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+        return true;
     }
 
-    void HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -120,7 +121,7 @@ public:
                        "Duplicate PlanStep opId#" << OperationId
                            << " at schemeshard: " << ssId
                            << " txState is in state#" << TTxState::StateName(txState->State));
-            return;
+            return true;
         }
 
         Y_VERIFY(txState->TxType == TTxState::TxAlterUserAttributes);
@@ -142,6 +143,7 @@ public:
         context.OnComplete.UpdateTenants({pathId});
 
         context.OnComplete.DoneOperation(OperationId);
+        return true;
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -159,11 +161,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterUserAttrs(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterUserAttrs(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterUserAttrs>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
     return MakeSubOperation<TAlterUserAttrs>(id);
 }

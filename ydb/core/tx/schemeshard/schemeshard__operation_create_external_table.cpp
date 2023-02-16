@@ -332,11 +332,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewExternalTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewExternalTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateExternalTable>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateExternalTable>(id, state);
 }

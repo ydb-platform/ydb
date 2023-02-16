@@ -625,11 +625,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterPQ(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterPQ(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterPQ>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterPQ(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterPQ(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TAlterPQ>(id, state);
 }

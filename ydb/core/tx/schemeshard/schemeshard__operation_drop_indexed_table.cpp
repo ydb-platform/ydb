@@ -381,15 +381,15 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropTableIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropTableIndex>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropTableIndex>(id, state);
 }
 
-TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
 
     auto dropOperation = tx.GetDrop();
@@ -441,7 +441,7 @@ TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, con
         }
     }
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
     result.push_back(CreateDropTable(NextPartId(nextId, result), tx));
 
     for (const auto& [childName, childPathId] : table.Base()->GetChildren()) {

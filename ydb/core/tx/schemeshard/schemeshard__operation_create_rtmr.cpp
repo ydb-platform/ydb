@@ -395,11 +395,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewRTMR(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewRTMR(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateRTMR>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewRTMR(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewRTMR(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateRTMR>(id, state);
 }

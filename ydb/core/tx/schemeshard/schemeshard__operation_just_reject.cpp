@@ -7,7 +7,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TReject: public ISubOperationBase {
+class TReject: public ISubOperation {
     const TOperationId OperationId;
     THolder<TProposeResponse> Response;
 
@@ -55,7 +55,7 @@ public:
         Y_FAIL("no AbortPropose for TReject");
     }
 
-    void ProgressState(TOperationContext&) override {
+    bool ProgressState(TOperationContext&) override {
         Y_FAIL("no ProgressState for TReject");
     }
 
@@ -68,11 +68,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response) {
+ISubOperation::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response) {
     return new TReject(id, std::move(response));
 }
 
-ISubOperationBase::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message) {
+ISubOperation::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message) {
     return new TReject(id, status, message);
 }
 

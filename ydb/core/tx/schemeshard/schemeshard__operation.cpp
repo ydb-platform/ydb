@@ -97,7 +97,7 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
 
         txc.DB.NoMoreReadsForTx();
 
-        ISubOperationBase::TPtr part = CreateTxCancelTx(Ev);
+        ISubOperation::TPtr part = CreateTxCancelTx(Ev);
         TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
         auto fakeResponse = part->Propose(TString(), context);
         Y_UNUSED(fakeResponse);
@@ -360,7 +360,7 @@ struct TSchemeShard::TTxOperationProgress: public NTabletFlatExecutor::TTransact
             return true;
         }
 
-        ISubOperationBase::TPtr part = operation->Parts.at(ui64(OpId.GetSubTxId()));
+        ISubOperation::TPtr part = operation->Parts.at(ui64(OpId.GetSubTxId()));
 
         TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
 
@@ -405,7 +405,7 @@ struct TSchemeShard::TTxOperationReply {};
                         "TTxOperationReply<" #TEvType "> execute " \
                             << ", operationId: " << OperationId \
                             << ", at schemeshard: " << Self->TabletID() \
-                            << ", message: " << IOperationBase::DebugReply(EvReply)); \
+                            << ", message: " << ISubOperationState::DebugReply(EvReply)); \
             if (!Self->Operations.contains(OperationId.GetTxId())) { \
                 return true; \
             } \
@@ -418,7 +418,7 @@ struct TSchemeShard::TTxOperationReply {};
                                << ", at schemeshard: " << Self->TabletID()); \
                 return true; \
             } \
-            ISubOperationBase::TPtr part = operation->Parts.at(ui64(OperationId.GetSubTxId())); \
+            ISubOperation::TPtr part = operation->Parts.at(ui64(OperationId.GetSubTxId())); \
             TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges}; \
             Y_VERIFY(EvReply); \
             part->HandleReply(EvReply, context); \
@@ -842,7 +842,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     return result;
 }
 
-ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) const {
+ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) const {
     switch (txType) {
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
@@ -1026,7 +1026,7 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
     Y_UNREACHABLE();
 }
 
-ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType opType, const TTxTransaction& tx) const {
+ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType opType, const TTxTransaction& tx) const {
     switch (opType) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
         return CreateMkDir(NextPartId(), tx);
@@ -1232,7 +1232,7 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
     Y_UNREACHABLE();
 }
 
-TVector<ISubOperationBase::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, TOperationContext& context) const {
+TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, TOperationContext& context) const {
     const auto& opType = tx.GetOperationType();
 
     switch (opType) {
@@ -1278,7 +1278,7 @@ TVector<ISubOperationBase::TPtr> TOperation::ConstructParts(const TTxTransaction
     }
 }
 
-void TOperation::AddPart(ISubOperationBase::TPtr part) {
+void TOperation::AddPart(ISubOperation::TPtr part) {
     Parts.push_back(part);
 }
 

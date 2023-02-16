@@ -6,7 +6,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TTxCancelTx: public ISubOperationBase {
+class TTxCancelTx: public ISubOperation {
     const TOperationId OperationId;
     const TOperationId TargetOperationId;
     const TActorId Sender;
@@ -79,7 +79,7 @@ public:
         Y_FAIL("no AbortPropose for TTxCancelTx");
     }
 
-    void ProgressState(TOperationContext&) override {
+    bool ProgressState(TOperationContext&) override {
         Y_FAIL("no progress state for cancel tx");
     }
 
@@ -92,7 +92,7 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev) {
+ISubOperation::TPtr CreateTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev) {
     return new TTxCancelTx(ev);
 }
 

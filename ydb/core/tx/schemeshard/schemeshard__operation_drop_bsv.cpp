@@ -244,11 +244,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropBSV(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropBSV(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropBlockStoreVolume>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropBSV(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropBSV(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropBlockStoreVolume>(id, state);
 }

@@ -100,13 +100,13 @@ struct TRestore {
     }
 };
 
-ISubOperationBase::TPtr CreateRestore(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateRestore(TOperationId id, const TTxTransaction& tx) {
     return new TBackupRestoreOperationBase<TRestore, TEvDataShard::TEvCancelRestore>(
         TTxState::TxRestore, TPathElement::EPathState::EPathStateRestore, id, tx
     );
 }
 
-ISubOperationBase::TPtr CreateRestore(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateRestore(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return new TBackupRestoreOperationBase<TRestore, TEvDataShard::TEvCancelRestore>(
         TTxState::TxRestore, TPathElement::EPathState::EPathStateRestore, id, state

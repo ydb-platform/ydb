@@ -635,11 +635,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterBSV(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterBSV(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterBlockStoreVolume>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterBSV(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterBSV(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TAlterBlockStoreVolume>(id, state);
 }

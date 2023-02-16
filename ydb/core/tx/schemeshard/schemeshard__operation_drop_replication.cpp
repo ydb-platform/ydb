@@ -342,11 +342,11 @@ public:
 
 } // anonymous
 
-ISubOperationBase::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropReplication>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropReplication>(id, state);
 }
 

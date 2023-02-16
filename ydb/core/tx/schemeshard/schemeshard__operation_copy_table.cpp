@@ -623,16 +623,16 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCopyTable>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCopyTable>(id, state);
 }
 
-TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
 
     auto copying = tx.GetCreateTable();
@@ -659,7 +659,7 @@ TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxT
     TPath workDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     TPath dstPath = workDir.Child(copying.GetName());
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
     {
         auto schema = TransactionTemplate(tx.GetWorkingDir(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         schema.SetFailOnExist(tx.GetFailOnExist());

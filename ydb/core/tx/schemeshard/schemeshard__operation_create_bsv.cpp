@@ -388,11 +388,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateBlockStoreVolume>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateBlockStoreVolume>(id, state);
 }

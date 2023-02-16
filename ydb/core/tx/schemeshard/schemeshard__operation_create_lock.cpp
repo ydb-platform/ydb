@@ -219,11 +219,11 @@ public:
 
 } // anonymous namespace
 
-ISubOperationBase::TPtr CreateLock(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateLock(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateLock>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateLock(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateLock(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateLock>(id, state);
 }

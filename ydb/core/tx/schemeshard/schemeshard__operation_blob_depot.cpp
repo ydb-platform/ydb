@@ -426,11 +426,11 @@ namespace NKikimr::NSchemeShard {
 
     }
 
-    ISubOperationBase::TPtr CreateNewBlobDepot(TOperationId id, const TTxTransaction& tx) { return MakeIntrusive<TBlobDepot>(EAction::Create, id, tx); }
-    ISubOperationBase::TPtr CreateNewBlobDepot(TOperationId id, TTxState::ETxState state) { return MakeIntrusive<TBlobDepot>(EAction::Create, id, state); }
-    ISubOperationBase::TPtr CreateAlterBlobDepot(TOperationId id, const TTxTransaction& tx) { return MakeIntrusive<TBlobDepot>(EAction::Alter, id, tx); }
-    ISubOperationBase::TPtr CreateAlterBlobDepot(TOperationId id, TTxState::ETxState state) { return MakeIntrusive<TBlobDepot>(EAction::Alter, id, state); }
-    ISubOperationBase::TPtr CreateDropBlobDepot(TOperationId id, const TTxTransaction& tx) { return MakeIntrusive<TBlobDepot>(EAction::Drop, id, tx); }
-    ISubOperationBase::TPtr CreateDropBlobDepot(TOperationId id, TTxState::ETxState state) { return MakeIntrusive<TBlobDepot>(EAction::Drop, id, state); }
+    ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, const TTxTransaction& tx) { return MakeIntrusive<TBlobDepot>(EAction::Create, id, tx); }
+    ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, TTxState::ETxState state) { return MakeIntrusive<TBlobDepot>(EAction::Create, id, state); }
+    ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, const TTxTransaction& tx) { return MakeIntrusive<TBlobDepot>(EAction::Alter, id, tx); }
+    ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, TTxState::ETxState state) { return MakeIntrusive<TBlobDepot>(EAction::Alter, id, state); }
+    ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, const TTxTransaction& tx) { return MakeIntrusive<TBlobDepot>(EAction::Drop, id, tx); }
+    ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, TTxState::ETxState state) { return MakeIntrusive<TBlobDepot>(EAction::Drop, id, state); }
 
 }

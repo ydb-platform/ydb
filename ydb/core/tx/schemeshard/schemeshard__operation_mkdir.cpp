@@ -257,11 +257,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TMkDir>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateMkDir(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateMkDir(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TMkDir>(id, state);
 }

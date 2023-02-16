@@ -703,24 +703,24 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
+ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);
     static_cast<TCreateTable*>(obj.Get())->SetLocalSequences(localSequences);
     return obj;
 }
 
-ISubOperationBase::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateTable>(id, state);
 }
 
-ISubOperationBase::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);
     static_cast<TCreateTable*>(obj.Get())->SetAllowShadowDataForBuildIndex();
     return obj;
 }
 
-ISubOperationBase::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     auto obj = MakeSubOperation<TCreateTable>(id, state);
     static_cast<TCreateTable*>(obj.Get())->SetAllowShadowDataForBuildIndex();

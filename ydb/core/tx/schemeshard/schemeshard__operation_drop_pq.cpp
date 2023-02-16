@@ -454,11 +454,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropPQ>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropPQ>(id, state);
 }

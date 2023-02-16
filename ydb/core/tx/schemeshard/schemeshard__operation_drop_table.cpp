@@ -619,11 +619,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropTable>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropTable>(id, state);
 }

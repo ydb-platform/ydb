@@ -9,7 +9,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild);
 
     const auto& op = tx.GetInitiateIndexBuild();
@@ -62,7 +62,7 @@ TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId opId, const TTxTr
         return {CreateReject(opId, status, errStr)};
     }
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
 
     {
         auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);

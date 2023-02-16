@@ -14,7 +14,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild);
 
     auto config = tx.GetApplyIndexBuild();
@@ -32,7 +32,7 @@ TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxT
 
     //check limits
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
 
     {
         auto finalize = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
@@ -70,7 +70,7 @@ TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxT
     return result;
 }
 
-TVector<ISubOperationBase::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild);
 
     auto config = tx.GetCancelIndexBuild();
@@ -84,7 +84,7 @@ TVector<ISubOperationBase::TPtr> CancelBuildIndex(TOperationId nextId, const TTx
 
     //check limits
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
 
     {
         auto finalize = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);

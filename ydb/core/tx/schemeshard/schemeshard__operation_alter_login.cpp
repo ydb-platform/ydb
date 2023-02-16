@@ -150,7 +150,7 @@ public:
         Y_FAIL("no AbortPropose for TAlterLogin");
     }
 
-    void ProgressState(TOperationContext&) override {
+    bool ProgressState(TOperationContext&) override {
         Y_FAIL("no progress state for TAlterLogin");
     }
 
@@ -163,11 +163,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterLogin>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
     return MakeSubOperation<TAlterLogin>(id);
 }

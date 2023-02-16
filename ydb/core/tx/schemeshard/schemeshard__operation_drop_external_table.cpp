@@ -197,11 +197,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropExternalTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropExternalTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropExternalTable>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropExternalTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropExternalTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropExternalTable>(id, state);
 }

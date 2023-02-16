@@ -362,11 +362,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterKesus(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterKesus(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterKesus>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterKesus(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterKesus(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TAlterKesus>(id, state);
 }

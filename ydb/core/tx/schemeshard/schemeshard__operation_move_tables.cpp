@@ -11,10 +11,10 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable);
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
 
     const auto& moving = tx.GetMoveTable();
     const auto& srcStr = moving.GetSrcPath();

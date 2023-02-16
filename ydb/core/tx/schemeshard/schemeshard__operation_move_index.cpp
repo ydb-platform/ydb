@@ -455,10 +455,10 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperationBase::TPtr> CreateConsistentMoveIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
 
     if (!context.SS->EnableMoveIndex) {
         TString errStr = "Move index is not supported yet";
@@ -602,11 +602,11 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveIndex(TOperationId nextId, 
     return result;
 }
 
-ISubOperationBase::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TUpdateMainTableOnIndexMove>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TUpdateMainTableOnIndexMove>(id, state);
 }
 

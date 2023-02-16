@@ -511,11 +511,11 @@ TTxState& TCreateFileStore::PrepareChanges(
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewFileStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateFileStore>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewFileStore(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TCreateFileStore>(id, state);
 }

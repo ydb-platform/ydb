@@ -259,11 +259,11 @@ THolder<TProposeResponse> TDropFileStore::Propose(
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropFileStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropFileStore>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropFileStore>(id, state);
 }

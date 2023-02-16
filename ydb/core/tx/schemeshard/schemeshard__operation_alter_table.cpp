@@ -590,29 +590,29 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterTable>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TAlterTable>(id, state);
 }
 
-ISubOperationBase::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx) {
     auto obj = MakeHolder<TAlterTable>(id, tx);
     obj->SetAllowShadowDataForBuildIndex();
     return obj.Release();
 }
 
-ISubOperationBase::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     auto obj = MakeHolder<TAlterTable>(id, state);
     obj->SetAllowShadowDataForBuildIndex();
     return obj.Release();
 }
 
-TVector<ISubOperationBase::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
     auto alter = tx.GetAlterTable();
@@ -651,7 +651,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentAlterTable(TOperationId id, con
         return {CreateAlterTable(id, tx)};
     }
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
 
     // only for super user use
     // until correct and safe altering index api is released

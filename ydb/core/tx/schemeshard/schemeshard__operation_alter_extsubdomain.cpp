@@ -870,25 +870,25 @@ public:
 
 } // anonymous namespace
 
-ISubOperationBase::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterExtSubDomainCreateHive>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TAlterExtSubDomainCreateHive>(id, state);
 }
 
-ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterExtSubDomain>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TAlterExtSubDomain>(id, state);
 }
 
-TVector<ISubOperationBase::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain);
 
     LOG_I("CreateCompatibleAlterExtSubDomain, opId " << id
@@ -902,7 +902,7 @@ TVector<ISubOperationBase::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId 
 
     LOG_I("CreateCompatibleAlterExtSubDomain, opId " << id << ", path " << parentPathStr << "/" << name);
 
-    auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperationBase::TPtr> {
+    auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
         return {CreateReject(id, status, TStringBuilder() << "Invalid AlterExtSubDomain request: " << msg)};
     };
 
@@ -963,7 +963,7 @@ TVector<ISubOperationBase::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId 
     }
 
     // create suboperations
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
 
     if (delta.AddExternalHive && context.SS->EnableAlterDatabaseCreateHiveFirst) {
         auto msg = TransactionTemplate(parentPathStr, NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive);

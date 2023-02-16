@@ -88,7 +88,7 @@ public:
         Y_FAIL("no AbortPropose for TAssignBlockStoreVolume");
     }
 
-    void ProgressState(TOperationContext&) override {
+    bool ProgressState(TOperationContext&) override {
         Y_FAIL("no progress state for assign bsc");
     }
 
@@ -101,11 +101,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateAssignBSV(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAssignBSV(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAssignBlockStoreVolume>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAssignBSV(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAssignBSV(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
     return MakeSubOperation<TAssignBlockStoreVolume>(id);
 }

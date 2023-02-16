@@ -232,11 +232,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropKesus(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropKesus(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropKesus>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropKesus(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropKesus(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropKesus>(id, state);
 }

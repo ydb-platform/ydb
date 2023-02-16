@@ -431,23 +431,23 @@ private:
 
 } // anonymous
 
-ISubOperationBase::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropCdcStream>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropCdcStream>(id, state);
 }
 
-ISubOperationBase::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot) {
+ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot) {
     return MakeSubOperation<TDropCdcStreamAtTable>(id, tx, dropSnapshot);
 }
 
-ISubOperationBase::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot) {
+ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot) {
     return MakeSubOperation<TDropCdcStreamAtTable>(id, state, dropSnapshot);
 }
 
-TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream);
 
     LOG_D("CreateDropCdcStream"
@@ -512,7 +512,7 @@ TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId opId, const TT
         return {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
     }
 
-    TVector<ISubOperationBase::TPtr> result;
+    TVector<ISubOperation::TPtr> result;
 
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable);

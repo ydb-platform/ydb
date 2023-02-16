@@ -442,11 +442,11 @@ private:
 
 }
 
-ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropOlapStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropOlapStore>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropOlapStore>(id, state);
 }

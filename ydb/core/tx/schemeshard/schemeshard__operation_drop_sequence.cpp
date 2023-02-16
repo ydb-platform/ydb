@@ -404,11 +404,11 @@ public:
 
 }
 
-ISubOperationBase::TPtr CreateDropSequence(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropSequence(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropSequence>(id ,tx);
 }
 
-ISubOperationBase::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropSequence>(id, state);
 }
 

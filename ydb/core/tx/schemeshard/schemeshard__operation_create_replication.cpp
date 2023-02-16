@@ -408,11 +408,11 @@ public:
 
 } // anonymous
 
-ISubOperationBase::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateReplication>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateReplication>(id, state);
 }
 

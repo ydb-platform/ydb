@@ -232,11 +232,11 @@ public:
 
 } // anonymous namespace
 
-ISubOperationBase::TPtr DropLock(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr DropLock(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropLock>(id, tx);
 }
 
-ISubOperationBase::TPtr DropLock(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr DropLock(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropLock>(id, state);
 }

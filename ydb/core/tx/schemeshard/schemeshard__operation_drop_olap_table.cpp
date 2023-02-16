@@ -552,11 +552,11 @@ private:
 
 }
 
-ISubOperationBase::TPtr CreateDropColumnTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropColumnTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropColumnTable>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropColumnTable>(id, state);
 }

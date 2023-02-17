@@ -1,6 +1,8 @@
 #include "yql_library_compiler.h"
 #include "yql_expr_optimize.h"
 
+#include <ydb/library/yql/sql/sql.h>
+
 #include <util/system/file.h>
 
 #include <unordered_set>
@@ -89,7 +91,15 @@ bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
 
 bool CompileLibrary(const TString& alias, const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize)
 {
-    const auto& res = ParseAst(script, nullptr, alias);
+    TAstParseResult res;
+    if (alias.EndsWith(".sql")) {
+        NSQLTranslation::TTranslationSettings translationSettings;
+        translationSettings.SyntaxVersion = 1;
+        translationSettings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
+        res = NSQLTranslation::SqlToYql(script, translationSettings);
+    } else {
+        res = ParseAst(script, nullptr, alias);
+    }
     if (!res.IsOk()) {
         for (const auto& originalError : res.Issues) {
             TIssue error(originalError);

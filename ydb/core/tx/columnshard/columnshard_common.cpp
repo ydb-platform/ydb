@@ -108,6 +108,12 @@ TAssign MakeFunction(const TContext& info, const std::string& name,
             return TAssign(name, EOperation::BinaryLength, std::move(arguments));
         case TId::FUNC_STR_MATCH:
             return TAssign(name, EOperation::MatchSubstring, std::move(arguments));
+        case TId::FUNC_STR_MATCH_LIKE:
+            return TAssign(name, EOperation::MatchLike, std::move(arguments));
+        case TId::FUNC_STR_STARTS_WITH:
+            return TAssign(name, EOperation::StartsWith, std::move(arguments));
+        case TId::FUNC_STR_ENDS_WITH:
+            return TAssign(name, EOperation::EndsWith, std::move(arguments));
         case TId::FUNC_BINARY_NOT:
             return TAssign(name, EOperation::Invert, std::move(arguments));
         case TId::FUNC_BINARY_AND:

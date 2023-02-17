@@ -52,6 +52,9 @@ enum class EOperation {
     //
     BinaryLength,
     MatchSubstring,
+    MatchLike,
+    StartsWith,
+    EndsWith,
     // math
     Acosh,
     Atanh,

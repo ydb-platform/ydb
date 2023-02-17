@@ -1412,6 +1412,9 @@ private:
         }
 
         ContainerCache.Clear();
+        ArrowTupleContainerCache.Clear();
+        ArrowRowContainerCache.Clear();
+
         TActorBootstrapped<TS3StreamReadActor>::PassAway();
     }
 

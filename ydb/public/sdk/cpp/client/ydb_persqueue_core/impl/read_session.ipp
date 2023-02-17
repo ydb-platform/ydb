@@ -475,7 +475,7 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
         if (topic.MaxLag_) {
             *topicSettings->mutable_max_lag() =
                 ::google::protobuf::util::TimeUtil::MillisecondsToDuration(topic.MaxLag_->MilliSeconds());
-        } else if (Settings.ReadFromTimestamp_) {
+        } else if (Settings.MaxLag_) {
             *topicSettings->mutable_max_lag() =
                 ::google::protobuf::util::TimeUtil::MillisecondsToDuration(Settings.MaxLag_->MilliSeconds());
         }

@@ -10,6 +10,7 @@
 add_library(contrib-libs-fmt)
 target_compile_options(contrib-libs-fmt PUBLIC
   -DFMT_EXPORT
+  -DFMT_CONSTEVAL=
 )
 target_compile_options(contrib-libs-fmt PRIVATE
   -Wno-everything

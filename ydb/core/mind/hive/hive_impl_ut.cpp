@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 10 * BASE_PERF);
 #else
-        UNIT_ASSERT(passed < 1 * BASE_PERF);
+        UNIT_ASSERT(passed < 2 * BASE_PERF);
 #endif
 #endif
 

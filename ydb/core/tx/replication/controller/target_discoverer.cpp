@@ -71,9 +71,9 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         }
 
         if (Failed) {
-            Send(Parent, new TEvPrivate::TEvDiscoveryResult(ReplicationId, std::move(Failed)));
+            Send(Parent, new TEvPrivate::TEvDiscoveryTargetsResult(ReplicationId, std::move(Failed)));
         } else {
-            Send(Parent, new TEvPrivate::TEvDiscoveryResult(ReplicationId, std::move(ToAdd), {}));
+            Send(Parent, new TEvPrivate::TEvDiscoveryTargetsResult(ReplicationId, std::move(ToAdd), {}));
         }
 
         PassAway();
@@ -134,8 +134,8 @@ private:
 
     THashSet<ui32> Pending;
     THashSet<ui32> ToRetry;
-    TVector<TEvPrivate::TEvDiscoveryResult::TAddEntry> ToAdd;
-    TVector<TEvPrivate::TEvDiscoveryResult::TFailedEntry> Failed;
+    TVector<TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry> ToAdd;
+    TVector<TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry> Failed;
 
 }; // TTargetDiscoverer
 

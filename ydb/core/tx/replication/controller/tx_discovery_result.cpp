@@ -5,13 +5,13 @@
 
 namespace NKikimr::NReplication::NController {
 
-class TController::TTxDiscoveryResult: public TTxBase {
-    TEvPrivate::TEvDiscoveryResult::TPtr Ev;
+class TController::TTxDiscoveryTargetsResult: public TTxBase {
+    TEvPrivate::TEvDiscoveryTargetsResult::TPtr Ev;
     TReplication::TPtr Replication;
 
 public:
-    explicit TTxDiscoveryResult(TController* self, TEvPrivate::TEvDiscoveryResult::TPtr& ev)
-        : TTxBase("TxDiscovertResult", self)
+    explicit TTxDiscoveryTargetsResult(TController* self, TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev)
+        : TTxBase("TxDiscoveryTargetsResult", self)
         , Ev(ev)
     {
     }
@@ -87,10 +87,10 @@ public:
         }
     }
 
-}; // TTxDiscoveryResult
+}; // TTxDiscoveryTargetsResult
 
-void TController::RunTxDiscoveryResult(TEvPrivate::TEvDiscoveryResult::TPtr& ev, const TActorContext& ctx) {
-    Execute(new TTxDiscoveryResult(this, ev), ctx);
+void TController::RunTxDiscoveryTargetsResult(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxDiscoveryTargetsResult(this, ev), ctx);
 }
 
 }

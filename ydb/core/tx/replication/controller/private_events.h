@@ -11,7 +11,7 @@ namespace NKikimr::NReplication::NController {
 
 struct TEvPrivate {
     enum EEv {
-        EvDiscoveryResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        EvDiscoveryTargetsResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
         EvAssignStreamName,
         EvCreateStreamResult,
         EvCreateDstResult,
@@ -24,7 +24,7 @@ struct TEvPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
 
-    struct TEvDiscoveryResult: public TEventLocal<TEvDiscoveryResult, EvDiscoveryResult> {
+    struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
         using TAddEntry = std::pair<NYdb::NScheme::TSchemeEntry, TString>; // src, dst
         using TFailedEntry = std::pair<TString, NYdb::TStatus>; // src, error
 
@@ -33,8 +33,8 @@ struct TEvPrivate {
         TVector<ui64> ToDelete;
         TVector<TFailedEntry> Failed;
 
-        explicit TEvDiscoveryResult(ui64 rid, TVector<TAddEntry>&& toAdd, TVector<ui64>&& toDel);
-        explicit TEvDiscoveryResult(ui64 rid, TVector<TFailedEntry>&& failed);
+        explicit TEvDiscoveryTargetsResult(ui64 rid, TVector<TAddEntry>&& toAdd, TVector<ui64>&& toDel);
+        explicit TEvDiscoveryTargetsResult(ui64 rid, TVector<TFailedEntry>&& failed);
         TString ToString() const override;
 
         bool IsSuccess() const;

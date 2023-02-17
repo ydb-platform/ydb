@@ -63,7 +63,7 @@ private:
     void Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvDiscoveryResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
@@ -76,7 +76,7 @@ private:
     class TTxInit;
     class TTxCreateReplication;
     class TTxDropReplication;
-    class TTxDiscoveryResult;
+    class TTxDiscoveryTargetsResult;
     class TTxAssignStreamName;
     class TTxCreateStreamResult;
     class TTxDropStreamResult;
@@ -89,7 +89,7 @@ private:
     void RunTxCreateReplication(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx);
     void RunTxDropReplication(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
     void RunTxDropReplication(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
-    void RunTxDiscoveryResult(TEvPrivate::TEvDiscoveryResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxDiscoveryTargetsResult(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx);
     void RunTxAssignStreamName(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActorContext& ctx);
     void RunTxCreateStreamResult(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropStreamResult(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);

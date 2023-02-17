@@ -4,20 +4,20 @@
 
 namespace NKikimr::NReplication::NController {
 
-TEvPrivate::TEvDiscoveryResult::TEvDiscoveryResult(ui64 rid, TVector<TAddEntry>&& toAdd, TVector<ui64>&& toDel)
+TEvPrivate::TEvDiscoveryTargetsResult::TEvDiscoveryTargetsResult(ui64 rid, TVector<TAddEntry>&& toAdd, TVector<ui64>&& toDel)
     : ReplicationId(rid)
     , ToAdd(std::move(toAdd))
     , ToDelete(std::move(toDel))
 {
 }
 
-TEvPrivate::TEvDiscoveryResult::TEvDiscoveryResult(ui64 rid, TVector<TFailedEntry>&& failed)
+TEvPrivate::TEvDiscoveryTargetsResult::TEvDiscoveryTargetsResult(ui64 rid, TVector<TFailedEntry>&& failed)
     : ReplicationId(rid)
     , Failed(std::move(failed))
 {
 }
 
-TString TEvPrivate::TEvDiscoveryResult::ToString() const {
+TString TEvPrivate::TEvDiscoveryTargetsResult::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " ReplicationId: " << ReplicationId
         << " ToAdd [" << JoinSeq(",", ToAdd) << "]"
@@ -26,7 +26,7 @@ TString TEvPrivate::TEvDiscoveryResult::ToString() const {
     << " }";
 }
 
-bool TEvPrivate::TEvDiscoveryResult::IsSuccess() const {
+bool TEvPrivate::TEvDiscoveryTargetsResult::IsSuccess() const {
     return Failed.empty();
 }
 
@@ -147,11 +147,11 @@ TString TEvPrivate::TEvDropReplication::ToString() const {
 
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryResult::TAddEntry, stream, value) {
+Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry, stream, value) {
     stream << value.first.Name << " (" << value.first.Type << ")";
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryResult::TFailedEntry, stream, value) {
+Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry, stream, value) {
     stream << value.first << ": " << value.second.GetStatus() << " (";
     value.second.GetIssues().PrintTo(stream, true);
     stream << ")";

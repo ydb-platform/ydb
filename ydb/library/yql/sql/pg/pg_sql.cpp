@@ -1,3 +1,4 @@
+#include "utils.h"
 #include <ydb/library/yql/sql/settings/partitioning.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 #include <ydb/library/yql/parser/pg_wrapper/parser.h>
@@ -1296,7 +1297,7 @@ public:
 
         for (auto& [key, value] : bindingInfo.Attributes) {
             TVector<TAstNode*> hintValues;
-            hintValues.push_back(QA(key));
+            hintValues.push_back(QA(NormalizeName(key)));
             for (auto& v : value) {
                 hintValues.push_back(QA(v));
             }

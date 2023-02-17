@@ -769,6 +769,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
             create.MutableCreateExternalTable()->SetName(name);
             break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
+            create.MutableCreateExternalDataSource()->SetName(name);
+            break;
         default:
             Y_UNREACHABLE();
         }
@@ -1019,6 +1022,12 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropExternalTable(NextPartId(), txState);
     case TTxState::ETxType::TxAlterExternalTable:
         Y_FAIL("TODO: implement");
+    case TTxState::ETxType::TxCreateExternalDataSource:
+        return CreateNewExternalDataSource(NextPartId(), txState);
+    case TTxState::ETxType::TxDropExternalDataSource:
+        return CreateDropExternalDataSource(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterExternalDataSource:
+        Y_FAIL("TODO: implement");
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1226,6 +1235,14 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
         return CreateDropExternalTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
+        Y_FAIL("TODO: implement");
+
+    // ExternalDataSource
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
+        return CreateNewExternalDataSource(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:
+        return CreateDropExternalDataSource(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
         Y_FAIL("TODO: implement");
     }
 

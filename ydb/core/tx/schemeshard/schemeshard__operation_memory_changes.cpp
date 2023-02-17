@@ -82,12 +82,12 @@ void TMemoryChanges::GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId
     LockedPaths.emplace(pathId, lockTxId); // will be restored on UnDo()
 }
 
-void TMemoryChanges::GrabNewExternalTable(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->ExternalTables, ExternalTables);
-}
-
 void TMemoryChanges::GrabExternalTable(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TExternalTableInfo>(pathId, ss->ExternalTables, ExternalTables);
+}
+
+void TMemoryChanges::GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TExternalDataSourceInfo>(pathId, ss->ExternalDataSources, ExternalDataSources);
 }
 
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
@@ -198,6 +198,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ExternalTables.erase(id);
         }
         ExternalTables.pop();
+    }
+
+    while (ExternalDataSources) {
+        const auto& [id, elem] = ExternalDataSources.top();
+        if (elem) {
+            ss->ExternalDataSources[id] = elem;
+        } else {
+            ss->ExternalDataSources.erase(id);
+        }
+        ExternalDataSources.pop();
     }
 }
 

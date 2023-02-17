@@ -813,6 +813,21 @@ void TPathDescriber::DescribeExternalTable(const TActorContext& ctx, TPathId pat
     entry->SetContent(externalTableInfo->Content);
 }
 
+void TPathDescriber::DescribeExternalDataSource(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->ExternalDataSources.FindPtr(pathId);
+    Y_VERIFY(it, "ExternalDataSource is not found");
+    TExternalDataSourceInfo::TPtr externalDataSourceInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableExternalDataSourceDescription();
+    entry->SetName(pathEl->Name);
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetVersion(externalDataSourceInfo->AlterVersion);
+    entry->SetSourceType(externalDataSourceInfo->SourceType);
+    entry->SetLocation(externalDataSourceInfo->Location);
+    entry->SetInstallation(externalDataSourceInfo->Installation);
+    entry->MutableAuth()->CopyFrom(externalDataSourceInfo->Auth);
+}
+
 THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
     TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
     TString pathStr = Params.GetPath();
@@ -942,6 +957,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeExternalTable:
             DescribeExternalTable(ctx, base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeExternalDataSource:
+            DescribeExternalDataSource(ctx, base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

@@ -42,6 +42,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TExternalTableState = std::pair<TPathId, TExternalTableInfo::TPtr>;
     TStack<TExternalTableState> ExternalTables;
 
+    using TExternalDataSourceState = std::pair<TPathId, TExternalDataSourceInfo::TPtr>;
+    TStack<TExternalDataSourceState> ExternalDataSources;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -69,8 +72,9 @@ public:
     void GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId);
     void GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId);
 
-    void GrabNewExternalTable(TSchemeShard* ss, const TPathId& pathId);
     void GrabExternalTable(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

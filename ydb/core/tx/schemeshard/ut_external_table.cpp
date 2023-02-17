@@ -5,19 +5,42 @@ using namespace NKikimr;
 using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
 
+namespace {
+
+void CreateExternalDataSource(TTestBasicRuntime& runtime, TTestEnv& env, ui64 txId) {
+    TestCreateExternalDataSource(runtime, txId, "/MyRoot",R"(
+            Name: "ExternalDataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/my_bucket"
+            Auth {
+                None {
+                }
+            }
+        )", {NKikimrScheme::StatusAccepted});
+
+    env.TestWaitNotification(runtime, txId);
+
+    TestLs(runtime, "/MyRoot/ExternalDataSource", false, NLs::PathExist);
+}
+
+}
+
 Y_UNIT_TEST_SUITE(TExternalTableTest) {
     Y_UNIT_TEST(CreateExternalTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        CreateExternalDataSource(runtime, env, txId++);
+        TestCreateExternalTable(runtime, txId++, "/MyRoot", R"(
+                Name: "ExternalTable"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key" Type: "Uint64" }
+            )", {NKikimrScheme::StatusAccepted});
 
-        TestCreateExternalTable(runtime, txId++, "/MyRoot",
-                            R"(Name: "external_table1")",
-                            {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId - 1);
 
-        env.TestWaitNotification(runtime, 100);
-
-        TestLs(runtime, "/MyRoot/external_table1", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathExist);
     }
 
     Y_UNIT_TEST(DropExternalTable) {
@@ -25,18 +48,22 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateExternalTable(runtime, txId++, "/MyRoot",
-                            R"(Name: "external_table1")",
-                            {NKikimrScheme::StatusAccepted});
+        CreateExternalDataSource(runtime, env, txId++);
+        TestCreateExternalTable(runtime, txId++, "/MyRoot", R"(
+                Name: "ExternalTable"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key" Type: "Uint64" }
+            )", {NKikimrScheme::StatusAccepted});
 
-        env.TestWaitNotification(runtime, 100);
+        env.TestWaitNotification(runtime, txId - 1);
 
-        TestLs(runtime, "/MyRoot/external_table1", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathExist);
 
-        TestDropExternalTable(runtime, ++txId, "/MyRoot", "external_table1");
+        TestDropExternalTable(runtime, ++txId, "/MyRoot", "ExternalTable");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/external_table1", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathNotExist);
     }
 
     using TRuntimeTxFn = std::function<void(TTestBasicRuntime&, ui64)>;
@@ -46,6 +73,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        CreateExternalDataSource(runtime, env, txId++);
         createFn(runtime, ++txId);
         env.TestWaitNotification(runtime, txId);
 
@@ -70,10 +98,12 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
     Y_UNIT_TEST(DropTableTwice) {
         auto createFn = [](TTestBasicRuntime& runtime, ui64 txId) {
             TestCreateExternalTable(runtime, txId, "/MyRoot", R"(
-                  Name: "ExternalTable"
-                  Columns { Name: "key"   Type: "Uint64" }
-                  Columns { Name: "value" Type: "Utf8" }
-            )");
+                    Name: "ExternalTable"
+                    DataSourcePath: "/MyRoot/ExternalDataSource"
+                    Location: "/"
+                    Columns { Name: "key"   Type: "Uint64" }
+                    Columns { Name: "value" Type: "Utf8" }
+                )");
         };
 
         auto dropFn = [](TTestBasicRuntime& runtime, ui64 txId) {
@@ -88,17 +118,24 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
+        CreateExternalDataSource(runtime, env, txId++);
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
-        AsyncCreateExternalTable(runtime, ++txId, "/MyRoot/DirA",
-                                R"(Name: "ExternalTable1"
-                                          Columns { Name: "RowId"      Type: "Uint64"}
-                                          Columns { Name: "Value"      Type: "Utf8"})");
-        AsyncCreateExternalTable(runtime, ++txId, "/MyRoot/DirA",
-                                R"(Name: "ExternalTable2"
-                                   Columns { Name: "key1"       Type: "Uint32"}
-                                   Columns { Name: "key2"       Type: "Utf8"}
-                                   Columns { Name: "RowId"      Type: "Uint64"}
-                                   Columns { Name: "Value"      Type: "Utf8"})");
+        AsyncCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
+                Name: "ExternalTable1"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "RowId" Type: "Uint64"}
+                Columns { Name: "Value" Type: "Utf8"}
+            )");
+        AsyncCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
+                Name: "ExternalTable2"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key1"  Type: "Uint32"}
+                Columns { Name: "key2"  Type: "Utf8"}
+                Columns { Name: "RowId" Type: "Uint64"}
+                Columns { Name: "Value" Type: "Utf8"}
+            )");
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
@@ -123,10 +160,14 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
-        TString tableConfig = R"(Name: "NilNoviSubLuna"
-            Columns { Name: "key"        Type: "Uint64"}
-            Columns { Name: "value"      Type: "Uint64"})";
-
+        TString tableConfig = R"(
+                Name: "NilNoviSubLuna"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key"   Type: "Uint64"}
+                Columns { Name: "value" Type: "Uint64"}
+            )";
+        CreateExternalDataSource(runtime, env, txId++);
         AsyncCreateExternalTable(runtime, ++txId, "/MyRoot", tableConfig);
         AsyncCreateExternalTable(runtime, ++txId, "/MyRoot", tableConfig);
         AsyncCreateExternalTable(runtime, ++txId, "/MyRoot", tableConfig);
@@ -167,11 +208,15 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
+        CreateExternalDataSource(runtime, env, txId++);
         AsyncMkDir(runtime, ++txId, "/MyRoot", "SubDirA");
-        AsyncCreateExternalTable(runtime, ++txId, "/MyRoot",
-                                        R"(Name: "ExternalTable1"
-                                          Columns { Name: "RowId"      Type: "Uint64"}
-                                          Columns { Name: "Value"      Type: "Utf8"})");
+        AsyncCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "ExternalTable1"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "RowId" Type: "Uint64"}
+                Columns { Name: "Value" Type: "Utf8"}
+            )");
         // Set ReadOnly
         SetSchemeshardReadOnlyMode(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
@@ -189,11 +234,13 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
         // Check that new modifications fail
         TestMkDir(runtime, ++txId, "/MyRoot", "SubDirBBBB", {NKikimrScheme::StatusReadOnly});
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot",
-                                R"(Name: "ExternalTable1"
-                                          Columns { Name: "RowId"      Type: "Uint64"}
-                                          Columns { Name: "Value"      Type: "Utf8"})",
-                                {NKikimrScheme::StatusReadOnly});
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "ExternalTable1"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "RowId" Type: "Uint64"}
+                Columns { Name: "Value" Type: "Utf8"}
+            )", {NKikimrScheme::StatusReadOnly});
 
         // Disable ReadOnly
         SetSchemeshardReadOnlyMode(runtime, false);
@@ -211,27 +258,44 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
         env.TestWaitNotification(runtime, txId);
-
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA",
-                R"(Name: "Table2"
-                            Columns { Name: "RowId"      Type: "BlaBlaType"})",
-                        {NKikimrScheme::StatusSchemeError});
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA",
-                R"(Name: "Table2"
-                          Columns { Name: ""      Type: "Uint64"})",
-                {NKikimrScheme::StatusSchemeError});
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA",
-                R"(Name: "Table2"
-                          Columns { Name: "RowId"      TypeId: 27})",
-                {NKikimrScheme::StatusSchemeError});
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA",
-                R"(Name: "Table2"
-                            Columns { Name: "RowId" })",
-            {NKikimrScheme::StatusSchemeError});
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA",
-                R"(Name: "Table2"
-                        Columns { Name: "RowId" Type: "Uint64" Id: 2}
-                        Columns { Name: "RowId2" Type: "Uint64" Id: 2 })",
-            {NKikimrScheme::StatusSchemeError});
+        CreateExternalDataSource(runtime, env, txId++);
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
+                Name: "Table2"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "RowId" Type: "BlaBlaType"}
+            )", {{NKikimrScheme::StatusSchemeError, "Type 'BlaBlaType' specified for column 'RowId' is not supported"}});
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
+                Name: "Table2"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "" Type: "Uint64"}
+            )", {{NKikimrScheme::StatusSchemeError, "Columns cannot have an empty name"}});
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
+                Name: "Table2"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "RowId" TypeId: 27}
+            )", {{NKikimrScheme::StatusSchemeError, "a"}});
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
+                Name: "Table2"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "RowId" }
+            )", {{NKikimrScheme::StatusSchemeError, "Missing Type for column 'RowId'"}});
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
+                Name: "Table2"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "RowId" Type: "Uint64" Id: 2}
+                Columns { Name: "RowId2" Type: "Uint64" Id: 2 }
+            )", {{NKikimrScheme::StatusSchemeError, "Duplicate column id: 2"}});
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
+                Name: "Table2"
+                DataSourcePath: "/MyRoot/ExternalDataSource1"
+                Location: "/"
+                Columns { Name: "RowId" Type: "Uint64"}
+                Columns { Name: "Value" Type: "Utf8"}
+            )", {{NKikimrScheme::StatusPathDoesNotExist, "Check failed: path: '/MyRoot/ExternalDataSource1'"}});
     }
 }

@@ -13,6 +13,53 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
+constexpr uint32_t MAX_FIELD_SIZE = 1000;
+constexpr uint32_t MAX_PROTOBUF_SIZE = 2 * 1024 * 1024; // 2 MiB
+
+bool ValidateSourceType(const TString& sourceType, TString& errStr) {
+    // Only object storage supported today
+    if (sourceType != "ObjectStorage") {
+        errStr = "Only ObjectStorage source type supported but got " + sourceType;
+        return false;
+    }
+    return true;
+}
+
+bool ValidateLocation(const TString& location, TString& errStr) {
+    if (!location) {
+        errStr = "Location must not be empty";
+        return false;
+    }
+    if (location.Size() > MAX_FIELD_SIZE) {
+        errStr = Sprintf("Maximum length of location must be less or equal equal to %u but got %lu", MAX_FIELD_SIZE, location.Size());
+        return false;
+    }
+    return true;
+}
+
+bool ValidateContent(const TString& content, TString& errStr) {
+    if (content.Size() > MAX_PROTOBUF_SIZE) {
+        errStr = Sprintf("Maximum size of content must be less or equal equal to %u but got %lu", MAX_PROTOBUF_SIZE, content.Size());
+        return false;
+    }
+    return true;
+}
+
+bool ValidateDataSourcePath(const TString& dataSourcePath, TString& errStr) {
+    if (!dataSourcePath) {
+        errStr = "Data source path must not be empty";
+        return false;
+    }
+    return true;
+}
+
+bool Validate(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDescription& desc, TString& errStr) {
+    return ValidateSourceType(sourceType, errStr)
+        && ValidateLocation(desc.GetLocation(), errStr)
+        && ValidateContent(desc.GetContent(), errStr)
+        && ValidateDataSourcePath(desc.GetDataSourcePath(), errStr);
+}
+
 bool IsAllowedType(ui32 typeId) {
     if (!NScheme::NTypeIds::IsYqlType(typeId)) {
         return false;
@@ -30,7 +77,16 @@ bool IsAllowedType(ui32 typeId) {
     return true;
 }
 
-TExternalTableInfo::TPtr CreateExternalTable(const NKikimrSchemeOp::TExternalTableDescription& desc, TString& errStr) {
+TExternalTableInfo::TPtr CreateExternalTable(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDescription& desc, TString& errStr) {
+    if (!Validate(sourceType, desc, errStr)) {
+        return nullptr;
+    }
+
+    if (!desc.ColumnsSize()) {
+        errStr = "The schema must have at least one column";
+        return nullptr;
+    }
+
     TExternalTableInfo::TPtr externalTableInfo = new TExternalTableInfo;
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
 
@@ -38,6 +94,7 @@ TExternalTableInfo::TPtr CreateExternalTable(const NKikimrSchemeOp::TExternalTab
     externalTableInfo->Location = desc.GetLocation();
     externalTableInfo->AlterVersion = 1;
     externalTableInfo->Content = desc.GetContent();
+    externalTableInfo->SourceType = sourceType;
 
     uint64_t nextColumnId = 1;
     for (const auto& col : desc.GetColumns()) {
@@ -102,7 +159,7 @@ TExternalTableInfo::TPtr CreateExternalTable(const NKikimrSchemeOp::TExternalTab
 
 class TPropose: public TSubOperationState {
 private:
-    TOperationId OperationId;
+    const TOperationId OperationId;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -111,7 +168,7 @@ private:
     }
 
 public:
-    TPropose(TOperationId id)
+    explicit TPropose(TOperationId id)
         : OperationId(id)
     {
     }
@@ -119,7 +176,7 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
+        LOG_I(DebugHint() << " HandleReply TEvOperationPlan"
             << ": step# " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -127,8 +184,10 @@ public:
         Y_VERIFY(txState->TxType == TTxState::TxCreateExternalTable);
 
         auto pathId = txState->TargetPathId;
+        auto dataSourcePathId = txState->SourcePathId;
         auto path = TPath::Init(pathId, context.SS);
         TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
+        TPathElement::TPtr dataSourcePathPtr = context.SS->PathsById.at(dataSourcePathId);
 
         context.SS->TabletCounters->Simple()[COUNTER_EXTERNAL_TABLE_COUNT].Add(1);
 
@@ -140,14 +199,16 @@ public:
         IncParentDirAlterVersionWithRepublish(OperationId, path, context);
 
         context.SS->ClearDescribePathCaches(pathPtr);
+        context.SS->ClearDescribePathCaches(dataSourcePathPtr);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+        context.OnComplete.PublishToSchemeBoard(OperationId, dataSourcePathId);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        LOG_I(DebugHint() << " ProgressState");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -197,16 +258,15 @@ public:
         const auto& externalTableDescription = Transaction.GetCreateExternalTable();
         const TString& name = externalTableDescription.GetName();
 
-
         LOG_N("TCreateExternalTable Propose"
             << ": opId# " << OperationId
             << ", path# " << parentPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
         {
-            NSchemeShard::TPath::TChecker checks = parentPath.Check();
+            auto checks = parentPath.Check();
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
@@ -224,9 +284,9 @@ public:
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
-        NSchemeShard::TPath dstPath = parentPath.Child(name);
+        TPath dstPath = parentPath.Child(name);
         {
-            NSchemeShard::TPath::TChecker checks = dstPath.Check();
+            auto checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
                 checks
@@ -258,13 +318,37 @@ public:
             }
         }
 
+        TPath dataSourcePath = TPath::Resolve(externalTableDescription.GetDataSourcePath(), context.SS);
+        {
+            auto checks = dataSourcePath.Check();
+            checks
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .IsCommonSensePath()
+                .IsExternalDataSource()
+                .NotUnderOperation();
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
+        TExternalDataSourceInfo::TPtr externalDataSource = context.SS->ExternalDataSources.Value(dataSourcePath->PathId, nullptr);
+        if (!externalDataSource) {
+            result->SetError(NKikimrScheme::StatusSchemeError, "Data source doesn't exist");
+            return result;
+        }
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
-        TExternalTableInfo::TPtr externalTableInfo = CreateExternalTable(externalTableDescription, errStr);
+        TExternalTableInfo::TPtr externalTableInfo = CreateExternalTable(externalDataSource->SourceType, externalTableDescription, errStr);
         if (!externalTableInfo) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
@@ -279,7 +363,7 @@ public:
         externalTable->PathState = TPathElement::EPathState::EPathStateCreate;
         externalTable->PathType = TPathElement::EPathType::EPathTypeExternalTable;
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateExternalTable, externalTable->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateExternalTable, externalTable->PathId, dataSourcePath->PathId);
         txState.Shards.clear();
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -292,6 +376,9 @@ public:
         context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
         context.OnComplete.ActivateTx(OperationId);
 
+        auto& reference = *externalDataSource->ExternalTableReferences.AddReferences();
+        reference.SetPath(externalTableInfo->DataSourcePath);
+        PathIdFromPathId(externalTable->PathId, reference.MutablePathId());
         context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
         context.SS->IncrementPathDbRefCount(externalTable->PathId);
 
@@ -302,6 +389,7 @@ public:
             context.SS->PersistACL(db, externalTable);
         }
 
+        context.SS->PersistExternalDataSource(db, dataSourcePath->PathId, externalDataSource);
         context.SS->PersistExternalTable(db, externalTable->PathId, externalTableInfo);
         context.SS->PersistTxState(db, OperationId);
 

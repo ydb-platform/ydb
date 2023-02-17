@@ -371,6 +371,14 @@ ISubOperation::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState s
 ISubOperation::TPtr CreateDropExternalTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropExternalTable(TOperationId id, TTxState::ETxState state);
 
+// External Data Source
+// Create
+ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, TTxState::ETxState state);
+
 /// CDC
 // Create
 TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);

@@ -178,6 +178,11 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateExternalTable = 144         [(CounterOpts) = {Name: "InFlightOps/CreateExternalTable"}];
     COUNTER_IN_FLIGHT_OPS_TxDropExternalTable = 145           [(CounterOpts) = {Name: "InFlightOps/DropExternalTable"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterExternalTable = 146          [(CounterOpts) = {Name: "InFlightOps/AlterExternalTable"}];
+
+    COUNTER_EXTERNAL_DATA_SOURCE_COUNT = 147                       [(CounterOpts) = {Name: "ExternalDataSourceCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateExternalDataSource = 148         [(CounterOpts) = {Name: "InFlightOps/CreateExternalDataSource"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropExternalDataSource = 149           [(CounterOpts) = {Name: "InFlightOps/DropExternalDataSource"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterExternalDataSource = 150          [(CounterOpts) = {Name: "InFlightOps/AlterExternalDataSource"}];
 }
 
 enum ECumulativeCounters {
@@ -288,6 +293,10 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateExternalTable = 88          [(CounterOpts) = {Name: "FinishedOps/CreateExternalTable"}];
     COUNTER_FINISHED_OPS_TxDropExternalTable = 89          [(CounterOpts) = {Name: "FinishedOps/DropExternalTable"}];
     COUNTER_FINISHED_OPS_TxAlterExternalTable = 90          [(CounterOpts) = {Name: "FinishedOps/AlterExternalTable"}];
+
+    COUNTER_FINISHED_OPS_TxCreateExternalDataSource = 91  [(CounterOpts) = {Name: "FinishedOps/CreateExternalDataSource"}];
+    COUNTER_FINISHED_OPS_TxDropExternalDataSource = 92    [(CounterOpts) = {Name: "FinishedOps/DropExternalDataSource"}];
+    COUNTER_FINISHED_OPS_TxAlterExternalDataSource = 93   [(CounterOpts) = {Name: "FinishedOps/AlterExternalDataSource"}];
 }
 
 enum EPercentileCounters {

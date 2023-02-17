@@ -1632,6 +1632,20 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, SourceType, DataSourcePath, Location, AlterVersion, Content>;
     };
 
+    struct ExternalDataSource : Table<105> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct SourceType : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct Location : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct Installation : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct Auth : Column<7, NScheme::NTypeIds::String> {};
+        struct ExternalTableReferences : Column<8, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, SourceType, Location, Installation, Auth, ExternalTableReferences>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1735,7 +1749,8 @@ struct Schema : NIceDb::Schema {
         ReplicationsAlterData,
         BlobDepots,
         CdcStreamScanShardStatus,
-        ExternalTable
+        ExternalTable,
+        ExternalDataSource
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

@@ -13,7 +13,7 @@ using namespace NSchemeShard;
 class TPropose: public TSubOperationState {
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TDropExternalTable TPropose"
+            << "TDropExternalDataSource TPropose"
             << " opId# " << OperationId << " ";
     }
 
@@ -27,7 +27,7 @@ public:
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropExternalTable);
+        Y_VERIFY(txState->TxType == TTxState::TxDropExternalDataSource);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -44,9 +44,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
         TPathId pathId = txState->TargetPathId;
-        TPathId dataSourcePathId = txState->SourcePathId;
         auto path = context.SS->PathsById.at(pathId);
-        auto dataSourcePath = context.SS->PathsById.at(dataSourcePathId);
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
 
         Y_VERIFY(!path->Dropped());
@@ -56,24 +54,17 @@ public:
         domainInfo->DecPathsInside();
         parentDir->DecAliveChildren();
 
-        TExternalDataSourceInfo::TPtr externalDataSourceInfo = context.SS->ExternalDataSources.Value(dataSourcePathId, nullptr);
-        Y_VERIFY(externalDataSourceInfo);
-        EraseIf(*externalDataSourceInfo->ExternalTableReferences.MutableReferences(), [pathId](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) { return PathIdFromPathId(reference.GetPathId()) == pathId; });
-
-        context.SS->TabletCounters->Simple()[COUNTER_EXTERNAL_TABLE_COUNT].Sub(1);
-        context.SS->PersistExternalDataSource(db, dataSourcePathId, externalDataSourceInfo);
-        context.SS->PersistRemoveExternalTable(db, pathId);
+        context.SS->TabletCounters->Simple()[COUNTER_EXTERNAL_DATA_SOURCE_COUNT].Sub(1);
+        context.SS->PersistRemoveExternalDataSource(db, pathId);
 
         ++parentDir->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDir);
         context.SS->ClearDescribePathCaches(parentDir);
         context.SS->ClearDescribePathCaches(path);
-        context.SS->ClearDescribePathCaches(dataSourcePath);
 
         if (!context.SS->DisablePublicationsOfDropping) {
             context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
             context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-            context.OnComplete.PublishToSchemeBoard(OperationId, dataSourcePathId);
         }
 
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
@@ -85,7 +76,7 @@ private:
     const TOperationId OperationId;
 }; // TPropose
 
-class TDropExternalTable: public TSubOperation {
+class TDropExternalDataSource: public TSubOperation {
     TTxState::ETxState NextState() const {
         return TTxState::Propose;
     }
@@ -120,7 +111,7 @@ public:
         const TString& workingDir = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        LOG_N("TDropExternalTable Propose"
+        LOG_N("TDropExternalDataSource Propose"
             << ": opId# " << OperationId
             << ", path# " << workingDir << "/" << name);
 
@@ -138,18 +129,28 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsExternalTable()
+                .IsExternalDataSource()
                 .NotUnderOperation()
                 .IsCommonSensePath();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                if (path.IsResolved() && path.Base()->IsExternalTable() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
+                if (path.IsResolved() && path.Base()->IsExternalDataSource() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
                 return result;
             }
+        }
+
+        TExternalDataSourceInfo::TPtr externalDataSource = context.SS->ExternalDataSources.Value(path->PathId, nullptr);
+        if (!externalDataSource) {
+            result->SetError(NKikimrScheme::StatusSchemeError, "Data source doesn't exist");
+            return result;
+        }
+        if (externalDataSource->ExternalTableReferences.ReferencesSize()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, "Other entities depend on this data source, please remove them at the beginning: " + externalDataSource->ExternalTableReferences.GetReferences(0).GetPath());
+            return result;
         }
 
         TString errStr;
@@ -161,44 +162,18 @@ public:
         const auto pathId = path.Base()->PathId;
         result->SetPathId(pathId.LocalPathId);
 
-        TExternalTableInfo::TPtr externalTableInfo = context.SS->ExternalTables.Value(pathId, nullptr);
-        if (!externalTableInfo) {
-            result->SetError(NKikimrScheme::StatusSchemeError, "External table info doesn't exist");
-            return result;
-        }
-        TPath dataSourcePath = TPath::Resolve(externalTableInfo->DataSourcePath, context.SS);
-        {
-            auto checks = dataSourcePath.Check();
-            checks
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsExternalDataSource();
-
-            if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
-        }
-
         auto guard = context.DbGuard();
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabPath(context.SS, pathId);
         context.MemChanges.GrabPath(context.SS, path->ParentPathId);
-        context.MemChanges.GrabPath(context.SS, dataSourcePath->PathId);
-        context.MemChanges.GrabExternalTable(context.SS, pathId);
-        context.MemChanges.GrabExternalDataSource(context.SS, dataSourcePath->PathId);
+        context.MemChanges.GrabExternalDataSource(context.SS, pathId);
 
         context.DbChanges.PersistTxState(OperationId);
         context.DbChanges.PersistPath(pathId);
         context.DbChanges.PersistPath(path->ParentPathId);
-        context.DbChanges.PersistPath(dataSourcePath->PathId);
 
         Y_VERIFY(!context.SS->FindTx(OperationId));
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropExternalTable, path.Base()->PathId, dataSourcePath->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropExternalDataSource, path.Base()->PathId);
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
 
@@ -215,12 +190,12 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TDropExternalTable AbortPropose"
+        LOG_N("TDropExternalDataSource AbortPropose"
             << ": opId# " << OperationId);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TDropExternalTable AbortUnsafe"
+        LOG_N("TDropExternalDataSource AbortUnsafe"
             << ": opId# " << OperationId
             << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
@@ -231,13 +206,13 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateDropExternalTable(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TDropExternalTable>(id, tx);
+ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TDropExternalDataSource>(id, tx);
 }
 
-ISubOperation::TPtr CreateDropExternalTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return MakeSubOperation<TDropExternalTable>(id, state);
+    return MakeSubOperation<TDropExternalDataSource>(id, state);
 }
 
 }

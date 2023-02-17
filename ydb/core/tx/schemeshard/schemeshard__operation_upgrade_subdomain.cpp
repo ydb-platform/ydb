@@ -304,6 +304,7 @@ public:
         switch (path.Base()->PathType) {
             case NKikimrSchemeOp::EPathType::EPathTypeDir:
             case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
+            case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
                 Y_VERIFY(!path.Base()->IsRoot());
                 //no shards
                 break;

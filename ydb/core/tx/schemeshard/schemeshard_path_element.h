@@ -379,6 +379,7 @@ public:
     bool HasActiveChanges() const;
     bool IsCreateFinished() const;
     bool IsExternalTable() const;
+    bool IsExternalDataSource() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

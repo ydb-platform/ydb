@@ -192,6 +192,12 @@ TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
         return "DROP EXTERNAL TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
         return "ALTER EXTERNAL TABLE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
+        return "CREATE EXTERNAL DATA SOURCE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:
+        return "DROP EXTERNAL DATA SOURCE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
+        return "ALTER EXTERNAL DATA SOURCE";
     }
     Y_FAIL("switch should cover all operation types");
 }
@@ -458,6 +464,15 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
+        // TODO: unimplemented
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateExternalDataSource().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
         // TODO: unimplemented
         break;
     }

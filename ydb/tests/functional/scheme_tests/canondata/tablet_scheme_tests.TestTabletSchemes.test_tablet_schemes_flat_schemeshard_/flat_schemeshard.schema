@@ -6842,5 +6842,83 @@
                 "Blobs": 1
             }
         }
+    },
+    {
+        "TableId": 105,
+        "TableName": "ExternalDataSource",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "AlterVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "SourceType",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Location",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "Installation",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "Auth",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "ExternalTableReferences",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
     }
 ]

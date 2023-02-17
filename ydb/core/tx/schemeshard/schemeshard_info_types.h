@@ -2900,6 +2900,17 @@ struct TExternalTableInfo: TSimpleRefCount<TExternalTableInfo> {
     TString Content;
 };
 
+struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
+    using TPtr = TIntrusivePtr<TExternalDataSourceInfo>;
+
+    ui64 AlterVersion = 0;
+    TString SourceType;
+    TString Location;
+    TString Installation;
+    NKikimrSchemeOp::TAuth Auth;
+    NKikimrSchemeOp::TExternalTableReferences ExternalTableReferences;
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,

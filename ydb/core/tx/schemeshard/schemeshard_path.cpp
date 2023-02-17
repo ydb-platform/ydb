@@ -755,6 +755,19 @@ const TPath::TChecker& TPath::TChecker::IsExternalTable(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsExternalDataSource(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsExternalDataSource()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a external data source"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;

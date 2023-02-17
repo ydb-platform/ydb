@@ -737,6 +737,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             ReplicationInfo.Drop();
             BlobDepotInfo.Drop();
             ExternalTableInfo.Drop();
+            ExternalDataSourceInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -1166,6 +1167,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(ReplicationInfo);
             DESCRIPTION_PART(BlobDepotInfo);
             DESCRIPTION_PART(ExternalTableInfo);
+            DESCRIPTION_PART(ExternalDataSourceInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1476,6 +1478,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindExternalTable;
                 FillInfo(Kind, ExternalTableInfo, std::move(*pathDesc.MutableExternalTableDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeExternalDataSource:
+                Kind = TNavigate::KindExternalDataSource;
+                FillInfo(Kind, ExternalDataSourceInfo, std::move(*pathDesc.MutableExternalDataSourceDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_VERIFY_DEBUG(false, "Invalid path type");
                 break;
@@ -1535,6 +1541,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeExternalTable:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindExternalTable);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeExternalDataSource:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindExternalDataSource);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1745,6 +1754,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.ReplicationInfo = ReplicationInfo;
             entry.BlobDepotInfo = BlobDepotInfo;
             entry.ExternalTableInfo = ExternalTableInfo;
+            entry.ExternalDataSourceInfo = ExternalDataSourceInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2021,6 +2031,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // ExternalTable specific
         TIntrusivePtr<TNavigate::TExternalTableInfo> ExternalTableInfo;
+
+        // ExternalDataSource specific
+        TIntrusivePtr<TNavigate::TExternalDataSourceInfo> ExternalDataSourceInfo;
 
     }; // TCacheItem
 

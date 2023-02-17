@@ -210,6 +210,7 @@ public:
     THashMap<TPathId, TKesusInfo::TPtr> KesusInfos;
     THashMap<TPathId, TOlapStoreInfo::TPtr> OlapStores;
     THashMap<TPathId, TExternalTableInfo::TPtr> ExternalTables;
+    THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
 
     TTablesStorage ColumnTables;
 
@@ -744,6 +745,10 @@ public:
     // ExternalTable
     void PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTable);
     void PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathId);
+
+    // ExternalDataSource
+    void PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId, const TExternalDataSourceInfo::TPtr externalDataSource);
+    void PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId pathId);
 
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 

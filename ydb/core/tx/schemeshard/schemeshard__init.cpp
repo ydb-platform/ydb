@@ -1906,6 +1906,32 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Externel Data Source
+        {
+            auto rowset = db.Table<Schema::ExternalDataSource>().Range().Select();
+            if (!rowset.IsReady())
+                return false;
+
+            while (!rowset.EndOfSet()) {
+                TOwnerId ownerPathId = rowset.GetValue<Schema::ExternalDataSource::OwnerPathId>();
+                TLocalPathId localPathId = rowset.GetValue<Schema::ExternalDataSource::LocalPathId>();
+                TPathId pathId(ownerPathId, localPathId);
+
+                auto& externalDataSource = Self->ExternalDataSources[pathId] = new TExternalDataSourceInfo();
+                externalDataSource->AlterVersion = rowset.GetValue<Schema::ExternalDataSource::AlterVersion>();
+                externalDataSource->SourceType = rowset.GetValue<Schema::ExternalDataSource::SourceType>();
+                externalDataSource->Location = rowset.GetValue<Schema::ExternalDataSource::Location>();
+                externalDataSource->Installation = rowset.GetValue<Schema::ExternalDataSource::Installation>();
+                Y_PROTOBUF_SUPPRESS_NODISCARD externalDataSource->Auth.ParseFromString(rowset.GetValue<Schema::ExternalDataSource::Auth>());
+                Y_PROTOBUF_SUPPRESS_NODISCARD externalDataSource->ExternalTableReferences.ParseFromString(rowset.GetValue<Schema::ExternalDataSource::ExternalTableReferences>());
+
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next())
+                    return false;
+            }
+        }
+
         // Read table columns
         {
             TColumnRows columnRows;

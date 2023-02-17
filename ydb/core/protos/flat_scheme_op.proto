@@ -1302,6 +1302,11 @@ enum EOperationType {
     ESchemeOpCreateExternalTable = 86;
     ESchemeOpDropExternalTable = 87;
     ESchemeOpAlterExternalTable = 88;
+
+    // External Data Source
+    ESchemeOpCreateExternalDataSource = 89;
+    ESchemeOpDropExternalDataSource = 90;
+    ESchemeOpAlterExternalDataSource = 91;
 }
 
 message TApplyIf {
@@ -1412,6 +1417,8 @@ message TModifyScheme {
     optional TPersQueueGroupDeallocate DeallocatePersQueueGroup = 57;
 
     optional TExternalTableDescription CreateExternalTable = 58;
+
+    optional TExternalDataSourceDescription CreateExternalDataSource = 59;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands
@@ -1468,6 +1475,7 @@ enum EPathType {
     EPathTypeReplication = 16;
     EPathTypeBlobDepot = 17;
     EPathTypeExternalTable = 18;
+    EPathTypeExternalDataSource = 19;
 }
 
 enum EPathSubType {
@@ -1520,6 +1528,7 @@ message TPathVersion {
     optional uint64 ReplicationVersion = 25;
     optional uint64 BlobDepotVersion = 26;
     optional uint64 ExternalTableVersion = 27;
+    optional uint64 ExternalDataSourceVersion = 28;
 }
 
 // Describes single path
@@ -1606,6 +1615,7 @@ message TPathDescription {
     optional TReplicationDescription ReplicationDescription = 25;
     optional TBlobDepotDescription BlobDepotDescription = 26;
     optional TExternalTableDescription ExternalTableDescription = 27;
+    optional TExternalDataSourceDescription ExternalDataSourceDescription = 28;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -1659,4 +1669,32 @@ message TExternalTableDescription {
     optional string Location = 6;
     repeated TColumnDescription Columns = 7;
     optional bytes Content = 8;
+}
+
+// Access without authorization
+message NoneAuth {
+}
+
+message TAuth {
+    oneof identity {
+        NoneAuth None = 3;
+    }
+}
+
+message TExternalTableReferences {
+    message TReference {
+        optional string Path = 1;
+        optional NKikimrProto.TPathID PathId = 2;
+    }
+    repeated TReference References = 1;
+}
+
+message TExternalDataSourceDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+    optional string SourceType = 4;
+    optional string Location = 5;
+    optional string Installation = 6;
+    optional TAuth Auth = 7;
 }

@@ -87,7 +87,7 @@ public:
                                 std::bind(&OnResult, promise, std::placeholders::_1),
                                 {},
                                 RetryPolicy);
-            return arrow::Buffer::FromString(promise.GetFuture().GetValueSync());
+            return arrow::Buffer::FromString(std::move(promise.GetFuture().GetValueSync()));
         } catch (const std::exception& e) {
             return arrow::Status::UnknownError(e.what());
         }
@@ -104,8 +104,7 @@ public:
 private:
     static void OnResult(NThreading::TPromise<TString> promise, IHTTPGateway::TResult&& result) {
         try {
-            auto res = std::get<IHTTPGateway::TContent>(result).Extract();
-            promise.SetValue(res);
+            promise.SetValue(std::move(std::get<IHTTPGateway::TContent>(result).Extract()));
         } catch (const std::exception& e) {
             promise.SetException(std::current_exception());
         }

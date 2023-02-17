@@ -48,72 +48,89 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{ $context.Values.grafanaDashboards.markerLabel.key }}: {{ $context.Values.grafanaDashboards.markerLabel.value | quote }}
 {{- end -}}
 
-{{- define "ydb-prometheus.externalCluster.config" -}}
+{{- define "ydb-prometheus.externalCluster.jobs" }}
 {{- $context := . -}}
-{{- $counters := .Values.ydb.counters -}}
-{{- $clusters := .Values.ydb.clusters -}}
-{{- $result := list -}}
-{{- range $cluster := $clusters }}
-  {{- if eq $cluster.type "external" }}
+{{- $spec := index $context 0 -}}
+{{- $counters := index $context 1 -}}
+{{- $specType := index $context 2 -}}
+  {{- range $counter := $counters }}
+    {{- $type := include "ydb-prometheus.counter.type" $counter }}
+    {{- if or (eq $type "all") (eq $type $specType) }}
+- job_name: {{ include "ydb-prometheus.counter.jobName" (tuple $spec.name $counter) }}
+  metrics_path: {{ include "ydb-prometheus.counter.metricsPath" $counter | quote }}
+  relabel_configs:
+  - source_labels:
+    - __address__
+    target_label: instance
+    regex: '([^:]+)(:[0-9]+)?'
+    replacement: '${1}'
+  metric_relabel_configs:
+  - source_labels:
+    - __name__
+    target_label: __name__
+    regex: (.*)
+    replacement: {{ $counter.counter }}_$1
+  static_configs:
+  - targets:
+    {{- range $host := $spec.hosts }}
+      {{- printf "- %s:%d" $host ($spec.port.number | int) | nindent 4 }}
+    {{- end }}
+    labels:
+      counter: {{ $counter.counter | quote }}
+      container: ydb-dynamic
+      {{- end }}
+  {{- end }}
+{{- end }}
 
+{{- define "ydb-prometheus.internalCluster.serviceMonitor" -}}
+{{- $context := . -}}
+{{- $spec := index $context 0 -}}
+{{- $counters := index $context 1 -}}
+{{- $specType := index $context 2 -}}
+spec:
+  endpoints:
     {{- range $counter := $counters }}
-      {{- $name := "staticNode" }}
-      {{- $port := $cluster.ports.static }}
-      {{- $type := default "all" $counter.type }}
-      {{- if or (eq $type "static") (eq $type "all") }}
-        {{- $config := include "ydb-prometheus.externalCluster.targetCounter" (tuple $cluster $counter $name $port) | fromYaml }}
-        {{- $result = append $result $config }}
+      {{- $type := include "ydb-prometheus.counter.type" $counter }}
+      {{- if or (eq $type "all") (eq $type $specType) }}
+  - path: {{ include "ydb-prometheus.counter.metricsPath" $counter }}
+    port: {{ $spec.port.name }}
+    metricRelabelings:
+    - sourceLabels:
+      - __name__
+      targetLabel: __name__
+      regex: (.*)
+      replacement: {{ $counter.counter }}_$1
+    relabelings:
+    - sourceLabels:
+      - __meta_kubernetes_namespace
+      targetLabel: job
+      regex: (.*)
+      replacement: {{ include "ydb-prometheus.counter.jobName" (tuple (printf "$1/%s" $spec.name) $counter) }}
       {{- end }}
     {{- end }}
-
-    {{- range $port := $cluster.ports.dynamic }}
-      {{- range $counter := $counters }}
-        {{- $name := printf "dynamicNode/%d" ($port | int) }}
-        {{- $type := default "all" $counter.type }}
-        {{- if or (eq $type "dynamic") (eq $type "all") }}
-          {{- $config := include "ydb-prometheus.externalCluster.targetCounter" (tuple $cluster $counter $name $port) | fromYaml }}
-          {{- $result = append $result $config }}
-        {{- end }}
-      {{- end }}
-    {{- end }}
-
-{{- end }}
-{{- end }}
-
-{{- $result | toYaml }}
+  namespaceSelector:
+    matchNames:
+    - {{ $spec.namespace }}
+  selector:
+    matchLabels: {{ $spec.selector | toYaml | nindent 6 }}
 {{- end -}}
 
-{{- define "ydb-prometheus.externalCluster.targetCounter" }}
-{{- $context := . }}
-{{- $cluster := index $context 0 }}
-{{- $counter := index $context 1 }}
-{{- $name := index $context 2 }}
-{{- $port := index $context 3 }}
-{{- $metricsPath := (printf "/counters/counters=%s/prometheus" $counter.counter) }}
-{{- if $counter.metricsPath }}
-{{- $metricsPath = $counter.metricsPath }}
-{{- end }}
-job_name: {{ printf "ydb/%s/%s/counter/%s" $cluster.cluster $name $counter.counter | quote }}
-metrics_path: {{ $metricsPath | quote }}
-relabel_configs:
-- source_labels:
-  - __address__
-  target_label: instance
-  regex: '([^:]+)(:[0-9]+)?'
-  replacement: '${1}'
-metric_relabel_configs:
-- source_labels:
-  - __name__
-  target_label: __name__
-  regex: (.*)
-  replacement: {{ $counter.counter }}_$1
-static_configs:
-- targets:
-  {{- range $host := $cluster.hosts }}
-    {{- printf "- %s:%d" $host ($port | int) | nindent 4 }}
-  {{- end }}
-  labels:
-    project: {{ $cluster.cluster }}
-    counter: {{ $counter.counter | quote }}
-    container: ydb-dynamic
-{{- end }}
+{{- define "ydb-prometheus.counter.jobName" -}}
+{{- $context := . -}}
+{{- $name := index $context 0 -}}
+{{- $counter := index $context 1 -}}
+{{- $name := printf "ydb/%s/counter/%s" $name $counter.counter | quote -}}
+{{- $name -}}
+{{- end -}}
+
+{{- define "ydb-prometheus.counter.type" -}}
+{{- $counter := . -}}
+{{- $type := default "all" $counter.type -}}
+{{- $type -}}
+{{- end -}}
+
+{{- define "ydb-prometheus.counter.metricsPath" -}}
+{{- $counter := . -}}
+{{- $metricsPath := default (printf "/counters/counters=%s/prometheus" $counter.counter) $counter.metricsPath -}}
+{{- $metricsPath -}}
+{{- end -}}

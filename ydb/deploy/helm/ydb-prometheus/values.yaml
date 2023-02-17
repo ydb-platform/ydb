@@ -55,43 +55,71 @@ ydb:
     # If unspecified, will be used /counters/counters=%s/prometheus
     # metricsPath: <url to prometheus metrics>
     #
-    - counter: auth
-    - counter: compile
-    - counter: dsproxy
-    - counter: dsproxy_percentile
-    - counter: dsproxy_queue
-    - counter: dsproxynode
-    - counter: grpc
-    - counter: interconnect
-    - counter: kqp
-    - counter: netclassifier
-    - counter: pdisks
-      type: static
-    - counter: pqproxy
-    - counter: proxy
-    - counter: quoter_service
-    - counter: tablets
-    - counter: vdisks
-      type: static
-    - counter: utils
     - counter: ydb
       metricsPath: /counters/counters=ydb/name_label=name/prometheus
+    # - counter: ydb_serverless
+    - counter: auth
+    - counter: coordinator
+    - counter: dsproxy_queue
+    - counter: dsproxy
+    - counter: dsproxy_percentile
+    - counter: grpc
+    - counter: pdisks
+      type: static
+    - counter: kqp
+      type: dynamic
+    - counter: processing
+    - counter: proxy
+    - counter: followers
+    - counter: storage_pool_stat
+    # - counter: streaming
+    - counter: tablets
+    - counter: utils
+    # - counter: yql
+    - counter: dsproxynode
+    - counter: interconnect
+    - counter: vdisks
+      type: static
 
   # Cluster which will be monitored
   clusters: []
   # Cluster name
-  # cluster: <cluster name>
+  # name: <cluster name>
   #
   # Cluster type
   # For external clusters, additional scrape config secret will be generated
   # For internal clusters, service monitor with appropriate configuration will be generated
   # type: <external|internal>
   #
-  # External cluster targets, used only if type == external
-  # external:
-  # Monitoring ports for static and dynamic nodes
-  #   ports:
-  #     static: <static (storage) node port>
-  #     dynamic: <dynamic (tenants) node ports>
-  # Monitoring hosts
-  #   hosts: <cluster targets>
+  # Storage nodes monitoring configuration
+  # storage:
+  #   name: <name of prometheus job/target>
+  #
+  #   Internal cluster specific spec
+  #   namespace: <namespace of ydb storage pods>
+  #   selector: <label selector for ydb storage pods>
+  #   port:
+  #     name: <service port name for ydb storage pods>
+  #
+  #   External cluster specific spec
+  #   hosts:
+  #   - <ydb storage host>
+  #   port:
+  #     number: <ydb storage monitoring (status) port number>
+  #
+  # Dynamic nodes monitoring configuration
+  # Each item represents ydb database
+  # databases:
+  # - name: <name of prometheus job/target>
+  #
+  #   Internal cluster specific spec
+  #   namespace: <namespace of ydb database pods>
+  #   selector: <label selector for ydb database pods>
+  #   port:
+  #     name: <service port name for ydb database pods>
+  #
+  #   External cluster specific spec
+  #   hosts:
+  #   - <ydb database host>
+  #   port:
+  #     number: <ydb database monitoring (status) port number>

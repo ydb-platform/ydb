@@ -32,18 +32,48 @@ kube-prometheus-stack:
 
 ydb:
   clusters:
-  - cluster: <cluster-name>
+  - name: <cluster-name>
     type: external
-    ports:
-      static: <static nodes port>
-      dynamic:
-      - <dynamic nodes ports, one per database (tenant)>
-    hosts:
-    - <ydb host>
+    storage:
+      name: <prometheus job name, will be formatted as ydb/<name>/counter/<counter name>>
+      hosts:
+      - <ydb storage hosts>
+      port:
+        number: <ydb storage monitoring port number>
+    databases:
+    - name: <prometheus job name, will be formatted as ydb/<name>/counter/<counter name>>
+      hosts:
+      - <ydb dynamic hosts>
+      port:
+        number: <ydb dynamic monitoring port number>
+
 ```
 
 4. Install chart with `helm`
 
 ## Monitoring Internal YDB Cluster (deployed with ydb-operator)
 
-Work in progress
+1. Set following in values.yaml to cluster monitor:
+
+```yaml
+
+ydb:
+  clusters:
+  - name: <cluster-name>
+    type: internal
+    storage:
+      name: <prometheus job name, will be formatted as serviceMonitor/<release namespace>/<release-name>/<counter number>
+      namespace: <ydb cluster namespace>
+      selector: <kubernetes label selector for ydb storage pods>
+      port:
+        name: <ydb storage service (status) port number>
+    databases:
+    - name: <prometheus job name, will be formatted as serviceMonitor/<release namespace>/<release-name>/<counter number>
+      namespace: <ydb cluster namespace>
+      selector: <kubernetes label selector for ydb database pods>
+      port:
+        name: <ydb database service (status) port number>
+
+```
+
+2. Install chart with `helm`

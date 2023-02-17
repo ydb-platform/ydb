@@ -1,2 +1,26 @@
+{{- $namespace := .Release.Namespace -}}
 {{- if .Values.prometheusConfig.enabled -}}
+{{- $counters := .Values.ydb.counters -}}
+  {{- range $cluster := .Values.ydb.clusters -}}
+    {{- if eq $cluster.type "internal" -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ printf "%s-%s" (include "ydb-prometheus.fullname" $) $cluster.storage.name }}
+  namespace: {{ $namespace }}
+  labels: {{- include "ydb-prometheus.labels" $ | nindent 4 }}
+{{ include "ydb-prometheus.internalCluster.serviceMonitor" (tuple $cluster.storage $counters "static") }}
+---
+      {{- range $database := $cluster.databases -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ printf "%s-%s" (include "ydb-prometheus.fullname" $) $database.name }}
+  namespace: {{ $namespace }}
+  labels: {{- include "ydb-prometheus.labels" $ | nindent 4 }}
+{{ include "ydb-prometheus.internalCluster.serviceMonitor" (tuple $database $counters "dynamic") }}
+---
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
 {{- end -}}

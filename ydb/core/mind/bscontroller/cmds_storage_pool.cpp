@@ -457,6 +457,9 @@ namespace NKikimr::NBsController {
             if (driveInfo.NodeId) {
                 device->SetNodeId(driveInfo.NodeId.GetRef());
             }
+            if (driveInfo.PDiskId) {
+                device->SetPDiskId(driveInfo.PDiskId.GetRef());
+            }
             if (driveInfo.Path) {
                 device->SetPath(driveInfo.Path.GetRef());
             }

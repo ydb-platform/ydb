@@ -2,7 +2,7 @@ import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 
-description = 'List storage devices'
+description = 'List available storage devices'
 
 
 def add_options(p):
@@ -15,11 +15,12 @@ def do(args):
 
     all_columns = [
         'SerialNumber',
-        'NodeId',
         'FQDN',
         'Path',
         'Type',
         'StorageStatus',
+        'NodeId:PDiskId',
+        'NodeId',
         'BoxId',
     ]
     visible_columns = [
@@ -28,6 +29,7 @@ def do(args):
         'Path',
         'Type',
         'StorageStatus',
+        'NodeId:PDiskId',
     ]
 
     table_output = table.TableOutput(
@@ -36,14 +38,29 @@ def do(args):
 
     rows = []
     for device in base_config.Device:
+        usedByPDisk = True if device.PDiskId > 0 else False
+
         row = {}
         row['SerialNumber'] = device.SerialNumber
         row['NodeId'] = device.NodeId
         row['FQDN'] = node_to_fqdn[device.NodeId]
-        row['Type'] = kikimr_bsconfig.EPDiskType.Name(device.Type)
-        row['StorageStatus'] = kikimr_bsconfig.TDriveLifeStage.E.Name(device.LifeStage)
         row['Path'] = device.Path
+        row['Type'] = kikimr_bsconfig.EPDiskType.Name(device.Type)
         row['BoxId'] = device.BoxId
+
+        if usedByPDisk:
+            row['NodeId:PDiskId'] = '[%u:%u]' % (device.NodeId, device.PDiskId)
+        else:
+            row['NodeId:PDiskId'] = 'NULL'
+
+        if usedByPDisk:
+            if device.LifeStage == kikimr_bsconfig.TDriveLifeStage.E.ADDED_TO_BSC:
+                row['StorageStatus'] = 'Configured by ydb-dstool'
+            else:
+                row['StorageStatus'] = 'Configured by DefineBox'
+        else:
+            row['StorageStatus'] = 'FREE'
+
         rows.append(row)
 
     table_output.dump(rows, args)

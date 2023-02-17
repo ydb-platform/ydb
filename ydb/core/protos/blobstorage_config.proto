@@ -643,9 +643,10 @@ message TBaseConfig {
         string SerialNumber = 1;
         uint64 BoxId = 2;
         uint32 NodeId = 3;
-        TDriveLifeStage.E LifeStage = 4;
+        uint32 PDiskId = 4;
         string Path = 5;
         EPDiskType Type = 6;
+        TDriveLifeStage.E LifeStage = 7;
     }
 
     repeated TPDisk PDisk = 1;

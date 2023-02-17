@@ -349,6 +349,11 @@ namespace NKikimr {
                             NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE,
                             disk.Serial, disk.LastSeenSerial, disk.LastSeenPath, staticSlotUsage);
 
+                    // Set PDiskId in DrivesSerials
+                    if (auto info = state.DrivesSerials.FindForUpdate(disk.Serial)) {
+                        info->PDiskId = pdiskId.PDiskId;
+                    }
+
                     STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP02, "Create new pdisk", (PDiskId, pdiskId), (Path, disk.Path));
                 }
 
@@ -356,6 +361,14 @@ namespace NKikimr {
             }
 
             for (const auto& pdiskId : state.PDisksToRemove) {
+                // Unset PDiskId in DrivesSerials
+                if (auto pdiskInfo = state.PDisks.Find(pdiskId)) {
+                    if (state.DrivesSerials.Find(pdiskInfo->ExpectedSerial)) {
+                        auto driveInfo = state.DrivesSerials.FindForUpdate(pdiskInfo->ExpectedSerial);
+                        driveInfo->PDiskId.Clear();
+                    }
+                }
+
                 STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP03, "PDisk to remove:", (PDiskId, pdiskId));
             }
             state.CheckConsistency();

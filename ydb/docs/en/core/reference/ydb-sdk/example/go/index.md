@@ -107,7 +107,7 @@ err = db.Table().Do(ctx,
       log.Printf("  > column, name: %s, %s\n", c.Type, c.Name)
     }
     return
-  }
+  },
 )
 if err != nil {
   // handling query execution failure

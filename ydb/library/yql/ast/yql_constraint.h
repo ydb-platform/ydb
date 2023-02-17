@@ -244,6 +244,7 @@ public:
     static const TUniqueConstraintNodeBase* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
     const TUniqueConstraintNodeBase* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
     const TUniqueConstraintNodeBase* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
+    const TUniqueConstraintNodeBase* MakeCommon(const TUniqueConstraintNodeBase* other, TExprContext& ctx) const;
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
@@ -362,6 +363,7 @@ public:
     const TPassthroughConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
 
     static const TPassthroughConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
+    const TPassthroughConstraintNode* MakeCommon(const TPassthroughConstraintNode* other, TExprContext& ctx) const;
 private:
     TMapType Mapping_;
 };

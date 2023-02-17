@@ -20,6 +20,9 @@ struct TRobinHoodCacheHashUsageDetector {
 //TODO: only POD key & payloads are now supported
 template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv, bool CacheHash = TRobinHoodCacheHashUsageDetector<TKey>::UseCache>
 class TRobinHoodHashBase {
+public:
+    using iterator = char*;
+    using const_iterator = const char*;
 protected:
     THash HashLocal;
     TEqual EqualLocal;

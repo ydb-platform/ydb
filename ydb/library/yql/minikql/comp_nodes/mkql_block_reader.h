@@ -13,6 +13,7 @@
 namespace NKikimr::NMiniKQL {
 
 using NYql::NUdf::IBlockReader;
+using NYql::NUdf::TOutputBuffer;
 
 class IBlockItemConverter {
 public:
@@ -23,6 +24,8 @@ public:
 };
 
 using NYql::NUdf::MakeBlockReader;
+using NYql::NUdf::TBlockItemSerializeProps;
+using NYql::NUdf::UpdateBlockItemSerializeProps;
 
 std::unique_ptr<IBlockItemConverter> MakeBlockItemConverter(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type);
 

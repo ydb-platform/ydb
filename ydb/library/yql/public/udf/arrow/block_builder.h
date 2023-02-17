@@ -2,6 +2,7 @@
 
 #include "util.h"
 #include "bit_util.h"
+#include "block_io_buffer.h"
 
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
 
@@ -17,6 +18,7 @@ public:
     virtual size_t MaxLength() const = 0;
     virtual void Add(NUdf::TUnboxedValuePod value) = 0;
     virtual void Add(TBlockItem value) = 0;
+    virtual void Add(TInputBuffer& input) = 0;
     virtual void AddMany(const arrow::ArrayData& array, size_t popCount, const ui8* sparseBitmap, size_t bitmapSize) = 0;
     virtual arrow::Datum Build(bool finish) = 0;
 };
@@ -72,6 +74,12 @@ public:
     }
 
 
+    void Add(TInputBuffer& input) final {
+        Y_VERIFY(CurrLen < MaxLen);
+        DoAdd(input);
+        CurrLen++;
+    }
+
     void AddDefault() {
         Y_VERIFY(CurrLen < MaxLen);
         DoAddDefault();
@@ -108,6 +116,7 @@ public:
 protected:
     virtual void DoAdd(NUdf::TUnboxedValuePod value) = 0;
     virtual void DoAdd(TBlockItem value) = 0;
+    virtual void DoAdd(TInputBuffer& input) = 0;
     virtual void DoAddDefault() = 0;
     virtual void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) = 0;
     virtual TBlockArrayTree::Ptr DoBuildTree(bool finish) = 0;
@@ -208,6 +217,15 @@ public:
         }
 
         DataBuilder->UnsafeAppend(value.As<T>());
+    }
+
+    void DoAdd(TInputBuffer& input) final {
+        if constexpr (Nullable) {
+            if (!input.PopChar()) {
+                return DoAdd(TBlockItem{});
+            }
+        }
+        DoAdd(TBlockItem(input.PopNumber<T>()));
     }
 
     void DoAddDefault() final {
@@ -319,6 +337,18 @@ public:
         if constexpr (Nullable) {
             NullBuilder->UnsafeAppend(1);
         }
+    }
+
+    void DoAdd(TInputBuffer& input) final {
+        if constexpr (Nullable) {
+            if (!input.PopChar()) {
+                return DoAdd(TBlockItem{});
+            }
+        }
+
+        auto str = input.PopString();
+        TStringRef ref(str.data(), str.size());
+        DoAdd(TBlockItem(ref));
     }
 
 
@@ -518,6 +548,18 @@ public:
         }
     }
 
+    void DoAdd(TInputBuffer& input) final {
+        if constexpr (Nullable) {
+            if (!input.PopChar()) {
+                return DoAdd(TBlockItem{});
+            }
+        }
+
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            Children[i]->Add(input);
+        }
+    }
+
     void DoAddDefault() final {
         if constexpr (Nullable) {
             NullBuilder->UnsafeAppend(1);
@@ -613,6 +655,16 @@ public:
 
         NullBuilder->UnsafeAppend(1);
         Inner->Add(value.GetOptionalValue());
+    }
+
+    void DoAdd(TInputBuffer& input) final {
+        if (!input.PopChar()) {
+            NullBuilder->UnsafeAppend(0);
+            Inner->AddDefault();
+            return;
+        }
+
+        Inner->Add(input);
     }
 
     void DoAddDefault() final {

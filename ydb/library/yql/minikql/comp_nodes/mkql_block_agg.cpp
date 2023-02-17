@@ -1,5 +1,6 @@
 #include "mkql_block_agg.h"
 #include "mkql_block_agg_factory.h"
+#include "mkql_block_reader.h"
 #include "mkql_block_builder.h"
 #include "mkql_block_impl.h"
 #include "mkql_rh_hash.h"
@@ -376,353 +377,28 @@ struct TKeyParams {
     TType* Type;
 };
 
-class TInputBuffer {
-public:
-    TInputBuffer(TStringBuf buf)
-        : Buf_(buf)
-    {}
-
-    char PopChar() {
-        Ensure(1);
-        char c = Buf_.Data()[Pos_];
-        ++Pos_;
-        return c;
-    }
-
-    template <typename T>
-    T PopNumber() {
-        Ensure(sizeof(T));
-        T t = *(const T*)(Buf_.Data() + Pos_);
-        Pos_ += sizeof(T);
-        return t;
-    }
-
-    std::string_view PopString() {
-        ui32 size = PopNumber<ui32>();
-        Ensure(size);
-        std::string_view result(Buf_.Data() + Pos_, size);
-        Pos_ += size;
-        return result;
-    }
-
-private:
-    void Ensure(size_t delta) {
-        MKQL_ENSURE(Pos_ + delta <= Buf_.Size(), "Unexpected end of buffer");
-    }
-
-private:
-    size_t Pos_ = 0;
-    TStringBuf Buf_;
-};
-
-class TOutputBuffer {
-public:
-    void PushChar(char c) {
-        Ensure(1);
-        Vec_[Pos_] = c;
-        ++Pos_;
-    }
-
-    template <typename T>
-    void PushNumber(T t) {
-        Ensure(sizeof(T));
-        *(T*)&Vec_[Pos_] = t;
-        Pos_ += sizeof(T);
-    }
-
-    void PushString(std::string_view data) {
-        Ensure(sizeof(ui32) + data.size());
-        *(ui32*)&Vec_[Pos_] = data.size();
-        Pos_ += sizeof(ui32);
-        std::memcpy(Vec_.data() + Pos_, data.data(), data.size());
-        Pos_ += data.size();
-    }
-
-    // fill with zeros
-    void Resize(size_t size) {
-        Pos_ = 0;
-        Vec_.clear();
-        Vec_.resize(size);
-    }
-
-    void Rewind() {
-        Pos_ = 0;
-    }
-
-    TStringBuf Finish() const {
-        return TStringBuf(Vec_.data(), Vec_.data() + Pos_);
-    }
-
-private:
-    void Ensure(size_t delta) {
-        if (Pos_ + delta > Vec_.size()) {
-            if (Pos_ + delta > Vec_.capacity()) {
-                Vec_.reserve(Max(2 * Vec_.capacity(), Pos_ + delta));
-            }
-            // TODO: replace TVector - resize() performs unneeded zeroing here
-            Vec_.resize(Pos_ + delta);
-        }
-    }
-
-private:
-    size_t Pos_ = 0;
-    TVector<char> Vec_;
-};
-
-class IKeyColumnBuilder {
-public:
-    virtual ~IKeyColumnBuilder() = default;
-
-    // decode part of buffer and advances position
-    virtual void Add(TInputBuffer& in) = 0;
-
-    virtual NUdf::TUnboxedValue Build() = 0;
-};
-
-class IKeySerializer {
-public:
-    virtual ~IKeySerializer() = default;
-
-    // handle scalar or array item
-    virtual void Serialize(const arrow::Datum& value, ui64 index, TOutputBuffer& out) const = 0;
-
-    virtual std::unique_ptr<IKeyColumnBuilder> MakeBuilder(ui64 size, TComputationContext& ctx) const = 0;
-};
-
-template <typename T, typename TBuilder, bool IsOptional>
-class TFixedSizeKeyColumnBuilder : public IKeyColumnBuilder  {
-public:
-    TFixedSizeKeyColumnBuilder(ui64 size, const std::shared_ptr<arrow::DataType>& dataType, TComputationContext& ctx)
-        : Builder_(dataType, &ctx.ArrowMemoryPool)
-        , Ctx_(ctx)
-    {
-        ARROW_OK(this->Builder_.Reserve(size));
-    }
-
-    void Add(TInputBuffer& in) final {
-        if constexpr (IsOptional) {
-            if (in.PopChar()) {
-                auto x = in.PopNumber<T>();
-                this->Builder_.UnsafeAppend(x);
-            } else {
-                this->Builder_.UnsafeAppendNull();
-            }
-        } else {
-            auto x = in.PopNumber<T>();
-            this->Builder_.UnsafeAppend(x);
-        }
-    }
-
-    NUdf::TUnboxedValue Build() final {
-        std::shared_ptr<arrow::ArrayData> result;
-        ARROW_OK(this->Builder_.FinishInternal(&result));
-        return Ctx_.HolderFactory.CreateArrowBlock(result);
-    }
-
-private:
-    TBuilder Builder_;
-    TComputationContext& Ctx_;
-};
-
-template <typename T, bool IsOptional>
-class TStringKeyColumnBuilder : public IKeyColumnBuilder  {
-public:
-    using TArrowType = typename TPrimitiveDataType<T>::TResult;
-    using TOffset = typename TArrowType::offset_type;
-
-    TStringKeyColumnBuilder(ui64 size, TComputationContext& ctx)
-        : Ctx_(ctx)
-        , MaxLen_(size)
-    {
-        Reserve();
-    }
-
-    void Add(TInputBuffer& in) final {
-        if constexpr (IsOptional) {
-            if (!in.PopChar()) {
-                NullBuilder_->UnsafeAppend(0);
-                AppendCurrentOffset();
-                return;
-            }
-        }
-
-        std::string_view str = in.PopString();
-
-        size_t currentLen = DataBuilder_->Length();
-        // empty string can always be appended
-        if (!str.empty() && currentLen + str.size() > MaxBlockSizeInBytes) {
-            if (currentLen) {
-                FlushChunk(false);
-            }
-            if (str.size() > MaxBlockSizeInBytes) {
-                DataBuilder_->Reserve(str.size());
-            }
-        }
-
-        AppendCurrentOffset();
-        DataBuilder_->UnsafeAppend((const ui8*)str.data(), str.size());
-        if constexpr (IsOptional) {
-            NullBuilder_->UnsafeAppend(1);
-        }
-    }
-
-    NUdf::TUnboxedValue Build() final {
-        FlushChunk(true);
-        arrow::ArrayVector chunks;
-        for (auto& data : Chunks_) {
-            chunks.push_back(arrow::Datum(data).make_array());
-        }
-        Y_VERIFY(!chunks.empty());
-
-        auto chunked = ARROW_RESULT(arrow::ChunkedArray::Make(std::move(chunks), std::make_shared<TArrowType>()));
-        return Ctx_.HolderFactory.CreateArrowBlock(std::move(chunked));
-    }
-
-private:
-    void Reserve() {
-        if constexpr (IsOptional) {
-            NullBuilder_ = std::make_unique<TTypedBufferBuilder<ui8>>(&Ctx_.ArrowMemoryPool);
-            NullBuilder_->Reserve(MaxLen_ + 1);
-        }
-        OffsetsBuilder_ = std::make_unique<TTypedBufferBuilder<TOffset>>(&Ctx_.ArrowMemoryPool);
-        OffsetsBuilder_->Reserve(MaxLen_ + 1);
-        DataBuilder_ = std::make_unique<TTypedBufferBuilder<ui8>>(&Ctx_.ArrowMemoryPool);
-        DataBuilder_->Reserve(MaxBlockSizeInBytes);
-    }
-
-    void AppendCurrentOffset() {
-        OffsetsBuilder_->UnsafeAppend(DataBuilder_->Length());
-    }
-
-    void FlushChunk(bool finish) {
-        const auto length = OffsetsBuilder_->Length();
-        Y_VERIFY(length > 0);
-
-        AppendCurrentOffset();
-        std::shared_ptr<arrow::Buffer> nullBitmap;
-        if constexpr (IsOptional) {
-            nullBitmap = NullBuilder_->Finish();
-            nullBitmap = MakeDenseBitmap(nullBitmap->data(), length, &Ctx_.ArrowMemoryPool);
-        }
-        std::shared_ptr<arrow::Buffer> offsets = OffsetsBuilder_->Finish();
-        std::shared_ptr<arrow::Buffer> data = DataBuilder_->Finish();
-
-        auto arrowType = std::make_shared<TArrowType>();
-        Chunks_.push_back(arrow::ArrayData::Make(arrowType, length, { nullBitmap, offsets, data }));
-        if (!finish) {
-            Reserve();
-        }
-    }
-
-    std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder_;
-    std::unique_ptr<TTypedBufferBuilder<TOffset>> OffsetsBuilder_;
-    std::unique_ptr<TTypedBufferBuilder<ui8>> DataBuilder_;
-
-    std::vector<std::shared_ptr<arrow::ArrayData>> Chunks_;
-
-    TComputationContext& Ctx_;
-    const ui64 MaxLen_;
-};
-
-template <typename T, typename TScalar, typename TBuilder, bool IsOptional>
-class TFixedSizeKeySerializer : public IKeySerializer {
-public:
-    TFixedSizeKeySerializer(const std::shared_ptr<arrow::DataType>& dataType)
-        : DataType_(dataType)
-    {}
-
-    virtual void Serialize(const arrow::Datum& value, ui64 index, TOutputBuffer& out) const final {
-        T x;
-        if (value.is_scalar()) {
-            const auto& scalar = value.scalar_as<TScalar>();
-            if constexpr (IsOptional) {
-                if (scalar.is_valid) {
-                    out.PushChar(1);
-                    x = scalar.value;
-                } else {
-                    out.PushChar(0);
-                    return;
-                }
-               
-            } else {
-                Y_ASSERT(scalar.is_valid);
-                x = scalar.value;
-            }
-        } else {
-            const auto& array = *value.array();
-            if constexpr (IsOptional) {
-                if (array.GetNullCount() == 0 || arrow::BitUtil::GetBit(array.GetValues<uint8_t>(0, 0), index + array.offset)) {
-                    out.PushChar(1);
-                    x = array.GetValues<T>(1)[index];
-                } else {
-                    out.PushChar(0);
-                    return;
-                }
-            } else {
-                x = array.GetValues<T>(1)[index];
-            }
-        }
-
-        out.PushNumber<T>(x);
-    }
-
-    std::unique_ptr<IKeyColumnBuilder> MakeBuilder(ui64 size, TComputationContext& ctx) const final {
-        return std::make_unique<TFixedSizeKeyColumnBuilder<T, TBuilder, IsOptional>>(size, DataType_, ctx);
-    }
-
-private:
-    const std::shared_ptr<arrow::DataType> DataType_;
-};
-
-template <typename T, bool IsOptional>
-class TStringKeySerializer : public IKeySerializer {
-public:
-    using TOffset = typename TPrimitiveDataType<T>::TResult::offset_type;
-
-    TStringKeySerializer() = default;
-
-    virtual void Serialize(const arrow::Datum& value, ui64 index, TOutputBuffer& out) const final {
-        std::string_view x;
-        if (value.is_scalar()) {
-            const auto& scalar = *value.scalar();
-            if constexpr (IsOptional) {
-                if (!scalar.is_valid) {
-                    out.PushChar(0);
-                    return;
-                }
-                out.PushChar(1);
-            }
-            x = GetStringScalarValue(scalar);
-        } else {
-            const auto& array = *value.array();
-            if constexpr (IsOptional) {
-                bool isValid = array.GetNullCount() == 0 ||
-                    arrow::BitUtil::GetBit(array.GetValues<uint8_t>(0, 0), index + array.offset);
-                if (!isValid) {
-                    out.PushChar(0);
-                    return;
-                }
-                out.PushChar(1);
-            }
-            const TOffset* offsets = array.GetValues<TOffset>(1);
-            const char* data = array.GetValues<char>(2, 0);
-            x = std::string_view(data + offsets[index], offsets[index + 1] - offsets[index]);
-        }
-
-        out.PushString(x);
-    }
-
-    std::unique_ptr<IKeyColumnBuilder> MakeBuilder(ui64 size, TComputationContext& ctx) const final {
-        return std::make_unique<TStringKeyColumnBuilder<T, IsOptional>>(size, ctx);
-    }
-};
-
 size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
     size_t len = (size_t)arr->length;
     MKQL_ENSURE(arr->GetNullCount() == 0, "Bitmap block should not have nulls");
     const ui8* src = arr->GetValues<ui8>(1);
     return GetSparseBitmapPopCount(src, len);
 }
+
+size_t CalcMaxBlockLenForOutput(TType* out) {
+    const auto outputType = AS_TYPE(TFlowType, out);
+    const auto outputTupleType = AS_TYPE(TTupleType, outputType->GetItemType());
+    MKQL_ENSURE(outputTupleType->GetElementsCount() > 0, "Expecting at least one output column");
+
+    size_t maxBlockItemSize = 0;
+    for (ui32 i = 0; i < outputTupleType->GetElementsCount() - 1; ++i) {
+        auto type = AS_TYPE(TBlockType, outputTupleType->GetElementType(i));
+        MKQL_ENSURE(type->GetShape() != TBlockType::EShape::Scalar, "Expecting block type");
+        maxBlockItemSize = std::max(maxBlockItemSize, CalcMaxBlockItemSize(type->GetItemType()));
+    }
+
+    return CalcBlockLen(maxBlockItemSize);
+}
+
 
 class TBlockCombineAllWrapper : public TStatefulWideFlowComputationNode<TBlockCombineAllWrapper> {
 public:
@@ -960,7 +636,7 @@ public:
         std::optional<ui32> filterColumn,
         size_t width,
         const std::vector<TKeyParams>& keys,
-        std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+        size_t maxBlockLen,
         ui32 keyLength,
         TVector<TAggParams<TAggregator>>&& aggsParams,
         ui32 streamIndex,
@@ -971,7 +647,7 @@ public:
         , Width_(width)
         , OutputWidth_(keys.size() + aggsParams.size() + 1)
         , Keys_(keys)
-        , KeySerializers_(std::move(keySerializers))
+        , MaxBlockLen_(maxBlockLen)
         , KeyLength_(keyLength)
         , AggsParams_(std::move(aggsParams))
         , StreamIndex_(streamIndex)
@@ -995,7 +671,7 @@ public:
             return EFetchResult::Finish;
         }
 
-        for (;;) {
+        while (!s.WritingOutput_) {
             auto result = Flow_->FetchValues(ctx, s.ValuePointers_.data());
             if (result == EFetchResult::Yield) {
                 return result;
@@ -1054,7 +730,7 @@ public:
                     out.Rewind();
                     // encode key
                     for (ui32 i = 0; i < keysDatum.size(); ++i) {
-                        KeySerializers_[i]->Serialize(keysDatum[i], row, out);
+                        s.Readers_[i]->SaveItem(*keysDatum[i].array(), row, out);
                     }
 
                     auto str = out.Finish();
@@ -1078,103 +754,114 @@ public:
                     }
                 }
             } else {
-                s.IsFinished_ = true;
                 if (!s.HasValues_) {
+                    s.IsFinished_ = true;
                     return EFetchResult::Finish;
                 }
 
-                // export results, TODO: split by batches
-                ui64 size;
-                if constexpr (UseSet) {
-                    size = s.HashSet_->GetSize();
-                } else {
-                    if (!InlineAggState) {
-                        size = s.HashFixedMap_->GetSize();
-                    } else {
-                        size = s.HashMap_->GetSize();
-                    }
-                }
-
-                TVector<std::unique_ptr<IKeyColumnBuilder>> keyBuilders;
-                for (const auto& ks : KeySerializers_) {
-                    keyBuilders.emplace_back(ks->MakeBuilder(size, ctx));
-                }
+                s.WritingOutput_ = true;
+                s.OutputBlockSize_ = 0;
+                s.PrepareAggBuilders(MaxBlockLen_);
 
                 if constexpr (UseSet) {
-                    for (auto iter = s.HashSet_->Begin(); iter != s.HashSet_->End(); s.HashSet_->Advance(iter)) {
-                        if (!s.HashSet_->IsValid(iter)) {
-                            continue;
-                        }
-
-                        const TKey& key = s.HashSet_->GetKey(iter);
-                        TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-                        for (auto& kb : keyBuilders) {
-                            kb->Add(in);
-                        }
-                    }
+                    s.HashSetIt_ = s.HashSet_->Begin();
                 } else {
-                    TVector<std::unique_ptr<IAggColumnBuilder>> aggBuilders;
-                    for (const auto& a : s.Aggs_) {
-                        if constexpr (Finalize) {
-                            aggBuilders.emplace_back(a->MakeResultBuilder(size));
-                        } else {
-                            aggBuilders.emplace_back(a->MakeStateBuilder(size));
-                        }
-                    }
-
                     if (!InlineAggState) {
-                        Iterate(*s.HashFixedMap_, keyBuilders, aggBuilders, output, s);
+                        s.HashFixedMapIt_ = s.HashFixedMap_->Begin();
                     } else {
-                        Iterate(*s.HashMap_, keyBuilders, aggBuilders, output, s);
-                    }
-
-                    for (size_t i = 0; i < s.Aggs_.size(); ++i) {
-                        if (output[Keys_.size() + i]) {
-                            *output[Keys_.size() + i] = aggBuilders[i]->Build();
-                        }
+                        s.HashMapIt_ = s.HashMap_->Begin();
                     }
                 }
+            }
+        }
 
-                for (ui32 i = 0; i < Keys_.size(); ++i) {
-                    if (output[i]) {
-                        *output[i] = keyBuilders[i]->Build();
+        while (s.WritingOutput_) {
+            if constexpr (UseSet) {
+                for (; s.HashSetIt_ != s.HashSet_->End(); s.HashSet_->Advance(s.HashSetIt_)) {
+                    if (!s.HashSet_->IsValid(s.HashSetIt_)) {
+                        continue;
                     }
-                }
 
-                MKQL_ENSURE(output[OutputWidth_ - 1], "Block size should not be marked as unused");
-                *output[OutputWidth_ - 1] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(size)));
+                    if (s.OutputBlockSize_ == MaxBlockLen_) {
+                        s.Flush(output, MaxBlockLen_, false, ctx);
+                        return EFetchResult::One;
+                    }
+
+                    const TKey& key = s.HashSet_->GetKey(s.HashSetIt_);
+                    TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
+                    for (auto& kb : s.Builders_) {
+                        kb->Add(in);
+                    }
+                    s.OutputBlockSize_++;
+                }
+                break;
+            } else {
+                bool done = InlineAggState ?
+                    Iterate(*s.HashMap_, s.HashMapIt_, output, s) :
+                    Iterate(*s.HashFixedMap_, s.HashFixedMapIt_, output, s);
+                if (done) {
+                    break;
+                }
+                s.Flush(output, MaxBlockLen_, false, ctx);
                 return EFetchResult::One;
             }
         }
+
+        s.IsFinished_ = true;
+        s.WritingOutput_ = false;
+        if (s.OutputBlockSize_) {
+            s.Flush(output, MaxBlockLen_, true, ctx);
+            return EFetchResult::One;
+        }
+        return EFetchResult::Finish;
     }
 
 private:
     struct TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
+        using TDynMapImpl = TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>;
+        using TSetImpl = THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>;
+        using TFixedMapImpl = TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>;
 
         TVector<NUdf::TUnboxedValue> Values_;
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
         TVector<std::unique_ptr<TAggregator>> Aggs_;
         TVector<ui32> AggStateOffsets_;
         TVector<NUdf::TUnboxedValue> UnwrappedValues_;
+        TVector<std::unique_ptr<IBlockReader>> Readers_;
+        TVector<std::unique_ptr<IArrayBuilder>> Builders_;
+        TVector<std::unique_ptr<IAggColumnBuilder>> AggBuilders_;
+        bool WritingOutput_ = false;
         bool IsFinished_ = false;
         bool HasValues_ = false;
         ui32 TotalStateSize_ = 0;
-        std::unique_ptr<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>> HashMap_;
-        std::unique_ptr<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>> HashSet_;
-        std::unique_ptr<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>> HashFixedMap_;
+        size_t OutputBlockSize_ = 0;
+        std::unique_ptr<TDynMapImpl> HashMap_;
+        typename TDynMapImpl::iterator HashMapIt_;
+        std::unique_ptr<TSetImpl> HashSet_;
+        typename TSetImpl::iterator HashSetIt_;
+        std::unique_ptr<TFixedMapImpl> HashFixedMap_;
+        typename TFixedMapImpl::iterator HashFixedMapIt_;
         TPagedArena Arena_;
 
         TState(TMemoryUsageInfo* memInfo, ui32 keyLength, size_t width, std::optional<ui32> filterColumn, const TVector<TAggParams<TAggregator>>& params,
-            const TVector<TVector<ui32>>& streams, TComputationContext& ctx)
+            const TVector<TVector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
             : TBase(memInfo)
             , Values_(width)
             , ValuePointers_(width)
             , UnwrappedValues_(width)
+            , Readers_(keys.size())
+            , Builders_(keys.size())
             , Arena_(TlsAllocState)
         {
             for (size_t i = 0; i < width; ++i) {
                 ValuePointers_[i] = &Values_[i];
+            }
+
+            for (size_t i = 0; i < keys.size(); ++i) {
+                auto itemType = AS_TYPE(TBlockType, keys[i].Type)->GetItemType();
+                Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
+                Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, ctx.ArrowMemoryPool, maxBlockLen);
             }
 
             if constexpr (Many) {
@@ -1201,6 +888,48 @@ private:
                 }
             } 
         }
+
+        void PrepareAggBuilders(size_t maxBlockSize) {
+            if constexpr (!UseSet) {
+                AggBuilders_.clear();
+                AggBuilders_.reserve(Aggs_.size());
+                for (const auto& a : Aggs_) {
+                    if constexpr (Finalize) {
+                        AggBuilders_.emplace_back(a->MakeResultBuilder(maxBlockSize));
+                    } else {
+                        AggBuilders_.emplace_back(a->MakeStateBuilder(maxBlockSize));
+                    }
+                }
+            }
+        }
+
+        void Flush(NUdf::TUnboxedValue*const* output, size_t maxBlockSize, bool final, TComputationContext& ctx) {
+            if (OutputBlockSize_ == 0) {
+                return;
+            }
+
+            for (size_t i = 0; i < Builders_.size(); ++i) {
+                if (output[i]) {
+                    *output[i] = ctx.HolderFactory.CreateArrowBlock(Builders_[i]->Build(final));
+                }
+            }
+
+            if constexpr (!UseSet) {
+                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                    if (output[Builders_.size() + i]) {
+                        *output[Builders_.size() + i] = AggBuilders_[i]->Build();
+                    }
+                }
+                if (!final) {
+                    PrepareAggBuilders(maxBlockSize);
+                }
+            }
+
+            size_t outputWidth = Builders_.size() + Aggs_.size() + 1;
+            MKQL_ENSURE(output[outputWidth - 1], "Block size should not be marked as unused");
+            *output[outputWidth - 1] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)));
+            OutputBlockSize_ = 0;
+        }
     };
 
 private:
@@ -1210,7 +939,7 @@ private:
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(KeyLength_, Width_, FilterColumn_, AggsParams_, Streams_, ctx);
+            state = ctx.HolderFactory.Create<TState>(KeyLength_, Width_, FilterColumn_, AggsParams_, Streams_, Keys_, MaxBlockLen_, ctx);
         }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
@@ -1302,13 +1031,15 @@ private:
     }
 
     template <typename THash>
-    void Iterate(THash& hash, const TVector<std::unique_ptr<IKeyColumnBuilder>>& keyBuilders,
-        const TVector<std::unique_ptr<IAggColumnBuilder>>& aggBuilders,
-        NUdf::TUnboxedValue*const* output, TState& s) const {
-        MKQL_ENSURE(s.IsFinished_, "Supposed to be called at the end");
-        for (auto iter = hash.Begin(); iter != hash.End(); hash.Advance(iter)) {
+    bool Iterate(THash& hash, typename THash::iterator& iter, NUdf::TUnboxedValue*const* output, TState& s) const {
+        MKQL_ENSURE(s.WritingOutput_, "Supposed to be called at the end");
+        for (; iter != hash.End(); hash.Advance(iter)) {
             if (!hash.IsValid(iter)) {
                 continue;
+            }
+
+            if (s.OutputBlockSize_ == MaxBlockLen_) {
+                return false;
             }
 
             const TKey& key = hash.GetKey(iter);
@@ -1321,7 +1052,7 @@ private:
             }
 
             TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-            for (auto& kb : keyBuilders) {
+            for (auto& kb : s.Builders_) {
                 kb->Add(in);
             }
 
@@ -1335,13 +1066,15 @@ private:
 
             for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                 if (output[Keys_.size() + i]) {
-                    aggBuilders[i]->Add(ptr);
+                    s.AggBuilders_[i]->Add(ptr);
                     s.Aggs_[i]->DestroyState(ptr);
                 }
 
                 ptr += s.Aggs_[i]->StateSize;
             }
+            s.OutputBlockSize_++;
         }
+        return true;
     }
 
     ui64 GetBatchLength(const NUdf::TUnboxedValue* columns) const {
@@ -1354,8 +1087,8 @@ private:
     const size_t Width_;
     const size_t OutputWidth_;
     const std::vector<TKeyParams> Keys_;
+    const size_t MaxBlockLen_;
     const TVector<TAggParams<TAggregator>> AggsParams_;
-    std::vector<std::unique_ptr<IKeySerializer>> KeySerializers_;
     const ui32 KeyLength_;
     const ui32 StreamIndex_;
     const TVector<TVector<ui32>> Streams_;
@@ -1372,10 +1105,10 @@ public:
         std::optional<ui32> filterColumn,
         size_t width,
         const std::vector<TKeyParams>& keys,
-        std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+        size_t maxBlockLen,
         ui32 keyLength,
         TVector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams)
-        : TBase(mutables, flow, filterColumn, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams), 0, {})
+        : TBase(mutables, flow, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams), 0, {})
     {}
 };
 
@@ -1389,10 +1122,10 @@ public:
         IComputationWideFlowNode* flow,
         size_t width,
         const std::vector<TKeyParams>& keys,
-        std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+        size_t maxBlockLen,
         ui32 keyLength,
         TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams)
-        : TBase(mutables, flow, {}, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams), 0, {})
+        : TBase(mutables, flow, {}, width, keys, maxBlockLen, keyLength, std::move(aggsParams), 0, {})
     {}
 };
 
@@ -1406,11 +1139,11 @@ public:
         IComputationWideFlowNode* flow,
         size_t width,
         const std::vector<TKeyParams>& keys,
-        std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+        size_t maxBlockLen,
         ui32 keyLength,
         TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
         ui32 streamIndex, TVector<TVector<ui32>>&& streams)
-        : TBase(mutables, flow, {}, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams), streamIndex, std::move(streams))
+        : TBase(mutables, flow, {}, width, keys, maxBlockLen, keyLength, std::move(aggsParams), streamIndex, std::move(streams))
     {}
 };
 
@@ -1509,17 +1242,17 @@ IComputationNode* MakeBlockCombineHashedWrapper(
     std::optional<ui32> filterColumn,
     size_t width,
     const std::vector<TKeyParams>& keys,
-    std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+    size_t maxBlockLen,
     TVector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams) {
     if (totalStateSize <= sizeof(TState8)) {
-        return new TBlockCombineHashedWrapper<TKey, TState8, UseSet, UseFilter>(mutables, flow, filterColumn, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams));
+        return new TBlockCombineHashedWrapper<TKey, TState8, UseSet, UseFilter>(mutables, flow, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
     }
 
     if (totalStateSize <= sizeof(TState16)) {
-        return new TBlockCombineHashedWrapper<TKey, TState16, UseSet, UseFilter>(mutables, flow, filterColumn, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams));
+        return new TBlockCombineHashedWrapper<TKey, TState16, UseSet, UseFilter>(mutables, flow, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
     }
 
-    return new TBlockCombineHashedWrapper<TKey, TStateArena, UseSet, UseFilter>(mutables, flow, filterColumn, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams));
+    return new TBlockCombineHashedWrapper<TKey, TStateArena, UseSet, UseFilter>(mutables, flow, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
 }
 
 template <bool UseSet, bool UseFilter>
@@ -1532,25 +1265,25 @@ IComputationNode* MakeBlockCombineHashedWrapper(
     std::optional<ui32> filterColumn,
     size_t width,
     const std::vector<TKeyParams>& keys,
-    std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+    size_t maxBlockLen,
     TVector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams) {
     if (totalKeysSize && *totalKeysSize <= sizeof(ui32)) {
-        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, ui32>(*totalKeysSize, totalStateSize, mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
+        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, ui32>(*totalKeysSize, totalStateSize, mutables, flow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
     if (totalKeysSize && *totalKeysSize <= sizeof(ui64)) {
-        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, ui64>(*totalKeysSize, totalStateSize, mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
+        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, ui64>(*totalKeysSize, totalStateSize, mutables, flow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
     if (totalKeysSize && *totalKeysSize <= sizeof(TKey16)) {
-        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TKey16>(*totalKeysSize, totalStateSize, mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
+        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TKey16>(*totalKeysSize, totalStateSize, mutables, flow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
     if (totalKeysSize && isFixed) {
-        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TExternalFixedSizeKey>(*totalKeysSize, totalStateSize, mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
+        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TExternalFixedSizeKey>(*totalKeysSize, totalStateSize, mutables, flow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
-    return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TSSOKey>(Max<ui32>(), totalStateSize, mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
+    return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TSSOKey>(Max<ui32>(), totalStateSize, mutables, flow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
 }
 
 template <typename TKey, bool UseSet>
@@ -1561,18 +1294,18 @@ IComputationNode* MakeBlockMergeFinalizeHashedWrapper(
     IComputationWideFlowNode* flow,
     size_t width,
     const std::vector<TKeyParams>& keys,
-    std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+    size_t maxBlockLen,
     TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams) {
 
     if (totalStateSize <= sizeof(TState8)) {
-        return new TBlockMergeFinalizeHashedWrapper<TKey, TState8, UseSet>(mutables, flow, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams));
+        return new TBlockMergeFinalizeHashedWrapper<TKey, TState8, UseSet>(mutables, flow, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
     }
 
     if (totalStateSize <= sizeof(TState16)) {
-        return new TBlockMergeFinalizeHashedWrapper<TKey, TState16, UseSet>(mutables, flow, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams));
+        return new TBlockMergeFinalizeHashedWrapper<TKey, TState16, UseSet>(mutables, flow, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
     }
 
-    return new TBlockMergeFinalizeHashedWrapper<TKey, TStateArena, UseSet>(mutables, flow, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams));
+    return new TBlockMergeFinalizeHashedWrapper<TKey, TStateArena, UseSet>(mutables, flow, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
 }
 
 template <bool UseSet>
@@ -1584,25 +1317,25 @@ IComputationNode* MakeBlockMergeFinalizeHashedWrapper(
     IComputationWideFlowNode* flow,
     size_t width,
     const std::vector<TKeyParams>& keys,
-    std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+    size_t maxBlockLen,
     TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams) {
     if (totalKeysSize && *totalKeysSize <= sizeof(ui32)) {
-        return MakeBlockMergeFinalizeHashedWrapper<ui32, UseSet>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams));
+        return MakeBlockMergeFinalizeHashedWrapper<ui32, UseSet>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
     if (totalKeysSize && *totalKeysSize <= sizeof(ui64)) {
-        return MakeBlockMergeFinalizeHashedWrapper<ui64, UseSet>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams));
+        return MakeBlockMergeFinalizeHashedWrapper<ui64, UseSet>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
     if (totalKeysSize && *totalKeysSize <= sizeof(TKey16)) {
-        return MakeBlockMergeFinalizeHashedWrapper<TKey16, UseSet>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams));
+        return MakeBlockMergeFinalizeHashedWrapper<TKey16, UseSet>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
     if (totalKeysSize && isFixed) {
-        return MakeBlockMergeFinalizeHashedWrapper<TExternalFixedSizeKey, UseSet>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams));
+        return MakeBlockMergeFinalizeHashedWrapper<TExternalFixedSizeKey, UseSet>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
-    return MakeBlockMergeFinalizeHashedWrapper<TSSOKey, UseSet>(Max<ui32>(), totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams));
+    return MakeBlockMergeFinalizeHashedWrapper<TSSOKey, UseSet>(Max<ui32>(), totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams));
 }
 
 template <typename TKey>
@@ -1613,20 +1346,20 @@ IComputationNode* MakeBlockMergeManyFinalizeHashedWrapper(
     IComputationWideFlowNode* flow,
     size_t width,
     const std::vector<TKeyParams>& keys,
-    std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+    size_t maxBlockLen,
     TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
     ui32 streamIndex,
     TVector<TVector<ui32>>&& streams) {
 
     if (totalStateSize <= sizeof(TState8)) {
-        return new TBlockMergeManyFinalizeHashedWrapper<TKey, TState8>(mutables, flow, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams), streamIndex, std::move(streams));
+        return new TBlockMergeManyFinalizeHashedWrapper<TKey, TState8>(mutables, flow, width, keys, maxBlockLen, keyLength, std::move(aggsParams), streamIndex, std::move(streams));
     }
 
     if (totalStateSize <= sizeof(TState16)) {
-        return new TBlockMergeManyFinalizeHashedWrapper<TKey, TState16>(mutables, flow, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams), streamIndex, std::move(streams));
+        return new TBlockMergeManyFinalizeHashedWrapper<TKey, TState16>(mutables, flow, width, keys, maxBlockLen, keyLength, std::move(aggsParams), streamIndex, std::move(streams));
     }
 
-    return new TBlockMergeManyFinalizeHashedWrapper<TKey, TStateArena>(mutables, flow, width, keys, std::move(keySerializers), keyLength, std::move(aggsParams), streamIndex, std::move(streams));
+    return new TBlockMergeManyFinalizeHashedWrapper<TKey, TStateArena>(mutables, flow, width, keys, maxBlockLen, keyLength, std::move(aggsParams), streamIndex, std::move(streams));
 }
 
 IComputationNode* MakeBlockMergeManyFinalizeHashedWrapper(
@@ -1637,158 +1370,39 @@ IComputationNode* MakeBlockMergeManyFinalizeHashedWrapper(
     IComputationWideFlowNode* flow,
     size_t width,
     const std::vector<TKeyParams>& keys,
-    std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+    size_t maxBlockLen,
     TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
     ui32 streamIndex,
     TVector<TVector<ui32>>&& streams) {
     if (totalKeysSize && *totalKeysSize <= sizeof(ui32)) {
-        return MakeBlockMergeManyFinalizeHashedWrapper<ui32>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+        return MakeBlockMergeManyFinalizeHashedWrapper<ui32>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams), streamIndex, std::move(streams));
     }
 
     if (totalKeysSize && *totalKeysSize <= sizeof(ui64)) {
-        return MakeBlockMergeManyFinalizeHashedWrapper<ui64>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+        return MakeBlockMergeManyFinalizeHashedWrapper<ui64>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams), streamIndex, std::move(streams));
     }
 
     if (totalKeysSize && *totalKeysSize <= sizeof(TKey16)) {
-        return MakeBlockMergeManyFinalizeHashedWrapper<TKey16>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+        return MakeBlockMergeManyFinalizeHashedWrapper<TKey16>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams), streamIndex, std::move(streams));
     }
 
     if (totalKeysSize && isFixed) {
-        return MakeBlockMergeManyFinalizeHashedWrapper<TExternalFixedSizeKey>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+        return MakeBlockMergeManyFinalizeHashedWrapper<TExternalFixedSizeKey>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams), streamIndex, std::move(streams));
     }
 
-    return MakeBlockMergeManyFinalizeHashedWrapper<TSSOKey>(Max<ui32>(), totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+    return MakeBlockMergeManyFinalizeHashedWrapper<TSSOKey>(Max<ui32>(), totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams), streamIndex, std::move(streams));
 }
 
-void PrepareKeys(const std::vector<TKeyParams>& keys, TMaybe<ui32>& totalKeysSize, bool& isFixed, std::vector<std::unique_ptr<IKeySerializer>>& keySerializers) {
-    isFixed = true;
-    totalKeysSize = 0;
-    keySerializers.clear();
-    for (const auto& k : keys) {
-        auto itemType = AS_TYPE(TBlockType, k.Type)->GetItemType();
-        bool isOptional;
-        auto dataType = UnpackOptionalData(itemType, isOptional);
-        if (isOptional && totalKeysSize) {
-            *totalKeysSize += 1;
-            isFixed = false;
-        }
-
-        switch (*dataType->GetDataSlot()) {
-        case NUdf::EDataSlot::Int8:
-            if (totalKeysSize) {
-                *totalKeysSize += 1;
-            }
-            if (isOptional) {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<i8, arrow::Int8Scalar, arrow::Int8Builder, true>>(arrow::int8()));
-            } else {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<i8, arrow::Int8Scalar, arrow::Int8Builder, false>>(arrow::int8()));
-            }
-
-            break;
-        case NUdf::EDataSlot::Bool:
-        case NUdf::EDataSlot::Uint8:
-            if (totalKeysSize) {
-                *totalKeysSize += 1;
-            }
-            if (isOptional) {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<ui8, arrow::UInt8Scalar, arrow::UInt8Builder, true>>(arrow::uint8()));
-            } else {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<ui8, arrow::UInt8Scalar, arrow::UInt8Builder, false>>(arrow::uint8()));
-            }
-
-            break;
-        case NUdf::EDataSlot::Int16:
-            if (totalKeysSize) {
-                *totalKeysSize += 2;
-            }
-            if (isOptional) {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<i16, arrow::Int16Scalar, arrow::Int16Builder, true>>(arrow::int16()));
-            } else {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<i16, arrow::Int16Scalar, arrow::Int16Builder, false>>(arrow::int16()));
-            }
-
-            break;
-        case NUdf::EDataSlot::Uint16:
-        case NUdf::EDataSlot::Date:
-            if (totalKeysSize) {
-                *totalKeysSize += 2;
-            }
-            if (isOptional) {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<ui16, arrow::UInt16Scalar, arrow::UInt16Builder, true>>(arrow::uint16()));
-            } else {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<ui16, arrow::UInt16Scalar, arrow::UInt16Builder, false>>(arrow::uint16()));
-            }
-
-            break;
-        case NUdf::EDataSlot::Int32:
-            if (totalKeysSize) {
-                *totalKeysSize += 4;
-            }
-            if (isOptional) {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<i32, arrow::Int32Scalar, arrow::Int32Builder, true>>(arrow::int32()));
-            } else {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<i32, arrow::Int32Scalar, arrow::Int32Builder, false>>(arrow::int32()));
-            }
-
-            break;
-        case NUdf::EDataSlot::Uint32:
-        case NUdf::EDataSlot::Datetime:
-            if (totalKeysSize) {
-                *totalKeysSize += 4;
-            }
-            if (isOptional) {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<ui32, arrow::UInt32Scalar, arrow::UInt32Builder, true>>(arrow::uint32()));
-            } else {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<ui32, arrow::UInt32Scalar, arrow::UInt32Builder, false>>(arrow::uint32()));
-            }
-
-            break;
-        case NUdf::EDataSlot::Int64:
-        case NUdf::EDataSlot::Interval:
-            if (totalKeysSize) {
-                *totalKeysSize += 8;
-            }
-            if (isOptional) {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<i64, arrow::Int64Scalar, arrow::Int64Builder, true>>(arrow::int64()));
-            } else {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<i64, arrow::Int64Scalar, arrow::Int64Builder, false>>(arrow::int64()));
-            }
-
-            break;
-        case NUdf::EDataSlot::Uint64:
-        case NUdf::EDataSlot::Timestamp:
-            if (totalKeysSize) {
-                *totalKeysSize += 8;
-            }
-            if (isOptional) {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<ui64, arrow::UInt64Scalar, arrow::UInt64Builder, true>>(arrow::uint64()));
-            } else {
-                keySerializers.emplace_back(std::make_unique<TFixedSizeKeySerializer<ui64, arrow::UInt64Scalar, arrow::UInt64Builder, false>>(arrow::uint64()));
-            }
-
-            break;
-        case NUdf::EDataSlot::String:
-            totalKeysSize = {};
-            if (isOptional) {
-                keySerializers.emplace_back(std::make_unique<TStringKeySerializer<char*, true>>());
-            } else {
-                keySerializers.emplace_back(std::make_unique<TStringKeySerializer<char*, false>>());
-            }
-
-            break;
-        case NUdf::EDataSlot::Utf8:
-            totalKeysSize = {};
-            if (isOptional) {
-                keySerializers.emplace_back(std::make_unique<TStringKeySerializer<NYql::NUdf::TUtf8, true>>());
-            } else {
-                keySerializers.emplace_back(std::make_unique<TStringKeySerializer<NYql::NUdf::TUtf8, false>>());
-            }
-
-            break;
-        default:
-            throw yexception() << "Unsupported key type";
-        }
+void PrepareKeys(const std::vector<TKeyParams>& keys, TMaybe<ui32>& totalKeysSize, bool& isFixed) {
+    NYql::NUdf::TBlockItemSerializeProps props;
+    for (auto& param : keys) {
+        auto type = AS_TYPE(TBlockType, param.Type);
+        MKQL_ENSURE(type->GetShape() != TBlockType::EShape::Scalar, "Expecting block as key");
+        UpdateBlockItemSerializeProps(TTypeInfoHelper(), type->GetItemType(), props);
     }
+
+    isFixed = props.IsFixed;
+    totalKeysSize = props.MaxSize;
 }
 
 void FillAggStreams(TRuntimeNode streamsNode, TVector<TVector<ui32>>& streams) {
@@ -1853,20 +1467,20 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
 
     TMaybe<ui32> totalKeysSize;
     bool isFixed = false;
-    std::vector<std::unique_ptr<IKeySerializer>> keySerializers;
-    PrepareKeys(keys, totalKeysSize, isFixed, keySerializers);
+    PrepareKeys(keys, totalKeysSize, isFixed);
 
+    const size_t maxBlockLen = CalcMaxBlockLenForOutput(callable.GetType()->GetReturnType());
     if (filterColumn) {
         if (aggsParams.size() == 0) {
-            return MakeBlockCombineHashedWrapper<true, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+            return MakeBlockCombineHashedWrapper<true, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
         } else {
-            return MakeBlockCombineHashedWrapper<false, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+            return MakeBlockCombineHashedWrapper<false, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
         }
     } else {
         if (aggsParams.size() == 0) {
-            return MakeBlockCombineHashedWrapper<true, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+            return MakeBlockCombineHashedWrapper<true, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
         } else {
-            return MakeBlockCombineHashedWrapper<false, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+            return MakeBlockCombineHashedWrapper<false, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
         }
     }
 }
@@ -1892,13 +1506,13 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
 
     TMaybe<ui32> totalKeysSize;
     bool isFixed = false;
-    std::vector<std::unique_ptr<IKeySerializer>> keySerializers;
-    PrepareKeys(keys, totalKeysSize, isFixed, keySerializers);
+    PrepareKeys(keys, totalKeysSize, isFixed);
 
+    const size_t maxBlockLen = CalcMaxBlockLenForOutput(callable.GetType()->GetReturnType());
     if (aggsParams.size() == 0) {
-        return MakeBlockMergeFinalizeHashedWrapper<true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+        return MakeBlockMergeFinalizeHashedWrapper<true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
     } else {
-        return MakeBlockMergeFinalizeHashedWrapper<false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+        return MakeBlockMergeFinalizeHashedWrapper<false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
     }
 }
 
@@ -1923,20 +1537,20 @@ IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TC
 
     TMaybe<ui32> totalKeysSize;
     bool isFixed = false;
-    std::vector<std::unique_ptr<IKeySerializer>> keySerializers;
-    PrepareKeys(keys, totalKeysSize, isFixed, keySerializers);
+    PrepareKeys(keys, totalKeysSize, isFixed);
 
     ui32 streamIndex = AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<ui32>();
     TVector<TVector<ui32>> streams;
     FillAggStreams(callable.GetInput(4), streams);
     totalStateSize += streams.size();
 
+    const size_t maxBlockLen = CalcMaxBlockLenForOutput(callable.GetType()->GetReturnType());
     if (aggsParams.size() == 0) {
         return MakeBlockMergeFinalizeHashedWrapper<true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(),
-            keys, std::move(keySerializers), std::move(aggsParams));
+            keys, maxBlockLen, std::move(aggsParams));
     } else {
         return MakeBlockMergeManyFinalizeHashedWrapper(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(),
-            keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+            keys, maxBlockLen, std::move(aggsParams), streamIndex, std::move(streams));
     }
 }
 

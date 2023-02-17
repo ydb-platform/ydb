@@ -1,6 +1,7 @@
 #pragma once
 
 #include "block_item.h"
+#include "block_io_buffer.h"
 #include "util.h"
 #include <arrow/datum.h>
 
@@ -15,6 +16,15 @@ public:
     // result will reference to Array/Scalar internals and will be valid until next call to GetItem/GetScalarItem
     virtual TBlockItem GetItem(const arrow::ArrayData& data, size_t index) = 0;
     virtual TBlockItem GetScalarItem(const arrow::Scalar& scalar) = 0;
+
+    virtual void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const = 0;
+    virtual void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const = 0;
+};
+
+struct TBlockItemSerializeProps {
+    TMaybe<ui32> MaxSize = 0; // maximum size each block item can occupy in TOutputBuffer
+                              // (will be undefined for dynamic object like string)
+    bool IsFixed = true;      // true if each block item takes fixed size
 };
 
 template <typename T, bool Nullable>
@@ -38,6 +48,28 @@ public:
         }
 
         return TBlockItem(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+    }
+
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+        if constexpr (Nullable) {
+            if (IsNull(data, index)) {
+                return out.PushChar(0);
+            }
+            out.PushChar(1);
+        }
+
+        out.PushNumber(data.GetValues<T>(1)[index]);
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+        if constexpr (Nullable) {
+            if (!scalar.is_valid) {
+                return out.PushChar(0);
+            }
+            out.PushChar(1);
+        }
+
+        out.PushNumber(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
     }
 };
 
@@ -71,6 +103,35 @@ public:
         auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(scalar).value;
         std::string_view str(reinterpret_cast<const char*>(buffer->data()), buffer->size());
         return TBlockItem(str);
+    }
+
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+        Y_VERIFY_DEBUG(data.buffers.size() == 3);
+        if constexpr (Nullable) {
+            if (IsNull(data, index)) {
+                return out.PushChar(0);
+            }
+            out.PushChar(1);
+        }
+
+        const TOffset* offsets = data.GetValues<TOffset>(1);
+        const char* strData = data.GetValues<char>(2, 0);
+
+        std::string_view str(strData + offsets[index], offsets[index + 1] - offsets[index]);
+        out.PushString(str);
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+        if constexpr (Nullable) {
+            if (!scalar.is_valid) {
+                return out.PushChar(0);
+            }
+            out.PushChar(1);
+        }
+
+        auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(scalar).value;
+        std::string_view str(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+        out.PushString(str);
     }
 };
 
@@ -112,6 +173,34 @@ public:
         return TBlockItem(Items.data());
     }
 
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+        if constexpr (Nullable) {
+            if (IsNull(data, index)) {
+                return out.PushChar(0);
+            }
+            out.PushChar(1);
+        }
+
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            Children[i]->SaveItem(*data.child_data[i], index, out);
+        }
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+        if constexpr (Nullable) {
+            if (!scalar.is_valid) {
+                return out.PushChar(0);
+            }
+            out.PushChar(1);
+        }
+
+        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
+
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            Children[i]->SaveScalarItem(*structScalar.value[i], out);
+        }
+    }
+
 private:
     const TVector<std::unique_ptr<IBlockReader>> Children;
     TVector<TBlockItem> Items;
@@ -138,6 +227,25 @@ public:
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
         return Inner->GetScalarItem(*structScalar.value[0]).MakeOptional();
+    }
+
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+        if (IsNull(data, index)) {
+            return out.PushChar(0);
+        }
+        out.PushChar(1);
+
+        Inner->SaveItem(*data.child_data[0], index, out);
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+        if (!scalar.is_valid) {
+            return out.PushChar(0);
+        }
+        out.PushChar(1);
+
+        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
+        Inner->SaveScalarItem(*structScalar.value[0], out);
     }
 
 private:
@@ -273,6 +381,46 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
 
 inline std::unique_ptr<IBlockReader> MakeBlockReader(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
     return MakeBlockReaderImpl<TReaderTraits>(typeInfoHelper, type);
+}
+
+inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper, const TType* type, TBlockItemSerializeProps& props) {
+    if (!props.MaxSize.Defined()) {
+        return;
+    }
+
+    for (;;) {
+        TOptionalTypeInspector typeOpt(typeInfoHelper, type);
+        if (!typeOpt) {
+            break;
+        }
+        props.MaxSize = *props.MaxSize + 1;
+        props.IsFixed = false;
+        type = typeOpt.GetItemType();
+    }
+
+    TTupleTypeInspector typeTuple(typeInfoHelper, type);
+    if (typeTuple) {
+        for (ui32 i = 0; i < typeTuple.GetElementsCount(); ++i) {
+            UpdateBlockItemSerializeProps(typeInfoHelper, typeTuple.GetElementType(i), props);
+        }
+        return;
+    }
+
+    TDataTypeInspector typeData(typeInfoHelper, type);
+    if (typeData) {
+        auto typeId = typeData.GetTypeId();
+        auto slot = GetDataSlot(typeId);
+        auto& dataTypeInfo = GetDataTypeInfo(slot);
+        if (dataTypeInfo.Features & StringType) {
+            props.MaxSize = {};
+            props.IsFixed = false;
+        } else {
+            *props.MaxSize += dataTypeInfo.FixedSize;
+        }
+        return;
+    }
+
+    Y_ENSURE(false, "Unsupported type");
 }
 
 }

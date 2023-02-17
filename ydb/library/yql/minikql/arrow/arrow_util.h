@@ -39,198 +39,96 @@ inline std::string_view GetStringScalarValue(const arrow::Scalar& scalar) {
     return std::string_view{reinterpret_cast<const char*>(base.value->data()), static_cast<size_t>(base.value->size())};
 }
 
-template <typename T>
-std::shared_ptr<arrow::DataType> GetPrimitiveDataType();
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<bool>() {
-    return arrow::uint8();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i8>() {
-    return arrow::int8();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui8>() {
-    return arrow::uint8();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i16>() {
-    return arrow::int16();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui16>() {
-    return arrow::uint16();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i32>() {
-    return arrow::int32();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui32>() {
-    return arrow::uint32();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i64>() {
-    return arrow::int64();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui64>() {
-    return arrow::uint64();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<float>() {
-    return arrow::float32();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<double>() {
-    return arrow::float64();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<char*>() {
-    return arrow::binary();
-}
-
-template <>
-inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<NYql::NUdf::TUtf8>() {
-    return arrow::utf8();
-}
-
 template<typename T>
 struct TPrimitiveDataType;
 
 template<>
 struct TPrimitiveDataType<bool> {
     using TResult = arrow::UInt8Type;
+    using TScalarResult = arrow::UInt8Scalar;
 };
 
 template<>
 struct TPrimitiveDataType<i8> {
     using TResult = arrow::Int8Type;
+    using TScalarResult = arrow::Int8Scalar;
 };
 
 template<>
 struct TPrimitiveDataType<ui8> {
     using TResult = arrow::UInt8Type;
+    using TScalarResult = arrow::UInt8Scalar;
 };
 
 template<>
 struct TPrimitiveDataType<i16> {
     using TResult = arrow::Int16Type;
+    using TScalarResult = arrow::Int16Scalar;
 };
 
 template<>
 struct TPrimitiveDataType<ui16> {
     using TResult = arrow::UInt16Type;
+    using TScalarResult = arrow::UInt16Scalar;
 };
 
 template<>
 struct TPrimitiveDataType<i32> {
     using TResult = arrow::Int32Type;
+    using TScalarResult = arrow::Int32Scalar;
 };
 
 template<>
 struct TPrimitiveDataType<ui32> {
     using TResult = arrow::UInt32Type;
+    using TScalarResult = arrow::UInt32Scalar;
 };
 
 template<>
 struct TPrimitiveDataType<i64> {
     using TResult = arrow::Int64Type;
+    using TScalarResult = arrow::Int64Scalar;
 };
 
 template<>
 struct TPrimitiveDataType<ui64> {
     using TResult = arrow::UInt64Type;
+    using TScalarResult = arrow::UInt64Scalar;
 };
 
 template<>
 struct TPrimitiveDataType<float> {
     using TResult = arrow::FloatType;
+    using TScalarResult = arrow::FloatScalar;
 };
 
 template<>
 struct TPrimitiveDataType<double> {
     using TResult = arrow::DoubleType;
+    using TScalarResult = arrow::DoubleScalar;
 };
 
 template<>
 struct TPrimitiveDataType<char*> {
     using TResult = arrow::BinaryType;
+    using TScalarResult = arrow::BinaryScalar;
 };
 
 template<>
 struct TPrimitiveDataType<NYql::NUdf::TUtf8> {
     using TResult = arrow::StringType;
+    using TScalarResult = arrow::StringScalar;
 };
 
+template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
+inline arrow::Datum MakeScalarDatum(T value) {
+    return arrow::Datum(std::make_shared<typename TPrimitiveDataType<T>::TScalarResult>(value));
+}
+
 template <typename T>
-arrow::Datum MakeScalarDatum(T value);
-
-template <>
-inline arrow::Datum MakeScalarDatum<bool>(bool value) {
-    return arrow::Datum(std::make_shared<arrow::UInt8Scalar>(value));
-}
-
-template <>
-inline arrow::Datum MakeScalarDatum<i8>(i8 value) {
-    return arrow::Datum(std::make_shared<arrow::Int8Scalar>(value));
-}
-
-template <>
-inline arrow::Datum MakeScalarDatum<ui8>(ui8 value) {
-    return arrow::Datum(std::make_shared<arrow::UInt8Scalar>(value));
-}
-
-template <>
-inline arrow::Datum MakeScalarDatum<i16>(i16 value) {
-    return arrow::Datum(std::make_shared<arrow::Int16Scalar>(value));
-}
-
-template <>
-inline arrow::Datum MakeScalarDatum<ui16>(ui16 value) {
-    return arrow::Datum(std::make_shared<arrow::UInt16Scalar>(value));
-}
-
-template <>
-inline arrow::Datum MakeScalarDatum<i32>(i32 value) {
-    return arrow::Datum(std::make_shared<arrow::Int32Scalar>(value));
-}
-
-template <>
-inline arrow::Datum MakeScalarDatum<ui32>(ui32 value) {
-    return arrow::Datum(std::make_shared<arrow::UInt32Scalar>(value));
-}
-
-template <>
-inline arrow::Datum MakeScalarDatum<i64>(i64 value) {
-    return arrow::Datum(std::make_shared<arrow::Int64Scalar>(value));
-}
-
-template <>
-inline arrow::Datum MakeScalarDatum<ui64>(ui64 value) {
-    return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(value));
-}
-
-template <>
-inline arrow::Datum MakeScalarDatum<float>(float value) {
-    return arrow::Datum(std::make_shared<arrow::FloatScalar>(value));
-}
-
-template <>
-inline arrow::Datum MakeScalarDatum<double>(double value) {
-    return arrow::Datum(std::make_shared<arrow::DoubleScalar>(value));
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType() {
+    static std::shared_ptr<arrow::DataType> result = std::make_shared<typename TPrimitiveDataType<T>::TResult>();
+    return result;
 }
 
 using NYql::NUdf::TTypedBufferBuilder;

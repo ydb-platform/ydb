@@ -15,6 +15,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 using NYql::NUdf::IArrayBuilder;
+using NYql::NUdf::TInputBuffer;
 using NYql::NUdf::MakeArrayBuilder;
 
 }

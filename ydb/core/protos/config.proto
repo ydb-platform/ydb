@@ -697,7 +697,7 @@ message TFeatureFlags {
     optional bool EnableExternalHive = 17 [default = true];
     optional bool UseSchemeBoardCacheForSchemeRequests = 18 [default = true]; // deprecated: always true
     optional bool CompileMinikqlWithVersion = 19 [default = true]; // deprecated: always true
-    optional bool ReadTableWithSnapshot = 20 [default = true];
+    optional bool ReadTableWithSnapshot = 20 [default = true]; // deprecated: always true
     optional bool ImportantTabletsUseSystemPool = 21 [default = true];
     optional bool EnableOfflineSlaves = 22 [default = true]; // deprecated: always true
     optional bool CheckDatabaseAccessPermission = 23 [default = false];

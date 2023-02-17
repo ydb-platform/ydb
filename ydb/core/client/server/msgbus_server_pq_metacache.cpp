@@ -636,10 +636,18 @@ private:
         RequestedNodesInfo = true;
 
         NActorsProto::TRemoteHttpInfo info;
-        auto* param = info.AddQueryParams();
-        param->SetKey("page");
-        param->SetValue("LandingData");
+        {
+            auto* param = info.AddQueryParams();
+            param->SetKey("page");
+            param->SetValue("MemStateNodes");
+        }
+        {
+            auto* param = info.AddQueryParams();
+            param->SetKey("format");
+            param->SetValue("json");
+        }
         info.SetPath("/app");
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Send Hive nodes state request");
         NTabletPipe::SendData(ctx, HivePipeClient, new NActors::NMon::TEvRemoteHttpInfo(info));
     }
 

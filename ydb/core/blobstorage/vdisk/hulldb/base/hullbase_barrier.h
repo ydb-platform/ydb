@@ -103,7 +103,8 @@ namespace NKikimr {
         static bool Parse(TKeyBarrier &out, const TString &buf, TString &errorExplanation);
 
         auto ConvertToTuple() const {
-            return std::make_tuple(TabletId, Channel, Hard, Gen, GenCounter);
+            ui64 alignedTabletId = ReadUnaligned<ui64>(&TabletId);
+            return std::make_tuple(alignedTabletId, Channel, Hard, Gen, GenCounter);
         }
     };
 #pragma pack(pop)

@@ -2750,7 +2750,7 @@ void TErasureType::SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDi
 template <typename Bucket>
 void XorCpy(Bucket *dest, const Bucket *orig, const Bucket *diff, ui32 count) {
     for (ui32 idx = 0; idx < count; ++idx) {
-        dest[idx] = orig[idx] ^ diff[idx];
+        dest[idx] = ReadUnaligned<Bucket>(&orig[idx]) ^ ReadUnaligned<Bucket>(&diff[idx]);
     }
 }
 

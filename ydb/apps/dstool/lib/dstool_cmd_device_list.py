@@ -21,6 +21,7 @@ def do(args):
         'StorageStatus',
         'NodeId:PDiskId',
         'NodeId',
+        'Guid',
         'BoxId',
     ]
     visible_columns = [
@@ -30,6 +31,7 @@ def do(args):
         'Type',
         'StorageStatus',
         'NodeId:PDiskId',
+        'Guid',
     ]
 
     table_output = table.TableOutput(
@@ -47,6 +49,7 @@ def do(args):
         row['Path'] = device.Path
         row['Type'] = kikimr_bsconfig.EPDiskType.Name(device.Type)
         row['BoxId'] = device.BoxId
+        row['Guid'] = device.Guid if device.Guid > 0 else 'NULL'
 
         if usedByPDisk:
             row['NodeId:PDiskId'] = '[%u:%u]' % (device.NodeId, device.PDiskId)

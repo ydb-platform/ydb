@@ -463,6 +463,9 @@ namespace NKikimr::NBsController {
             if (driveInfo.Path) {
                 device->SetPath(driveInfo.Path.GetRef());
             }
+            if (driveInfo.Guid) {
+                device->SetGuid(driveInfo.Guid.GetRef());
+            }
             device->SetLifeStage(driveInfo.LifeStage);
             device->SetType(driveInfo.PDiskType);
         });

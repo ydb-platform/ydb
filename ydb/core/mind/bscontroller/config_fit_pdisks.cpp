@@ -349,9 +349,10 @@ namespace NKikimr {
                             NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE,
                             disk.Serial, disk.LastSeenSerial, disk.LastSeenPath, staticSlotUsage);
 
-                    // Set PDiskId in DrivesSerials
+                    // Set PDiskId and Guid in DrivesSerials
                     if (auto info = state.DrivesSerials.FindForUpdate(disk.Serial)) {
                         info->PDiskId = pdiskId.PDiskId;
+                        info->Guid = guid;
                     }
 
                     STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP02, "Create new pdisk", (PDiskId, pdiskId), (Path, disk.Path));

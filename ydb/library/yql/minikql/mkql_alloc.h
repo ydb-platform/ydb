@@ -77,6 +77,14 @@ struct TAllocState : public TAlignedPagePool
     void* MainContext = nullptr;
     void* CurrentContext = nullptr;
 
+    struct TLockInfo {
+         i32 OriginalRefs;
+         i32 Locks;
+    };
+
+    bool UseRefLocking = false;
+    std::unordered_map<void*, TLockInfo> LockedObjectsRefs;
+
     ::NKikimr::NUdf::TBoxedValueLink Root;
 
     NKikimr::NUdf::TBoxedValueLink* GetRoot() noexcept {
@@ -88,6 +96,9 @@ struct TAllocState : public TAlignedPagePool
     void InvalidateMemInfo();
     size_t GetDeallocatedInPages() const;
     static void CleanupPAllocList(TListEntry* root);
+
+    void LockObject(::NKikimr::NUdf::TUnboxedValuePod value);
+    void UnlockObject(::NKikimr::NUdf::TUnboxedValuePod value);
 };
 
 extern Y_POD_THREAD(TAllocState*) TlsAllocState;

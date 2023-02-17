@@ -3316,7 +3316,13 @@ THolderFactory::THolderFactory(
     , MemInfo(memInfo)
     , FunctionRegistry(functionRegistry)
     , EmptyContainer(NUdf::TUnboxedValuePod(AllocateOn<TEmptyContainerHolder>(CurrentAllocState, &MemInfo)))
-{}
+{
+    CurrentAllocState->LockObject(EmptyContainer);
+}
+
+THolderFactory::~THolderFactory() {
+    CurrentAllocState->UnlockObject(EmptyContainer);
+}
 
 NUdf::TUnboxedValuePod THolderFactory::CreateTypeHolder(TType* type) const
 {

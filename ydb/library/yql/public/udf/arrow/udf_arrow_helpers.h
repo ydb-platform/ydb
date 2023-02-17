@@ -25,7 +25,7 @@ using TExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::comp
 
 class TUdfKernelState : public arrow::compute::KernelState {
 public:
-    TUdfKernelState(const TVector<const TType*>& argTypes, const TType* outputType, bool onlyScalars, const ITypeInfoHelper::TPtr& typeInfoHelper)
+    TUdfKernelState(const TVector<const TType*>& argTypes, const TType* outputType, bool onlyScalars, const ITypeInfoHelper* typeInfoHelper)
         : ArgTypes_(argTypes)
         , OutputType_(outputType)
         , OnlyScalars_(onlyScalars)
@@ -64,7 +64,7 @@ private:
     const TVector<const TType*> ArgTypes_;
     const TType* OutputType_;
     const bool OnlyScalars_;
-    const ITypeInfoHelper::TPtr TypeInfoHelper_;
+    const ITypeInfoHelper* TypeInfoHelper_;
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     std::unique_ptr<IArrayBuilder> ArrayBuilder_;
     std::unique_ptr<IScalarBuilder> ScalarBuilder_;
@@ -79,19 +79,18 @@ public:
         , Exec_(exec)
         , Pos_(GetSourcePosition(builder))
         , Name_(name)
-        , KernelContext_(&ExecContext_)
+        , OutputType_(outputType)
     {
-        auto typeInfoHelper = builder.TypeInfoHelper();
+        TypeInfoHelper_ = builder.TypeInfoHelper();
         Kernel_.null_handling = nullHandling;
         Kernel_.exec = Exec_;
         std::vector<arrow::compute::InputType> inTypes;
-        TVector<const TType*> argTypes;
         for (const auto& blockType : argBlockTypes) {
-            TBlockTypeInspector blockInspector(*typeInfoHelper, blockType);
+            TBlockTypeInspector blockInspector(*TypeInfoHelper_, blockType);
             Y_ENSURE(blockInspector);
-            argTypes.push_back(blockInspector.GetItemType());
+            ArgTypes_.push_back(blockInspector.GetItemType());
 
-            auto arrowTypeHandle = typeInfoHelper->MakeArrowType(blockInspector.GetItemType());
+            auto arrowTypeHandle = TypeInfoHelper_->MakeArrowType(blockInspector.GetItemType());
             Y_ENSURE(arrowTypeHandle);
             ArrowSchema s;
             arrowTypeHandle->Export(&s);
@@ -104,7 +103,7 @@ public:
             ArgsValuesDescr_.emplace_back(arrow::ValueDescr(type, shape));
         }
 
-        ReturnArrowTypeHandle_ = typeInfoHelper->MakeArrowType(outputType);
+        ReturnArrowTypeHandle_ = TypeInfoHelper_->MakeArrowType(outputType);
         Y_ENSURE(ReturnArrowTypeHandle_);
 
         ArrowSchema s;
@@ -113,8 +112,6 @@ public:
         arrow::compute::OutputType outType(arrow::ValueDescr(ARROW_RESULT(arrow::ImportType(&s)), outputShape));
 
         Kernel_.signature = arrow::compute::KernelSignature::Make(std::move(inTypes), std::move(outType));
-        KernelState_ = std::make_unique<TUdfKernelState>(argTypes, outputType, onlyScalars, typeInfoHelper);
-        KernelContext_.SetState(KernelState_.get());
     }
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
@@ -147,8 +144,13 @@ public:
                 }
             }
 
+            TUdfKernelState kernelState(ArgTypes_, OutputType_, OnlyScalars_, TypeInfoHelper_.Get());
+            arrow::compute::ExecContext execContext;
+            arrow::compute::KernelContext kernelContext(&execContext);
+            kernelContext.SetState(&kernelState);
+
             auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
-            ARROW_OK(executor->Init(&KernelContext_, { &Kernel_, ArgsValuesDescr_, nullptr }));
+            ARROW_OK(executor->Init(&kernelContext, { &Kernel_, ArgsValuesDescr_, nullptr }));
 
             arrow::Datum res;
             if (OnlyScalars_) {
@@ -205,15 +207,15 @@ private:
     const TExec Exec_;
     TSourcePosition Pos_;
     const TString Name_;
+    const TType* OutputType_;
+    ITypeInfoHelper::TPtr TypeInfoHelper_;
 
     TVector<std::shared_ptr<arrow::DataType>> ArgArrowTypes_;
     IArrowType::TPtr ReturnArrowTypeHandle_;
 
-    arrow::compute::ExecContext ExecContext_;
-    mutable arrow::compute::KernelContext KernelContext_;
     arrow::compute::ScalarKernel Kernel_;
     std::vector<arrow::ValueDescr> ArgsValuesDescr_;
-    std::unique_ptr<TUdfKernelState> KernelState_;
+    TVector<const TType*> ArgTypes_;
 };
 
 inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* signature, TType* userType, TExec exec, bool typesOnly,

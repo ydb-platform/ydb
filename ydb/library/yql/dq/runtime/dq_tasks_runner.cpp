@@ -304,10 +304,11 @@ public:
         return opts;
     }
 
-    std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const NDqProto::TDqTask& task, const TString& rawProgram) {
+    std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const NDqProto::TDqTask& task, const TString& rawProgram, bool forCache) {
         auto entry = TComputationPatternLRUCache::CreateCacheEntry(UseSeparatePatternAlloc());
         auto& patternAlloc = UseSeparatePatternAlloc() ? entry->Alloc : Alloc();
         auto& patternEnv = UseSeparatePatternAlloc() ? entry->Env : TypeEnv();
+        patternAlloc.Ref().UseRefLocking = forCache;
 
         {
             auto guard = patternEnv.BindAllocator();
@@ -419,7 +420,7 @@ public:
             auto& cache = Context.PatternCache;
             auto ticket = cache->FindOrSubscribe(program.GetRaw());
             if (!ticket.HasFuture()) {
-                entry = CreateComputationPattern(task, program.GetRaw());
+                entry = CreateComputationPattern(task, program.GetRaw(), true);
                 if (entry->Pattern->GetSuitableForCache()) {
                     cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
                     ticket.Close();
@@ -432,7 +433,7 @@ public:
         } 
 
         if (!entry) {
-            entry = CreateComputationPattern(task, program.GetRaw());
+            entry = CreateComputationPattern(task, program.GetRaw(), false);
         }
 
         AllocatedHolder->ProgramParsed.PatternCacheEntry = entry;

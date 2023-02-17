@@ -148,6 +148,10 @@ public:
 
     ~TPatternNodes()
     {
+        for (auto it = ComputationNodesList.rbegin(); it != ComputationNodesList.rend(); ++it) {
+            *it = nullptr;
+        }
+
         ComputationNodesList.clear();
         if (!UncaughtException()) {
 #ifndef NDEBUG

@@ -32,15 +32,17 @@ TUnboxedImmutableComputationNode::TUnboxedImmutableComputationNode(TMemoryUsageI
     , RepresentationKind(UnboxedValue.HasValue() ? (UnboxedValue.IsBoxed() ? EValueRepresentation::Boxed : (UnboxedValue.IsString() ? EValueRepresentation::String : EValueRepresentation::Embedded)) : EValueRepresentation::Embedded)
 {
     MKQL_MEM_TAKE(MemInfo, this, sizeof(*this), __MKQL_LOCATION__);
+    TlsAllocState->LockObject(UnboxedValue);
 }
 
 TUnboxedImmutableComputationNode::~TUnboxedImmutableComputationNode() {
     MKQL_MEM_RETURN(MemInfo, this, sizeof(*this));
+    TlsAllocState->UnlockObject(UnboxedValue);
 }
 
 NUdf::TUnboxedValue TUnboxedImmutableComputationNode::GetValue(TComputationContext& compCtx) const {
     Y_UNUSED(compCtx);
-    if (RepresentationKind == EValueRepresentation::String) {
+    if (!TlsAllocState->UseRefLocking && RepresentationKind == EValueRepresentation::String) {
         /// TODO: YQL-4461
         return MakeString(UnboxedValue.AsStringRef());
     }

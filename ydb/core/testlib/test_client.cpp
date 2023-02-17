@@ -87,7 +87,6 @@
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
-#include <ydb/core/yq/libs/audit/mock/yq_mock_audit_service.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/yq/libs/init/init.h>
 #include <ydb/core/yq/libs/mock/yql_mock.h>
@@ -975,7 +974,6 @@ namespace Tests {
                 nullptr, // MakeIntrusive<NPq::NConfigurationManager::TConnections>(),
                 YqSharedResources,
                 NKikimr::NFolderService::CreateMockFolderServiceActor,
-                NYq::CreateMockYqAuditServiceActor,
                 /*IcPort = */0,
                 {}
                 );

@@ -42,7 +42,6 @@ struct TModuleFactories {
     IActor*(*CreateTicketParser)(const NKikimrProto::TAuthConfig&);
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
 
-    std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig, const ::NMonitoring::TDynamicCounterPtr& counters)> YqAuditServiceFactory;
     // Factory for grpc services
     TGrpcServiceFactory GrpcServiceFactory;
 

@@ -67,7 +67,6 @@ target_link_libraries(ydb-core-testlib PUBLIC
   core-tx-sequenceproxy
   core-tx-sequenceshard
   core-tx-time_cast
-  libs-audit-mock
   yq-libs-init
   yq-libs-mock
   yq-libs-shared_resources

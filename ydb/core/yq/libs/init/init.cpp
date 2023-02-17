@@ -5,6 +5,7 @@
 
 #include <ydb/core/yq/libs/audit/yq_audit_service.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/yq/libs/cloud_audit/yq_cloud_audit_service.h>
 #include <ydb/core/yq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/yq/libs/health/health.h>
@@ -65,7 +66,6 @@ void Init(
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const IYqSharedResources::TPtr& iyqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
-    const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig, const ::NMonitoring::TDynamicCounterPtr& counters)>& auditServiceFactory,
     ui32 icPort,
     const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories
     )
@@ -111,10 +111,10 @@ void Init(
     }
 
     if (protoConfig.GetAudit().GetEnabled()) {
-        auto* auditSerive = auditServiceFactory(
+        auto* auditService = NYq::CreateYqCloudAuditServiceActor(
             protoConfig.GetAudit(),
             yqCounters->GetSubgroup("subsystem", "audit"));
-        actorRegistrator(NYq::YqAuditServiceActorId(), auditSerive);
+        actorRegistrator(NYq::YqAuditServiceActorId(), auditService);
     }
 
     // if not enabled then stub

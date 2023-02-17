@@ -6,15 +6,20 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(events)
 
-add_library(yq-libs-audit)
-target_link_libraries(yq-libs-audit PUBLIC
-  contrib-libs-linux-headers
+add_library(yq-libs-cloud_audit)
+target_link_libraries(yq-libs-cloud_audit PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  cpp-actors-log_backend
+  library-cpp-unified_agent_client
+  yq-libs-actors
+  libs-audit-events
+  libs-config-protos
+  ydb-library-folder_service
+  library-ycloud-api
+  client-yc_public-events
 )
-target_sources(yq-libs-audit PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/audit/yq_audit_service.cpp
+target_sources(yq-libs-cloud_audit PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/cloud_audit/yq_cloud_audit_service.cpp
 )

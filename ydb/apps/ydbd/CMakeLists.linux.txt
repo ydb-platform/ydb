@@ -22,7 +22,6 @@ target_link_libraries(ydbd PUBLIC
   run
   ydb-core-protos
   ydb-core-security
-  libs-audit-mock
   library-folder_service-mock
   ydb-library-keys
   ydb-library-pdisk_io

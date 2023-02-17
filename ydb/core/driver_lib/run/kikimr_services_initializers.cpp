@@ -2449,7 +2449,6 @@ void TFederatedQueryInitializer::InitializeServices(TActorSystemSetup* setup, co
         Factories->PqCmConnections,
         YqSharedResources,
         Factories->FolderServiceFactory,
-        Factories->YqAuditServiceFactory,
         IcPort,
         Factories->AdditionalComputationNodeFactories
         );

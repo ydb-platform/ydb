@@ -7,13 +7,13 @@
 
 
 
-add_library(libs-audit-mock)
-target_link_libraries(libs-audit-mock PUBLIC
+add_library(cpp-actors-log_backend)
+target_link_libraries(cpp-actors-log_backend PUBLIC
   contrib-libs-cxxsupp
   yutil
-  libs-audit-events
-  libs-config-protos
+  cpp-actors-core
+  library-cpp-logger
 )
-target_sources(libs-audit-mock PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/audit/mock/yq_mock_audit_service.cpp
+target_sources(cpp-actors-log_backend PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/log_backend/actor_log_backend.cpp
 )

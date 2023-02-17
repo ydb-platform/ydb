@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "raw_serialization.h"
+#include "capnp/protos.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_syncstate.h>
 #include <ydb/core/blobstorage/base/blobstorage_oos_defs.h>
@@ -1077,7 +1078,7 @@ namespace NKikimr {
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     struct TEvBlobStorage::TEvVGet
-        : TEventPB<TEvBlobStorage::TEvVGet, RawSerializer::TEvVGet, TEvBlobStorage::EvVGet>
+        : TEventPB<TEvBlobStorage::TEvVGet, Capnproto::TEvVGet, TEvBlobStorage::EvVGet>
         , TEventWithRelevanceTracker
     {
         TEvVGet() = default;

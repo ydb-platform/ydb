@@ -27,7 +27,8 @@ namespace NKikimrCapnProto {
 
         public:
             Builder(NKikimrCapnProto_::TMessageId::Builder b) : NKikimrCapnProto_::TMessageId::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetSequenceId(const uint64_t& value) { return setSequenceId(value); }
             void SetMsgId(const uint64_t& value) { return setMsgId(value); }
@@ -55,7 +56,8 @@ namespace NKikimrCapnProto {
 
         public:
             Builder(NKikimrCapnProto_::TTimestamps::Builder b) : NKikimrCapnProto_::TTimestamps::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetSentByDSProxyUs(const uint64_t& value) { return setSentByDSProxyUs(value); }
             void SetReceivedByVDiskUs(const uint64_t& value) { return setReceivedByVDiskUs(value); }
@@ -88,7 +90,8 @@ namespace NKikimrCapnProto {
 
         public:
             Builder(NKikimrCapnProto_::TActorId::Builder b) : NKikimrCapnProto_::TActorId::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetRawX1(const uint64_t& value) { return setRawX1(value); }
             void SetRawX2(const uint64_t& value) { return setRawX2(value); }
@@ -122,7 +125,8 @@ namespace NKikimrCapnProto {
 
         public:
             Builder(NKikimrCapnProto_::TExecTimeStats::Builder b) : NKikimrCapnProto_::TExecTimeStats::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetSubmitTimestamp(const uint64_t& value) { return setSubmitTimestamp(value); }
             void SetInSenderQueue(const uint64_t& value) { return setInSenderQueue(value); }
@@ -167,7 +171,8 @@ namespace NKikimrCapnProto {
             using NKikimrCapnProto_::TWindowFeedback::Builder::getFailedMsgId;
         public:
             Builder(NKikimrCapnProto_::TWindowFeedback::Builder b) : NKikimrCapnProto_::TWindowFeedback::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetActualWindowSize(const uint64_t& value) { return setActualWindowSize(value); }
             void SetMaxWindowSize(const uint64_t& value) { return setMaxWindowSize(value); }
@@ -230,7 +235,8 @@ namespace NKikimrCapnProto {
 
         public:
             Builder(NKikimrCapnProto_::TVDiskCostSettings::Builder b) : NKikimrCapnProto_::TVDiskCostSettings::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetSeekTimeUs(const uint64_t& value) { return setSeekTimeUs(value); }
             void SetReadSpeedBps(const uint64_t& value) { return setReadSpeedBps(value); }
@@ -286,7 +292,8 @@ namespace NKikimrCapnProto {
             using NKikimrCapnProto_::TMsgQoS::Builder::getSenderActorId;
         public:
             Builder(NKikimrCapnProto_::TMsgQoS::Builder b) : NKikimrCapnProto_::TMsgQoS::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetDeadlineSeconds(const uint32_t& value) { return setDeadlineSeconds(value); }
             void SetCost(const uint64_t& value) { return setCost(value); }
@@ -333,8 +340,8 @@ namespace NKikimrCapnProto {
 
         public:
             Builder(NKikimrCapnProto_::TVDiskID::Builder b) : NKikimrCapnProto_::TVDiskID::Builder(b), Reader(b.asReader()) {}
-
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetGroupID(const uint32_t& value) { return setGroupID(value); }
             void SetGroupGeneration(const uint32_t& value) { return setGroupGeneration(value); }
@@ -363,7 +370,8 @@ namespace NKikimrCapnProto {
 
         public:
             Builder(NKikimrCapnProto_::TLogoBlobID::Builder b) : NKikimrCapnProto_::TLogoBlobID::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetRawX1(const int64_t& value) { return setRawX1(value); }
             void SetRawX2(const int64_t& value) { return setRawX2(value); }
@@ -393,7 +401,8 @@ namespace NKikimrCapnProto {
             using NKikimrCapnProto_::TRangeQuery::Builder::getTo;
         public:
             Builder(NKikimrCapnProto_::TRangeQuery::Builder b) : NKikimrCapnProto_::TRangeQuery::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetCookie(const uint64_t& value) { return setCookie(value); }
             void SetMaxResults(const uint32_t& value) { return setMaxResults(value); }
@@ -425,7 +434,8 @@ namespace NKikimrCapnProto {
             using NKikimrCapnProto_::TExtremeQuery::Builder::getId;
         public:
             Builder(NKikimrCapnProto_::TExtremeQuery::Builder b) : NKikimrCapnProto_::TExtremeQuery::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             void SetShift(const uint64_t& value) { return setShift(value); }
             void SetSize(const uint64_t& value) { return setSize(value); }
@@ -452,7 +462,9 @@ namespace NKikimrCapnProto {
 
         public:
             Builder(NKikimrCapnProto_::TTabletData::Builder b) : NKikimrCapnProto_::TTabletData::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
+
             void SetId(const uint64_t& value) { return setId(value); }
             void SetGeneration(const uint32_t& value) { return setGeneration(value); }
             const NKikimrCapnProto_::TTabletData::Builder& GetCapnpBase() const { return *this; }
@@ -521,7 +533,8 @@ namespace NKikimrCapnProto {
             using NKikimrCapnProto_::TEvVGet::Builder::getForceBlockTabletData;
         public:
             Builder(NKikimrCapnProto_::TEvVGet::Builder b) : NKikimrCapnProto_::TEvVGet::Builder(b), Reader(b.asReader()) {}
-            Builder& operator->() { return *this; }
+            Builder* operator->() { return this; }
+            Builder& operator*() { return *this; }
 
             TExtremeQuery::Builder AddExtremeQueries() {
                 auto orphan = getOrphanage().newOrphan<NKikimrCapnProto_::TExtremeQuery>();

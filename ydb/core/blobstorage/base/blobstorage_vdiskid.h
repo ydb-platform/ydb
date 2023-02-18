@@ -84,13 +84,20 @@ TVDiskID VDiskIDFromVDiskID(const SerializerType &x) {
     return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
 }
 
-template <typename SerializerType>
-void VDiskIDFromVDiskID(const TVDiskID &id, SerializerType *proto) {
+void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto) {
     proto->SetGroupID(id.GroupID);
     proto->SetGroupGeneration(id.GroupGeneration);
     proto->SetRing(id.FailRealm);
     proto->SetDomain(id.FailDomain);
     proto->SetVDisk(id.VDisk);
+}
+
+void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrCapnProto::TVDiskID::Builder proto) {
+    proto.SetGroupID(id.GroupID);
+    proto.SetGroupGeneration(id.GroupGeneration);
+    proto.SetRing(id.FailRealm);
+    proto.SetDomain(id.FailDomain);
+    proto.SetVDisk(id.VDisk);
 }
 
 // Takes a string in the same format as ToString output, sets isGenerationSet if second number is not '_'

@@ -562,8 +562,9 @@ namespace NKikimrCapnProto {
                 for (size_t i = 0; i != elements.size(); ++i) {
                     interviews.setWithCaveats(i, GetExtremeQueries(i).GetCapnpBase());
                 }
+
                 kj::VectorOutputStream stream;
-                capnp::writePackedMessage(stream, *this);
+                capnp::writePackedMessage(stream, const_cast<capnp::MallocMessageBuilder&>(*this));
                 output->WriteAliasedRaw(stream.getArray().begin(), stream.getArray().size());
                 return true;
             }

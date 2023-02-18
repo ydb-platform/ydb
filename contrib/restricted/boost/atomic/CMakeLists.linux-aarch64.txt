@@ -10,7 +10,7 @@
 add_library(restricted-boost-atomic)
 target_compile_options(restricted-boost-atomic PRIVATE
   -DBOOST_ATOMIC_SOURCE
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-boost-atomic PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/include

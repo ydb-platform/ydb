@@ -9,7 +9,7 @@
 
 add_library(Target-X86-Disassembler)
 target_compile_options(Target-X86-Disassembler PRIVATE
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(Target-X86-Disassembler PRIVATE
   ${CMAKE_BINARY_DIR}/contrib/libs/llvm12/lib/Target/X86

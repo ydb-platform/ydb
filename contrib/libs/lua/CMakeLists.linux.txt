@@ -10,7 +10,7 @@
 add_library(contrib-libs-lua)
 target_compile_options(contrib-libs-lua PRIVATE
   -DLUA_USE_LINUX
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-lua PUBLIC
   ${CMAKE_BINARY_DIR}/contrib/libs/lua

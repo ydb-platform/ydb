@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-random)
 target_compile_options(restricted-boost-random PRIVATE
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-boost-random PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/random/include

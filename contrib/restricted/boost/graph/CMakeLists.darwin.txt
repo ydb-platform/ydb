@@ -9,7 +9,7 @@
 
 add_library(restricted-boost-graph)
 target_compile_options(restricted-boost-graph PRIVATE
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-boost-graph PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/graph/include

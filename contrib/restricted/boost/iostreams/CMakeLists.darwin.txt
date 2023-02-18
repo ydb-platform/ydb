@@ -11,7 +11,7 @@ find_package(ZLIB REQUIRED)
 add_library(restricted-boost-iostreams)
 target_compile_options(restricted-boost-iostreams PRIVATE
   -DBOOST_IOSTREAMS_USE_DEPRECATED
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-boost-iostreams PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/include

@@ -13,7 +13,7 @@ target_compile_options(contrib-libs-icu PRIVATE
   -DU_I18N_IMPLEMENTATION
   -DU_IO_IMPLEMENTATION
   -DU_STATIC_IMPLEMENTATION
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-icu PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/include

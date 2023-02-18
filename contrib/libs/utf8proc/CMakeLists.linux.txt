@@ -9,7 +9,7 @@
 
 add_library(contrib-libs-utf8proc)
 target_compile_options(contrib-libs-utf8proc PRIVATE
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_link_libraries(contrib-libs-utf8proc PUBLIC
   contrib-libs-linux-headers

@@ -16,7 +16,7 @@ target_compile_options(libs-poco-NetSSL_OpenSSL PRIVATE
   -DPOCO_UNBUNDLED
   -DPOCO_OS_FAMILY_UNIX
   -DPOCO_HAVE_FD_EPOLL
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-poco-NetSSL_OpenSSL PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/include

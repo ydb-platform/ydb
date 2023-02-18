@@ -18,7 +18,7 @@ target_compile_options(libs-poco-XML PRIVATE
   -DXML_NS
   -DPOCO_OS_FAMILY_UNIX
   -DPOCO_HAVE_FD_EPOLL
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-poco-XML PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/expat

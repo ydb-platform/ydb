@@ -9,7 +9,7 @@
 
 add_library(yql-minikql-codegen)
 target_compile_options(yql-minikql-codegen PRIVATE
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_link_libraries(yql-minikql-codegen PUBLIC
   contrib-libs-cxxsupp

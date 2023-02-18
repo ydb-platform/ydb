@@ -15,7 +15,7 @@ add_subdirectory(third_party)
 add_library(contrib-libs-grpc)
 target_compile_options(contrib-libs-grpc PRIVATE
   -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-grpc PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/include

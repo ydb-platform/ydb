@@ -10,7 +10,7 @@
 add_library(yql-minikql-computation)
 target_compile_options(yql-minikql-computation PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_link_libraries(yql-minikql-computation PUBLIC
   contrib-libs-cxxsupp
@@ -53,7 +53,7 @@ target_sources(yql-minikql-computation PRIVATE
 add_global_library_for(yql-minikql-computation.global yql-minikql-computation)
 target_compile_options(yql-minikql-computation.global PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_link_libraries(yql-minikql-computation.global PUBLIC
   contrib-libs-cxxsupp

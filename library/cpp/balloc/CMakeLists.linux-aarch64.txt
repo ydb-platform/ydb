@@ -11,7 +11,7 @@ add_subdirectory(setup)
 
 add_library(library-cpp-balloc)
 target_compile_options(library-cpp-balloc PRIVATE
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_link_libraries(library-cpp-balloc PUBLIC
   contrib-libs-linux-headers

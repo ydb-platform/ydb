@@ -11,7 +11,7 @@ add_library(restricted-boost-regex)
 target_compile_options(restricted-boost-regex PRIVATE
   -DBOOST_HAS_ICU
   -DBOOST_NO_CXX98_BINDERS
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-boost-regex PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/regex/include

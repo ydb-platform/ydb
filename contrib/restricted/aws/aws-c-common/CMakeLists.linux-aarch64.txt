@@ -14,7 +14,7 @@ target_compile_options(restricted-aws-aws-c-common PRIVATE
   -DCJSON_HIDE_SYMBOLS
   -DHAVE_SYSCONF
   -DAWS_AFFINITY_METHOD=AWS_AFFINITY_METHOD_PTHREAD_ATTR
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-common PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/generated/include

@@ -33,7 +33,7 @@ target_compile_options(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
   -DS2N_KYBER512R3_AVX2_BMI2
   -DS2N_SIKE_P434_R3_ASM
   -DS2N___RESTRICT__SUPPORTED
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include

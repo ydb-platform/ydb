@@ -9,7 +9,7 @@
 
 add_library(cpp-balloc-lib)
 target_compile_options(cpp-balloc-lib PRIVATE
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_link_libraries(cpp-balloc-lib PUBLIC
   contrib-libs-linux-headers

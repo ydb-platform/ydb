@@ -10,7 +10,7 @@
 add_library(contrib-libs-liburing)
 target_compile_options(contrib-libs-liburing PRIVATE
   -DLIBURING_INTERNAL
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(contrib-libs-liburing PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/liburing/src/include

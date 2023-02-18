@@ -10,7 +10,7 @@
 add_library(cpp-lfalloc-yt)
 target_compile_options(cpp-lfalloc-yt PRIVATE
   -DLFALLOC_YT
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_link_libraries(cpp-lfalloc-yt PUBLIC
   contrib-libs-cxxsupp

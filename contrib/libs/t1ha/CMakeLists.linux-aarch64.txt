@@ -9,7 +9,7 @@
 
 add_library(contrib-libs-t1ha)
 target_compile_options(contrib-libs-t1ha PRIVATE
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_link_libraries(contrib-libs-t1ha PUBLIC
   contrib-libs-linux-headers

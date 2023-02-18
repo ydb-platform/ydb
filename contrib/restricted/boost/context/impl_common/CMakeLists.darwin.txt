@@ -10,7 +10,7 @@
 add_library(boost-context-impl_common)
 target_compile_options(boost-context-impl_common PRIVATE
   -DBOOST_CONTEXT_SOURCE
-  -Wno-everything
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(boost-context-impl_common PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/include

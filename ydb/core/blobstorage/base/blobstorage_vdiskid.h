@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/blobstorage/vdisk/common/capnp/protos.h>
 
 #include <util/str_stl.h>
 #include <util/digest/numeric.h>

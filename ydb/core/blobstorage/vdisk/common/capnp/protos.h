@@ -532,6 +532,7 @@ namespace NKikimrCapnProto {
             using NKikimrCapnProto_::TEvVGet::Builder::getReaderTabletData;
             using NKikimrCapnProto_::TEvVGet::Builder::getForceBlockTabletData;
         public:
+            Builder() : NKikimrCapnProto_::TEvVGet::Builder(initRoot<NKikimrCapnProto_::TEvVGet>()), Reader(asReader()) {}
             Builder(NKikimrCapnProto_::TEvVGet::Builder b) : NKikimrCapnProto_::TEvVGet::Builder(b), Reader(b.asReader()) {}
             Builder* operator->() { return this; }
             Builder& operator*() { return *this; }

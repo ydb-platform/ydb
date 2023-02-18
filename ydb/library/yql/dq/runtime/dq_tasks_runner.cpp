@@ -324,6 +324,7 @@ public:
         TRuntimeNode programRoot = programStruct.GetValue(*programRootIdx);
 
         if (Context.FuncProvider) {
+            auto guard = patternEnv.BindAllocator();
             TExploringNodeVisitor explorer;
             explorer.Walk(programRoot.GetNode(), patternEnv);
             bool wereChanges = false;

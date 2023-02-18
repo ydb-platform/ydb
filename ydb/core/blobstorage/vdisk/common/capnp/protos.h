@@ -1,3 +1,5 @@
+#pragma once
+
 #include <capnp/message.h>
 #include <capnp/serialize-packed.h>
 #include <string>
@@ -6,7 +8,7 @@
 
 #include "tevvget.capnp.h"
 
-namespace Capnroto {
+namespace CapnProto {
     struct TMessageId {
         struct Reader : private ::TMessageId::Reader {
             Reader(::TMessageId::Reader r) : ::TMessageId::Reader(r) {}
@@ -460,9 +462,3 @@ namespace Capnroto {
     };
 
 };
-
-int main() {
-    return 0;
-}
-
-

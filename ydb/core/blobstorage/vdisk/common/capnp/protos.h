@@ -556,8 +556,8 @@ namespace NKikimrCapnProto {
                 return "TEvVGet";
             }
 
-            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                auto interviews = initExtremeQueries(elements.size());
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
+                auto interviews = const_cast<NKikimrCapnProto_::TEvVGet::Builder>(*this).initExtremeQueries(elements.size());
                 for (size_t i = 0; i != elements.size(); ++i) {
                     interviews.setWithCaveats(i, GetExtremeQueries(i).GetCapnpBase());
                 }

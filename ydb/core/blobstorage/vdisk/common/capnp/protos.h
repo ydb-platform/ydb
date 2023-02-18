@@ -544,8 +544,12 @@ namespace NKikimrCapnProto {
                 return orphan.get();
             }
 
-            size_t ByteSize() const {
+            int ByteSize() const {
                 return totalSize().wordCount * 8;
+            }
+
+            std::string ShortDebugString() const {
+                return "ShortDebugString";
             }
 
             std::string GetTypeName() const {

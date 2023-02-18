@@ -1199,10 +1199,10 @@ namespace NKikimr {
             return ToString(Record);
         }
 
-        static TString ToString(const RawSerializer::TEvVGet &record) {
+        static TString ToString(const NKikimrCapnProto::TEvVGet::Builder &record) {
             TStringStream str;
             if (record.HasRangeQuery()) {
-                const RawSerializer::TRangeQuery &query = record.GetRangeQuery();
+                auto query = record.GetRangeQuery();
                 str << "{RangeQuery# ";
                 TLogoBlobID from = LogoBlobIDFromLogoBlobID(query.GetFrom());
                 TLogoBlobID to = LogoBlobIDFromLogoBlobID(query.GetTo());
@@ -1219,7 +1219,7 @@ namespace NKikimr {
             }
             size_t size = record.ExtremeQueriesSize();
             for (unsigned i = 0; i < size; i++) {
-                const RawSerializer::TExtremeQuery &query = record.GetExtremeQueries(i);
+                auto query = record.GetExtremeQueries(i);
                 str << "{ExtrQuery# ";
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(query.GetId());
                 str << id.ToString();

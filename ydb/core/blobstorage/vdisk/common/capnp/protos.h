@@ -531,6 +531,7 @@ namespace NKikimrCapnProto {
             using NKikimrCapnProto_::TEvVGet::Builder::getTimestamps;
             using NKikimrCapnProto_::TEvVGet::Builder::getReaderTabletData;
             using NKikimrCapnProto_::TEvVGet::Builder::getForceBlockTabletData;
+            using NKikimrCapnProto_::TEvVGet::Builder::totalSize;
         public:
             Builder() : NKikimrCapnProto_::TEvVGet::Builder(initRoot<NKikimrCapnProto_::TEvVGet>()), Reader(asReader()) {}
             Builder(NKikimrCapnProto_::TEvVGet::Builder b) : NKikimrCapnProto_::TEvVGet::Builder(b), Reader(b.asReader()) {}
@@ -541,6 +542,14 @@ namespace NKikimrCapnProto {
                 auto orphan = getOrphanage().newOrphan<NKikimrCapnProto_::TExtremeQuery>();
                 elements.emplace_back(orphan.getReader());
                 return orphan.get();
+            }
+
+            size_t ByteSize() const {
+                return totalSize();
+            }
+
+            std::string GetTypeName() const {
+                return "TEvVGet";
             }
 
             void SetNotifyIfNotReady(const bool& value) { return setNotifyIfNotReady(value); }

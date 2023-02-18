@@ -79,6 +79,7 @@ CAPNP_DECLARE_SCHEMA(e60a8e68a2bf1d49);
 }  // namespace schemas
 }  // namespace capnp
 
+namespace NKikimrCapnProto_ {
 
 struct TMessageId {
   TMessageId() = delete;
@@ -661,17 +662,17 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::EStatus getStatus() const;
+  inline  ::NKikimrCapnProto_::EStatus getStatus() const;
 
   inline  ::uint64_t getActualWindowSize() const;
 
   inline  ::uint64_t getMaxWindowSize() const;
 
   inline bool hasExpectedMsgId() const;
-  inline  ::TMessageId::Reader getExpectedMsgId() const;
+  inline  ::NKikimrCapnProto_::TMessageId::Reader getExpectedMsgId() const;
 
   inline bool hasFailedMsgId() const;
-  inline  ::TMessageId::Reader getFailedMsgId() const;
+  inline  ::NKikimrCapnProto_::TMessageId::Reader getFailedMsgId() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -701,8 +702,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::EStatus getStatus();
-  inline void setStatus( ::EStatus value);
+  inline  ::NKikimrCapnProto_::EStatus getStatus();
+  inline void setStatus( ::NKikimrCapnProto_::EStatus value);
 
   inline  ::uint64_t getActualWindowSize();
   inline void setActualWindowSize( ::uint64_t value);
@@ -711,18 +712,18 @@ public:
   inline void setMaxWindowSize( ::uint64_t value);
 
   inline bool hasExpectedMsgId();
-  inline  ::TMessageId::Builder getExpectedMsgId();
-  inline void setExpectedMsgId( ::TMessageId::Reader value);
-  inline  ::TMessageId::Builder initExpectedMsgId();
-  inline void adoptExpectedMsgId(::capnp::Orphan< ::TMessageId>&& value);
-  inline ::capnp::Orphan< ::TMessageId> disownExpectedMsgId();
+  inline  ::NKikimrCapnProto_::TMessageId::Builder getExpectedMsgId();
+  inline void setExpectedMsgId( ::NKikimrCapnProto_::TMessageId::Reader value);
+  inline  ::NKikimrCapnProto_::TMessageId::Builder initExpectedMsgId();
+  inline void adoptExpectedMsgId(::capnp::Orphan< ::NKikimrCapnProto_::TMessageId>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TMessageId> disownExpectedMsgId();
 
   inline bool hasFailedMsgId();
-  inline  ::TMessageId::Builder getFailedMsgId();
-  inline void setFailedMsgId( ::TMessageId::Reader value);
-  inline  ::TMessageId::Builder initFailedMsgId();
-  inline void adoptFailedMsgId(::capnp::Orphan< ::TMessageId>&& value);
-  inline ::capnp::Orphan< ::TMessageId> disownFailedMsgId();
+  inline  ::NKikimrCapnProto_::TMessageId::Builder getFailedMsgId();
+  inline void setFailedMsgId( ::NKikimrCapnProto_::TMessageId::Reader value);
+  inline  ::NKikimrCapnProto_::TMessageId::Builder initFailedMsgId();
+  inline void adoptFailedMsgId(::capnp::Orphan< ::NKikimrCapnProto_::TMessageId>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TMessageId> disownFailedMsgId();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -742,8 +743,8 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::TMessageId::Pipeline getExpectedMsgId();
-  inline  ::TMessageId::Pipeline getFailedMsgId();
+  inline  ::NKikimrCapnProto_::TMessageId::Pipeline getExpectedMsgId();
+  inline  ::NKikimrCapnProto_::TMessageId::Pipeline getFailedMsgId();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -873,21 +874,21 @@ public:
   inline  ::uint32_t getDeadlineSeconds() const;
 
   inline bool hasMsgId() const;
-  inline  ::TMessageId::Reader getMsgId() const;
+  inline  ::NKikimrCapnProto_::TMessageId::Reader getMsgId() const;
 
   inline  ::uint64_t getCost() const;
 
-  inline  ::EVDiskQueueId getExtQueueId() const;
+  inline  ::NKikimrCapnProto_::EVDiskQueueId getExtQueueId() const;
 
-  inline  ::EVDiskInternalQueueId getIntQueueId() const;
+  inline  ::NKikimrCapnProto_::EVDiskInternalQueueId getIntQueueId() const;
 
   inline bool hasCostSettings() const;
-  inline  ::TVDiskCostSettings::Reader getCostSettings() const;
+  inline  ::NKikimrCapnProto_::TVDiskCostSettings::Reader getCostSettings() const;
 
   inline bool getSendMeCostSettings() const;
 
   inline bool hasWindow() const;
-  inline  ::TWindowFeedback::Reader getWindow() const;
+  inline  ::NKikimrCapnProto_::TWindowFeedback::Reader getWindow() const;
 
   inline  ::uint32_t getProxyNodeId() const;
 
@@ -898,10 +899,10 @@ public:
   inline  ::uint32_t getVPatchVDiskId() const;
 
   inline bool hasExecTimeStats() const;
-  inline  ::TExecTimeStats::Reader getExecTimeStats() const;
+  inline  ::NKikimrCapnProto_::TExecTimeStats::Reader getExecTimeStats() const;
 
   inline bool hasSenderActorId() const;
-  inline  ::TActorId::Reader getSenderActorId() const;
+  inline  ::NKikimrCapnProto_::TActorId::Reader getSenderActorId() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -935,37 +936,37 @@ public:
   inline void setDeadlineSeconds( ::uint32_t value);
 
   inline bool hasMsgId();
-  inline  ::TMessageId::Builder getMsgId();
-  inline void setMsgId( ::TMessageId::Reader value);
-  inline  ::TMessageId::Builder initMsgId();
-  inline void adoptMsgId(::capnp::Orphan< ::TMessageId>&& value);
-  inline ::capnp::Orphan< ::TMessageId> disownMsgId();
+  inline  ::NKikimrCapnProto_::TMessageId::Builder getMsgId();
+  inline void setMsgId( ::NKikimrCapnProto_::TMessageId::Reader value);
+  inline  ::NKikimrCapnProto_::TMessageId::Builder initMsgId();
+  inline void adoptMsgId(::capnp::Orphan< ::NKikimrCapnProto_::TMessageId>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TMessageId> disownMsgId();
 
   inline  ::uint64_t getCost();
   inline void setCost( ::uint64_t value);
 
-  inline  ::EVDiskQueueId getExtQueueId();
-  inline void setExtQueueId( ::EVDiskQueueId value);
+  inline  ::NKikimrCapnProto_::EVDiskQueueId getExtQueueId();
+  inline void setExtQueueId( ::NKikimrCapnProto_::EVDiskQueueId value);
 
-  inline  ::EVDiskInternalQueueId getIntQueueId();
-  inline void setIntQueueId( ::EVDiskInternalQueueId value);
+  inline  ::NKikimrCapnProto_::EVDiskInternalQueueId getIntQueueId();
+  inline void setIntQueueId( ::NKikimrCapnProto_::EVDiskInternalQueueId value);
 
   inline bool hasCostSettings();
-  inline  ::TVDiskCostSettings::Builder getCostSettings();
-  inline void setCostSettings( ::TVDiskCostSettings::Reader value);
-  inline  ::TVDiskCostSettings::Builder initCostSettings();
-  inline void adoptCostSettings(::capnp::Orphan< ::TVDiskCostSettings>&& value);
-  inline ::capnp::Orphan< ::TVDiskCostSettings> disownCostSettings();
+  inline  ::NKikimrCapnProto_::TVDiskCostSettings::Builder getCostSettings();
+  inline void setCostSettings( ::NKikimrCapnProto_::TVDiskCostSettings::Reader value);
+  inline  ::NKikimrCapnProto_::TVDiskCostSettings::Builder initCostSettings();
+  inline void adoptCostSettings(::capnp::Orphan< ::NKikimrCapnProto_::TVDiskCostSettings>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TVDiskCostSettings> disownCostSettings();
 
   inline bool getSendMeCostSettings();
   inline void setSendMeCostSettings(bool value);
 
   inline bool hasWindow();
-  inline  ::TWindowFeedback::Builder getWindow();
-  inline void setWindow( ::TWindowFeedback::Reader value);
-  inline  ::TWindowFeedback::Builder initWindow();
-  inline void adoptWindow(::capnp::Orphan< ::TWindowFeedback>&& value);
-  inline ::capnp::Orphan< ::TWindowFeedback> disownWindow();
+  inline  ::NKikimrCapnProto_::TWindowFeedback::Builder getWindow();
+  inline void setWindow( ::NKikimrCapnProto_::TWindowFeedback::Reader value);
+  inline  ::NKikimrCapnProto_::TWindowFeedback::Builder initWindow();
+  inline void adoptWindow(::capnp::Orphan< ::NKikimrCapnProto_::TWindowFeedback>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TWindowFeedback> disownWindow();
 
   inline  ::uint32_t getProxyNodeId();
   inline void setProxyNodeId( ::uint32_t value);
@@ -980,18 +981,18 @@ public:
   inline void setVPatchVDiskId( ::uint32_t value);
 
   inline bool hasExecTimeStats();
-  inline  ::TExecTimeStats::Builder getExecTimeStats();
-  inline void setExecTimeStats( ::TExecTimeStats::Reader value);
-  inline  ::TExecTimeStats::Builder initExecTimeStats();
-  inline void adoptExecTimeStats(::capnp::Orphan< ::TExecTimeStats>&& value);
-  inline ::capnp::Orphan< ::TExecTimeStats> disownExecTimeStats();
+  inline  ::NKikimrCapnProto_::TExecTimeStats::Builder getExecTimeStats();
+  inline void setExecTimeStats( ::NKikimrCapnProto_::TExecTimeStats::Reader value);
+  inline  ::NKikimrCapnProto_::TExecTimeStats::Builder initExecTimeStats();
+  inline void adoptExecTimeStats(::capnp::Orphan< ::NKikimrCapnProto_::TExecTimeStats>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TExecTimeStats> disownExecTimeStats();
 
   inline bool hasSenderActorId();
-  inline  ::TActorId::Builder getSenderActorId();
-  inline void setSenderActorId( ::TActorId::Reader value);
-  inline  ::TActorId::Builder initSenderActorId();
-  inline void adoptSenderActorId(::capnp::Orphan< ::TActorId>&& value);
-  inline ::capnp::Orphan< ::TActorId> disownSenderActorId();
+  inline  ::NKikimrCapnProto_::TActorId::Builder getSenderActorId();
+  inline void setSenderActorId( ::NKikimrCapnProto_::TActorId::Reader value);
+  inline  ::NKikimrCapnProto_::TActorId::Builder initSenderActorId();
+  inline void adoptSenderActorId(::capnp::Orphan< ::NKikimrCapnProto_::TActorId>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TActorId> disownSenderActorId();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1011,11 +1012,11 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::TMessageId::Pipeline getMsgId();
-  inline  ::TVDiskCostSettings::Pipeline getCostSettings();
-  inline  ::TWindowFeedback::Pipeline getWindow();
-  inline  ::TExecTimeStats::Pipeline getExecTimeStats();
-  inline  ::TActorId::Pipeline getSenderActorId();
+  inline  ::NKikimrCapnProto_::TMessageId::Pipeline getMsgId();
+  inline  ::NKikimrCapnProto_::TVDiskCostSettings::Pipeline getCostSettings();
+  inline  ::NKikimrCapnProto_::TWindowFeedback::Pipeline getWindow();
+  inline  ::NKikimrCapnProto_::TExecTimeStats::Pipeline getExecTimeStats();
+  inline  ::NKikimrCapnProto_::TActorId::Pipeline getSenderActorId();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -1224,10 +1225,10 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasFrom() const;
-  inline  ::TLogoBlobID::Reader getFrom() const;
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Reader getFrom() const;
 
   inline bool hasTo() const;
-  inline  ::TLogoBlobID::Reader getTo() const;
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Reader getTo() const;
 
   inline  ::uint64_t getCookie() const;
 
@@ -1262,18 +1263,18 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasFrom();
-  inline  ::TLogoBlobID::Builder getFrom();
-  inline void setFrom( ::TLogoBlobID::Reader value);
-  inline  ::TLogoBlobID::Builder initFrom();
-  inline void adoptFrom(::capnp::Orphan< ::TLogoBlobID>&& value);
-  inline ::capnp::Orphan< ::TLogoBlobID> disownFrom();
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Builder getFrom();
+  inline void setFrom( ::NKikimrCapnProto_::TLogoBlobID::Reader value);
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Builder initFrom();
+  inline void adoptFrom(::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID> disownFrom();
 
   inline bool hasTo();
-  inline  ::TLogoBlobID::Builder getTo();
-  inline void setTo( ::TLogoBlobID::Reader value);
-  inline  ::TLogoBlobID::Builder initTo();
-  inline void adoptTo(::capnp::Orphan< ::TLogoBlobID>&& value);
-  inline ::capnp::Orphan< ::TLogoBlobID> disownTo();
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Builder getTo();
+  inline void setTo( ::NKikimrCapnProto_::TLogoBlobID::Reader value);
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Builder initTo();
+  inline void adoptTo(::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID> disownTo();
 
   inline  ::uint64_t getCookie();
   inline void setCookie( ::uint64_t value);
@@ -1299,8 +1300,8 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::TLogoBlobID::Pipeline getFrom();
-  inline  ::TLogoBlobID::Pipeline getTo();
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Pipeline getFrom();
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Pipeline getTo();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -1327,7 +1328,7 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasId() const;
-  inline  ::TLogoBlobID::Reader getId() const;
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Reader getId() const;
 
   inline  ::uint64_t getShift() const;
 
@@ -1364,11 +1365,11 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasId();
-  inline  ::TLogoBlobID::Builder getId();
-  inline void setId( ::TLogoBlobID::Reader value);
-  inline  ::TLogoBlobID::Builder initId();
-  inline void adoptId(::capnp::Orphan< ::TLogoBlobID>&& value);
-  inline ::capnp::Orphan< ::TLogoBlobID> disownId();
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Builder getId();
+  inline void setId( ::NKikimrCapnProto_::TLogoBlobID::Reader value);
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Builder initId();
+  inline void adoptId(::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID> disownId();
 
   inline  ::uint64_t getShift();
   inline void setShift( ::uint64_t value);
@@ -1397,7 +1398,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::TLogoBlobID::Pipeline getId();
+  inline  ::NKikimrCapnProto_::TLogoBlobID::Pipeline getId();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -1505,13 +1506,13 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasRangeQuery() const;
-  inline  ::TRangeQuery::Reader getRangeQuery() const;
+  inline  ::NKikimrCapnProto_::TRangeQuery::Reader getRangeQuery() const;
 
   inline bool hasExtremeQueries() const;
-  inline  ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>::Reader getExtremeQueries() const;
+  inline  ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>::Reader getExtremeQueries() const;
 
   inline bool hasVDiskID() const;
-  inline  ::TVDiskID::Reader getVDiskID() const;
+  inline  ::NKikimrCapnProto_::TVDiskID::Reader getVDiskID() const;
 
   inline bool getNotifyIfNotReady() const;
 
@@ -1520,11 +1521,11 @@ public:
   inline  ::uint64_t getCookie() const;
 
   inline bool hasMsgQoS() const;
-  inline  ::TMsgQoS::Reader getMsgQoS() const;
+  inline  ::NKikimrCapnProto_::TMsgQoS::Reader getMsgQoS() const;
 
   inline bool getIndexOnly() const;
 
-  inline  ::EGetHandleClass getHandleClass() const;
+  inline  ::NKikimrCapnProto_::EGetHandleClass getHandleClass() const;
 
   inline bool getSuppressBarrierCheck() const;
 
@@ -1533,15 +1534,15 @@ public:
   inline bool getAcquireBlockedGeneration() const;
 
   inline bool hasTimestamps() const;
-  inline  ::TTimestamps::Reader getTimestamps() const;
+  inline  ::NKikimrCapnProto_::TTimestamps::Reader getTimestamps() const;
 
   inline  ::uint32_t getForceBlockedGeneration() const;
 
   inline bool hasReaderTabletData() const;
-  inline  ::TTabletData::Reader getReaderTabletData() const;
+  inline  ::NKikimrCapnProto_::TTabletData::Reader getReaderTabletData() const;
 
   inline bool hasForceBlockTabletData() const;
-  inline  ::TTabletData::Reader getForceBlockTabletData() const;
+  inline  ::NKikimrCapnProto_::TTabletData::Reader getForceBlockTabletData() const;
 
   inline bool hasSnapshotId() const;
   inline  ::capnp::Data::Reader getSnapshotId() const;
@@ -1575,25 +1576,25 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasRangeQuery();
-  inline  ::TRangeQuery::Builder getRangeQuery();
-  inline void setRangeQuery( ::TRangeQuery::Reader value);
-  inline  ::TRangeQuery::Builder initRangeQuery();
-  inline void adoptRangeQuery(::capnp::Orphan< ::TRangeQuery>&& value);
-  inline ::capnp::Orphan< ::TRangeQuery> disownRangeQuery();
+  inline  ::NKikimrCapnProto_::TRangeQuery::Builder getRangeQuery();
+  inline void setRangeQuery( ::NKikimrCapnProto_::TRangeQuery::Reader value);
+  inline  ::NKikimrCapnProto_::TRangeQuery::Builder initRangeQuery();
+  inline void adoptRangeQuery(::capnp::Orphan< ::NKikimrCapnProto_::TRangeQuery>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TRangeQuery> disownRangeQuery();
 
   inline bool hasExtremeQueries();
-  inline  ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>::Builder getExtremeQueries();
-  inline void setExtremeQueries( ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>::Reader value);
-  inline  ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>::Builder initExtremeQueries(unsigned int size);
-  inline void adoptExtremeQueries(::capnp::Orphan< ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>> disownExtremeQueries();
+  inline  ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>::Builder getExtremeQueries();
+  inline void setExtremeQueries( ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>::Builder initExtremeQueries(unsigned int size);
+  inline void adoptExtremeQueries(::capnp::Orphan< ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>> disownExtremeQueries();
 
   inline bool hasVDiskID();
-  inline  ::TVDiskID::Builder getVDiskID();
-  inline void setVDiskID( ::TVDiskID::Reader value);
-  inline  ::TVDiskID::Builder initVDiskID();
-  inline void adoptVDiskID(::capnp::Orphan< ::TVDiskID>&& value);
-  inline ::capnp::Orphan< ::TVDiskID> disownVDiskID();
+  inline  ::NKikimrCapnProto_::TVDiskID::Builder getVDiskID();
+  inline void setVDiskID( ::NKikimrCapnProto_::TVDiskID::Reader value);
+  inline  ::NKikimrCapnProto_::TVDiskID::Builder initVDiskID();
+  inline void adoptVDiskID(::capnp::Orphan< ::NKikimrCapnProto_::TVDiskID>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TVDiskID> disownVDiskID();
 
   inline bool getNotifyIfNotReady();
   inline void setNotifyIfNotReady(bool value);
@@ -1605,17 +1606,17 @@ public:
   inline void setCookie( ::uint64_t value);
 
   inline bool hasMsgQoS();
-  inline  ::TMsgQoS::Builder getMsgQoS();
-  inline void setMsgQoS( ::TMsgQoS::Reader value);
-  inline  ::TMsgQoS::Builder initMsgQoS();
-  inline void adoptMsgQoS(::capnp::Orphan< ::TMsgQoS>&& value);
-  inline ::capnp::Orphan< ::TMsgQoS> disownMsgQoS();
+  inline  ::NKikimrCapnProto_::TMsgQoS::Builder getMsgQoS();
+  inline void setMsgQoS( ::NKikimrCapnProto_::TMsgQoS::Reader value);
+  inline  ::NKikimrCapnProto_::TMsgQoS::Builder initMsgQoS();
+  inline void adoptMsgQoS(::capnp::Orphan< ::NKikimrCapnProto_::TMsgQoS>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TMsgQoS> disownMsgQoS();
 
   inline bool getIndexOnly();
   inline void setIndexOnly(bool value);
 
-  inline  ::EGetHandleClass getHandleClass();
-  inline void setHandleClass( ::EGetHandleClass value);
+  inline  ::NKikimrCapnProto_::EGetHandleClass getHandleClass();
+  inline void setHandleClass( ::NKikimrCapnProto_::EGetHandleClass value);
 
   inline bool getSuppressBarrierCheck();
   inline void setSuppressBarrierCheck(bool value);
@@ -1627,28 +1628,28 @@ public:
   inline void setAcquireBlockedGeneration(bool value);
 
   inline bool hasTimestamps();
-  inline  ::TTimestamps::Builder getTimestamps();
-  inline void setTimestamps( ::TTimestamps::Reader value);
-  inline  ::TTimestamps::Builder initTimestamps();
-  inline void adoptTimestamps(::capnp::Orphan< ::TTimestamps>&& value);
-  inline ::capnp::Orphan< ::TTimestamps> disownTimestamps();
+  inline  ::NKikimrCapnProto_::TTimestamps::Builder getTimestamps();
+  inline void setTimestamps( ::NKikimrCapnProto_::TTimestamps::Reader value);
+  inline  ::NKikimrCapnProto_::TTimestamps::Builder initTimestamps();
+  inline void adoptTimestamps(::capnp::Orphan< ::NKikimrCapnProto_::TTimestamps>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TTimestamps> disownTimestamps();
 
   inline  ::uint32_t getForceBlockedGeneration();
   inline void setForceBlockedGeneration( ::uint32_t value);
 
   inline bool hasReaderTabletData();
-  inline  ::TTabletData::Builder getReaderTabletData();
-  inline void setReaderTabletData( ::TTabletData::Reader value);
-  inline  ::TTabletData::Builder initReaderTabletData();
-  inline void adoptReaderTabletData(::capnp::Orphan< ::TTabletData>&& value);
-  inline ::capnp::Orphan< ::TTabletData> disownReaderTabletData();
+  inline  ::NKikimrCapnProto_::TTabletData::Builder getReaderTabletData();
+  inline void setReaderTabletData( ::NKikimrCapnProto_::TTabletData::Reader value);
+  inline  ::NKikimrCapnProto_::TTabletData::Builder initReaderTabletData();
+  inline void adoptReaderTabletData(::capnp::Orphan< ::NKikimrCapnProto_::TTabletData>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TTabletData> disownReaderTabletData();
 
   inline bool hasForceBlockTabletData();
-  inline  ::TTabletData::Builder getForceBlockTabletData();
-  inline void setForceBlockTabletData( ::TTabletData::Reader value);
-  inline  ::TTabletData::Builder initForceBlockTabletData();
-  inline void adoptForceBlockTabletData(::capnp::Orphan< ::TTabletData>&& value);
-  inline ::capnp::Orphan< ::TTabletData> disownForceBlockTabletData();
+  inline  ::NKikimrCapnProto_::TTabletData::Builder getForceBlockTabletData();
+  inline void setForceBlockTabletData( ::NKikimrCapnProto_::TTabletData::Reader value);
+  inline  ::NKikimrCapnProto_::TTabletData::Builder initForceBlockTabletData();
+  inline void adoptForceBlockTabletData(::capnp::Orphan< ::NKikimrCapnProto_::TTabletData>&& value);
+  inline ::capnp::Orphan< ::NKikimrCapnProto_::TTabletData> disownForceBlockTabletData();
 
   inline bool hasSnapshotId();
   inline  ::capnp::Data::Builder getSnapshotId();
@@ -1675,12 +1676,12 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::TRangeQuery::Pipeline getRangeQuery();
-  inline  ::TVDiskID::Pipeline getVDiskID();
-  inline  ::TMsgQoS::Pipeline getMsgQoS();
-  inline  ::TTimestamps::Pipeline getTimestamps();
-  inline  ::TTabletData::Pipeline getReaderTabletData();
-  inline  ::TTabletData::Pipeline getForceBlockTabletData();
+  inline  ::NKikimrCapnProto_::TRangeQuery::Pipeline getRangeQuery();
+  inline  ::NKikimrCapnProto_::TVDiskID::Pipeline getVDiskID();
+  inline  ::NKikimrCapnProto_::TMsgQoS::Pipeline getMsgQoS();
+  inline  ::NKikimrCapnProto_::TTimestamps::Pipeline getTimestamps();
+  inline  ::NKikimrCapnProto_::TTabletData::Pipeline getReaderTabletData();
+  inline  ::NKikimrCapnProto_::TTabletData::Pipeline getForceBlockTabletData();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -1901,17 +1902,17 @@ inline void TExecTimeStats::Builder::setHugeWriteTime( ::uint64_t value) {
       ::capnp::bounded<6>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::EStatus TWindowFeedback::Reader::getStatus() const {
-  return _reader.getDataField< ::EStatus>(
+inline  ::NKikimrCapnProto_::EStatus TWindowFeedback::Reader::getStatus() const {
+  return _reader.getDataField< ::NKikimrCapnProto_::EStatus>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::EStatus TWindowFeedback::Builder::getStatus() {
-  return _builder.getDataField< ::EStatus>(
+inline  ::NKikimrCapnProto_::EStatus TWindowFeedback::Builder::getStatus() {
+  return _builder.getDataField< ::NKikimrCapnProto_::EStatus>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void TWindowFeedback::Builder::setStatus( ::EStatus value) {
-  _builder.setDataField< ::EStatus>(
+inline void TWindowFeedback::Builder::setStatus( ::NKikimrCapnProto_::EStatus value) {
+  _builder.setDataField< ::NKikimrCapnProto_::EStatus>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
@@ -1951,34 +1952,34 @@ inline bool TWindowFeedback::Builder::hasExpectedMsgId() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TMessageId::Reader TWindowFeedback::Reader::getExpectedMsgId() const {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TMessageId::Reader TWindowFeedback::Reader::getExpectedMsgId() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::TMessageId::Builder TWindowFeedback::Builder::getExpectedMsgId() {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TMessageId::Builder TWindowFeedback::Builder::getExpectedMsgId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TMessageId::Pipeline TWindowFeedback::Pipeline::getExpectedMsgId() {
-  return  ::TMessageId::Pipeline(_typeless.getPointerField(0));
+inline  ::NKikimrCapnProto_::TMessageId::Pipeline TWindowFeedback::Pipeline::getExpectedMsgId() {
+  return  ::NKikimrCapnProto_::TMessageId::Pipeline(_typeless.getPointerField(0));
 }
 #endif  // !CAPNP_LITE
-inline void TWindowFeedback::Builder::setExpectedMsgId( ::TMessageId::Reader value) {
-  ::capnp::_::PointerHelpers< ::TMessageId>::set(_builder.getPointerField(
+inline void TWindowFeedback::Builder::setExpectedMsgId( ::NKikimrCapnProto_::TMessageId::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::TMessageId::Builder TWindowFeedback::Builder::initExpectedMsgId() {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TMessageId::Builder TWindowFeedback::Builder::initExpectedMsgId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 inline void TWindowFeedback::Builder::adoptExpectedMsgId(
-    ::capnp::Orphan< ::TMessageId>&& value) {
-  ::capnp::_::PointerHelpers< ::TMessageId>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TMessageId>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TMessageId> TWindowFeedback::Builder::disownExpectedMsgId() {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TMessageId> TWindowFeedback::Builder::disownExpectedMsgId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
@@ -1990,34 +1991,34 @@ inline bool TWindowFeedback::Builder::hasFailedMsgId() {
   return !_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TMessageId::Reader TWindowFeedback::Reader::getFailedMsgId() const {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TMessageId::Reader TWindowFeedback::Reader::getFailedMsgId() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::get(_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline  ::TMessageId::Builder TWindowFeedback::Builder::getFailedMsgId() {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TMessageId::Builder TWindowFeedback::Builder::getFailedMsgId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::get(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TMessageId::Pipeline TWindowFeedback::Pipeline::getFailedMsgId() {
-  return  ::TMessageId::Pipeline(_typeless.getPointerField(1));
+inline  ::NKikimrCapnProto_::TMessageId::Pipeline TWindowFeedback::Pipeline::getFailedMsgId() {
+  return  ::NKikimrCapnProto_::TMessageId::Pipeline(_typeless.getPointerField(1));
 }
 #endif  // !CAPNP_LITE
-inline void TWindowFeedback::Builder::setFailedMsgId( ::TMessageId::Reader value) {
-  ::capnp::_::PointerHelpers< ::TMessageId>::set(_builder.getPointerField(
+inline void TWindowFeedback::Builder::setFailedMsgId( ::NKikimrCapnProto_::TMessageId::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::set(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-inline  ::TMessageId::Builder TWindowFeedback::Builder::initFailedMsgId() {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TMessageId::Builder TWindowFeedback::Builder::initFailedMsgId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::init(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 inline void TWindowFeedback::Builder::adoptFailedMsgId(
-    ::capnp::Orphan< ::TMessageId>&& value) {
-  ::capnp::_::PointerHelpers< ::TMessageId>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TMessageId>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::adopt(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TMessageId> TWindowFeedback::Builder::disownFailedMsgId() {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TMessageId> TWindowFeedback::Builder::disownFailedMsgId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
@@ -2127,34 +2128,34 @@ inline bool TMsgQoS::Builder::hasMsgId() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TMessageId::Reader TMsgQoS::Reader::getMsgId() const {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TMessageId::Reader TMsgQoS::Reader::getMsgId() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::TMessageId::Builder TMsgQoS::Builder::getMsgId() {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TMessageId::Builder TMsgQoS::Builder::getMsgId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TMessageId::Pipeline TMsgQoS::Pipeline::getMsgId() {
-  return  ::TMessageId::Pipeline(_typeless.getPointerField(0));
+inline  ::NKikimrCapnProto_::TMessageId::Pipeline TMsgQoS::Pipeline::getMsgId() {
+  return  ::NKikimrCapnProto_::TMessageId::Pipeline(_typeless.getPointerField(0));
 }
 #endif  // !CAPNP_LITE
-inline void TMsgQoS::Builder::setMsgId( ::TMessageId::Reader value) {
-  ::capnp::_::PointerHelpers< ::TMessageId>::set(_builder.getPointerField(
+inline void TMsgQoS::Builder::setMsgId( ::NKikimrCapnProto_::TMessageId::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::TMessageId::Builder TMsgQoS::Builder::initMsgId() {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TMessageId::Builder TMsgQoS::Builder::initMsgId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 inline void TMsgQoS::Builder::adoptMsgId(
-    ::capnp::Orphan< ::TMessageId>&& value) {
-  ::capnp::_::PointerHelpers< ::TMessageId>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TMessageId>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TMessageId> TMsgQoS::Builder::disownMsgId() {
-  return ::capnp::_::PointerHelpers< ::TMessageId>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TMessageId> TMsgQoS::Builder::disownMsgId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMessageId>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
@@ -2172,31 +2173,31 @@ inline void TMsgQoS::Builder::setCost( ::uint64_t value) {
       ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::EVDiskQueueId TMsgQoS::Reader::getExtQueueId() const {
-  return _reader.getDataField< ::EVDiskQueueId>(
+inline  ::NKikimrCapnProto_::EVDiskQueueId TMsgQoS::Reader::getExtQueueId() const {
+  return _reader.getDataField< ::NKikimrCapnProto_::EVDiskQueueId>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
 
-inline  ::EVDiskQueueId TMsgQoS::Builder::getExtQueueId() {
-  return _builder.getDataField< ::EVDiskQueueId>(
+inline  ::NKikimrCapnProto_::EVDiskQueueId TMsgQoS::Builder::getExtQueueId() {
+  return _builder.getDataField< ::NKikimrCapnProto_::EVDiskQueueId>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
-inline void TMsgQoS::Builder::setExtQueueId( ::EVDiskQueueId value) {
-  _builder.setDataField< ::EVDiskQueueId>(
+inline void TMsgQoS::Builder::setExtQueueId( ::NKikimrCapnProto_::EVDiskQueueId value) {
+  _builder.setDataField< ::NKikimrCapnProto_::EVDiskQueueId>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::EVDiskInternalQueueId TMsgQoS::Reader::getIntQueueId() const {
-  return _reader.getDataField< ::EVDiskInternalQueueId>(
+inline  ::NKikimrCapnProto_::EVDiskInternalQueueId TMsgQoS::Reader::getIntQueueId() const {
+  return _reader.getDataField< ::NKikimrCapnProto_::EVDiskInternalQueueId>(
       ::capnp::bounded<3>() * ::capnp::ELEMENTS);
 }
 
-inline  ::EVDiskInternalQueueId TMsgQoS::Builder::getIntQueueId() {
-  return _builder.getDataField< ::EVDiskInternalQueueId>(
+inline  ::NKikimrCapnProto_::EVDiskInternalQueueId TMsgQoS::Builder::getIntQueueId() {
+  return _builder.getDataField< ::NKikimrCapnProto_::EVDiskInternalQueueId>(
       ::capnp::bounded<3>() * ::capnp::ELEMENTS);
 }
-inline void TMsgQoS::Builder::setIntQueueId( ::EVDiskInternalQueueId value) {
-  _builder.setDataField< ::EVDiskInternalQueueId>(
+inline void TMsgQoS::Builder::setIntQueueId( ::NKikimrCapnProto_::EVDiskInternalQueueId value) {
+  _builder.setDataField< ::NKikimrCapnProto_::EVDiskInternalQueueId>(
       ::capnp::bounded<3>() * ::capnp::ELEMENTS, value);
 }
 
@@ -2208,34 +2209,34 @@ inline bool TMsgQoS::Builder::hasCostSettings() {
   return !_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TVDiskCostSettings::Reader TMsgQoS::Reader::getCostSettings() const {
-  return ::capnp::_::PointerHelpers< ::TVDiskCostSettings>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TVDiskCostSettings::Reader TMsgQoS::Reader::getCostSettings() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskCostSettings>::get(_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline  ::TVDiskCostSettings::Builder TMsgQoS::Builder::getCostSettings() {
-  return ::capnp::_::PointerHelpers< ::TVDiskCostSettings>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TVDiskCostSettings::Builder TMsgQoS::Builder::getCostSettings() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskCostSettings>::get(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TVDiskCostSettings::Pipeline TMsgQoS::Pipeline::getCostSettings() {
-  return  ::TVDiskCostSettings::Pipeline(_typeless.getPointerField(1));
+inline  ::NKikimrCapnProto_::TVDiskCostSettings::Pipeline TMsgQoS::Pipeline::getCostSettings() {
+  return  ::NKikimrCapnProto_::TVDiskCostSettings::Pipeline(_typeless.getPointerField(1));
 }
 #endif  // !CAPNP_LITE
-inline void TMsgQoS::Builder::setCostSettings( ::TVDiskCostSettings::Reader value) {
-  ::capnp::_::PointerHelpers< ::TVDiskCostSettings>::set(_builder.getPointerField(
+inline void TMsgQoS::Builder::setCostSettings( ::NKikimrCapnProto_::TVDiskCostSettings::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskCostSettings>::set(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-inline  ::TVDiskCostSettings::Builder TMsgQoS::Builder::initCostSettings() {
-  return ::capnp::_::PointerHelpers< ::TVDiskCostSettings>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TVDiskCostSettings::Builder TMsgQoS::Builder::initCostSettings() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskCostSettings>::init(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 inline void TMsgQoS::Builder::adoptCostSettings(
-    ::capnp::Orphan< ::TVDiskCostSettings>&& value) {
-  ::capnp::_::PointerHelpers< ::TVDiskCostSettings>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TVDiskCostSettings>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskCostSettings>::adopt(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TVDiskCostSettings> TMsgQoS::Builder::disownCostSettings() {
-  return ::capnp::_::PointerHelpers< ::TVDiskCostSettings>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TVDiskCostSettings> TMsgQoS::Builder::disownCostSettings() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskCostSettings>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
@@ -2261,34 +2262,34 @@ inline bool TMsgQoS::Builder::hasWindow() {
   return !_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TWindowFeedback::Reader TMsgQoS::Reader::getWindow() const {
-  return ::capnp::_::PointerHelpers< ::TWindowFeedback>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TWindowFeedback::Reader TMsgQoS::Reader::getWindow() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TWindowFeedback>::get(_reader.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
-inline  ::TWindowFeedback::Builder TMsgQoS::Builder::getWindow() {
-  return ::capnp::_::PointerHelpers< ::TWindowFeedback>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TWindowFeedback::Builder TMsgQoS::Builder::getWindow() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TWindowFeedback>::get(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TWindowFeedback::Pipeline TMsgQoS::Pipeline::getWindow() {
-  return  ::TWindowFeedback::Pipeline(_typeless.getPointerField(2));
+inline  ::NKikimrCapnProto_::TWindowFeedback::Pipeline TMsgQoS::Pipeline::getWindow() {
+  return  ::NKikimrCapnProto_::TWindowFeedback::Pipeline(_typeless.getPointerField(2));
 }
 #endif  // !CAPNP_LITE
-inline void TMsgQoS::Builder::setWindow( ::TWindowFeedback::Reader value) {
-  ::capnp::_::PointerHelpers< ::TWindowFeedback>::set(_builder.getPointerField(
+inline void TMsgQoS::Builder::setWindow( ::NKikimrCapnProto_::TWindowFeedback::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TWindowFeedback>::set(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS), value);
 }
-inline  ::TWindowFeedback::Builder TMsgQoS::Builder::initWindow() {
-  return ::capnp::_::PointerHelpers< ::TWindowFeedback>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TWindowFeedback::Builder TMsgQoS::Builder::initWindow() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TWindowFeedback>::init(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 inline void TMsgQoS::Builder::adoptWindow(
-    ::capnp::Orphan< ::TWindowFeedback>&& value) {
-  ::capnp::_::PointerHelpers< ::TWindowFeedback>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TWindowFeedback>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TWindowFeedback>::adopt(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TWindowFeedback> TMsgQoS::Builder::disownWindow() {
-  return ::capnp::_::PointerHelpers< ::TWindowFeedback>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TWindowFeedback> TMsgQoS::Builder::disownWindow() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TWindowFeedback>::disown(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 
@@ -2356,34 +2357,34 @@ inline bool TMsgQoS::Builder::hasExecTimeStats() {
   return !_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TExecTimeStats::Reader TMsgQoS::Reader::getExecTimeStats() const {
-  return ::capnp::_::PointerHelpers< ::TExecTimeStats>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TExecTimeStats::Reader TMsgQoS::Reader::getExecTimeStats() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TExecTimeStats>::get(_reader.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
-inline  ::TExecTimeStats::Builder TMsgQoS::Builder::getExecTimeStats() {
-  return ::capnp::_::PointerHelpers< ::TExecTimeStats>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TExecTimeStats::Builder TMsgQoS::Builder::getExecTimeStats() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TExecTimeStats>::get(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TExecTimeStats::Pipeline TMsgQoS::Pipeline::getExecTimeStats() {
-  return  ::TExecTimeStats::Pipeline(_typeless.getPointerField(3));
+inline  ::NKikimrCapnProto_::TExecTimeStats::Pipeline TMsgQoS::Pipeline::getExecTimeStats() {
+  return  ::NKikimrCapnProto_::TExecTimeStats::Pipeline(_typeless.getPointerField(3));
 }
 #endif  // !CAPNP_LITE
-inline void TMsgQoS::Builder::setExecTimeStats( ::TExecTimeStats::Reader value) {
-  ::capnp::_::PointerHelpers< ::TExecTimeStats>::set(_builder.getPointerField(
+inline void TMsgQoS::Builder::setExecTimeStats( ::NKikimrCapnProto_::TExecTimeStats::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TExecTimeStats>::set(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS), value);
 }
-inline  ::TExecTimeStats::Builder TMsgQoS::Builder::initExecTimeStats() {
-  return ::capnp::_::PointerHelpers< ::TExecTimeStats>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TExecTimeStats::Builder TMsgQoS::Builder::initExecTimeStats() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TExecTimeStats>::init(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 inline void TMsgQoS::Builder::adoptExecTimeStats(
-    ::capnp::Orphan< ::TExecTimeStats>&& value) {
-  ::capnp::_::PointerHelpers< ::TExecTimeStats>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TExecTimeStats>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TExecTimeStats>::adopt(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TExecTimeStats> TMsgQoS::Builder::disownExecTimeStats() {
-  return ::capnp::_::PointerHelpers< ::TExecTimeStats>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TExecTimeStats> TMsgQoS::Builder::disownExecTimeStats() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TExecTimeStats>::disown(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 
@@ -2395,34 +2396,34 @@ inline bool TMsgQoS::Builder::hasSenderActorId() {
   return !_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TActorId::Reader TMsgQoS::Reader::getSenderActorId() const {
-  return ::capnp::_::PointerHelpers< ::TActorId>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TActorId::Reader TMsgQoS::Reader::getSenderActorId() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TActorId>::get(_reader.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
-inline  ::TActorId::Builder TMsgQoS::Builder::getSenderActorId() {
-  return ::capnp::_::PointerHelpers< ::TActorId>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TActorId::Builder TMsgQoS::Builder::getSenderActorId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TActorId>::get(_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TActorId::Pipeline TMsgQoS::Pipeline::getSenderActorId() {
-  return  ::TActorId::Pipeline(_typeless.getPointerField(4));
+inline  ::NKikimrCapnProto_::TActorId::Pipeline TMsgQoS::Pipeline::getSenderActorId() {
+  return  ::NKikimrCapnProto_::TActorId::Pipeline(_typeless.getPointerField(4));
 }
 #endif  // !CAPNP_LITE
-inline void TMsgQoS::Builder::setSenderActorId( ::TActorId::Reader value) {
-  ::capnp::_::PointerHelpers< ::TActorId>::set(_builder.getPointerField(
+inline void TMsgQoS::Builder::setSenderActorId( ::NKikimrCapnProto_::TActorId::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TActorId>::set(_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS), value);
 }
-inline  ::TActorId::Builder TMsgQoS::Builder::initSenderActorId() {
-  return ::capnp::_::PointerHelpers< ::TActorId>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TActorId::Builder TMsgQoS::Builder::initSenderActorId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TActorId>::init(_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
 inline void TMsgQoS::Builder::adoptSenderActorId(
-    ::capnp::Orphan< ::TActorId>&& value) {
-  ::capnp::_::PointerHelpers< ::TActorId>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TActorId>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TActorId>::adopt(_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TActorId> TMsgQoS::Builder::disownSenderActorId() {
-  return ::capnp::_::PointerHelpers< ::TActorId>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TActorId> TMsgQoS::Builder::disownSenderActorId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TActorId>::disown(_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
 
@@ -2546,34 +2547,34 @@ inline bool TRangeQuery::Builder::hasFrom() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TLogoBlobID::Reader TRangeQuery::Reader::getFrom() const {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TLogoBlobID::Reader TRangeQuery::Reader::getFrom() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::TLogoBlobID::Builder TRangeQuery::Builder::getFrom() {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TLogoBlobID::Builder TRangeQuery::Builder::getFrom() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TLogoBlobID::Pipeline TRangeQuery::Pipeline::getFrom() {
-  return  ::TLogoBlobID::Pipeline(_typeless.getPointerField(0));
+inline  ::NKikimrCapnProto_::TLogoBlobID::Pipeline TRangeQuery::Pipeline::getFrom() {
+  return  ::NKikimrCapnProto_::TLogoBlobID::Pipeline(_typeless.getPointerField(0));
 }
 #endif  // !CAPNP_LITE
-inline void TRangeQuery::Builder::setFrom( ::TLogoBlobID::Reader value) {
-  ::capnp::_::PointerHelpers< ::TLogoBlobID>::set(_builder.getPointerField(
+inline void TRangeQuery::Builder::setFrom( ::NKikimrCapnProto_::TLogoBlobID::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::TLogoBlobID::Builder TRangeQuery::Builder::initFrom() {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TLogoBlobID::Builder TRangeQuery::Builder::initFrom() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 inline void TRangeQuery::Builder::adoptFrom(
-    ::capnp::Orphan< ::TLogoBlobID>&& value) {
-  ::capnp::_::PointerHelpers< ::TLogoBlobID>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TLogoBlobID> TRangeQuery::Builder::disownFrom() {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID> TRangeQuery::Builder::disownFrom() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
@@ -2585,34 +2586,34 @@ inline bool TRangeQuery::Builder::hasTo() {
   return !_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TLogoBlobID::Reader TRangeQuery::Reader::getTo() const {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TLogoBlobID::Reader TRangeQuery::Reader::getTo() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::get(_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline  ::TLogoBlobID::Builder TRangeQuery::Builder::getTo() {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TLogoBlobID::Builder TRangeQuery::Builder::getTo() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::get(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TLogoBlobID::Pipeline TRangeQuery::Pipeline::getTo() {
-  return  ::TLogoBlobID::Pipeline(_typeless.getPointerField(1));
+inline  ::NKikimrCapnProto_::TLogoBlobID::Pipeline TRangeQuery::Pipeline::getTo() {
+  return  ::NKikimrCapnProto_::TLogoBlobID::Pipeline(_typeless.getPointerField(1));
 }
 #endif  // !CAPNP_LITE
-inline void TRangeQuery::Builder::setTo( ::TLogoBlobID::Reader value) {
-  ::capnp::_::PointerHelpers< ::TLogoBlobID>::set(_builder.getPointerField(
+inline void TRangeQuery::Builder::setTo( ::NKikimrCapnProto_::TLogoBlobID::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::set(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-inline  ::TLogoBlobID::Builder TRangeQuery::Builder::initTo() {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TLogoBlobID::Builder TRangeQuery::Builder::initTo() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::init(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 inline void TRangeQuery::Builder::adoptTo(
-    ::capnp::Orphan< ::TLogoBlobID>&& value) {
-  ::capnp::_::PointerHelpers< ::TLogoBlobID>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::adopt(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TLogoBlobID> TRangeQuery::Builder::disownTo() {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID> TRangeQuery::Builder::disownTo() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
@@ -2652,34 +2653,34 @@ inline bool TExtremeQuery::Builder::hasId() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TLogoBlobID::Reader TExtremeQuery::Reader::getId() const {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TLogoBlobID::Reader TExtremeQuery::Reader::getId() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::TLogoBlobID::Builder TExtremeQuery::Builder::getId() {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TLogoBlobID::Builder TExtremeQuery::Builder::getId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TLogoBlobID::Pipeline TExtremeQuery::Pipeline::getId() {
-  return  ::TLogoBlobID::Pipeline(_typeless.getPointerField(0));
+inline  ::NKikimrCapnProto_::TLogoBlobID::Pipeline TExtremeQuery::Pipeline::getId() {
+  return  ::NKikimrCapnProto_::TLogoBlobID::Pipeline(_typeless.getPointerField(0));
 }
 #endif  // !CAPNP_LITE
-inline void TExtremeQuery::Builder::setId( ::TLogoBlobID::Reader value) {
-  ::capnp::_::PointerHelpers< ::TLogoBlobID>::set(_builder.getPointerField(
+inline void TExtremeQuery::Builder::setId( ::NKikimrCapnProto_::TLogoBlobID::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::TLogoBlobID::Builder TExtremeQuery::Builder::initId() {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TLogoBlobID::Builder TExtremeQuery::Builder::initId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 inline void TExtremeQuery::Builder::adoptId(
-    ::capnp::Orphan< ::TLogoBlobID>&& value) {
-  ::capnp::_::PointerHelpers< ::TLogoBlobID>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TLogoBlobID> TExtremeQuery::Builder::disownId() {
-  return ::capnp::_::PointerHelpers< ::TLogoBlobID>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID> TExtremeQuery::Builder::disownId() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TLogoBlobID>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
@@ -2761,34 +2762,34 @@ inline bool TEvVGet::Builder::hasRangeQuery() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TRangeQuery::Reader TEvVGet::Reader::getRangeQuery() const {
-  return ::capnp::_::PointerHelpers< ::TRangeQuery>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TRangeQuery::Reader TEvVGet::Reader::getRangeQuery() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TRangeQuery>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::TRangeQuery::Builder TEvVGet::Builder::getRangeQuery() {
-  return ::capnp::_::PointerHelpers< ::TRangeQuery>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TRangeQuery::Builder TEvVGet::Builder::getRangeQuery() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TRangeQuery>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TRangeQuery::Pipeline TEvVGet::Pipeline::getRangeQuery() {
-  return  ::TRangeQuery::Pipeline(_typeless.getPointerField(0));
+inline  ::NKikimrCapnProto_::TRangeQuery::Pipeline TEvVGet::Pipeline::getRangeQuery() {
+  return  ::NKikimrCapnProto_::TRangeQuery::Pipeline(_typeless.getPointerField(0));
 }
 #endif  // !CAPNP_LITE
-inline void TEvVGet::Builder::setRangeQuery( ::TRangeQuery::Reader value) {
-  ::capnp::_::PointerHelpers< ::TRangeQuery>::set(_builder.getPointerField(
+inline void TEvVGet::Builder::setRangeQuery( ::NKikimrCapnProto_::TRangeQuery::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TRangeQuery>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::TRangeQuery::Builder TEvVGet::Builder::initRangeQuery() {
-  return ::capnp::_::PointerHelpers< ::TRangeQuery>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TRangeQuery::Builder TEvVGet::Builder::initRangeQuery() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TRangeQuery>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 inline void TEvVGet::Builder::adoptRangeQuery(
-    ::capnp::Orphan< ::TRangeQuery>&& value) {
-  ::capnp::_::PointerHelpers< ::TRangeQuery>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TRangeQuery>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TRangeQuery>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TRangeQuery> TEvVGet::Builder::disownRangeQuery() {
-  return ::capnp::_::PointerHelpers< ::TRangeQuery>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TRangeQuery> TEvVGet::Builder::disownRangeQuery() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TRangeQuery>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
@@ -2800,29 +2801,29 @@ inline bool TEvVGet::Builder::hasExtremeQueries() {
   return !_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>::Reader TEvVGet::Reader::getExtremeQueries() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>::Reader TEvVGet::Reader::getExtremeQueries() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>::Builder TEvVGet::Builder::getExtremeQueries() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>::Builder TEvVGet::Builder::getExtremeQueries() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline void TEvVGet::Builder::setExtremeQueries( ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
+inline void TEvVGet::Builder::setExtremeQueries( ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>::Builder TEvVGet::Builder::initExtremeQueries(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>::Builder TEvVGet::Builder::initExtremeQueries(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), size);
 }
 inline void TEvVGet::Builder::adoptExtremeQueries(
-    ::capnp::Orphan< ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>> TEvVGet::Builder::disownExtremeQueries() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::TExtremeQuery,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>> TEvVGet::Builder::disownExtremeQueries() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::NKikimrCapnProto_::TExtremeQuery,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
@@ -2834,34 +2835,34 @@ inline bool TEvVGet::Builder::hasVDiskID() {
   return !_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TVDiskID::Reader TEvVGet::Reader::getVDiskID() const {
-  return ::capnp::_::PointerHelpers< ::TVDiskID>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TVDiskID::Reader TEvVGet::Reader::getVDiskID() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskID>::get(_reader.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
-inline  ::TVDiskID::Builder TEvVGet::Builder::getVDiskID() {
-  return ::capnp::_::PointerHelpers< ::TVDiskID>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TVDiskID::Builder TEvVGet::Builder::getVDiskID() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskID>::get(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TVDiskID::Pipeline TEvVGet::Pipeline::getVDiskID() {
-  return  ::TVDiskID::Pipeline(_typeless.getPointerField(2));
+inline  ::NKikimrCapnProto_::TVDiskID::Pipeline TEvVGet::Pipeline::getVDiskID() {
+  return  ::NKikimrCapnProto_::TVDiskID::Pipeline(_typeless.getPointerField(2));
 }
 #endif  // !CAPNP_LITE
-inline void TEvVGet::Builder::setVDiskID( ::TVDiskID::Reader value) {
-  ::capnp::_::PointerHelpers< ::TVDiskID>::set(_builder.getPointerField(
+inline void TEvVGet::Builder::setVDiskID( ::NKikimrCapnProto_::TVDiskID::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskID>::set(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS), value);
 }
-inline  ::TVDiskID::Builder TEvVGet::Builder::initVDiskID() {
-  return ::capnp::_::PointerHelpers< ::TVDiskID>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TVDiskID::Builder TEvVGet::Builder::initVDiskID() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskID>::init(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 inline void TEvVGet::Builder::adoptVDiskID(
-    ::capnp::Orphan< ::TVDiskID>&& value) {
-  ::capnp::_::PointerHelpers< ::TVDiskID>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TVDiskID>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskID>::adopt(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TVDiskID> TEvVGet::Builder::disownVDiskID() {
-  return ::capnp::_::PointerHelpers< ::TVDiskID>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TVDiskID> TEvVGet::Builder::disownVDiskID() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TVDiskID>::disown(_builder.getPointerField(
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 
@@ -2915,34 +2916,34 @@ inline bool TEvVGet::Builder::hasMsgQoS() {
   return !_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TMsgQoS::Reader TEvVGet::Reader::getMsgQoS() const {
-  return ::capnp::_::PointerHelpers< ::TMsgQoS>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TMsgQoS::Reader TEvVGet::Reader::getMsgQoS() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMsgQoS>::get(_reader.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
-inline  ::TMsgQoS::Builder TEvVGet::Builder::getMsgQoS() {
-  return ::capnp::_::PointerHelpers< ::TMsgQoS>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TMsgQoS::Builder TEvVGet::Builder::getMsgQoS() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMsgQoS>::get(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TMsgQoS::Pipeline TEvVGet::Pipeline::getMsgQoS() {
-  return  ::TMsgQoS::Pipeline(_typeless.getPointerField(3));
+inline  ::NKikimrCapnProto_::TMsgQoS::Pipeline TEvVGet::Pipeline::getMsgQoS() {
+  return  ::NKikimrCapnProto_::TMsgQoS::Pipeline(_typeless.getPointerField(3));
 }
 #endif  // !CAPNP_LITE
-inline void TEvVGet::Builder::setMsgQoS( ::TMsgQoS::Reader value) {
-  ::capnp::_::PointerHelpers< ::TMsgQoS>::set(_builder.getPointerField(
+inline void TEvVGet::Builder::setMsgQoS( ::NKikimrCapnProto_::TMsgQoS::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMsgQoS>::set(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS), value);
 }
-inline  ::TMsgQoS::Builder TEvVGet::Builder::initMsgQoS() {
-  return ::capnp::_::PointerHelpers< ::TMsgQoS>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TMsgQoS::Builder TEvVGet::Builder::initMsgQoS() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMsgQoS>::init(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 inline void TEvVGet::Builder::adoptMsgQoS(
-    ::capnp::Orphan< ::TMsgQoS>&& value) {
-  ::capnp::_::PointerHelpers< ::TMsgQoS>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TMsgQoS>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMsgQoS>::adopt(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TMsgQoS> TEvVGet::Builder::disownMsgQoS() {
-  return ::capnp::_::PointerHelpers< ::TMsgQoS>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TMsgQoS> TEvVGet::Builder::disownMsgQoS() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TMsgQoS>::disown(_builder.getPointerField(
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 
@@ -2960,17 +2961,17 @@ inline void TEvVGet::Builder::setIndexOnly(bool value) {
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::EGetHandleClass TEvVGet::Reader::getHandleClass() const {
-  return _reader.getDataField< ::EGetHandleClass>(
+inline  ::NKikimrCapnProto_::EGetHandleClass TEvVGet::Reader::getHandleClass() const {
+  return _reader.getDataField< ::NKikimrCapnProto_::EGetHandleClass>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
 
-inline  ::EGetHandleClass TEvVGet::Builder::getHandleClass() {
-  return _builder.getDataField< ::EGetHandleClass>(
+inline  ::NKikimrCapnProto_::EGetHandleClass TEvVGet::Builder::getHandleClass() {
+  return _builder.getDataField< ::NKikimrCapnProto_::EGetHandleClass>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
-inline void TEvVGet::Builder::setHandleClass( ::EGetHandleClass value) {
-  _builder.setDataField< ::EGetHandleClass>(
+inline void TEvVGet::Builder::setHandleClass( ::NKikimrCapnProto_::EGetHandleClass value) {
+  _builder.setDataField< ::NKikimrCapnProto_::EGetHandleClass>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
@@ -3024,34 +3025,34 @@ inline bool TEvVGet::Builder::hasTimestamps() {
   return !_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TTimestamps::Reader TEvVGet::Reader::getTimestamps() const {
-  return ::capnp::_::PointerHelpers< ::TTimestamps>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TTimestamps::Reader TEvVGet::Reader::getTimestamps() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTimestamps>::get(_reader.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
-inline  ::TTimestamps::Builder TEvVGet::Builder::getTimestamps() {
-  return ::capnp::_::PointerHelpers< ::TTimestamps>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TTimestamps::Builder TEvVGet::Builder::getTimestamps() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTimestamps>::get(_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TTimestamps::Pipeline TEvVGet::Pipeline::getTimestamps() {
-  return  ::TTimestamps::Pipeline(_typeless.getPointerField(4));
+inline  ::NKikimrCapnProto_::TTimestamps::Pipeline TEvVGet::Pipeline::getTimestamps() {
+  return  ::NKikimrCapnProto_::TTimestamps::Pipeline(_typeless.getPointerField(4));
 }
 #endif  // !CAPNP_LITE
-inline void TEvVGet::Builder::setTimestamps( ::TTimestamps::Reader value) {
-  ::capnp::_::PointerHelpers< ::TTimestamps>::set(_builder.getPointerField(
+inline void TEvVGet::Builder::setTimestamps( ::NKikimrCapnProto_::TTimestamps::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTimestamps>::set(_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS), value);
 }
-inline  ::TTimestamps::Builder TEvVGet::Builder::initTimestamps() {
-  return ::capnp::_::PointerHelpers< ::TTimestamps>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TTimestamps::Builder TEvVGet::Builder::initTimestamps() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTimestamps>::init(_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
 inline void TEvVGet::Builder::adoptTimestamps(
-    ::capnp::Orphan< ::TTimestamps>&& value) {
-  ::capnp::_::PointerHelpers< ::TTimestamps>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TTimestamps>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTimestamps>::adopt(_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TTimestamps> TEvVGet::Builder::disownTimestamps() {
-  return ::capnp::_::PointerHelpers< ::TTimestamps>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TTimestamps> TEvVGet::Builder::disownTimestamps() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTimestamps>::disown(_builder.getPointerField(
       ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
 
@@ -3077,34 +3078,34 @@ inline bool TEvVGet::Builder::hasReaderTabletData() {
   return !_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TTabletData::Reader TEvVGet::Reader::getReaderTabletData() const {
-  return ::capnp::_::PointerHelpers< ::TTabletData>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TTabletData::Reader TEvVGet::Reader::getReaderTabletData() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::get(_reader.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS));
 }
-inline  ::TTabletData::Builder TEvVGet::Builder::getReaderTabletData() {
-  return ::capnp::_::PointerHelpers< ::TTabletData>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TTabletData::Builder TEvVGet::Builder::getReaderTabletData() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::get(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TTabletData::Pipeline TEvVGet::Pipeline::getReaderTabletData() {
-  return  ::TTabletData::Pipeline(_typeless.getPointerField(5));
+inline  ::NKikimrCapnProto_::TTabletData::Pipeline TEvVGet::Pipeline::getReaderTabletData() {
+  return  ::NKikimrCapnProto_::TTabletData::Pipeline(_typeless.getPointerField(5));
 }
 #endif  // !CAPNP_LITE
-inline void TEvVGet::Builder::setReaderTabletData( ::TTabletData::Reader value) {
-  ::capnp::_::PointerHelpers< ::TTabletData>::set(_builder.getPointerField(
+inline void TEvVGet::Builder::setReaderTabletData( ::NKikimrCapnProto_::TTabletData::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::set(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS), value);
 }
-inline  ::TTabletData::Builder TEvVGet::Builder::initReaderTabletData() {
-  return ::capnp::_::PointerHelpers< ::TTabletData>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TTabletData::Builder TEvVGet::Builder::initReaderTabletData() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::init(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS));
 }
 inline void TEvVGet::Builder::adoptReaderTabletData(
-    ::capnp::Orphan< ::TTabletData>&& value) {
-  ::capnp::_::PointerHelpers< ::TTabletData>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TTabletData>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::adopt(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TTabletData> TEvVGet::Builder::disownReaderTabletData() {
-  return ::capnp::_::PointerHelpers< ::TTabletData>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TTabletData> TEvVGet::Builder::disownReaderTabletData() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::disown(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS));
 }
 
@@ -3116,34 +3117,34 @@ inline bool TEvVGet::Builder::hasForceBlockTabletData() {
   return !_builder.getPointerField(
       ::capnp::bounded<6>() * ::capnp::POINTERS).isNull();
 }
-inline  ::TTabletData::Reader TEvVGet::Reader::getForceBlockTabletData() const {
-  return ::capnp::_::PointerHelpers< ::TTabletData>::get(_reader.getPointerField(
+inline  ::NKikimrCapnProto_::TTabletData::Reader TEvVGet::Reader::getForceBlockTabletData() const {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::get(_reader.getPointerField(
       ::capnp::bounded<6>() * ::capnp::POINTERS));
 }
-inline  ::TTabletData::Builder TEvVGet::Builder::getForceBlockTabletData() {
-  return ::capnp::_::PointerHelpers< ::TTabletData>::get(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TTabletData::Builder TEvVGet::Builder::getForceBlockTabletData() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::get(_builder.getPointerField(
       ::capnp::bounded<6>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::TTabletData::Pipeline TEvVGet::Pipeline::getForceBlockTabletData() {
-  return  ::TTabletData::Pipeline(_typeless.getPointerField(6));
+inline  ::NKikimrCapnProto_::TTabletData::Pipeline TEvVGet::Pipeline::getForceBlockTabletData() {
+  return  ::NKikimrCapnProto_::TTabletData::Pipeline(_typeless.getPointerField(6));
 }
 #endif  // !CAPNP_LITE
-inline void TEvVGet::Builder::setForceBlockTabletData( ::TTabletData::Reader value) {
-  ::capnp::_::PointerHelpers< ::TTabletData>::set(_builder.getPointerField(
+inline void TEvVGet::Builder::setForceBlockTabletData( ::NKikimrCapnProto_::TTabletData::Reader value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::set(_builder.getPointerField(
       ::capnp::bounded<6>() * ::capnp::POINTERS), value);
 }
-inline  ::TTabletData::Builder TEvVGet::Builder::initForceBlockTabletData() {
-  return ::capnp::_::PointerHelpers< ::TTabletData>::init(_builder.getPointerField(
+inline  ::NKikimrCapnProto_::TTabletData::Builder TEvVGet::Builder::initForceBlockTabletData() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::init(_builder.getPointerField(
       ::capnp::bounded<6>() * ::capnp::POINTERS));
 }
 inline void TEvVGet::Builder::adoptForceBlockTabletData(
-    ::capnp::Orphan< ::TTabletData>&& value) {
-  ::capnp::_::PointerHelpers< ::TTabletData>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::NKikimrCapnProto_::TTabletData>&& value) {
+  ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::adopt(_builder.getPointerField(
       ::capnp::bounded<6>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::TTabletData> TEvVGet::Builder::disownForceBlockTabletData() {
-  return ::capnp::_::PointerHelpers< ::TTabletData>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::NKikimrCapnProto_::TTabletData> TEvVGet::Builder::disownForceBlockTabletData() {
+  return ::capnp::_::PointerHelpers< ::NKikimrCapnProto_::TTabletData>::disown(_builder.getPointerField(
       ::capnp::bounded<6>() * ::capnp::POINTERS));
 }
 
@@ -3181,6 +3182,7 @@ inline ::capnp::Orphan< ::capnp::Data> TEvVGet::Builder::disownSnapshotId() {
       ::capnp::bounded<7>() * ::capnp::POINTERS));
 }
 
+}  // namespace
 
 CAPNP_END_HEADER
 

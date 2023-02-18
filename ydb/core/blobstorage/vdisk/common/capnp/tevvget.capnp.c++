@@ -1864,6 +1864,7 @@ const ::capnp::_::RawSchema s_e60a8e68a2bf1d49 = {
 
 // =======================================================================================
 
+namespace NKikimrCapnProto_ {
 
 // TMessageId
 constexpr uint16_t TMessageId::_capnpPrivate::dataWordSize;
@@ -1970,4 +1971,5 @@ constexpr ::capnp::_::RawSchema const* TEvVGet::_capnpPrivate::schema;
 #endif  // !CAPNP_LITE
 
 
+}  // namespace
 

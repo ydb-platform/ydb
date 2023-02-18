@@ -867,18 +867,18 @@ private:
 
     template<typename EvType>
     void WaitEvent() {
-        auto event = WaitForSpecificEvent<TEvPrivate::TEvFutureResolved, TEvPrivate::TEvPause, TEvPrivate::TEvContinue, TEvPrivate::TEvBlockProcessed, NActors::TEvents::TEvPoison>();
+        auto event = WaitForEvent();
         TVector<THolder<IEventBase>> otherEvents;
         while (!event->CastAsLocal<EvType>()) {
             if (event->CastAsLocal<NActors::TEvents::TEvPoison>()) {
                 throw TS3ReadAbort();
             }
             
-            if (!event->CastAsLocal<TEvPrivate::TEvPause>() && !event->CastAsLocal<TEvPrivate::TEvContinue>()) {
+            if (!event->CastAsLocal<TEvPrivate::TEvPause>() && !event->CastAsLocal<TEvPrivate::TEvContinue>() && !event->CastAsLocal<TEvPrivate::TEvReadFinished>()) {
                 otherEvents.push_back(event->ReleaseBase());
             }
             
-            event = WaitForSpecificEvent<TEvPrivate::TEvFutureResolved, TEvPrivate::TEvPause, TEvPrivate::TEvContinue, TEvPrivate::TEvBlockProcessed, NActors::TEvents::TEvPoison>();
+            event = WaitForEvent();
         }
 
         for (auto& e: otherEvents) {

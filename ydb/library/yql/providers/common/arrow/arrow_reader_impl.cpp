@@ -87,7 +87,7 @@ public:
                                 std::bind(&OnResult, promise, std::placeholders::_1),
                                 {},
                                 RetryPolicy);
-            return arrow::Buffer::FromString(std::move(promise.GetFuture().GetValueSync()));
+            return arrow::Buffer::FromString(promise.GetFuture().ExtractValueSync());
         } catch (const std::exception& e) {
             return arrow::Status::UnknownError(e.what());
         }

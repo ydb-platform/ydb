@@ -349,31 +349,7 @@ void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<T
 }
 
 TString TQueryPlanPrinter::JsonToString(const NJson::TJsonValue& jsonValue) {
-    TStringBuilder str;
-
-    if (jsonValue.IsString()) {
-        str << jsonValue.GetString();
-    } else if (jsonValue.IsArray()) {
-        str << "[";
-        const auto& array = jsonValue.GetArraySafe();
-        for (auto it = array.begin(); it != array.end(); ++it) {
-            str << (it != array.begin() ? ", " : "")
-                << JsonToString(*it);
-        }
-        str << "]";
-    } else if (jsonValue.IsMap()) {
-        str << "{";
-        const auto& map = jsonValue.GetMapSafe();
-        for (auto it = map.begin(); it != map.end(); ++it) {
-            str << (it != map.begin() ? ", " : "")
-                << it->first << ": " << JsonToString(it->second);
-        }
-        str << "}";
-    } else {
-        str << jsonValue;
-    }
-
-    return str;
+    return jsonValue.GetStringRobust();
 }
 
 

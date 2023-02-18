@@ -17,6 +17,8 @@ namespace NKikimrCapnProto {
             Reader() = default;
             uint64_t GetSequenceId() const { return getSequenceId(); }
             uint64_t GetMsgId() const { return getMsgId(); }
+            bool HasSequenceId() const { return getSequenceId() != 0; }
+            bool HasMsgId() const { return getMsgId() != 0; }
             const NKikimrCapnProto_::TMessageId::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -39,6 +41,10 @@ namespace NKikimrCapnProto {
             uint64_t GetReceivedByVDiskUs() const { return getReceivedByVDiskUs(); }
             uint64_t GetSentByVDiskUs() const { return getSentByVDiskUs(); }
             uint64_t GetReceivedByDSProxyUs() const { return getReceivedByDSProxyUs(); }
+            bool HasSentByDSProxyUs() const { return getSentByDSProxyUs() != 0; }
+            bool HasReceivedByVDiskUs() const { return getReceivedByVDiskUs() != 0; }
+            bool HasSentByVDiskUs() const { return getSentByVDiskUs() != 0; }
+            bool HasReceivedByDSProxyUs() const { return getReceivedByDSProxyUs() != 0; }
             const NKikimrCapnProto_::TTimestamps::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -68,6 +74,8 @@ namespace NKikimrCapnProto {
             Reader() = default;
             uint64_t GetRawX1() const { return getRawX1(); }
             uint64_t GetRawX2() const { return getRawX2(); }
+            bool HasRawX1() const { return getRawX1() != 0; }
+            bool HasRawX2() const { return getRawX2() != 0; }
             const NKikimrCapnProto_::TActorId::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -93,6 +101,13 @@ namespace NKikimrCapnProto {
             uint64_t GetInQueue() const { return getInQueue(); }
             uint64_t GetExecution() const { return getExecution(); }
             uint64_t GetHugeWriteTime() const { return getHugeWriteTime(); }
+            bool HasSubmitTimestamp() const { return getSubmitTimestamp() != 0; }
+            bool HasInSenderQueue() const { return getInSenderQueue() != 0; }
+            bool HasReceivedTimestamp() const { return getReceivedTimestamp() != 0; }
+            bool HasTotal() const { return getTotal() != 0; }
+            bool HasInQueue() const { return getInQueue() != 0; }
+            bool HasExecution() const { return getExecution() != 0; }
+            bool HasHugeWriteTime() const { return getHugeWriteTime() != 0; }
             const NKikimrCapnProto_::TExecTimeStats::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -133,6 +148,8 @@ namespace NKikimrCapnProto {
             bool HasExpectedMsgId() const { return hasExpectedMsgId(); }
             bool HasFailedMsgId() const { return hasFailedMsgId(); }
             bool HasStatus() const { return getStatus() != NKikimrCapnProto_::EStatus::NOT_SET; }
+            bool HasActualWindowSize() const { return getActualWindowSize() != 0; }
+            bool HasMaxWindowSize() const { return getMaxWindowSize() != 0; }
             const NKikimrCapnProto_::TWindowFeedback::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -189,6 +206,12 @@ namespace NKikimrCapnProto {
             uint64_t GetReadBlockSize() const { return getReadBlockSize(); }
             uint64_t GetWriteBlockSize() const { return getWriteBlockSize(); }
             uint32_t GetMinREALHugeBlobInBytes() const { return getMinREALHugeBlobInBytes(); }
+            bool HasSeekTimeUs() const { return getSeekTimeUs() != 0; }
+            bool HasReadSpeedBps() const { return getReadSpeedBps() != 0; }
+            bool HasWriteSpeedBps() const { return getWriteSpeedBps() != 0; }
+            bool HasReadBlockSize() const { return getReadBlockSize() != 0; }
+            bool HasWriteBlockSize() const { return getWriteBlockSize() != 0; }
+            bool HasMinREALHugeBlobInBytes() const { return getMinREALHugeBlobInBytes() != 0; }
             const NKikimrCapnProto_::TVDiskCostSettings::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -232,6 +255,13 @@ namespace NKikimrCapnProto {
             bool HasSenderActorId() const { return hasSenderActorId(); }
             bool HasExtQueueId() const { return getExtQueueId() != NKikimrCapnProto_::EVDiskQueueId::NOT_SET; }
             bool HasIntQueueId() const { return getIntQueueId() != NKikimrCapnProto_::EVDiskInternalQueueId::NOT_SET; }
+            bool HasDeadlineSeconds() const { return getDeadlineSeconds() != 0; }
+            bool HasCost() const { return getCost() != 0; }
+            bool HasSendMeCostSettings() const { return getSendMeCostSettings() != 0; }
+            bool HasProxyNodeId() const { return getProxyNodeId() != 0; }
+            bool HasReplVDiskId() const { return getReplVDiskId() != 0; }
+            bool HasVDiskLoadId() const { return getVDiskLoadId() != 0; }
+            bool HasVPatchVDiskId() const { return getVPatchVDiskId() != 0; }
             const NKikimrCapnProto_::TMsgQoS::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -276,6 +306,11 @@ namespace NKikimrCapnProto {
             uint32_t GetRing() const { return getRing(); }
             uint32_t GetDomain() const { return getDomain(); }
             uint32_t GetVDisk() const { return getVDisk(); }
+            bool HasGroupID() const { return getGroupID() != 0; }
+            bool HasGroupGeneration() const { return getGroupGeneration() != 0; }
+            bool HasRing() const { return getRing() != 0; }
+            bool HasDomain() const { return getDomain() != 0; }
+            bool HasVDisk() const { return getVDisk() != 0; }
             const NKikimrCapnProto_::TVDiskID::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -300,6 +335,9 @@ namespace NKikimrCapnProto {
             int64_t GetRawX1() const { return getRawX1(); }
             int64_t GetRawX2() const { return getRawX2(); }
             int64_t GetRawX3() const { return getRawX3(); }
+            bool HasRawX1() const { return getRawX1() != 0; }
+            bool HasRawX2() const { return getRawX2() != 0; }
+            bool HasRawX3() const { return getRawX3() != 0; }
             const NKikimrCapnProto_::TLogoBlobID::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -325,6 +363,8 @@ namespace NKikimrCapnProto {
             TLogoBlobID::Reader GetTo() const { return getTo(); }
             bool HasFrom() const { return hasFrom(); }
             bool HasTo() const { return hasTo(); }
+            bool HasCookie() const { return getCookie() != 0; }
+            bool HasMaxResults() const { return getMaxResults() != 0; }
             const NKikimrCapnProto_::TRangeQuery::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -353,6 +393,9 @@ namespace NKikimrCapnProto {
             uint64_t GetCookie() const { return getCookie(); }
             TLogoBlobID::Reader GetId() const { return getId(); }
             bool HasId() const { return hasId(); }
+            bool HasShift() const { return getShift() != 0; }
+            bool HasSize() const { return getSize() != 0; }
+            bool HasCookie() const { return getCookie() != 0; }
             const NKikimrCapnProto_::TExtremeQuery::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -376,6 +419,8 @@ namespace NKikimrCapnProto {
             Reader() = default;
             uint64_t GetId() const { return getId(); }
             uint32_t GetGeneration() const { return getGeneration(); }
+            bool HasId() const { return getId() != 0; }
+            bool HasGeneration() const { return getGeneration() != 0; }
             const NKikimrCapnProto_::TTabletData::Reader& GetCapnpBase() const { return *this; }
         };
 
@@ -430,6 +475,15 @@ namespace NKikimrCapnProto {
             bool HasReaderTabletData() const { return hasReaderTabletData(); }
             bool HasForceBlockTabletData() const { return hasForceBlockTabletData(); }
             bool HasHandleClass() const { return getHandleClass() != NKikimrCapnProto_::EGetHandleClass::NOT_SET; }
+            bool HasNotifyIfNotReady() const { return getNotifyIfNotReady() != 0; }
+            bool HasShowInternals() const { return getShowInternals() != 0; }
+            bool HasCookie() const { return getCookie() != 0; }
+            bool HasIndexOnly() const { return getIndexOnly() != 0; }
+            bool HasSuppressBarrierCheck() const { return getSuppressBarrierCheck() != 0; }
+            bool HasTabletId() const { return getTabletId() != 0; }
+            bool HasAcquireBlockedGeneration() const { return getAcquireBlockedGeneration() != 0; }
+            bool HasForceBlockedGeneration() const { return getForceBlockedGeneration() != 0; }
+            bool HasSnapshotId() const { return getSnapshotId() != 0; }
             const NKikimrCapnProto_::TEvVGet::Reader& GetCapnpBase() const { return *this; }
         };
 

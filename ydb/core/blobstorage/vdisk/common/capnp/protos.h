@@ -56,10 +56,10 @@ namespace NKikimrCapnProto {
     };
 
     enum class EGetHandleClass {
-        asyncRead,
-        fastRead,
-        discover,
-        lowRead,
+        AsyncRead,
+        FastRead,
+        Discover,
+        LowRead,
     };
 
     struct TActorId {
@@ -113,12 +113,12 @@ namespace NKikimrCapnProto {
     };
 
     enum class EStatus {
-        unknown,
-        success,
-        windowUpdate,
-        processed,
-        incorrectMsgId,
-        highWatermarkOverflow,
+        Unknown,
+        Success,
+        WindowUpdate,
+        Processed,
+        IncorrectMsgId,
+        HighWatermarkOverflow,
     };
 
     struct TWindowFeedback {
@@ -153,16 +153,16 @@ namespace NKikimrCapnProto {
     };
 
     enum class EVDiskQueueId {
-        unknown,
-        putTabletLog,
-        putAsyncBlob,
-        putUserData,
-        getAsyncRead,
-        getFastRead,
-        getDiscover,
-        getLowRead,
-        begin,
-        end,
+        Unknown,
+        PutTabletLog,
+        PutAsyncBlob,
+        PutUserData,
+        GetAsyncRead,
+        GetFastRead,
+        GetDiscover,
+        GetLowRead,
+        Begin,
+        End,
     };
 
     enum class EVDiskInternalQueueId {

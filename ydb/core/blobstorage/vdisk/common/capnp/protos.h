@@ -564,7 +564,7 @@ namespace NKikimrCapnProto {
                 }
 
                 kj::VectorOutputStream stream;
-                capnp::writePackedMessage(stream, const_cast<capnp::MallocMessageBuilder&>(*this));
+                capnp::writePackedMessage(stream, const_cast<Builder&>(*this));
                 output->WriteAliasedRaw(stream.getArray().begin(), stream.getArray().size());
                 return true;
             }

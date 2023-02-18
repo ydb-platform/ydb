@@ -545,7 +545,7 @@ namespace NKikimrCapnProto {
             }
 
             size_t ByteSize() const {
-                return totalSize();
+                return totalSize().wordCount * 8;
             }
 
             std::string GetTypeName() const {

@@ -1271,7 +1271,7 @@ namespace NKikimr {
                 std::optional<TForceBlockTabletData> forceBlockTabletData)
             : Extreme(extreme)
         {
-            VDiskIDFromVDiskID(vdisk, &Record.MutableVDiskID());
+            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             Record.SetHandleClass(cls);
             if (notifyIfNotReady) {
                 Record.SetNotifyIfNotReady(true);

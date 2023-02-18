@@ -1129,17 +1129,16 @@ namespace NKikimr {
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags, TMaybe<ui64> requestCookie,
                 const TLogoBlobID &fromId, const TLogoBlobID &toId, ui32 maxResults = 0, const ui64 *cookie = nullptr,
                 std::optional<TForceBlockTabletData> forceBlockTabletData = {}) {
-            RawSerializer::EGetHandleClass clsRaw = static_cast<RawSerializer::EGetHandleClass>(cls);
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, clsRaw, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, static_cast<NKikimrCapnProto::EGetHandleClass>(cls), bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, false, forceBlockTabletData));
-            NKikimr::RawSerializer::TRangeQuery *q = res->Record.MutableRangeQuery();
-            LogoBlobIDFromLogoBlobID(fromId, q->MutableFrom());
-            LogoBlobIDFromLogoBlobID(toId, q->MutableTo());
+            NKikimrCapnProto::TRangeQuery::Builder q = res->Record.MutableRangeQuery();
+            LogoBlobIDFromLogoBlobID(fromId, &q.MutableFrom());
+            LogoBlobIDFromLogoBlobID(toId, &q.MutableTo());
             if (maxResults) {
-                q->SetMaxResults(maxResults);
+                q.SetMaxResults(maxResults);
             }
             if (cookie) {
-                q->SetCookie(*cookie);
+                q.SetCookie(*cookie);
             }
             return res;
         }
@@ -1147,14 +1146,14 @@ namespace NKikimr {
         void AddExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr) {
             Y_VERIFY(Extreme);
 
-            NKikimr::RawSerializer::TExtremeQuery *q = Record.AddExtremeQueries();
-            LogoBlobIDFromLogoBlobID(logoBlobId, q->MutableId());
+            NKikimrCapnProto::TExtremeQuery::Builder q = Record.AddExtremeQueries();
+            LogoBlobIDFromLogoBlobID(logoBlobId, &q.MutableId());
             if (sh != 0)
-                q->SetShift(sh);
+                q.SetShift(sh);
             if (sz != 0)
-                q->SetSize(sz);
+                q.SetSize(sz);
             if (cookie)
-                q->SetCookie(*cookie);
+                q.SetCookie(*cookie);
 #if BS_EVVGET_SIZE_VERIFY
             if (Record.HasIndexOnly() && Record.GetIndexOnly()) {
                 ExpectedReplySize += BlobProtobufHeaderMaxSize;
@@ -1186,11 +1185,11 @@ namespace NKikimr {
                 errorReason = "TEvVGet rejected by VDisk. It has no query";
             } else if (!Record.HasVDiskID()) {
                 errorReason = "TEvVGet rejected by VDisk. It has no VDiskID";
-            } else if (!Record.MutableVDiskID()->HasGroupID()) {
+            } else if (!Record.MutableVDiskID().HasGroupID()) {
                 errorReason = "TEvVGet rejected by VDisk. It has no VDiskID::GroupID";
-            } else if (Record.MutableMsgQoS() == nullptr) {
+            } else if (Record.HasMsgQoS()) {
                 errorReason = "TEvVGet rejected by VDisk. MsgQoS is undefined";
-            } else if (! Record.MutableMsgQoS()->HasExtQueueId()) {
+            } else if (! Record.MutableMsgQoS().HasExtQueueId()) {
                 errorReason = "TEvVGet rejected by VDisk. ExtQueueId is undefined";
             } else {
                 return true;
@@ -1265,7 +1264,7 @@ namespace NKikimr {
     private:
         TEvVGet(const TVDiskID &vdisk,
                 TInstant deadline,
-                RawSerializer::EGetHandleClass cls,
+                NKikimrCapnProto::EGetHandleClass cls,
                 bool notifyIfNotReady,
                 bool showInternals,
                 TMaybe<ui64> requestCookie,
@@ -1274,7 +1273,7 @@ namespace NKikimr {
                 std::optional<TForceBlockTabletData> forceBlockTabletData)
             : Extreme(extreme)
         {
-            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
+            VDiskIDFromVDiskID(vdisk, &Record.MutableVDiskID());
             Record.SetHandleClass(cls);
             if (notifyIfNotReady) {
                 Record.SetNotifyIfNotReady(true);
@@ -1289,13 +1288,13 @@ namespace NKikimr {
                 Record.SetIndexOnly(true);
             }
             if (deadline != TInstant::Max()) {
-                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
+                Record.MutableMsgQoS().SetDeadlineSeconds((ui32)deadline.Seconds());
             }
             if (forceBlockTabletData) {
-                Record.MutableForceBlockTabletData()->SetId(forceBlockTabletData->Id);
-                Record.MutableForceBlockTabletData()->SetGeneration(forceBlockTabletData->Generation);
+                Record.MutableForceBlockTabletData().SetId(forceBlockTabletData->Id);
+                Record.MutableForceBlockTabletData().SetGeneration(forceBlockTabletData->Generation);
             }
-            Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(cls));
+            Record.MutableMsgQoS().SetExtQueueId(HandleClassToQueueId(cls));
         }
     };
 

@@ -129,6 +129,7 @@ namespace NKikimrCapnProto {
             uint64_t GetMaxWindowSize() const { return getMaxWindowSize(); }
             TMessageId::Reader GetExpectedMsgId() const { return getExpectedMsgId(); }
             TMessageId::Reader GetFailedMsgId() const { return getFailedMsgId(); }
+            EStatus GetStatus() const { return static_cast<EStatus>(getStatus()); }
             bool HasExpectedMsgId() const { return hasExpectedMsgId(); }
             bool HasFailedMsgId() const { return hasFailedMsgId(); }
             const NKikimrCapnProto_::TWindowFeedback::Reader& GetCapnpBase() const { return *this; }
@@ -144,6 +145,7 @@ namespace NKikimrCapnProto {
             void SetMaxWindowSize(const uint64_t& value) { return setMaxWindowSize(value); }
             void SetExpectedMsgId(const TMessageId::Reader& value) { return setExpectedMsgId(value.GetCapnpBase()); }
             void SetFailedMsgId(const TMessageId::Reader& value) { return setFailedMsgId(value.GetCapnpBase()); }
+            void SetStatus(const EStatus& value) { return setStatus(static_cast<NKikimrCapnProto_::EStatus>(value)); }
             TMessageId::Builder MutableExpectedMsgId() { return getExpectedMsgId(); }
             TMessageId::Builder MutableFailedMsgId() { return getFailedMsgId(); }
             const NKikimrCapnProto_::TWindowFeedback::Builder& GetCapnpBase() const { return *this; }
@@ -220,6 +222,8 @@ namespace NKikimrCapnProto {
             TWindowFeedback::Reader GetWindow() const { return getWindow(); }
             TExecTimeStats::Reader GetExecTimeStats() const { return getExecTimeStats(); }
             TActorId::Reader GetSenderActorId() const { return getSenderActorId(); }
+            EVDiskQueueId GetExtQueueId() const { return static_cast<EVDiskQueueId>(getExtQueueId()); }
+            EVDiskInternalQueueId GetIntQueueId() const { return static_cast<EVDiskInternalQueueId>(getIntQueueId()); }
             bool HasMsgId() const { return hasMsgId(); }
             bool HasCostSettings() const { return hasCostSettings(); }
             bool HasWindow() const { return hasWindow(); }
@@ -249,6 +253,8 @@ namespace NKikimrCapnProto {
             void SetWindow(const TWindowFeedback::Reader& value) { return setWindow(value.GetCapnpBase()); }
             void SetExecTimeStats(const TExecTimeStats::Reader& value) { return setExecTimeStats(value.GetCapnpBase()); }
             void SetSenderActorId(const TActorId::Reader& value) { return setSenderActorId(value.GetCapnpBase()); }
+            void SetExtQueueId(const EVDiskQueueId& value) { return setExtQueueId(static_cast<NKikimrCapnProto_::EVDiskQueueId>(value)); }
+            void SetIntQueueId(const EVDiskInternalQueueId& value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(value)); }
             TMessageId::Builder MutableMsgId() { return getMsgId(); }
             TVDiskCostSettings::Builder MutableCostSettings() { return getCostSettings(); }
             TWindowFeedback::Builder MutableWindow() { return getWindow(); }
@@ -396,6 +402,7 @@ namespace NKikimrCapnProto {
             const std::vector<TExtremeQuery::Reader>& GetExtremeQueries() const {
                 return elements;
             }
+            size_t ExtremeQueriesSize() const { return elements.size(); }
 
             bool GetNotifyIfNotReady() const { return getNotifyIfNotReady(); }
             bool GetShowInternals() const { return getShowInternals(); }
@@ -412,6 +419,7 @@ namespace NKikimrCapnProto {
             TTimestamps::Reader GetTimestamps() const { return getTimestamps(); }
             TTabletData::Reader GetReaderTabletData() const { return getReaderTabletData(); }
             TTabletData::Reader GetForceBlockTabletData() const { return getForceBlockTabletData(); }
+            EGetHandleClass GetHandleClass() const { return static_cast<EGetHandleClass>(getHandleClass()); }
             bool HasRangeQuery() const { return hasRangeQuery(); }
             bool HasVDiskID() const { return hasVDiskID(); }
             bool HasMsgQoS() const { return hasMsgQoS(); }
@@ -453,6 +461,7 @@ namespace NKikimrCapnProto {
             void SetTimestamps(const TTimestamps::Reader& value) { return setTimestamps(value.GetCapnpBase()); }
             void SetReaderTabletData(const TTabletData::Reader& value) { return setReaderTabletData(value.GetCapnpBase()); }
             void SetForceBlockTabletData(const TTabletData::Reader& value) { return setForceBlockTabletData(value.GetCapnpBase()); }
+            void SetHandleClass(const EGetHandleClass& value) { return setHandleClass(static_cast<NKikimrCapnProto_::EGetHandleClass>(value)); }
             TRangeQuery::Builder MutableRangeQuery() { return getRangeQuery(); }
             TVDiskID::Builder MutableVDiskID() { return getVDiskID(); }
             TMsgQoS::Builder MutableMsgQoS() { return getMsgQoS(); }

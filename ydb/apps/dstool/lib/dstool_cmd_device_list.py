@@ -31,7 +31,6 @@ def do(args):
         'Type',
         'StorageStatus',
         'NodeId:PDiskId',
-        'Guid',
     ]
 
     table_output = table.TableOutput(

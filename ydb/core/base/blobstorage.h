@@ -6,9 +6,10 @@
 #include "tablet_types.h"
 #include "logoblob.h"
 #include "pathid.h"
-#include "capnp/protos.h"
 
 #include <ydb/core/blobstorage/vdisk/common/raw_serialization.h>
+#include <ydb/core/blobstorage/vdisk/common/capnp/protos.h>
+
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/blobstorage_grouptype.h>

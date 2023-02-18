@@ -98,12 +98,18 @@ TLogoBlobID LogoBlobIDFromLogoBlobID(const TLogoBlobIDSerializationClass &proto)
     return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
 }
 
-template <typename TLogoBlobIDSerializationClass>
-void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, TLogoBlobIDSerializationClass *proto) {
+void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto) {
     const ui64* raw = id.GetRaw();
     proto->SetRawX1(raw[0]);
     proto->SetRawX2(raw[1]);
     proto->SetRawX3(raw[2]);
+}
+
+void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrCapnProto::TLogoBlobID::Builder proto) {
+    const ui64* raw = id.GetRaw();
+    proto.SetRawX1(raw[0]);
+    proto.SetRawX2(raw[1]);
+    proto.SetRawX3(raw[2]);
 }
 
 void LogoBlobIDVectorFromLogoBlobIDRepeated(

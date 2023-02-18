@@ -1,6 +1,8 @@
 #pragma once
 #include "defs.h"
 
+#include <ydb/core/blobstorage/vdisk/common/capnp/protos.h>
+
 namespace NKikimrProto {
     class TLogoBlobID;
 }
@@ -306,8 +308,9 @@ namespace NKikimr {
     template <typename TLogoBlobIDSerializationClass>
     TLogoBlobID LogoBlobIDFromLogoBlobID(const TLogoBlobIDSerializationClass &proto);
 
-    template <typename TLogoBlobIDSerializationClass>
-    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, TLogoBlobIDSerializationClass *proto);
+    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto);
+
+    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrCapnProto::TLogoBlobID::Builder proto);
 
 
     void LogoBlobIDVectorFromLogoBlobIDRepeated(

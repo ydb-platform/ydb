@@ -1130,8 +1130,8 @@ namespace NKikimr {
             std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, static_cast<NKikimrCapnProto::EGetHandleClass>(cls), bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, false, forceBlockTabletData));
             NKikimrCapnProto::TRangeQuery::Builder q = res->Record.MutableRangeQuery();
-            LogoBlobIDFromLogoBlobID(fromId, &q.MutableFrom());
-            LogoBlobIDFromLogoBlobID(toId, &q.MutableTo());
+            LogoBlobIDFromLogoBlobID(fromId, q.MutableFrom());
+            LogoBlobIDFromLogoBlobID(toId, q.MutableTo());
             if (maxResults) {
                 q.SetMaxResults(maxResults);
             }
@@ -1145,7 +1145,7 @@ namespace NKikimr {
             Y_VERIFY(Extreme);
 
             NKikimrCapnProto::TExtremeQuery::Builder q = Record.AddExtremeQueries();
-            LogoBlobIDFromLogoBlobID(logoBlobId, &q.MutableId());
+            LogoBlobIDFromLogoBlobID(logoBlobId, q.MutableId());
             if (sh != 0)
                 q.SetShift(sh);
             if (sz != 0)

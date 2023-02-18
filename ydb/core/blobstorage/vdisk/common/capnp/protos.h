@@ -556,19 +556,14 @@ namespace NKikimrCapnProto {
                 return "TEvVGet";
             }
 
-            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
                 auto interviews = initExtremeQueries(elements.size());
                 for (size_t i = 0; i != elements.size(); ++i) {
                     interviews.setWithCaveats(i, GetExtremeQueries(i).GetCapnpBase());
                 }
                 kj::VectorOutputStream stream;
                 capnp::writePackedMessage(stream, *this);
-
-                auto begin = stream.getArray().begin();
-                auto size = stream.getArray().size();
-                std::vector<unsigned char> bytes;
-                bytes.reserve(size);
-                bytes.insert(bytes.end(), begin, begin + size);
+                output->WriteAliasedRaw(stream.getArray().begin(), stream.getArray().size());
                 return true;
             }
 

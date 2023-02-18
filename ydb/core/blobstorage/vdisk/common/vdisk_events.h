@@ -1104,8 +1104,7 @@ namespace NKikimr {
         static std::unique_ptr<TEvVGet> CreateExtremeIndexQuery(const TVDiskID &vdisk, TInstant deadline,
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {},
                 std::initializer_list<TExtremeQuery> queries = {}, std::optional<TForceBlockTabletData> forceBlockTabletData = {}) {
-            RawSerializer::EGetHandleClass clsRaw = static_cast<RawSerializer::EGetHandleClass>(cls);
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, clsRaw, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, static_cast<NKikimrCapnProto::EGetHandleClass>(cls), bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, true, forceBlockTabletData));
             for (const auto &q : queries) {
                 res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q));
@@ -1116,8 +1115,7 @@ namespace NKikimr {
         static std::unique_ptr<TEvVGet> CreateExtremeDataQuery(const TVDiskID &vdisk, TInstant deadline,
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {},
                 std::initializer_list<TExtremeQuery> queries = {}, std::optional<TForceBlockTabletData> forceBlockTabletData = {}) {
-            RawSerializer::EGetHandleClass clsRaw = static_cast<RawSerializer::EGetHandleClass>(cls);
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, clsRaw, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, static_cast<NKikimrCapnProto::EGetHandleClass>(cls), bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, false, true, forceBlockTabletData));
             for (const auto &q : queries) {
                 res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q));

@@ -1,6 +1,7 @@
 #include "dq_compute_actor.h"
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <util/system/hostname.h>
 
 namespace NYql {
 namespace NDq {
@@ -15,6 +16,10 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     // Cerr << (TStringBuilder() << "FillTaskRunnerStats: " << taskStats.ComputeCpuTime << ", " << taskStats.BuildCpuTime << Endl);
 
     if (Y_UNLIKELY(withProfileStats)) {
+        if (NActors::TlsActivationContext && NActors::TlsActivationContext->ActorSystem()) {
+            protoTask->SetNodeId(NActors::TlsActivationContext->ActorSystem()->NodeId);
+        }
+        protoTask->SetHostName(HostName());
         protoTask->SetComputeCpuTimeUs(taskStats.ComputeCpuTime.MicroSeconds());
         protoTask->SetBuildCpuTimeUs(taskStats.BuildCpuTime.MicroSeconds());
         protoTask->SetWaitTimeUs(taskStats.WaitTime.MicroSeconds());

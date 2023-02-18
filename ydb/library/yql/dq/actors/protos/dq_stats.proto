@@ -155,6 +155,8 @@ message TDqTaskStats {
     repeated TDqAsyncOutputBufferStats Sinks = 152;
     repeated TDqOutputChannelStats OutputChannels = 153;
     repeated TDqAsyncInputBufferStats InputTransforms = 155;
+    string HostName = 156;
+    uint32 NodeId = 157;
 
     google.protobuf.Any Extra = 200;
 }

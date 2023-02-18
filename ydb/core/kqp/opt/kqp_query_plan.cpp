@@ -1638,6 +1638,8 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     auto fillTaskStats = [&](NJson::TJsonValue& node, const NYql::NDqProto::TDqTaskStats& taskStats) {
         node["TaskId"] = taskStats.GetTaskId();
 
+        SetNonZero(node, "Host", taskStats.GetHostName());
+        SetNonZero(node, "NodeId", taskStats.GetNodeId());
         SetNonZero(node, "InputRows", taskStats.GetInputRows());
         SetNonZero(node, "InputBytes", taskStats.GetInputBytes());
         SetNonZero(node, "OutputRows", taskStats.GetOutputRows());

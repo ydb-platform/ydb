@@ -1078,7 +1078,7 @@ namespace NKikimr {
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     struct TEvBlobStorage::TEvVGet
-        : TEventPB<TEvBlobStorage::TEvVGet, NKikimrCapnProto::TEvVGet, TEvBlobStorage::EvVGet>
+        : TEventPB<TEvBlobStorage::TEvVGet, NKikimrCapnProto::TEvVGet::Builder, TEvBlobStorage::EvVGet>
         , TEventWithRelevanceTracker
     {
         TEvVGet() = default;

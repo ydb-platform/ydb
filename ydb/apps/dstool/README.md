@@ -211,7 +211,29 @@ or ```-H``` to command options:
 user@host:~$ ydb-dstool -e ydbd.endpoint pdisk list --show-pdisk-usage -H
 ```
 
+## Do things with storage devices
+
+A storage device is a hardware data storage installed on one of the cluster's machines and prepared for cluster's use.
+Currently the following types of storage devices are supported:
+
+* HDD
+* SSD
+* NVME
+
+A storage device available on a cluster and preperated for use, may or may not be used by the cluster.
+
+### List devices
+
+```bash
+user@host:~$ ydb-dstool -e ydbd.endpoint device list
+```
+
+The above command lists all storage devices of a cluster available for use.
+
 ## Do things with pdisks
+
+Physical disk or pdisk is an abstraction of a storage device which is used by the cluster. As a result every pdisk
+has an associated storage device, but not every storage device has an associated pdisk.
 
 ### List pdisks
 

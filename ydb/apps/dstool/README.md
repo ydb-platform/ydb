@@ -56,7 +56,9 @@ user@host:~/github$ cd ydb
 user@host:~/github/ydb$ ydb_root=$(pwd)
 user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
 user@host:~/github/ydb$ mv ydb/apps/dstool/setup.py .
+user@host:~/github/ydb$ python3 -m pip install --upgrade build
 user@host:~/github/ydb$ python3 -m build
+user@host:~/github/ydb$ python3 -m pip install --upgrade twine
 user@host:~/github/ydb$ python3 -m twine upload dist/*
 ```
 

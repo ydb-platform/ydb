@@ -25,7 +25,7 @@
 
 static void s_client_bootstrap_destroy_impl(struct aws_client_bootstrap *bootstrap) {
     AWS_ASSERT(bootstrap);
-    AWS_LOGF_DEBUG(AWS_LS_IO_CHANNEL_BOOTSTRAP, "id=%p: destroying", (void *)bootstrap);
+    AWS_LOGF_DEBUG(AWS_LS_IO_CHANNEL_BOOTSTRAP, "id=%p: bootstrap destroying", (void *)bootstrap);
     aws_client_bootstrap_shutdown_complete_fn *on_shutdown_complete = bootstrap->on_shutdown_complete;
     void *user_data = bootstrap->user_data;
 
@@ -41,6 +41,7 @@ static void s_client_bootstrap_destroy_impl(struct aws_client_bootstrap *bootstr
 
 struct aws_client_bootstrap *aws_client_bootstrap_acquire(struct aws_client_bootstrap *bootstrap) {
     if (bootstrap != NULL) {
+        AWS_LOGF_DEBUG(AWS_LS_IO_CHANNEL_BOOTSTRAP, "id=%p: acquiring bootstrap reference", (void *)bootstrap);
         aws_ref_count_acquire(&bootstrap->ref_count);
     }
 
@@ -48,8 +49,8 @@ struct aws_client_bootstrap *aws_client_bootstrap_acquire(struct aws_client_boot
 }
 
 void aws_client_bootstrap_release(struct aws_client_bootstrap *bootstrap) {
-    AWS_LOGF_DEBUG(AWS_LS_IO_CHANNEL_BOOTSTRAP, "id=%p: releasing bootstrap reference", (void *)bootstrap);
     if (bootstrap != NULL) {
+        AWS_LOGF_DEBUG(AWS_LS_IO_CHANNEL_BOOTSTRAP, "id=%p: releasing bootstrap reference", (void *)bootstrap);
         aws_ref_count_release(&bootstrap->ref_count);
     }
 }
@@ -144,6 +145,7 @@ struct client_connection_args {
 
 static struct client_connection_args *s_client_connection_args_acquire(struct client_connection_args *args) {
     if (args != NULL) {
+        AWS_LOGF_TRACE(AWS_LS_IO_CHANNEL_BOOTSTRAP, "acquiring client connection args, args=%p", (void *)args);
         aws_ref_count_acquire(&args->ref_count);
     }
 
@@ -152,6 +154,7 @@ static struct client_connection_args *s_client_connection_args_acquire(struct cl
 
 static void s_client_connection_args_destroy(struct client_connection_args *args) {
     AWS_ASSERT(args);
+    AWS_LOGF_TRACE(AWS_LS_IO_CHANNEL_BOOTSTRAP, "destroying client connection args, args=%p", (void *)args);
 
     struct aws_allocator *allocator = args->bootstrap->allocator;
     aws_client_bootstrap_release(args->bootstrap);
@@ -168,6 +171,7 @@ static void s_client_connection_args_destroy(struct client_connection_args *args
 
 static void s_client_connection_args_release(struct client_connection_args *args) {
     if (args != NULL) {
+        AWS_LOGF_TRACE(AWS_LS_IO_CHANNEL_BOOTSTRAP, "releasing client connection args, args=%p", (void *)args);
         aws_ref_count_release(&args->ref_count);
     }
 }
@@ -189,18 +193,17 @@ static void s_connection_args_setup_callback(
     int error_code,
     struct aws_channel *channel) {
     /* setup_callback is always called exactly once */
-    AWS_ASSERT(!args->setup_called);
-    if (!args->setup_called) {
-        AWS_ASSERT((error_code == AWS_OP_SUCCESS) == (channel != NULL));
-        aws_client_bootstrap_on_channel_event_fn *setup_callback = args->setup_callback;
-        setup_callback(args->bootstrap, error_code, channel, args->user_data);
-        args->setup_called = true;
-        /* if setup_callback is called with an error, we will not call shutdown_callback */
-        if (error_code) {
-            args->shutdown_callback = NULL;
-        }
-        s_client_connection_args_release(args);
+    AWS_FATAL_ASSERT(!args->setup_called);
+
+    AWS_ASSERT((error_code == AWS_OP_SUCCESS) == (channel != NULL));
+    aws_client_bootstrap_on_channel_event_fn *setup_callback = args->setup_callback;
+    setup_callback(args->bootstrap, error_code, channel, args->user_data);
+    args->setup_called = true;
+    /* if setup_callback is called with an error, we will not call shutdown_callback */
+    if (error_code) {
+        args->shutdown_callback = NULL;
     }
+    s_client_connection_args_release(args);
 }
 
 static void s_connection_args_creation_callback(struct client_connection_args *args, struct aws_channel *channel) {
@@ -696,9 +699,19 @@ static void s_on_host_resolved(
     /* ...then schedule all the tasks, which cannot fail */
     for (size_t i = 0; i < host_addresses_len; ++i) {
         struct connection_task_data *task_data = tasks[i];
-        /* each task needs to hold a ref to the args until completed */
+        /**
+         * Acquire on the connection args to make sure connection args outlive the tasks to attempt connection.
+         *
+         * Once upon a time, the connection attempt tasks were scheduled right after acquiring the connection args,
+         * which lead to a crash that when the attempt connection tasks run and the attempt connection succeed and
+         * closed before the other tasks can acquire on the connection args, the connection args had be destroyed before
+         * acquire and lead to a crash.
+         */
         s_client_connection_args_acquire(task_data->args);
+    }
 
+    for (size_t i = 0; i < host_addresses_len; ++i) {
+        struct connection_task_data *task_data = tasks[i];
         aws_task_init(&task_data->task, s_attempt_connection, task_data, "attempt_connection");
         aws_event_loop_schedule_task_now(connect_loop, &task_data->task);
     }

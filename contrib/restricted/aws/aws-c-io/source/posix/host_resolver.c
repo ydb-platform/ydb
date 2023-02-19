@@ -38,7 +38,9 @@ int aws_default_dns_resolve(
     AWS_ZERO_STRUCT(hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
+#    if !defined(__OpenBSD__)
     hints.ai_flags = AI_ALL | AI_V4MAPPED;
+#    endif /* __OpenBSD__ */
 
     int err_code = getaddrinfo(hostname_cstr, NULL, &hints, &result);
 #endif

@@ -17,6 +17,7 @@
 struct exponential_backoff_strategy {
     struct aws_retry_strategy base;
     struct aws_exponential_backoff_retry_options config;
+    struct aws_shutdown_callback_options shutdown_options;
 };
 
 struct exponential_backoff_retry_token {
@@ -29,6 +30,8 @@ struct exponential_backoff_retry_token {
     /* Let's not make this worse by constantly moving across threads if we can help it */
     struct aws_event_loop *bound_loop;
     uint64_t (*generate_random)(void);
+    aws_generate_random_fn *generate_random_impl;
+    void *generate_random_user_data;
     struct aws_task retry_task;
 
     struct {
@@ -43,7 +46,14 @@ static void s_exponential_retry_destroy(struct aws_retry_strategy *retry_strateg
     if (retry_strategy) {
         struct exponential_backoff_strategy *exponential_strategy = retry_strategy->impl;
         struct aws_event_loop_group *el_group = exponential_strategy->config.el_group;
+        aws_simple_completion_callback *completion_callback =
+            exponential_strategy->shutdown_options.shutdown_callback_fn;
+        void *completion_user_data = exponential_strategy->shutdown_options.shutdown_callback_user_data;
+
         aws_mem_release(retry_strategy->allocator, exponential_strategy);
+        if (completion_callback != NULL) {
+            completion_callback(completion_user_data);
+        }
         aws_ref_count_release(&el_group->ref_count);
     }
 }
@@ -131,6 +141,9 @@ static int s_exponential_retry_acquire_token(
         exponential_backoff_strategy->config.backoff_scale_factor_ms, AWS_TIMESTAMP_MILLIS, AWS_TIMESTAMP_NANOS, NULL);
     backoff_retry_token->jitter_mode = exponential_backoff_strategy->config.jitter_mode;
     backoff_retry_token->generate_random = exponential_backoff_strategy->config.generate_random;
+    backoff_retry_token->generate_random_impl = exponential_backoff_strategy->config.generate_random_impl;
+    backoff_retry_token->generate_random_user_data = exponential_backoff_strategy->config.generate_random_user_data;
+
     aws_atomic_init_int(&backoff_retry_token->current_retry_count, 0);
     aws_atomic_init_int(&backoff_retry_token->last_backoff, 0);
 
@@ -158,8 +171,12 @@ static inline uint64_t s_random_in_range(uint64_t from, uint64_t to, struct expo
     if (!diff) {
         return 0;
     }
-
-    uint64_t random = token->generate_random();
+    uint64_t random;
+    if (token->generate_random_impl) {
+        random = token->generate_random_impl(token->generate_random_user_data);
+    } else {
+        random = token->generate_random();
+    }
     return min + random % (diff);
 }
 
@@ -297,7 +314,8 @@ static struct aws_retry_strategy_vtable s_exponential_retry_vtable = {
     .release_token = s_exponential_backoff_release_token,
 };
 
-static uint64_t s_default_gen_rand(void) {
+static uint64_t s_default_gen_rand(void *user_data) {
+    (void)user_data;
     uint64_t res = 0;
     aws_device_random_u64(&res);
     return res;
@@ -341,8 +359,9 @@ struct aws_retry_strategy *aws_retry_strategy_new_exponential_backoff(
     exponential_backoff_strategy->config.el_group =
         aws_ref_count_acquire(&exponential_backoff_strategy->config.el_group->ref_count);
 
-    if (!exponential_backoff_strategy->config.generate_random) {
-        exponential_backoff_strategy->config.generate_random = s_default_gen_rand;
+    if (!exponential_backoff_strategy->config.generate_random &&
+        !exponential_backoff_strategy->config.generate_random_impl) {
+        exponential_backoff_strategy->config.generate_random_impl = s_default_gen_rand;
     }
 
     if (!exponential_backoff_strategy->config.max_retries) {
@@ -353,5 +372,8 @@ struct aws_retry_strategy *aws_retry_strategy_new_exponential_backoff(
         exponential_backoff_strategy->config.backoff_scale_factor_ms = 25;
     }
 
+    if (config->shutdown_options) {
+        exponential_backoff_strategy->shutdown_options = *config->shutdown_options;
+    }
     return &exponential_backoff_strategy->base;
 }

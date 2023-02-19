@@ -1272,6 +1272,7 @@ int aws_socket_set_options(struct aws_socket *socket, const struct aws_socket_op
             }
         }
 
+#if !defined(__OpenBSD__)
         if (socket->options.keep_alive_interval_sec && socket->options.keep_alive_timeout_sec) {
             int ival_in_secs = socket->options.keep_alive_interval_sec;
             if (AWS_UNLIKELY(setsockopt(
@@ -1311,6 +1312,7 @@ int aws_socket_set_options(struct aws_socket *socket, const struct aws_socket_op
                     errno_value);
             }
         }
+#endif /* __OpenBSD__ */
     }
 
     return AWS_OP_SUCCESS;

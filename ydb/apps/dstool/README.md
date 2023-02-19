@@ -213,7 +213,7 @@ user@host:~$ ydb-dstool -e ydbd.endpoint pdisk list --show-pdisk-usage -H
 
 ## Do things with storage devices
 
-A storage device is a hardware data storage installed on one of the cluster's machines and prepared for cluster's use.
+A storage device is a hardware data storage device installed on a cluster's machine and prepared for cluster's use.
 Currently the following types of storage devices are supported:
 
 * HDD

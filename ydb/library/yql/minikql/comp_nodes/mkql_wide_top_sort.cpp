@@ -29,10 +29,11 @@ struct TMyValueCompare {
 using TComparePtr = int(*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
 using TCompareFunc = std::function<int(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
 
-class TState : public TComputationValue<TState> {
-using TBase = TComputationValue<TState>;
+template <bool HasCount>
+class TState : public TComputationValue<TState<HasCount>> {
+using TBase = TComputationValue<TState<HasCount>>;
 public:
-using TLLVMBase = TLLVMFieldsStructure<TComputationValue<TState>>;
+using TLLVMBase = TLLVMFieldsStructure<TComputationValue<TState<HasCount>>>;
 private:
     using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
     using TFields = std::vector<NUdf::TUnboxedValue*, TMKQLAllocator<NUdf::TUnboxedValue*, EMemorySubPool::Temporary>>;
@@ -43,15 +44,30 @@ private:
     }
 
     void ResetFields() {
-        auto ptr = Tongue = Free.back();
+        NUdf::TUnboxedValuePod* ptr;
+        if constexpr (HasCount) {
+            ptr = Tongue = Free.back();
+        } else {
+            auto pos = Storage.size();
+            Storage.insert(Storage.end(), Indexes.size(), {});
+            ptr = Tongue = Storage.data() + pos;
+        }
+
         std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
     }
 public:
     TState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare, const std::vector<ui32>& indexes)
         : TBase(memInfo), Count(count), Indexes(indexes), Directions(directons, directons + keyWidth)
         , LessFunc(std::bind(std::less<int>(), std::bind(compare, Directions.data(), std::placeholders::_1, std::placeholders::_2), 0))
-        , Storage(GetStorageSize() * Indexes.size()), Free(GetStorageSize(), nullptr), Fields(Indexes.size(), nullptr)
+        , Fields(Indexes.size(), nullptr)
     {
+        if constexpr (!HasCount) {
+            ResetFields();
+            return;
+        }
+
+        Storage.resize(GetStorageSize() * Indexes.size());
+        Free.resize(GetStorageSize(), nullptr);
         if (Count) {
             Full.reserve(GetStorageSize());
             auto ptr = Storage.data();
@@ -70,6 +86,11 @@ public:
     }
 
     bool Push() {
+        if constexpr (!HasCount) {
+            ResetFields();
+            return true;
+        }
+
         if (Full.size() + 1U == GetStorageSize()) {
             Free.pop_back();
 
@@ -100,6 +121,18 @@ public:
 
     template<bool Sort>
     void Seal() {
+        if constexpr (!HasCount) {
+            static_assert (Sort);
+            Storage.resize(Storage.size() - Indexes.size());
+            Full.reserve(Storage.size() / Indexes.size());
+            for (auto it = Storage.begin(); it != Storage.end(); it += Indexes.size()) {
+                Full.emplace_back(&*it);
+            }
+
+            std::sort(Full.rbegin(), Full.rend(), LessFunc);
+            return;
+        }
+
         Free.clear();
         Free.shrink_to_fit();
 
@@ -135,9 +168,10 @@ private:
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
-class TLLVMFieldsStructureState: public TState::TLLVMBase {
+template <bool HasCount>
+class TLLVMFieldsStructureState: public TState<HasCount>::TLLVMBase {
 private:
-    using TBase = TState::TLLVMBase;
+    using TBase = typename TState<HasCount>::TLLVMBase;
     llvm::IntegerType* ValueType;
     llvm::PointerType* PtrValueType;
     llvm::IntegerType* StatusType;
@@ -171,13 +205,13 @@ public:
 };
 #endif
 
-template<bool Sort>
-class TWideTopWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort>>
+template<bool Sort, bool HasCount>
+class TWideTopWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort, HasCount>>
 #ifndef MKQL_DISABLE_CODEGEN
     , public ICodegeneratorRootNode
 #endif
 {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort>>;
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort, HasCount>>;
 public:
     TWideTopWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, TComputationNodePtrVector&& directions, TKeyTypes&& keyTypes, std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed), Flow(flow), Count(count), Directions(std::move(directions)), KeyTypes(std::move(keyTypes)), Indexes(std::move(indexes)), Representations(std::move(representations))
@@ -185,13 +219,19 @@ public:
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {
-            const auto count = Count->GetValue(ctx).Get<ui64>();
+            ui64 count;
+            if constexpr (HasCount) {
+                count = Count->GetValue(ctx).Get<ui64>();
+            } else {
+                count = 0;
+            }
+
             std::vector<bool> dirs(Directions.size());
             std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
             MakeState(ctx, state, count, dirs.data());
         }
 
-        if (const auto ptr = static_cast<TState*>(state.AsBoxed().Get())) {
+        if (const auto ptr = static_cast<TState<HasCount>*>(state.AsBoxed().Get())) {
             while (EFetchResult::Finish != ptr->InputStatus) {
                 switch (ptr->InputStatus = Flow->FetchValues(ctx, ptr->GetFields())) {
                     case EFetchResult::One:
@@ -200,7 +240,7 @@ public:
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
                     case EFetchResult::Finish:
-                        ptr->Seal<Sort>();
+                        ptr->template Seal<Sort>();
                         break;
                 }
             }
@@ -230,7 +270,7 @@ public:
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(ctx.Codegen->GetContext());
 
-        TLLVMFieldsStructureState stateFields(context);
+        TLLVMFieldsStructureState<HasCount> stateFields(context);
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
@@ -255,8 +295,13 @@ public:
         BranchInst::Create(main, make, HasValue(statePtr, block), block);
         block = make;
 
-        const auto count = GetNodeValue(Count, ctx, block);
-        const auto trunc = GetterFor<ui64>(count, context, block);
+        llvm::Value* trunc;
+        if constexpr (HasCount) {
+            const auto count = GetNodeValue(Count, ctx, block);
+            trunc = GetterFor<ui64>(count, context, block);
+        } else {
+            trunc = ConstantInt::get(Type::getInt64Ty(context), 0U);
+        }
 
         const auto dirs = new AllocaInst(ArrayType::get(Type::getInt1Ty(context), Directions.size()), 0U, "dirs", block);
         for (auto i = 0U; i < Directions.size(); ++i) {
@@ -311,7 +356,7 @@ public:
             block = rest;
 
             new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block);
-            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Seal<Sort>));
+            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<HasCount>::template Seal<Sort>));
             const auto sealType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
             const auto sealPtr = CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(sealType), "seal", block);
             CallInst::Create(sealPtr, {stateArg}, "", block);
@@ -328,40 +373,52 @@ public:
                 placeholders[i] = GetElementPtrInst::CreateInBounds(tongue, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block);
             }
 
-            for (auto i = 0U; i < KeyTypes.size(); ++i) {
-                const auto item = getres.second[Indexes[i]](ctx, block);
-                new StoreInst(item, placeholders[i], block);
+            if constexpr (!HasCount) {
+                for (auto i = 0; i < Representations.size(); ++i) {
+                    const auto item = getres.second[Indexes[i]](ctx, block);
+                    ValueAddRef(Representations[i], item, ctx, block);
+                    new StoreInst(item, placeholders[i], block);
+                }
+
+                } else {
+                for (auto i = 0U; i < KeyTypes.size(); ++i) {
+                    const auto item = getres.second[Indexes[i]](ctx, block);
+                    new StoreInst(item, placeholders[i], block);
+                }
             }
 
-            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Push));
+
+            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<HasCount>::Push));
             const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
             const auto pushPtr = CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block);
             const auto accepted = CallInst::Create(pushPtr, {stateArg}, "accepted", block);
+            if constexpr (HasCount) {
+                const auto push = BasicBlock::Create(context, "push", ctx.Func);
+                const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
 
-            const auto push = BasicBlock::Create(context, "push", ctx.Func);
-            const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
+                BranchInst::Create(push, skip, accepted, block);
 
-            BranchInst::Create(push, skip, accepted, block);
+                block = push;
 
-            block = push;
+                for (auto i = 0U; i < KeyTypes.size(); ++i) {
+                    ValueAddRef(Representations[i], placeholders[i], ctx, block);
+                }
 
-            for (auto i = 0U; i < KeyTypes.size(); ++i) {
-                ValueAddRef(Representations[i], placeholders[i], ctx, block);
-            }
+                for (auto i = KeyTypes.size(); i < Representations.size(); ++i) {
+                    const auto item = getres.second[Indexes[i]](ctx, block);
+                    ValueAddRef(Representations[i], item, ctx, block);
+                    new StoreInst(item, placeholders[i], block);
+                }
+            
 
-            for (auto i = KeyTypes.size(); i < Representations.size(); ++i) {
-                const auto item = getres.second[Indexes[i]](ctx, block);
-                ValueAddRef(Representations[i], item, ctx, block);
-                new StoreInst(item, placeholders[i], block);
-            }
+                BranchInst::Create(loop, block);
 
-            BranchInst::Create(loop, block);
+                block = skip;
 
-            block = skip;
-
-            for (auto i = 0U; i < KeyTypes.size(); ++i) {
-                ValueCleanup(Representations[i], placeholders[i], ctx, block);
-                new StoreInst(ConstantInt::get(valueType, 0), placeholders[i], block);
+                for (auto i = 0U; i < KeyTypes.size(); ++i) {
+                    ValueCleanup(Representations[i], placeholders[i], ctx, block);
+                    new StoreInst(ConstantInt::get(valueType, 0), placeholders[i], block);
+                }
             }
 
             BranchInst::Create(loop, block);
@@ -372,7 +429,7 @@ public:
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Extract));
+            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<HasCount>::Extract));
             const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
             const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
             const auto out = CallInst::Create(extractPtr, {stateArg}, "out", block);
@@ -397,15 +454,18 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, ui64 count, const bool* directions) const {
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TState>(count, directions, Directions.size(), TMyValueCompare(KeyTypes), Indexes);
+        state = ctx.HolderFactory.Create<TState<HasCount>>(count, directions, Directions.size(), TMyValueCompare(KeyTypes), Indexes);
 #else
-        state = ctx.HolderFactory.Create<TState>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(KeyTypes)), Indexes);
+        state = ctx.HolderFactory.Create<TState<HasCount>>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(KeyTypes)), Indexes);
 #endif
     }
 
     void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow)) {
-            TWideTopWrapper::DependsOn(flow, Count);
+            if constexpr (HasCount) {
+                TWideTopWrapper::DependsOn(flow, Count);
+            }
+
             std::for_each(Directions.cbegin(), Directions.cend(), std::bind(&TWideTopWrapper::DependsOn, flow, std::placeholders::_1));
         }
     }
@@ -441,20 +501,26 @@ private:
 
 }
 
-template<bool Sort>
+template<bool Sort, bool HasCount>
 IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() > 2U && !(callable.GetInputsCount() % 2U), "Expected more arguments.");
+    const ui32 offset = HasCount ? 0 : 1;
+    const ui32 inputsWithCount = callable.GetInputsCount() + offset;
+    MKQL_ENSURE(inputsWithCount > 2U && !(inputsWithCount % 2U), "Expected more arguments.");
 
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
-    const auto count = LocateNode(ctx.NodeLocator, callable, 1);
-    const auto keyWidth = (callable.GetInputsCount() >> 1U) - 1U;
+    IComputationNode* count = nullptr;
+    if (HasCount) {
+        count = LocateNode(ctx.NodeLocator, callable, 1);
+    }
+
+    const auto keyWidth = (inputsWithCount >> 1U) - 1U;
     const auto inputType = AS_TYPE(TTupleType, AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType());
     std::vector<ui32> indexes(inputType->GetElementsCount());
     std::iota(indexes.begin(), indexes.end(), 0U);
 
     TKeyTypes keyTypes(keyWidth);
     for (auto i = 0U; i < keyTypes.size(); ++i) {
-        const auto keyIndex = AS_VALUE(TDataLiteral, callable.GetInput((i + 1U) << 1U))->AsValue().Get<ui32>();
+        const auto keyIndex = AS_VALUE(TDataLiteral, callable.GetInput(((i + 1U) << 1U) - offset))->AsValue().Get<ui32>();
         std::swap(indexes[i], indexes[indexes[keyIndex]]);
         keyTypes[i].first = *UnpackOptionalData(inputType->GetElementType(keyIndex), keyTypes[i].second)->GetDataSlot();
     }
@@ -464,22 +530,26 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
         representations[i] = GetValueRepresentation(inputType->GetElementType(indexes[i]));
 
     TComputationNodePtrVector directions(keyWidth);
-    auto index = 1U;
+    auto index = 1U - offset;
     std::generate(directions.begin(), directions.end(), [&](){ return LocateNode(ctx.NodeLocator, callable, ++++index); });
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
-        return new TWideTopWrapper<Sort>(ctx.Mutables, wide, count, std::move(directions), std::move(keyTypes), std::move(indexes), std::move(representations));
+        return new TWideTopWrapper<Sort, HasCount>(ctx.Mutables, wide, count, std::move(directions), std::move(keyTypes), std::move(indexes), std::move(representations));
     }
 
     THROW yexception() << "Expected wide flow.";
 }
 
 IComputationNode* WrapWideTop(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideTopT<false>(callable, ctx);
+    return WrapWideTopT<false, true>(callable, ctx);
 }
 
 IComputationNode* WrapWideTopSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideTopT<true>(callable, ctx);
+    return WrapWideTopT<true, true>(callable, ctx);
+}
+
+IComputationNode* WrapWideSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapWideTopT<true, false>(callable, ctx);
 }
 
 }

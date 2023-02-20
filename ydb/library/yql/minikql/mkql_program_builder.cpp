@@ -1484,11 +1484,15 @@ TRuntimeNode TProgramBuilder::WideTakeBlocks(TRuntimeNode flow, TRuntimeNode cou
 }
 
 TRuntimeNode TProgramBuilder::WideTopBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys) {
-    return BuildWideTop(__func__, flow, count, keys);
+    return BuildWideTopOrSort(__func__, flow, count, keys);
 }
 
 TRuntimeNode TProgramBuilder::WideTopSortBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys) {
-    return BuildWideTop(__func__, flow, count, keys);
+    return BuildWideTopOrSort(__func__, flow, count, keys);
+}
+
+TRuntimeNode TProgramBuilder::WideSortBlocks(TRuntimeNode flow, const std::vector<std::pair<ui32, TRuntimeNode>>& keys) {
+    return BuildWideTopOrSort(__func__, flow, Nothing(), keys);
 }
 
 TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
@@ -1671,17 +1675,28 @@ TRuntimeNode TProgramBuilder::Sort(TRuntimeNode list, TRuntimeNode ascending, co
 
 TRuntimeNode TProgramBuilder::WideTop(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys)
 {
-    return BuildWideTop(__func__, flow, count, keys);
+    return BuildWideTopOrSort(__func__, flow, count, keys);
 }
 
 TRuntimeNode TProgramBuilder::WideTopSort(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys)
 {
-    return BuildWideTop(__func__, flow, count, keys);
+    return BuildWideTopOrSort(__func__, flow, count, keys);
 }
 
-TRuntimeNode TProgramBuilder::BuildWideTop(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys) {
-    if constexpr (RuntimeVersion < 33U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << callableName;
+TRuntimeNode TProgramBuilder::WideSort(TRuntimeNode flow, const std::vector<std::pair<ui32, TRuntimeNode>>& keys)
+{
+    return BuildWideTopOrSort(__func__, flow, Nothing(), keys);
+}
+
+TRuntimeNode TProgramBuilder::BuildWideTopOrSort(const std::string_view& callableName, TRuntimeNode flow, TMaybe<TRuntimeNode> count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys) {
+    if (count) {
+        if constexpr (RuntimeVersion < 33U) {
+            THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << callableName;
+        }
+    } else {
+        if constexpr (RuntimeVersion < 34U) {
+            THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << callableName;
+        }
     }
 
     const auto width = AS_TYPE(TTupleType, AS_TYPE(TFlowType, flow.GetStaticType())->GetItemType())->GetElementsCount();
@@ -1689,7 +1704,10 @@ TRuntimeNode TProgramBuilder::BuildWideTop(const std::string_view& callableName,
 
     TCallableBuilder callableBuilder(Env, callableName, flow.GetStaticType());
     callableBuilder.Add(flow);
-    callableBuilder.Add(count);
+    if (count) {
+        callableBuilder.Add(*count);
+    }
+
     std::for_each(keys.cbegin(), keys.cend(), [&](const std::pair<ui32, TRuntimeNode>& key) {
         MKQL_ENSURE(key.first < width, "Key index too large: " << key.first);
         callableBuilder.Add(NewDataLiteral(key.first));

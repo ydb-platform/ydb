@@ -324,6 +324,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideChopper", &WrapWideChopper},
         {"WideTop", &WrapWideTop},
         {"WideTopSort", &WrapWideTopSort},
+        {"WideSort", &WrapWideSort},
         {"WideFlowArg", &WrapWideFlowArg},
         {"Source", &WrapSource},
         {"RangeCreate", &WrapRangeCreate},

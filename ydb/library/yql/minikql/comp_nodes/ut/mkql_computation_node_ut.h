@@ -15,7 +15,7 @@
         if (!(v.AsStringRef() == (expected))) { \
             UNIT_FAIL_IMPL( \
                     "equal assertion failed", \
-                    Sprintf("%s == %s", #unboxed, #expected)); \
+                    Sprintf("%s %s == %s", #unboxed, TString(v.AsStringRef()).c_str(), #expected)); \
         } \
     } while (0)
 

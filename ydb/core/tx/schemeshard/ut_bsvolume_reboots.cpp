@@ -342,11 +342,9 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner123"));
 
-
-           TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner124", 1);
+            TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner124", 1);
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner124"));
-
         });
     }
 }

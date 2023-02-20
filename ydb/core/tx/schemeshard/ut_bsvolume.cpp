@@ -102,6 +102,104 @@ Y_UNIT_TEST_SUITE(TBSV) {
             // Good: Value { Struct { Optional { Struct { } Struct { Bool: false } } } } }
             UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStruct(0).GetOptional().GetStruct(0).ListSize(), 0);
         }
+    }
 
+    Y_UNIT_TEST(ShouldLimitBlockStoreVolumeDropRate) {
+        struct TMockTimeProvider : public ITimeProvider
+        {
+            TInstant Time;
+
+            TInstant Now() override
+            {
+                return Time;
+            }
+        };
+
+        struct TTimeProviderMocker
+        {
+            TIntrusivePtr<ITimeProvider> OriginalTimeProvider;
+
+            TTimeProviderMocker(TIntrusivePtr<ITimeProvider> timeProvider)
+            {
+                OriginalTimeProvider = NKikimr::TAppData::TimeProvider;
+                NKikimr::TAppData::TimeProvider = timeProvider;
+            }
+
+            ~TTimeProviderMocker()
+            {
+                NKikimr::TAppData::TimeProvider = OriginalTimeProvider;
+            }
+        };
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        auto root = "/MyRoot";
+        auto name = "BSVolume";
+        auto throttled = NKikimrScheme::StatusNotAvailable;
+
+        TestUserAttrs(runtime, ++txId, "", "MyRoot",
+            AlterUserAttrs(
+                {{"drop_blockstore_volume_rate_limiter_rate", "1.0"}}
+            )
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestUserAttrs(runtime, ++txId, "", "MyRoot",
+            AlterUserAttrs(
+                {{"drop_blockstore_volume_rate_limiter_capacity", "10.0"}}
+            )
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TIntrusivePtr<TMockTimeProvider> mockTimeProvider =
+            new TMockTimeProvider();
+        TTimeProviderMocker mocker(mockTimeProvider);
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription descr;
+        descr.SetName(name);
+        auto& c = *descr.MutableVolumeConfig();
+        c.SetBlockSize(4096);
+        for (int i = 0; i < 4; ++i) {
+            c.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        }
+        c.AddPartitions()->SetBlockCount(16);
+
+        // consume all initial budget
+        for (int i = 0; i < 10; ++i) {
+            TestCreateBlockStoreVolume(runtime, ++txId, root, descr.DebugString());
+            env.TestWaitNotification(runtime, txId);
+            TestDropBlockStoreVolume(runtime, ++txId, root, name);
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TestCreateBlockStoreVolume(runtime, ++txId, root, descr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        // drop should be throttled
+        TestDropBlockStoreVolume(runtime, ++txId, root, name, {throttled});
+        env.TestWaitNotification(runtime, txId);
+
+        mockTimeProvider->Time = TInstant::Seconds(1);
+
+        // after 1 second, we should be able to drop one volume
+        TestDropBlockStoreVolume(runtime, ++txId, root, name);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateBlockStoreVolume(runtime, ++txId, root, descr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        // next drop should be throttled
+        TestDropBlockStoreVolume(runtime, ++txId, root, name, {throttled});
+        env.TestWaitNotification(runtime, txId);
+
+        // turn off rate limiter
+        TestUserAttrs(runtime, ++txId, "", "MyRoot",
+            AlterUserAttrs(
+                {{"drop_blockstore_volume_rate_limiter_rate", "0.0"}}
+            )
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropBlockStoreVolume(runtime, ++txId, root, name);
+        env.TestWaitNotification(runtime, txId);
     }
 }

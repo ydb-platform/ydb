@@ -44,6 +44,7 @@
 #include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/core/util/token_bucket.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -327,6 +328,8 @@ public:
     bool CleanDroppedPathsInFly = false;
     bool CleanDroppedPathsDisabled = true;
     bool CleanDroppedSubDomainsInFly = false;
+
+    TTokenBucket DropBlockStoreVolumeRateLimiter;
 
     TActorId DelayedInitTenantDestination;
     TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;

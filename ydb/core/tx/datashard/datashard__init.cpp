@@ -43,6 +43,9 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         if (done && Self->State != TShardState::Offline) {
             Self->SnapshotManager.Fix_KIKIMR_12289(txc.DB);
             Self->SnapshotManager.Fix_KIKIMR_14259(txc.DB);
+            for (const auto& pr : Self->TableInfos) {
+                pr.second->Fix_KIKIMR_17222(txc.DB);
+            }
         }
 
         return done;

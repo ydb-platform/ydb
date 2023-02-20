@@ -609,4 +609,35 @@ void TUserTable::ApplyDefaults(TTransactionContext& txc) const
     }
 }
 
+void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db) const
+{
+    Fix_KIKIMR_17222(db, LocalTid);
+    if (ShadowTid) {
+        Fix_KIKIMR_17222(db, ShadowTid);
+    }
+}
+
+void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db, ui32 tid) const
+{
+    const auto* tableInfo = db.GetScheme().GetTableInfo(tid);
+    if (!tableInfo) {
+        // Local table does not exist, nothing to fix
+        return;
+    }
+
+    for (const auto& fam : Families) {
+        ui32 familyId = fam.first;
+        if (tableInfo->Families.contains(familyId)) {
+            // Family exists, nothing to fix
+            continue;
+        }
+
+        const TUserFamily& family = fam.second;
+
+        db.Alter().AddFamily(tid, familyId, family.GetRoomId());
+        db.Alter().SetFamily(tid, familyId, family.Cache, family.Codec);
+        db.Alter().SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
+    }
+}
+
 }}

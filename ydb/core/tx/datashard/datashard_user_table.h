@@ -389,6 +389,8 @@ struct TUserTable : public TThrRefBase {
                     const NKikimrSchemeOp::TTableDescription& alter, TString& strError);
     void ApplyDefaults(NTabletFlatExecutor::TTransactionContext& txc) const;
 
+    void Fix_KIKIMR_17222(NTable::TDatabase& db) const;
+
     TTableRange GetTableRange() const { return Range.ToTableRange(); }
     const TString& GetSchema() const { return Schema; }
 
@@ -421,6 +423,8 @@ struct TUserTable : public TThrRefBase {
 private:
     void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,
             const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
+
+    void Fix_KIKIMR_17222(NTable::TDatabase& db, ui32 tid) const;
 
 private:
     TString Schema;

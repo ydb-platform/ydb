@@ -325,7 +325,7 @@ public:
 
         Become(&TKqpCompileService::MainState);
         if (Config.GetCompileQueryCacheTTLSec()) {
-            StartCheckQueriesTtlTimer(ctx);
+            StartCheckQueriesTtlTimer();
         }
     }
 
@@ -341,7 +341,7 @@ private:
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
             hFunc(TEvents::TEvUndelivered, HandleUndelivery);
 
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            CFunc(TEvents::TSystem::Wakeup, HandleTtlTimer);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         default:
             Y_FAIL("TKqpCompileService: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
@@ -661,7 +661,7 @@ private:
         QueryCache.EraseByUid(request.Uid);
     }
 
-    void HandleTimeout(const TActorContext& ctx) {
+    void HandleTtlTimer(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received check queries TTL timeout");
 
         auto evicted = QueryCache.EraseExpiredQueries();
@@ -669,7 +669,7 @@ private:
             Counters->CompileQueryCacheEvicted->Add(evicted);
         }
 
-        StartCheckQueriesTtlTimer(ctx);
+        StartCheckQueriesTtlTimer();
     }
 
 private:
@@ -713,9 +713,8 @@ private:
         RequestsQueue.AddActiveRequest(std::move(request));
     }
 
-    void StartCheckQueriesTtlTimer(const TActorContext& ctx) {
-        CheckQueriesTtlTimer = CreateLongTimer(ctx, TDuration::Seconds(Config.GetCompileQueryCacheTTLSec()),
-            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
+    void StartCheckQueriesTtlTimer() {
+        Schedule(TDuration::Seconds(Config.GetCompileQueryCacheTTLSec()), new TEvents::TEvWakeup());
     }
 
     void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
@@ -787,7 +786,6 @@ private:
 
     TKqpQueryCache QueryCache;
     TKqpRequestsQueue RequestsQueue;
-    TActorId CheckQueriesTtlTimer;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
 };
 

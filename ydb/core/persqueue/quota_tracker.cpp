@@ -27,7 +27,8 @@ namespace NKikimr::NPQ {
         AvailableSize = Min<i64>(AvailableSize + (ui64)SpeedPerSecond * ms / 1000, MaxBurst);
     }
 
-    bool TQuotaTracker::CanExaust() const {
+    bool TQuotaTracker::CanExaust(const TInstant timestamp) {
+        Update(timestamp);
         return AvailableSize > 0;
     }
 
@@ -37,7 +38,8 @@ namespace NKikimr::NPQ {
         Update(timestamp);
     }
 
-    ui64 TQuotaTracker::GetQuotedTime() const {
+    ui64 TQuotaTracker::GetQuotedTime(const TInstant timestamp) {
+        Update(timestamp);
         return QuotedTime;
     }
 

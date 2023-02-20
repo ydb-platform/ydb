@@ -11,10 +11,10 @@ namespace NKikimr::NPQ {
         void UpdateConfig(const ui64 maxBurst, const ui64 speedPerSecond);
         void Update(const TInstant timestamp);
 
-        bool CanExaust() const;
+        bool CanExaust(const TInstant timestamp) ;
         void Exaust(const ui64 size, const TInstant timestamp);
 
-        ui64 GetQuotedTime() const;
+        ui64 GetQuotedTime(const TInstant timestamp);
         ui64 GetTotalSpeed() const;
 
     private:

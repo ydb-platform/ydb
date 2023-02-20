@@ -1082,8 +1082,7 @@ void TPartition::UpdateAvailableSize(const TActorContext& ctx) {
     WriteQuota->Update(now);
     for (auto &c : UsersInfoStorage->GetAll()) {
         while (true) {
-            c.second.ReadQuota.Update(now);
-            if (!c.second.ReadQuota.CanExaust() && !c.second.ReadRequests.empty()) {
+            if (!c.second.ReadQuota.CanExaust(now) && !c.second.ReadRequests.empty()) {
                 break;
             }
             if (!c.second.ReadRequests.empty()) {
@@ -1923,7 +1922,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
 
         it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicConverter->GetClientsideName(), Partition, ctx);//will change OwnerCookie
         //cookie is generated. but answer will be sent when all inflight writes will be done - they in the same queue 'Requests'
-        Requests.emplace_back(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+        Requests.emplace_back(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now().MilliSeconds(), 0);
         TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
         UpdateWriteBufferIsFullState(ctx.Now());
         ProcessReserveRequests(ctx);
@@ -4822,7 +4821,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     for (auto& msg: ev->Get()->Msgs) {
         size += msg.Data.size();
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
-        Requests.emplace_back(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+        Requests.emplace_back(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now().MilliSeconds(), 0);
         if (offset && needToChangeOffset)
             ++*offset;
     }
@@ -4869,7 +4868,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
     }
 
     WriteQuota->Update(ctx.Now());
-    Requests.emplace_back(TRegisterMessageGroupMsg(*ev->Get()), WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+    Requests.emplace_back(TRegisterMessageGroupMsg(*ev->Get()), WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now().MilliSeconds(), 0);
 }
 
 void TPartition::HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
@@ -4887,7 +4886,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const
     }
 
     WriteQuota->Update(ctx.Now());
-    Requests.emplace_back(TDeregisterMessageGroupMsg(*ev->Get()), WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+    Requests.emplace_back(TDeregisterMessageGroupMsg(*ev->Get()), WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now().MilliSeconds(), 0);
 }
 
 void TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
@@ -4926,7 +4925,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TAct
     }
 
     WriteQuota->Update(ctx.Now());
-    Requests.emplace_back(std::move(msg), WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+    Requests.emplace_back(std::move(msg), WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now().MilliSeconds(), 0);
 }
 
 std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool headCleared) {
@@ -5064,7 +5063,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 Y_VERIFY(pp.IsOwnership());
             }
 
-            pp.QuotedTime = WriteQuota->GetQuotedTime() - pp.QuotedTime; //change to duration
+            pp.QuotedTime = WriteQuota->GetQuotedTime(ctx.Now()) - pp.QuotedTime; //change to duration
             pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
             pp.WriteTime = ctx.Now().MilliSeconds();
             Responses.push_back(pp);
@@ -5106,7 +5105,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             }
 
             TString().swap(p.Msg.Data);
-            pp.QuotedTime = WriteQuota->GetQuotedTime() - pp.QuotedTime; //change to duration
+            pp.QuotedTime = WriteQuota->GetQuotedTime(ctx.Now()) - pp.QuotedTime; //change to duration
             pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
             pp.WriteTime = ctx.Now().MilliSeconds();
             Responses.push_back(pp);
@@ -5320,7 +5319,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
         }
         TString().swap(p.Msg.Data);
-        pp.QuotedTime = WriteQuota->GetQuotedTime() - pp.QuotedTime; //change to duration
+        pp.QuotedTime = WriteQuota->GetQuotedTime(ctx.Now()) - pp.QuotedTime; //change to duration
         pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
         pp.WriteTime = ctx.Now().MilliSeconds();
         Responses.push_back(pp);
@@ -5505,7 +5504,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorCon
 
     FilterDeadlinedWrites(ctx);
 
-    if (!WriteQuota->CanExaust()) { // Waiting for partition quota.
+    if (!WriteQuota->CanExaust(ctx.Now())) { // Waiting for partition quota.
         SetDeadlinesForWrites(ctx);
         return false;
     }
@@ -5624,7 +5623,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
             bool res = ProcessWrites(request.Get(), ctx);
             Y_VERIFY(!res);
         }
-        Y_VERIFY(Requests.empty() || !WriteQuota->CanExaust() || WaitingForPreviousBlobQuota()); //in this case all writes must be processed or no quota left
+        Y_VERIFY(Requests.empty() || !WriteQuota->CanExaust(ctx.Now()) || WaitingForPreviousBlobQuota()); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
         BecomeIdle(ctx);
         return;
@@ -5646,7 +5645,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         userInfo.ForgetSubscription(ctx.Now());
     }
 
-    if (!userInfo.ReadQuota.CanExaust()) {
+    if (!userInfo.ReadQuota.CanExaust(ctx.Now())) {
         userInfo.ReadRequests.push_back({std::move(info), cookie});
         userInfo.UpdateReadingTimeAndState(ctx.Now());
         return;

@@ -2,11 +2,26 @@
 
 #include <capnp/message.h>
 #include <capnp/serialize-packed.h>
+#include <kj/io.h>
 #include <string>
 #include <vector>
 #include <optional>
+#include <library/cpp/actors/core/event_pb.h>
 
 #include "tevvget.capnp.h"
+
+namespace NKikimrCapnProtoUtil {
+    struct TRopeStream : public kj::BufferedInputStream {
+        NActors::TRopeStream *underlying;
+
+        virtual kj::ArrayPtr<const kj::byte> tryGetReadBuffer() override {
+            const void* bytes;
+            int size;
+            underlying->Next(&bytes, &size);
+            return {static_cast<const kj::byte*>(bytes), static_cast<size_t>(size)};
+        }
+    };
+};
 
 namespace NKikimrCapnProto {
     using namespace NKikimrCapnProto_;
@@ -521,6 +536,21 @@ namespace NKikimrCapnProto {
             bool HasForceBlockedGeneration() const { return getForceBlockedGeneration() != 0; }
             bool HasSnapshotId() const { return getSnapshotId() != 0; }
             const NKikimrCapnProto_::TEvVGet::Reader& GetCapnpBase() const { return *this; }
+
+            bool ParseFromZeroCopyStream(NActors::TRopeStream *input) {
+                NKikimrCapnProtoUtil::TRopeStream stream;
+                stream.underlying = input;
+
+                static_cast<NKikimrCapnProto_::TEvVGet::Reader&>(*this) = messageReader.emplace(stream).getRoot<NKikimrCapnProto_::TEvVGet>();
+                if (hasExtremeQueries()) {
+                    elements.reserve(getExtremeQueries().size());
+                    for (TEvVGet::Reader interview : getExtremeQueries()) {
+                        elements.push_back(interview);
+                    }
+                }
+                return true;
+            }
+
         };
 
         struct Builder : private capnp::MallocMessageBuilder, private NKikimrCapnProto_::TEvVGet::Builder, public Reader {

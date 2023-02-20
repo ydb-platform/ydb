@@ -217,7 +217,7 @@ namespace NKikimr {
                     return true;
                 }
 
-                if (driveInfo.LifeStage != NKikimrBlobStorage::TDriveLifeStage::ADDED_TO_BSC) {
+                if (driveInfo.LifeStage != NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
                     return true;
                 }
 

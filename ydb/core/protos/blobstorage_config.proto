@@ -219,11 +219,9 @@ message TGroupStatus {
 
 message TDriveLifeStage {
     enum E {
-        UNKNOWN = 0; // life stage is unknown (default)
-        SEEN_ON_NODE = 1; // disk drive has been seen on a node, but is not added to BSC yet
-        ADDED_TO_BSC = 2; // disk drive has been added to BSC
-        REMOVED_FROM_BSC = 3; // disk drive has been removed from BSC
-        ERROR = 4; // drive was moved between nodes with allocated VDisks
+        FREE = 0; // disk drive has been seen on a node, but is not added to BSC yet
+        ADDED_BY_DSTOOL = 1; // disk drive has been added to BSC
+        REMOVED_BY_DSTOOL = 2; // disk drive has been removed from BSC
     }
 }
 

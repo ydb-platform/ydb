@@ -1279,7 +1279,7 @@ public:
         TMaybe<Table::NodeId::Type> NodeId;
         TMaybe<Table::PDiskId::Type> PDiskId;
         TMaybe<Table::Guid::Type> Guid;
-        Table::LifeStage::Type LifeStage = NKikimrBlobStorage::TDriveLifeStage::UNKNOWN;
+        Table::LifeStage::Type LifeStage = NKikimrBlobStorage::TDriveLifeStage::FREE;
         Table::Kind::Type Kind = 0;
         Table::PDiskType::Type PDiskType = PDiskTypeToPDiskType(NPDisk::DEVICE_TYPE_UNKNOWN);
         TMaybe<Table::PDiskConfig::Type> PDiskConfig;
@@ -1970,36 +1970,28 @@ public:
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutSlotCount);
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL].Set(numWithoutSerial);
 
-        ui32 numUnknown = 0;
-        ui32 numSeen = 0;
+        ui32 numFree = 0;
         ui32 numAdded = 0;
         ui32 numRemoved = 0;
-        ui32 numError = 0;
         for (const auto& [serial, driveInfo] : DrivesSerials) {
             switch (driveInfo->LifeStage) {
-                case NKikimrBlobStorage::TDriveLifeStage::SEEN_ON_NODE:
-                    ++numSeen;
+                case NKikimrBlobStorage::TDriveLifeStage::FREE:
+                    ++numFree;
                     break;
-                case NKikimrBlobStorage::TDriveLifeStage::ADDED_TO_BSC:
+                case NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL:
                     ++numAdded;
                     break;
-                case NKikimrBlobStorage::TDriveLifeStage::REMOVED_FROM_BSC:
+                case NKikimrBlobStorage::TDriveLifeStage::REMOVED_BY_DSTOOL:
                     ++numRemoved;
                     break;
-                case NKikimrBlobStorage::TDriveLifeStage::ERROR:
-                    ++numError;
-                    break;
                 default:
-                    ++numUnknown;
                     break;
             }
         }
 
-        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_SEEN_ON_NODE].Set(numSeen);
-        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_ADDED_TO_BSC].Set(numAdded);
-        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_REMOVED_FROM_BSC].Set(numRemoved);
-        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_ERROR].Set(numError);
-        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_UNKNOWN].Set(numUnknown);
+        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_FREE].Set(numFree);
+        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_ADDED_BY_DSTOOL].Set(numAdded);
+        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_REMOVED_BY_DSTOOL].Set(numRemoved);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

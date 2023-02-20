@@ -110,12 +110,12 @@ class TBlobStorageController::TTxUpdateNodeDrives
             auto it = Self->DrivesSerials.find(serial);
             if (it == Self->DrivesSerials.end()) {
                 auto newInfo = MakeHolder<TDriveSerialInfo>();
-                newInfo->LifeStage = NKikimrBlobStorage::TDriveLifeStage::SEEN_ON_NODE;
+                newInfo->LifeStage = NKikimrBlobStorage::TDriveLifeStage::FREE;
                 newInfo->NodeId = nodeId;
                 newInfo->Path = data.GetPath();
                 newInfo->PDiskType = data.GetDeviceType();
                 Self->DrivesSerials.emplace(serial, std::move(newInfo));
-            } else if (it->second->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_TO_BSC) {
+            } else if (it->second->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
                 if (it->second->NodeId != nodeId) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN03,
                         "Received drive from NewNodeId, but drive is reported as placed in OldNodeId",

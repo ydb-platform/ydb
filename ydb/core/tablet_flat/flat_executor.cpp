@@ -4185,7 +4185,14 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     for (size_t group : xrange(rowScheme->Families.size())) {
         auto familyId = rowScheme->Families[group];
-        auto* family = tableInfo->Families.FindPtr(familyId);
+        const auto* family = tableInfo->Families.FindPtr(familyId);
+        if (Y_UNLIKELY(!family)) {
+            // FIXME: workaround for KIKIMR-17222
+            // Column families with default settings may be missing in schema,
+            // so we have to use a static variable as a substitute
+            static const NTable::TScheme::TFamily defaultFamilySettings;
+            family = &defaultFamilySettings;
+        }
         Y_VERIFY(family, "Cannot find family %" PRIu32 " in table %" PRIu32, familyId, table);
 
         auto roomId = family->Room;

@@ -634,7 +634,7 @@ private:
                 break;
             }
 
-            LOG_S_DEBUG("Evict: " << it.Key());
+            LOG_S_DEBUG("Evict: " << it.Key() << ";CacheDataSize:" << CacheDataSize << ";InFlightDataSize:" << (i64)InFlightDataSize << ";MaxCacheDataSize:" << (i64)MaxCacheDataSize);
 
             {
                 // Remove the range from list of ranges by blob id

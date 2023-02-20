@@ -1,6 +1,6 @@
 ## Nodes {#nodes}
 
-One {{ ydb-short-name }} installation consists of a *cluster* that is divided into *nodes*. A node is a single process in the system, usually kikimr. This node is part of a cluster and can exchange data with its other nodes via *Interconnect*. Each *node* has its own ID which is usually named NodeId. NodeID is a 20-bit integer equal to or greater than 1. NodeID 0 is reserved for internal needs and usually indicates the current node or no node.
+One {{ ydb-short-name }} installation consists of a *cluster* that is divided into *nodes*. A node is a single process in the system, usually ydbd. This node is part of a cluster and can exchange data with its other nodes via *Interconnect*. Each *node* has its own ID which is usually named NodeId. NodeID is a 20-bit integer equal to or greater than 1. NodeID 0 is reserved for internal needs and usually indicates the current node or no node.
 
 A number of services are run on each node and implemented via *actors*.
 

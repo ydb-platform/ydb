@@ -74,5 +74,5 @@ You can extend a {{ ydb-short-name }} cluster by adding new nodes to its configu
 1. Run the command:
 
    ```protobuf
-   kikimr -s <endpoint> admin bs config invoke --proto-file DefineBox.txt
+   ydbd -s <endpoint> admin bs config invoke --proto-file DefineBox.txt
    ```

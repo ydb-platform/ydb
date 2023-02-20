@@ -35,9 +35,9 @@ Command {
   }
 }
 ```
-    
-```
-kikimr -s <endpoint> admin bs config invoke --proto-file ReadHostConfig.txt
+
+```bash
+ydbd -s <endpoint> admin bs config invoke --proto-file ReadHostConfig.txt
 ```
 
 Требуется вставить полученный конфиг в протобуф ниже и поменять в нем поле **PDiskConfig/ExpectedSlotCount**.
@@ -49,7 +49,7 @@ Command {
   }
 }
 ```
-    
-```
-kikimr -s <endpoint> admin bs config invoke --proto-file DefineHostConfig.txt
+
+```bash
+ydbd -s <endpoint> admin bs config invoke --proto-file DefineHostConfig.txt
 ```

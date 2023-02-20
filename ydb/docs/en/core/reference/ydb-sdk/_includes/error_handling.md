@@ -53,7 +53,7 @@ Error types:
 | SUCCESS | The query was processed successfully | Continue execution |  |
 | BAD_REQUEST | Error in query syntax, required fields missing | Check the query | N |
 | INTERNAL_ERROR | Unknown internal error | Contact the developers | N |
-| ABORTED | The operation was aborted (for example, due to lock invalidation, KIKIMR_LOCKS_INVALIDATED in detailed error messages) | Retry the entire transaction | R |
+| ABORTED | The operation was aborted (for example, due to lock invalidation, TRANSACTION_LOCKS_INVALIDATE in detailed error messages) | Retry the entire transaction | R |
 | UNAUTHENTICATED | Authentication is required. | Check the token in use. If the token is valid, retry the query. | N |
 | UNAUTHORIZED | Access to the requested object (table, directory) is denied | Request access from the DB administrator. | N |
 | UNAVAILABLE | Part of the system is not available | Retry the last action (query) | R |

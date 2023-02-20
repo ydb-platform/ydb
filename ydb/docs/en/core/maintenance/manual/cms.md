@@ -4,12 +4,12 @@
 
 The following command will let you get the current settings for a cluster or tenant.
 
-```
-./kikimr -s <endpoint> admin console configs load --out-dir <config-folder>
+```bash
+ydbd -s <endpoint> admin console configs load --out-dir <config-folder>
 ```
 
-```
-./kikimr -s <endpoint> admin console configs load --out-dir <config-folder> --tenant <tenant-name>
+```bash
+ydbd -s <endpoint> admin console configs load --out-dir <config-folder> --tenant <tenant-name>
 ```
 
 ## Update the settings
@@ -38,7 +38,6 @@ Actions {
 
 The UsageScope field is optional and is needed to use settings for a specific tenant.
 
+```bash
+ydbd -s <endpoint> admin console configs update <protobuf-file>
 ```
-./kikimr -s <endpoint> admin console configs update <protobuf-file>
-```
-

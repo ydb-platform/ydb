@@ -9,7 +9,7 @@ To make sure that the process is stoppable, follow these steps.
 1. Execute the command
 
     ```bash
-    kikimr cms request restart host {node_id} --user {user} --duration 60 --dry --reason 'some-reason'
+    ydbd cms request restart host {node_id} --user {user} --duration 60 --dry --reason 'some-reason'
     ```
 
     If the process is stoppable, you'll see `ALLOW`.
@@ -17,13 +17,13 @@ To make sure that the process is stoppable, follow these steps.
 1. Stop the process
 
     ```bash
-    sudo service kikimr stop
+    sudo service ydbd stop
     ```
 
 1. Restart the process if needed
 
    ```bash
-    sudo service kikimr start
+    sudo service ydbd start
    ```
 
 ## Replacing equipment {#replace_hardware}

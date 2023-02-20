@@ -25,7 +25,7 @@
     Все данные, хранимые VDisk'ом, будут необратимо удалены, после чего VDisk начнет восстанавливать данные, читая их с остальных VDisk'ов группы.
 
     ```bash
-    kikimr admin blobstorage group reconfigure wipe --domain <Номер домена> --node <ID узла> --pdisk <pdisk-id> --vslot <Номер слота>
+    ydbd admin blobstorage group reconfigure wipe --domain <Номер домена> --node <ID узла> --pdisk <pdisk-id> --vslot <Номер слота>
     ```
 
     Посмотреть нужную информацию для команды можно во вьювере.
@@ -41,19 +41,19 @@
 4. Остановить процесс
 
     ```bash
-    sudo systemctl stop kikimr
+    sudo systemctl stop ydbd
     ```
 
 5. Форматировать устройство
 
     ```bash
-    sudo kikimr admin blobstorage disk obliterate <путь до партлейбла устройства>
+    sudo ydbd admin blobstorage disk obliterate <путь до партлейбла устройства>
     ```
 
 6. Запустить процесс
 
     ```bash
-    sudo systemctl start kikimr
+    sudo systemctl start ydbd
     ```
 
 ## Перевоз отдельных VDisk'ов с заполненных устройств

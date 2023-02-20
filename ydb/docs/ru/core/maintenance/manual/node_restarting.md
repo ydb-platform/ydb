@@ -9,7 +9,7 @@
 1. Выполнить команду
 
     ```bash
-    kikimr cms request restart host {node_id} --user {user} --duration 60 --dry --reason 'some-reason'
+    ydbd cms request restart host {node_id} --user {user} --duration 60 --dry --reason 'some-reason'
     ```
 
     При разрешение выведет `ALLOW`.
@@ -17,13 +17,13 @@
 1. Остановить процесс
 
     ```bash
-    sudo service kikimr stop
+    sudo service ydbd stop
     ```
 
 1. Если потребуется, запустить процесс
 
    ```bash
-    sudo service kikimr start
+    sudo service ydbd start
     ```
 
 ## Замена оборудования {#replace_hardware}

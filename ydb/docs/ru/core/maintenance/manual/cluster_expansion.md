@@ -73,6 +73,6 @@
 
 1. Выполните команду:
 
-    ```protobuf
-    kikimr -s <endpoint> admin bs config invoke --proto-file DefineBox.txt
+    ```bash
+    ydbd -s <endpoint> admin bs config invoke --proto-file DefineBox.txt
     ```

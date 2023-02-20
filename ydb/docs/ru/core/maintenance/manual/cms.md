@@ -4,19 +4,19 @@
 
 Следующая команда позволит получить текущие настройки по кластеру или по тенанту.
 
-```
-./kikimr -s <endpoint> admin console configs load --out-dir <config-folder>
+```bash
+ydbd -s <endpoint> admin console configs load --out-dir <config-folder>
 ```
 
-```
-./kikimr -s <endpoint> admin console configs load --out-dir <config-folder> --tenant <tenant-name>
+```bash
+ydbd -s <endpoint> admin console configs load --out-dir <config-folder> --tenant <tenant-name>
 ```
 
 ## Обновить настройки
 
 Сначала надо выкачать нужный конфиг как указано выше, после чего требуется подготовить protobuf файл с запросом на изменение.
 
-```
+```proto
 Actions {
   AddConfigItem {
     ConfigItem {
@@ -38,6 +38,6 @@ Actions {
 
 Поле UsageScope необязательно, и нужно для применения настроек для определенного тенанта.
 
-```
-./kikimr -s <endpoint> admin console configs update <protobuf-file>
+```bash
+ydbd -s <endpoint> admin console configs update <protobuf-file>
 ```

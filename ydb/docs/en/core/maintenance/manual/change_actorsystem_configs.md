@@ -116,7 +116,7 @@ ServiceExecutor {
 
 ## On static nodes
 
-Static nodes take the configuration of the actor system from the kikimr/cfg/sys.txt file.
+Static nodes take the configuration of the actor system from the `/opt/ydb/cfg/config.yaml` file.
 
 After changing the configuration, restart the node.
 
@@ -142,6 +142,5 @@ ConfigureRequest {
 }
 
 ```bash
-kikimr -s <endpoint> admin console execute --domain=<domain> --retry=10 actorsystem.txt
+ydbd -s <endpoint> admin console execute --domain=<domain> --retry=10 actorsystem.txt
 ```
-

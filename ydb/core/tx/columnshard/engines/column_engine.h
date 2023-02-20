@@ -64,11 +64,13 @@ struct TCompactionInfo {
 struct TPortionEvictionFeatures {
     const TString TargetTierName;
     const ui64 PathId;      // portion path id for cold-storage-key construct
+    bool NeedExport = false;
     bool DataChanges = true;
 
-    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId)
+    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId, bool needExport)
         : TargetTierName(targetTierName)
         , PathId(pathId)
+        , NeedExport(needExport)
     {}
 };
 

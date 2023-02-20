@@ -229,6 +229,7 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
                     auto it = tierConfigs.find(name);
                     if (it != tierConfigs.end()) {
                         tier->Compression = NTiers::ConvertCompression(it->second.GetCompression());
+                        tier->NeedExport = it->second.NeedExport();
                     }
                 }
             }

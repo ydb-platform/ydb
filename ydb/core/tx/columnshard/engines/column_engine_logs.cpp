@@ -78,6 +78,8 @@ bool UpdateEvictedPortion(TPortionInfo& portionInfo, const TIndexInfo& indexInfo
         return true;
     }
 
+    Y_VERIFY(!evictFeatures.NeedExport);
+
     auto schema = indexInfo.ArrowSchemaWithSpecials();
     auto batch = portionInfo.AssembleInBatch(indexInfo, schema, srcBlobs);
     auto writeOptions = WriteOptions(*compression);
@@ -851,7 +853,9 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
                         }
                         if (info.TierName != tierName) {
                             evicttionSize += info.BlobsSizes().first;
-                            changes->PortionsToEvict.emplace_back(info, TPortionEvictionFeatures(tierName, pathId));
+                            bool needExport = ttl.NeedExport(tierName);
+                            changes->PortionsToEvict.emplace_back(
+                                info, TPortionEvictionFeatures(tierName, pathId, needExport));
                         }
                     }
                     if (!keep && allowDrop) {

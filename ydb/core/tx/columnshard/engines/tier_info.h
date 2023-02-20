@@ -16,6 +16,7 @@ struct TTierInfo {
     std::shared_ptr<arrow::Field> EvictColumn;
     std::optional<TCompression> Compression;
     ui32 TtlUnitsInSecond;
+    bool NeedExport = false;
 
     TTierInfo(const TString& tierName, TInstant evictBorder, const TString& column, ui32 unitsInSecond = 0)
         : Name(tierName)
@@ -146,6 +147,15 @@ struct TTiering {
             return it->second->Compression;
         }
         return {};
+    }
+
+    bool NeedExport(const TString& name) const {
+        auto it = TierByName.find(name);
+        if (it != TierByName.end()) {
+            Y_VERIFY(!name.empty());
+            return it->second->NeedExport;
+        }
+        return false;
     }
 
     THashSet<TString> GetTtlColumns() const {

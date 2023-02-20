@@ -139,8 +139,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 }
 
                 // Mark exported blobs
-                auto& tManager = Self->GetTierManagerVerified(tierName);
-                if (tManager.NeedExport()) {
+                if (evictionFeatures.NeedExport) {
                     for (auto& rec : portionInfo.Records) {
                         auto& blobId = rec.BlobRange.BlobId;
                         if (!blobsToExport.count(blobId)) {

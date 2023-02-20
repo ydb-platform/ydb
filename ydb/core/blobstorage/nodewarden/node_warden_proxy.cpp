@@ -41,6 +41,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
                     proxy.reset(NBlobDepot::CreateBlobDepotAgent(groupId, info, proxyActorId));
+                    group.AgentProxy = true;
                     break;
             }
         } else {

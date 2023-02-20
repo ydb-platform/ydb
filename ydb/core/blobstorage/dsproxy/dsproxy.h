@@ -250,7 +250,7 @@ public:
 
         // sanity check for correct VDisk generation ??? possible race
         Y_VERIFY_S(status == NKikimrProto::RACE || vdiskId.GroupGeneration <= Info->GroupGeneration ||
-            TEvent::EventType == TEvBlobStorage::EvVStatusResult,
+            TEvent::EventType == TEvBlobStorage::EvVStatusResult || TEvent::EventType == TEvBlobStorage::EvVAssimilateResult,
             "status# " << NKikimrProto::EReplyStatus_Name(status) << " vdiskId.GroupGeneration# " << vdiskId.GroupGeneration
             << " Info->GroupGeneration# " << Info->GroupGeneration << " Response# " << ev->Get()->ToString());
 

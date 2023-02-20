@@ -593,3 +593,15 @@ message TKqpStreamLookupSettings {
      optional bool ImmediateTx = 6;
      repeated string LookupKeyColumns = 7;
 }
+
+message TEvFetchScriptResultsRequest {
+    optional uint64 RowsOffset = 1;
+    optional uint64 RowsLimit = 2;
+}
+
+message TEvFetchScriptResultsResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional uint64 ResultSetIndex = 3;
+    optional Ydb.ResultSet ResultSet = 4;
+}

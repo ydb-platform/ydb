@@ -65,6 +65,53 @@ public:
         return promise.GetFuture();
     }
 
+    TAsyncFetchScriptResultsResult FetchScriptResults(const TString& executionId, const TFetchScriptResultsSettings& settings) {
+        using namespace Ydb::Query;
+        auto request = MakeRequest<FetchScriptResultsRequest>();
+        request.set_execution_id(executionId);
+        if (settings.FetchToken_) {
+            request.set_fetch_token(settings.FetchToken_);
+        }
+        request.set_rows_offset(settings.RowsOffset_);
+        request.set_rows_limit(settings.RowsLimit_);
+
+        auto promise = NThreading::NewPromise<TFetchScriptResultsResult>();
+
+        auto extractor = [promise]
+            (FetchScriptResultsResponse* response, TPlainStatus status) mutable {
+                if (response) {
+                    NYql::TIssues opIssues;
+                    NYql::IssuesFromMessage(response->issues(), opIssues);
+                    TStatus st(static_cast<EStatus>(response->status()), std::move(opIssues));
+
+                    promise.SetValue(
+                        TFetchScriptResultsResult(
+                            std::move(st),
+                            TResultSet(std::move(*response->mutable_result_set())),
+                            response->result_set_index(),
+                            response->next_fetch_token()
+                        )
+                    );
+                } else {
+                    TStatus st(std::move(status));
+                    promise.SetValue(TFetchScriptResultsResult(std::move(st)));
+                }
+            };
+
+        TRpcRequestSettings rpcSettings;
+        rpcSettings.ClientTimeout = TDuration::Seconds(60);
+
+        Connections_->Run<V1::QueryService, FetchScriptResultsRequest, FetchScriptResultsResponse>(
+            std::move(request),
+            extractor,
+            &V1::QueryService::Stub::AsyncFetchScriptResults,
+            DbDriverState_,
+            rpcSettings,
+            TEndpointKey());
+
+        return promise.GetFuture();
+    }
+
 private:
     TClientSettings Settings_;
 };
@@ -90,6 +137,12 @@ TAsyncExecuteScriptResult TQueryClient::ExecuteScript(const TString& script,
     const TExecuteScriptSettings& settings)
 {
     return Impl_->ExecuteScript(script, settings);
+}
+
+TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const TString& executionId,
+    const TFetchScriptResultsSettings& settings)
+{
+    return Impl_->FetchScriptResults(executionId, settings);
 }
 
 } // namespace NYdb::NQuery

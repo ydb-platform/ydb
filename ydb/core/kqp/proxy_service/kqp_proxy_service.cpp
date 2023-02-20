@@ -13,6 +13,7 @@
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/core/kqp/runtime/kqp_spilling_file.h>
 #include <ydb/core/kqp/runtime/kqp_spilling.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -561,6 +562,14 @@ public:
         KQP_PROXY_LOG_D(TKqpRequestInfo(traceId, sessionId) << "Sent request to target, requestId: " << requestId << ", targetId: " << targetId);
     }
 
+    void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {
+        const NActors::TActorId actorId = Register(CreateRunScriptActor(ev->Get()->Record));
+        Ydb::TOperationId operationId;
+        operationId.SetKind(Ydb::TOperationId::SCRIPT);
+        NOperationId::AddOptionalValue(operationId, "actor_id", actorId.ToString());
+        Send(ev->Sender, new TEvKqp::TEvScriptResponse(NOperationId::ProtoToString(operationId), actorId.ToString(), Ydb::Query::EXEC_STATUS_STARTING, Ydb::Query::EXEC_MODE_EXECUTE));
+    }
+
     void Handle(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
         auto& event = ev->Get()->Record;
         auto& request = event.GetRequest();
@@ -994,6 +1003,7 @@ public:
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             hFunc(TEvKqp::TEvQueryRequest, Handle);
+            hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
             hFunc(TEvKqp::TEvProcessResponse, ForwardEvent);

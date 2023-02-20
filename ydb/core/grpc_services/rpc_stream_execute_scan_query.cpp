@@ -116,7 +116,7 @@ bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::
 
     auto& query = req.query();
     switch (query.query_case()) {
-        case Query::kYqlText: {
+        case Ydb::Table::Query::kYqlText: {
             NYql::TIssues issues;
             if (!CheckQuery(query.yql_text(), issues)) {
                 error = TParseRequestError(Ydb::StatusIds::BAD_REQUEST, issues);
@@ -127,7 +127,7 @@ bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::
             break;
         }
 
-        case Query::kId: {
+        case Ydb::Table::Query::kId: {
             NYql::TIssues issues;
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 "Specifying query by ID not supported in scan execution."));

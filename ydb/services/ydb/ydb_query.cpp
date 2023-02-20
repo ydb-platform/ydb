@@ -34,6 +34,12 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
             new TGrpcRequestNoOperationCall<ExecuteScriptRequest, Ydb::Operations::Operation>
                 (ctx, &DoExecuteScriptRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
     })
+
+    ADD_REQUEST(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_,
+            new TGrpcRequestNoOperationCall<FetchScriptResultsRequest, FetchScriptResultsResponse>
+                (ctx, &DoFetchScriptResults, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
+    })
 #undef ADD_REQUEST
 }
 

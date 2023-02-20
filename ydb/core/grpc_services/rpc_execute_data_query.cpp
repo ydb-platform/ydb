@@ -88,7 +88,7 @@ public:
         NKikimrKqp::EQueryType queryType;
 
         switch (query.query_case()) {
-            case Query::kYqlText: {
+            case Ydb::Table::Query::kYqlText: {
                 NYql::TIssues issues;
                 if (!CheckQuery(query.yql_text(), issues)) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
@@ -99,7 +99,7 @@ public:
                 break;
             }
 
-            case Query::kId: {
+            case Ydb::Table::Query::kId: {
                 if (query.id().empty()) {
                     NYql::TIssues issues;
                     issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty query id"));

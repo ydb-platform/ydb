@@ -6,6 +6,7 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/draft/ydb_query.pb.h>
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
@@ -754,7 +755,43 @@ struct TEvKqp {
         {}
     };
 
+    struct TEvScriptRequest : public TEventLocal<TEvScriptRequest, TKqpEvents::EvScriptRequest> {
+        TEvScriptRequest() = default;
+
+        mutable NKikimrKqp::TEvQueryRequest Record;
+    };
+
+    struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {
+        TEvScriptResponse(TString operationId, TString executionId, Ydb::Query::ExecStatus execStatus, Ydb::Query::ExecMode execMode)
+            : Status(Ydb::StatusIds::SUCCESS)
+            , OperationId(std::move(operationId))
+            , ExecutionId(std::move(executionId))
+            , ExecStatus(execStatus)
+            , ExecMode(execMode)
+        {}
+
+        TEvScriptResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : Status(status)
+            , Issues(std::move(issues))
+            , ExecStatus(Ydb::Query::EXEC_STATUS_FAILED)
+            , ExecMode(Ydb::Query::EXEC_MODE_UNSPECIFIED)
+        {}
+
+        const Ydb::StatusIds::StatusCode Status;
+        const NYql::TIssues Issues;
+        const TString OperationId;
+        const TString ExecutionId;
+        const Ydb::Query::ExecStatus ExecStatus;
+        const Ydb::Query::ExecMode ExecMode;
+    };
+
     using TEvAbortExecution = NYql::NDq::TEvDq::TEvAbortExecution;
+
+    struct TEvFetchScriptResultsRequest : public TEventPB<TEvFetchScriptResultsRequest, NKikimrKqp::TEvFetchScriptResultsRequest, TKqpEvents::EvFetchScriptResultsRequest> {
+    };
+
+    struct TEvFetchScriptResultsResponse : public TEventPB<TEvFetchScriptResultsResponse, NKikimrKqp::TEvFetchScriptResultsResponse, TKqpEvents::EvFetchScriptResultsResponse> {
+    };
 };
 
 class TKqpRequestInfo {

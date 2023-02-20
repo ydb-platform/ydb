@@ -17,6 +17,7 @@ target_include_directories(quoter_performance_test PRIVATE
 target_link_libraries(quoter_performance_test PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-malloc-system
   library-cpp-cpuid_check
   library-cpp-getopt
   cpp-testing-unittest

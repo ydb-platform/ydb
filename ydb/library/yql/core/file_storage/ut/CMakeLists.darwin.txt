@@ -14,6 +14,7 @@ target_include_directories(ydb-library-yql-core-file_storage-ut PRIVATE
 target_link_libraries(ydb-library-yql-core-file_storage-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-core-file_storage

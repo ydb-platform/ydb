@@ -17,6 +17,7 @@ target_include_directories(ydb-library-yql-providers-common-http_gateway-ut PRIV
 target_link_libraries(ydb-library-yql-providers-common-http_gateway-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   providers-common-http_gateway

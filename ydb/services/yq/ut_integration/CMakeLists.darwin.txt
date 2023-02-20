@@ -17,6 +17,7 @@ target_include_directories(ydb-services-yq-ut_integration PRIVATE
 target_link_libraries(ydb-services-yq-ut_integration PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-services-yq

@@ -14,6 +14,7 @@ target_include_directories(ydb-core-blobstorage-vdisk-hullop-ut PRIVATE
 target_link_libraries(ydb-core-blobstorage-vdisk-hullop-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   blobstorage-vdisk-hullop

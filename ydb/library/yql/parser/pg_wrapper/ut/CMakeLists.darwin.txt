@@ -18,6 +18,7 @@ target_include_directories(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
 target_link_libraries(ydb-library-yql-parser-pg_wrapper-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-parser-pg_wrapper

@@ -11,6 +11,7 @@ add_executable(surg)
 target_link_libraries(surg PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-malloc-system
   library-cpp-cpuid_check
   library-cpp-getopt
   ydb-core-tablet_flat

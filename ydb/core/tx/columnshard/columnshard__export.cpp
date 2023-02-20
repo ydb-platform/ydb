@@ -33,7 +33,7 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
     auto& msg = *Ev->Get();
     auto status = msg.Status;
 
-    if (status == NKikimrProto::OK) {
+    {
         TBlobManagerDb blobManagerDb(txc.DB);
 
         for (auto& [blob, externId] : msg.SrcToDstBlobs) {
@@ -41,6 +41,11 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
             Y_VERIFY(blobId.IsDsBlob());
             Y_VERIFY(externId.IsS3Blob());
             bool dropped = false;
+
+            if (!msg.Blobs.count(blobId)) {
+                Y_VERIFY(!msg.ErrorStrings.empty());
+                continue; // not exported
+            }
 
 #if 0 // TODO: SELF_CACHED logic
             NOlap::TEvictedBlob evict{
@@ -78,7 +83,9 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
             // TODO: delete not present in S3 for sure (avoid race between export and forget)
 #endif
         }
+    }
 
+    if (status == NKikimrProto::OK) {
         Self->IncCounter(COUNTER_EXPORT_SUCCESS);
     } else {
         Self->IncCounter(COUNTER_EXPORT_FAIL);
@@ -112,15 +119,19 @@ void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& 
     if (status == NKikimrProto::UNKNOWN) {
         LOG_S_DEBUG("Export (write): id " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
         ExportBlobs(ctx, exportNo, tierName, pathId, std::move(msg.Blobs));
-    } else if (status == NKikimrProto::OK) {
-        LOG_S_DEBUG("Export (apply): id " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
-        Execute(new TTxExportFinish(this, ev), ctx);
-    } else if (status == NKikimrProto::ERROR) {
+    } else if (status == NKikimrProto::ERROR && msg.Blobs.empty()) {
         LOG_S_WARN("Export (fail): id " << exportNo << " tier '" << tierName << "' error: "
             << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());
         --ActiveEvictions;
     } else {
-        Y_VERIFY(false);
+        // There's no atomicity needed here. Allow partial export
+        if (status == NKikimrProto::ERROR) {
+            LOG_S_WARN("Export (partial): id " << exportNo << " tier '" << tierName << "' error: "
+                << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());
+        } else {
+            LOG_S_DEBUG("Export (apply): id " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
+        }
+        Execute(new TTxExportFinish(this, ev), ctx);
     }
 }
 

@@ -131,7 +131,7 @@ struct TEvPrivate {
         TString TierName;
         ui64 PathId = 0;
         TActorId DstActor;
-        TBlobDataMap Blobs;
+        TBlobDataMap Blobs; // src: blobId -> data map; dst: exported blobIds set
         THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
         TMap<TString, TString> ErrorStrings;
 
@@ -159,6 +159,23 @@ struct TEvPrivate {
             Y_VERIFY(PathId);
             Y_VERIFY(DstActor);
             Y_VERIFY(!Blobs.empty());
+        }
+
+        void AddResult(const TUnifiedBlobId& blobId, const TString& key, const bool hasError, const TString& errStr) {
+            if (hasError) {
+                Status = NKikimrProto::ERROR;
+                Y_VERIFY(ErrorStrings.emplace(key, errStr).second, "%s", key.data());
+                Blobs.erase(blobId);
+            } else if (!ErrorStrings.count(key)) { // (OK + !OK) == !OK
+                Y_VERIFY(Blobs.count(blobId));
+                if (Status == NKikimrProto::UNKNOWN) {
+                    Status = NKikimrProto::OK;
+                }
+            }
+        }
+
+        bool Finished() const {
+            return (Blobs.size() + ErrorStrings.size()) == SrcToDstBlobs.size();
         }
 
         TString SerializeErrorsToString() const {

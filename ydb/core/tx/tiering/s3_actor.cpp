@@ -44,17 +44,16 @@ public:
         return KeysToWrite.empty();
     }
 
-    TS3Export& RegisterKey(const TString& key) {
-        KeysToWrite.emplace(key);
-        return *this;
+    void RegisterKey(const TString& key, const TUnifiedBlobId& blobId) {
+        KeysToWrite.emplace(key, blobId);
     }
 
-    TS3Export& FinishKey(const TString& key) {
-        KeysToWrite.erase(key);
-        return *this;
+    TUnifiedBlobId FinishKey(const TString& key) {
+        auto node = KeysToWrite.extract(key);
+        return node.mapped();
     }
 private:
-    TSet<TString> KeysToWrite;
+    std::unordered_map<TString, TUnifiedBlobId> KeysToWrite;
 };
 
 struct TS3Forget {
@@ -118,15 +117,19 @@ public:
         ui64 exportNo = msg.ExportNo;
         Y_VERIFY(msg.DstActor == ShardActor);
 
-        Y_VERIFY(!Exports.count(exportNo));
+        if (Exports.count(exportNo)) {
+            LOG_S_ERROR("[S3] Multiple exports with same export id '" << exportNo << "' at tablet " << TabletId);
+            return;
+        }
+
         Exports[exportNo] = TS3Export(ev->Release());
         auto& ex = Exports[exportNo];
 
         for (auto& [blobId, blobData] : ex.Blobs()) {
             TString key = ex.AddExported(blobId, msg.PathId).GetS3Key();
-            Y_VERIFY(!ExportingKeys.count(key)); // TODO
+            Y_VERIFY(!ExportingKeys.count(key)); // TODO: allow reexport?
 
-            ex.RegisterKey(key);
+            ex.RegisterKey(key, blobId);
             ExportingKeys[key] = exportNo;
 
             SendPutObjectIfNotExists(key, std::move(blobData));
@@ -185,7 +188,6 @@ public:
         }
     }
 
-    // TODO: clean written blobs in failed export
     void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         Y_VERIFY(Initialized());
 
@@ -198,7 +200,11 @@ public:
             errStr = LogError("PutObjectResponse", resultOutcome.GetError(), msg.Key);
         }
 
-        Y_VERIFY(msg.Key); // FIXME
+        if (!msg.Key || msg.Key->empty()) {
+            LOG_S_ERROR("[S3] no key in PutObjectResponse at tablet " << TabletId);
+            return;
+        }
+
         const TString key = *msg.Key;
 
         LOG_S_DEBUG("[S3] PutObjectResponse '" << key << "' at tablet " << TabletId);
@@ -254,7 +260,11 @@ public:
             errStr = LogError("DeleteObjectResponse", resultOutcome.GetError(), msg.Key);
         }
 
-        Y_VERIFY(msg.Key); // FIXME
+        if (!msg.Key || msg.Key->empty()) {
+            LOG_S_ERROR("[S3] no key in DeleteObjectResponse at tablet " << TabletId);
+            return;
+        }
+
         TString key = *msg.Key;
 
         LOG_S_DEBUG("[S3] DeleteObjectResponse '" << key << "' at tablet " << TabletId);
@@ -362,17 +372,12 @@ public:
         }
 
         auto& ex = it->second;
-        ex.FinishKey(key);
+        TUnifiedBlobId blobId = ex.FinishKey(key);
 
-        if (hasError) {
-            ex.Event->Status = NKikimrProto::ERROR;
-            Y_VERIFY(ex.Event->ErrorStrings.emplace(key, errStr).second, "%s", key.data());
-        }
+        ex.Event->AddResult(blobId, key, hasError, errStr);
 
         if (ex.ExtractionFinished()) {
-            if (ex.Event->Status == NKikimrProto::UNKNOWN) {
-                ex.Event->Status = NKikimrProto::OK;
-            }
+            Y_VERIFY(ex.Event->Finished());
             Send(ShardActor, ex.Event.release());
             Exports.erase(exportNo);
         }

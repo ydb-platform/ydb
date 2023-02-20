@@ -262,7 +262,7 @@ public:
         }
 
         for (const auto& [serial, info] : Self->DrivesSerials) {
-            if (info->NodeId && info->PDiskId) {
+            if (info->NodeId && info->PDiskId && info->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
                 const bool inserted = driveToBox.emplace(std::make_tuple(*info->NodeId, serial.Serial), info->BoxId).second;
                 Y_VERIFY(inserted, "duplicate Serial-generated drive");
             }

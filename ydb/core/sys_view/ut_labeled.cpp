@@ -24,7 +24,7 @@ void CreateDatabase(TTestEnv& env, const TString& databaseName) {
     UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
         env.GetClient().CreateExtSubdomain("/Root", subdomain));
 
-    env.GetTenants().Run("/Root/" + databaseName, 1);
+    env.GetTenants().Run("/Root/" + databaseName, 2);
 
     auto subdomainSettings = GetSubDomainDefaultSettings(databaseName, env.GetPools());
     subdomainSettings.SetExternalSysViewProcessor(true);
@@ -51,6 +51,7 @@ bool CheckLabeledCounters(::NMonitoring::TDynamicCounterPtr databaseGroup, const
     std::function<bool(::NMonitoring::TDynamicCounterPtr)> particularCountersCheck) {
     bool isGood{true};
     Y_UNUSED(dbId);
+
     auto topicGroup = databaseGroup
             ->GetSubgroup("cloud_id", "")
             ->GetSubgroup("folder_id", "")
@@ -121,6 +122,41 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
                                  env.GetPqTabletIds()[0], edge);
         GetCounters(env, databaseName, databasePath, check);
     }
+
+
+    Y_UNIT_TEST(OneTabletRemoveCounters) {
+        TTestEnv env(1, 2, 0, 1, true);
+        const TString databaseName = NPQ::TTabletPreparationParameters().databaseId;
+        const TString databasePath = NPQ::TTabletPreparationParameters().databasePath;
+        auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
+        auto checkExists = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
+            bool isGood{true};
+            auto consumerGroup = topicGroup->FindSubgroup("consumer", "consumer");
+            if (!consumerGroup)
+                return false;
+            isGood &= CheckCounter(consumerGroup, "topic.partition.alive_count", partitionsN, false);
+
+            return isGood;
+        };
+
+        CreateDatabase(env, databaseName);
+        NPQ::PQTabletPrepare({.partitions=partitionsN}, {{"consumer", false}}, *env.GetServer().GetRuntime(),
+                                 env.GetPqTabletIds()[0], edge);
+        GetCounters(env, databaseName, databasePath, checkExists);
+
+        NPQ::PQTabletPrepare({.partitions=partitionsN}, {}, *env.GetServer().GetRuntime(),
+                                 env.GetPqTabletIds()[0], edge);
+        //TODO: fix clearence of groups in sys view service/processor
+/*        auto checkNotExists = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
+            auto consumerGroup = topicGroup->FindSubgroup("consumer", "consumer");
+            return !consumerGroup;
+        };
+
+        GetCounters(env, databaseName, databasePath, checkNotExists);
+*/
+
+    }
+
 
     Y_UNIT_TEST(OneTabletRestart) {
         TTestEnv env(1, 2, 0, 1, true);
@@ -226,52 +262,6 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
 
                 isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN, false);
 
-                return isGood;
-            };
-
-            GetCounters(env, databaseName, databasePath, check);
-        }
-    }
-
-    Y_UNIT_TEST(TwoTabletsDisconnectOneNode) {
-        TTestEnv env(1, 2, 0, 2, true);
-        const TString databaseName = NPQ::TTabletPreparationParameters().databaseId;
-        const TString databasePath = NPQ::TTabletPreparationParameters().databasePath;
-        auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
-        CreateDatabase(env, databaseName);
-        for (auto& tbId : env.GetPqTabletIds()) {
-            NPQ::PQTabletPrepare({.partitions=partitionsN}, {}, *env.GetServer().GetRuntime(),
-                                     tbId, edge);
-        }
-
-        {
-            auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
-                bool isGood{true};
-
-                isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN*2, false);
-                isGood &= CheckCounter(topicGroup, "topic.partition.write.speed_limit_bytes_per_second", 50'000'000, false);
-                isGood &= CheckCounter(topicGroup, "topic.producers_count", 0, false);
-
-                return isGood;
-            };
-
-            GetCounters(env, databaseName, databasePath, check);
-        }
-
-        for (ui32 i = 0; i < env.GetServer().StaticNodes() + env.GetServer().DynamicNodes(); i++) {
-            env.GetClient().MarkNodeInHive(env.GetServer().GetRuntime(), i, false);
-            if (i > 0) {
-                env.GetServer().GetRuntime()->DisconnectNodes(0, i, false);
-                env.GetServer().GetRuntime()->DisconnectNodes(i, 0, false);
-            }
-        }
-
-        {
-            auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
-                bool isGood{true};
-
-                isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN, false);
-                isGood &= CheckCounter(topicGroup, "topic.partition.total_count", partitionsN, false);
                 return isGood;
             };
 

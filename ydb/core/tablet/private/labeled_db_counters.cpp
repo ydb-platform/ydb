@@ -17,7 +17,10 @@ TPQCounters::TPQCounters(NMonitoring::TDynamicCounterPtr counters) {
 void TPQCounters::Apply(ui64 tabletId, const NKikimr::TTabletLabeledCountersBase* labeledCounters) {
     const TString group = labeledCounters->GetGroup();
     TString groupNames;
-
+    if (labeledCounters->GetDrop()) {
+        LabeledCountersByGroup.Erase(group);
+        return;
+    }
     if (!LabeledCountersByGroup.Has(group)) {
         TVector<TString> rr;
         StringSplitter(group).Split('|').Collect(&rr);

@@ -3,6 +3,15 @@
 namespace NKikimr {
 namespace NPQ {
 
+TString EscapeBadChars(const TString& str) {
+    TStringBuilder res;
+    for (ui32 i = 0; i < str.size();++i) {
+        if (str[i] == '|') res << '/';
+        else res << str[i];
+    }
+    return res;
+}
+
 namespace NDeprecatedUserData {
     TBuffer Serialize(ui64 offset, ui32 gen, ui32 step, const TString& session) {
         TBuffer data;

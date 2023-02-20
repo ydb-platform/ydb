@@ -21,6 +21,9 @@
 namespace NKikimr {
 namespace NPQ {
 
+
+TString EscapeBadChars(const TString& str);
+
 namespace NDeprecatedUserData {
     // [offset:64bit][generation:32bit][step:32bit][session:other bytes]
     TBuffer Serialize(ui64 offset, ui32 gen, ui32 step, const TString& session);
@@ -200,7 +203,7 @@ struct TUserInfo {
         if (AppData(ctx)->Counters) {
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
                 LabeledCounters.Reset(new TUserLabeledCounters(
-                    user + "||" + topicConverter->GetClientsideName(), partition, dbPath));
+                    EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath));
 
                 SetupStreamCounters(streamCountersSubgroup);
             } else {

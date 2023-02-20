@@ -816,7 +816,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicConverter->GetClientsideName(),
+        PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicConverter->GetClientsideName()),
                                                                      Partition,
                                                                      Config.GetYdbDatabasePath()));
     } else {

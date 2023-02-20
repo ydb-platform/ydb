@@ -1454,35 +1454,33 @@ bool ShouldConvertSqlInToJoin(const TCoSqlIn& sqlIn, bool /* negated */) {
 }
 
 bool CanConvertSqlInToJoin(const TCoSqlIn& sqlIn) {
-    auto leftArg = sqlIn.Lookup();
-    auto leftColumnType = leftArg.Ref().GetTypeAnn();
+    const auto leftArg = sqlIn.Lookup();
+    const auto leftColumnType = leftArg.Ref().GetTypeAnn();
 
-    auto rightArg = sqlIn.Collection();
-    auto rightArgType = rightArg.Ref().GetTypeAnn();
+    const auto rightArg = sqlIn.Collection();
+    const auto rightArgType = rightArg.Ref().GetTypeAnn();
 
     if (rightArgType->GetKind() == ETypeAnnotationKind::List) {
-        auto rightListItemType = rightArgType->Cast<TListExprType>()->GetItemType();
+        const auto rightListItemType = rightArgType->Cast<TListExprType>()->GetItemType();
 
-        auto isDataOrTupleOfData = [](const TTypeAnnotationNode* type) {
-            if (IsDataOrOptionalOfData(type)) {
+        const auto isDataOrTupleOfDataOrPg = [](const TTypeAnnotationNode* type) {
+            if (IsDataOrOptionalOfDataOrPg(type)) {
                 return true;
             }
             if (type->GetKind() == ETypeAnnotationKind::Tuple) {
-                return AllOf(type->Cast<TTupleExprType>()->GetItems(), [](const auto& item) {
-                    return IsDataOrOptionalOfData(item);
-                });
+                return AllOf(type->Cast<TTupleExprType>()->GetItems(), &IsDataOrOptionalOfDataOrPg);
             }
             return false;
         };
 
         if (rightListItemType->GetKind() == ETypeAnnotationKind::Struct) {
-            auto rightStructType = rightListItemType->Cast<TStructExprType>();
+            const auto rightStructType = rightListItemType->Cast<TStructExprType>();
             YQL_ENSURE(rightStructType->GetSize() == 1);
-            auto rightColumnType = rightStructType->GetItems()[0]->GetItemType();
-            return isDataOrTupleOfData(rightColumnType);
+            const auto rightColumnType = rightStructType->GetItems().front()->GetItemType();
+            return isDataOrTupleOfDataOrPg(rightColumnType);
         }
 
-        return isDataOrTupleOfData(rightListItemType);
+        return isDataOrTupleOfDataOrPg(rightListItemType);
     }
 
     /**
@@ -1495,8 +1493,8 @@ bool CanConvertSqlInToJoin(const TCoSqlIn& sqlIn) {
      */
 
     if (rightArgType->GetKind() == ETypeAnnotationKind::Dict) {
-        auto rightDictType = rightArgType->Cast<TDictExprType>()->GetKeyType();
-        return IsDataOrOptionalOfData(leftColumnType) && IsDataOrOptionalOfData(rightDictType);
+        const auto rightDictType = rightArgType->Cast<TDictExprType>()->GetKeyType();
+        return IsDataOrOptionalOfDataOrPg(leftColumnType) && IsDataOrOptionalOfDataOrPg(rightDictType);
     }
 
     return false;
@@ -1598,7 +1596,7 @@ TExprNode::TPtr BuildCollectionEmptyPred(TPositionHandle pos, const TExprNode::T
                 .Callable(0, "Take")
                     .Add(0, collectionAsList)
                     .Callable(1, "Uint64")
-                        .Atom(0, "1", TNodeFlags::Default)
+                        .Atom(0, 1)
                     .Seal()
                 .Seal()
             .Seal()
@@ -1760,7 +1758,7 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
             YQL_ENSURE(rightStructType->GetSize() == 1);
 
             const TItemExprType* itemType = rightStructType->GetItems()[0];
-            if (IsDataOrOptionalOfData(itemType->GetItemType())) {
+            if (IsDataOrOptionalOfDataOrPg(itemType->GetItemType())) {
                 result.Right = rightArg;
                 result.RightArgColumns = { ToString(itemType->GetName()) };
                 return result;
@@ -1793,7 +1791,7 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
                             .Name().Build(columnName)
                             .Value<TCoNth>()
                                 .Tuple(rowArg)
-                                .Index(ctx.NewAtom(sqlIn.Pos(), ToString(i)))
+                                .Index(ctx.NewAtom(sqlIn.Pos(), i))
                                 .Build()
                             .Build();
                     result.RightArgColumns.emplace_back(columnName);
@@ -1825,7 +1823,7 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
                             .Name().Build(columnName)
                             .Value<TCoNth>()
                                 .Tuple(rowArg)
-                                .Index(ctx.NewAtom(sqlIn.Pos(), ToString(i)))
+                                .Index(ctx.NewAtom(sqlIn.Pos(), i))
                                 .Build()
                             .Build();
                     result.RightArgColumns.emplace_back(columnName);
@@ -1843,7 +1841,7 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
 
             // fallthrough to default join by the whole tuple
         } else {
-            YQL_ENSURE(IsDataOrOptionalOfData(rightArgItemType), "" << FormatType(rightArgItemType));
+            YQL_ENSURE(IsDataOrOptionalOfDataOrPg(rightArgItemType), "" << FormatType(rightArgItemType));
         }
 
         // rewrite List<DataType|Tuple> to List<Struct<key: DataType|Tuple>>
@@ -1868,7 +1866,7 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
     YQL_ENSURE(rightArgType->GetKind() == ETypeAnnotationKind::Dict, "" << FormatType(rightArgType));
 
     auto rightDictType = rightArgType->Cast<TDictExprType>()->GetKeyType();
-    YQL_ENSURE(IsDataOrOptionalOfData(rightDictType));
+    YQL_ENSURE(IsDataOrOptionalOfDataOrPg(rightDictType));
 
     auto dictKeys = ctx.Builder(sqlIn.Pos())
         .Callable("DictKeys")

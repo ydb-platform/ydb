@@ -55,6 +55,7 @@ void EnsureAllNodesTypeAnnotated(const TExprNode& root);
 bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation, bool& isOptional, const TDataExprType*& dataType);
 bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation);
 bool IsPg(const TTypeAnnotationNode* typeAnnotation, const TPgExprType*& pgType);
+bool IsDataOrOptionalOfDataOrPg(const TTypeAnnotationNode* typeAnnotation);
 bool UpdateLambdaAllArgumentsTypes(TExprNode::TPtr& lambda, const std::vector<const TTypeAnnotationNode*>& argumentsAnnotations, TExprContext& ctx);
 bool UpdateLambdaArgumentsType(const TExprNode& lambda, TExprContext& ctx);
 bool EnsureArgsCount(const TExprNode& node, ui32 expectedArgs, TExprContext& ctx);

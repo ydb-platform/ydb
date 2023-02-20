@@ -1881,6 +1881,13 @@ bool IsPg(const TTypeAnnotationNode* typeAnnotation, const TPgExprType*& pgType)
     return IsPg({}, typeAnnotation, pgType, err, hasErrorType);
 }
 
+bool IsDataOrOptionalOfDataOrPg(const TTypeAnnotationNode* typeAnnotation) {
+    bool isOptional;
+    const TDataExprType* dataType;
+    const TPgExprType* pg;
+    return IsDataOrOptionalOfData(typeAnnotation, isOptional, dataType) || IsPg(typeAnnotation, pg);
+}
+
 bool EnsureArgsCount(const TExprNode& node, ui32 expectedArgs, TExprContext& ctx) {
     if (node.ChildrenSize() != expectedArgs) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << expectedArgs << " argument(s), but got " <<

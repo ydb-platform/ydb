@@ -779,9 +779,15 @@ public:
                 return true;
             case TEvPrivate::TEvReadFinished::EventType:
                 Issues = std::move(ev->Get<TEvPrivate::TEvReadFinished>()->Issues);
+
+                if (HttpResponseCode >= 300) {
+                    ServerReturnedError = true;
+                    Issues.AddIssue(TIssue{TStringBuilder() << "HTTP error code: " << HttpResponseCode});
+                }
+
                 if (Issues) {
                     LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished. Url: " << RetryStuff->Url << ". Issues: " << Issues.ToOneLineString());
-                    if (RetryStuff->NextRetryDelay = RetryStuff->GetRetryState()->GetNextRetryDelay(0L); !RetryStuff->NextRetryDelay) {
+                    if (!RetryStuff->NextRetryDelay) {
                         InputFinished = true;
                         LOG_CORO_W("TS3ReadCoroImpl", "ReadError: " << Issues.ToOneLineString() << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText() << ", request id: [" << RetryStuff->RequestId << "]");
                         throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format

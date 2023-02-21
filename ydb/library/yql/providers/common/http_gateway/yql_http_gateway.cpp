@@ -411,20 +411,27 @@ private:
             OnFinish(TIssues{error});
     }
 
-    void Done(CURLcode result, long) final {
-        if (CURLE_OK != result)
-            return Fail(TIssue(TStringBuilder{} << "error: " << curl_easy_strerror(result) << " detailed: " << GetDetailedErrorText()));
+    void MaybeStart() {
+        if (!HttpResponseCode) {
+            curl_easy_getinfo(GetHandle(), CURLINFO_RESPONSE_CODE, &HttpResponseCode);
+            OnStart(HttpResponseCode);
+        }
+    }
 
+    void Done(CURLcode result, long httpResponseCode) final {
+        if (CURLE_OK != result) {
+            return Fail(TIssue(TStringBuilder{} << "error: " << curl_easy_strerror(result) << " detailed: " << GetDetailedErrorText()));
+        }
+        if (!HttpResponseCode) {
+            HttpResponseCode = httpResponseCode;
+            OnStart(HttpResponseCode);
+        }
         if (!Cancelled)
             OnFinish(TIssues());
     }
 
     size_t Write(void* contents, size_t size, size_t nmemb) final {
-        if (!HttpResponseCode) {
-            curl_easy_getinfo(GetHandle(), CURLINFO_RESPONSE_CODE, &HttpResponseCode);
-            OnStart(HttpResponseCode);
-        }
-
+        MaybeStart();
         const auto realsize = size * nmemb;
         if (!Cancelled)
             OnNewData(IHTTPGateway::TCountedContent(TString(static_cast<char*>(contents), realsize), Counter, InflightCounter));

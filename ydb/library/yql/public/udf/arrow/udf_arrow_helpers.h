@@ -299,14 +299,21 @@ struct TUnaryKernelExec {
         else {
             auto& array = *arg.array();
             auto& builder = state.GetArrayBuilder();
-            for (int64_t i = 0; i < array.length; ++i) {
-                auto item = reader.GetItem(array, i);
-                TDerived::Process(item, [&](TBlockItem out) {
-                    builder.Add(out);
-                });
+            size_t maxBlockLength = builder.MaxLength();
+            Y_ENSURE(maxBlockLength > 0);
+            TVector<std::shared_ptr<arrow::ArrayData>> outputArrays;
+            for (int64_t i = 0; i < array.length;) {
+                for (size_t j = 0; j < maxBlockLength && i < array.length; ++j, ++i) {
+                    auto item = reader.GetItem(array, i);
+                    TDerived::Process(item, [&](TBlockItem out) {
+                        builder.Add(out);
+                    });
+                }
+                auto outputDatum = builder.Build(false);
+                ForEachArrayData(outputDatum, [&](const auto& arr) { outputArrays.push_back(arr); });
             }
 
-            *res = builder.Build(false);
+            *res = MakeArray(outputArrays);
         }
 
         return arrow::Status::OK();

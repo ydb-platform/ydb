@@ -15,13 +15,13 @@ namespace NActors {
         TMappedAllocation Stack;
         bool AllowUnhandledPoisonPill;
         bool AllowUnhandledDtor;
+        bool Finished = false;
+        bool InvokedFromDtor = false;
         TContClosure FiberClosure;
         TExceptionSafeContext FiberContext;
         TExceptionSafeContext* ActorSystemContext = nullptr;
         THolder<IEventHandle> PendingEvent;
-        bool Finished = false;
         ui64 WaitCookie = 0;
-        std::optional<TActorContext> ActorContext;
 
     protected:
         TActorIdentity SelfActorId = TActorIdentity(TActorId());
@@ -41,8 +41,6 @@ namespace NActors {
                 return ev.GetTypeRewrite() == TSingleEvent::EventType;
             }
         };
-
-        struct TEvCoroTimeout : TEventLocal<TEvCoroTimeout, TEvents::TSystem::CoroTimeout> {};
 
     protected:
         struct TPoisonPillException : yexception {};
@@ -103,7 +101,7 @@ namespace NActors {
         }
 
     protected: // Actor System compatibility section
-        const TActorContext& GetActorContext() const;
+        const TActorContext& GetActorContext() const { return TActivationContext::AsActorContext(); }
         TActorSystem *GetActorSystem() const { return GetActorContext().ExecutorThread.ActorSystem; }
         TInstant Now() const { return GetActorContext().Now(); }
 
@@ -163,11 +161,7 @@ namespace NActors {
         }
 
     private:
-        STATEFN(StateFunc) {
-            if (Impl->ProcessEvent(ev)) {
-                PassAway();
-            }
-        }
+        STATEFN(StateFunc);
     };
 
 }

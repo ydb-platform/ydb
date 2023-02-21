@@ -3,41 +3,36 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/type_name.h>
+#include <util/system/info.h>
+#include <util/system/protect.h>
 
 namespace NActors {
-    static constexpr size_t StackOverflowGap = 4096;
-    static char GoodStack[StackOverflowGap];
+    static const size_t PageSize = NSystemInfo::GetPageSize();
 
-    static struct TInitGoodStack {
-        TInitGoodStack() {
-            // fill stack with some pseudo-random pattern
-            for (size_t k = 0; k < StackOverflowGap; ++k) {
-                GoodStack[k] = k + k * 91;
-            }
-        }
-    } initGoodStack;
+    static size_t AlignStackSize(size_t size) {
+        size += PageSize - (size & PageSize - 1) & PageSize - 1;
+#ifndef NDEBUG
+        size += PageSize;
+#endif
+        return size;
+    }
 
     TActorCoroImpl::TActorCoroImpl(size_t stackSize, bool allowUnhandledPoisonPill, bool allowUnhandledDtor)
-        : Stack(stackSize)
+        : Stack(AlignStackSize(stackSize))
         , AllowUnhandledPoisonPill(allowUnhandledPoisonPill)
         , AllowUnhandledDtor(allowUnhandledDtor)
         , FiberClosure{this, TArrayRef(Stack.Begin(), Stack.End())}
         , FiberContext(FiberClosure)
     {
 #ifndef NDEBUG
-        char* p;
-#if STACK_GROW_DOWN
-        p = Stack.Begin();
-#else
-        p = Stack.End() - StackOverflowGap;
-#endif
-        memcpy(p, GoodStack, StackOverflowGap);
+        ProtectMemory(STACK_GROW_DOWN ? Stack.Begin() : Stack.End() - PageSize, PageSize, EProtectMemoryMode::PM_NONE);
 #endif
     }
 
     TActorCoroImpl::~TActorCoroImpl() {
         if (!Finished && !NSan::TSanIsOn()) { // only resume when we have bootstrapped and Run() was entered and not yet finished; in other case simply terminate
             Y_VERIFY(!PendingEvent);
+            InvokedFromDtor = true;
             Resume();
         }
     }
@@ -49,8 +44,7 @@ namespace NActors {
     THolder<IEventHandle> TActorCoroImpl::WaitForEvent(TInstant deadline) {
         const ui64 cookie = ++WaitCookie;
         if (deadline != TInstant::Max()) {
-            ActorContext->ExecutorThread.Schedule(deadline - Now(), new IEventHandle(SelfActorId, {}, new TEvCoroTimeout,
-                0, cookie));
+            TActivationContext::Schedule(deadline, new IEventHandle(TEvents::TSystem::CoroTimeout, 0, SelfActorId, {}, 0, cookie));
         }
 
         // ensure we have no unprocessed event and return back to actor system to receive one
@@ -76,11 +70,6 @@ namespace NActors {
         Y_FAIL("no pending event");
     }
 
-    const TActorContext& TActorCoroImpl::GetActorContext() const {
-        Y_VERIFY(ActorContext);
-        return ActorContext.value();
-    }
-
     bool TActorCoroImpl::ProcessEvent(THolder<IEventHandle> ev) {
         Y_VERIFY(!PendingEvent);
         if (!SelfActorId) { // process bootstrap message, extract actor ids
@@ -92,16 +81,14 @@ namespace NActors {
         }
 
         // prepare actor context for in-coroutine use
-        Y_VERIFY(!ActorContext);
         TActivationContext *ac = TlsActivationContext;
-        ActorContext.emplace(ac->Mailbox, ac->ExecutorThread, ac->EventStart, SelfActorId);
-        TlsActivationContext = &ActorContext.value();
+        TActorContext actorContext(ac->Mailbox, ac->ExecutorThread, ac->EventStart, SelfActorId);
+        TlsActivationContext = &actorContext;
 
         Resume();
 
         // drop actor context
         TlsActivationContext = ac;
-        ActorContext.reset();
 
         return Finished;
     }
@@ -115,22 +102,11 @@ namespace NActors {
         // go to actor coroutine
         BeforeResume();
         ActorSystemContext->SwitchTo(&FiberContext);
-
-        // check for stack overflow
-#ifndef NDEBUG
-        const char* p;
-#if STACK_GROW_DOWN
-        p = Stack.Begin();
-#else
-        p = Stack.End() - StackOverflowGap;
-#endif
-        Y_VERIFY_DEBUG(memcmp(p, GoodStack, StackOverflowGap) == 0);
-#endif
     }
 
     void TActorCoroImpl::DoRun() {
         try {
-            if (ActorContext) { // ActorContext may be nullptr here if the destructor was invoked before bootstrapping
+            if (!InvokedFromDtor) { // ActorContext may be nullptr here if the destructor was invoked before bootstrapping
                 Y_VERIFY(!PendingEvent);
                 Run();
             }
@@ -162,4 +138,9 @@ namespace NActors {
         }
     }
 
+    STATEFN(TActorCoro::StateFunc) {
+        if (Impl->ProcessEvent(ev)) {
+            PassAway();
+        }
+    }
 }

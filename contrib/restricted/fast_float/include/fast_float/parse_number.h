@@ -66,6 +66,10 @@ from_chars_result parse_infnan(const char *first, const char *last, T &value)  n
  * Credit : @mwalcott3
  */
 fastfloat_really_inline bool rounds_to_nearest() noexcept {
+  // https://lemire.me/blog/2020/06/26/gcc-not-nearest/
+#if (FLT_EVAL_METHOD != 1) && (FLT_EVAL_METHOD != 0)
+  return false;
+#endif
   // See
   // A fast function to check your floating-point rounding mode
   // https://lemire.me/blog/2022/11/16/a-fast-function-to-check-your-floating-point-rounding-mode/

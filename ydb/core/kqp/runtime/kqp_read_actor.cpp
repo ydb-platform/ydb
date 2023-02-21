@@ -369,6 +369,7 @@ public:
             StartTableScan();
         }
         Become(&TKqpReadActor::ReadyState);
+        Bootstrapped = true;
     }
 
     bool StartTableScan() {
@@ -625,7 +626,7 @@ public:
     void StartRead(TShardState* state) {
         TMaybe<ui64> limit;
         if (Settings.GetItemsLimit()) {
-            limit = Settings.GetItemsLimit() - Min(Settings.GetItemsLimit(), RecievedRowCount);
+            limit = Settings.GetItemsLimit() - Min(Settings.GetItemsLimit(), ReceivedRowCount);
 
             if (*limit == 0) {
                 return;
@@ -724,7 +725,7 @@ public:
         Reads[id].RegisterMessage(*ev->Get());
 
 
-        RecievedRowCount += ev->Get()->GetRowsCount();
+        ReceivedRowCount += ev->Get()->GetRowsCount();
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
         CA_LOG_D(TStringBuilder() << "new data for read #" << id << " pushed");
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
@@ -843,12 +844,17 @@ public:
         return stats;
     }
 
+    bool LimitReached() const {
+        return Settings.GetItemsLimit() && ProcessedRowCount >= Settings.GetItemsLimit();
+    }
+
     i64 GetAsyncInputData(
         NKikimr::NMiniKQL::TUnboxedValueVector& resultVector,
         TMaybe<TInstant>&,
         bool& finished,
         i64 freeSpace) override
     {
+        CA_LOG_D(TStringBuilder() << " enter getasyncinputdata results size " << Results.size());
         ui64 bytes = 0;
         while (!Results.empty()) {
             auto& result = Results.front();
@@ -886,17 +892,14 @@ public:
                     return bytes;
                 }
             }
-            CA_LOG_D(TStringBuilder() << "returned " << resultVector.size() << " rows");
+            CA_LOG_D(TStringBuilder() << "returned " << resultVector.size() << " rows; processed " << ProcessedRowCount << " rows");
 
             if (batch->size() == result.ProcessedRows) {
                 auto& record = msg.Record;
-                if (Reads[id].IsLastMessage(msg)) {
-                    Reads[id].Reset();
-                    ResetReads++;
-                } else if (!Reads[id].Finished) {
+                if (!Reads[id].Finished) {
                     TMaybe<ui64> limit;
                     if (Settings.GetItemsLimit()) {
-                        limit = Settings.GetItemsLimit() - Min(Settings.GetItemsLimit(), RecievedRowCount);
+                        limit = Settings.GetItemsLimit() - Min(Settings.GetItemsLimit(), ReceivedRowCount);
                     }
 
                     if (!limit || *limit > 0) {
@@ -909,20 +912,26 @@ public:
                         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), state->TabletId, true),
                             IEventHandle::FlagTrackDelivery);
                     } else {
+                        Reads[id].Finished = true;
+                    }
+                }
+
+                if (Reads[id].IsLastMessage(msg)) {
+                    if (!record.GetFinished()) {
                         auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
                         cancel->Record.SetReadId(id);
                         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId), IEventHandle::FlagTrackDelivery);
-                        Reads[id].Reset();
-                        ResetReads++;
                     }
+                    Reads[id].Reset();
+                    ResetReads++;
                 }
 
                 StartTableScan();
 
                 Results.pop();
-                CA_LOG_D("dropping batch");
+                CA_LOG_D("dropping batch for read #" << id);
 
-                if (RunningReads() == 0 || (Settings.GetItemsLimit() && ProcessedRowCount >= Settings.GetItemsLimit())) {
+                if (LimitReached()) {
                     finished = true;
                     break;
                 }
@@ -930,6 +939,19 @@ public:
                 break;
             }
         }
+
+        if (RunningReads() == 0 && PendingShards.Empty() && Bootstrapped) {
+            finished = true;
+        }
+        
+        CA_LOG_D(TStringBuilder() << "returned async data"
+            << " processed rows " << ProcessedRowCount
+            << " received rows " << ReceivedRowCount
+            << " running reads " << RunningReads()
+            << " pending shards " << PendingShards.Size()
+            << " finished = " << finished
+            << " has limit " << (Settings.GetItemsLimit() != 0)
+            << " limit reached " << LimitReached());
 
         return bytes;
     }
@@ -950,7 +972,7 @@ public:
             }
 
             //FIXME: use evread statistics after KIKIMR-16924
-            tableStats->SetReadRows(tableStats->GetReadRows() + RecievedRowCount);
+            tableStats->SetReadRows(tableStats->GetReadRows() + ReceivedRowCount);
             tableStats->SetReadBytes(tableStats->GetReadBytes() + BytesStats.DataBytes);
             tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
         }
@@ -1010,7 +1032,7 @@ private:
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     NMiniKQL::TBytesStatistics BytesStats;
-    ui64 RecievedRowCount = 0;
+    ui64 ReceivedRowCount = 0;
     ui64 ProcessedRowCount = 0;
     ui64 ResetReads = 0;
     ui64 ReadId = 0;
@@ -1033,6 +1055,8 @@ private:
     ui32 MaxInFlight = 1024;
     TString LogPrefix;
     TTableId TableId;
+
+    bool Bootstrapped = false;
 
     const TActorId ComputeActorId;
     const ui64 InputIndex;

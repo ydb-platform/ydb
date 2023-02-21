@@ -360,7 +360,7 @@ public:
         if constexpr (Nullable) {
             Y_VERIFY(NullBuilder->Length() == DataBuilder->Length());
             for (size_t i = beginIndex; i < beginIndex + count; ++i) {
-                NullBuilder->UnsafeAppend(IsNull(array, i));
+                NullBuilder->UnsafeAppend(!IsNull(array, i));
             }
         }
 
@@ -375,7 +375,7 @@ public:
         if constexpr (Nullable) {
             Y_VERIFY(NullBuilder->Length() == DataBuilder->Length());
             for (size_t i = 0; i < count; ++i) {
-                NullBuilder->UnsafeAppend(IsNull(array, indexes[i]));
+                NullBuilder->UnsafeAppend(!IsNull(array, indexes[i]));
             }
         }
 
@@ -593,7 +593,7 @@ public:
             for (;;) {
                 if (strSize <= availBytes) {
                     if constexpr (Nullable) {
-                        NullBuilder->UnsafeAppend(IsNull(array, i));
+                        NullBuilder->UnsafeAppend(!IsNull(array, i));
                     }
                     OffsetsBuilder->UnsafeAppend(TOffset(dataLen));
                     chunkEnd = end;
@@ -634,7 +634,7 @@ public:
             for (;;) {
                 if (str.size() <= availBytes) {
                     if constexpr (Nullable) {
-                        NullBuilder->UnsafeAppend(IsNull(array, idx));
+                        NullBuilder->UnsafeAppend(!IsNull(array, idx));
                     }
                     OffsetsBuilder->UnsafeAppend(TOffset(dataLen));
                     DataBuilder->UnsafeAppend((const ui8*)str.data(), str.size());
@@ -805,7 +805,7 @@ public:
 
         if constexpr (Nullable) {
             for (ui64 i = beginIndex; i < beginIndex + count; ++i) {
-                NullBuilder->UnsafeAppend(IsNull(array, i));
+                NullBuilder->UnsafeAppend(!IsNull(array, i));
             }
         }
 
@@ -820,7 +820,7 @@ public:
 
         if constexpr (Nullable) {
             for (size_t i = 0; i < count; ++i) {
-                NullBuilder->UnsafeAppend(IsNull(array, indexes[i]));
+                NullBuilder->UnsafeAppend(!IsNull(array, indexes[i]));
             }
         }
 
@@ -933,7 +933,7 @@ public:
         Y_VERIFY(array.child_data.size() == 1);
 
         for (ui64 i = beginIndex; i < beginIndex + count; ++i) {
-            NullBuilder->UnsafeAppend(IsNull(array, i));
+            NullBuilder->UnsafeAppend(!IsNull(array, i));
         }
 
         Inner->AddMany(*array.child_data[0], beginIndex, count);
@@ -944,7 +944,7 @@ public:
         Y_VERIFY(array.child_data.size() == 1);
 
         for (size_t i = 0; i < count; ++i) {
-            NullBuilder->UnsafeAppend(IsNull(array, indexes[i]));
+            NullBuilder->UnsafeAppend(!IsNull(array, indexes[i]));
         }
 
         Inner->AddMany(*array.child_data[0], indexes, count);

@@ -1,5 +1,7 @@
 Version | Release date | Download
 :--- | :--- | :---
+**v22.5**
+v.22.5.10 | 09.02.23 | [Binary file](https://binaries.ydb.tech/release/22.5.10/ydbd-22.5.10-linux-amd64.tar.gz)
 **v22.4**
 v.22.4.44 | 28.11.22 | [Binary file](https://binaries.ydb.tech/release/22.4.44/ydbd-22.4.44-linux-amd64.tar.gz)
 v.22.4.31 | 23.10.22 | [Binary file](https://binaries.ydb.tech/release/22.4.31/ydbd-22.4.31-linux-amd64.tar.gz)

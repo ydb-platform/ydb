@@ -1,5 +1,7 @@
 Version | Release date | Download
 :--- | :--- | :---
+**v22.5**
+v.22.5.10 | 09.02.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:22.5.10`
 **v22.4**
 v.22.4.44 | 28.11.22 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.44`
 v.22.4.31 | 23.10.22 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.31`

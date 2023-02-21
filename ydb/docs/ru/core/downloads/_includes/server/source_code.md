@@ -1,5 +1,7 @@
 Версия |  Дата выпуска | Ссылка
 :--- | :--- | :---
+**v22.5**
+v.22.5.10 | 09.02.23 | [https://github.com/ydb-platform/ydb/tree/22.5.10](https://github.com/ydb-platform/ydb/tree/22.5.10)
 **v22.4**
 v.22.4.44 | 28.11.22 | [https://github.com/ydb-platform/ydb/tree/22.4.44](https://github.com/ydb-platform/ydb/tree/22.4.44)
 v.22.4.31 | 23.10.22 | [https://github.com/ydb-platform/ydb/tree/22.4.31](https://github.com/ydb-platform/ydb/tree/22.4.31)

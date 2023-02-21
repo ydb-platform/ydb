@@ -312,12 +312,14 @@ enum class EEvictState : ui8 {
     SELF_CACHED = 2,    // source, extern, cached blobs: 11-
     EXTERN = 3,         // source, extern, cached blobs: -1-
     CACHED = 4,         // source, extern, cached blobs: -11
-    ERASED = 5,         // source, extern, cached blobs: ---
+    ERASING = 5,        // source, extern, cached blobs: -??
+    //ERASED = 6,       // source, extern, cached blobs: ---
 };
 
 inline bool IsExported(EEvictState state) {
     return state == EEvictState::SELF_CACHED ||
-        state == EEvictState::EXTERN;
+        state == EEvictState::EXTERN ||
+        state == EEvictState::CACHED;
 }
 
 inline bool IsDeleted(EEvictState state) {

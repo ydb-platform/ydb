@@ -564,6 +564,8 @@ bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool
     Y_VERIFY(extracted);
 
     switch (evict.State) {
+        case EEvictState::EVICTING:
+            Y_FAIL();
         case EEvictState::SELF_CACHED:
             Y_VERIFY(old.State == EEvictState::EVICTING);
             break;
@@ -614,7 +616,6 @@ bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobI
     for (auto& [evict, metadata] : dropped) {
         if (evict.IsEvicting()) {
             droppedEvicting.insert(evict.Blob);
-            //continue; // keep them in DroppedEvictedBlobs till next tablet restart
         }
 
         NKikimrTxColumnShard::TEvictMetadata meta;
@@ -647,8 +648,10 @@ TEvictedBlob TBlobManager::GetDropped(const TUnifiedBlobId& blobId, TEvictMetada
 void TBlobManager::GetCleanupBlobs(THashSet<TEvictedBlob>& cleanup) const {
     TString strBlobs;
     for (auto& [evict, _] : DroppedEvictedBlobs) {
-        strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
-        cleanup.insert(evict);
+        if (evict.State != EEvictState::EVICTING) {
+            strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
+            cleanup.insert(evict);
+        }
     }
     if (!strBlobs.empty()) {
         LOG_S_NOTICE("Cleanup evicted blobs " << strBlobs << "at tablet " << TabletInfo->TabletID);

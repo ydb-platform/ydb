@@ -163,6 +163,7 @@ void TBlobManagerDb::UpdateEvictBlob(const TEvictedBlob& evict, const TString& m
 
     switch (evict.State) {
         case EEvictState::EVICTING:
+            Y_VERIFY(!meta.empty());
             db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Update(
                 NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::Size>(evict.Blob.BlobSize()),
                 NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::State>((ui8)evict.State),

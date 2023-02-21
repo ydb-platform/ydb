@@ -318,21 +318,28 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
 
-    // Clear dropped evicting records
-    // TODO: better cleanup logic. Check if blob exists in external storage (and remove it if so).
+    // Set dropped evicting records to be erased in future cleanups
     TString strBlobs;
     for (auto& blobId : lostEvictions) {
         TEvictMetadata meta;
         auto evict = Self->BlobManager->GetDropped(blobId, meta);
-        bool erased = Self->BlobManager->EraseOneToOne(evict, blobManagerDb);
-        if (erased) {
+        Y_VERIFY(evict.State == EEvictState::EVICTING);
+        evict.State = EEvictState::ERASING;
+
+        if (meta.GetTierName().empty()) {
+            LOG_S_ERROR("Blob " << evict.Blob << " eviction with empty tier name at tablet " << Self->TabletID());
+        }
+
+        bool dropped;
+        bool present = Self->BlobManager->UpdateOneToOne(std::move(evict), blobManagerDb, dropped);
+        if (present) {
             strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
         } else {
-            LOG_S_ERROR("Forget unknown dropped evicting blob " << evict.Blob << " at tablet " << Self->TabletID());
+            LOG_S_ERROR("Unknown dropped evicting blob " << evict.Blob << " at tablet " << Self->TabletID());
         }
     }
     if (!strBlobs.empty()) {
-        LOG_S_NOTICE("Forget dropped evicting blobs " << strBlobs << "at tablet " << Self->TabletID());
+        LOG_S_NOTICE("Erasing potentially exported blobs " << strBlobs << "at tablet " << Self->TabletID());
     }
 
     Self->UpdateInsertTableCounters();

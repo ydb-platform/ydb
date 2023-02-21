@@ -230,16 +230,27 @@ TMaybe<TValue> ProcessResultSet(TStringStream& ss,
     return lastReadPK;
 }
 
+static void Flush(TFile& tmpFile, TStringStream& ss, TMaybe<TValue>& lastWrittenPK, const TMaybe<TValue>& lastReadPK) {
+    tmpFile.Write(ss.Data(), ss.Size());
+    ss.Clear();
+
+    if (lastReadPK) {
+        lastWrittenPK = *lastReadPK;
+    }
+}
+
+static void CloseAndRename(TFile& tmpFile, const TFsPath& fileName) {
+    tmpFile.Close();
+
+    LOG_DEBUG("New file with data is created, fileName# " << fileName);
+    TFsPath(tmpFile.GetName()).RenameTo(fileName);
+}
+
 TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& desc, const TString& fullTablePath,
-        const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32 *fileCounter) {
-    NTable::TTableClient client(driver);
-
-
-
+        const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32 *fileCounter)
+{
     TMaybe<NTable::TTablePartIterator> iter;
-    auto readTableJob = [fullTablePath, &lastWrittenPK, &iter]
-            (NTable::TSession session) -> TStatus {
-
+    auto readTableJob = [fullTablePath, &lastWrittenPK, &iter](NTable::TSession session) -> TStatus {
         NTable::TReadTableSettings settings;
         if (lastWrittenPK) {
             settings.From(NTable::TKeyBound::Exclusive(*lastWrittenPK));
@@ -251,10 +262,10 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
         VerifyStatus(result, TStringBuilder() << "ReadTable result was not successfull,"
                 " path: " << fullTablePath.Quote());
         return result;
-
     };
 
-    TStatus status = client.RetryOperationSync(readTableJob, NYdb::NTable::TRetryOperationSettings().MaxRetries(1));
+    NTable::TTableClient client(driver);
+    TStatus status = client.RetryOperationSync(readTableJob, NTable::TRetryOperationSettings().MaxRetries(1));
     VerifyStatus(status);
 
     {
@@ -268,8 +279,7 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
                     " error msg: " << resultSetStreamPart.GetIssues().ToString());
         TResultSet resultSetCurrent = resultSetStreamPart.ExtractPart();
 
-        TFsPath tmpFileName = folderPath.Child(INCOMPLETE_DATA_FILE_NAME);
-        TFile tmpFile = TFile(tmpFileName, CreateAlways | WrOnly);
+        auto tmpFile = TFile(folderPath.Child(INCOMPLETE_DATA_FILE_NAME), CreateAlways | WrOnly);
         TStringStream ss;
         ss.Reserve(IO_BUFFER_SIZE);
 
@@ -292,13 +302,9 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
                         break;
                     } else {
                         if (ss.Data()) {
-                            tmpFile.Write(ss.Data(), ss.Size());
-                            lastWrittenPK = *lastReadPK;
-                            ss.Clear();
+                            Flush(tmpFile, ss, lastWrittenPK, lastReadPK);
                         }
-                        tmpFile.Close();
-                        LOG_DEBUG("New file with data is created, fileName# " << CreateDataFileName(*fileCounter));
-                        tmpFileName.RenameTo(folderPath.Child(CreateDataFileName((*fileCounter)++)));
+                        CloseAndRename(tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
                         return lastWrittenPK;
                     }
                 }
@@ -307,24 +313,15 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
                 break;
             }
             if (ss.Size() > IO_BUFFER_SIZE) {
-                tmpFile.Write(ss.Data(), ss.Size());
-                lastWrittenPK = *lastReadPK;
-                ss.Clear();
+                Flush(tmpFile, ss, lastWrittenPK, lastReadPK);
             }
             if (tmpFile.GetLength() > FILE_SPLIT_THRESHOLD) {
-                tmpFile.Close();
-                LOG_DEBUG("New file with data is created, fileName# " << CreateDataFileName(*fileCounter));
-                tmpFileName.RenameTo(folderPath.Child(CreateDataFileName((*fileCounter)++)));
-                tmpFileName = folderPath.Child(INCOMPLETE_DATA_FILE_NAME);
-                tmpFile = TFile(tmpFileName, CreateAlways | WrOnly);
+                CloseAndRename(tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
+                tmpFile = TFile(folderPath.Child(INCOMPLETE_DATA_FILE_NAME), CreateAlways | WrOnly);
             }
         }
-        tmpFile.Write(ss.Data(), ss.Size());
-        lastWrittenPK = *lastReadPK;
-        ss.Clear();
-        tmpFile.Close();
-        LOG_DEBUG("New file with data is created, fileName# " << CreateDataFileName(*fileCounter));
-        tmpFileName.RenameTo(folderPath.Child(CreateDataFileName((*fileCounter)++)));
+        Flush(tmpFile, ss, lastWrittenPK, lastReadPK);
+        CloseAndRename(tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
     }
 
     return {};

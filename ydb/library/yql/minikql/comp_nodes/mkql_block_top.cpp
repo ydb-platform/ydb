@@ -20,6 +20,7 @@ namespace NMiniKQL {
 namespace {
 
 class TTopBlocksWrapper : public TStatefulWideFlowBlockComputationNode<TTopBlocksWrapper> {
+    using TChunkedArrayIndex = TVector<IArrayBuilder::TArrayDataItem>;
 public:
     TTopBlocksWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TTupleType* tupleType, IComputationNode* count,
         TVector<IComputationNode*>&& directions, TVector<ui32>&& keyIndicies, bool sort)
@@ -88,7 +89,15 @@ public:
                         blockIndicies->emplace_back(row);
                     }
 
-                    TBlockLess cmp(KeyIndicies_, s, s.Values_);
+                    TVector<TChunkedArrayIndex> arrayIndicies(Columns_.size());
+                    for (ui32 i = 0; i < Columns_.size(); ++i) {
+                        if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
+                            auto datum = TArrowBlock::From(s.Values_[i]).GetDatum();
+                            arrayIndicies[i] = MakeChunkedArrayIndex(datum);
+                        }
+                    }    
+                
+                    TBlockLess cmp(KeyIndicies_, s, arrayIndicies);
                     NYql::FastNthElement(blockIndicies->begin(), blockIndicies->begin() + s.Count_, blockIndicies->end(), cmp);
                 }
                 
@@ -144,8 +153,6 @@ private:
         TVector<NUdf::TUnboxedValue> Values_;
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
 
-        TVector<NUdf::TUnboxedValue> TmpValues_;
-
         TState(TMemoryUsageInfo* memInfo, const TVector<ui32>& keyIndicies, const TVector<TBlockType*>& columns)
             : TComputationValue(memInfo)
         {
@@ -167,8 +174,6 @@ private:
             for (ui32 i = 0; i <= columns.size(); ++i) {
                 ValuePointers_[i] = &Values_[i];
             }
-
-            TmpValues_.resize(columns.size());
 
             Comparators_.resize(keyIndicies.size());
             for (ui32 k = 0; k < keyIndicies.size(); ++k) {
@@ -202,11 +207,13 @@ private:
 
         void CompressBuilders(bool sort, const TVector<TBlockType*>& columns, const TVector<ui32>& keyIndicies, TComputationContext& ctx) {
             Y_VERIFY(ScalarsFilled_);
+            TVector<TChunkedArrayIndex> arrayIndicies(columns.size());
+            TVector<arrow::Datum> tmpDatums(columns.size());
             for (ui32 i = 0; i < columns.size(); ++i) {
-                if (columns[i]->GetShape() == TBlockType::EShape::Scalar) {
-                    TmpValues_[i] = ScalarValues_[i];
-                } else {
-                    TmpValues_[i] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(false)));
+                if (columns[i]->GetShape() != TBlockType::EShape::Scalar) {
+                    auto datum = Builders_[i]->Build(false);
+                    arrayIndicies[i] = MakeChunkedArrayIndex(datum);
+                    tmpDatums[i] = std::move(datum);
                 }
             }
 
@@ -217,7 +224,7 @@ private:
             }
 
             ui64 blockLen = Min(BuilderLength_, Count_);
-            TBlockLess cmp(keyIndicies, *this, TmpValues_);
+            TBlockLess cmp(keyIndicies, *this, arrayIndicies);
             if (BuilderLength_ <= Count_) {
                 if (sort) {
                     std::sort(blockIndicies.begin(), blockIndicies.end(), cmp);
@@ -235,18 +242,11 @@ private:
                     continue;
                 }
 
-                const auto& datum = TArrowBlock::From(TmpValues_[i]).GetDatum();
-                const auto& array = *datum.array();
-                for (ui64 j = 0; j < blockLen; ++j) {
-                    Builders_[i]->Add(LeftReaders_[i]->GetItem(array, blockIndicies[j]));
-                }
+                auto& arrayIndex = arrayIndicies[i];
+                Builders_[i]->AddMany(arrayIndex.data(), arrayIndex.size(), blockIndicies.data(), blockLen);
             }
 
             BuilderLength_ = blockLen;
-
-            for (ui32 i = 0; i < columns.size(); ++i) {
-                TmpValues_[i] = {};
-            }
         }
 
         void FillOutput(const TVector<TBlockType*>& columns, NUdf::TUnboxedValue*const* output, TComputationContext& ctx) {
@@ -272,15 +272,11 @@ private:
                 }
 
                 const auto& datum = TArrowBlock::From(Values_[i]).GetDatum();
-                const auto& array = *datum.array();
+                auto arrayIndex = MakeChunkedArrayIndex(datum);
                 if (blockIndicies) {
-                    for (ui64 j = 0; j < Count_; ++j) {
-                        Builders_[i]->Add(LeftReaders_[i]->GetItem(array, (*blockIndicies)[j]));
-                    }
+                    Builders_[i]->AddMany(arrayIndex.data(), arrayIndex.size(), blockIndicies->data(), Count_);
                 } else {
-                    for (ui64 row = 0; row < blockLen; ++row) {
-                        Builders_[i]->Add(LeftReaders_[i]->GetItem(array, row));
-                    }
+                    Builders_[i]->AddMany(arrayIndex.data(), arrayIndex.size(), ui64(0), blockLen);
                 }
             }
 
@@ -300,25 +296,41 @@ private:
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
+    static TChunkedArrayIndex MakeChunkedArrayIndex(const arrow::Datum& datum) {
+        TChunkedArrayIndex result;
+        if (datum.is_array()) {
+            result.push_back({datum.array().get(), 0});
+        } else {
+            auto chunks = datum.chunks();
+            ui64 offset = 0;
+            for (auto& chunk : chunks) {
+                auto arrayData = chunk->data();
+                result.push_back({arrayData.get(), offset});
+                offset += arrayData->length;
+            }
+        }
+        return result;
+    }
+
     class TBlockLess {
     public:
-        TBlockLess(const TVector<ui32>& keyIndicies, const TState& state, const TVector<NUdf::TUnboxedValue>& values)
+        TBlockLess(const TVector<ui32>& keyIndicies, const TState& state, const TVector<TChunkedArrayIndex>& arrayIndicies)
             : KeyIndicies_(keyIndicies)
+            , ArrayIndicies_(arrayIndicies)
             , State_(state)
-            , Values_(values)
         {}
 
         bool operator()(ui64 lhs, ui64 rhs) const {
             if (KeyIndicies_.size() == 1) {
                 auto i = KeyIndicies_[0];
-                const auto& datum = TArrowBlock::From(Values_[i]).GetDatum();
-                if (datum.is_scalar()) {
+                auto& arrayIndex = ArrayIndicies_[i];
+                if (arrayIndex.empty()) {
+                    // scalar
                     return false;
                 }
 
-                const auto& array = *datum.array();
-                auto leftItem = State_.LeftReaders_[i]->GetItem(array, lhs);
-                auto rightItem = State_.RightReaders_[i]->GetItem(array, rhs);
+                auto leftItem = GetBlockItem(*State_.LeftReaders_[i], arrayIndex, lhs);
+                auto rightItem = GetBlockItem(*State_.RightReaders_[i], arrayIndex, rhs);
                 if (State_.Directions_[0]) {
                     return State_.Comparators_[0]->Less(leftItem, rightItem);
                 } else {
@@ -327,14 +339,14 @@ private:
             } else {
                 for (ui32 k = 0; k < KeyIndicies_.size(); ++k) {
                     auto i = KeyIndicies_[k];
-                    const auto& datum = TArrowBlock::From(Values_[i]).GetDatum();
-                    if (datum.is_scalar()) {
+                    auto& arrayIndex = ArrayIndicies_[i];
+                    if (arrayIndex.empty()) {
+                        // scalar
                         continue;
                     }
 
-                    const auto& array = *datum.array();
-                    auto leftItem = State_.LeftReaders_[i]->GetItem(array, lhs);
-                    auto rightItem = State_.RightReaders_[i]->GetItem(array, rhs);
+                    auto leftItem = GetBlockItem(*State_.LeftReaders_[i], arrayIndex, lhs);
+                    auto rightItem = GetBlockItem(*State_.RightReaders_[i], arrayIndex, rhs);
                     auto cmp = State_.Comparators_[k]->Compare(leftItem, rightItem);
                     if (cmp == 0) {
                         continue;
@@ -352,9 +364,19 @@ private:
         }
 
     private:
+        static TBlockItem GetBlockItem(IBlockReader& reader, const TChunkedArrayIndex& arrayIndex, ui64 idx) {
+            Y_VERIFY_DEBUG(!arrayIndex.empty());
+            if (arrayIndex.size() == 1) {
+                return reader.GetItem(*arrayIndex.front().Data, idx);
+            }
+
+            auto it = LookupArrayDataItem(arrayIndex.data(), arrayIndex.size(), idx);
+            return reader.GetItem(*it->Data, idx);
+        }
+
         const TVector<ui32>& KeyIndicies_;
+        const TVector<TChunkedArrayIndex> ArrayIndicies_;
         const TState& State_;
-        const TVector<NUdf::TUnboxedValue>& Values_;
     };
 
     IComputationWideFlowNode* Flow_;

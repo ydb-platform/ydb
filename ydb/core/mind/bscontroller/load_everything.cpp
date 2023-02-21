@@ -261,10 +261,11 @@ public:
             }
         }
 
-        for (const auto& [serial, info] : Self->DrivesSerials) {
-            if (info->NodeId && info->PDiskId && info->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
-                const bool inserted = driveToBox.emplace(std::make_tuple(*info->NodeId, serial.Serial), info->BoxId).second;
-                Y_VERIFY(inserted, "duplicate Serial-generated drive");
+        for (const auto& [_, info] : Self->DrivesSerials) {
+            if (info->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
+                Y_VERIFY(info->NodeId);
+                Y_VERIFY(info->Path);
+                driveToBox.emplace(std::make_tuple(*info->NodeId, *info->Path), info->BoxId);
             }
         }
 
@@ -288,9 +289,7 @@ public:
                 THostId hostId;
                 TBoxId boxId;
                 TString path = disks.GetValue<T::Path>();
-                TString pathOrSerial = path ? path : disks.GetValue<T::ExpectedSerial>();
-                Y_VERIFY_S(pathOrSerial, "For pdiskId# " << disks.GetValue<T::PDiskID>()
-                        << " not found neither pathOrSerial nor serial");
+                Y_VERIFY_S(path, "Couldn't find path for pdiskId# " << disks.GetValue<T::PDiskID>());
 
                 if (const auto& x = Self->HostRecords->GetHostId(disks.GetValue<T::NodeID>())) {
                     hostId = *x;
@@ -299,7 +298,7 @@ public:
                 }
 
                 // find the owning box
-                if (const auto it = driveToBox.find(std::make_tuple(disks.GetValue<T::NodeID>(), pathOrSerial)); it != driveToBox.end()) {
+                if (const auto it = driveToBox.find(std::make_tuple(disks.GetValue<T::NodeID>(), path)); it != driveToBox.end()) {
                     boxId = it->second;
                     driveToBox.erase(it);
                 } else {

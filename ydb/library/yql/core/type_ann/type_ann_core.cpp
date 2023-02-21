@@ -11855,6 +11855,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideChain1Map"] = &WideChain1MapWrapper;
         Functions["WideTop"] = &WideTopWrapper;
         Functions["WideTopSort"] = &WideTopWrapper;
+        Functions["WideSort"] = &WideSortWrapper;
         Functions["NarrowMap"] = &NarrowMapWrapper;
         Functions["NarrowFlatMap"] = &NarrowFlatMapWrapper;
         Functions["NarrowMultiMap"] = &NarrowMultiMapWrapper;
@@ -11867,6 +11868,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockExpandChunked"] = &BlockExpandChunkedWrapper;
         Functions["WideTopBlocks"] = &WideTopBlocksWrapper;
         Functions["WideTopSortBlocks"] = &WideTopBlocksWrapper;
+        Functions["WideSortBlocks"] = &WideSortBlocksWrapper;
 
         Functions["AsScalar"] = &AsScalarWrapper;
         Functions["BlockCoalesce"] = &BlockCoalesceWrapper;

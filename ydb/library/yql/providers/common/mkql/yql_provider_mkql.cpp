@@ -39,6 +39,19 @@ TRuntimeNode WideTopImpl(const TExprNode& node, TMkqlBuildContext& ctx,
     return (ctx.ProgramBuilder.*func)(flow, count, directions);
 }
 
+TRuntimeNode WideSortImpl(const TExprNode& node, TMkqlBuildContext& ctx,
+    TRuntimeNode(TProgramBuilder::*func)(TRuntimeNode, const std::vector<std::pair<ui32, TRuntimeNode>>&)) {
+    const auto flow = MkqlBuildExpr(node.Head(), ctx);
+
+    std::vector<std::pair<ui32, TRuntimeNode>> directions;
+    directions.reserve(node.Tail().ChildrenSize());
+    node.Tail().ForEachChild([&](const TExprNode& dir) {
+        directions.emplace_back(std::make_pair(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx)));
+    });
+
+    return (ctx.ProgramBuilder.*func)(flow, directions);
+}
+
 TRuntimeNode CombineByKeyImpl(const TExprNode& node, TMkqlBuildContext& ctx) {
     NNodes::TCoCombineByKey combine(&node);
     const bool isStreamOrFlow = combine.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
@@ -766,12 +779,20 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return WideTopImpl(node, ctx, &TProgramBuilder::WideTopSort);
     });
 
+    AddCallable("WideSort", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return WideSortImpl(node, ctx, &TProgramBuilder::WideSort);
+    });
+
     AddCallable("WideTopBlocks", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return WideTopImpl(node, ctx, &TProgramBuilder::WideTopBlocks);
     });
 
     AddCallable("WideTopSortBlocks", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return WideTopImpl(node, ctx, &TProgramBuilder::WideTopSortBlocks);
+    });
+
+    AddCallable("WideSortBlocks", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return WideSortImpl(node, ctx, &TProgramBuilder::WideSortBlocks);
     });
 
     AddCallable("Iterable", [](const TExprNode& node, TMkqlBuildContext& ctx) {

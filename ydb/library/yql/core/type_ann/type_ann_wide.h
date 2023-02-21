@@ -23,5 +23,6 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus NarrowMultiMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
     IGraphTransformer::TStatus WideTopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus WideSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 } // namespace NTypeAnnImpl
 } // namespace NYql

@@ -4060,8 +4060,8 @@ TExprNode::TPtr OptimizeCombineCore(const TExprNode::TPtr& node, TExprContext& c
     return node;
 }
 
-template<bool Sort>
-TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx) {
+template<bool Sort, bool HasCount>
+TExprNode::TPtr OptimizeTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap") && input.Tail().Tail().IsCallable("AsStruct")) {
         TNodeMap<size_t> indexes(input.Tail().Tail().ChildrenSize());
         input.Tail().Tail().ForEachChild([&](const TExprNode& field) {
@@ -4073,6 +4073,7 @@ TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx) {
         });
 
         const auto itemType = node->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
+        std::unordered_set<size_t> unique;
         std::vector<size_t> sorted;
         if (node->Tail().Tail().IsCallable("Member") && &node->Tail().Tail().Head() == &node->Tail().Head().Head()) {
             if (const auto it = indexes.find(&node->Tail().Tail().Tail()); indexes.cend() == it)
@@ -4095,14 +4096,16 @@ TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx) {
             }
         }
 
-        if (sorted.empty())
+        unique.insert(sorted.begin(), sorted.end());
+        if (sorted.empty() || unique.size() != sorted.size())
             return node;
 
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
 
         TExprNode::TListType directions(sorted.size());
+        auto dirIndex = HasCount ? 2U : 1U;
         for (auto i = 0U; i < sorted.size(); ++i) {
-            auto dir = node->Child(2U)->IsList() ? node->Child(2U)->ChildPtr(i) : node->ChildPtr(2U);
+            auto dir = node->Child(dirIndex)->IsList() ? node->Child(dirIndex)->ChildPtr(i) : node->ChildPtr(dirIndex);
             directions[i] = ctx.Builder(dir->Pos())
                 .List()
                     .Atom(0, sorted[i])
@@ -4110,16 +4113,28 @@ TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx) {
                 .Seal().Build();
         }
 
-        return Build<TCoNarrowMap>(ctx, node->Pos())
-            .template Input<std::conditional_t<Sort, TCoWideTopSort, TCoWideTop>>()
-                .Input(input.HeadPtr())
-                .Count(node->ChildPtr(1))
-                .template Keys<TCoSortKeys>()
-                    .Add(std::move(directions))
+        if constexpr (HasCount) {
+            return Build<TCoNarrowMap>(ctx, node->Pos())
+                .template Input<std::conditional_t<Sort, TCoWideTopSort, TCoWideTop>>()
+                    .Input(input.HeadPtr())
+                    .Count(node->ChildPtr(1))
+                    .template Keys<TCoSortKeys>()
+                        .Add(std::move(directions))
+                        .Build()
                     .Build()
-                .Build()
-            .Lambda(input.TailPtr())
-            .Done().Ptr();
+                .Lambda(input.TailPtr())
+                .Done().Ptr();
+        } else {
+            return Build<TCoNarrowMap>(ctx, node->Pos())
+                .template Input<TCoWideSort>()
+                    .Input(input.HeadPtr())
+                    .template Keys<TCoSortKeys>()
+                        .Add(std::move(directions))
+                        .Build()
+                    .Build()
+                .Lambda(input.TailPtr())
+                .Done().Ptr();
+        }
     }
 
     return node;
@@ -5369,7 +5384,7 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
         .Build();
 }
 
-TExprNode::TPtr OptimizeTopBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr OptimizeTopOrSortBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (!types.ArrowResolver) {
         return node;
     }
@@ -5395,17 +5410,14 @@ TExprNode::TPtr OptimizeTopBlocks(const TExprNode::TPtr& node, TExprContext& ctx
         return node;
     }
 
-    TStringBuf newName = node->Content() == "WideTop" ? "WideTopBlocks" : "WideTopSortBlocks";
+    TString newName = node->Content() + TString("Blocks");
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
+    auto children = node->ChildrenList();
+    children[0] = ctx.NewCallable(node->Pos(), "WideToBlocks", { children[0] });
+
     return ctx.Builder(node->Pos())
         .Callable("WideFromBlocks")
-            .Callable(0, newName)
-                .Callable(0, "WideToBlocks")
-                    .Add(0, node->HeadPtr())
-                .Seal()
-                .Add(1, node->ChildPtr(1))
-                .Add(2, node->ChildPtr(2))
-            .Seal()
+            .Add(0, ctx.NewCallable(node->Pos(), newName, std::move(children)))
         .Seal()
         .Build();
 }
@@ -7237,8 +7249,9 @@ struct TPeepHoleRules {
         {"WideMap", &OptimizeWideMaps},
         {"NarrowMap", &OptimizeWideMaps},
         {"Unordered", &DropUnordered},
-        {"Top", &OptimizeTop<false>},
-        {"TopSort", &OptimizeTop<true>},
+        {"Top", &OptimizeTopOrSort<false, true>},
+        {"TopSort", &OptimizeTopOrSort<true, true>},
+        {"Sort", &OptimizeTopOrSort<true, false>},
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageExtRulesInit = {};
@@ -7265,8 +7278,9 @@ struct TPeepHoleRules {
         {"Take", &OptimizeSkipTakeToBlocks},
         {"BlockCombineAll", &OptimizeBlockCombine},
         {"BlockCombineHashed", &OptimizeBlockCombine},
-        {"WideTop", &OptimizeTopBlocks},
-        {"WideTopSort", &OptimizeTopBlocks},
+        {"WideTop", &OptimizeTopOrSortBlocks},
+        {"WideTopSort", &OptimizeTopOrSortBlocks},
+        //{"WideSort", &OptimizeTopOrSortBlocks},
     };
 
     TPeepHoleRules()

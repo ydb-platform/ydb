@@ -648,6 +648,25 @@ IGraphTransformer::TStatus WideTopWrapper(const TExprNode::TPtr& input, TExprNod
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus WideSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const auto& types = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    if (!ValidateWideTopKeys(input->Tail(), types, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(input->Head().GetTypeAnn());
+    return IGraphTransformer::TStatus::Ok;
+}
+
 bool ValidateWideTopKeys(const TExprNode& keys, const TTypeAnnotationNode::TListType& types, TExprContext& ctx) {
     if (!(EnsureTupleMinSize(keys, 1U, ctx) && EnsureTupleMaxSize(keys, types.size(), ctx))) {
         return false;

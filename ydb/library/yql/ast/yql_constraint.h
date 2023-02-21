@@ -309,7 +309,7 @@ public:
     static void UniqueMerge(TMapType& output, TMapType&& input);
     static TMapType ExtractField(const TMapType& mapping, const std::string_view& field);
 
-    static const TMainConstraint* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TMainConstraint* original);
+    static const TMainConstraint* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TMainConstraint* original, const std::string_view& field = {});
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
 private:
@@ -354,6 +354,8 @@ public:
 
     const TMapType& GetColumnMapping() const;
     TReverseMapType GetReverseMapping() const;
+
+    TMapType GetMappingForField(const std::string_view& field) const;
 
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;

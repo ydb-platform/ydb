@@ -731,6 +731,8 @@ TUniqueConstraintNodeBase<Distinct>::MakeCommon(const TUniqueConstraintNodeBase*
 
 template<bool Distinct>
 bool TUniqueConstraintNodeBase<Distinct>::IsApplicableToType(const TTypeAnnotationNode& type) const {
+    if (ETypeAnnotationKind::Dict == type.GetKind())
+        return true; // TODO: check for dict.
     const auto& itemType = GetSeqItemType(type);
     return std::all_of(Sets_.cbegin(), Sets_.cend(), [&itemType](const TSetType& set) {
         return std::all_of(set.cbegin(), set.cend(), std::bind(&GetSubTypeByPath, std::placeholders::_1, std::cref(itemType)));
@@ -1035,7 +1037,7 @@ TPartOfConstraintNode<TOriginalConstraintNode>::ExtractField(const TMapType& map
 
 template<class TOriginalConstraintNode>
 const TOriginalConstraintNode*
-TPartOfConstraintNode<TOriginalConstraintNode>::MakeComplete(TExprContext& ctx, const TMapType& mapping, const TOriginalConstraintNode* original) {
+TPartOfConstraintNode<TOriginalConstraintNode>::MakeComplete(TExprContext& ctx, const TMapType& mapping, const TOriginalConstraintNode* original, const std::string_view& field) {
     if (const auto it = mapping.find(original); mapping.cend() != it) {
         TReversePartType reverseMap;
         reverseMap.reserve(it->second.size());
@@ -1044,7 +1046,10 @@ TPartOfConstraintNode<TOriginalConstraintNode>::MakeComplete(TExprContext& ctx, 
 
         const auto rename = [&](const TPathType& path) {
             const auto& set = reverseMap[path];
-            return std::vector<TPathType>(set.cbegin(), set.cend());
+            std::vector<TPathType> out(set.cbegin(), set.cend());
+            if (!field.empty())
+                std::for_each(out.begin(), out.end(), [&field](TPathType& path) { path.emplace_front(field); });
+            return out;
         };
 
         return it->first->RenameFields(ctx, rename);
@@ -1055,6 +1060,9 @@ TPartOfConstraintNode<TOriginalConstraintNode>::MakeComplete(TExprContext& ctx, 
 
 template<class TOriginalConstraintNode>
 bool TPartOfConstraintNode<TOriginalConstraintNode>::IsApplicableToType(const TTypeAnnotationNode& type) const {
+    if (ETypeAnnotationKind::Dict == type.GetKind())
+        return true; // TODO: check for dict.
+
     const auto itemType = GetSeqItemType(&type);
     const auto& actualType = itemType ? *itemType : type;
     return std::all_of(Mapping_.cbegin(), Mapping_.cend(), [&actualType](const typename TMapType::value_type& pair) {
@@ -1302,6 +1310,20 @@ const TPassthroughConstraintNode* TPassthroughConstraintNode::MakeCommon(const T
 
 const TPassthroughConstraintNode::TMapType& TPassthroughConstraintNode::GetColumnMapping() const {
     return Mapping_;
+}
+
+TPassthroughConstraintNode::TMapType TPassthroughConstraintNode::GetMappingForField(const std::string_view& field) const {
+    TMapType mapping(Mapping_.size());
+    for (const auto& map : Mapping_) {
+        TPartType part;
+        part.reserve(map.second.size());
+        std::transform(map.second.cbegin(), map.second.cend(), std::back_inserter(part), [&field](TPartType::value_type item) {
+            item.first.emplace_front(field);
+            return item;
+        });
+        mapping.emplace(map.first ? map.first : this, std::move(part));
+    }
+    return mapping;
 }
 
 TPassthroughConstraintNode::TReverseMapType TPassthroughConstraintNode::GetReverseMapping() const {

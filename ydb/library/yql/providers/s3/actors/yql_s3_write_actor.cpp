@@ -367,14 +367,18 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
-        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeaders(RequestId), xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, SentSize, std::placeholders::_1), false, RetryPolicy);
+        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeaders(RequestId, "application/xml"sv), xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, SentSize, std::placeholders::_1), false, RetryPolicy);
     }
 
-    IHTTPGateway::THeaders MakeHeaders(const TString& requestId) const {
-        if (const auto& token = CredProvider->GetAuthInfo(); token.empty())
-            return IHTTPGateway::THeaders{TString{"X-Request-ID:"} += requestId};
-        else
-            return IHTTPGateway::THeaders{TString("X-YaCloud-SubjectToken:") += token, TString{"X-Request-ID:"} += requestId};
+    IHTTPGateway::THeaders MakeHeaders(const TString& requestId, std::string_view contentType = "") const {
+        auto headers = IHTTPGateway::THeaders{ TString{"X-Request-ID:"} += requestId };
+        if (const auto& token = CredProvider->GetAuthInfo(); !token.empty()) {
+            headers.push_back(TString("X-YaCloud-SubjectToken:") += token);
+        }
+        if (!contentType.empty()) {
+            headers.push_back(TString("Content-Type:") += contentType);
+        }
+        return headers;
     }
 
     size_t InFlight = 0ULL;

@@ -14,6 +14,7 @@ enum ESimpleCounters {
     COUNTER_MODE_WRITE = 0 [(CounterOpts) = {Name: "ModeWrite"}];
     COUNTER_MODE_READ_VALIDATE = 1 [(CounterOpts) = {Name: "ModeReadValidate"}];
     COUNTER_MODE_STATE_SERVER_CONNECT = 2 [(CounterOpts) = {Name: "StateServerConnect"}];
+    COUNTER_MODE_INITIAL = 3 [(CounterOpts) = {Name: "Initial"}];
 }
 
 enum EPercentileCounters {

@@ -746,7 +746,7 @@ private:
             item.SetFlags(affectedFlags);
         }
 
-        ui64 sizeLimit = RequestControls.PerRequestDataSizeLimit;
+        ui64 sizeLimit = Request.PerRequestDataSizeLimit;
         if (Request.TotalReadSizeLimitBytes > 0) {
             sizeLimit = sizeLimit
                 ? std::min(sizeLimit, Request.TotalReadSizeLimitBytes)
@@ -1450,7 +1450,6 @@ private:
 
         NWilson::TSpan prepareTasksSpan(TWilsonKqp::DataExecuterPrepateTasks, ExecuterStateSpan.GetTraceId(), "PrepateTasks", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
-        RequestControls.Reqister(TlsActivationContext->AsActorContext());
 
         size_t readActors = 0;
         ReadOnlyTx = !Request.TopicOperations.HasOperations();
@@ -1655,7 +1654,7 @@ private:
         }
 
         ui32 shardsLimit = Request.MaxAffectedShards;
-        if (i64 msc = (i64) RequestControls.MaxShardCount; msc > 0) {
+        if (i64 msc = (i64) Request.MaxShardCount; msc > 0) {
             shardsLimit = std::min(shardsLimit, (ui32) msc);
         }
         size_t shards = datashardTasks.size() + remoteComputeTasks.size();
@@ -2298,7 +2297,6 @@ private:
 
     bool HasStreamLookup = false;
 
-    NTxProxy::TRequestControls RequestControls;
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;
     THashMap<ui64, TShardState> TopicTabletStates;

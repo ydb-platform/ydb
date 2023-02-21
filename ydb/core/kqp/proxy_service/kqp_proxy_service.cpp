@@ -482,37 +482,38 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        auto& event = ev->Get()->Record;
-        auto& request = *event.MutableRequest();
-        TString traceId = event.GetTraceId();
+        const TString& database = ev->Get()->GetDatabase();
+        const TString& traceId = ev->Get()->GetTraceId();
+        const auto queryType = ev->Get()->GetType();
+        const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
-        if (request.GetSessionId().empty()) {
+        if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                request.GetDatabase(), false, result))
+                database, false, result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
             }
 
-            request.SetSessionId(result.Value->SessionId);
+            ev->Get()->SetSessionId(result.Value->SessionId);
         }
 
-        TString sessionId = request.GetSessionId();
+        const TString& sessionId = ev->Get()->GetSessionId();
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         if (!dbCounters) {
-            dbCounters = Counters->GetDbCounters(request.GetDatabase());
+            dbCounters = Counters->GetDbCounters(database);
         }
 
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
         Counters->ReportQueryRequest(dbCounters, ev->Get()->GetRequestSize(), ev->Get()->GetParametersSize(), ev->Get()->GetQuerySize());
-        Counters->ReportQueryAction(dbCounters, request.GetAction());
-        Counters->ReportQueryType(dbCounters, request.GetType());
+        Counters->ReportQueryAction(dbCounters, queryAction);
+        Counters->ReportQueryType(dbCounters, queryType);
 
         auto queryLimitBytes = TableServiceConfig.GetQueryLimitBytes();
-        if (queryLimitBytes && IsSqlQuery(request.GetType()) && ev->Get()->GetQuerySize() > queryLimitBytes) {
+        if (queryLimitBytes && IsSqlQuery(queryType) && ev->Get()->GetQuerySize() > queryLimitBytes) {
             TString error = TStringBuilder() << "Query text size exceeds limit ("
                 << ev->Get()->GetQuerySize() << "b > " << queryLimitBytes << "b)";
             ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
@@ -527,26 +528,12 @@ public:
             return;
         }
 
-        if (request.HasTxControl() && request.GetTxControl().has_begin_tx()) {
-            switch (request.GetTxControl().begin_tx().tx_mode_case()) {
-                case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
-                    if (!AppData()->FeatureFlags.GetEnableMvccSnapshotReads()) {
-                        ReplyProcessError(Ydb::StatusIds::BAD_REQUEST,
-                            "Snapshot reads not supported in current database", requestId);
-                        return;
-                    }
-
-                default:
-                    break;
-            }
-        }
-
         TActorId targetId;
         if (sessionInfo) {
             targetId = sessionInfo->WorkerId;
             LocalSessions->StopIdleCheck(sessionInfo);
         } else {
-            targetId = TryGetSessionTargetActor(request.GetSessionId(), requestInfo, requestId);
+            targetId = TryGetSessionTargetActor(sessionId, requestInfo, requestId);
             if (!targetId) {
                 return;
             }
@@ -556,10 +543,12 @@ public:
         // because it is much better to give detailed error message rather than generic timeout.
         // For example, it helps to avoid race in event order when worker and proxy recieve timeout at the same moment.
         // If worker located in the different datacenter we should better substract some RTT estimate, but at this point it's not done.
-        auto timeoutMs = GetQueryTimeout(request.GetType(), request.GetTimeoutMs(), TableServiceConfig) + DEFAULT_EXTRA_TIMEOUT_WAIT;
+        auto timeout = ev->Get()->GetOperationTimeout();
+        auto timeoutMs = GetQueryTimeout(queryType, timeout.MilliSeconds(), TableServiceConfig) + DEFAULT_EXTRA_TIMEOUT_WAIT;
         StartQueryTimeout(requestId, timeoutMs);
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
-        KQP_PROXY_LOG_D(TKqpRequestInfo(traceId, sessionId) << "Sent request to target, requestId: " << requestId << ", targetId: " << targetId);
+        KQP_PROXY_LOG_D("Sent request to target, requestId: " << requestId
+            << ", targetId: " << targetId << ", sessionId: " << sessionId);
     }
 
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {

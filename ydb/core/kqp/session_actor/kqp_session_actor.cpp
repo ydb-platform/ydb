@@ -103,16 +103,12 @@ struct TKqpQueryState {
     TDuration CpuTime;
     std::optional<NCpuTime::TCpuTimer> CurrentTimer;
 
-    const NKikimrKqp::TQueryRequest& RequestProto() const {
-        return RequestEv->Record.GetRequest();
-    }
-
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
     }
 
     bool GetKeepSession() const {
-        return RequestProto().GetKeepSession();
+        return RequestEv->GetKeepSession();
     }
 
     const TString& GetQuery() const {
@@ -137,11 +133,13 @@ struct TKqpQueryState {
 
     void SetQueryDeadlines(const NKikimrConfig::TTableServiceConfig& service) {
         auto now = TAppData::TimeProvider->Now();
-        if (RequestProto().GetCancelAfterMs()) {
-            QueryDeadlines.CancelAt = now + TDuration::MilliSeconds(RequestProto().GetCancelAfterMs());
+        auto cancelAfter = RequestEv->GetCancelAfter();
+        auto timeout = RequestEv->GetOperationTimeout();
+        if (cancelAfter.MilliSeconds() > 0) {
+            QueryDeadlines.CancelAt = now + cancelAfter;
         }
 
-        auto timeoutMs = GetQueryTimeout(GetType(), RequestProto().GetTimeoutMs(), service);
+        auto timeoutMs = GetQueryTimeout(GetType(), timeout.MilliSeconds(), service);
         QueryDeadlines.TimeoutAt = now + timeoutMs;
     }
 
@@ -149,12 +147,12 @@ struct TKqpQueryState {
         return RequestEv->HasTopicOperations();
     }
 
-    const ::Ydb::Table::QueryCachePolicy& GetQueryCachePolicy() const {
-        return RequestEv->GetQueryCachePolicy();
+    bool GetQueryKeepInCache() const {
+        return RequestEv->GetQueryKeepInCache();
     }
 
     const TString& GetDatabase() const {
-        return RequestProto().GetDatabase();
+        return RequestEv->GetDatabase();
     }
 
     TString ExtractQueryText() const {
@@ -164,11 +162,11 @@ struct TKqpQueryState {
             }
             return {};
         }
-        return RequestProto().GetQuery();
+        return RequestEv->GetQuery();
     }
 
     const ::NKikimrKqp::TTopicOperations& GetTopicOperations() const {
-        return RequestProto().GetTopicOperations();
+        return RequestEv->GetTopicOperations();
     }
 
     bool NeedPersistentSnapshot() const {
@@ -196,15 +194,16 @@ struct TKqpQueryState {
     }
 
     Ydb::Table::QueryStatsCollection::Mode GetStatsMode() const {
-        if (!RequestProto().HasCollectStats()) {
+        if (!RequestEv->HasCollectStats()) {
             return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
         }
 
-        if (RequestProto().GetCollectStats() == Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED) {
+        auto cStats = RequestEv->GetCollectStats();
+        if (cStats == Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED) {
             return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
         }
 
-        return RequestProto().GetCollectStats();
+        return cStats;
     }
 
     bool CollectStatsDefined() const {
@@ -212,7 +211,7 @@ struct TKqpQueryState {
     }
 
     bool HasPreparedQuery() const {
-        return RequestProto().HasPreparedQuery();
+        return RequestEv->HasPreparedQuery();
     }
 
     bool IsStreamResult() const {
@@ -302,6 +301,7 @@ public:
 
         Config->FeatureFlags = AppData()->FeatureFlags;
 
+        RequestControls.Reqister(TlsActivationContext->AsActorContext());
         Become(&TKqpSessionActor::ReadyState);
     }
 
@@ -363,6 +363,8 @@ public:
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
         if (!ConvertParameters())
             return;
+
+        QueryState->RequestEv->PrepareRemote();
 
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
@@ -461,9 +463,8 @@ public:
 
     void HandleReady(TEvKqp::TEvQueryRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         ui64 proxyRequestId = ev->Cookie;
-        auto& event = ev->Get()->Record;
-        YQL_ENSURE(event.GetRequest().GetSessionId() == SessionId,
-                "Invalid session, expected: " << SessionId << ", got: " << event.GetRequest().GetSessionId());
+        YQL_ENSURE(ev->Get()->GetSessionId() == SessionId,
+                "Invalid session, expected: " << SessionId << ", got: " << ev->Get()->GetSessionId());
 
         if (ev->Get()->HasYdbStatus() && ev->Get()->GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
@@ -613,7 +614,7 @@ public:
         switch (QueryState->GetAction()) {
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
                 query = TKqpQueryId(Settings.Cluster, Settings.Database, QueryState->GetQuery(), QueryState->GetType());
-                keepInCache = QueryState->GetQueryCachePolicy().keep_in_cache() && query->IsSql();
+                keepInCache = QueryState->GetQueryKeepInCache() && query->IsSql();
                 break;
 
             case NKikimrKqp::QUERY_ACTION_PREPARE:
@@ -623,7 +624,7 @@ public:
 
             case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
                 uid = QueryState->GetPreparedQuery();
-                keepInCache = QueryState->GetQueryCachePolicy().keep_in_cache();
+                keepInCache = QueryState->GetQueryKeepInCache();
                 break;
 
             default:
@@ -1282,6 +1283,8 @@ public:
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
         }
+        request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
+        request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
@@ -1603,7 +1606,7 @@ public:
                 break;
 
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
-                replyQueryParameters = replyQueryId = QueryState->GetQueryCachePolicy().keep_in_cache();
+                replyQueryParameters = replyQueryId = QueryState->GetQueryKeepInCache();
                 break;
 
             case NKikimrKqp::QUERY_ACTION_PARSE:
@@ -2290,6 +2293,7 @@ private:
     std::unique_ptr<TEvKqp::TEvQueryResponse> QueryResponse;
     std::optional<TSessionShutdownState> ShutdownState;
     TULIDGenerator UlidGen;
+    NTxProxy::TRequestControls RequestControls;
 };
 
 } // namespace

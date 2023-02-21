@@ -256,7 +256,7 @@ struct TEvKqp {
     struct TEvQueryRequest : public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
     public:
         TEvQueryRequest(
-            std::shared_ptr<NGRpcService::IRequestCtxMtSafe> ctx,
+            const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& ctx,
             const TString& sessionId,
             TActorId actorId,
             TString&& yqlText,
@@ -267,22 +267,8 @@ struct TEvKqp {
             const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>* ydbParameters,
             const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
             const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
-            const ::Ydb::Operations::OperationParams* operationParams)
-            : RequestCtx(ctx)
-            , SessionId(sessionId)
-            , YqlText(std::move(yqlText))
-            , QueryId(std::move(queryId))
-            , QueryAction(queryAction)
-            , QueryType(queryType)
-            , TxControl(txControl)
-            , YdbParameters(ydbParameters)
-            , CollectStats(collectStats)
-            , QueryCachePolicy(queryCachePolicy)
-            , OperationParams(operationParams)
-        {
-            ActorIdToProto(actorId, Record.MutableCancelationActor());
-        }
-
+            const ::Ydb::Operations::OperationParams* operationParams,
+            bool keepSession = false);
 
         TEvQueryRequest() = default;
 
@@ -290,77 +276,70 @@ struct TEvKqp {
             return true;
         }
 
-        // Same as TEventPBBase but without Rope (but can contain Payload and will lose some data after all)
         TEventSerializationInfo CreateSerializationInfo() const override { return {}; }
 
-        bool HasYdbStatus() const {
-            if (RequestCtx) {
-                return false;
-            }
+        const TString& GetDatabase() const {
+            return RequestCtx ? Database : Record.GetRequest().GetDatabase();
+        }
 
-            return Record.HasYdbStatus();
+        bool HasYdbStatus() const {
+            return RequestCtx ? false : Record.HasYdbStatus();
+        }
+
+        const ::NKikimrKqp::TTopicOperations& GetTopicOperations() const {
+            return Record.GetRequest().GetTopicOperations();
         }
 
         bool HasTopicOperations() const {
             return Record.GetRequest().HasTopicOperations();
         }
 
+        bool GetKeepSession() const {
+            return RequestCtx ? KeepSession : Record.GetRequest().GetKeepSession();
+        }
+
+        TDuration GetCancelAfter() const {
+            return RequestCtx ? CancelAfter : TDuration::MilliSeconds(Record.GetRequest().GetCancelAfterMs());
+        }
+
+        TDuration GetOperationTimeout() const {
+            return RequestCtx ? OperationTimeout : TDuration::MilliSeconds(Record.GetRequest().GetTimeoutMs());
+        }
+
         bool HasAction() const {
+            return RequestCtx ? true : Record.GetRequest().HasAction();
+        }
+
+        void SetSessionId(const TString& sessionId) {
             if (RequestCtx) {
-                // passed directly to constructor.
-                return true;
+                SessionId = sessionId;
             } else {
-                return Record.GetRequest().HasAction();
+                Record.MutableRequest()->SetSessionId(sessionId);
             }
         }
 
         const TString& GetSessionId() const {
-            if (RequestCtx) {
-                return SessionId;
-            }
-
-            return Record.GetRequest().GetSessionId();
+            return RequestCtx ? SessionId : Record.GetRequest().GetSessionId();
         }
 
         NKikimrKqp::EQueryAction GetAction() const {
-            if (RequestCtx) {
-                return QueryAction;
-            }
-
-            return Record.GetRequest().GetAction();
-
+            return RequestCtx ? QueryAction : Record.GetRequest().GetAction();
         }
 
         NKikimrKqp::EQueryType GetType() const {
-            if (RequestCtx) {
-                return QueryType;
-            }
-
-            return Record.GetRequest().GetType();
+            return RequestCtx ? QueryType : Record.GetRequest().GetType();
         }
 
         bool HasPreparedQuery() const {
-            if (!QueryId.empty()) {
-                return true;
-            }
-
-            return Record.GetRequest().HasPreparedQuery();
+            return RequestCtx ? QueryId.size() > 0 : Record.GetRequest().HasPreparedQuery();
         }
 
         const TString& GetPreparedQuery() const {
-            if (!QueryId.empty()) {
-                return QueryId;
-            }
-
-            return Record.GetRequest().GetPreparedQuery();
+            return RequestCtx ? QueryId : Record.GetRequest().GetPreparedQuery();
         }
 
         const TString& GetQuery() const {
-            if (!YqlText.empty()) {
-                return YqlText;
-            }
-
-            return Record.GetRequest().GetQuery();
+            return RequestCtx ? YqlText : Record.GetRequest().GetQuery();
         }
 
         const ::NKikimrMiniKQL::TParams& GetParameters() const {
@@ -368,35 +347,29 @@ struct TEvKqp {
         }
 
         const ::Ydb::Table::TransactionControl& GetTxControl() const {
-            if (TxControl) {
-                return *TxControl;
-            }
-
-            return Record.GetRequest().GetTxControl();
+            return RequestCtx ? *TxControl : Record.GetRequest().GetTxControl();
         }
 
         bool GetUsePublicResponseDataFormat() const {
-            if (RequestCtx) {
-                return true;
-            }
-
-            return Record.GetRequest().GetUsePublicResponseDataFormat();
+            return RequestCtx ? true : Record.GetRequest().GetUsePublicResponseDataFormat();
         }
 
-        const ::Ydb::Table::QueryCachePolicy& GetQueryCachePolicy() const {
-            if (QueryCachePolicy) {
-                return *QueryCachePolicy;
+        bool GetQueryKeepInCache() const {
+            if (RequestCtx) {
+                if (QueryCachePolicy != nullptr) {
+                    return QueryCachePolicy->keep_in_cache();
+                }
+                return false;
             }
-
-            return Record.GetRequest().GetQueryCachePolicy();
+            return Record.GetRequest().GetQueryCachePolicy().keep_in_cache();
         }
 
         bool HasTxControl() const {
-            if (TxControl) {
-                return true;
-            }
+            return RequestCtx ? TxControl != nullptr : Record.GetRequest().HasTxControl();
+        }
 
-            return Record.GetRequest().HasTxControl();
+        bool HasCollectStats() const {
+            return RequestCtx ? true : Record.GetRequest().HasCollectStats();
         }
 
         TActorId GetRequestActorId() const {
@@ -405,9 +378,10 @@ struct TEvKqp {
 
         const TString& GetTraceId() const {
             if (RequestCtx) {
-                if (auto traceId = RequestCtx->GetTraceId()) {
-                    return traceId.GetRef();
+                if (!TraceId) {
+                    TraceId = RequestCtx->GetTraceId().GetOrElse("");
                 }
+                return TraceId;
             }
 
             return Record.GetTraceId();
@@ -415,9 +389,10 @@ struct TEvKqp {
 
         const TString& GetRequestType() const {
             if (RequestCtx) {
-                if (auto requestType = RequestCtx->GetRequestType()) {
-                    return requestType.GetRef();
+                if (!RequestType) {
+                    RequestType = RequestCtx->GetRequestType().GetOrElse("");
                 }
+                return RequestType;
             }
 
             return Record.GetRequestType();
@@ -460,7 +435,7 @@ struct TEvKqp {
         }
 
         ui64 GetQuerySize() const {
-            return Record.GetRequest().GetQuery().size();
+            return RequestCtx ? YqlText.size() : Record.GetRequest().GetQuery().size();
         }
 
         ui64 GetParametersSize() const {
@@ -469,7 +444,7 @@ struct TEvKqp {
             }
 
             ParametersSize += Record.GetRequest().GetParameters().ByteSizeLong();
-            for(const auto& [name, param]: Record.GetRequest().GetYdbParameters()) {
+            for(const auto& [name, param]: GetYdbParameters()) {
                 ParametersSize += name.size();
                 ParametersSize += param.ByteSizeLong();
             }
@@ -512,6 +487,9 @@ struct TEvKqp {
     private:
         mutable ui64 ParametersSize = 0;
         mutable std::shared_ptr<NGRpcService::IRequestCtxMtSafe> RequestCtx;
+        mutable TString TraceId;
+        mutable TString RequestType;
+        TString Database;
         TString SessionId;
         TString YqlText;
         TString QueryId;
@@ -522,6 +500,9 @@ struct TEvKqp {
         const ::Ydb::Table::QueryStatsCollection::Mode CollectStats = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
         const ::Ydb::Table::QueryCachePolicy* QueryCachePolicy = nullptr;
         const ::Ydb::Operations::OperationParams* OperationParams = nullptr;
+        bool KeepSession = false;
+        TDuration OperationTimeout;
+        TDuration CancelAfter;
     };
 
     struct TEvCloseSessionRequest : public TEventPB<TEvCloseSessionRequest,

@@ -108,6 +108,8 @@ public:
             : TxAlloc(txAlloc)
         {}
 
+        NKikimr::TControlWrapper PerRequestDataSizeLimit;
+        NKikimr::TControlWrapper MaxShardCount;
         TVector<TPhysicalTxData> Transactions;
         TMap<ui64, TVector<NKikimrTxDataShard::TLock>> DataShardLocks;
         NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;

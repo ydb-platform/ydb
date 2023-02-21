@@ -5,14 +5,48 @@
 
 namespace NKikimr::NKqp {
 
+TEvKqp::TEvQueryRequest::TEvQueryRequest(
+    const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& ctx,
+    const TString& sessionId,
+    TActorId actorId,
+    TString&& yqlText,
+    TString&& queryId,
+    NKikimrKqp::EQueryAction queryAction,
+    NKikimrKqp::EQueryType queryType,
+    const ::Ydb::Table::TransactionControl* txControl,
+    const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>* ydbParameters,
+    const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
+    const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
+    const ::Ydb::Operations::OperationParams* operationParams,
+    bool keepSession)
+    : RequestCtx(ctx)
+    , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
+    , SessionId(sessionId)
+    , YqlText(std::move(yqlText))
+    , QueryId(std::move(queryId))
+    , QueryAction(queryAction)
+    , QueryType(queryType)
+    , TxControl(txControl)
+    , YdbParameters(ydbParameters)
+    , CollectStats(collectStats)
+    , QueryCachePolicy(queryCachePolicy)
+    , OperationParams(operationParams)
+    , KeepSession(keepSession)
+{
+    if (OperationParams) {
+        OperationTimeout = GetDuration(OperationParams->operation_timeout());
+        CancelAfter = GetDuration(OperationParams->cancel_after());
+    }
+    ActorIdToProto(actorId, Record.MutableCancelationActor());
+}
+
 void TEvKqp::TEvQueryRequest::PrepareRemote() const {
     if (RequestCtx) {
         if (RequestCtx->GetInternalToken()) {
             Record.SetUserToken(RequestCtx->GetInternalToken());
         }
 
-        Record.MutableRequest()->SetDatabase(
-            CanonizePath(RequestCtx->GetDatabaseName().GetOrElse("")));
+        Record.MutableRequest()->SetDatabase(Database);
 
         if (auto traceId = RequestCtx->GetTraceId()) {
             Record.SetTraceId(traceId.GetRef());
@@ -50,11 +84,8 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);
         if (OperationParams) {
-            const auto& operationTimeout = GetDuration(OperationParams->operation_timeout());
-            const auto& cancelAfter = GetDuration(OperationParams->cancel_after());
-
-            Record.MutableRequest()->SetCancelAfterMs(cancelAfter.MilliSeconds());
-            Record.MutableRequest()->SetTimeoutMs(operationTimeout.MilliSeconds());
+            Record.MutableRequest()->SetCancelAfterMs(CancelAfter.MilliSeconds());
+            Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());
         }
 
         RequestCtx.reset();

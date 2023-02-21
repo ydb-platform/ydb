@@ -1200,9 +1200,8 @@ message TTableServiceConfig {
         optional uint32 DSBaseSortScanThreads = 32 [default = 16];
         optional uint32 DSBaseJoinScanThreads = 33 [default = 16];
 
-        optional double AggregationHardThreadsKff = 34 [default = 2];
-        optional double AggregationSortThreadsKff = 35 [default = 1];
-        optional double AggregationJoinThreadsKff = 36 [default = 1];
+        optional uint32 AggregationComputeThreads = 37;
+
     }
 
     message TExecuterRetriesConfig {

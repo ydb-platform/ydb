@@ -33,8 +33,17 @@ message TProgram {
         bool HasMapJoin = 1;
         bool HasSort = 2;
         bool HasUdf = 3;
-        bool HasAggregation = 4;
+        bool HasStateAggregation = 4;
         bool HasFilter = 5;
+        uint32 StageLevel = 6;
+        double LevelDataPrediction = 7;
+        bool HasFinalAggregation = 8;
+        bool HasTop = 9;
+        uint32 GroupByKeysCount = 10;
+        bool HasRangeScan = 11;
+        bool HasLookup = 12;
+        double InputDataPrediction = 13;
+        double OutputDataPrediction = 14;
     }
 
     uint32 RuntimeVersion = 1;

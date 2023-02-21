@@ -43,6 +43,7 @@ public:
     ui32 GetCurrentRetryDelay(ui32 requestId);
 private:
     void PrepareToProcess();
+    TString GetEstimationsInfo() const;
 
     void RunLocal(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot);
 

@@ -172,7 +172,8 @@ void TKqpPlanner::ProcessTasksForScanExecuter() {
 
         LOG_E("Not enough resources to execute query locally and no information about other nodes");
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
-            "Not enough resources to execute query locally and no information about other nodes (estimation: " + ToString(LocalRunMemoryEst) + ")");
+            "Not enough resources to execute query locally and no information about other nodes (estimation: "
+            + ToString(LocalRunMemoryEst) + ";" + GetEstimationsInfo() + ")");
 
         TlsActivationContext->Send(std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release()));
         return;
@@ -237,6 +238,17 @@ void TKqpPlanner::ProcessTasksForScanExecuter() {
     }
 }
 
+TString TKqpPlanner::GetEstimationsInfo() const {
+    TStringStream ss;
+    ss << "ComputeTasks:" << ComputeTasks.size() << ";NodeTasks:";
+    if (auto it = MainTasksPerNode.find(ExecuterId.NodeId()); it != MainTasksPerNode.end()) {
+        ss << it->second.size() << ";";
+    } else {
+        ss << "0;";
+    }
+    return ss.Str();
+}
+
 void TKqpPlanner::PrepareToProcess() {
     auto rmConfig = GetKqpResourceManager()->GetConfig();
 
@@ -249,12 +261,12 @@ void TKqpPlanner::PrepareToProcess() {
     LocalRunMemoryEst = 0;
 
     for (size_t i = 0; i < ComputeTasks.size(); ++i) {
-        EstimateTaskResources(ComputeTasks[i], rmConfig, ResourceEstimations[i]);
+        EstimateTaskResources(ComputeTasks[i], rmConfig, ResourceEstimations[i], ComputeTasks.size());
         LocalRunMemoryEst += ResourceEstimations[i].TotalMemoryLimit;
     }
     if (auto it = MainTasksPerNode.find(ExecuterId.NodeId()); it != MainTasksPerNode.end()) {
         for (size_t i = 0; i < it->second.size(); ++i) {
-            EstimateTaskResources(it->second[i], rmConfig, ResourceEstimations[i + ComputeTasks.size()]);
+            EstimateTaskResources(it->second[i], rmConfig, ResourceEstimations[i + ComputeTasks.size()], it->second.size());
             LocalRunMemoryEst += ResourceEstimations[i + ComputeTasks.size()].TotalMemoryLimit;
         }
     }

@@ -270,7 +270,11 @@ void KqpNode::CommonCase() {
     TActorId sender1 = Runtime->AllocateEdgeActor();
     TActorId sender2 = Runtime->AllocateEdgeActor();
 
-    const ui64 taskSize = 1'000 + 2 * 10;
+    const ui64 additionalSize = 2 * 10;
+    const ui64 fullMkqlLimit = 1'000;
+//    const ui64 taskSize = fullMkqlLimit + additionalSize;
+    const ui64 tasksSize12 = fullMkqlLimit + 2 * additionalSize;
+    const ui64 tasksSize22 = 2 * tasksSize12; //for 2 requests
 
     // first request
     SendStartTasksRequest(sender1, /* txId */ 1, /* taskIds */ {1, 2});
@@ -292,9 +296,9 @@ void KqpNode::CommonCase() {
         UNIT_ASSERT_VALUES_EQUAL(10'000, memoryLimits.MkqlHeavyProgramMemoryLimit);
 
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), 2 * taskSize);
+        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), tasksSize12);
 
-        AssertResourceBrokerSensors(0, 2 * taskSize, 0, 0, 2);
+        AssertResourceBrokerSensors(0, tasksSize12, 0, 0, 2);
     }
 
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
@@ -319,7 +323,7 @@ void KqpNode::CommonCase() {
         UNIT_ASSERT_VALUES_EQUAL(98, payload.GetExecutionUnits());
         UNIT_ASSERT_VALUES_EQUAL(1, payload.GetMemory().size());
         UNIT_ASSERT_VALUES_EQUAL((ui32) NRm::EKqpMemoryPool::ScanQuery, payload.GetMemory()[0].GetPool());
-        UNIT_ASSERT_VALUES_EQUAL(cfg.GetResourceManager().GetQueryMemoryLimit() - 2 * taskSize,
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetResourceManager().GetQueryMemoryLimit() - tasksSize12,
                                  payload.GetMemory()[0].GetAvailable());
     }
 
@@ -335,7 +339,7 @@ void KqpNode::CommonCase() {
             UNIT_ASSERT_EQUAL(NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, notStartedTask.GetReason());
         }
 
-        AssertResourceBrokerSensors(0, 2 * taskSize, 0, 0, 2);
+        AssertResourceBrokerSensors(0, tasksSize12, 0, 0, 2);
     }
 
     // second request
@@ -355,9 +359,9 @@ void KqpNode::CommonCase() {
         UNIT_ASSERT(CompFactory->Task2Actor.contains(4));
 
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), 4 * taskSize);
+        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), tasksSize22);
 
-        AssertResourceBrokerSensors(0, 4 * taskSize, 0, 0, 4);
+        AssertResourceBrokerSensors(0, tasksSize22, 0, 0, 4);
     }
 
     // request extra resources for taskId 4
@@ -369,8 +373,8 @@ void KqpNode::CommonCase() {
         UNIT_ASSERT(allocated);
         DispatchKqpNodePostponedEvents(sender1);
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), 4 * taskSize + 100);
-        AssertResourceBrokerSensors(0, 4 * taskSize + 100, 0, 1, 4);
+        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), tasksSize22 + 100);
+        AssertResourceBrokerSensors(0, tasksSize22 + 100, 0, 1, 4);
     }
 
     // complete tasks
@@ -383,9 +387,10 @@ void KqpNode::CommonCase() {
         SendFinishTask(mockCA.ActorId, taskId < 3 ? 1 : 2, taskId);
         {
             UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), (i64) CompFactory->Task2Actor.size());
-            UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), (i64) (4 - taskId) * taskSize + extraMem);
+            const ui64 tasksMemMkql = fullMkqlLimit * (4 - taskId) / 2;
+            UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), (i64) (4 - taskId) * additionalSize + extraMem + tasksMemMkql);
 
-            AssertResourceBrokerSensors(0, (4 - taskId) * taskSize + extraMem, 0, 1 + taskId, 4 - taskId);
+            AssertResourceBrokerSensors(0, (4 - taskId) * additionalSize + extraMem + tasksMemMkql, 0, 1 + taskId, 4 - taskId);
         }
     }
 
@@ -399,7 +404,9 @@ void KqpNode::ExtraAllocation() {
 
     TActorId sender1 = Runtime->AllocateEdgeActor();
 
-    const ui64 taskSize = 1'000 + 2 * 10;
+    const ui64 mkqlLimit = 1'000;
+    const ui64 additionalSize = 2 * 10;
+    const ui64 taskSize2 = mkqlLimit + additionalSize * 2;
 
     SendStartTasksRequest(sender1, /* txId */ 1, /* taskIds */ {1, 2});
     Runtime->GrabEdgeEvent<TEvKqpNode::TEvStartKqpTasksResponse>(sender1);
@@ -415,8 +422,8 @@ void KqpNode::ExtraAllocation() {
         DispatchKqpNodePostponedEvents(sender1);
 
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), 2 * taskSize + 100);
-        AssertResourceBrokerSensors(0, 2 * taskSize + 100, 0, 1, 2);
+        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), taskSize2 + 100);
+        AssertResourceBrokerSensors(0, taskSize2 + 100, 0, 1, 2);
     }
 
     // too big request
@@ -428,10 +435,10 @@ void KqpNode::ExtraAllocation() {
         DispatchKqpNodePostponedEvents(sender1);
 
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), 2 * taskSize + 100);
+        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), taskSize2 + 100);
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmNotEnoughMemory->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmNotEnoughComputeActors->Val(), 0);
-        AssertResourceBrokerSensors(0, 2 * taskSize + 100, 0, 1, 2);
+        AssertResourceBrokerSensors(0, taskSize2 + 100, 0, 1, 2);
     }
 }
 
@@ -462,7 +469,9 @@ void KqpNode::NotEnoughMemory_Extra() {
 
     TActorId sender1 = Runtime->AllocateEdgeActor();
 
-    const ui64 taskSize = 1'000 + 2 * 10;
+    const ui64 mkqlLimit = 1'000;
+    const ui64 additionalSize = 2 * 10;
+    const ui64 taskSize2 = mkqlLimit + additionalSize * 2;
 
     // first request
     SendStartTasksRequest(sender1, /* txId */ (ui64)1, /* taskIds */ {1, 2});
@@ -484,9 +493,9 @@ void KqpNode::NotEnoughMemory_Extra() {
         UNIT_ASSERT_VALUES_EQUAL(10'000, memoryLimits.MkqlHeavyProgramMemoryLimit);
 
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), 2 * taskSize);
+        UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), taskSize2);
 
-        AssertResourceBrokerSensors(0, 2 * taskSize, 0, 0, 2);
+        AssertResourceBrokerSensors(0, taskSize2, 0, 0, 2);
     }
 
     {
@@ -500,11 +509,11 @@ void KqpNode::NotEnoughMemory_Extra() {
     DispatchKqpNodePostponedEvents(sender1);
 
     UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), 2 * taskSize);
+    UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmMemory->Val(), taskSize2);
     UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmNotEnoughMemory->Val(), 1);
     UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmNotEnoughComputeActors->Val(), 0);
 
-    AssertResourceBrokerSensors(0, 2 * taskSize, 0, 0, 2);
+    AssertResourceBrokerSensors(0, taskSize2, 0, 0, 2);
 }
 
 void KqpNode::NotEnoughComputeActors() {
@@ -532,7 +541,7 @@ void KqpNode::NotEnoughComputeActors() {
 void KqpNode::ResourceBrokerNotEnoughResources() {
     auto cfg = MakeKqpResourceManagerConfig();
     cfg.MutableResourceManager()->SetChannelBufferSize(6'000);
-    cfg.MutableResourceManager()->SetQueryMemoryLimit(100'000);
+    cfg.MutableResourceManager()->SetQueryMemoryLimit(49'000);
     CreateKqpNode(cfg);
 
     TActorId sender1 = Runtime->AllocateEdgeActor();
@@ -542,7 +551,7 @@ void KqpNode::ResourceBrokerNotEnoughResources() {
     {
         auto answer = Runtime->GrabEdgeEvent<TEvKqpNode::TEvStartKqpTasksResponse>(sender1);
         Y_UNUSED(answer);
-        AssertResourceBrokerSensors(0, 26'000, 0, 0, 2);
+        AssertResourceBrokerSensors(0, 2 * (6000 * 2 + 1000 / 2), 0, 0, 2);
     }
 
     SendStartTasksRequest(sender2, 2, {3, 4});
@@ -557,13 +566,13 @@ void KqpNode::ResourceBrokerNotEnoughResources() {
         }
     }
 
-    AssertResourceBrokerSensors(0, 26'000, 0, 1, 2);
+    AssertResourceBrokerSensors(0, 2 * (6000 * 2 + 1000 / 2), 0, 1, 2);
 }
 
 void KqpNode::ResourceBrokerNotEnoughResources_Extra() {
     auto cfg = MakeKqpResourceManagerConfig();
     cfg.MutableResourceManager()->SetChannelBufferSize(6'000);
-    cfg.MutableResourceManager()->SetQueryMemoryLimit(100'000);
+    cfg.MutableResourceManager()->SetQueryMemoryLimit(49'000);
     CreateKqpNode(cfg);
 
     TActorId sender1 = Runtime->AllocateEdgeActor();
@@ -572,18 +581,18 @@ void KqpNode::ResourceBrokerNotEnoughResources_Extra() {
     {
         auto answer = Runtime->GrabEdgeEvent<TEvKqpNode::TEvStartKqpTasksResponse>(sender1);
         Y_UNUSED(answer);
-        AssertResourceBrokerSensors(0, 26'000, 0, 0, 2);
+        AssertResourceBrokerSensors(0, 2 * (6000 * 2 + 1000 / 2), 0, 0, 2);
     }
 
     {
         NKikimr::TActorSystemStub stub;
 
         auto& task1ExtraAlloc = CompFactory->Task2Actor[1].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task1ExtraAlloc((ui64)1, 1, 26'000);
+        bool allocated = task1ExtraAlloc((ui64)1, 1, 2 * (6000 * 2 + 1000 / 2));
         UNIT_ASSERT(!allocated);
     }
 
-    AssertResourceBrokerSensors(0, 26'000, 0, 0, 2);
+    AssertResourceBrokerSensors(0, 2 * (6000 * 2 + 1000 / 2), 0, 0, 2);
 }
 
 void KqpNode::ExecuterLost() {

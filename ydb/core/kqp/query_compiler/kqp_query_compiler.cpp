@@ -1,4 +1,5 @@
 #include "kqp_query_compiler.h"
+#include "kqp_predictor.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/query_compiler/kqp_mkql_compiler.h>
@@ -523,7 +524,7 @@ public:
                 [](const TItemExprType* first, const TItemExprType* second) {
                     return first->GetName() < second->GetName();
                 });
-            inputsParams.erase(std::unique(inputsParams.begin(), inputsParams.end(),
+            inputsParams.erase(std::unique(inputsParams.begin(), inputsParams.end(), 
                 [](const TItemExprType* first, const TItemExprType* second) {
                     return first->GetName() == second->GetName();
                 }),
@@ -543,9 +544,12 @@ private:
     }
 
     void CompileStage(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx,
-        const TMap<ui64, ui32>& stagesMap, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+        const TMap<ui64, ui32>& stagesMap, TRequestPredictor& rPredictor, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
     {
         stageProto.SetIsEffectsStage(NOpt::IsKqpEffectsStage(stage));
+
+        TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
+        stagePredictor.Scan(stage.Program().Ptr());
 
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
             const auto& input = stage.Inputs().Item(inputIndex);
@@ -564,11 +568,6 @@ private:
             }
         }
 
-        bool hasSort = false;
-        bool hasMapJoin = false;
-        bool hasUdf = false;
-        bool hasFilter = false;
-        bool hasWideCombiner = false;
         VisitExpr(stage.Program().Ptr(), [&](const TExprNode::TPtr& exprNode) {
             TExprBase node(exprNode);
             if (auto maybeReadTable = node.Maybe<TKqpWideReadTable>()) {
@@ -652,20 +651,9 @@ private:
                 FillOlapProgram(readTableRanges.Process(), miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange());
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
-            } else if (node.Maybe<TCoSort>()) {
-                hasSort = true;
-            } else if (node.Maybe<TCoFilterBase>()) {
-                hasFilter = true;
-            } else if (node.Maybe<TCoWideCombiner>()) {
-                hasWideCombiner = true;
-            } else if (node.Maybe<TCoMapJoinCore>()) {
-                hasMapJoin = true;
-            } else if (node.Maybe<TCoUdf>()) {
-                hasUdf = true;
             } else {
                 YQL_ENSURE(!node.Maybe<TKqpReadTable>());
             }
-
             return true;
         });
 
@@ -695,11 +683,8 @@ private:
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         programProto.SetRaw(programBytecode);
-        programProto.MutableSettings()->SetHasMapJoin(hasMapJoin);
-        programProto.MutableSettings()->SetHasSort(hasSort);
-        programProto.MutableSettings()->SetHasUdf(hasUdf);
-        programProto.MutableSettings()->SetHasAggregation(hasWideCombiner);
-        programProto.MutableSettings()->SetHasFilter(hasFilter);
+
+        stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
 
         for (auto member : paramsType->GetItems()) {
             auto paramName = TString(member->GetName());
@@ -720,12 +705,17 @@ private:
         TMap<ui64, ui32> stagesMap;
         THashMap<TStringBuf, THashSet<TStringBuf>> tablesMap;
 
+        TRequestPredictor rPredictor;
         for (const auto& stage : tx.Stages()) {
             auto* protoStage = txProto.AddStages();
-            CompileStage(stage, *protoStage, ctx, stagesMap, tablesMap);
+            CompileStage(stage, *protoStage, ctx, stagesMap, rPredictor, tablesMap);
             hasEffectStage |= protoStage->GetIsEffectsStage();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
         }
+        for (auto&& i : *txProto.MutableStages()) {
+            i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
+        }
+        
 
         YQL_ENSURE(hasEffectStage == txSettings.WithEffects);
 

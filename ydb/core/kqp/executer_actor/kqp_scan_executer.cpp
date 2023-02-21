@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/query_compiler/kqp_predictor.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
@@ -209,25 +210,24 @@ private:
         }
     };
 
-    ui32 GetMaxTasksPerNodeEstimate(TStageInfo& stageInfo, const bool isOlapScan) const {
+    ui32 GetMaxTasksPerNodeEstimate(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /*nodeId*/) const {
         ui32 result = 0;
+        const auto& stage = GetStage(stageInfo);
         if (isOlapScan) {
             if (AggregationSettings.HasCSScanMinimalThreads()) {
                 result = AggregationSettings.GetCSScanMinimalThreads();
             } else {
-                std::optional<ui32> userPoolSize;
-                if (TlsActivationContext && TlsActivationContext->ActorSystem()) {
-                    userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount(AppData()->UserPoolId);
+                TStagePredictor predictor;
+                const ui32 threadsCount = TStagePredictor::GetUsableThreads();
+                if (!predictor.DeserializeFromKqpSettings(stage.GetProgram().GetSettings())) {
+                    ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "cannot parse program settings for data prediction";
+                    return threadsCount;
+                } else {
+                    return std::max<ui32>(1, predictor.CalcTasksOptimalCount(threadsCount, {}));
                 }
-                if (!userPoolSize) {
-                    ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
-                    userPoolSize = NSystemInfo::NumberOfCpus();
-                }
-                result = *userPoolSize;
             }
         } else {
             result = AggregationSettings.GetDSScanMinimalThreads();
-            const auto& stage = GetStage(stageInfo);
             if (stage.GetProgram().GetSettings().GetHasSort()) {
                 result = std::max(result, AggregationSettings.GetDSBaseSortScanThreads());
             }
@@ -238,19 +238,19 @@ private:
         return Max<ui32>(1, result);
     }
 
-    ui32 GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount) const {
-        ui32 result = Max<ui32>(1, previousTasksCount / 2);
-        const auto& stage = GetStage(stageInfo);
-        if (stage.GetProgram().GetSettings().GetHasAggregation() && !stage.GetProgram().GetSettings().GetHasFilter()) {
-            result *= AggregationSettings.GetAggregationHardThreadsKff();
+    ui32 GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount) const {
+        if (AggregationSettings.HasAggregationComputeThreads()) {
+            return std::max<ui32>(1, AggregationSettings.GetAggregationComputeThreads());
+        } else {
+            const auto& stage = GetStage(stageInfo);
+            TStagePredictor predictor;
+            if (!predictor.DeserializeFromKqpSettings(stage.GetProgram().GetSettings())) {
+                ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "cannot parse program settings for data prediction";
+                return std::max<ui32>(1, previousTasksCount * 0.75);
+            } else {
+                return predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), previousTasksCount / nodesCount) * nodesCount;
+            }
         }
-        if (stage.GetProgram().GetSettings().GetHasSort()) {
-            result *= AggregationSettings.GetAggregationSortThreadsKff();
-        }
-        if (stage.GetProgram().GetSettings().GetHasMapJoin()) {
-            result *= AggregationSettings.GetAggregationJoinThreadsKff();
-        }
-        return result;
     }
 
     TTask& AssignTaskToShard(
@@ -268,8 +268,7 @@ private:
 
         auto& tasks = nodeTasks[nodeId];
         auto& cnt = assignedShardsCount[nodeId];
-
-        const ui32 maxScansPerNode = GetMaxTasksPerNodeEstimate(stageInfo, isOlapScan);
+        const ui32 maxScansPerNode = GetMaxTasksPerNodeEstimate(stageInfo, isOlapScan, nodeId);
         if (cnt < maxScansPerNode) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.NodeId = nodeId;
@@ -286,7 +285,6 @@ private:
     void BuildScanTasks(TStageInfo& stageInfo) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
-
         auto& stage = GetStage(stageInfo);
 
         const auto& table = TableKeys.GetTable(stageInfo.Meta.TableId);
@@ -384,6 +382,8 @@ private:
         auto& stage = GetStage(stageInfo);
 
         ui32 partitionsCount = 1;
+        ui32 inputTasks = 0;
+        bool isShuffle = false;
         for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
             const auto& input = stage.GetInputs(inputIndex);
 
@@ -411,7 +411,8 @@ private:
 
             switch (input.GetTypeCase()) {
                 case NKqpProto::TKqpPhyConnection::kHashShuffle: {
-                    partitionsCount = Max<ui32>(1, GetMaxTasksAggregation(stageInfo, originStageInfo.Tasks.size()));
+                    inputTasks += originStageInfo.Tasks.size();
+                    isShuffle = true;
                     break;
                 }
 
@@ -423,6 +424,10 @@ private:
                 default:
                     break;
             }
+        }
+
+        if (isShuffle) {
+            partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, ShardsOnNode.size()));
         }
 
         for (ui32 i = 0; i < partitionsCount; ++i) {

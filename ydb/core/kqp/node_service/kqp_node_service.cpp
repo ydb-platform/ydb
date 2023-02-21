@@ -149,7 +149,7 @@ private:
 
         ui32 requestChannels = 0;
         for (auto& dqTask : *msg.MutableTasks()) {
-            auto estimation = EstimateTaskResources(dqTask, Config);
+            auto estimation = EstimateTaskResources(dqTask, Config, msg.GetTasks().size());
             LOG_D("Resource estimation complete"
                 << ", TxId: " << txId << ", task id: " << dqTask.GetId() << ", node id: " << SelfId().NodeId()
                 << ", estimated resources: " << estimation.ToString());

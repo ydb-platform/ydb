@@ -521,6 +521,22 @@ struct TDropExternalTableSettings {
     TString ExternalTable;
 };
 
+struct TCreateExternalDataSourceSettings {
+    TString ExternalDataSource;
+    TString SourceType;
+    TString Location;
+    TString Installation;
+    TString AuthMethod;
+};
+
+struct TAlterExternalDataSourceSettings {
+    TString ExternalDataSource;
+};
+
+struct TDropExternalDataSourceSettings {
+    TString ExternalDataSource;
+};
+
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -681,6 +697,12 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateExternalDataSource(const TString& cluster, const TCreateExternalDataSourceSettings& settings, bool createDir) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterExternalDataSource(const TString& cluster, const TAlterExternalDataSourceSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropExternalDataSource(const TString& cluster, const TDropExternalDataSourceSettings& settings) = 0;
 
     virtual TVector<TString> GetCollectedSchemeData() = 0;
 

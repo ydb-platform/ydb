@@ -130,7 +130,7 @@ struct TSchemeCacheNavigate {
         KindReplication = 15,
         KindBlobDepot = 16,
         KindExternalTable = 17,
-        KindExternalDataSource = 17,
+        KindExternalDataSource = 18,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {

@@ -1269,8 +1269,8 @@ public:
             schemeTx.SetWorkingDir(pathPair.first);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalTable);
 
-            NKikimrSchemeOp::TExternalTableDescription& tableDesc = *schemeTx.MutableCreateExternalTable();
-            FillCreateExternalTableColumnDesc(tableDesc, pathPair.second, settings);
+            NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
+            FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
             return SendSchemeRequest(ev.Release());
         }
         catch (yexception& e) {
@@ -1357,6 +1357,84 @@ public:
             );
 
             return createUserPromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> CreateExternalDataSource(const TString& cluster,
+                                                     const NYql::TCreateExternalDataSourceSettings& settings,
+                                                     bool createDir) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!GetPathPair(settings.ExternalDataSource, pathPair, error, createDir)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(Database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->Serialized);
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetWorkingDir(pathPair.first);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
+
+            NKikimrSchemeOp::TExternalDataSourceDescription& dataSourceDesc = *schemeTx.MutableCreateExternalDataSource();
+            FillCreateExternalDataSourceDesc(dataSourceDesc, pathPair.second, settings);
+            return SendSchemeRequest(ev.Release());
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> AlterExternalDataSource(const TString& cluster,
+                                                    const NYql::TAlterExternalDataSourceSettings& settings) override {
+        Y_UNUSED(cluster, settings);
+        return MakeErrorFuture<TGenericResult>(std::make_exception_ptr(yexception() << "The alter is not supported for the external data source"));
+    }
+
+    TFuture<TGenericResult> DropExternalDataSource(const TString& cluster,
+                                                   const NYql::TDropExternalDataSourceSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!GetPathPair(settings.ExternalDataSource, pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(Database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->Serialized);
+            }
+
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetWorkingDir(pathPair.first);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropExternalDataSource);
+
+            NKikimrSchemeOp::TDrop& drop = *schemeTx.MutableDrop();
+            drop.SetName(pathPair.second);
+            return SendSchemeRequest(ev.Release());
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
@@ -2130,7 +2208,7 @@ private:
     }
 
     static void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
-        const TString& name, NYql::TKikimrTableMetadataPtr metadata)
+                                          const TString& name, NYql::TKikimrTableMetadataPtr metadata)
     {
         tableDesc.SetName(name);
 
@@ -2174,23 +2252,37 @@ private:
         schema.SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
     }
 
-    static void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalableDesc,
+    static void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalTableDesc,
                                                   const TString& name,
                                                   const NYql::TCreateExternalTableSettings& settings)
     {
-        externalableDesc.SetName(name);
-        externalableDesc.SetDataSourcePath(settings.DataSourcePath);
-        externalableDesc.SetLocation(settings.Location);
+        externalTableDesc.SetName(name);
+        externalTableDesc.SetDataSourcePath(settings.DataSourcePath);
+        externalTableDesc.SetLocation(settings.Location);
 
         Y_ENSURE(settings.ColumnOrder.size() == settings.Columns.size());
         for (const auto& name : settings.ColumnOrder) {
             auto columnIt = settings.Columns.find(name);
             Y_ENSURE(columnIt != settings.Columns.end());
 
-            TColumnDescription& columnDesc = *externalableDesc.AddColumns();
+            TColumnDescription& columnDesc = *externalTableDesc.AddColumns();
             columnDesc.SetName(columnIt->second.Name);
             columnDesc.SetType(columnIt->second.Type);
             columnDesc.SetNotNull(columnIt->second.NotNull);
+        }
+    }
+
+    static void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc,
+                                                 const TString& name,
+                                                 const NYql::TCreateExternalDataSourceSettings& settings)
+    {
+        externaDataSourceDesc.SetName(name);
+        externaDataSourceDesc.SetSourceType(settings.SourceType);
+        externaDataSourceDesc.SetLocation(settings.Location);
+        externaDataSourceDesc.SetInstallation(settings.Installation);
+
+        if (settings.AuthMethod == "NONE") {
+            externaDataSourceDesc.MutableAuth()->MutableNone();
         }
     }
 

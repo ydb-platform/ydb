@@ -672,6 +672,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
         targetName = tx.GetCreateExternalTable().GetName();
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
+        targetName = tx.GetCreateExternalDataSource().GetName();
+        break;
     default:
         result.Transactions.push_back(tx);
         return result;

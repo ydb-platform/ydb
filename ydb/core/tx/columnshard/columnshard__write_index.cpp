@@ -133,13 +133,11 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
             Self->IncCounter(COUNTER_EVICTION_PORTIONS_WRITTEN, changes->PortionsToEvict.size());
             for (auto& [portionInfo, evictionFeatures] : changes->PortionsToEvict) {
-                auto& tierName = portionInfo.TierName;
-                if (tierName.empty()) {
-                    continue;
-                }
-
                 // Mark exported blobs
                 if (evictionFeatures.NeedExport) {
+                    auto& tierName = portionInfo.TierName;
+                    Y_VERIFY(!tierName.empty());
+
                     for (auto& rec : portionInfo.Records) {
                         auto& blobId = rec.BlobRange.BlobId;
                         if (!blobsToExport.count(blobId)) {

@@ -17,6 +17,8 @@ struct TS3ReadActorFactoryConfig {
     ui64 RowsInBatch = 1000;
     ui64 MaxInflight = 20;
     ui64 DataInflight = 200_MB;
+    ui64 FileSizeLimit = 2_GB;
+    std::unordered_map<TString, ui64> FormatSizeLimits;
 };
 
 void RegisterS3ReadActorFactory(

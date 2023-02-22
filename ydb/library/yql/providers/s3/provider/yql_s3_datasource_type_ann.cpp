@@ -441,6 +441,22 @@ public:
                     return true;
                 }
 
+                if (name == "pathpattern"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "path_pattern"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
+                if (name == "pathpatternvariant"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "path_pattern_variant"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
                 YQL_ENSURE(name == "projection"sv);
                 haveProjection = true;
                 if (!EnsureAtom(setting.Tail(), ctx)) {
@@ -457,7 +473,7 @@ public:
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
                                      { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv,
                                         "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv,
-                                        "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv }, validator, ctx))
+                                        "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
             {
                 return TStatus::Error;
             }

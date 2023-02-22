@@ -262,7 +262,9 @@ public:
             return TStatus::Error;
         }
 
-        const auto maxFiles = State_->Configuration->MaxFilesPerQuery;
+        const auto maxFiles = std::max(
+            State_->Configuration->MaxFilesPerQuery,
+            State_->Configuration->MaxDirectoriesAndFilesPerQuery);
         if (count > maxFiles) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too many objects to read: " << count << ", but limit is " << maxFiles));
             return TStatus::Error;

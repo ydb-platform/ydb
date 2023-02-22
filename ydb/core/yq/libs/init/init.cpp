@@ -175,6 +175,17 @@ void Init(
         if (const ui64 dataInflight = s3readConfig.GetDataInflight()) {
             readActorFactoryCfg.DataInflight = dataInflight;
         }
+        for (auto& formatSizeLimit: protoConfig.GetGateways().GetS3().GetFormatSizeLimit()) {
+            if (formatSizeLimit.GetName()) { // ignore unnamed limits
+                readActorFactoryCfg.FormatSizeLimits.emplace(
+                    formatSizeLimit.GetName(), formatSizeLimit.GetFileSizeLimit());
+            }
+        }
+        if (protoConfig.GetGateways().GetS3().HasFileSizeLimit()) {
+            readActorFactoryCfg.FileSizeLimit =
+                protoConfig.GetGateways().GetS3().GetFileSizeLimit();
+        }
+
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
         RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,

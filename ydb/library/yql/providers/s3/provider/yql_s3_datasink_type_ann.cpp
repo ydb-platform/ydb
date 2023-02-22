@@ -1,4 +1,3 @@
-#include "yql_s3_path.h"
 #include "yql_s3_provider_impl.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
@@ -8,6 +7,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 

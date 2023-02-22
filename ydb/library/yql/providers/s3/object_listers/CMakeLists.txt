@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(actors)
-add_subdirectory(common)
-add_subdirectory(compressors)
-add_subdirectory(expr_nodes)
-add_subdirectory(object_listers)
-add_subdirectory(path_generator)
-add_subdirectory(proto)
-add_subdirectory(provider)
-add_subdirectory(range_helpers)
-add_subdirectory(serializations)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

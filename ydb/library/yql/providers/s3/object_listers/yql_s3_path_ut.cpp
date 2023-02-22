@@ -1,4 +1,4 @@
-#include <ydb/library/yql/providers/s3/provider/yql_s3_path.h>
+#include "yql_s3_path.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 

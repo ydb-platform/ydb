@@ -41,6 +41,8 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     std::unordered_map<TString, ui64> FormatSizeLimits;
     ui64 MaxFilesPerQuery;
     ui64 MaxDiscoveryFilesPerQuery;
+    ui64 MaxDirectoriesAndFilesPerQuery;
+    ui64 MinDesiredDirectoriesOfFilesPerQuery;
     ui64 MaxReadSizePerQuery;
     ui64 MaxInflightListsPerQuery;
     bool AllowLocalFiles;

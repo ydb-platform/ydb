@@ -37,6 +37,7 @@ target_link_libraries(providers-s3-actors PUBLIC
   common-arrow-interface
   providers-s3-common
   providers-s3-compressors
+  providers-s3-object_listers
   providers-s3-proto
   clickhouse_client_udf
   providers-s3-range_helpers

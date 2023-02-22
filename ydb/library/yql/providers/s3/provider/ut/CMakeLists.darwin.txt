@@ -8,9 +8,6 @@
 
 
 add_executable(ydb-library-yql-providers-s3-provider-ut)
-target_compile_options(ydb-library-yql-providers-s3-provider-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
 target_include_directories(ydb-library-yql-providers-s3-provider-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/provider
 )
@@ -21,9 +18,6 @@ target_link_libraries(ydb-library-yql-providers-s3-provider-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   providers-s3-provider
-  udf-service-exception_policy
-  yql-sql-pg_dummy
-  yql-dq-opt
 )
 target_link_options(ydb-library-yql-providers-s3-provider-ut PRIVATE
   -Wl,-no_deduplicate
@@ -34,7 +28,7 @@ target_link_options(ydb-library-yql-providers-s3-provider-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-yql-providers-s3-provider-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/provider/yql_s3_path_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/provider/yql_s3_listing_strategy_ut.cpp
 )
 set_property(
   TARGET

@@ -127,12 +127,15 @@ public:
         TStringStream ss;
         IMetricEncoderPtr encoder = EncoderPrometheus(&ss);
         IMetricEncoder* e = encoder.Get();
+        
+        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
         e->OnStreamBegin();
         for (auto& recordCounter : *recordCounters) {
             e->OnMetricBegin(EMetricType::IGAUGE);
             {
                 e->OnLabelsBegin();
-                e->OnLabel("sensor", "Hc_ydb_ru");
+                e->OnLabel("sensor", "HC_" + domain->Name);
                 if (recordCounter.first.Database) {
                     e->OnLabel("DATABASE", recordCounter.first.Database);
                 }

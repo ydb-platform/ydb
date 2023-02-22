@@ -7280,7 +7280,7 @@ struct TPeepHoleRules {
         {"BlockCombineHashed", &OptimizeBlockCombine},
         {"WideTop", &OptimizeTopOrSortBlocks},
         {"WideTopSort", &OptimizeTopOrSortBlocks},
-        //{"WideSort", &OptimizeTopOrSortBlocks},
+        {"WideSort", &OptimizeTopOrSortBlocks},
     };
 
     TPeepHoleRules()

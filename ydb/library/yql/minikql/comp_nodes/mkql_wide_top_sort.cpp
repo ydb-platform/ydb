@@ -503,13 +503,15 @@ private:
 
 template<bool Sort, bool HasCount>
 IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    const ui32 offset = HasCount ? 0 : 1;
+    constexpr ui32 offset = HasCount ? 0 : 1;
     const ui32 inputsWithCount = callable.GetInputsCount() + offset;
     MKQL_ENSURE(inputsWithCount > 2U && !(inputsWithCount % 2U), "Expected more arguments.");
 
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     IComputationNode* count = nullptr;
-    if (HasCount) {
+    if constexpr (HasCount) {
+        const auto countType = AS_TYPE(TDataType, callable.GetInput(1).GetStaticType());
+        MKQL_ENSURE(countType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
         count = LocateNode(ctx.NodeLocator, callable, 1);
     }
 

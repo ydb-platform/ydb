@@ -1224,6 +1224,12 @@ TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx
                 .Seal().Build();
         }
 
+        if (lambda.Tail().IsCallable({"SafeCast", "StrictCast"}) && node->Tail().IsCallable("Nothing") && &lambda.Tail().Head() == &lambda.Head().Head() &&
+            ETypeAnnotationKind::Optional != node->Head().GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType()->GetKind()) {
+            YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " with " << lambda.Tail().Content() << " and " << node->Tail().Content();
+            return ctx.ChangeChild(lambda.Tail(), 0U, node->HeadPtr());
+        }
+
         if constexpr (Cannonize) {
             if (node->Tail().IsCallable("Nothing") && node->Tail().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " with else " << node->Tail().Content();

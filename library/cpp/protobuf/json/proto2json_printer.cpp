@@ -466,8 +466,6 @@ namespace NProtobufJson {
                                         const FieldDescriptor& field,
                                         IJsonOutput& json,
                                         const TStringBuf key) {
-
-
         if (field.is_repeated())
             PrintRepeatedField(proto, field, json, key);
         else
@@ -513,26 +511,28 @@ namespace NProtobufJson {
 
     template <class T, class U>
     std::enable_if_t<!std::is_unsigned<T>::value, bool> ValueInRange(T value, U range) {
-        return value >= -range && value <= range;
+        return value > -range && value < range;
     }
 
     template <class T, class U>
     std::enable_if_t<std::is_unsigned<T>::value, bool> ValueInRange(T value, U range) {
-        return value <= (std::make_unsigned_t<U>)(range);
+        return value < (std::make_unsigned_t<U>)(range);
     }
 
     template <class T>
     bool TProto2JsonPrinter::NeedStringifyNumber(T value) const {
-        constexpr long SAFE_INTEGER_RANGE_FLOAT = 16777216;
-        constexpr long long SAFE_INTEGER_RANGE_DOUBLE = 9007199254740992;
+        constexpr long SAFE_INTEGER_RANGE_FLOAT = 1L << 24;
+        constexpr long long SAFE_INTEGER_RANGE_DOUBLE = 1LL << 53;
 
-        switch (GetConfig().StringifyLongNumbers) {
+        switch (GetConfig().StringifyNumbers) {
             case TProto2JsonConfig::StringifyLongNumbersNever:
                 return false;
             case TProto2JsonConfig::StringifyLongNumbersForFloat:
                 return !ValueInRange(value, SAFE_INTEGER_RANGE_FLOAT);
             case TProto2JsonConfig::StringifyLongNumbersForDouble:
                 return !ValueInRange(value, SAFE_INTEGER_RANGE_DOUBLE);
+            case TProto2JsonConfig::StringifyInt64Always:
+                return std::is_same_v<T, i64> || std::is_same_v<T, ui64>;
         }
 
         return false;

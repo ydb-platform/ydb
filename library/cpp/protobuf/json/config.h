@@ -83,12 +83,13 @@ namespace NProtobufJson {
         bool MapAsObject = false;
 
         /// Stringify long integers which are not exactly representable by float or double values
-        enum EStringifyLongNumbersMode {
+        enum EStringifyNumbersMode {
             StringifyLongNumbersNever = 0, // default
             StringifyLongNumbersForFloat,
             StringifyLongNumbersForDouble,
+            StringifyInt64Always,
         };
-        EStringifyLongNumbersMode StringifyLongNumbers = StringifyLongNumbersNever;
+        EStringifyNumbersMode StringifyNumbers = StringifyLongNumbersNever;
 
         /// Custom field names generator.
         TNameGenerator NameGenerator = {};
@@ -170,8 +171,8 @@ namespace NProtobufJson {
             return *this;
         }
 
-        TSelf& SetStringifyLongNumbers(EStringifyLongNumbersMode stringify) {
-            StringifyLongNumbers = stringify;
+        TSelf& SetStringifyNumbers(EStringifyNumbersMode stringify) {
+            StringifyNumbers = stringify;
             return *this;
         }
 

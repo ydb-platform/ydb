@@ -110,7 +110,7 @@ protected:
         auto config = NProtobufJson::TProto2JsonConfig()
             .SetFormatOutput(false)
             .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName)
-            .SetStringifyLongNumbers(NProtobufJson::TProto2JsonConfig::StringifyLongNumbersForDouble);
+            .SetStringifyNumbers(NProtobufJson::TProto2JsonConfig::StringifyLongNumbersForDouble);
 
         auto json = NProtobufJson::Proto2Json(resp, config);
         ReplyAndDie(json, ctx);

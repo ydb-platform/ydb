@@ -605,9 +605,7 @@ public:
         }
         CA_LOG_D("Retrying read #" << id);
 
-        auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
-        cancel->Record.SetReadId(id);
-        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId), IEventHandle::FlagTrackDelivery);
+        SendCancel(id);
 
         if (Reads[id].SerializedContinuationToken) {
             NKikimrTxDataShard::TReadContinuationToken token;
@@ -929,9 +927,7 @@ public:
 
                 if (Reads[id].IsLastMessage(msg)) {
                     if (!record.GetFinished()) {
-                        auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
-                        cancel->Record.SetReadId(id);
-                        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId), IEventHandle::FlagTrackDelivery);
+                        SendCancel(id);
                     }
                     Reads[id].Reset();
                     ResetReads++;
@@ -994,10 +990,21 @@ public:
     void CommitState(const NYql::NDqProto::TCheckpoint&) override {}
     void LoadState(const NYql::NDqProto::TSourceState&) override {}
 
+    void SendCancel(ui32 id) {
+        if (!Reads[id]) {
+            return;
+        }
+        auto* state = Reads[id].Shard;
+        auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+        cancel->Record.SetReadId(id);
+        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId), IEventHandle::FlagTrackDelivery);
+    }
+
     void PassAway() override {
         {
             auto guard = BindAllocator();
             Results.clear();
+            Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         }
         TBase::PassAway();
     }

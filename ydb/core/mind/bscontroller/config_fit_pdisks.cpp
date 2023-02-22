@@ -222,25 +222,20 @@ namespace NKikimr {
                 }
 
                 if (serial.Serial.empty()) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCFP04, "Missing disks's serial number");
-                    return true;
+                    throw TExError() << "Missing disks's serial number";
                 }
 
                 auto nodeId = driveInfo.NodeId;
                 if (!nodeId) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCFP05, "Empty node id for disk with serial number.", (SerialNumber, serial.Serial));
-                    return true;
+                    throw TExError() << "Empty node id for disk with serial number " << TErrorParams::DiskSerialNumber(serial.Serial);
                 }
                 auto hostId = state.HostRecords->GetHostId(*nodeId);
                 if (!hostId) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCFP06, "Couldn't find host id for node.", (NodeId, *nodeId));
-                    return true;
+                    throw TExError() << "Couldn't find host id for node " << TErrorParams::NodeId(*nodeId);
                 }
-
                 auto path = driveInfo.Path;
                 if (!path) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCFP07, "Couldn't get path for disk with serial number.", (SerialNumber, serial.Serial));
-                    return true;
+                    throw TExError() << "Couldn't get path for disk with serial number " << TErrorParams::DiskSerialNumber(serial.Serial);
                 }
 
                 TDiskInfo disk;

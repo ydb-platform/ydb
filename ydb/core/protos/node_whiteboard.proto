@@ -241,6 +241,7 @@ message TBSGroupStateInfo {
     optional uint64 WriteThroughput = 18;
     optional bool Encryption = 19;
     repeated uint32 VDiskNodeIds = 20;
+    optional uint64 BlobDepotId = 21; // if set, then this is virtual group
 }
 
 message TEvBSGroupStateRequest {

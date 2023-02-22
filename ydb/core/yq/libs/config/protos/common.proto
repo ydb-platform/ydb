@@ -25,4 +25,5 @@ message TCommonConfig {
     uint64 QueryArtifactsCompressionMinSize = 10;
     string MonitoringEndpoint = 11;
     uint64 MaxTasksPerStage = 12;
+    bool KeepInternalErrors = 13;
 }

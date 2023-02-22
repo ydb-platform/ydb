@@ -149,6 +149,7 @@ message PingTaskRequest {
     google.protobuf.Timestamp deadline = 103;
     string tenant = 104;
     TaskResources resources = 33;
+    repeated Ydb.Issue.IssueMessage internal_issues = 34;
 }
 
 message PingTaskResult {

@@ -1016,13 +1016,27 @@ private:
         Issues.AddIssues(issues);
     }
 
+    TIssue WrapInternalIssues(const TIssues& issues) {
+        NYql::IssuesToMessage(issues, QueryStateUpdateRequest.mutable_internal_issues());
+        TString referenceId = GetEntityIdAsString(Params.CommonConfig.GetIdsPrefix(), EEntityType::UNDEFINED);
+        LOG_E(referenceId << ": " << issues.ToOneLineString());
+        return TIssue("Contact technical support and provide query information and this id: " + referenceId + "_" + Now().ToStringUpToSeconds());
+    }
+
     void SaveQueryResponse(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
         auto& result = ev->Get()->Record;
-        LOG_D("Query response. Result set index: " << DqGraphIndex
+        LOG_D("Query response " << NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
+            << ". Result set index: " << DqGraphIndex
             << ". Issues count: " << result.IssuesSize()
             << ". Rows count: " << result.GetRowsCount());
 
-        AddIssues(result.issues());
+        if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR && !Params.CommonConfig.GetKeepInternalErrors()) {
+            TIssues issues;
+            IssuesFromMessage(result.issues(), issues);
+            Issues.AddIssue(WrapInternalIssues(issues));
+        } else {
+            AddIssues(result.issues());
+        }
 
         if (Finishing && !result.issues_size()) { // Race between abort and successful finishing. Override with success and provide results to user.
             FinalQueryStatus = YandexQuery::QueryMeta::COMPLETED;
@@ -1053,13 +1067,21 @@ private:
 
             auto& result = ev->Get()->Record;
 
-            LOG_D("Query evaluation " << it->second.Index << " response. Issues count: " << result.IssuesSize()
+            LOG_D("Query evaluation " << NYql::NDqProto::StatusIds_StatusCode_Name(result.GetStatusCode())
+                << "." << it->second.Index << " response. Issues count: " << result.IssuesSize()
                 << ". Rows count: " << result.GetRowsCount());
 
             queryResult.Data = result.yson();
 
             TIssues issues;
             IssuesFromMessage(result.GetIssues(), issues);
+
+            if (result.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR && !Params.CommonConfig.GetKeepInternalErrors()) {
+                auto issue = WrapInternalIssues(issues);
+                issues.Clear();
+                issues.AddIssue(issue);
+            }
+
             bool error = false;
             for (const auto& issue : issues) {
                 if (issue.GetSeverity() <= TSeverityIds::S_ERROR) {

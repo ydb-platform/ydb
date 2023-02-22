@@ -183,6 +183,10 @@ TPingTaskParams ConstructHardPingTask(
             NYql::IssuesToMessage(newIssues, query.mutable_transient_issue());
         }
 
+        if (request.internal_issues().size()) {
+            *internal.mutable_internal_issue() = request.internal_issues();
+        }
+
         if (request.statistics()) {
             TString statistics;
             try {

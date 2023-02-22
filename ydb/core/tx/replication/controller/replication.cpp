@@ -2,6 +2,7 @@
 #include "replication.h"
 #include "target_discoverer.h"
 #include "target_table.h"
+#include "tenant_resolver.h"
 #include "util.h"
 
 #include <ydb/core/protos/replication.pb.h>
@@ -37,7 +38,7 @@ class TReplication::TImpl {
                     paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
                 }
 
-                Discoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths)));
+                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths)));
                 break;
             }
 
@@ -101,6 +102,10 @@ public:
             }
         }
 
+        if (!Tenant && !TenantResolver) {
+            TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
+        }
+
         switch (State) {
         case EState::Ready:
             if (!Targets) {
@@ -124,7 +129,7 @@ public:
             target->Shutdown(ctx);
         }
 
-        for (auto& x : TVector<TActorId>{Discoverer, YdbProxy}) {
+        for (auto& x : TVector<TActorId>{TargetDiscoverer, TenantResolver, YdbProxy}) {
             if (auto actorId = std::exchange(x, {})) {
                 ctx.Send(actorId, new TEvents::TEvPoison());
             }
@@ -143,6 +148,7 @@ public:
 private:
     const ui64 ReplicationId;
     const TPathId PathId;
+    TString Tenant;
 
     NKikimrReplication::TReplicationConfig Config;
     EState State = EState::Ready;
@@ -150,7 +156,8 @@ private:
     ui64 NextTargetId = 1;
     THashMap<ui64, THolder<ITarget>> Targets;
     TActorId YdbProxy;
-    TActorId Discoverer;
+    TActorId TenantResolver;
+    TActorId TargetDiscoverer;
 
 }; // TImpl
 
@@ -230,6 +237,15 @@ void TReplication::SetNextTargetId(ui64 value) {
 
 ui64 TReplication::GetNextTargetId() const {
     return Impl->NextTargetId;
+}
+
+void TReplication::SetTenant(const TString& value) {
+    Impl->Tenant = value;
+    Impl->TenantResolver = {};
+}
+
+const TString& TReplication::GetTenant() const {
+    return Impl->Tenant;
 }
 
 void TReplication::SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>& opId) {

@@ -531,5 +531,12 @@ private:
     static ui32 IcPort;
 };
 
+class TReplicationServiceInitializer : public IKikimrServicesInitializer {
+public:
+    TReplicationServiceInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

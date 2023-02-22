@@ -6,6 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(controller)
-add_subdirectory(service)
-add_subdirectory(ydb_proxy)
+
+add_library(tx-replication-service)
+target_compile_options(tx-replication-service PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(tx-replication-service PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-base
+)
+target_sources(tx-replication-service PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/service/service.cpp
+)

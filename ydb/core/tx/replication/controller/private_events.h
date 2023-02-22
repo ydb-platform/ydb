@@ -18,6 +18,8 @@ struct TEvPrivate {
         EvDropStreamResult,
         EvDropDstResult,
         EvDropReplication,
+        EvResolveTenantResult,
+        EvUpdateTenantNodes,
 
         EvEnd,
     };
@@ -101,6 +103,25 @@ struct TEvPrivate {
         const ui64 ReplicationId;
 
         explicit TEvDropReplication(ui64 rid);
+        TString ToString() const override;
+    };
+
+    struct TEvResolveTenantResult: public TEventLocal<TEvResolveTenantResult, EvResolveTenantResult> {
+        const ui64 ReplicationId;
+        const TString Tenant;
+        const bool Success;
+
+        explicit TEvResolveTenantResult(ui64 rid, const TString& tenant);
+        explicit TEvResolveTenantResult(ui64 rid, bool success);
+        TString ToString() const override;
+
+        bool IsSuccess() const;
+    };
+
+    struct TEvUpdateTenantNodes: public TEventLocal<TEvUpdateTenantNodes, EvUpdateTenantNodes> {
+        const TString Tenant;
+
+        explicit TEvUpdateTenantNodes(const TString& tenant);
         TString ToString() const override;
     };
 

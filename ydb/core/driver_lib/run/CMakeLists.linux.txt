@@ -96,6 +96,7 @@ target_link_libraries(run PUBLIC
   tx-long_tx_service-public
   core-tx-mediator
   tx-replication-controller
+  tx-replication-service
   core-tx-scheme_board
   core-tx-schemeshard
   core-tx-sequenceproxy

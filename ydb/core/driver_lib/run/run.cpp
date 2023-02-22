@@ -1503,6 +1503,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TSequenceProxyServiceInitializer(runConfig));
     }
 
+    if (serviceMask.EnableReplicationService) {
+        sil->AddServiceInitializer(new TReplicationServiceInitializer(runConfig));
+    }
+
     return sil;
 }
 

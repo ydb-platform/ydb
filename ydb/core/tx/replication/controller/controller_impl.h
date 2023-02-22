@@ -1,6 +1,7 @@
 #pragma once
 
 #include "logging.h"
+#include "nodes_manager.h"
 #include "private_events.h"
 #include "public_events.h"
 #include "replication.h"
@@ -69,6 +70,10 @@ private:
     void Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoison::TPtr& ev, const TActorContext& ctx);
 
     // local transactions
@@ -122,6 +127,10 @@ private:
     TSysParams SysParams;
     THashMap<ui64, TReplication::TPtr> Replications;
     THashMap<TPathId, TReplication::TPtr> ReplicationsByPathId;
+
+    // discovery
+    TActorId DiscoveryCache;
+    TNodesManager NodesManager;
 
 }; // TController
 

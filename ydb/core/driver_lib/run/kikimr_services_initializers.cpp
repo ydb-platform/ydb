@@ -123,6 +123,7 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
+#include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
@@ -2452,6 +2453,18 @@ void TFederatedQueryInitializer::InitializeServices(TActorSystemSetup* setup, co
         IcPort,
         Factories->AdditionalComputationNodeFactories
         );
+}
+
+TReplicationServiceInitializer::TReplicationServiceInitializer(const TKikimrRunConfig& runConfig)
+   : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TReplicationServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    setup->LocalServices.emplace_back(
+        NReplication::MakeReplicationServiceId(NodeId),
+        TActorSetupCmd(NReplication::CreateReplicationService(), TMailboxType::HTSwap, appData->UserPoolId)
+    );
 }
 
 } // namespace NKikimrServicesInitializers

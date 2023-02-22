@@ -100,6 +100,9 @@ public:
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
 
+    void SetTenant(const TString& value);
+    const TString& GetTenant() const;
+
     void SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>& opId);
     const std::optional<TDropOp>& GetDropOp() const;
 

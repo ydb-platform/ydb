@@ -16,6 +16,7 @@ target_link_libraries(tx-replication-controller PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
+  ydb-core-discovery
   core-engine-minikql
   ydb-core-protos
   ydb-core-tablet_flat
@@ -29,6 +30,7 @@ target_sources(tx-replication-controller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_creator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_remover.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/logging.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/nodes_manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/private_events.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/replication.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_creator.cpp
@@ -38,11 +40,12 @@ target_sources(tx-replication-controller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/target_discoverer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/target_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/target_with_stream.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tenant_resolver.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_assign_stream_name.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_dst_result.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_replication.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_stream_result.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_discovery_result.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_discovery_targets_result.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_dst_result.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_replication.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_stream_result.cpp

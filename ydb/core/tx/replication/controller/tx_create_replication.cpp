@@ -21,7 +21,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
 
-        const auto& record = Ev->Get()->Record;
+        auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvController::TEvCreateReplicationResult>();
         Result->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
         Result->Record.SetOrigin(Self->TabletID());
@@ -36,18 +36,18 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        const auto rid = Self->SysParams.AllocateReplicationId(db);
 
-        Replication = Self->Add(rid, pathId, record.GetConfig());
+        const auto rid = Self->SysParams.AllocateReplicationId(db);
+        CLOG_N(ctx, "Add replication"
+            << ": rid# " << rid
+            << ", pathId# " << pathId);
+
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::PathOwnerId>(pathId.OwnerId),
             NIceDb::TUpdate<Schema::Replications::PathLocalId>(pathId.LocalPathId),
             NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString())
         );
-
-        CLOG_N(ctx, "Add replication"
-            << ": rid# " << rid
-            << ", pathId# " << pathId);
+        Replication = Self->Add(rid, pathId, std::move(*record.MutableConfig()));
 
         Result->Record.SetStatus(NKikimrReplication::TEvCreateReplicationResult::SUCCESS);
         return true;

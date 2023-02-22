@@ -8,14 +8,8 @@
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
 extern "C" void* UdfAllocateWithSize(ui64 size);
 extern "C" void UdfFreeWithSize(const void* mem, ui64 size);
-#ifdef __clang__
-[[deprecated]]
-#endif
-extern "C" void* UdfAllocate(ui64 size);
-#ifdef __clang__
-[[deprecated]]
-#endif
-extern "C" void UdfFree(const void* mem);
+extern "C" [[deprecated("Use UdfAllocateWithSize() instead")]] void* UdfAllocate(ui64 size);
+extern "C" [[deprecated("Use UdfFreeWithSize() instead")]] void UdfFree(const void* mem);
 #else
 extern "C" void* UdfAllocate(ui64 size);
 extern "C" void UdfFree(const void* mem);

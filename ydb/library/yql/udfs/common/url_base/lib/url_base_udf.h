@@ -26,6 +26,30 @@ inline bool PrepareUrl(const std::string_view& keyStr, TUri& parser) {
     return parser.ParseAbs(keyStr, parseFlags) == TUri::ParsedOK;
 }
 
+#define ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(udfName, functionName) \
+    BEGIN_SIMPLE_ARROW_UDF(udfName, TOptional<char*>(TOptional<char*>)) { \
+        EMPTY_RESULT_ON_EMPTY_ARG(0); \
+        const std::string_view url(args[0].AsStringRef()); \
+        const std::string_view res(functionName(url)); \
+        return res.empty() ? TUnboxedValue() : \
+            valueBuilder->SubString(args[0], std::distance(url.begin(), res.begin()), res.size()); \
+    } \
+    struct udfName##KernelExec : public TUnaryKernelExec<udfName##KernelExec> { \
+        template <typename TSink> \
+        static void Process(TBlockItem arg, const TSink& sink) { \
+            if (!arg) { \
+                return sink(TBlockItem()); \
+            } \
+            const std::string_view url(arg.AsStringRef()); \
+            const std::string_view res(functionName(url)); \
+            if (res.empty()) { \
+                return sink(TBlockItem()); \
+            } \
+            sink(TBlockItem(TStringRef(res))); \
+        } \
+    }; \
+    END_SIMPLE_ARROW_UDF(udfName, udfName##KernelExec::Do);
+
 SIMPLE_UDF(TNormalize, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     TUri url;
@@ -41,32 +65,7 @@ SIMPLE_UDF(TGetScheme, char*(TAutoMap<char*>)) {
     return valueBuilder->SubString(args[0], std::distance(url.begin(), prefix.begin()), prefix.size());
 }
 
-BEGIN_SIMPLE_ARROW_UDF(TGetHost, TOptional<char*>(TOptional<char*>)) {
-    EMPTY_RESULT_ON_EMPTY_ARG(0);
-    const std::string_view url(args[0].AsStringRef());
-    const std::string_view host(GetOnlyHost(url));
-    return host.empty() ? TUnboxedValue() :
-        valueBuilder->SubString(args[0], std::distance(url.begin(), host.begin()), host.size());
-}
-
-struct TGetHostKernelExec : public TUnaryKernelExec<TGetHostKernelExec> {
-    template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
-        if (!arg) {
-            return sink(TBlockItem());
-        }
-
-        const std::string_view url(arg.AsStringRef());
-        const std::string_view host(GetOnlyHost(url));
-        if (host.empty()) {
-            return sink(TBlockItem());
-        }
-
-        sink(TBlockItem(TStringRef(host)));
-    }
-};
-
-END_SIMPLE_ARROW_UDF(TGetHost, TGetHostKernelExec::Do);
+ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetHost, GetOnlyHost)
 
 SIMPLE_UDF(TGetHostPort, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
@@ -224,67 +223,11 @@ SIMPLE_UDF(TGetCGIParam, TOptional<char*>(TOptional<char*>, char*)) {
     return TUnboxedValue();
 }
 
-SIMPLE_UDF(TCutScheme, TOptional<char*>(TOptional<char*>)) {
-    EMPTY_RESULT_ON_EMPTY_ARG(0);
-    const std::string_view url(args[0].AsStringRef());
-    const std::string_view cut(CutSchemePrefix(url));
-    return cut.empty() ? TUnboxedValue() :
-        valueBuilder->SubString(args[0], std::distance(url.begin(), cut.begin()), cut.length());
-}
+ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TCutScheme, CutSchemePrefix)
 
-BEGIN_SIMPLE_ARROW_UDF(TCutWWW, TOptional<char*>(TOptional<char*>)) {
-    EMPTY_RESULT_ON_EMPTY_ARG(0);
-    const std::string_view url(args[0].AsStringRef());
-    const std::string_view cut(CutWWWPrefix(url));
-    return cut.empty() ? TUnboxedValue() :
-        valueBuilder->SubString(args[0], std::distance(url.begin(), cut.begin()), cut.length());
-}
+ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TCutWWW, CutWWWPrefix)
 
-struct TCutWWWKernelExec : public TUnaryKernelExec<TCutWWWKernelExec> {
-    template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
-        if (!arg) {
-            return sink(TBlockItem());
-        }
-
-        const std::string_view url(arg.AsStringRef());
-        const std::string_view cut(CutWWWPrefix(url));
-        if (cut.empty()) {
-            return sink(TBlockItem());
-        }
-
-        sink(TBlockItem(TStringRef(cut)));
-    }
-};
-
-END_SIMPLE_ARROW_UDF(TCutWWW, TCutWWWKernelExec::Do);
-
-BEGIN_SIMPLE_ARROW_UDF(TCutWWW2, TOptional<char*>(TOptional<char*>)) {
-    EMPTY_RESULT_ON_EMPTY_ARG(0);
-    const std::string_view url(args[0].AsStringRef());
-    const std::string_view cut(CutWWWNumberedPrefix(url));
-    return cut.empty() ? TUnboxedValue() :
-        valueBuilder->SubString(args[0], std::distance(url.begin(), cut.begin()), cut.length());
-}
-
-struct TCutWWW2KernelExec : public TUnaryKernelExec<TCutWWW2KernelExec> {
-    template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
-        if (!arg) {
-            return sink(TBlockItem());
-        }
-
-        const std::string_view url(arg.AsStringRef());
-        const std::string_view cut(CutWWWNumberedPrefix(url));
-        if (cut.empty()) {
-            return sink(TBlockItem());
-        }
-
-        sink(TBlockItem(TStringRef(cut)));
-    }
-};
-
-END_SIMPLE_ARROW_UDF(TCutWWW2, TCutWWW2KernelExec::Do);
+ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TCutWWW2, CutWWWNumberedPrefix)
 
 SIMPLE_UDF(TCutQueryStringAndFragment, char*(TAutoMap<char*>)) {
     const std::string_view input(args[0].AsStringRef());
@@ -389,4 +332,3 @@ SIMPLE_UDF(TCanBePunycodeHostName, bool(TAutoMap<char*>)) {
     TQueryStringToList, \
     TQueryStringToDict, \
     TBuildQueryString
-

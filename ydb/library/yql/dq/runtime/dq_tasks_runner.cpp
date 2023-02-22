@@ -304,7 +304,8 @@ public:
         return opts;
     }
 
-    std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const NDqProto::TDqTask& task, const TString& rawProgram, bool forCache) {
+    std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const NDqProto::TDqTask& task, const TString& rawProgram, bool forCache, bool& canBeCached) {
+        canBeCached = true;
         auto entry = TComputationPatternLRUCache::CreateCacheEntry(UseSeparatePatternAlloc());
         auto& patternAlloc = UseSeparatePatternAlloc() ? entry->Alloc : Alloc();
         auto& patternEnv = UseSeparatePatternAlloc() ? entry->Env : TypeEnv();
@@ -329,6 +330,9 @@ public:
             explorer.Walk(programRoot.GetNode(), patternEnv);
             bool wereChanges = false;
             programRoot = SinglePassVisitCallables(programRoot, explorer, Context.FuncProvider, patternEnv, true, wereChanges);
+            if (wereChanges) {
+                canBeCached = false;
+            }
         }
 
         entry->OutputItemTypes.resize(task.OutputsSize());
@@ -417,12 +421,13 @@ public:
         YQL_ENSURE(program.GetRuntimeVersion() <= NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
 
         std::shared_ptr<TPatternCacheEntry> entry;
+        bool canBeCached;
         if (UseSeparatePatternAlloc() && Context.PatternCache) {
             auto& cache = Context.PatternCache;
             auto ticket = cache->FindOrSubscribe(program.GetRaw());
             if (!ticket.HasFuture()) {
-                entry = CreateComputationPattern(task, program.GetRaw(), true);
-                if (entry->Pattern->GetSuitableForCache()) {
+                entry = CreateComputationPattern(task, program.GetRaw(), true, canBeCached);
+                if (canBeCached && entry->Pattern->GetSuitableForCache()) {
                     cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
                     ticket.Close();
                 } else {
@@ -434,7 +439,7 @@ public:
         } 
 
         if (!entry) {
-            entry = CreateComputationPattern(task, program.GetRaw(), false);
+            entry = CreateComputationPattern(task, program.GetRaw(), false, canBeCached);
         }
 
         AllocatedHolder->ProgramParsed.PatternCacheEntry = entry;

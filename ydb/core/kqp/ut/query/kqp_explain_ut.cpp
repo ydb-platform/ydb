@@ -512,8 +512,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_VALUES_EQUAL(rangeScansCount, 1);
 
         ui32 lookupsCount = 0;
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            lookupsCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQuerySourceRead()) {
+            lookupsCount = CountPlanNodesByKv(plan, "Node Type", "Stage-TablePointLookup");
         } else {
             lookupsCount = CountPlanNodesByKv(plan, "Node Type", "TablePointLookup-ConstantExpr");
         }

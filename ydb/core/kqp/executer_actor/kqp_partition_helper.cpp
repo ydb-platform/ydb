@@ -584,7 +584,14 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
             keyColumnTypes, source.GetRanges(), stageInfo, typeEnv
         );
     } else if (source.HasKeyRange()) {
-        ranges.push_back(MakeKeyRange(keyColumnTypes, source.GetKeyRange(), stageInfo, holderFactory, typeEnv));
+        const auto& range = source.GetKeyRange();
+        if (range.GetFrom().SerializeAsString() == range.GetTo().SerializeAsString() &&
+            range.GetFrom().ValuesSize() == keyColumnTypes.size()) {
+            auto cells = FillKeyValues(keyColumnTypes, range.GetFrom(), stageInfo, holderFactory, typeEnv);
+            ranges.push_back(TSerializedCellVec(TSerializedCellVec::Serialize(cells)));
+        } else {
+            ranges.push_back(MakeKeyRange(keyColumnTypes, range, stageInfo, holderFactory, typeEnv));
+        }
     } else {
         ranges = BuildFullRange(keyColumnTypes);
     }

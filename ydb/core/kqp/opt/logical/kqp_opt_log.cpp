@@ -51,13 +51,16 @@ public:
         AddHandler(1, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
         AddHandler(1, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
 
-        AddHandler(2, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(2, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<true>));
-        AddHandler(2, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
-        AddHandler(2, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<true>));
+        AddHandler(2, &TKqlLookupTable::Match, HNDL(RewriteLookupTable));
+
+        AddHandler(3, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(3, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<true>));
+        AddHandler(3, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
+        AddHandler(3, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<true>));
+
 #undef HNDL
 
-        SetGlobal(2u);
+        SetGlobal(3u);
     }
 
 protected:
@@ -149,6 +152,12 @@ protected:
     TMaybeNode<TExprBase> RewriteStreamLookupIndex(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteStreamLookupIndex(node, ctx, KqpCtx);
         DumpAppliedRule("RewriteStreamLookupIndex", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteLookupTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteLookupTable(node, ctx, KqpCtx);
+        DumpAppliedRule("RewriteLookupTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

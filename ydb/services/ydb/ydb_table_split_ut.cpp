@@ -215,7 +215,9 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "SELECT * FROM `/Root/Foo` \n"
                 "WHERE NameHash = $name_hash AND Name = $name";
 
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         DoTestSplitByLoad(server, query, /* fill with data */ true, /* at least two splits */ 2);
     }
 
@@ -365,7 +367,9 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         TIntrusivePtr<TTestTimeProvider> testTimeProvider = new TTestTimeProvider(originalTimeProvider);
         NKikimr::TAppData::TimeProvider = testTimeProvider;
 
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
 
         // Set min uptime before merge by load to 10h
         TAtomic unused;

@@ -120,9 +120,9 @@ TParams BuildInsertIndexParams(TTableClient& client) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpQueryPerf) {
-    Y_UNIT_TEST_TWIN(KvRead, EnableStreamLookup) {
+    Y_UNIT_TEST_TWIN(KvRead, EnableSourceRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamPointLookup(EnableStreamLookup);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(EnableSourceRead);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig);
         TKikimrRunner kikimr{settings};
@@ -147,33 +147,25 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         // Cerr << stats.query_plan() << Endl;
 
-        // TODO: Fix stream lookup case
-        if (!EnableStreamLookup) {
-            AssertTableStats(result, "/Root/EightShard", {
-                .ExpectedReads = 1,
-            });
-        }
+        AssertTableStats(result, "/Root/EightShard", {.ExpectedReads = 1,});
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-
-        // TODO: Fix stream lookup case
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), EnableStreamLookup ? 0 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(stats.query_plan(), &plan, true);
 
         auto stages = FindPlanStages(plan);
-        // TODO: Fix stream lookup case
-        UNIT_ASSERT_VALUES_EQUAL(stages.size(), EnableStreamLookup ? 3 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 2);
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
             totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
         }
-        // TODO: Fix stream lookup case
-        UNIT_ASSERT_VALUES_EQUAL(totalTasks, EnableStreamLookup ? 3 : 2);
+        
+        UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
     }
 
     Y_UNIT_TEST_TWIN(RangeLimitRead, EnableSourceRead) {

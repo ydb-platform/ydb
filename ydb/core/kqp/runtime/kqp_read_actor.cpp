@@ -700,13 +700,24 @@ public:
             return;
         }
 
-        if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-            for (auto& issue : record.GetStatus().GetIssues()) {
-                CA_LOG_D("read id #" << id << " got issue " << issue.Getmessage());
-                Reads[id].Shard->Issues.push_back(issue);
+        switch (record.GetStatus().GetCode()) {
+            case Ydb::StatusIds::SUCCESS:
+                break;
+            case Ydb::StatusIds::OVERLOADED:
+            case Ydb::StatusIds::INTERNAL_ERROR: {
+                for (auto& issue : record.GetStatus().GetIssues()) {
+                    CA_LOG_D("read id #" << id << " got issue " << issue.Getmessage());
+                    Reads[id].Shard->Issues.push_back(issue);
+                }
+                return RetryRead(id);
             }
-            return RetryRead(id);
+            default: {
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
+                return RuntimeError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED, issues);
+            }
         }
+
         for (auto& lock : record.GetTxLocks()) {
             Locks.push_back(lock);
         }

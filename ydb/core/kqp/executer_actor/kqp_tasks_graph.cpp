@@ -633,7 +633,7 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettin
     } else {
         bool usePoints = true;
         for (auto& range : Ranges) {
-            if (std::holds_alternative<TSerializedCellVec>(range)) {
+            if (std::holds_alternative<TSerializedTableRange>(range)) {
                 usePoints = false;
             }
         }

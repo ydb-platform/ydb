@@ -1526,7 +1526,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
 Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetAppConfig(app)
@@ -3505,7 +3505,7 @@ Y_UNIT_TEST(TestLateKqpDataReadAfterColumnDrop) {
 Y_UNIT_TEST(MvccTestSnapshotRead) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetAppConfig(app)

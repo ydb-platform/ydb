@@ -86,6 +86,8 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvBlobDepot::EvPushNotifyResult, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvCollectGarbage, handleFromAgentPipe);
 
+                hFunc(TEvBlobDepot::TEvPushMetrics, Handle);
+
                 cFunc(TEvPrivate::EvProcessRegisterAgentQ, ProcessRegisterAgentQ);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
@@ -100,6 +102,7 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvCommitCertainKeys, Data->HandleCommitCertainKeys);
                 cFunc(TEvPrivate::EvDoGroupMetricsExchange, DoGroupMetricsExchange);
                 hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
+                cFunc(TEvPrivate::EvUpdateThroughputs, UpdateThroughputs);
 
                 default:
                     if (!HandleDefaultEvents(ev, ctx)) {

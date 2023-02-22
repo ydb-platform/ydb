@@ -28,6 +28,7 @@ namespace NKikimr::NBlobDepot {
                 EvDoGroupMetricsExchange,
                 EvKickSpaceMonitor,
                 EvProcessRegisterAgentQ,
+                EvUpdateThroughputs,
             };
         };
 
@@ -177,6 +178,7 @@ namespace NKikimr::NBlobDepot {
             ProcessRegisterAgentQ();
             KickSpaceMonitor();
             StartDataLoad();
+            UpdateThroughputs();
         }
 
         void StartDataLoad();
@@ -308,8 +310,14 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group metrics exchange
 
+        ui64 BytesRead = 0;
+        ui64 BytesWritten = 0;
+        std::deque<std::tuple<TMonotonic, ui64, ui64>> MetricsQ;
+
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
+        void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
+        void UpdateThroughputs();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation

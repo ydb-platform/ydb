@@ -133,6 +133,7 @@ namespace NKikimr::NBlobDepot {
             TEvBlobStorage::TEvGet::TQuery query;
             query.Set(item.Id, item.Offset, item.Size);
             queriesPerGroup[item.GroupId].emplace_back(item.OutputOffset, query);
+            Agent.BytesRead += item.Size;
         }
 
         for (const auto& [groupId, queries] : queriesPerGroup) {

@@ -167,6 +167,7 @@ namespace NKikimr::NBlobDepot {
                 EvQueryWatchdog = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvProcessPendingEvent,
                 EvPendingEventQueueWatchdog,
+                EvPushMetrics,
             };
         };
 
@@ -212,6 +213,8 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvPendingEventQueueWatchdog, HandlePendingEventQueueWatchdog);
 
                 cFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
+
+                cFunc(TEvPrivate::EvPushMetrics, HandlePushMetrics);
             )
 
             DeletePendingQueries.Clear();
@@ -481,6 +484,16 @@ namespace NKikimr::NBlobDepot {
                 return EscapeC(key);
             }
         }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Metrics
+
+        ui64 BytesRead = 0;
+        ui64 BytesWritten = 0;
+        ui64 LastBytesRead = 0;
+        ui64 LastBytesWritten = 0;
+
+        void HandlePushMetrics();
     };
 
 #define BDEV_QUERY(MARKER, TEXT, ...) BDEV(MARKER, TEXT, (VG, Agent.VirtualGroupId), (BDT, Agent.TabletId), \

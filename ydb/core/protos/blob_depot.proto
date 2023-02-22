@@ -228,3 +228,8 @@ message TEvResolveResult {
     optional string ErrorReason = 2;
     repeated TResolvedKey ResolvedKeys = 3;
 }
+
+message TEvPushMetrics {
+    optional uint64 BytesRead = 1; // since last update
+    optional uint64 BytesWritten = 2; // since last update
+}

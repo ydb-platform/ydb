@@ -124,6 +124,7 @@ namespace NKikimr::NBlobDepot {
                     ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
                     BDEV_QUERY(BDEV10, "TEvPut_sendToProxy", (BlobSeqId, BlobSeqId), (GroupId, groupId), (BlobId, id));
                     Agent.SendToProxy(groupId, std::move(ev), this, nullptr);
+                    Agent.BytesWritten += id.BlobSize();
                     ++PutsInFlight;
                 };
 

@@ -160,6 +160,11 @@ void InitLogger(const TString& log, bool startAsDaemon = false);
 void InitLogger(const NProto::TLoggingConfig& loggingConfig, bool startAsDaemon = false);
 
 /**
+ * @brief Add unified agent backends described in config to existing logger.
+*/
+void AddUnifiedAgentLogger(const NProto::TLoggingConfig& config);
+
+/**
  * @brief Initialize logger with concrete backend.
  *
  * @param backend - logger backend

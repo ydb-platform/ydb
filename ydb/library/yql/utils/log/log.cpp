@@ -327,11 +327,6 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
                     break;
                 }
                 default: {
-                    TYqlUaLogBackendCreatorInitContext creatorContext(NProto::TLoggingConfig::ELogTo_Name(logDest.GetType()),
-                                                                      logDest.GetTarget());
-                    if (auto creator = ILogBackendCreator::Create(creatorContext)) {
-                        backends.emplace_back(creator->CreateLogBackend());
-                    }
                     break;
                 }
             }
@@ -376,6 +371,33 @@ void CleanupLogger() {
         }
 
         TLoggerOperator<TYqlLog>::Set(new TYqlLog());
+    }
+}
+
+void AddUnifiedAgentLogger(const NProto::TLoggingConfig& config) {
+    std::vector<THolder<TLogBackend>> backends;
+
+    for (const auto& logDest : config.GetLogDest()) {
+        // Generate unified agent backend if specified
+        if (logDest.GetType() == NProto::TLoggingConfig::YQL_UA_LOGGER) {
+            TYqlUaLogBackendCreatorInitContext creatorContext(NProto::TLoggingConfig::ELogTo_Name(logDest.GetType()),
+                                                              logDest.GetTarget());
+            if (auto creator = ILogBackendCreator::Create(creatorContext)) {
+                backends.emplace_back(creator->CreateLogBackend());
+            }
+            break;
+        }
+    }
+
+    if (!backends.empty()) {
+        auto& logger = TLoggerOperator<TYqlLog>::Log();
+
+        THolder<TCompositeLogBackend> compositeBackend = MakeHolder<TCompositeLogBackend>();
+        compositeBackend->AddLogBackend(logger.ReleaseBackend());
+        for (auto& backend : backends) {
+            compositeBackend->AddLogBackend(std::move(backend));
+        }
+        logger.ResetBackend(std::move(compositeBackend));
     }
 }
 

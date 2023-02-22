@@ -275,6 +275,19 @@ Storage.prototype.update = function() {
         this.pDisksByVDisks[vDisk.Id] = pDisk;
     }
 
+    if (this.AllocatedSize !== undefined) {
+        allocatedSize = Number(this.AllocatedSize);
+    }
+    if (this.AvailableSize !== undefined) {
+        availableSize = Number(this.AvailableSize);
+    }
+    if (this.ReadThroughput !== undefined) {
+        readSpeed = Number(this.ReadThroughput);
+    }
+    if (this.WriteThroughput !== undefined) {
+        writeSpeed = Number(this.WriteThroughput);
+    }
+
     this.vDiskMap.resizeVDisks();
 
     if (allocatedSize === undefined) {

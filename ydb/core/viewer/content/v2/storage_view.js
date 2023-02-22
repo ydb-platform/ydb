@@ -199,6 +199,8 @@ StorageView.prototype.onStorage = function(update) {
                     }
                     storage.updateFromStorage(storageGroup);
                     var allocatedSizeGroup = 0;
+                    var totalSize_ = 0;
+                    var allocatedSize_ = 0;
                     vDisks += storageGroup.VDisks.length;
                     for (var vDiskNum in storageGroup.VDisks) {
                         var vDisk = storageGroup.VDisks[vDiskNum];
@@ -212,15 +214,22 @@ StorageView.prototype.onStorage = function(update) {
                             if (!pPiskSeen[pDiskId]) {
                                 pPiskSeen[pDiskId] = true;
                                 pDisks++;
-                                if (pDisk.TotalSize && pDisk.TotalSize && pDisk.AvailableSize) {
+                                if (pDisk.TotalSize && pDisk.AvailableSize) {
                                     var ts = Number(pDisk.TotalSize);
-                                    totalSize += ts;
-                                    allocatedSize += ts - Number(pDisk.AvailableSize);
+                                    totalSize_ += ts;
+                                    allocatedSize_ += ts - Number(pDisk.AvailableSize);
                                 }
                             }
                         }
                     }
+                    if (storageGroup.AllocatedSize !== undefined && storageGroup.AvailableSize !== undefined) {
+                        allocatedSizeGroup = Number(storageGroup.AllocatedSize);
+                        allocatedSize_ = allocatedSizeGroup;
+                        totalSize_ = allocatedSize_ + Number(storageGroup.AvailableSize);
+                    }
                     storage.allocatedSizeBytes = allocatedSizeGroup;
+                    totalSize += totalSize_;
+                    allocatedSize += allocatedSize_;
                     this.updateGroup(storage);
                 }
             }

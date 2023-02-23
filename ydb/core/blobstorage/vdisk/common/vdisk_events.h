@@ -105,6 +105,39 @@ namespace NKikimr {
                 }
             }
 
+            explicit TQueueClientId(const NKikimrCapnProto::TMsgQoS::Reader& msgQoS)
+            {
+                switch (msgQoS.ClientId_case()) {
+                    case NKikimrCapnProto::TMsgQoS::ClientIdCase::kProxyNodeId:
+                        Type = EQueueClientType::DSProxy;
+                        Identifier = msgQoS.GetProxyNodeId();
+                        break;
+
+                    case NKikimrCapnProto::TMsgQoS::ClientIdCase::kReplVDiskId:
+                        Type = EQueueClientType::ReplJob;
+                        Identifier = msgQoS.GetReplVDiskId();
+                        break;
+
+                    case NKikimrCapnProto::TMsgQoS::ClientIdCase::kVDiskLoadId:
+                        Type = EQueueClientType::VDiskLoad;
+                        Identifier = msgQoS.GetVDiskLoadId();
+                        break;
+
+                    case NKikimrCapnProto::TMsgQoS::ClientIdCase::kVPatchVDiskId:
+                        Type = EQueueClientType::VPatch;
+                        Identifier = msgQoS.GetVPatchVDiskId();
+                        break;
+
+                    case NKikimrCapnProto::TMsgQoS::ClientIdCase::CLIENTID_NOT_SET:
+                        Type = EQueueClientType::None;
+                        Identifier = 0;
+                        break;
+
+                    default:
+                        Y_FAIL("unexpected case");
+                }
+            }
+
             EQueueClientType GetType() const {
                 return Type;
             }
@@ -188,9 +221,14 @@ namespace NKikimr {
                 , MsgId(msgId)
             {}
 
-            TMessageId(const NKikimrBlobStorage::TMessageId &from)
+            TMessageId(const NKikimrCapnProto::TMessageId::Reader& from)
                 : SequenceId(from.GetSequenceId())
                 , MsgId(from.GetMsgId())
+            {}
+
+            TMessageId(const NKikimrBlobStorage::TMessageId &from)
+                    : SequenceId(from.GetSequenceId())
+                    , MsgId(from.GetMsgId())
             {}
 
             void Serialize(NKikimrBlobStorage::TMessageId &to) const {
@@ -1335,16 +1373,13 @@ namespace NKikimr {
         }
 
         TEvVGetResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
-                ui32 recByteSize, NKikimrCapnProto::TEvVGet::Builder queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
+                ui32 recByteSize, const TActorIDPtr &skeletonFrontIDPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
                 TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
             : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-//            if (queryRecord && queryRecord->HasTimestamps()) {
-//                Record.MutableTimestamps()->CopyFrom(queryRecord->GetTimestamps());
-//            }
 
             // copy cookie if it was set in initial query
             if (cookie)

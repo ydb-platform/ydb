@@ -3,7 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/protos/blobstorage.pb.h>
-//#include <ydb/core/blobstorage/vdisk/common/capnp/protos.h>
+#include <ydb/core/blobstorage/vdisk/common/capnp/protos.h>
 
 #include <util/str_stl.h>
 #include <util/digest/numeric.h>
@@ -54,6 +54,14 @@ struct TVDiskID {
     }
 
     bool SameDisk(const NKikimrBlobStorage::TVDiskID &x) const;
+
+    bool SameDisk(NKikimrCapnProto::TVDiskID::Reader x) const {
+        return GroupID == x.GetGroupID()
+               && FailDomain == x.GetDomain()
+               && FailRealm == x.GetRing()
+               && VDisk == x.GetVDisk()
+               && GroupGeneration == x.GetGroupGeneration();
+    }
 
     auto ConvertToTuple() const {
         return std::make_tuple(GroupID, GroupGeneration, FailRealm, FailDomain, VDisk);

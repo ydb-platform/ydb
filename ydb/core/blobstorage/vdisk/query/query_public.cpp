@@ -48,11 +48,12 @@ namespace NKikimr {
     //////////////////////////////////////////////////////////////////////////////////////
     // CreateLevelIndexQueryActor
     //////////////////////////////////////////////////////////////////////////////////////
+    template <typename ExtremeQueriesType>
     static void ValidateReadQuery(
             TReadQueryKeepChecker &&keepChecker,
             const TIntrusivePtr<THullCtx> &hullCtx,
             const TActorContext& ctx,
-            const ::google::protobuf::RepeatedPtrField<::NKikimrBlobStorage::TExtremeQuery> &extremeQueries,
+            const ExtremeQueriesType &extremeQueries,
             const TLogoBlobsSnapshot *snapshot,
             bool suppressBarrierCheck)
     {
@@ -110,7 +111,8 @@ namespace NKikimr {
     //////////////////////////////////////////////////////////////////////////////////////
     // Check query correctness
     //////////////////////////////////////////////////////////////////////////////////////
-    bool CheckVGetQuery(const NKikimrBlobStorage::TEvVGet &record) {
+    template <typename TevVGetMsg>
+    bool CheckVGetQuery(const TevVGetMsg &record) {
         bool hasRange = record.HasRangeQuery();
         bool hasExtreme = (record.ExtremeQueriesSize() > 0);
 

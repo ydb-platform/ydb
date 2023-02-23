@@ -316,22 +316,22 @@ namespace NKikimr {
             const NVDiskMon::TLtcHistoPtr &histoPtr = vctx->Histograms.GetHistogram(handleClass);
             const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
             auto result = std::make_unique<TEvBlobStorage::TEvVGetResult>(status, vdiskID, now,
-                ev->Get()->GetCachedByteSize(), &record, skeletonFrontIDPtr, counterPtr, histoPtr,
+                ev->Get()->GetCachedByteSize(), skeletonFrontIDPtr, counterPtr, histoPtr,
                 cookie, ev->GetChannel(), vdiskIncarnationGuid);
             // range query
             if (record.HasRangeQuery()) {
-                const NKikimrBlobStorage::TRangeQuery *q = &record.GetRangeQuery();
-                const TLogoBlobID first = LogoBlobIDFromLogoBlobID(q->GetFrom());
-                const ui64 vcookie = q->GetCookie();
-                const ui64 *cookie = q->HasCookie() ? &vcookie : nullptr;
+                const auto q = record.GetRangeQuery();
+                const TLogoBlobID first = LogoBlobIDFromLogoBlobID(q.GetFrom());
+                const ui64 vcookie = q.GetCookie();
+                const ui64 *cookie = q.HasCookie() ? &vcookie : nullptr;
                 result->AddResult(status, first, cookie);
             }
             // extreme queries
             for (ui32 i = 0, e = (ui32)record.ExtremeQueriesSize(); i != e; ++i) {
-                const NKikimrBlobStorage::TExtremeQuery *q = &record.GetExtremeQueries(i);
-                const TLogoBlobID first = LogoBlobIDFromLogoBlobID(q->GetId());
-                const ui64 vcookie = q->GetCookie();
-                const ui64 *cookie = q->HasCookie() ? &vcookie : nullptr;
+                const auto q = record.GetExtremeQueries(i);
+                const TLogoBlobID first = LogoBlobIDFromLogoBlobID(q.GetId());
+                const ui64 vcookie = q.GetCookie();
+                const ui64 *cookie = q.HasCookie() ? &vcookie : nullptr;
                 result->AddResult(status, first, cookie);
             }
             SetRacingGroupInfo(ev->Get()->Record, result->Record, groupInfo);

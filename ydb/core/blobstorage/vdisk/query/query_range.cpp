@@ -23,7 +23,7 @@ namespace NKikimr {
         TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
 
         void Prepare() {
-            const NKikimrBlobStorage::TRangeQuery &query = Record.GetRangeQuery();
+            auto query = Record.GetRangeQuery();
             First = LogoBlobIDFromLogoBlobID(query.GetFrom());
             FirstPartId = First.PartId();
             First = TLogoBlobID(First, 0);

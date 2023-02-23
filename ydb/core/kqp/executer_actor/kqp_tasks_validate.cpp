@@ -73,11 +73,6 @@ private:
         if (task.Meta.Writes) {
             YQL_ENSURE(task.Outputs.size() == 1, "Read-write tasks should have single output.");
         }
-
-        const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-        if (stageInfo.Meta.TableKind == ETableKind::Olap) {
-            YQL_ENSURE(!task.Meta.Writes, "OLAP writes are not supported yet");
-        }
     }
 
     bool IsDataExec() {

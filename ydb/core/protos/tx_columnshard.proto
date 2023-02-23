@@ -116,6 +116,11 @@ enum ETransactionKind {
     TX_KIND_SCHEMA = 1;
     TX_KIND_COMMIT = 2;
     TX_KIND_TTL = 3; // Immediate (not planned)
+    TX_KIND_DATA = 4;
+}
+
+enum ETransactionFlag {
+    TX_FLAG_IMMEDIATE = 1;
 }
 
 message TEvProposeTransaction {
@@ -126,6 +131,7 @@ message TEvProposeTransaction {
 
     optional uint64 SchemeShardId = 5;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 6;
+    optional uint64 Flags = 7;
 }
 
 message TEvProposeTransactionResult {

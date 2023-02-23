@@ -20,7 +20,8 @@ private:
     enum class ETriggerActivities {
         NONE,
         POST_INSERT,
-        POST_SCHEMA
+        POST_SCHEMA,
+        POST_DATA_OPERATION
     };
 
 public:
@@ -73,7 +74,13 @@ public:
 
             auto& txInfo = Self->BasicTxInfo.at(txId);
             switch (txInfo.TxKind) {
-                case NKikimrTxColumnShard::TX_KIND_SCHEMA: {
+                case NKikimrTxColumnShard::TX_KIND_DATA:
+                {
+                    Trigger = ETriggerActivities::POST_DATA_OPERATION;
+                    break;
+                }
+                case NKikimrTxColumnShard::TX_KIND_SCHEMA:
+                {
                     auto& meta = Self->AltersInFlight.at(txId);
                     Self->RunSchemaTx(meta.Body, TRowVersion(step, txId), txc);
                     Self->ProtectSchemaSeqNo(meta.Body.GetSeqNo(), txc);
@@ -161,6 +168,7 @@ public:
             case ETriggerActivities::POST_SCHEMA:
                 Self->EnqueueBackgroundActivities();
                 break;
+            case ETriggerActivities::POST_DATA_OPERATION:
             case ETriggerActivities::NONE:
             default:
                 break;

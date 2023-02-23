@@ -189,6 +189,24 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             status = NKikimrTxColumnShard::EResultStatus::PREPARED;
             break;
         }
+        case NKikimrTxColumnShard::TX_KIND_DATA: {
+            statusMessage = TStringBuilder() << "Data manipulation is unsupported for column shard TxId# " << txId;
+            if (record.GetFlags() & NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE) {
+                status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
+            } else {
+                minStep = Self->GetAllowedStep();
+                maxStep = minStep + Self->MaxCommitTxDelay.MilliSeconds();
+
+                auto& txInfo = Self->BasicTxInfo[txId];
+                txInfo.TxId = txId;
+                txInfo.TxKind = txKind;
+                txInfo.Source = Ev->Get()->GetSource();
+                txInfo.Cookie = Ev->Cookie;
+                Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, txInfo.MaxStep, txInfo.Source, txInfo.Cookie);
+                status = NKikimrTxColumnShard::EResultStatus::PREPARED;
+            }
+            break;
+        }
         case NKikimrTxColumnShard::TX_KIND_TTL: {
             /// @note There's no tx guaranties now. For now TX_KIND_TTL is used to trigger TTL in tests only.
             /// In future we could trigger TTL outside of tablet. Then we need real tx with complete notification.

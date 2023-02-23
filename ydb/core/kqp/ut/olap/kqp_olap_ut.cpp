@@ -3668,6 +3668,226 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(OlapUpsert) {
+        TPortManager pm;
+
+        ui32 grpcPort = pm.GetPort();
+        ui32 msgbPort = pm.GetPort();
+
+        Tests::TServerSettings serverSettings(msgbPort);
+        serverSettings.Port = msgbPort;
+        serverSettings.GrpcPort = grpcPort;
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMetadataProvider(true)
+            .SetEnableOlapSchemaOperations(true);
+        ;
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        server->EnableGRpc(grpcPort);
+        //        server->SetupDefaultProfiles();
+        Tests::TClient client(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        EnableDebugLogging(&runtime);
+
+        auto sender = runtime.AllocateEdgeActor();
+        server->SetupRootStoragePools(sender);
+        Tests::NCommon::THelper lHelper(*server);
+        lHelper.StartSchemaRequest(
+            R"(
+                CREATE TABLE `/Root/test_table`
+                (
+                    WatchID Int64 NOT NULL,
+                    CounterID Int32 NOT NULL,
+                    URL Text NOT NULL,
+                    Age Int16 NOT NULL,
+                    Sex Int16 NOT NULL,
+                    PRIMARY KEY (CounterID, WatchID)
+                )
+                PARTITION BY HASH(WatchID)
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8
+                );
+            )"
+        );
+
+        lHelper.StartDataRequest(
+            R"(
+                UPSERT INTO `/Root/test_table` (WatchID, CounterID, URL, Age, Sex)
+                VALUES
+                    (0, 15, 'aaaaaaa', 23, 1),
+                    (0, 15, 'bbbbbbb', 23, 1),
+                    (0, 15, 'ccccccc', 23, 1)
+            )"
+        );
+
+    }
+
+    Y_UNIT_TEST(OlapDeleteImmediate) {
+        TPortManager pm;
+
+        ui32 grpcPort = pm.GetPort();
+        ui32 msgbPort = pm.GetPort();
+
+        Tests::TServerSettings serverSettings(msgbPort);
+        serverSettings.Port = msgbPort;
+        serverSettings.GrpcPort = grpcPort;
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMetadataProvider(true)
+            .SetEnableOlapSchemaOperations(true);
+        ;
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        server->EnableGRpc(grpcPort);
+        //        server->SetupDefaultProfiles();
+        Tests::TClient client(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        EnableDebugLogging(&runtime);
+
+        auto sender = runtime.AllocateEdgeActor();
+        server->SetupRootStoragePools(sender);
+        Tests::NCommon::THelper lHelper(*server);
+        lHelper.StartSchemaRequest(
+            R"(
+                CREATE TABLE `/Root/test_table`
+                (
+                    WatchID Int64 NOT NULL,
+                    CounterID Int32 NOT NULL,
+                    URL Text NOT NULL,
+                    Age Int16 NOT NULL,
+                    Sex Int16 NOT NULL,
+                    PRIMARY KEY (CounterID, WatchID)
+                )
+                PARTITION BY HASH(WatchID)
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+                );
+            )"
+        );
+
+        lHelper.StartDataRequest(
+            R"(
+                DELETE FROM `/Root/test_table` WHERE WatchID = 1;
+            )"
+        );
+
+    }
+
+    Y_UNIT_TEST(OlapDeleteImmediatePK) {
+        TPortManager pm;
+
+        ui32 grpcPort = pm.GetPort();
+        ui32 msgbPort = pm.GetPort();
+
+        Tests::TServerSettings serverSettings(msgbPort);
+        serverSettings.Port = msgbPort;
+        serverSettings.GrpcPort = grpcPort;
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMetadataProvider(true)
+            .SetEnableOlapSchemaOperations(true);
+        ;
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        server->EnableGRpc(grpcPort);
+        //        server->SetupDefaultProfiles();
+        Tests::TClient client(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        EnableDebugLogging(&runtime);
+
+        auto sender = runtime.AllocateEdgeActor();
+        server->SetupRootStoragePools(sender);
+        Tests::NCommon::THelper lHelper(*server);
+        lHelper.StartSchemaRequest(
+            R"(
+                CREATE TABLE `/Root/test_table`
+                (
+                    WatchID Int64 NOT NULL,
+                    CounterID Int32 NOT NULL,
+                    URL Text NOT NULL,
+                    Age Int16 NOT NULL,
+                    Sex Int16 NOT NULL,
+                    PRIMARY KEY (CounterID, WatchID)
+                )
+                PARTITION BY HASH(WatchID)
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+                );
+            )"
+        );
+
+        lHelper.StartDataRequest(
+            R"(
+                DELETE FROM `/Root/test_table` WHERE WatchID = 1 AND CounterID = 1;
+            )"
+        );
+
+    }
+
+    Y_UNIT_TEST(OlapDeletePlanned) {
+        TPortManager pm;
+
+        ui32 grpcPort = pm.GetPort();
+        ui32 msgbPort = pm.GetPort();
+
+        Tests::TServerSettings serverSettings(msgbPort);
+        serverSettings.Port = msgbPort;
+        serverSettings.GrpcPort = grpcPort;
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMetadataProvider(true)
+            .SetEnableOlapSchemaOperations(true);
+        ;
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        server->EnableGRpc(grpcPort);
+        //        server->SetupDefaultProfiles();
+        Tests::TClient client(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        EnableDebugLogging(&runtime);
+
+        auto sender = runtime.AllocateEdgeActor();
+        server->SetupRootStoragePools(sender);
+        Tests::NCommon::THelper lHelper(*server);
+        lHelper.StartSchemaRequest(
+            R"(
+                CREATE TABLE `/Root/test_table`
+                (
+                    WatchID Int64 NOT NULL,
+                    CounterID Int32 NOT NULL,
+                    URL Text NOT NULL,
+                    Age Int16 NOT NULL,
+                    Sex Int16 NOT NULL,
+                    PRIMARY KEY (CounterID, WatchID)
+                )
+                PARTITION BY HASH(WatchID)
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8
+                );
+            )"
+        );
+
+        lHelper.StartDataRequest(
+            R"(
+                DELETE FROM `/Root/test_table` WHERE WatchID = 0;
+            )"
+        );
+
+    }
+
     Y_UNIT_TEST(PredicatePushdownCastErrors) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

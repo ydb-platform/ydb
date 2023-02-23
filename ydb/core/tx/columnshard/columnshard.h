@@ -46,25 +46,26 @@ struct TEvColumnShard {
         TEvProposeTransaction() = default;
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, const TActorId& source,
-                ui64 txId, TString txBody)
+                ui64 txId, TString txBody, const ui32 flags = 0)
         {
             Record.SetTxKind(txKind);
             ActorIdToProto(source, Record.MutableSource());
             Record.SetTxId(txId);
             Record.SetTxBody(std::move(txBody));
+            Record.SetFlags(flags);
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
-                ui64 txId, TString txBody)
-            : TEvProposeTransaction(txKind, source, txId, std::move(txBody))
+                ui64 txId, TString txBody, const ui32 flags = 0)
+            : TEvProposeTransaction(txKind, source, txId, std::move(txBody), flags)
         {
             Y_VERIFY(txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA);
             Record.SetSchemeShardId(ssId);
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
-                ui64 txId, TString txBody, const NKikimrSubDomains::TProcessingParams& processingParams)
-            : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody))
+                ui64 txId, TString txBody, const NKikimrSubDomains::TProcessingParams& processingParams, const ui32 flags = 0)
+            : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags)
         {
             Record.MutableProcessingParams()->CopyFrom(processingParams);
         }

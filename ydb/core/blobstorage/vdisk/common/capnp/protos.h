@@ -11,14 +11,21 @@
 #include "tevvget.capnp.h"
 
 namespace NKikimrCapnProtoUtil {
-    struct TRopeStream : public kj::BufferedInputStream {
+    struct TRopeStream : public kj::InputStream {
         NActors::TRopeStream *underlying;
 
-        virtual kj::ArrayPtr<const kj::byte> tryGetReadBuffer() override {
-            const void* bytes;
-            int size;
-            underlying->Next(&bytes, &size);
-            return {static_cast<const kj::byte*>(bytes), static_cast<size_t>(size)};
+        virtual size_t tryRead(void* dst, size_t minBytes, size_t maxBytes) override {
+            size_t bytesRead = 0;
+            while (bytesRead < minBytes) {
+                const void* buf;
+                int size;
+                if (!underlying->Next(&buf, &size)) {
+                    break;
+                }
+                memcpy((char*)dst + bytesRead, buf, size);
+                bytesRead += size;
+            }
+            return bytesRead;
         }
     };
 };
@@ -534,18 +541,20 @@ namespace NKikimrCapnProto {
             bool HasTabletId() const { return getTabletId() != 0; }
             bool HasAcquireBlockedGeneration() const { return getAcquireBlockedGeneration() != 0; }
             bool HasForceBlockedGeneration() const { return getForceBlockedGeneration() != 0; }
-            bool HasSnapshotId() const { return getSnapshotId() != 0; }
+            bool HasSnapshotId() const { return getSnapshotId().size() != 0; }
             const NKikimrCapnProto_::TEvVGet::Reader& GetCapnpBase() const { return *this; }
 
             bool ParseFromZeroCopyStream(NActors::TRopeStream *input) {
                 NKikimrCapnProtoUtil::TRopeStream stream;
                 stream.underlying = input;
 
-                static_cast<NKikimrCapnProto_::TEvVGet::Reader&>(*this) = messageReader.emplace(stream).getRoot<NKikimrCapnProto_::TEvVGet>();
+                kj::BufferedInputStreamWrapper buffered(stream);
+
+                static_cast<NKikimrCapnProto_::TEvVGet::Reader&>(*this) = messageReader.emplace(buffered).getRoot<NKikimrCapnProto_::TEvVGet>();
                 if (hasExtremeQueries()) {
                     elements.reserve(getExtremeQueries().size());
-                    for (TEvVGet::Reader interview : getExtremeQueries()) {
-                        elements.push_back(interview);
+                    for (TExtremeQuery::Reader extremeQuery : getExtremeQueries()) {
+                        elements.push_back(extremeQuery);
                     }
                 }
                 return true;

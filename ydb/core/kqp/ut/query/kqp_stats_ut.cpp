@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
@@ -343,6 +344,41 @@ Y_UNIT_TEST(StatsProfile) {
 
     //auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
     //UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
+}
+
+Y_UNIT_TEST(StreamLookupStats) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
+    TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    auto result = session.ExecuteDataQuery(R"(
+        $keys = SELECT Key FROM `/Root/KeyValue`;
+        SELECT * FROM `/Root/TwoShard` WHERE Key in $keys;
+    )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    Cerr << result.GetQueryPlan() << Endl;
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
+    auto streamLookup = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
+    UNIT_ASSERT(streamLookup.IsDefined());
+    
+    auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
+
+    AssertTableStats(result, "/Root/TwoShard", {
+        .ExpectedReads = 2,
+    });
 }
 
 } // suite

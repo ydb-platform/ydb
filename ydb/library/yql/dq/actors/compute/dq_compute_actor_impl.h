@@ -1973,10 +1973,10 @@ public:
                     protoTransform->SetIngressBytes(ingressBytes);
 
                     protoTransform->SetMaxMemoryUsage(transformStats->MaxMemoryUsage);
+                }
 
-                    if (auto* transform = transformInfo.AsyncInput) {
-                        transform->FillExtraStats(protoTask, last);
-                    }
+                if (auto* transform = transformInfo.AsyncInput) {
+                    transform->FillExtraStats(protoTask, last);
                 }
             }
 

@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
@@ -28,7 +29,8 @@ public:
         const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
         std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, NKikimrKqp::TKqpStreamLookupSettings&& settings)
         : InputIndex(inputIndex), Input(input), ComputeActorId(computeActorId), TypeEnv(typeEnv)
-        , HolderFactory(holderFactory), Alloc(alloc), TableId(MakeTableId(settings.GetTable()))
+        , HolderFactory(holderFactory), Alloc(alloc), TablePath(settings.GetTable().GetPath())
+        , TableId(MakeTableId(settings.GetTable()))
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , ImmediateTx(settings.GetImmediateTx())
@@ -80,6 +82,34 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_STREAM_LOOKUP_ACTOR;
+    }
+
+    void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats , bool last) override {
+        if (last) {
+            NYql::NDqProto::TDqTableStats* tableStats = nullptr;
+            for (auto& table : *stats->MutableTables()) {
+                if (table.GetTablePath() == TablePath) {
+                    tableStats = &table;
+                }
+            }
+
+            if (!tableStats) {
+                tableStats = stats->AddTables();
+                tableStats->SetTablePath(TablePath);
+            }
+
+            // TODO: use evread statistics after KIKIMR-16924
+            tableStats->SetReadRows(tableStats->GetReadRows() + ReadRowsCount);
+            tableStats->SetReadBytes(tableStats->GetReadBytes() + ReadBytesCount);
+            tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + ReadsPerShard.size());
+
+            NKqpProto::TKqpReadActorTableAggrExtraStats tableExtraStats;
+            for (const auto& [shardId, _] : ReadsPerShard) {
+                tableExtraStats.AddAffectedShards(shardId);
+            }
+
+            tableStats->MutableExtra()->PackFrom(tableExtraStats);
+        }
     }
 
 private:
@@ -346,6 +376,8 @@ private:
                 }
 
                 batch.push_back(std::move(row));
+                ++ReadRowsCount;
+                ReadBytesCount += rowSize;
                 totalSize += rowSize;
             }
 
@@ -580,6 +612,7 @@ private:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    const TString TablePath;
     const TTableId TableId;
     IKqpGateway::TKqpSnapshot Snapshot;
     const TMaybe<ui64> LockTxId;
@@ -596,6 +629,10 @@ private:
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
     TVector<NKikimrTxDataShard::TLock> Locks;
     TVector<NKikimrTxDataShard::TLock> BrokenLocks;
+
+    // stats
+    ui64 ReadRowsCount = 0;
+    ui64 ReadBytesCount = 0;
 };
 
 } // namespace

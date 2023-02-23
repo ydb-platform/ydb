@@ -285,11 +285,6 @@ public:
 
             // dst->MutableExtra()->PackFrom(extraStats);
         }
-
-        if (last && dst->TasksSize() > 0) {
-            YQL_ENSURE(dst->TasksSize() == 1);
-            NComputeActor::FillTaskInputStats(GetTask(), *dst->MutableTasks(0));
-        }
     }
 
 protected:

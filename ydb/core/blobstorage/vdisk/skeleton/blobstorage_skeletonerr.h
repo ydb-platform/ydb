@@ -308,11 +308,11 @@ namespace NKikimr {
                         const TVDiskID &vdiskID, ui64 vdiskIncarnationGuid,
                         const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo)
         {
-            NKikimrBlobStorage::TEvVGet &record = ev->Get()->Record;
+            auto& record = ev->Get()->Record;
             TMaybe<ui64> cookie;
             if (record.HasCookie())
                 cookie = record.GetCookie();
-            const auto handleClass = record.GetHandleClass();
+            const auto handleClass = NKikimrBlobStorage::EGetHandleClass(record.GetHandleClass());
             const NVDiskMon::TLtcHistoPtr &histoPtr = vctx->Histograms.GetHistogram(handleClass);
             const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
             auto result = std::make_unique<TEvBlobStorage::TEvVGetResult>(status, vdiskID, now,

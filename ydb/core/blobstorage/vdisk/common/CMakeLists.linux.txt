@@ -23,6 +23,8 @@ target_link_libraries(blobstorage-vdisk-common PUBLIC
   kj
 )
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -v")
+
 target_sources(blobstorage-vdisk-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.cpp

@@ -493,6 +493,16 @@ namespace NKikimr {
             }
         }
 
+        TEvVResultBaseWithQoSPB(TInstant now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
+                                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel,
+                                ui32 recByteSize, const TActorIDPtr &skeletonFrontIDPtr)
+                : TBase(now, counterPtr, histoPtr, channel)
+                , MsgCtx(TVMsgContext())
+                , SkeletonFrontIDPtr(skeletonFrontIDPtr)
+        {
+                Y_VERIFY(!SkeletonFrontIDPtr);
+        }
+
         void MarkHugeWriteTime() {
             if (auto *stats = GetExecTimeStats()) {
                 TDuration hugeWriteTime = TDuration::Seconds(ExecutionTimer.Passed());
@@ -1304,16 +1314,37 @@ namespace NKikimr {
         TEvVGetResult() = default;
 
         TEvVGetResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
-                ui32 recByteSize, NKikimrBlobStorage::TEvVGet *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
-                const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, queryRecord, skeletonFrontIDPtr)
+                      ui32 recByteSize, NKikimrBlobStorage::TEvVGet *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
+                      const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
+                      TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
+                : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (queryRecord && queryRecord->HasTimestamps()) {
                 Record.MutableTimestamps()->CopyFrom(queryRecord->GetTimestamps());
             }
+
+            // copy cookie if it was set in initial query
+            if (cookie)
+                Record.SetCookie(*cookie);
+
+            if (status == NKikimrProto::OK) {
+                Record.SetIncarnationGuid(incarnationGuid);
+            }
+        }
+
+        TEvVGetResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
+                ui32 recByteSize, NKikimrCapnProto::TEvVGet::Builder queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
+                const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
+                TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, skeletonFrontIDPtr)
+        {
+            Record.SetStatus(status);
+            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
+//            if (queryRecord && queryRecord->HasTimestamps()) {
+//                Record.MutableTimestamps()->CopyFrom(queryRecord->GetTimestamps());
+//            }
 
             // copy cookie if it was set in initial query
             if (cookie)

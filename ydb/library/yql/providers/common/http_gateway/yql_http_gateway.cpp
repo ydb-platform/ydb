@@ -419,12 +419,10 @@ private:
     }
 
     void Done(CURLcode result, long httpResponseCode) final {
+        HttpResponseCode = httpResponseCode;
+        OnStart(HttpResponseCode);
         if (CURLE_OK != result) {
             return Fail(TIssue(TStringBuilder{} << "error: " << curl_easy_strerror(result) << " detailed: " << GetDetailedErrorText()));
-        }
-        if (!HttpResponseCode) {
-            HttpResponseCode = httpResponseCode;
-            OnStart(HttpResponseCode);
         }
         if (!Cancelled)
             OnFinish(TIssues());

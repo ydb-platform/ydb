@@ -56,7 +56,7 @@ def do(args):
             row['NodeId:PDiskId'] = 'NULL'
 
         if usedByPDisk:
-            if device.LifeStage == kikimr_bsconfig.TDriveLifeStage.E.ADDED_TO_BSC:
+            if device.LifeStage == kikimr_bsconfig.TDriveLifeStage.E.ADDED_BY_DSTOOL:
                 row['StorageStatus'] = 'Configured by ydb-dstool'
             else:
                 row['StorageStatus'] = 'Configured by DefineBox'

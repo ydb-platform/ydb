@@ -5,6 +5,7 @@
 # ya.make files by maintainers. Any complex modifications which can't be ported back to the
 # original buildsystem will not be accepted.
 
+target_link_directories(blobstorage-vdisk-common PUBLIC /usr/local/lib)
 
 add_subdirectory(ut)
 

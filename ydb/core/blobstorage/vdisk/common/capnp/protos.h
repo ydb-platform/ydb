@@ -202,6 +202,7 @@ namespace NKikimrCapnProto {
             void SetExpectedMsgId(const TMessageId::Reader& value) { return setExpectedMsgId(value.GetCapnpBase()); }
             void SetFailedMsgId(const TMessageId::Reader& value) { return setFailedMsgId(value.GetCapnpBase()); }
             void SetStatus(const EStatus& value) { return setStatus(static_cast<NKikimrCapnProto_::EStatus>(static_cast<size_t>(value) + 1)); }
+            void SetStatus(const NKikimrBlobStorage::TWindowFeedback_EStatus& value) { return setStatus(static_cast<NKikimrCapnProto_::EStatus>(static_cast<size_t>(value) + 1)); }
             TMessageId::Builder MutableExpectedMsgId() { return getExpectedMsgId(); }
             TMessageId::Builder MutableFailedMsgId() { return getFailedMsgId(); }
             const NKikimrCapnProto_::TWindowFeedback::Builder& GetCapnpBase() const { return *this; }

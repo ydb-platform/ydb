@@ -1193,7 +1193,7 @@ namespace NKikimr {
                 }
                 // good, enqueue it in intQueue
                 intQueue.Enqueue(ctx, recByteSize, std::move(event), msgId, cost,
-                        deadline, extQueueId, *this, clientId, std::move(trace));
+                        deadline, NKikimrBlobStorage::EVDiskQueueId(extQueueId), *this, clientId, std::move(trace));
             }
 
             Sanitize(ctx);
@@ -1248,7 +1248,7 @@ namespace NKikimr {
             };
 
             Y_VERIFY_DEBUG(int(extId) >= 0 && int(extId) <= 7 && int(intId) >= 0 && int(intId) <= 7);
-            return compatibilityMatrix[extId][intId];
+            return compatibilityMatrix[int(extId)][int(intId)];
         }
 
         template <typename TEvPtr>

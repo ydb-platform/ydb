@@ -107,34 +107,21 @@ namespace NKikimr {
 
             explicit TQueueClientId(const NKikimrCapnProto::TMsgQoS::Reader& msgQoS)
             {
-                switch (msgQoS.ClientId_case()) {
-                    case NKikimrCapnProto::TMsgQoS::ClientIdCase::kProxyNodeId:
-                        Type = EQueueClientType::DSProxy;
-                        Identifier = msgQoS.GetProxyNodeId();
-                        break;
-
-                    case NKikimrCapnProto::TMsgQoS::ClientIdCase::kReplVDiskId:
-                        Type = EQueueClientType::ReplJob;
-                        Identifier = msgQoS.GetReplVDiskId();
-                        break;
-
-                    case NKikimrCapnProto::TMsgQoS::ClientIdCase::kVDiskLoadId:
-                        Type = EQueueClientType::VDiskLoad;
-                        Identifier = msgQoS.GetVDiskLoadId();
-                        break;
-
-                    case NKikimrCapnProto::TMsgQoS::ClientIdCase::kVPatchVDiskId:
-                        Type = EQueueClientType::VPatch;
-                        Identifier = msgQoS.GetVPatchVDiskId();
-                        break;
-
-                    case NKikimrCapnProto::TMsgQoS::ClientIdCase::CLIENTID_NOT_SET:
-                        Type = EQueueClientType::None;
-                        Identifier = 0;
-                        break;
-
-                    default:
-                        Y_FAIL("unexpected case");
+                if (msgQoS.HasProxyNodeId()) {
+                    Type = EQueueClientType::DSProxy;
+                    Identifier = msgQoS.GetProxyNodeId();
+                } else if (msgQoS.HasReplVDiskId()) {
+                    Type = EQueueClientType::ReplJob;
+                    Identifier = msgQoS.GetReplVDiskId();
+                } else if (msgQoS.HasVDiskLoadId()) {
+                    Type = EQueueClientType::VDiskLoad;
+                    Identifier = msgQoS.GetVDiskLoadId();
+                } else if (msgQoS.HasVPatchVDiskId()) {
+                    Type = EQueueClientType::VPatch;
+                    Identifier = msgQoS.GetVPatchVDiskId();
+                } else {
+                    Type = EQueueClientType::None;
+                    Identifier = 0;
                 }
             }
 
@@ -236,6 +223,11 @@ namespace NKikimr {
                 to.SetMsgId(MsgId);
             }
 
+            void Serialize(NKikimrCapnProto::TMessageId::Builder &to) const {
+                to.SetSequenceId(SequenceId);
+                to.SetMsgId(MsgId);
+            }
+
             bool operator ==(const TMessageId &other) const {
                 return SequenceId == other.SequenceId && MsgId == other.MsgId;
             }
@@ -313,6 +305,15 @@ namespace NKikimr {
             }
 
             void Serialize(NKikimrBlobStorage::TWindowFeedback &to) const {
+                to.SetStatus(Status);
+                to.SetActualWindowSize(ActualWindowSize);
+                to.SetMaxWindowSize(MaxWindowSize);
+                ExpectedMsgId.Serialize(*to.MutableExpectedMsgId());
+                if (!FailedMsgId.Empty())
+                    FailedMsgId.Serialize(*to.MutableFailedMsgId());
+            }
+
+            void Serialize(NKikimrCapnProto::TWindowFeedback::Builder &to) const {
                 to.SetStatus(Status);
                 to.SetActualWindowSize(ActualWindowSize);
                 to.SetMaxWindowSize(MaxWindowSize);

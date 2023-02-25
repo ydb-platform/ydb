@@ -1,7 +1,8 @@
 #pragma once
 
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
-#include <ydb/core/kqp/gateway/kqp_gateway.h>
+#include <ydb/library/yql/ast/yql_pos_handle.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 
 namespace NYql {
 

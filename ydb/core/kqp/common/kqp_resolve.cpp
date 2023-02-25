@@ -1,13 +1,12 @@
 #include "kqp_resolve.h"
 
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-
 // #define DBG_TRACE
 
 #ifdef DBG_TRACE
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #endif
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
 namespace NKikimr {
 namespace NKqp {

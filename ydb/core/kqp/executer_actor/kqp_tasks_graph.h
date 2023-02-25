@@ -40,6 +40,26 @@ struct TStageInfoMeta {
     THolder<TKeyDesc> ShardKey;
     NSchemeCache::TSchemeCacheRequest::EKind ShardKind = NSchemeCache::TSchemeCacheRequest::EKind::KindUnknown;
 
+    const NKqpProto::TKqpPhyStage& GetStage(const size_t idx) const {
+        auto& txBody = Tx.Body;
+        YQL_ENSURE(idx < txBody->StagesSize());
+        return txBody->GetStages(idx);
+    }
+
+    template <class TStageIdExt>
+    const NKqpProto::TKqpPhyStage& GetStage(const TStageIdExt& stageId) const {
+        return GetStage(stageId.StageId);
+    }
+
+    bool HasReads() const {
+        return ShardOperations.contains(TKeyDesc::ERowOperation::Read);
+    }
+
+    bool HasWrites() const {
+        return ShardOperations.contains(TKeyDesc::ERowOperation::Update) ||
+            ShardOperations.contains(TKeyDesc::ERowOperation::Erase);
+    }
+
     explicit TStageInfoMeta(const IKqpGateway::TPhysicalTxData& tx)
         : Tx(tx)
         , TableKind(ETableKind::Unknown)
@@ -204,12 +224,7 @@ struct TKqpTaskOutputType {
     };
 };
 
-const NKqpProto::TKqpPhyStage& GetStage(const TStageInfo& stageInfo);
-
 void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo);
-
-bool HasReads(const TStageInfo& stageInfo);
-bool HasWrites(const TStageInfo& stageInfo);
 
 bool IsCrossShardChannel(TKqpTasksGraph& tasksGraph, const NYql::NDq::TChannel& channel);
 

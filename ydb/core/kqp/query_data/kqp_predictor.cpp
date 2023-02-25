@@ -1,8 +1,10 @@
 #include "kqp_predictor.h"
-#include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <util/system/info.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 
 namespace NKikimr::NKqp {
 

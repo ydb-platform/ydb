@@ -175,7 +175,7 @@ public:
 
     void RunTask(TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
         auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-        auto& stage = GetStage(stageInfo);
+        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         NDqProto::TDqTask protoTask;
         protoTask.SetId(task.Id);

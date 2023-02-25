@@ -1,10 +1,10 @@
 #pragma once
 
 #include "kqp_event_ids.h"
-#include "kqp_prepared_query.h"
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/draft/ydb_query.pb.h>
 

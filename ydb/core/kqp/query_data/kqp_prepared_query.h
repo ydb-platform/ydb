@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/protos/kqp.pb.h>
 
 #include <util/generic/vector.h>
@@ -36,9 +37,11 @@ class TKqpPhyTxHolder {
     bool PureTx = false;
     TVector<TPhyTxResultMetadata> TxResultsMeta;
     std::shared_ptr<TPreparedQueryAllocHolder> Alloc;
-
+    std::vector<TStagePredictor> Predictors;
 public:
     using TConstPtr = std::shared_ptr<const TKqpPhyTxHolder>;
+
+    const TStagePredictor& GetCalculationPredictor(const size_t stageIdx) const;
 
     const TVector<TPhyTxResultMetadata>& GetTxResultsMeta() const { return TxResultsMeta; }
 

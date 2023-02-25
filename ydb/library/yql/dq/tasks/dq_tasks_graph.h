@@ -64,6 +64,16 @@ struct TStageInfo : private TMoveOnly {
 
     TVector<ui64> Tasks;
     TStageInfoMeta Meta;
+
+    TString DebugString() const {
+        // TODO: Print stage details, including input types and program.
+        TStringBuilder result;
+        result << "StageInfo: StageId #" << Id
+            << ", InputsCount: " << InputsCount
+            << ", OutputsCount: " << OutputsCount;
+        return result;
+    }
+
 };
 
 struct TChannel {

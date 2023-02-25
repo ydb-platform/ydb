@@ -1,7 +1,6 @@
 #pragma once
 
-#include "kqp_query_data.h"
-
+#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>

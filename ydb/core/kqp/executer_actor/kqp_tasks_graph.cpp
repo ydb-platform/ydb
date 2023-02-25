@@ -19,19 +19,7 @@ using namespace NYql::NNodes;
 // #define DBG_TRACE
 
 void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo) {
-    // TODO: Print stage details, including input types and program.
-    LOG_DEBUG_S(ctx, NKikimrServices::KQP_EXECUTER, "StageInfo: StageId #" << stageInfo.Id
-        << ", InputsCount: " << stageInfo.InputsCount
-        << ", OutputsCount: " << stageInfo.OutputsCount);
-}
-
-bool HasReads(const TStageInfo& stageInfo) {
-    return stageInfo.Meta.ShardOperations.contains(TKeyDesc::ERowOperation::Read);
-}
-
-bool HasWrites(const TStageInfo& stageInfo) {
-    return stageInfo.Meta.ShardOperations.contains(TKeyDesc::ERowOperation::Update) ||
-           stageInfo.Meta.ShardOperations.contains(TKeyDesc::ERowOperation::Erase);
+    LOG_DEBUG_S(ctx, NKikimrServices::KQP_EXECUTER, stageInfo.DebugString());
 }
 
 void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGateway::TPhysicalTxData>& txs) {
@@ -93,7 +81,7 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
             }
 
             YQL_ENSURE(tables.empty() || tables.size() == 1);
-            YQL_ENSURE(!HasReads(stageInfo) || !HasWrites(stageInfo));
+            YQL_ENSURE(!stageInfo.Meta.HasReads() || !stageInfo.Meta.HasWrites());
         }
     }
 }
@@ -272,7 +260,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tableKeys, const TStageInfo& stageInfo,
     ui64 txId, bool enableSpilling)
 {
-    auto& stage = GetStage(stageInfo);
+    auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
     if (stage.GetIsEffectsStage()) {
         YQL_ENSURE(stageInfo.OutputsCount == 1);
@@ -355,13 +343,6 @@ bool IsCrossShardChannel(TKqpTasksGraph& tasksGraph, const TChannel& channel) {
     }
 
     return targetShard != tasksGraph.GetTask(channel.SrcTask).Meta.ShardId;
-}
-
-const NKqpProto::TKqpPhyStage& GetStage(const TStageInfo& stageInfo) {
-    auto& txBody = stageInfo.Meta.Tx.Body;
-    YQL_ENSURE(stageInfo.Id.StageId < txBody->StagesSize());
-
-    return txBody->GetStages(stageInfo.Id.StageId);
 }
 
 void TShardKeyRanges::AddPoint(TSerializedCellVec&& point) {

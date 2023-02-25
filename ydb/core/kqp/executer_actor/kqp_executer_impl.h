@@ -61,11 +61,7 @@ enum class EExecType {
 
 const ui64 MaxTaskSize = 48_MB;
 
-void PrepareKqpTaskParameters(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const TTask& task,
-    NYql::NDqProto::TDqTask& dqTask, const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory);
-
-std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const NKqpProto::TKqpPhyStage& stage,
-    const TStageInfo& stageInfo, const TTask& task);
+std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task);
 
 inline bool IsDebugLogEnabled() {
     return TlsActivationContext->LoggerSettings() &&
@@ -670,7 +666,7 @@ protected:
     void BuildSysViewScanTasks(TStageInfo& stageInfo) {
         Y_VERIFY_DEBUG(stageInfo.Meta.IsSysView());
 
-        auto& stage = GetStage(stageInfo);
+        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         const auto& table = TableKeys.GetTable(stageInfo.Meta.TableId);
         const auto& keyTypes = table.KeyColumnTypes;
@@ -716,7 +712,7 @@ protected:
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
-        auto& stage = GetStage(stageInfo);
+        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasReadRangesSource());
         YQL_ENSURE(stage.InputsSize() == 0 && stage.SourcesSize() == 1, "multiple sources or sources mixed with connections");
@@ -916,6 +912,33 @@ protected:
             auto& channelDesc = *outputDesc.AddChannels();
             static_cast<TDerived*>(this)->FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
         }
+    }
+
+    NYql::NDqProto::TDqTask PrepareKqpTaskParameters(const TStageInfo& stageInfo, const TTask& task, const NMiniKQL::TTypeEnvironment& typeEnv) {
+        NYql::NDqProto::TDqTask result;
+        result.SetId(task.Id);
+        result.SetStageId(stageInfo.Id.StageId);
+
+        for (auto& input : task.Inputs) {
+            FillInputDesc(*result.AddInputs(), input);
+        }
+
+        for (auto& output : task.Outputs) {
+            FillOutputDesc(*result.AddOutputs(), output);
+        }
+
+        const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+        result.MutableProgram()->CopyFrom(stage.GetProgram());
+        auto g = typeEnv.BindAllocator();
+        for (auto& paramName : stage.GetProgramParameters()) {
+            auto& dqParams = *result.MutableParameters();
+            if (auto* taskParam = task.Meta.Params.FindPtr(paramName)) {
+                dqParams[paramName] = *taskParam;
+            } else {
+                dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
+            }
+        }
+        return result;
     }
 
     void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta) {
@@ -1197,7 +1220,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, 
+    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
 

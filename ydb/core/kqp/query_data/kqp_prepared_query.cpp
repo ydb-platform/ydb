@@ -6,6 +6,9 @@
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/services.pb.h>
+
+#include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NKqp {
 
@@ -55,6 +58,16 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
     , Alloc(alloc)
 {
     TxResultsMeta.resize(Proto->GetResults().size());
+    for (auto&& i : Proto->GetStages()) {
+        TStagePredictor predictor;
+        if (!predictor.DeserializeFromKqpSettings(i.GetProgram().GetSettings())) {
+            ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "cannot parse program settings for data prediction";
+            Predictors.emplace_back();
+        } else {
+            Predictors.emplace_back(std::move(predictor));
+        }
+    }
+
     ui32 i = 0;
     for (const auto& txResult : Proto->GetResults()) {
         auto& result = TxResultsMeta[i++];
@@ -79,6 +92,11 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
 
 bool TKqpPhyTxHolder::IsPureTx() const {
     return PureTx;
+}
+
+const NKikimr::NKqp::TStagePredictor& TKqpPhyTxHolder::GetCalculationPredictor(const size_t stageIdx) const {
+    YQL_ENSURE(stageIdx < Predictors.size(), "incorrect stage idx for predictor");
+    return Predictors[stageIdx];
 }
 
 TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,

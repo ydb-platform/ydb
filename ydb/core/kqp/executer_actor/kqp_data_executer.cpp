@@ -852,10 +852,10 @@ private:
                 auto& task = TasksGraph.GetTask(taskId);
                 auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
 
-                if (HasReads(stageInfo)) {
+                if (stageInfo.Meta.HasReads()) {
                     affectedFlags |= NFlatTxCoordinator::TTransactionProposal::TAffectedEntry::AffectedRead;
                 }
-                if (HasWrites(stageInfo)) {
+                if (stageInfo.Meta.HasWrites()) {
                     affectedFlags |= NFlatTxCoordinator::TTransactionProposal::TAffectedEntry::AffectedWrite;
                 }
             }
@@ -1307,7 +1307,7 @@ private:
             return task;
         };
 
-        auto& stage = GetStage(stageInfo);
+        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         const auto& table = TableKeys.GetTable(stageInfo.Meta.TableId);
         const auto& keyTypes = table.KeyColumnTypes;;
@@ -1439,7 +1439,7 @@ private:
     }
 
     void BuildComputeTasks(TStageInfo& stageInfo) {
-        auto& stage = GetStage(stageInfo);
+        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         ui32 partitionsCount = 1;
         for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
@@ -1696,24 +1696,8 @@ private:
 
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-            auto& stage = GetStage(stageInfo);
-
-            NDqProto::TDqTask taskDesc;
-            taskDesc.SetId(task.Id);
-            taskDesc.SetStageId(stageInfo.Id.StageId);
+            NDqProto::TDqTask taskDesc = PrepareKqpTaskParameters(stageInfo, task, TypeEnv());
             ActorIdToProto(SelfId(), taskDesc.MutableExecuter()->MutableActorId());
-
-            for (auto& input : task.Inputs) {
-                FillInputDesc(*taskDesc.AddInputs(), input);
-            }
-
-            for (auto& output : task.Outputs) {
-                FillOutputDesc(*taskDesc.AddOutputs(), output);
-            }
-
-            taskDesc.MutableProgram()->CopyFrom(stage.GetProgram());
-
-            PrepareKqpTaskParameters(stage, stageInfo, task, taskDesc, TypeEnv(), HolderFactory());
 
             if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
                 NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta protoTaskMeta;

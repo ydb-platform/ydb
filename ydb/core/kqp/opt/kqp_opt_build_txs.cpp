@@ -9,6 +9,7 @@
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
 
 namespace NKikimr::NKqp::NOpt {
 

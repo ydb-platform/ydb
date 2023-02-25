@@ -1,11 +1,12 @@
 #include "kqp_yql.h"
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 namespace NYql {
 
 using namespace NKikimr;
-using namespace NKikimr::NKqp;
+//using namespace NKikimr::NKqp;
 using namespace NNodes;
 
 static EPhysicalQueryType GetPhysicalQueryType(const TStringBuf& value) {

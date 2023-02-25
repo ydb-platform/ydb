@@ -310,7 +310,7 @@ namespace NKikimr {
 
     void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto);
 
-    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrCapnProto::TLogoBlobID::Builder proto);
+    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrCapnProto::TLogoBlobID::Reader proto);
 
 
     void LogoBlobIDVectorFromLogoBlobIDRepeated(

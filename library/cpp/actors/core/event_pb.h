@@ -2,7 +2,6 @@
 
 #include "event.h"
 #include "event_load.h"
-
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/arena.h>
 #include <library/cpp/actors/protos/actors.pb.h>
@@ -510,5 +509,12 @@ namespace NActors {
         Y_VERIFY_DEBUG(dest);
         dest->SetRawX1(src.RawX1());
         dest->SetRawX2(src.RawX2());
+    }
+
+    template <typename ActorId>
+    inline void ActorIdToProto(const TActorId& src, ActorId dest) {
+//        Y_VERIFY_DEBUG(dest);
+        dest.SetRawX1(src.RawX1());
+        dest.SetRawX2(src.RawX2());
     }
 }

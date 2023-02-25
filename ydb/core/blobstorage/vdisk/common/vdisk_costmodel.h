@@ -132,6 +132,8 @@ namespace NKikimr {
 
         /// SETTINGS
         void FillInSettings(NKikimrBlobStorage::TVDiskCostSettings &settings) const;
+        void FillInSettings(NKikimrCapnProto::TVDiskCostSettings::Builder &&settings) const;
+
 
         /// READS
         ui64 GetCost(const TEvBlobStorage::TEvVGet &ev) const {

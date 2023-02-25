@@ -18,7 +18,7 @@ namespace NKikimr {
         TLogoBlobsSnapshot LogoBlobsSnapshot;
         TBarriersSnapshot BarriersSnapshot;
         TReadBatcherCtxPtr BatcherCtx;
-        const NKikimrBlobStorage::TEvVGet &Record;
+        const NKikimrCapnProto::TEvVGet::Builder &Record;
         const bool ShowInternals;
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> Result;
         TQueryResultSizeTracker ResultSize;
@@ -49,14 +49,14 @@ namespace NKikimr {
             ui8 priority = 0;
             Y_VERIFY(Record.HasHandleClass());
             switch (Record.GetHandleClass()) {
-                case NKikimrBlobStorage::EGetHandleClass::AsyncRead:
+                case NKikimrCapnProto::EGetHandleClass::AsyncRead:
                     priority = NPriRead::HullOnlineOther;
                     break;
-                case NKikimrBlobStorage::EGetHandleClass::FastRead:
-                case NKikimrBlobStorage::EGetHandleClass::Discover:
+                case NKikimrCapnProto::EGetHandleClass::FastRead:
+                case NKikimrCapnProto::EGetHandleClass::Discover:
                     priority = NPriRead::HullOnlineRt;
                     break;
-                case NKikimrBlobStorage::EGetHandleClass::LowRead:
+                case NKikimrCapnProto::EGetHandleClass::LowRead:
                     priority = NPriRead::HullLow;
                     break;
                 default:

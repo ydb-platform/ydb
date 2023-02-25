@@ -7,6 +7,7 @@
 #include <vector>
 #include <optional>
 #include <library/cpp/actors/core/event_pb.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 #include "tevvget.capnp.h"
 
@@ -14,7 +15,7 @@ namespace NKikimrCapnProtoUtil {
     struct TRopeStream : public kj::InputStream {
         NActors::TRopeStream *underlying;
 
-        virtual size_t tryRead(void* dst, size_t minBytes, size_t maxBytes) override {
+        virtual size_t tryRead(void* dst, size_t minBytes, size_t) override {
             size_t bytesRead = 0;
             while (bytesRead < minBytes) {
                 const void* buf;
@@ -201,6 +202,7 @@ namespace NKikimrCapnProto {
             void SetExpectedMsgId(const TMessageId::Reader& value) { return setExpectedMsgId(value.GetCapnpBase()); }
             void SetFailedMsgId(const TMessageId::Reader& value) { return setFailedMsgId(value.GetCapnpBase()); }
             void SetStatus(const EStatus& value) { return setStatus(static_cast<NKikimrCapnProto_::EStatus>(static_cast<size_t>(value) + 1)); }
+            void SetStatus(const NKikimrBlobStorage::TWindowFeedback_EStatus& value) { return setStatus(static_cast<NKikimrCapnProto_::EStatus>(static_cast<size_t>(value) + 1)); }
             TMessageId::Builder MutableExpectedMsgId() { return getExpectedMsgId(); }
             TMessageId::Builder MutableFailedMsgId() { return getFailedMsgId(); }
             const NKikimrCapnProto_::TWindowFeedback::Builder& GetCapnpBase() const { return *this; }
@@ -331,6 +333,7 @@ namespace NKikimrCapnProto {
             void SetSenderActorId(const TActorId::Reader& value) { return setSenderActorId(value.GetCapnpBase()); }
             void SetExtQueueId(const EVDiskQueueId& value) { return setExtQueueId(static_cast<NKikimrCapnProto_::EVDiskQueueId>(static_cast<size_t>(value) + 1)); }
             void SetIntQueueId(const EVDiskInternalQueueId& value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(static_cast<size_t>(value) + 1)); }
+            void SetIntQueueId(const NKikimrBlobStorage::EVDiskInternalQueueId& value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(static_cast<size_t>(value) + 1)); }
             TMessageId::Builder MutableMsgId() { return getMsgId(); }
             TVDiskCostSettings::Builder MutableCostSettings() { return getCostSettings(); }
             TWindowFeedback::Builder MutableWindow() { return getWindow(); }
@@ -496,7 +499,7 @@ namespace NKikimrCapnProto {
     struct TEvVGet {
         struct Reader : private NKikimrCapnProto_::TEvVGet::Reader {
         private:
-            std::optional<capnp::PackedMessageReader> messageReader;
+            std::unique_ptr<capnp::PackedMessageReader> messageReader;
         protected:
             std::vector<TExtremeQuery::Reader> elements;
         public:
@@ -550,7 +553,8 @@ namespace NKikimrCapnProto {
 
                 kj::BufferedInputStreamWrapper buffered(stream);
 
-                static_cast<NKikimrCapnProto_::TEvVGet::Reader&>(*this) = messageReader.emplace(buffered).getRoot<NKikimrCapnProto_::TEvVGet>();
+                messageReader = std::make_unique<capnp::PackedMessageReader>(buffered);
+                static_cast<NKikimrCapnProto_::TEvVGet::Reader&>(*this) = messageReader->getRoot<NKikimrCapnProto_::TEvVGet>();
                 if (hasExtremeQueries()) {
                     elements.reserve(getExtremeQueries().size());
                     for (TExtremeQuery::Reader extremeQuery : getExtremeQueries()) {
@@ -562,29 +566,30 @@ namespace NKikimrCapnProto {
 
         };
 
-        struct Builder : private capnp::MallocMessageBuilder, private NKikimrCapnProto_::TEvVGet::Builder, public Reader {
+        struct Builder : public Reader {
         private:
-            using NKikimrCapnProto_::TEvVGet::Builder::getRangeQuery;
-            using NKikimrCapnProto_::TEvVGet::Builder::getVDiskID;
-            using NKikimrCapnProto_::TEvVGet::Builder::getMsgQoS;
-            using NKikimrCapnProto_::TEvVGet::Builder::getTimestamps;
-            using NKikimrCapnProto_::TEvVGet::Builder::getReaderTabletData;
-            using NKikimrCapnProto_::TEvVGet::Builder::getForceBlockTabletData;
-            using NKikimrCapnProto_::TEvVGet::Builder::totalSize;
+            std::unique_ptr<capnp::MallocMessageBuilder> message;
+            NKikimrCapnProto_::TEvVGet::Builder builder;
+
         public:
-            Builder() : NKikimrCapnProto_::TEvVGet::Builder(initRoot<NKikimrCapnProto_::TEvVGet>()), Reader(asReader()) {}
-            Builder(NKikimrCapnProto_::TEvVGet::Builder b) : NKikimrCapnProto_::TEvVGet::Builder(b), Reader(b.asReader()) {}
+            Builder()
+            : message(std::make_unique<capnp::MallocMessageBuilder>())
+            , builder(message->initRoot<NKikimrCapnProto_::TEvVGet>())
+            {
+                static_cast<Reader&>(*this) = builder.asReader();
+            }
+            Builder(NKikimrCapnProto_::TEvVGet::Builder b) : Reader(b.asReader()), builder(b) {}
             Builder* operator->() { return this; }
             Builder& operator*() { return *this; }
 
             TExtremeQuery::Builder AddExtremeQueries() {
-                auto orphan = getOrphanage().newOrphan<NKikimrCapnProto_::TExtremeQuery>();
+                auto orphan = message->getOrphanage().newOrphan<NKikimrCapnProto_::TExtremeQuery>();
                 elements.emplace_back(orphan.getReader());
                 return orphan.get();
             }
 
             int ByteSize() const {
-                return totalSize().wordCount * 8;
+                return builder.totalSize().wordCount * 8;
             }
 
             std::string ShortDebugString() const {
@@ -595,42 +600,49 @@ namespace NKikimrCapnProto {
                 return "TEvVGet";
             }
 
+            bool ParseFromString(std::string) { return true; }
+
+            void CopyFrom(const Builder& other) {
+                // TODO(stetsyuk): think of a better solution
+                builder = other.builder;
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
-                NKikimrCapnProto_::TEvVGet::Builder b(*this);
+                NKikimrCapnProto_::TEvVGet::Builder b(builder);
                 auto interviews = b.initExtremeQueries(elements.size());
                 for (size_t i = 0; i != elements.size(); ++i) {
                     interviews.setWithCaveats(i, GetExtremeQueries(i).GetCapnpBase());
                 }
 
                 kj::VectorOutputStream stream;
-                capnp::writePackedMessage(stream, const_cast<Builder&>(*this));
+                capnp::writePackedMessage(stream, *message);
                 output->WriteAliasedRaw(stream.getArray().begin(), stream.getArray().size());
                 return true;
             }
 
-            void SetNotifyIfNotReady(const bool& value) { return setNotifyIfNotReady(value); }
-            void SetShowInternals(const bool& value) { return setShowInternals(value); }
-            void SetCookie(const uint64_t& value) { return setCookie(value); }
-            void SetIndexOnly(const bool& value) { return setIndexOnly(value); }
-            void SetSuppressBarrierCheck(const bool& value) { return setSuppressBarrierCheck(value); }
-            void SetTabletId(const uint64_t& value) { return setTabletId(value); }
-            void SetAcquireBlockedGeneration(const bool& value) { return setAcquireBlockedGeneration(value); }
-            void SetForceBlockedGeneration(const uint32_t& value) { return setForceBlockedGeneration(value); }
-            void SetSnapshotId(const std::string& value) { return setSnapshotId({reinterpret_cast<const unsigned char*>(value.data()), value.size()}); }
-            void SetRangeQuery(const TRangeQuery::Reader& value) { return setRangeQuery(value.GetCapnpBase()); }
-            void SetVDiskID(const TVDiskID::Reader& value) { return setVDiskID(value.GetCapnpBase()); }
-            void SetMsgQoS(const TMsgQoS::Reader& value) { return setMsgQoS(value.GetCapnpBase()); }
-            void SetTimestamps(const TTimestamps::Reader& value) { return setTimestamps(value.GetCapnpBase()); }
-            void SetReaderTabletData(const TTabletData::Reader& value) { return setReaderTabletData(value.GetCapnpBase()); }
-            void SetForceBlockTabletData(const TTabletData::Reader& value) { return setForceBlockTabletData(value.GetCapnpBase()); }
-            void SetHandleClass(const EGetHandleClass& value) { return setHandleClass(static_cast<NKikimrCapnProto_::EGetHandleClass>(static_cast<size_t>(value) + 1)); }
-            TRangeQuery::Builder MutableRangeQuery() { return getRangeQuery(); }
-            TVDiskID::Builder MutableVDiskID() { return getVDiskID(); }
-            TMsgQoS::Builder MutableMsgQoS() { return getMsgQoS(); }
-            TTimestamps::Builder MutableTimestamps() { return getTimestamps(); }
-            TTabletData::Builder MutableReaderTabletData() { return getReaderTabletData(); }
-            TTabletData::Builder MutableForceBlockTabletData() { return getForceBlockTabletData(); }
-            const NKikimrCapnProto_::TEvVGet::Builder& GetCapnpBase() const { return *this; }
+            void SetNotifyIfNotReady(const bool& value) { return builder.setNotifyIfNotReady(value); }
+            void SetShowInternals(const bool& value) { return builder.setShowInternals(value); }
+            void SetCookie(const uint64_t& value) { return builder.setCookie(value); }
+            void SetIndexOnly(const bool& value) { return builder.setIndexOnly(value); }
+            void SetSuppressBarrierCheck(const bool& value) { return builder.setSuppressBarrierCheck(value); }
+            void SetTabletId(const uint64_t& value) { return builder.setTabletId(value); }
+            void SetAcquireBlockedGeneration(const bool& value) { return builder.setAcquireBlockedGeneration(value); }
+            void SetForceBlockedGeneration(const uint32_t& value) { return builder.setForceBlockedGeneration(value); }
+            void SetSnapshotId(const std::string& value) { return builder.setSnapshotId({reinterpret_cast<const unsigned char*>(value.data()), value.size()}); }
+            void SetRangeQuery(const TRangeQuery::Reader& value) { return builder.setRangeQuery(value.GetCapnpBase()); }
+            void SetVDiskID(const TVDiskID::Reader& value) { return builder.setVDiskID(value.GetCapnpBase()); }
+            void SetMsgQoS(const TMsgQoS::Reader& value) { return builder.setMsgQoS(value.GetCapnpBase()); }
+            void SetTimestamps(const TTimestamps::Reader& value) { return builder.setTimestamps(value.GetCapnpBase()); }
+            void SetReaderTabletData(const TTabletData::Reader& value) { return builder.setReaderTabletData(value.GetCapnpBase()); }
+            void SetForceBlockTabletData(const TTabletData::Reader& value) { return builder.setForceBlockTabletData(value.GetCapnpBase()); }
+            void SetHandleClass(const EGetHandleClass& value) { return builder.setHandleClass(static_cast<NKikimrCapnProto_::EGetHandleClass>(static_cast<size_t>(value) + 1)); }
+            TRangeQuery::Builder MutableRangeQuery() { return builder.getRangeQuery(); }
+            TVDiskID::Builder MutableVDiskID() { return builder.getVDiskID(); }
+            TMsgQoS::Builder MutableMsgQoS() { return builder.getMsgQoS(); }
+            TTimestamps::Builder MutableTimestamps() { return builder.getTimestamps(); }
+            TTabletData::Builder MutableReaderTabletData() { return builder.getReaderTabletData(); }
+            TTabletData::Builder MutableForceBlockTabletData() { return builder.getForceBlockTabletData(); }
+            const NKikimrCapnProto_::TEvVGet::Builder& GetCapnpBase() const { return builder; }
         };
     };
 };

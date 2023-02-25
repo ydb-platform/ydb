@@ -39,15 +39,15 @@ namespace NKikimr {
                 return nullptr;
             }
 
-            const NKikimrBlobStorage::TExtremeQuery *query = &Record.GetExtremeQueries(queryNum);
+            auto query = Record.GetExtremeQueries(queryNum);
             TQuery q;
-            q.LogoBlobID = LogoBlobIDFromLogoBlobID(query->GetId());
+            q.LogoBlobID = LogoBlobIDFromLogoBlobID(query.GetId());
             q.PartId = q.LogoBlobID.PartId();
             q.LogoBlobID = TLogoBlobID(q.LogoBlobID, 0);
-            q.CookieVal = query->GetCookie();
-            q.HasCookie = query->HasCookie();
-            q.Shift = query->GetShift();
-            q.Size = query->GetSize();
+            q.CookieVal = query.GetCookie();
+            q.HasCookie = query.HasCookie();
+            q.Shift = query.GetShift();
+            q.Size = query.GetSize();
             Queries.push_back(q);
             ForwardIt->Seek(q.LogoBlobID);
             BlobInIndex = ForwardIt->Valid() && ForwardIt->GetCurKey().LogoBlobID() == q.LogoBlobID;

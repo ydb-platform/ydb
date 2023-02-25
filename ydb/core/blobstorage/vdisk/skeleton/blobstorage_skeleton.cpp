@@ -881,7 +881,7 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVGet::TPtr &ev, const TActorContext &ctx) {
             IFaceMonGroup->GetMsgs()++;
             TInstant now = TAppData::TimeProvider->Now();
-            NKikimrBlobStorage::TEvVGet &record = ev->Get()->Record;
+            auto &record = ev->Get()->Record;
 
             // FIXME: check PartId() is not null and is not too large
 
@@ -934,9 +934,9 @@ namespace NKikimr {
                 TMaybe<ui64> cookie;
                 if (record.HasCookie())
                     cookie = record.GetCookie();
-                auto handleClass = ev->Get()->Record.GetHandleClass();
+                auto handleClass = static_cast<NKikimrBlobStorage::EGetHandleClass>(ev->Get()->Record.GetHandleClass());
                 auto result = std::make_unique<TEvBlobStorage::TEvVGetResult>(NKikimrProto::OK, SelfVDiskId, now,
-                    ev->Get()->GetCachedByteSize(), &record, ev->Get()->GetIsLocalMon() ? nullptr : SkeletonFrontIDPtr,
+                    ev->Get()->GetCachedByteSize(), ev->Get()->GetIsLocalMon() ? nullptr : SkeletonFrontIDPtr,
                     IFaceMonGroup->GetResMsgsPtr(), VCtx->Histograms.GetHistogram(handleClass), cookie, ev->GetChannel(),
                     Db->GetVDiskIncarnationGuid());
                 if (record.GetAcquireBlockedGeneration()) {

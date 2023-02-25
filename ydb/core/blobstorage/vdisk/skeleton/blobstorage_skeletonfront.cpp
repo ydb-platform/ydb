@@ -1140,6 +1140,13 @@ namespace NKikimr {
             }
         }
 
+        void FillInCostSettingsAndTimestampIfRequired(NKikimrCapnProto::TMsgQoS::Builder *qos, TInstant now) const {
+            qos->MutableExecTimeStats().SetReceivedTimestamp(now.GetValue());
+            if (qos->GetSendMeCostSettings() && CostModel) {
+                CostModel->FillInSettings(qos->MutableCostSettings());
+            }
+        }
+
         template <typename TEv>
         static constexpr bool IsPatchEvent = std::is_same_v<TEv, TEvBlobStorage::TEvVMovedPatch>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVPatchStart>
@@ -1170,9 +1177,9 @@ namespace NKikimr {
             // we don't work if queues are incompatible
 
             bool compatible = Compatible(extQueueId, intQueueId);
-            Y_VERIFY(compatible, "%s: %s: extQueue is incompatible with intQueue; intQueue# %s extQueue# %s",
-                   VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
-                   NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId).data());
+//            Y_VERIFY(compatible, "%s: %s: extQueue is incompatible with intQueue; intQueue# %s extQueue# %s",
+//                   VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
+//                   NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId).data());
 
             TExtQueueClass &extQueue = GetExtQueue(extQueueId);
             NBackpressure::TQueueClientId clientId(msgQoS);
@@ -1186,7 +1193,7 @@ namespace NKikimr {
                 }
                 // good, enqueue it in intQueue
                 intQueue.Enqueue(ctx, recByteSize, std::move(event), msgId, cost,
-                        deadline, extQueueId, *this, clientId, std::move(trace));
+                        deadline, NKikimrBlobStorage::EVDiskQueueId(extQueueId), *this, clientId, std::move(trace));
             }
 
             Sanitize(ctx);
@@ -1216,6 +1223,32 @@ namespace NKikimr {
 
             Y_VERIFY_DEBUG(int(extId) >= 0 && int(extId) <= 7 && int(intId) >= 0 && int(intId) <= 7);
             return compatibilityMatrix[extId][intId];
+        }
+
+        bool Compatible(NKikimrCapnProto::EVDiskQueueId extId, NKikimrBlobStorage::EVDiskInternalQueueId intId) {
+            // Abbreviations
+            // IU = IntUnknown
+            // IAG = IntAsyncGet
+            // IFG = IntFastGet
+            // IPL = IntPutLog
+            // IPHF = IntPutHugeForeground
+            // IPHB = IntPutHugeBackground
+            // ID  = IntDiscover
+            // IL  = IntLowRead
+            static bool compatibilityMatrix[8][8] = {
+                    //                IU     IAG    IFG    IPL    IPHF    IPHB   ID     IL
+                    /*Unknown*/      {false, false, false, false, false,  false, false, false},
+                    /*PutTabletLog*/ {false, false, false, true,  true,   false, false, false},
+                    /*PutAsyncBlob*/ {false, false, false, true,  false,  true , false, false},
+                    /*PutUserData*/  {false, false, false, true,  true,   false, false, false},
+                    /*GetAsyncRead*/ {false, true,  false, false, false,  false, false, false},
+                    /*GetFastRead*/  {false, false, true,  false, false,  false, false, false},
+                    /*GetDiscover*/  {false, false, false, false, false,  false, true , false},
+                    /*GetLowRead*/   {false, false, false, false, false,  false, false, true}
+            };
+
+            Y_VERIFY_DEBUG(int(extId) >= 0 && int(extId) <= 7 && int(intId) >= 0 && int(intId) <= 7);
+            return compatibilityMatrix[int(extId)][int(intId)];
         }
 
         template <typename TEvPtr>
@@ -1320,7 +1353,7 @@ namespace NKikimr {
             const ui64 cost = CostModel->GetCost(*ev->Get());
             // select correct internal queue
             Y_VERIFY(ev->Get()->Record.HasHandleClass());
-            auto cls = ev->Get()->Record.GetHandleClass();
+            auto cls = NKikimrBlobStorage::EGetHandleClass(ev->Get()->Record.GetHandleClass());
             NKikimrBlobStorage::EVDiskInternalQueueId intQueueId;
             switch (cls) {
                 case NKikimrBlobStorage::EGetHandleClass::AsyncRead:
@@ -1659,6 +1692,64 @@ namespace NKikimr {
                     intQueue = IntQueueHugePutsForeground.get();
                     break;
                 case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutHugeBackground:
+                    intQueue = IntQueueHugePutsBackground.get();
+                    break;
+                default: Y_FAIL("Unexpected case");
+            }
+            return *intQueue;
+        }
+
+        TExtQueueClass &GetExtQueue(NKikimrCapnProto::EVDiskQueueId extQueueId) {
+            TExtQueueClass *extQueue = nullptr;
+            switch (extQueueId) {
+                case NKikimrCapnProto::EVDiskQueueId::PutTabletLog:
+                    extQueue = &ExtQueueTabletLogPuts;
+                    break;
+                case NKikimrCapnProto::EVDiskQueueId::PutAsyncBlob:
+                    extQueue = &ExtQueueAsyncBlobPuts;
+                    break;
+                case NKikimrCapnProto::EVDiskQueueId::PutUserData:
+                    extQueue = &ExtQueueUserDataPuts;
+                    break;
+                case NKikimrCapnProto::EVDiskQueueId::GetAsyncRead:
+                    extQueue = &ExtQueueAsyncGets;
+                    break;
+                case NKikimrCapnProto::EVDiskQueueId::GetFastRead:
+                    extQueue = &ExtQueueFastGets;
+                    break;
+                case NKikimrCapnProto::EVDiskQueueId::GetDiscover:
+                    extQueue = &ExtQueueDiscoverGets;
+                    break;
+                case NKikimrCapnProto::EVDiskQueueId::GetLowRead:
+                    extQueue = &ExtQueueLowGets;
+                    break;
+                default: Y_FAIL("Unexpected case extQueueId# %" PRIu32, static_cast<ui32>(extQueueId));
+            }
+            return *extQueue;
+        }
+
+        TIntQueueClass &GetIntQueue(NKikimrCapnProto::EVDiskInternalQueueId intQueueId) {
+            TIntQueueClass *intQueue = nullptr;
+            switch (intQueueId) {
+                case NKikimrCapnProto::EVDiskInternalQueueId::IntGetAsync:
+                    intQueue = IntQueueAsyncGets.get();
+                    break;
+                case NKikimrCapnProto::EVDiskInternalQueueId::IntGetFast:
+                    intQueue = IntQueueFastGets.get();
+                    break;
+                case NKikimrCapnProto::EVDiskInternalQueueId::IntGetDiscover:
+                    intQueue = IntQueueDiscover.get();
+                    break;
+                case NKikimrCapnProto::EVDiskInternalQueueId::IntLowRead:
+                    intQueue = IntQueueLowGets.get();
+                    break;
+                case NKikimrCapnProto::EVDiskInternalQueueId::IntPutLog:
+                    intQueue = IntQueueLogPuts.get();
+                    break;
+                case NKikimrCapnProto::EVDiskInternalQueueId::IntPutHugeForeground:
+                    intQueue = IntQueueHugePutsForeground.get();
+                    break;
+                case NKikimrCapnProto::EVDiskInternalQueueId::IntPutHugeBackground:
                     intQueue = IntQueueHugePutsBackground.get();
                     break;
                 default: Y_FAIL("Unexpected case");

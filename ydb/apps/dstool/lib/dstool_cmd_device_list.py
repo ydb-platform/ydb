@@ -37,10 +37,13 @@ def do(args):
         all_columns,
         default_visible_columns=visible_columns)
 
+    pdiskBySerialNumber = {}
+    for pdisk in base_config.PDisk:
+        if pdisk.ExpectedSerial:
+            pdiskBySerialNumber[pdisk.ExpectedSerial] = pdisk
+
     rows = []
     for device in base_config.Device:
-        usedByPDisk = True if device.PDiskId > 0 else False
-
         row = {}
         row['SerialNumber'] = device.SerialNumber
         row['NodeId'] = device.NodeId
@@ -50,17 +53,16 @@ def do(args):
         row['BoxId'] = device.BoxId
         row['Guid'] = device.Guid if device.Guid > 0 else 'NULL'
 
-        if usedByPDisk:
-            row['NodeId:PDiskId'] = '[%u:%u]' % (device.NodeId, device.PDiskId)
+        if device.SerialNumber in pdiskBySerialNumber:
+            pdisk = pdiskBySerialNumber[device.SerialNumber]
+            row['NodeId:PDiskId'] = '[%u:%u]' % (pdisk.NodeId, pdisk.PDiskId)
+
+            if device.LifeStage == kikimr_bsconfig.TDriveLifeStage.E.ADDED_BY_DSTOOL:
+                row['StorageStatus'] = 'PDISK_ADDED_BY_DSTOOL'
+            else:
+                row['StorageStatus'] = 'PDISK_ADDED_BY_DEFINE_BOX'
         else:
             row['NodeId:PDiskId'] = 'NULL'
-
-        if usedByPDisk:
-            if device.LifeStage == kikimr_bsconfig.TDriveLifeStage.E.ADDED_BY_DSTOOL:
-                row['StorageStatus'] = 'Configured by ydb-dstool'
-            else:
-                row['StorageStatus'] = 'Configured by DefineBox'
-        else:
             row['StorageStatus'] = 'FREE'
 
         rows.append(row)

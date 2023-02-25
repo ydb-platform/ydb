@@ -305,8 +305,8 @@ namespace NKikimr {
         {}
     };
 
-    template <typename TLogoBlobIDSerializationClass>
-    TLogoBlobID LogoBlobIDFromLogoBlobID(const TLogoBlobIDSerializationClass &proto);
+    TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto);
+    TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrCapnProto::TLogoBlobID::Builder &proto);
 
     void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto);
 

@@ -93,8 +93,11 @@ bool TLogoBlobID::Parse(TLogoBlobID &out, const TString &buf, TString &errorExpl
     return true;
 }
 
-template <typename TLogoBlobIDSerializationClass>
-TLogoBlobID LogoBlobIDFromLogoBlobID(const TLogoBlobIDSerializationClass &proto) {
+TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto) {
+    return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
+}
+
+TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrCapnProto::TLogoBlobID::Builder &proto) {
     return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
 }
 

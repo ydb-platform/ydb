@@ -688,14 +688,80 @@ namespace NKikimr {
             return ToString(Record);
         }
 
-        template <typename Serializer>
-        static void OutMsgQos(const Serializer &qos, TStringStream &str) {
+        static void OutMsgQos(const NKikimrBlobStorage::TMsgQoS &qos, TStringStream &str) {
             str << "{MsgQoS";
             if (qos.HasDeadlineSeconds()) {
                 str << " DeadlineSeconds# " << qos.GetDeadlineSeconds();
             }
             if (qos.HasMsgId()) {
                 str << " MsgId# " << qos.GetMsgId();
+            }
+            if (qos.HasCost()) {
+                str << " Cost# " << qos.GetCost();
+            }
+            if (qos.HasExtQueueId()) {
+                str << " ExtQueueId# " << NKikimrBlobStorage::EVDiskQueueId_Name(qos.GetExtQueueId()).data();
+            }
+            if (qos.HasIntQueueId()) {
+                str << " IntQueueId# " << NKikimrBlobStorage::EVDiskInternalQueueId_Name(qos.GetIntQueueId()).data();
+            }
+            if (qos.HasCostSettings()) {
+                str << " CostSettings# {";
+                const NKikimrBlobStorage::TVDiskCostSettings &costSettings = qos.GetCostSettings();
+                if (costSettings.HasSeekTimeUs()) {
+                    str << " SeekTimeUs# " << costSettings.GetSeekTimeUs();
+                }
+                if (costSettings.HasReadSpeedBps()) {
+                    str << " ReadSpeedBps# " << costSettings.GetReadSpeedBps();
+                }
+                if (costSettings.HasWriteSpeedBps()) {
+                    str << " WriteSpeedBps# " << costSettings.GetWriteSpeedBps();
+                }
+                if (costSettings.HasReadBlockSize()) {
+                    str << " ReadBlockSize# " << costSettings.GetReadBlockSize();
+                }
+                if (costSettings.HasWriteBlockSize()) {
+                    str << " WriteBlockSize# " << costSettings.GetWriteBlockSize();
+                }
+                if (costSettings.HasMinREALHugeBlobInBytes()) {
+                    str << " MinREALHugeBlobInBytes# " << costSettings.GetMinREALHugeBlobInBytes();
+                }
+                str << "}";
+            }
+
+            if (qos.HasSendMeCostSettings()) {
+                str << " SendMeCostSettings# " << qos.GetSendMeCostSettings();
+            }
+            if (qos.HasWindow()) {
+                str << " Window# {";
+                const NKikimrBlobStorage::TWindowFeedback &window = qos.GetWindow();
+                if (window.HasStatus()) {
+                    str << " Status# " << NKikimrBlobStorage::TWindowFeedback::EStatus_Name(window.GetStatus()).data();
+                }
+                if (window.HasActualWindowSize()) {
+                    str << " ActualWindowSize# " << window.GetActualWindowSize();
+                }
+                if (window.HasMaxWindowSize()) {
+                    str << " MaxWindowSize# " << window.GetMaxWindowSize();
+                }
+                if (window.HasExpectedMsgId()) {
+                    str << " ExpectedMsgId# " << window.GetExpectedMsgId();
+                }
+                if (window.HasFailedMsgId()) {
+                    str << " FailedMsgId# " << window.GetFailedMsgId();
+                }
+                str << "}";
+            }
+            str << "}";
+        }
+
+        static void OutMsgQos(const NKikimrCapnProto::TMsgQoS::Reader &qos, TStringStream &str) {
+            str << "{MsgQoS";
+            if (qos.HasDeadlineSeconds()) {
+                str << " DeadlineSeconds# " << qos.GetDeadlineSeconds();
+            }
+            if (qos.HasMsgId()) {
+                str << " MsgId# " << qos.GetMsgId().;
             }
             if (qos.HasCost()) {
                 str << " Cost# " << qos.GetCost();

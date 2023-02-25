@@ -306,13 +306,12 @@ namespace NKikimr {
     };
 
     TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto);
-    TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrCapnProto::TLogoBlobID::Builder &proto);
+    TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrCapnProto::TLogoBlobID::Reader &proto);
 
     void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto);
 
-    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrCapnProto::TLogoBlobID::Reader proto);
-
-
+    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrCapnProto::TLogoBlobID::Builder proto);
+    
     void LogoBlobIDVectorFromLogoBlobIDRepeated(
                 TVector<TLogoBlobID> *to,
                 const ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> &proto);

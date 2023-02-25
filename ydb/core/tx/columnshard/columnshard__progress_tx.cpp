@@ -1,5 +1,6 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -20,8 +21,7 @@ private:
     enum class ETriggerActivities {
         NONE,
         POST_INSERT,
-        POST_SCHEMA,
-        POST_DATA_OPERATION
+        POST_SCHEMA
     };
 
 public:
@@ -76,7 +76,27 @@ public:
             switch (txInfo.TxKind) {
                 case NKikimrTxColumnShard::TX_KIND_DATA:
                 {
-                    Trigger = ETriggerActivities::POST_DATA_OPERATION;
+                    NKikimrTxDataShard::TDataTransaction dataTransaction;
+                    Y_VERIFY(dataTransaction.ParseFromString(db.Table<Schema::TxInfo>().Key(txId).Select().GetValue<Schema::TxInfo::TxBody>()));
+                    {
+                        for (auto&& task : dataTransaction.GetKqpTransaction().GetTasks()) {
+                            for (auto&& o : task.GetOutputs()) {
+                                for (auto&& c : o.GetChannels()) {
+                                    TActorId actorId(c.GetDstEndpoint().GetActorId().GetRawX1(), c.GetDstEndpoint().GetActorId().GetRawX2());
+                                    {
+                                        NYql::NDqProto::TEvComputeChannelData evProto;
+                                        evProto.MutableChannelData()->SetChannelId(c.GetId());
+                                        evProto.MutableChannelData()->SetFinished(true);
+                                        evProto.SetNoAck(true);
+                                        evProto.SetSeqNo(1);
+                                        auto ev = std::make_unique<NYql::NDq::TEvDqCompute::TEvChannelData>();
+                                        ev->Record = evProto;
+                                        ctx.Send(actorId, ev.release());
+                                    }
+                                }
+                            }
+                        }
+                    }
                     break;
                 }
                 case NKikimrTxColumnShard::TX_KIND_SCHEMA:
@@ -168,7 +188,6 @@ public:
             case ETriggerActivities::POST_SCHEMA:
                 Self->EnqueueBackgroundActivities();
                 break;
-            case ETriggerActivities::POST_DATA_OPERATION:
             case ETriggerActivities::NONE:
             default:
                 break;

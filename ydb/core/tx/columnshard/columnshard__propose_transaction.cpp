@@ -1,6 +1,8 @@
 #include "columnshard_impl.h"
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -190,13 +192,30 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             break;
         }
         case NKikimrTxColumnShard::TX_KIND_DATA: {
-            statusMessage = TStringBuilder() << "Data manipulation is unsupported for column shard TxId# " << txId;
-            if (record.GetFlags() & NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE) {
+            NKikimrTxDataShard::TDataTransaction dataTransaction;
+            Y_VERIFY(dataTransaction.ParseFromString(record.GetTxBody()));
+            statusMessage = TStringBuilder() << "Data manipulation is unsupported for column shard TxId# " << txId << ":" << dataTransaction.DebugString() << Endl;
+            if ((record.GetFlags() & NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE) || Self->BasicTxInfo.contains(txId)) {
+                for (auto&& task : dataTransaction.GetKqpTransaction().GetTasks()) {
+                    for (auto&& o : task.GetOutputs()) {
+                        for (auto&& c : o.GetChannels()) {
+                            TActorId actorId(c.GetDstEndpoint().GetActorId().GetRawX1(), c.GetDstEndpoint().GetActorId().GetRawX2());
+                            NYql::NDqProto::TEvComputeChannelData evProto;
+                            evProto.MutableChannelData()->SetChannelId(c.GetId());
+                            evProto.MutableChannelData()->SetFinished(true);
+                            evProto.SetNoAck(true);
+                            evProto.SetSeqNo(1);
+                            auto ev = std::make_unique<NYql::NDq::TEvDqCompute::TEvChannelData>();
+                            ev->Record = evProto;
+                            ctx.Send(actorId, ev.release());
+                        }
+                    }
+                }
+
                 status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
             } else {
                 minStep = Self->GetAllowedStep();
                 maxStep = minStep + Self->MaxCommitTxDelay.MilliSeconds();
-
                 auto& txInfo = Self->BasicTxInfo[txId];
                 txInfo.TxId = txId;
                 txInfo.TxKind = txKind;

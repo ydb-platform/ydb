@@ -331,6 +331,9 @@ namespace NKikimr {
                         // yes, take some data from static configuration
                         pdiskId = *pdiskIdOptional;
                         guid = GetGuidAndValidateStaticPDisk(pdiskId, disk, state, staticSlotUsage);
+                    } else if (auto info = state.DrivesSerials.Find(disk.Serial); info && info->Guid) {
+                        pdiskId = FindFirstEmptyPDiskId(state.PDisks, disk.NodeId);
+                        guid = *info->Guid;
                     } else {
                         pdiskId = FindFirstEmptyPDiskId(state.PDisks, disk.NodeId);
                         guid = RandomNumber<Schema::PDisk::Guid::Type>();

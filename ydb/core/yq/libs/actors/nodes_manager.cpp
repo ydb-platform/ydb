@@ -106,6 +106,13 @@ private:
             ui64 memoryAllocated = AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic());
             TVector<TPeer> nodes;
             for (ui32 i = 0; i < count; ++i) {
+                ui64 totalMemoryLimit = 0;
+                if (rec.TaskSize() > i) {
+                    totalMemoryLimit = rec.GetTask(i).GetInitialTaskMemoryLimit();
+                }
+                if (totalMemoryLimit == 0) {
+                    totalMemoryLimit = MkqlInitialMemoryLimit;
+                }
                 TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
                 bool selfPlacement = true;
                 if (!Peers.empty()) {
@@ -120,13 +127,13 @@ private:
 
                         if (    (!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
                              && (   nextNode.MemoryLimit == 0 // memory is NOT limited
-                                 || nextNode.MemoryLimit >= nextNode.MemoryAllocated + MkqlInitialMemoryLimit) // or enough
+                                 || nextNode.MemoryLimit >= nextNode.MemoryAllocated + totalMemoryLimit) // or enough
                         ) {
                             // adjust allocated size to place next tasks correctly, will be reset after next health check
-                            nextNode.MemoryAllocated += MkqlInitialMemoryLimit;
+                            nextNode.MemoryAllocated += totalMemoryLimit;
                             if (nextNode.NodeId == SelfId().NodeId()) {
                                 // eventually synced self allocation info
-                                memoryAllocated += MkqlInitialMemoryLimit;
+                                memoryAllocated += totalMemoryLimit;
                             }
                             node = nextNode;
                             selfPlacement = false;
@@ -139,8 +146,8 @@ private:
                     }
                 }
                 if (selfPlacement) {
-                    if (memoryLimit == 0 || memoryLimit >= memoryAllocated + MkqlInitialMemoryLimit) {
-                        memoryAllocated += MkqlInitialMemoryLimit;
+                    if (memoryLimit == 0 || memoryLimit >= memoryAllocated + totalMemoryLimit) {
+                        memoryAllocated += totalMemoryLimit;
                     } else {
                         placementFailure = true;
                         auto& error = *req->Record.MutableError();

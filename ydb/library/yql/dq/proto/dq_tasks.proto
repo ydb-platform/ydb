@@ -174,4 +174,5 @@ message TDqTask {
     bool CreateSuspended = 8;
     string RateLimiter = 10;
     string RateLimiterResource = 11;
+    uint64 InitialTaskMemoryLimit = 12;
 }

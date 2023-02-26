@@ -286,12 +286,7 @@ void Init(
         auto fetcher = CreatePendingFetcher(
             yqSharedResources,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            protoConfig.GetCommon(),
-            protoConfig.GetCheckpointCoordinator(),
-            protoConfig.GetPrivateApi(),
-            protoConfig.GetGateways(),
-            protoConfig.GetPinger(),
-            protoConfig.GetRateLimiter(),
+            protoConfig,
             appData->FunctionRegistry,
             TAppData::TimeProvider,
             TAppData::RandomProvider,

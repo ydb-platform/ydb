@@ -282,10 +282,10 @@ public:
         , Params(std::move(params))
         , CreatedAt(Params.CreatedAt)
         , QueryCounters(queryCounters)
-        , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.CheckpointCoordinatorConfig.GetEnabled())
-        , MaxTasksPerStage(Params.CommonConfig.GetMaxTasksPerStage() ? Params.CommonConfig.GetMaxTasksPerStage() : 500)
-        , MaxTasksPerOperation(Params.CommonConfig.GetMaxTasksPerOperation() ? Params.CommonConfig.GetMaxTasksPerOperation() : 40)
-        , Compressor(Params.CommonConfig.GetQueryArtifactsCompressionMethod(), Params.CommonConfig.GetQueryArtifactsCompressionMinSize())
+        , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.Config.GetCheckpointCoordinator().GetEnabled())
+        , MaxTasksPerStage(Params.Config.GetCommon().GetMaxTasksPerStage() ? Params.Config.GetCommon().GetMaxTasksPerStage() : 500)
+        , MaxTasksPerOperation(Params.Config.GetCommon().GetMaxTasksPerOperation() ? Params.Config.GetCommon().GetMaxTasksPerOperation() : 40)
+        , Compressor(Params.Config.GetCommon().GetQueryArtifactsCompressionMethod(), Params.Config.GetCommon().GetQueryArtifactsCompressionMinSize())
     {
         QueryCounters.SetUptimePublicAndServiceCounter(0);
     }
@@ -308,7 +308,7 @@ public:
                 Params.QueryId,
                 Params.Owner,
                 SelfId(),
-                Params.PingerConfig,
+                Params.Config.GetPinger(),
                 Params.Deadline,
                 QueryCounters,
                 CreatedAt
@@ -545,7 +545,7 @@ private:
             break;
         case YandexQuery::QueryMeta::STARTING:
             QueryStateUpdateRequest.mutable_resources()->set_rate_limiter(
-                Params.RateLimiterConfig.GetEnabled() ? Fq::Private::TaskResources::PREPARE : Fq::Private::TaskResources::NOT_NEEDED);
+                Params.Config.GetRateLimiter().GetEnabled() ? Fq::Private::TaskResources::PREPARE : Fq::Private::TaskResources::NOT_NEEDED);
             QueryStateUpdateRequest.mutable_resources()->set_compilation(Fq::Private::TaskResources::PREPARE);
             // know nothing about read rules yet
             Params.Status = YandexQuery::QueryMeta::RUNNING; // ???
@@ -697,6 +697,32 @@ private:
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    void FillMemoryInfo() {
+        auto mkqlDefaultLimit = Params.Config.GetResourceManager().GetMkqlInitialMemoryLimit();
+        if (mkqlDefaultLimit == 0) {
+            mkqlDefaultLimit = 8_GB;
+        }
+
+        auto s3ReadDefaultInflightLimit = Params.Config.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetDataInflight();
+        if (s3ReadDefaultInflightLimit == 0) {
+            s3ReadDefaultInflightLimit = 200_MB;
+        }
+
+        for (auto& graphParams : DqGraphParams) {
+            for (NYql::NDqProto::TDqTask& task : *graphParams.MutableTasks()) {
+                if (task.GetInitialTaskMemoryLimit() == 0) {
+                    ui64 limitTotal = mkqlDefaultLimit;
+                    for (auto& input : *task.MutableInputs()) {
+                        if (input.HasSource() && input.GetSource().GetType() == "S3Source") {
+                            limitTotal += s3ReadDefaultInflightLimit;
+                        }
+                    }
+                    task.SetInitialTaskMemoryLimit(limitTotal);
                 }
             }
         }
@@ -1272,7 +1298,7 @@ private:
     }
 
     bool StartRateLimiterResourceDeleterIfCan() {
-        if (!RateLimiterResourceDeleterId && !RateLimiterResourceCreatorId && FinalizingStatusIsWritten && QueryResponseArrived && Params.RateLimiterConfig.GetEnabled()) {
+        if (!RateLimiterResourceDeleterId && !RateLimiterResourceCreatorId && FinalizingStatusIsWritten && QueryResponseArrived && Params.Config.GetRateLimiter().GetEnabled()) {
             LOG_D("Start rate limiter resource deleter");
             RateLimiterResourceDeleterId = Register(CreateRateLimiterResourceDeleter(SelfId(), Params.Owner, Params.QueryId, Params.Scope, Params.TenantName));
             return true;
@@ -1363,7 +1389,7 @@ private:
                 ::NYq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
-                Params.CheckpointCoordinatorConfig,
+                Params.Config.GetCheckpointCoordinator(),
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,
@@ -1408,7 +1434,7 @@ private:
 
         // Copy settings from config
         // They are stronger than settings from this function.
-        dqSettings = Params.GatewaysConfig.GetDq().GetDefaultSettings();
+        dqSettings = Params.Config.GetGateways().GetDq().GetDefaultSettings();
 
         THashSet<TString> settingsInConfig;
         for (const auto& s : dqSettings) {
@@ -1454,13 +1480,13 @@ private:
     }
 
     void AddClustersFromConfig(NYql::TGatewaysConfig& gatewaysConfig, THashMap<TString, TString>& clusters) const {
-        for (const auto& pq : Params.GatewaysConfig.GetPq().GetClusterMapping()) {
+        for (const auto& pq : Params.Config.GetGateways().GetPq().GetClusterMapping()) {
             auto& clusterCfg = *gatewaysConfig.MutablePq()->AddClusterMapping();
             clusterCfg = pq;
             clusters.emplace(clusterCfg.GetName(), PqProviderName);
         }
 
-        for (const auto& solomon : Params.GatewaysConfig.GetSolomon().GetClusterMapping()) {
+        for (const auto& solomon : Params.Config.GetGateways().GetSolomon().GetClusterMapping()) {
             auto& clusterCfg = *gatewaysConfig.MutableSolomon()->AddClusterMapping();
             clusterCfg = solomon;
             clusters.emplace(clusterCfg.GetName(), SolomonProviderName);
@@ -1570,7 +1596,7 @@ private:
             notFinished = true;
         }
 
-        if (!RateLimiterResourceWasDeleted && Params.RateLimiterConfig.GetEnabled()) {
+        if (!RateLimiterResourceWasDeleted && Params.Config.GetRateLimiter().GetEnabled()) {
             StartRateLimiterResourceDeleterIfCan();
             notFinished = true;
         }
@@ -1632,19 +1658,19 @@ private:
         SetupDqSettings(*gatewaysConfig.MutableDq());
         // the main idea of having Params.GatewaysConfig is to copy clusters only
         // but in this case we have to copy S3 provider limits
-        *gatewaysConfig.MutableS3() = Params.GatewaysConfig.GetS3();
+        *gatewaysConfig.MutableS3() = Params.Config.GetGateways().GetS3();
         gatewaysConfig.MutableS3()->ClearClusterMapping();
 
         THashMap<TString, TString> clusters;
 
-        TString monitoringEndpoint = Params.CommonConfig.GetMonitoringEndpoint();
+        TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringEndpoint();
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
         AddSystemClusters(gatewaysConfig, clusters, Params.AuthToken);
         AddClustersFromConnections(YqConnections,
-            Params.CommonConfig.GetUseBearerForYdb(),
-            Params.CommonConfig.GetObjectStorageEndpoint(),
+            Params.Config.GetCommon().GetUseBearerForYdb(),
+            Params.Config.GetCommon().GetObjectStorageEndpoint(),
             monitoringEndpoint,
             Params.AuthToken,
             Params.AccountIdSignatures,
@@ -1654,7 +1680,7 @@ private:
 
         TVector<TDataProviderInitializer> dataProvidersInit;
         const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(NActors::TActivationContext::ActorSystem(), Params.DatabaseResolver,
-            Params.CommonConfig.GetYdbMvpCloudEndpoint(), Params.CommonConfig.GetMdbGateway(), Params.CommonConfig.GetMdbTransformHost(), Params.QueryId);
+            Params.Config.GetCommon().GetYdbMvpCloudEndpoint(), Params.Config.GetCommon().GetMdbGateway(), Params.Config.GetCommon().GetMdbTransformHost(), Params.QueryId);
         {
             // TBD: move init to better place
             QueryStateUpdateRequest.set_scope(Params.Scope.ToString());

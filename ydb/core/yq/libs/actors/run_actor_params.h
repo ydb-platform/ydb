@@ -31,12 +31,7 @@ struct TRunActorParams { // TODO2 : Change name
         ui64 nextUniqueId,
         NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-        const ::NYq::NConfig::TCommonConfig& commonConfig,
-        const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
-        const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
-        const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
-        const ::NYq::NConfig::TPingerConfig& pingerConfig,
-        const ::NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
+        const ::NYq::NConfig::TConfig& config,
         const TString& sql,
         const NYdb::NFq::TScope& scope,
         const TString& authToken,
@@ -87,12 +82,7 @@ struct TRunActorParams { // TODO2 : Change name
     NKikimr::NMiniKQL::TComputationNodeFactory DqCompFactory;
 
     ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
-    const ::NYq::NConfig::TCommonConfig CommonConfig;
-    const ::NYq::NConfig::TCheckpointCoordinatorConfig CheckpointCoordinatorConfig;
-    const ::NYq::NConfig::TPrivateApiConfig PrivateApiConfig;
-    const ::NYq::NConfig::TGatewaysConfig GatewaysConfig;
-    const ::NYq::NConfig::TPingerConfig PingerConfig;
-    const ::NYq::NConfig::TRateLimiterConfig RateLimiterConfig;
+    const ::NYq::NConfig::TConfig Config;
     const TString Sql;
     const NYdb::NFq::TScope Scope;
     const TString AuthToken;

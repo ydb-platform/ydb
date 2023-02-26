@@ -109,12 +109,7 @@ public:
     TPendingFetcher(
         const NYq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const ::NYq::NConfig::TCommonConfig& commonConfig,
-        const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
-        const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
-        const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
-        const ::NYq::NConfig::TPingerConfig& pingerConfig,
-        const ::NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
+        const ::NYq::NConfig::TConfig& config,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -129,12 +124,7 @@ public:
         )
         : YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
-        , CommonConfig(commonConfig)
-        , CheckpointCoordinatorConfig(checkpointCoordinatorConfig)
-        , PrivateApiConfig(privateApiConfig)
-        , GatewaysConfig(gatewaysConfig)
-        , PingerConfig(pingerConfig)
-        , RateLimiterConfig(rateLimiterConfig)
+        , Config(config)
         , FunctionRegistry(functionRegistry)
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
@@ -360,9 +350,7 @@ private:
             FunctionRegistry, RandomProvider,
             ModuleResolver, ModuleResolver->GetNextUniqueId(),
             DqCompFactory, PqCmConnections,
-            CommonConfig, CheckpointCoordinatorConfig,
-            PrivateApiConfig, GatewaysConfig, PingerConfig,
-            RateLimiterConfig,
+            Config,
             task.text(), task.scope(), task.user_token(),
             DatabaseResolver, queryId,
             task.user_id(), GetOwnerId(), task.generation(),
@@ -373,7 +361,7 @@ private:
             task.query_type(),
             task.query_syntax(),
             task.execute_mode(),
-            GetEntityIdAsString(CommonConfig.GetIdsPrefix(), EEntityType::RESULT),
+            GetEntityIdAsString(Config.GetCommon().GetIdsPrefix(), EEntityType::RESULT),
             task.state_load_mode(),
             task.disposition(),
             task.status(),
@@ -414,12 +402,7 @@ private:
 
     NYq::TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    NYq::NConfig::TCommonConfig CommonConfig;
-    NYq::NConfig::TCheckpointCoordinatorConfig CheckpointCoordinatorConfig;
-    NYq::NConfig::TPrivateApiConfig PrivateApiConfig;
-    NYq::NConfig::TGatewaysConfig GatewaysConfig;
-    NYq::NConfig::TPingerConfig PingerConfig;
-    NYq::NConfig::TRateLimiterConfig RateLimiterConfig;
+    NYq::NConfig::TConfig Config;
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -467,12 +450,7 @@ private:
 NActors::IActor* CreatePendingFetcher(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const ::NYq::NConfig::TCommonConfig& commonConfig,
-    const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
-    const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
-    const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
-    const ::NYq::NConfig::TPingerConfig& pingerConfig,
-    const ::NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
+    const ::NYq::NConfig::TConfig& config,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
@@ -488,12 +466,7 @@ NActors::IActor* CreatePendingFetcher(
     return new TPendingFetcher(
         yqSharedResources,
         credentialsProviderFactory,
-        commonConfig,
-        checkpointCoordinatorConfig,
-        privateApiConfig,
-        gatewaysConfig,
-        pingerConfig,
-        rateLimiterConfig,
+        config,
         functionRegistry,
         timeProvider,
         randomProvider,

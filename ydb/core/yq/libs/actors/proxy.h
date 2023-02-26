@@ -39,12 +39,7 @@ NActors::TActorId MakePendingFetcherId(ui32 nodeId);
 NActors::IActor* CreatePendingFetcher(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const ::NYq::NConfig::TCommonConfig& commonConfig,
-    const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
-    const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
-    const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
-    const ::NYq::NConfig::TPingerConfig& pingerConfig,
-    const ::NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
+    const ::NYq::NConfig::TConfig& config,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,

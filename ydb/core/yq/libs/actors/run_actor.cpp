@@ -1044,7 +1044,7 @@ private:
 
     TIssue WrapInternalIssues(const TIssues& issues) {
         NYql::IssuesToMessage(issues, QueryStateUpdateRequest.mutable_internal_issues());
-        TString referenceId = GetEntityIdAsString(Params.CommonConfig.GetIdsPrefix(), EEntityType::UNDEFINED);
+        TString referenceId = GetEntityIdAsString(Params.Config.GetCommon().GetIdsPrefix(), EEntityType::UNDEFINED);
         LOG_E(referenceId << ": " << issues.ToOneLineString());
         return TIssue("Contact technical support and provide query information and this id: " + referenceId + "_" + Now().ToStringUpToSeconds());
     }
@@ -1056,7 +1056,7 @@ private:
             << ". Issues count: " << result.IssuesSize()
             << ". Rows count: " << result.GetRowsCount());
 
-        if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR && !Params.CommonConfig.GetKeepInternalErrors()) {
+        if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR && !Params.Config.GetCommon().GetKeepInternalErrors()) {
             TIssues issues;
             IssuesFromMessage(result.issues(), issues);
             Issues.AddIssue(WrapInternalIssues(issues));
@@ -1102,7 +1102,7 @@ private:
             TIssues issues;
             IssuesFromMessage(result.GetIssues(), issues);
 
-            if (result.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR && !Params.CommonConfig.GetKeepInternalErrors()) {
+            if (result.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR && !Params.Config.GetCommon().GetKeepInternalErrors()) {
                 auto issue = WrapInternalIssues(issues);
                 issues.Clear();
                 issues.AddIssue(issue);

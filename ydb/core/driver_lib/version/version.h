@@ -129,6 +129,8 @@ public:
     static bool CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
             const TOldFormat& stored, ui32 componentId, TString& errorReason);
 
+    static bool CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInfo& current);
+
     static NKikimrConfig::TStoredCompatibilityInfo MakeStored(ui32 componentId,
             const NKikimrConfig::TCurrentCompatibilityInfo* current);
 

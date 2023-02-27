@@ -601,8 +601,8 @@ Y_UNIT_TEST_SUITE(OldFormat) {
                     .YdbVersion = TYdbVersion{ .Year = 22, .Major = 4, .Minor = 1, .Hotfix = 0 }
                 }, 
                 TOldFormat{
-                    .Tag = "stable-22-4-1",
-                    .AcceptedTags = { "stable-22-4-1" }
+                    .Tag = "stable-22-4",
+                    .AcceptedTags = { "stable-22-4" }
                 },
                 true
         );
@@ -635,8 +635,8 @@ Y_UNIT_TEST_SUITE(OldFormat) {
                     }
                 }, 
                 TOldFormat{
-                    .Tag = "stable-22-5-1",
-                    .AcceptedTags = { "stable-22-5-1" }
+                    .Tag = "stable-22-5",
+                    .AcceptedTags = { "stable-22-5" }
                 },
                 true
         );
@@ -704,8 +704,8 @@ Y_UNIT_TEST_SUITE(OldFormat) {
                     }
                 }, 
                 TOldFormat{
-                    .Tag = "stable-22-4-1",
-                    .AcceptedTags = { "stable-22-4-1" }
+                    .Tag = "stable-22-4",
+                    .AcceptedTags = { "stable-22-4" }
                 },
                 true
         );

@@ -1,4 +1,5 @@
 #include <library/cpp/svnversion/svnversion.h>
+#include <ydb/core/util/yverify_stream.h>
 #include "version.h"
 
 using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
@@ -20,12 +21,14 @@ const TCurrent* TCompatibilityInfo::GetCurrent() {
         // using TCompatibilityRule = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
         using TCurrentCompatibilityInfo = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
 
-        // Look for protobuf message format in ydb/core/protos/config.proto
-        // To be changed in new release:
-        CompatibilityInfo = TCurrent();
-        CompatibilityInfo->CopyFrom(TCurrentCompatibilityInfo{
+        auto current = TCurrentCompatibilityInfo{
             .Build = "trunk"
-        }.ToPB());
+        }.ToPB();
+
+        // Y_VERIFY_DEBUG(CompleteFromTag(current));
+
+        CompatibilityInfo = TCurrent();
+        CompatibilityInfo->CopyFrom(current);
     }
 
     return &*CompatibilityInfo;
@@ -329,19 +332,181 @@ TString GetBranchName(TString url) {
     return url;
 }
 
+std::optional<NKikimrConfig::TYdbVersion> ParseYdbVersionFromTag(TString tag, TString delimiter = "-") {
+    NKikimrConfig::TYdbVersion version;
+    TVector<TString> splitted;
+    Split(tag, delimiter , splitted);
+    TDeque<TString> parts(splitted.begin(), splitted.end());
+
+    if (parts.empty()) {
+        // empty tag
+        return std::nullopt;
+    }
+
+    // Skip "stable" if present
+    if (parts.front() == "stable") {
+        parts.pop_front();
+    }
+
+    // parse Major version
+    ui32 year;
+    ui32 major;
+    if (parts.size() < 2 || !TryIntFromString<10, ui32>(parts[0], year) ||
+            !TryIntFromString<10, ui32>(parts[1], major)) {
+        // non-stable version, example: trunk
+        return std::nullopt;
+    }
+
+    parts.pop_front();
+    parts.pop_front();
+    version.SetYear(year);
+    version.SetMajor(major);
+
+    if (parts.empty()) {
+        // example: stable-22-1 == 22.1.1.0
+        version.SetMinor(1);
+        version.SetHotfix(0);
+        return version;
+    }
+
+    // parse Minor version
+    ui32 minor;
+    if (!TryIntFromString<10, ui32>(parts.front(), minor)) {
+        // example: stable-22-1-testing == 22.1.1.0
+        version.SetMinor(1);
+        version.SetHotfix(0);
+        return version;
+    }
+    parts.pop_front();
+    version.SetMinor(minor);
+
+    // parse Hotfix
+    ui32 hotfix;
+    if (parts.empty()) {
+        // example: stable-23-1-1 == 23.1.1.0
+        version.SetHotfix(0);
+        return version;
+    }
+    
+    if (TryIntFromString<10, ui32>(parts.front(), hotfix)) {
+        // example: stable-23-1-1-4 == 23.1.1.4
+        version.SetHotfix(hotfix);
+        return version;
+    }
+    
+    if (parts.front() == "hotfix" || parts.front() == "fix") {
+        parts.pop_front();
+    }
+
+    if (parts.empty()) {
+        // example: stable-23-1-1-hotfix == 23.1.1.1
+        version.SetHotfix(1);
+        return version;
+    }
+    
+    if (TryIntFromString<10, ui32>(parts.front(), hotfix)) {
+        // example: stable-23-1-1-hotfix-7 == 23.1.1.7
+        version.SetHotfix(hotfix);
+        return version;
+    }
+    
+    if (TryIntFromString<10, ui32>(parts.back(), hotfix)) {
+        // example: stable-23-1-1-fix-something-important-2 == 23.1.1.2
+        version.SetHotfix(hotfix);
+        return version;
+    } 
+
+    // example: stable-23-1-1-whatever == 23.1.1.0
+    version.SetHotfix(0);
+    return version;
+}
+
+TString GetBranchString() {
+    const char* begin = GetBranch();
+    const char* end = begin + strlen(begin);
+
+    while (begin != end && std::isspace(begin[0])) {
+        ++begin;
+    }
+    while (begin != end && std::isspace(end[-1])) {
+        --end;
+    }
+
+    return TString(begin, end);
+}
+
+TString GetTagString() {
+    TString tag = GetTag();
+    if (!tag) {
+        TString branch = GetBranchString();
+        for (const char* prefix : { "releases/", "tags/releases/experimental/", "tags/releases/" }) {
+            if (branch.StartsWith(prefix)) {
+                branch = TString(branch.begin() + strlen(prefix), branch.end());
+                break;
+            }
+        }
+        branch = tag;
+    }
+
+    for (const char* prefix : { "ydb/", "nbs/", "releases/nbs/", "releases/ydb/" , "releases/" }) {
+        if (tag.StartsWith(prefix)) {
+            tag = TString(tag.begin() + strlen(prefix), tag.end());
+            break;
+        }
+    }
+
+    return std::move(tag);
+}
+
+bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInfo& current) {
+    TString tag = GetTagString();
+    for (TString delim : {"-", "."}) {
+        auto tryParse = ParseYdbVersionFromTag(tag, delim);
+        if (tryParse) {
+            auto versionFromTag = *tryParse;
+            auto version = current.MutableYdbVersion();
+            if (version->HasYear()) {
+                Y_VERIFY_DEBUG(version->GetYear() == versionFromTag.GetYear());
+            } else {
+                version->SetYear(versionFromTag.GetYear());
+            }
+            
+            if (version->HasMajor()) {
+                Y_VERIFY_DEBUG(version->GetMajor() == versionFromTag.GetMajor());
+            } else {
+                version->SetYear(versionFromTag.GetYear());
+            }
+
+            if (versionFromTag.HasMinor()) {
+                if (version->HasMinor()) {
+                    Y_VERIFY_DEBUG(version->GetMinor() == versionFromTag.GetMinor());
+                } else {
+                    version->SetYear(versionFromTag.GetYear());
+                }
+            }
+
+            if (versionFromTag.HasHotfix()) {
+                if (version->HasYear()) {
+                    Y_VERIFY_DEBUG(version->GetYear() == versionFromTag.GetYear());
+                } else {
+                    version->SetYear(versionFromTag.GetYear());
+                }
+            }
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+////////////////////////////////////////////
+// Old Format
+////////////////////////////////////////////
+
 void CheckVersionTag() {
     if (VERSION) {
-        const char* begin = GetBranch();
-        const char* end = begin + strlen(begin);
-
-        while (begin != end && std::isspace(begin[0])) {
-            ++begin;
-        }
-        while (begin != end && std::isspace(end[-1])) {
-            --end;
-        }
-
-        TString branch(begin, end);
+        TString branch = GetBranchString();
         const char* arcadia_url = GetArcadiaSourceUrl();
 
         if ((branch.StartsWith("releases/") || branch.StartsWith("tags/releases/")) && VERSION->Tag == "trunk") {
@@ -351,65 +516,6 @@ void CheckVersionTag() {
 }
 
 using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
-
-std::optional<NKikimrConfig::TYdbVersion> ParseYdbVersionFromTag(TString tag) {
-    NKikimrConfig::TYdbVersion version;
-    TVector<TString> splitted;
-    ui32 partsCount = Split(tag, "-", splitted);
-
-    ui32 year;
-    ui32 major;
-
-    // at least "stable", year and major should be present
-    if (partsCount < 3 || splitted[0] != "stable" ||
-            !TryIntFromString<10, ui32>(splitted[1], year) ||
-            !TryIntFromString<10, ui32>(splitted[2], major)) {
-        // if we cannot parse ydb version, we assume that tag name is build name and version is non-stable
-        return std::nullopt;
-    }
-    version.SetYear(year);
-    version.SetMajor(major);
-
-    if (partsCount == 3) {
-        version.SetMinor(1);
-        version.SetHotfix(0);
-        return version;
-    }
-
-    ui32 minor;
-    if (!TryIntFromString<10, ui32>(splitted[3], minor)) {
-        version.SetMinor(1);
-        version.SetHotfix(0);
-        return version;
-    }
-    version.SetMinor(minor);
-
-    ui32 hotfix;
-
-    if (partsCount == 4) {
-        // example: stable-23-1-1 == 23.1.1.0
-        version.SetHotfix(0);
-    } else if (partsCount == 5 && TryIntFromString<10, ui32>(splitted[4], hotfix)) {
-        // example: stable-23-1-1-4 == 23.1.1.4
-        version.SetHotfix(hotfix);
-    } else if (splitted[4] == "hotfix" || splitted[4] == "fix") {
-        if (partsCount == 5) {
-            // example: stable-23-1-1-hotfix == 23.1.1.1
-            version.SetHotfix(1);
-        } else if (partsCount == 6 && TryIntFromString<10, ui32>(splitted[5], hotfix)) {
-            // example: stable-23-1-1-hotfix-7 == 23.1.1.7
-            version.SetHotfix(hotfix);
-        } else {
-            // stable-23-1-1-hotfix-some-bug == 23.1.1.1
-            version.SetHotfix(1);
-        }
-    } else {
-        // example: stable-23-1-1-cool-release == 23.1.1.0
-        version.SetHotfix(0);
-    }
-
-    return version;
-}
 
 bool TCompatibilityInfo::CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
             const TOldFormat& stored, ui32 componentId, TString& errorReason) {

@@ -67,29 +67,23 @@ SIMPLE_UDF(TGetScheme, char*(TAutoMap<char*>)) {
 
 ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetHost, GetOnlyHost)
 
-SIMPLE_UDF(TGetHostPort, TOptional<char*>(TOptional<char*>)) {
-    EMPTY_RESULT_ON_EMPTY_ARG(0);
-    const std::string_view url(args[0].AsStringRef());
-    const std::string_view host(GetHostAndPort(CutSchemePrefix(url)));
-    return host.empty() ? TUnboxedValue() :
-        valueBuilder->SubString(args[0], std::distance(url.begin(), host.begin()), host.size());
+std::string_view GetHostAndPortAfterCut(const std::string_view url) {
+    return GetHostAndPort(CutSchemePrefix(url));
 }
 
-SIMPLE_UDF(TGetSchemeHost, TOptional<char*>(TOptional<char*>)) {
-    EMPTY_RESULT_ON_EMPTY_ARG(0);
-    const std::string_view url(args[0].AsStringRef());
-    const std::string_view host(GetSchemeHost(url, /* trimHttp */ false));
-    return host.empty() ? TUnboxedValue() :
-        valueBuilder->SubString(args[0], 0U, std::distance(url.begin(), host.end()));
+ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetHostPort, GetHostAndPortAfterCut)
+
+std::string_view GetSchemeHostParameterized(const std::string_view url) {
+    return GetSchemeHost(url, /* trimHttp */ false);
 }
 
-SIMPLE_UDF(TGetSchemeHostPort, TOptional<char*>(TOptional<char*>)) {
-    EMPTY_RESULT_ON_EMPTY_ARG(0);
-    const std::string_view url(args[0].AsStringRef());
-    const std::string_view host(GetSchemeHostAndPort(url, /* trimHttp */ false, /* trimDefaultPort */ false));
-    return host.empty() ? TUnboxedValue() :
-        valueBuilder->SubString(args[0], 0U, std::distance(url.begin(), host.end()));
+ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetSchemeHost, GetSchemeHostParameterized);
+
+std::string_view GetSchemeHostPortParameterized(const std::string_view url) {
+    return GetSchemeHostAndPort(url, /* trimHttp */ false, /* trimDefaultPort */ false);
 }
+
+ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetSchemeHostPort, GetSchemeHostPortParameterized);
 
 SIMPLE_UDF(TGetPort, TOptional<ui64>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);

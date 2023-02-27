@@ -1778,7 +1778,6 @@ private:
     void ValidatePDiskWithSerial(TConfigState& state, ui32 nodeId, const TSerial& serial, const TDriveSerialInfo& driveInfo,
             std::function<TDriveSerialInfo*()> getMutableItem);
     void FitPDisksForUserConfig(TConfigState &state);
-    void FitPDisksForNode(TConfigState& state, ui32 nodeId, const std::vector<TSerial>& serials);
     void FitGroupsForUserConfig(TConfigState &state, ui32 availabilityDomainId,
         const NKikimrBlobStorage::TConfigRequest& cmd, std::deque<ui64> expectedSlotSize,
         NKikimrBlobStorage::TConfigResponse::TStatus& status);

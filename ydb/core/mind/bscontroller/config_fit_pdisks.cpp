@@ -360,20 +360,9 @@ namespace NKikimr {
             }
 
             for (const auto& pdiskId : state.PDisksToRemove) {
-                // Unset PDiskId in DrivesSerials
-                if (auto pdiskInfo = state.PDisks.Find(pdiskId)) {
-                    if (state.DrivesSerials.Find(pdiskInfo->ExpectedSerial)) {
-                        auto driveInfo = state.DrivesSerials.FindForUpdate(pdiskInfo->ExpectedSerial);
-                        driveInfo->PDiskId.Clear();
-                    }
-                }
-
                 STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP03, "PDisk to remove:", (PDiskId, pdiskId));
             }
             state.CheckConsistency();
-        }
-
-        void TBlobStorageController::FitPDisksForNode(TConfigState&, ui32, const std::vector<TSerial>&) {
         }
 
     } // NBsController

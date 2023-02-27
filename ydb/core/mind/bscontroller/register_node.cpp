@@ -10,12 +10,10 @@ class TBlobStorageController::TTxUpdateNodeDrives
 {
     NKikimrBlobStorage::TEvControllerUpdateNodeDrives Record;
     std::optional<TConfigState> State;
-
     std::unique_ptr<IEventHandle> Response;
 
-    void UpdateDevicesInfo(TTransactionContext& txc, TEvBlobStorage::TEvControllerNodeServiceSetUpdate* result) {
-
-        const TNodeId nodeId = Record.GetNodeId();
+    void UpdateDevicesInfo(TConfigState& state, TEvBlobStorage::TEvControllerNodeServiceSetUpdate* result) {
+        auto nodeId = Record.GetNodeId();
 
         auto createLog = [&] () {
             TStringStream out;
@@ -41,16 +39,9 @@ class TBlobStorageController::TTxUpdateNodeDrives
             diskSerialNumberByPath[disk.GetPath()] = disk.GetSerialNumber();
         }
 
-        NIceDb::TNiceDb db(txc.DB);
-        using T = Schema::PDisk;
-
-        auto minPDiskId = TPDiskId::MinForNode(nodeId);
-        for (auto pdiskIt = Self->PDisks.lower_bound(minPDiskId); pdiskIt != Self->PDisks.end() && pdiskIt->first.NodeId == nodeId; ++pdiskIt) {
-            Y_VERIFY(pdiskIt->second);
-            auto& pdiskInfo = *pdiskIt->second;
-            auto pdiskId = pdiskIt->first;
-
-            auto key(pdiskId.GetKey());
+        auto from = TPDiskId::MinForNode(nodeId);
+        auto to = TPDiskId::MaxForNode(nodeId);
+        state.PDisks.ScanRange(from, to, [&](const auto& pdiskId, const auto& pdiskInfo, auto& getMutableItem) {
             TString serial;
 
             // update pdisk's ExpectedSerial if necessary
@@ -62,10 +53,9 @@ class TBlobStorageController::TTxUpdateNodeDrives
 
                     switch (Self->SerialManagementStage) {
                     case NKikimrBlobStorage::TSerialManagementStage::CHECK_SERIAL:
-                        if (!pdiskInfo.ExpectedSerial && serial) {
+                        if (!pdiskInfo.ExpectedSerial && !serial.empty()) {
                             // update ExpectedSerial
-                            pdiskInfo.ExpectedSerial = serial;
-                            db.Table<T>().Key(key).Update<T::ExpectedSerial>(serial);
+                            getMutableItem()->ExpectedSerial = serial;
                             log << "Set ExpectedSerial for pdisk";
                         } else {
                             log << "disk's serial reported by the node doesn't match pdisk's serial, don't update anything";
@@ -76,10 +66,9 @@ class TBlobStorageController::TTxUpdateNodeDrives
                         log << "disk's serial reported by the node doesn't match pdisk's serial, don't update anything";
                         break;
                     default:
-                        if (serial) {
+                        if (!serial.empty()) {
                             // update ExpectedSerial
-                            pdiskInfo.ExpectedSerial = serial;
-                            db.Table<T>().Key(key).Update<T::ExpectedSerial>(serial);
+                            getMutableItem()->ExpectedSerial = serial;
                             log << "disk's serial reported by the node doesn't match pdisk's serial, update ExpectedSerial for pdisk";
                         }
                         break;
@@ -92,13 +81,14 @@ class TBlobStorageController::TTxUpdateNodeDrives
 
             // update pdisk's LastSeenSerial if necessary
             if (pdiskInfo.LastSeenSerial != serial) {
-                pdiskInfo.LastSeenSerial = serial;
-                db.Table<T>().Key(key).Update<T::LastSeenSerial>(serial);
+                getMutableItem()->LastSeenSerial = serial;
                 if (serial) {
                     Self->ReadPDisk(pdiskId, pdiskInfo, result, NKikimrBlobStorage::RESTART);
                 }
             }
-        }
+
+            return true;
+        });
 
         auto& nodeInfo = Self->GetNode(nodeId);
         Self->EraseKnownDrivesOnDisconnected(&nodeInfo);
@@ -107,33 +97,58 @@ class TBlobStorageController::TTxUpdateNodeDrives
         for (const auto& data : Record.GetDrivesData()) {
             const auto& serial = data.GetSerialNumber();
 
-            auto it = Self->DrivesSerials.find(serial);
-            if (it == Self->DrivesSerials.end()) {
-                auto newInfo = MakeHolder<TDriveSerialInfo>();
+            if (serial.empty()) {
+                continue;
+            }
+
+            if (auto info = state.DrivesSerials.FindForUpdate(serial)) {
+                if (info->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
+                    if (info->NodeId.GetRef() != nodeId) {
+                        STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN03,
+                            "Received drive from NewNodeId, but drive is reported as placed in OldNodeId",
+                            (NewNodeId, nodeId), (OldNodeId, info->NodeId.GetRef()), (Serial, serial));
+                    }
+                    if (info->Path.GetRef() != data.GetPath()) {
+                        STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN04,
+                            "Received drive by NewPath, but drive is reported as placed by OldPath",
+                            (NewPath, data.GetPath()), (OldPath, info->Path.GetRef()), (Serial, serial));
+                    }
+                } else {
+                    info->NodeId = nodeId;
+                    info->Path = data.GetPath();
+                    info->PDiskType = data.GetDeviceType();
+                }
+            } else {
+                auto newInfo = state.DrivesSerials.ConstructInplaceNewEntry(serial, /* BoxId*/ 0);
                 newInfo->LifeStage = NKikimrBlobStorage::TDriveLifeStage::FREE;
                 newInfo->NodeId = nodeId;
                 newInfo->Path = data.GetPath();
                 newInfo->PDiskType = data.GetDeviceType();
-                Self->DrivesSerials.emplace(serial, std::move(newInfo));
-            } else if (it->second->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
-                if (it->second->NodeId != nodeId) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN03,
-                        "Received drive from NewNodeId, but drive is reported as placed in OldNodeId",
-                        (NewNodeId, nodeId), (OldNodeId, it->second->NodeId), (Serial, serial));
-                }
-                if (it->second->Path != data.GetPath()) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN04,
-                        "Received drive by NewPath, but drive is reported as placed by OldPath",
-                        (NewPath, data.GetPath()), (OldPath, it->second->Path), (Serial, serial));
-                }
-            } else {
-                it->second->NodeId = nodeId;
-                it->second->Path = data.GetPath();
-                it->second->PDiskType = data.GetDeviceType();
             }
+
             NPDisk::TDriveData driveData;
             DriveDataToDriveData(data, driveData);
             nodeInfo.KnownDrives.emplace(serial, driveData);
+        }
+
+        // Remove ejected disks from DrivesSerials
+        std::unordered_set<TString> disksToRemove;
+        state.DrivesSerials.ForEach([&](const auto& serial, const auto& info) {
+            if (!info.NodeId ||
+                info.NodeId.GetRef() != nodeId ||
+                info.LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL ||
+                !info.Path ||
+                diskSerialNumberByPath.contains(info.Path.GetRef()))
+            {
+                return true;
+            }
+
+            disksToRemove.insert(serial);
+            return true;
+        });
+
+        for (const auto& serial : disksToRemove) {
+            state.DrivesSerials.DeleteExistingEntry(serial);
         }
     }
 
@@ -153,22 +168,16 @@ public:
         State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
         State->CheckConsistency();
 
-        UpdateDevicesInfo(txc, result.get());
-
-        TNodeInfo& nodeInfo = Self->GetNode(nodeId);
-
-        std::vector<TSerial> serials;
-        for (const auto& data : Record.GetDrivesData()) {
-            serials.emplace_back(data.GetSerialNumber());
-        }
-
+        auto updateIsSuccessful = true;
         try {
-            Self->FitPDisksForNode(*State, nodeId, serials);
+            UpdateDevicesInfo(*State, result.get());
             State->CheckConsistency();
         } catch (const TExError& e) {
+            updateIsSuccessful = false;
+            auto& nodeInfo = Self->GetNode(nodeId);
             Self->EraseKnownDrivesOnDisconnected(&nodeInfo);
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN04,
-                    "Error during FitPDisks after receiving TEvControllerRegisterNode", (TExError, e.what()));
+                    "Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode", (TExError, e.what()));
         }
 
         result->Record.SetInstanceId(Self->InstanceId);
@@ -177,11 +186,10 @@ public:
         Response = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), Self->SelfId(), result.release(), 0, 0);
 
         TString error;
-        if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
+        if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error))) {
             State->Rollback();
             State.reset();
         }
-
         return true;
     }
 

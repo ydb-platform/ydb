@@ -34,9 +34,9 @@
 >    Path,
 >    TabletId,
 >    DataSize
->FROM .sys/top_partitions_one_minute
+>FROM `.sys/top_partitions_one_minute`
 >WHERE CPUCores > 0.7
->AND IntervalEnd BETWEEN Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuuZ") AND Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuu")
+>AND IntervalEnd BETWEEN Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuuZ") AND Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuuZ")
 >ORDER BY IntervalEnd desc, CPUCores desc
 >```
 
@@ -51,9 +51,9 @@
 >    Path,
 >    TabletId,
 >    DataSize
->FROM .sys/top_partitions_one_hour
+>FROM `.sys/top_partitions_one_hour`
 >WHERE CPUCores > 0.9
->AND IntervalEnd BETWEEN Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuuZ") AND Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuu")
+>AND IntervalEnd BETWEEN Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuuZ") AND Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuuZ")
 >ORDER BY IntervalEnd desc, CPUCores desc
 >```
 

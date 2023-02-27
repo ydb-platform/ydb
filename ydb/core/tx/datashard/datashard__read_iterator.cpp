@@ -1350,9 +1350,9 @@ public:
         if (record.HasStatus()) {
             record.SetReadId(readId.ReadId);
             record.SetSeqNo(state.SeqNo + 1);
-            Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                 << " TReadOperation::Execute() finished with error, aborting: " << record.DebugString());
+            Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
             Self->DeleteReadIterator(it);
             return;
         }

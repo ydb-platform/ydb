@@ -1113,13 +1113,20 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             if (!PrepareJoinSide<false>(connRight, rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx, optCtx))
                 return join;
 
-        return Build<TDqJoin>(ctx, join.Pos())
-            .LeftInput(connLeft)
-            .LeftLabel(join.LeftLabel())
-            .RightInput(connRight)
-            .RightLabel(join.RightLabel())
-            .JoinType(join.JoinType())
-            .JoinKeys(ctx.ChangeChildren(join.JoinKeys().Ref(), std::move(joinKeys)))
+        const auto& items = GetSeqItemType(*join.Ref().GetTypeAnn()).Cast<TStructExprType>()->GetItems();
+        TExprNode::TListType fields(items.size());
+        std::transform(items.cbegin(), items.cend(), fields.begin(), [&](const TItemExprType* item) { return ctx.NewAtom(join.Pos(), item->GetName()); });
+
+        return Build<TCoExtractMembers>(ctx, join.Pos())
+            .Input<TDqJoin>()
+                .LeftInput(connLeft)
+                .LeftLabel(join.LeftLabel())
+                .RightInput(connRight)
+                .RightLabel(join.RightLabel())
+                .JoinType(join.JoinType())
+                .JoinKeys(ctx.ChangeChildren(join.JoinKeys().Ref(), std::move(joinKeys)))
+                .Build()
+            .Members().Add(std::move(fields)).Build()
             .Done();
     }
 

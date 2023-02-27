@@ -43,8 +43,8 @@
 1. Install dependencies
 
     ```
-    sudo apt-get -y install git cmake python python3-pip ninja-build antlr3 m4 clang-12 lld-12 libidn11-dev libaio1 libaio-dev
-    sudo pip3 install conan
+    sudo apt-get -y install git cmake python3-pip ninja-build antlr3 m4 clang-12 lld-12 libidn11-dev libaio1 libaio-dev
+    sudo pip3 install conan==1.59
      ```
 
  1. Create the work directory. Please make sure you have at least 80Gb of free space. We also recommend placing this directory on SSD to reduce build times.

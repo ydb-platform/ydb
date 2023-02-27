@@ -8,13 +8,10 @@
 #include <ydb/library/yql/utils/log/profile.h>
 
 #include <util/generic/scope.h>
-#include <util/generic/maybe.h>
-#include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <util/string/type.h>
-
 
 namespace NYql {
 
@@ -198,6 +195,7 @@ public:
         Functions["Nth"] = &TCallableConstraintTransformer::NthWrap;
         Functions["EquiJoin"] = &TCallableConstraintTransformer::EquiJoinWrap;
         Functions["MapJoinCore"] = &TCallableConstraintTransformer::MapJoinCoreWrap;
+        Functions["GraceJoinCore"] = &TCallableConstraintTransformer::GraceJoinCoreWrap;
         Functions["CommonJoinCore"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
         Functions["ToDict"] = &TCallableConstraintTransformer::ToDictWrap;
         Functions["DictItems"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>;
@@ -2252,14 +2250,166 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus MapJoinCoreWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& /*ctx*/) const {
-        if (const auto empty = input->Head().GetConstraint<TEmptyConstraintNode>()) {
+    static std::vector<std::string_view> GetKeys(const TExprNode& keys) {
+        std::vector<std::string_view> result;
+        result.reserve(keys.ChildrenSize());
+        keys.ForEachChild([&result](const TExprNode& key) { result.emplace_back(key.Content()); });
+        return result;
+    }
+
+    template<bool ForDict = false>
+    static TConstraintNode::TPathReduce GetRenames(const TExprNode& renames) {
+        std::unordered_map<std::string_view, std::string_view> map(renames.ChildrenSize() >> 1U);
+        for (auto i = 0U; i < renames.ChildrenSize(); ++++i)
+            map.emplace(renames.Child(i)->Content(), renames.Child(i + 1U)->Content());
+        return [map](const TConstraintNode::TPathType& path) -> std::vector<TConstraintNode::TPathType> {
+            if constexpr (ForDict) {
+                if (path.size() > 1U && path.front() == "1"sv) {
+                    auto out = path;
+                    out.pop_front();
+                    if (const auto it = map.find(out.front()); map.cend() != it) {
+                        out.front() = it->second;
+                        return {std::move(out)};
+                    }
+                }
+            } else {
+                if (!path.empty()) {
+                    if (const auto it = map.find(path.front()); map.cend() != it) {
+                        auto out = path;
+                        out.front() = it->second;
+                        return {std::move(out)};
+                    }
+                }
+            }
+
+            return {};
+        };
+    }
+
+    TStatus MapJoinCoreWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        const TCoMapJoinCore core(input);
+        const auto& joinType = core.JoinKind().Ref();
+        if (const auto empty = core.LeftInput().Ref().GetConstraint<TEmptyConstraintNode>()) {
             input->AddConstraint(empty);
-        } else if (const auto empty = input->Child(1)->GetConstraint<TEmptyConstraintNode>()) {
-            if (input->Child(2)->IsAtom({"Inner", "LeftSemi"})) {
+        } else if (const auto empty = core.RightDict().Ref().GetConstraint<TEmptyConstraintNode>()) {
+            if (joinType.IsAtom({"Inner", "LeftSemi"})) {
                 input->AddConstraint(empty);
             }
         }
+
+        if (joinType.IsAtom({"LeftSemi", "LeftOnly"})) {
+            const auto rename = GetRenames(core.LeftRenames().Ref());
+            if (const auto unique = core.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>())
+                if (const auto renamed = unique->RenameFields(ctx, rename))
+                    input->AddConstraint(renamed);
+            if (const auto distinct = core.LeftInput().Ref().GetConstraint<TDistinctConstraintNode>())
+                if (const auto renamed = distinct->RenameFields(ctx, rename))
+                    input->AddConstraint(renamed);
+        } else {
+            if (const auto unique = core.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>()) {
+                if (unique->HasEqualColumns(GetKeys(core.LeftKeysColumns().Ref())) && core.RightDict().Ref().GetTypeAnn()->Cast<TDictExprType>()->GetPayloadType()->GetKind() != ETypeAnnotationKind::List) {
+                    const auto rename = GetRenames(core.LeftRenames().Ref());
+                    const auto rightRename = GetRenames<true>(core.RightRenames().Ref());
+                    auto commonUnique = unique->RenameFields(ctx, rename);
+                    if (const auto rUnique = core.RightDict().Ref().GetConstraint<TUniqueConstraintNode>()) {
+                        commonUnique = TUniqueConstraintNode::Merge(commonUnique, rUnique->RenameFields(ctx, rightRename), ctx);
+                    }
+
+                    const auto distinct = core.LeftInput().Ref().GetConstraint<TDistinctConstraintNode>();
+                    auto commonDistinct = distinct ? distinct->RenameFields(ctx, rename) : nullptr;
+                    if (joinType.IsAtom("Inner")) {
+                        if (const auto rDistinct = core.RightDict().Ref().GetConstraint<TDistinctConstraintNode>()) {
+                            commonDistinct = TDistinctConstraintNode::Merge(commonDistinct, rDistinct->RenameFields(ctx, rightRename), ctx);
+                        }
+                    }
+
+                    if (commonUnique)
+                        input->AddConstraint(commonUnique);
+                    if (commonDistinct)
+                        input->AddConstraint(commonDistinct);
+                }
+            }
+        }
+
+        if (const auto sorted = core.LeftInput().Ref().GetConstraint<TSortedConstraintNode>())
+            if (const auto renamed = sorted->RenameFields(ctx, GetRenames(core.LeftRenames().Ref())))
+                input->AddConstraint(renamed);
+
+        return TStatus::Ok;
+    }
+
+    TStatus GraceJoinCoreWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        const TCoGraceJoinCore core(input);
+        const auto& joinType = core.JoinKind().Ref();
+        if (const auto lEmpty = core.LeftInput().Ref().GetConstraint<TEmptyConstraintNode>(), rEmpty = core.RightInput().Ref().GetConstraint<TEmptyConstraintNode>(); lEmpty && rEmpty) {
+            input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        } else if (lEmpty && joinType.Content().starts_with("Left")) {
+            input->AddConstraint(lEmpty);
+        } else if (rEmpty && joinType.Content().starts_with("Right")) {
+            input->AddConstraint(rEmpty);
+        } else if ((lEmpty || rEmpty) && (joinType.IsAtom("Inner") || joinType.Content().ends_with("Semi"))) {
+            input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        }
+
+        const auto lUnique = core.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>();
+        const auto rUnique = core.RightInput().Ref().GetConstraint<TUniqueConstraintNode>();
+
+        const bool lOneRow = lUnique && lUnique->HasEqualColumns(GetKeys(core.LeftKeysColumns().Ref()));
+        const bool rOneRow = rUnique && rUnique->HasEqualColumns(GetKeys(core.RightKeysColumns().Ref()));
+        const bool bothOne = lOneRow && rOneRow;
+
+        const bool singleSide = joinType.Content().ends_with("Semi") || joinType.Content().ends_with("Only");
+
+        if (singleSide || lOneRow || rOneRow) {
+            const TUniqueConstraintNode* unique = nullptr;
+            const TDistinctConstraintNode* distinct = nullptr;
+
+            const bool leftSide = joinType.Content().starts_with("Left");
+            const bool rightSide = joinType.Content().starts_with("Right");
+            const auto leftRename = GetRenames(core.LeftRenames().Ref());
+            const auto rightRename = GetRenames(core.RightRenames().Ref());
+
+            if (singleSide) {
+                if (leftSide && lUnique)
+                    unique = lUnique->RenameFields(ctx, leftRename);
+                else if (rightSide && rUnique)
+                    unique = rUnique->RenameFields(ctx, rightRename);
+            } else if (joinType.IsAtom("Exclusion") || (lOneRow && rOneRow && joinType.IsAtom({"Inner", "Full", "Left", "Right"}))) {
+                if (lUnique && rUnique)
+                    unique = TUniqueConstraintNode::Merge(lUnique->RenameFields(ctx, leftRename), rUnique->RenameFields(ctx, rightRename), ctx);
+                else if (lUnique)
+                    unique = lUnique->RenameFields(ctx, leftRename);
+                else if (rUnique)
+                    unique = rUnique->RenameFields(ctx, rightRename);
+            }
+
+            const auto lDistinct = core.LeftInput().Ref().GetConstraint<TDistinctConstraintNode>();
+            const auto rDistinct = core.RightInput().Ref().GetConstraint<TDistinctConstraintNode>();
+
+            if (singleSide) {
+                if (leftSide && lDistinct)
+                    distinct = lDistinct->RenameFields(ctx, leftRename);
+                else if (rightSide && rDistinct)
+                    distinct = rDistinct->RenameFields(ctx, rightRename);
+            } else {
+                const bool useBoth = bothOne && joinType.IsAtom("Inner");
+                const bool useLeft = lDistinct && ((leftSide && rOneRow) || useBoth);
+                const bool useRight = rDistinct && ((rightSide && lOneRow) || useBoth);
+
+                if (useLeft && !useRight)
+                    distinct = lDistinct->RenameFields(ctx, leftRename);
+                else if (useRight && !useLeft)
+                    distinct = rDistinct->RenameFields(ctx, rightRename);
+                else if (useLeft && useRight)
+                    distinct = TDistinctConstraintNode::Merge(lDistinct->RenameFields(ctx, leftRename), rDistinct->RenameFields(ctx, rightRename), ctx);
+            }
+
+            if (unique)
+                input->AddConstraint(unique);
+            if (distinct)
+                input->AddConstraint(distinct);
+        }
+
         return TStatus::Ok;
     }
 
@@ -3375,7 +3525,7 @@ private:
                             // Constraint Passthrough can be reduced in empty containers
                             newConstr = input.GetConstraint<TEmptyConstraintNode>();
                         }
-                        YQL_ENSURE(newConstr, "Rewrite error, missing " << *expectedConstr << " constraint in node\n" << input.Dump());
+                        YQL_ENSURE(newConstr, "Rewrite error, missing " << *expectedConstr << " constraint in node " << input.Content());
                     }
                 }
             }

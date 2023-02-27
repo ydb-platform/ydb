@@ -345,11 +345,9 @@ namespace {
                 else if (rightSide)
                     *unique = rUnique;
             } else if (joinType.IsAtom("Exclusion") || (lOneRow && rOneRow && joinType.IsAtom({"Inner", "Full", "Left", "Right"}))) {
-                if (lUnique && rUnique) {
-                    auto sets = lUnique->GetAllSets();
-                    sets.insert(rUnique->GetAllSets().cbegin(), rUnique->GetAllSets().cend());
-                    *unique = ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets));
-                } else if (lUnique)
+                if (lUnique && rUnique)
+                    *unique = TUniqueConstraintNode::Merge(lUnique, rUnique, ctx);
+                else if (lUnique)
                     *unique = lUnique;
                 else if (rUnique)
                     *unique = rUnique;
@@ -371,11 +369,8 @@ namespace {
                     *distinct = lDistinct;
                 else if (useRight && !useLeft)
                     *distinct = rDistinct;
-                else if (useLeft && useRight) {
-                    auto sets = lDistinct->GetAllSets();
-                    sets.insert(rDistinct->GetAllSets().cbegin(), rDistinct->GetAllSets().cend());
-                    *distinct = ctx.MakeConstraint<TDistinctConstraintNode>(std::move(sets));
-                }
+                else if (useLeft && useRight)
+                    *distinct = TDistinctConstraintNode::Merge(lDistinct, rDistinct, ctx);
             }
         }
 

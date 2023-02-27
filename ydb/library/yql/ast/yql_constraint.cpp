@@ -730,6 +730,18 @@ TUniqueConstraintNodeBase<Distinct>::MakeCommon(const TUniqueConstraintNodeBase*
 }
 
 template<bool Distinct>
+const TUniqueConstraintNodeBase<Distinct>* TUniqueConstraintNodeBase<Distinct>::Merge(const TUniqueConstraintNodeBase* one, const TUniqueConstraintNodeBase* two, TExprContext& ctx) {
+    if (!one)
+        return two;
+    if (!two)
+        return one;
+
+    auto sets = one->GetAllSets();
+    sets.insert_unique(two->GetAllSets().cbegin(), two->GetAllSets().cend());
+    return ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(sets));
+}
+
+template<bool Distinct>
 bool TUniqueConstraintNodeBase<Distinct>::IsApplicableToType(const TTypeAnnotationNode& type) const {
     if (ETypeAnnotationKind::Dict == type.GetKind())
         return true; // TODO: check for dict.

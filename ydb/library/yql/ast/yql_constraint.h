@@ -246,6 +246,8 @@ public:
     const TUniqueConstraintNodeBase* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
     const TUniqueConstraintNodeBase* MakeCommon(const TUniqueConstraintNodeBase* other, TExprContext& ctx) const;
 
+    static const TUniqueConstraintNodeBase* Merge(const TUniqueConstraintNodeBase* one, const TUniqueConstraintNodeBase* two, TExprContext& ctx);
+
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 private:
@@ -322,7 +324,7 @@ using TPartOfDistinctConstraintNode = TPartOfConstraintNode<TDistinctConstraintN
 
 template<>
 constexpr std::string_view TPartOfSortedConstraintNode::Name() {
-    return "PartOfSoted";
+    return "PartOfSorted";
 }
 
 template<>

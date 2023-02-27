@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(DotAfterDigits) {
         TCases cases = {
-            {"select a.1 .b from plato.foo;","SELECT\n\ta.1 .b\nFROM plato.foo;\n"},
+            {"select a.1 .b from plato.foo;","SELECT\n\ta.1 .b\nFROM plato.foo;\n\n"},
         };
 
         TSetup setup;
@@ -63,9 +63,9 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(DropRole) {
         TCases cases = {
-            {"use plato;drop user user,user,user;","USE plato;\nDROP USER user, user, user;\n"},
-            {"use plato;drop group if exists user;","USE plato;\nDROP GROUP IF EXISTS user;\n"},
-            {"use plato;drop group user,;","USE plato;\nDROP GROUP user,;\n"},
+            {"use plato;drop user user,user,user;","USE plato;\nDROP USER user, user, user;\n\n"},
+            {"use plato;drop group if exists user;","USE plato;\nDROP GROUP IF EXISTS user;\n\n"},
+            {"use plato;drop group user,;","USE plato;\nDROP GROUP user,;\n\n"},
         };
 
         TSetup setup;
@@ -74,8 +74,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(CreateUser) {
         TCases cases = {
-            {"use plato;create user user;","USE plato;\nCREATE USER user;\n"},
-            {"use plato;create user user encrypted password 'foo';","USE plato;\nCREATE USER user ENCRYPTED PASSWORD 'foo';\n"},
+            {"use plato;create user user;","USE plato;\nCREATE USER user;\n\n"},
+            {"use plato;create user user encrypted password 'foo';","USE plato;\nCREATE USER user ENCRYPTED PASSWORD 'foo';\n\n"},
         };
 
         TSetup setup;
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(CreateGroup) {
         TCases cases = {
-            {"use plato;create group user;","USE plato;\nCREATE GROUP user;\n"},
+            {"use plato;create group user;","USE plato;\nCREATE GROUP user;\n\n"},
         };
 
         TSetup setup;
@@ -93,9 +93,9 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(AlterUser) {
         TCases cases = {
-            {"use plato;alter user user rename to user;","USE plato;\nALTER USER user RENAME TO user;\n"},
-            {"use plato;alter user user encrypted password 'foo';","USE plato;\nALTER USER user ENCRYPTED PASSWORD 'foo';\n"},
-            {"use plato;alter user user with encrypted password 'foo';","USE plato;\nALTER USER user WITH ENCRYPTED PASSWORD 'foo';\n"},
+            {"use plato;alter user user rename to user;","USE plato;\nALTER USER user RENAME TO user;\n\n"},
+            {"use plato;alter user user encrypted password 'foo';","USE plato;\nALTER USER user ENCRYPTED PASSWORD 'foo';\n\n"},
+            {"use plato;alter user user with encrypted password 'foo';","USE plato;\nALTER USER user WITH ENCRYPTED PASSWORD 'foo';\n\n"},
         };
 
         TSetup setup;
@@ -104,10 +104,10 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(AlterGroup) {
         TCases cases = {
-            {"use plato;alter group user add user user;","USE plato;\nALTER GROUP user ADD USER user;\n"},
-            {"use plato;alter group user drop user user;","USE plato;\nALTER GROUP user DROP USER user;\n"},
-            {"use plato;alter group user add user user, user,;","USE plato;\nALTER GROUP user ADD USER user, user,;\n"},
-            {"use plato;alter group user rename to user;","USE plato;\nALTER GROUP user RENAME TO user;\n"},
+            {"use plato;alter group user add user user;","USE plato;\nALTER GROUP user ADD USER user;\n\n"},
+            {"use plato;alter group user drop user user;","USE plato;\nALTER GROUP user DROP USER user;\n\n"},
+            {"use plato;alter group user add user user, user,;","USE plato;\nALTER GROUP user ADD USER user, user,;\n\n"},
+            {"use plato;alter group user rename to user;","USE plato;\nALTER GROUP user RENAME TO user;\n\n"},
         };
 
         TSetup setup;
@@ -165,9 +165,9 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(Values) {
         TCases cases = {
-            {"values (1);","VALUES\n\t(1);\n"},
-            {"values (1,2),(3,4);","VALUES\n\t(1, 2),\n\t(3, 4);\n"},
-            {"values ('a\nb');","VALUES\n\t('a\nb');\n"},
+            {"values (1);","VALUES\n\t(1);\n\n"},
+            {"values (1,2),(3,4);","VALUES\n\t(1, 2),\n\t(3, 4);\n\n"},
+            {"values ('a\nb');","VALUES\n\t('a\nb');\n\n"},
         };
 
         TSetup setup;
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"$x=1","$x = 1;\n"},
             {"$x,$y=(2,3)","$x, $y = (2, 3);\n"},
-            {"$a = select 1 union all select 2","$a =\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2;\n"},
+            {"$a = select 1 union all select 2","$a =\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2;\n\n"},
         };
 
         TSetup setup;
@@ -208,31 +208,31 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(CreateTable) {
         TCases cases = {
-            {"create table user(user int32)","CREATE TABLE user (\n\tuser int32\n);\n"},
-            {"create table user(user int32,user bool ?)","CREATE TABLE user (\n\tuser int32,\n\tuser bool?\n);\n"},
-            {"create table user(user int32) with (user=user)","CREATE TABLE user (\n\tuser int32\n)\nWITH (user = user);\n"},
-            {"create table user(primary key (user))","CREATE TABLE user (\n\tPRIMARY KEY (user)\n);\n"},
-            {"create table user(primary key (user,user))","CREATE TABLE user (\n\tPRIMARY KEY (user, user)\n);\n"},
-            {"create table user(partition by (user))","CREATE TABLE user (\n\tPARTITION BY (user)\n);\n"},
-            {"create table user(partition by (user,user))","CREATE TABLE user (\n\tPARTITION BY (user, user)\n);\n"},
-            {"create table user(order by (user asc))","CREATE TABLE user (\n\tORDER BY (user ASC)\n);\n"},
-            {"create table user(order by (user desc,user))","CREATE TABLE user (\n\tORDER BY (user DESC, user)\n);\n"},
+            {"create table user(user int32)","CREATE TABLE user (\n\tuser int32\n);\n\n"},
+            {"create table user(user int32,user bool ?)","CREATE TABLE user (\n\tuser int32,\n\tuser bool?\n);\n\n"},
+            {"create table user(user int32) with (user=user)","CREATE TABLE user (\n\tuser int32\n)\nWITH (user = user);\n\n"},
+            {"create table user(primary key (user))","CREATE TABLE user (\n\tPRIMARY KEY (user)\n);\n\n"},
+            {"create table user(primary key (user,user))","CREATE TABLE user (\n\tPRIMARY KEY (user, user)\n);\n\n"},
+            {"create table user(partition by (user))","CREATE TABLE user (\n\tPARTITION BY (user)\n);\n\n"},
+            {"create table user(partition by (user,user))","CREATE TABLE user (\n\tPARTITION BY (user, user)\n);\n\n"},
+            {"create table user(order by (user asc))","CREATE TABLE user (\n\tORDER BY (user ASC)\n);\n\n"},
+            {"create table user(order by (user desc,user))","CREATE TABLE user (\n\tORDER BY (user DESC, user)\n);\n\n"},
             {"create table user(index user global unique sync with (user=user,user=user) on (user,user))",
-             "CREATE TABLE user (\n\tINDEX user GLOBAL UNIQUE SYNC WITH (user = user, user = user) ON (user, user)\n);\n"},
+             "CREATE TABLE user (\n\tINDEX user GLOBAL UNIQUE SYNC WITH (user = user, user = user) ON (user, user)\n);\n\n"},
             {"create table user(index user global async with (user=user,) on (user))",
-             "CREATE TABLE user (\n\tINDEX user GLOBAL ASYNC WITH (user = user,) ON (user)\n);\n"},
+             "CREATE TABLE user (\n\tINDEX user GLOBAL ASYNC WITH (user = user,) ON (user)\n);\n\n"},
             {"create table user(index user local on (user) cover (user))",
-             "CREATE TABLE user (\n\tINDEX user LOCAL ON (user) COVER (user)\n);\n"},
+             "CREATE TABLE user (\n\tINDEX user LOCAL ON (user) COVER (user)\n);\n\n"},
             {"create table user(index user local on (user) cover (user,user))",
-             "CREATE TABLE user (\n\tINDEX user LOCAL ON (user) COVER (user, user)\n);\n"},
+             "CREATE TABLE user (\n\tINDEX user LOCAL ON (user) COVER (user, user)\n);\n\n"},
             {"create table user(family user (user='foo'))",
-             "CREATE TABLE user (\n\tFAMILY user (user = 'foo')\n);\n"},
+             "CREATE TABLE user (\n\tFAMILY user (user = 'foo')\n);\n\n"},
             {"create table user(family user (user='foo',user='bar'))",
-             "CREATE TABLE user (\n\tFAMILY user (user = 'foo', user = 'bar')\n);\n"},
+             "CREATE TABLE user (\n\tFAMILY user (user = 'foo', user = 'bar')\n);\n\n"},
             {"create table user(changefeed user with (user='foo'))",
-             "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo')\n);\n"},
+             "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo')\n);\n\n"},
             {"create table user(changefeed user with (user='foo',user='bar'))",
-             "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo', user = 'bar')\n);\n"},
+             "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo', user = 'bar')\n);\n\n"},
             {"create table user(foo int32, bar bool ?) inherits (s3:$cluster.xxx) partition by hash(a,b,hash) with (inherits=interval('PT1D') ON logical_time) tablestore tablestore",
               "CREATE TABLE user (\n"
               "\tfoo int32,\n"
@@ -241,14 +241,14 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
               "INHERITS (s3: $cluster.xxx)\n"
               "PARTITION BY HASH (a, b, hash)\n"
               "WITH (inherits = interval('PT1D') ON logical_time)\n"
-              "TABLESTORE tablestore;\n"},
+              "TABLESTORE tablestore;\n\n"},
             {"create table user(foo int32, bar bool ?) partition by hash(a,b,hash) with (tiering='some')",
               "CREATE TABLE user (\n"
               "\tfoo int32,\n"
               "\tbar bool?\n"
               ")\n"
               "PARTITION BY HASH (a, b, hash)\n"
-              "WITH (tiering = 'some');\n"}
+              "WITH (tiering = 'some');\n\n"}
         };
 
         TSetup setup;
@@ -258,15 +258,15 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(ObjectOperations) {
         TCases cases = {
             {"alter oBject usEr (TYpe abcde) Set (a = b)",
-             "ALTER OBJECT usEr (TYPE abcde) SET (a = b);\n"},
+             "ALTER OBJECT usEr (TYPE abcde) SET (a = b);\n\n"},
             {"creAte oBject usEr (tYpe abcde) With (a = b)",
-             "CREATE OBJECT usEr (TYPE abcde) WITH (a = b);\n"},
+             "CREATE OBJECT usEr (TYPE abcde) WITH (a = b);\n\n"},
             {"creAte oBject usEr (tYpe abcde) With a = b",
-             "CREATE OBJECT usEr (TYPE abcde) WITH a = b;\n"},
+             "CREATE OBJECT usEr (TYPE abcde) WITH a = b;\n\n"},
             {"dRop oBject usEr (tYpe abcde) With (aeEE)",
-             "DROP OBJECT usEr (TYPE abcde) WITH (aeEE);\n"},
+             "DROP OBJECT usEr (TYPE abcde) WITH (aeEE);\n\n"},
             {"dRop oBject usEr (tYpe abcde) With aeEE",
-             "DROP OBJECT usEr (TYPE abcde) WITH aeEE;\n"}
+             "DROP OBJECT usEr (TYPE abcde) WITH aeEE;\n\n"}
         };
 
         TSetup setup;
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(TypeSelection) {
         TCases cases = {
             {"Select tYpe.* frOm Table tYpe",
-             "SELECT\n\ttYpe.*\nFROM Table\n\ttYpe;\n"}
+             "SELECT\n\ttYpe.*\nFROM Table\n\ttYpe;\n\n"}
         };
 
         TSetup setup;
@@ -286,55 +286,55 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(AlterTable) {
         TCases cases = {
             {"alter table user add user int32",
-             "ALTER TABLE user\n\tADD user int32;\n"},
+             "ALTER TABLE user\n\tADD user int32;\n\n"},
             {"alter table user add user int32, add user bool ?",
-             "ALTER TABLE user\n\tADD user int32,\n\tADD user bool?;\n"},
+             "ALTER TABLE user\n\tADD user int32,\n\tADD user bool?;\n\n"},
             {"alter table user add column user int32",
-             "ALTER TABLE user\n\tADD COLUMN user int32;\n"},
+             "ALTER TABLE user\n\tADD COLUMN user int32;\n\n"},
             {"alter table user drop user",
-             "ALTER TABLE user\n\tDROP user;\n"},
+             "ALTER TABLE user\n\tDROP user;\n\n"},
             {"alter table user drop column user",
-             "ALTER TABLE user\n\tDROP COLUMN user;\n"},
+             "ALTER TABLE user\n\tDROP COLUMN user;\n\n"},
             {"alter table user alter column user set family user",
-             "ALTER TABLE user\n\tALTER COLUMN user SET FAMILY user;\n"},
+             "ALTER TABLE user\n\tALTER COLUMN user SET FAMILY user;\n\n"},
             {"alter table user add family user(user='foo')",
-             "ALTER TABLE user\n\tADD FAMILY user (user = 'foo');\n"},
+             "ALTER TABLE user\n\tADD FAMILY user (user = 'foo');\n\n"},
             {"alter table user alter family user set user 'foo'",
-             "ALTER TABLE user\n\tALTER FAMILY user SET user 'foo';\n"},
+             "ALTER TABLE user\n\tALTER FAMILY user SET user 'foo';\n\n"},
             {"alter table user set user user",
-             "ALTER TABLE user\n\tSET user user;\n"},
+             "ALTER TABLE user\n\tSET user user;\n\n"},
             {"alter table user set (user=user)",
-             "ALTER TABLE user\n\tSET (user = user);\n"},
+             "ALTER TABLE user\n\tSET (user = user);\n\n"},
             {"alter table user set (user=user,user=user)",
-             "ALTER TABLE user\n\tSET (user = user, user = user);\n"},
+             "ALTER TABLE user\n\tSET (user = user, user = user);\n\n"},
             {"alter table user reset(user)",
-             "ALTER TABLE user\n\tRESET (user);\n"},
+             "ALTER TABLE user\n\tRESET (user);\n\n"},
             {"alter table user reset(user, user)",
-             "ALTER TABLE user\n\tRESET (user, user);\n"},
+             "ALTER TABLE user\n\tRESET (user, user);\n\n"},
             {"alter table user add index user local on (user)",
-             "ALTER TABLE user\n\tADD INDEX user LOCAL ON (user);\n"},
+             "ALTER TABLE user\n\tADD INDEX user LOCAL ON (user);\n\n"},
             {"alter table user drop index user",
-             "ALTER TABLE user\n\tDROP INDEX user;\n"},
+             "ALTER TABLE user\n\tDROP INDEX user;\n\n"},
             {"alter table user rename to user",
-             "ALTER TABLE user\n\tRENAME TO user;\n"},
+             "ALTER TABLE user\n\tRENAME TO user;\n\n"},
             {"alter table user add changefeed user with (user = 'foo')",
-             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (user = 'foo');\n"},
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (user = 'foo');\n\n"},
             {"alter table user alter changefeed user disable",
-             "ALTER TABLE user\n\tALTER CHANGEFEED user DISABLE;\n"},
+             "ALTER TABLE user\n\tALTER CHANGEFEED user DISABLE;\n\n"},
             {"alter table user alter changefeed user set(user='foo')",
-             "ALTER TABLE user\n\tALTER CHANGEFEED user SET (user = 'foo');\n"},
+             "ALTER TABLE user\n\tALTER CHANGEFEED user SET (user = 'foo');\n\n"},
             {"alter table user drop changefeed user",
-             "ALTER TABLE user\n\tDROP CHANGEFEED user;\n"},
+             "ALTER TABLE user\n\tDROP CHANGEFEED user;\n\n"},
             {"alter table user add changefeed user with (initial_scan = tRUe)",
-             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = TRUE);\n"},
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = TRUE);\n\n"},
             {"alter table user add changefeed user with (initial_scan = FaLsE)",
-             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = FALSE);\n"},
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = FALSE);\n\n"},
             {"alter table user add changefeed user with (retention_period = Interval(\"P1D\"))",
-             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (retention_period = Interval(\"P1D\"));\n"},
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (retention_period = Interval(\"P1D\"));\n\n"},
             {"alter table user add changefeed user with (virtual_timestamps = TruE)",
-             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (virtual_timestamps = TRUE);\n"},
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (virtual_timestamps = TRUE);\n\n"},
             {"alter table user add changefeed user with (virtual_timestamps = fAlSe)",
-             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (virtual_timestamps = FALSE);\n"},
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (virtual_timestamps = FALSE);\n\n"},
         };
 
         TSetup setup;
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"do $a(1,2,3)",
              "DO $a(1, 2, 3);\n"},
             {"do begin values(1); end do;",
-             "DO BEGIN\n\tVALUES\n\t\t(1);\nEND DO;\n"},
+             "DO BEGIN\n\tVALUES\n\t\t(1);\nEND DO;\n\n"},
         };
 
         TSetup setup;
@@ -366,9 +366,9 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "process $c(); "
              "end define",
              "DEFINE ACTION $a() AS\n\tDEFINE ACTION $b() AS\n\t\t"
-             "VALUES\n\t\t\t(1);\n\tEND DEFINE;\n\t"
+             "VALUES\n\t\t\t(1);\n\tEND DEFINE;\n\n\t"
              "DEFINE SUBQUERY $c() AS\n\t\tSELECT\n\t\t\t1;\n\t"
-             "END DEFINE;\n\tDO $b();\n\tPROCESS $c();\nEND DEFINE;\n"},
+             "END DEFINE;\n\n\tDO $b();\n\tPROCESS $c();\nEND DEFINE;\n\n"},
         };
 
         TSetup setup;
@@ -378,14 +378,14 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(If) {
         TCases cases = {
             {"evaluate if 1=1 do $a()",
-             "EVALUATE IF 1 = 1\n\tDO $a();\n"},
+             "EVALUATE IF 1 = 1\n\tDO $a();\n\n"},
             {"evaluate if 1=1 do $a() else do $b()",
-             "EVALUATE IF 1 = 1\n\tDO $a()\nELSE\n\tDO $b();\n"},
+             "EVALUATE IF 1 = 1\n\tDO $a()\nELSE\n\tDO $b();\n\n"},
             {"evaluate if 1=1 do begin select 1; end do",
-             "EVALUATE IF 1 = 1\n\tDO BEGIN\n\t\tSELECT\n\t\t\t1;\n\tEND DO;\n"},
+             "EVALUATE IF 1 = 1\n\tDO BEGIN\n\t\tSELECT\n\t\t\t1;\n\tEND DO;\n\n"},
             {"evaluate if 1=1 do begin select 1; end do else do begin select 2; end do",
              "EVALUATE IF 1 = 1\n\tDO BEGIN\n\t\tSELECT\n\t\t\t1;\n\tEND DO\n"
-             "ELSE\n\tDO BEGIN\n\t\tSELECT\n\t\t\t2;\n\tEND DO;\n"},
+             "ELSE\n\tDO BEGIN\n\t\tSELECT\n\t\t\t2;\n\tEND DO;\n\n"},
         };
 
         TSetup setup;
@@ -395,13 +395,13 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(For) {
         TCases cases = {
             {"evaluate for $x in [] do $a($x)",
-             "EVALUATE FOR $x IN []\n\tDO $a($x);\n"},
+             "EVALUATE FOR $x IN []\n\tDO $a($x);\n\n"},
             {"evaluate for $x in [] do $a($x) else do $b()",
-             "EVALUATE FOR $x IN []\n\tDO $a($x)\nELSE\n\tDO $b();\n"},
+             "EVALUATE FOR $x IN []\n\tDO $a($x)\nELSE\n\tDO $b();\n\n"},
             {"evaluate for $x in [] do begin select $x; end do",
-             "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO;\n"},
+             "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO;\n\n"},
             {"evaluate for $x in [] do begin select $x; end do else do begin select 2; end do",
-             "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO\nELSE\n\tDO BEGIN\n\t\tSELECT\n\t\t\t2;\n\tEND DO;\n"},
+             "EVALUATE FOR $x IN []\n\tDO BEGIN\n\t\tSELECT\n\t\t\t$x;\n\tEND DO\nELSE\n\tDO BEGIN\n\t\tSELECT\n\t\t\t2;\n\tEND DO;\n\n"},
         };
 
         TSetup setup;
@@ -411,29 +411,29 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(Update) {
         TCases cases = {
             {"update user on default values",
-             "UPDATE user\nON DEFAULT VALUES;\n"},
+             "UPDATE user\nON DEFAULT VALUES;\n\n"},
             {"update user on values (1),(2)",
-             "UPDATE user\nON\nVALUES\n\t(1),\n\t(2);\n"},
+             "UPDATE user\nON\nVALUES\n\t(1),\n\t(2);\n\n"},
             {"update user on select 1 as x, 2 as y",
-             "UPDATE user\nON\nSELECT\n\t1 AS x,\n\t2 AS y;\n"},
+             "UPDATE user\nON\nSELECT\n\t1 AS x,\n\t2 AS y;\n\n"},
             {"update user on (x) values (1),(2),(3)",
-             "UPDATE user\nON (\n\tx\n)\nVALUES\n\t(1),\n\t(2),\n\t(3);\n"},
+             "UPDATE user\nON (\n\tx\n)\nVALUES\n\t(1),\n\t(2),\n\t(3);\n\n"},
             {"update user on (x,y) values (1,2),(2,3),(3,4)",
-             "UPDATE user\nON (\n\tx,\n\ty\n)\nVALUES\n\t(1, 2),\n\t(2, 3),\n\t(3, 4);\n"},
+             "UPDATE user\nON (\n\tx,\n\ty\n)\nVALUES\n\t(1, 2),\n\t(2, 3),\n\t(3, 4);\n\n"},
             {"update user on (x) select 1",
-             "UPDATE user\nON (\n\tx\n)\nSELECT\n\t1;\n"},
+             "UPDATE user\nON (\n\tx\n)\nSELECT\n\t1;\n\n"},
             {"update user on (x,y) select 1,2",
-             "UPDATE user\nON (\n\tx,\n\ty\n)\nSELECT\n\t1,\n\t2;\n"},
+             "UPDATE user\nON (\n\tx,\n\ty\n)\nSELECT\n\t1,\n\t2;\n\n"},
             {"update user set x=1",
-             "UPDATE user\nSET\n\tx = 1;\n"},
+             "UPDATE user\nSET\n\tx = 1;\n\n"},
             {"update user set (x)=(1)",
-             "UPDATE user\nSET\n(\n\tx\n) = (\n\t1\n);\n"},
+             "UPDATE user\nSET\n(\n\tx\n) = (\n\t1\n);\n\n"},
             {"update user set (x,y)=(1,2)",
-             "UPDATE user\nSET\n(\n\tx,\n\ty\n) = (\n\t1,\n\t2\n);\n"},
+             "UPDATE user\nSET\n(\n\tx,\n\ty\n) = (\n\t1,\n\t2\n);\n\n"},
             {"update user set (x,y)=(select 1,2)",
-             "UPDATE user\nSET\n(\n\tx,\n\ty\n) = (\n\tSELECT\n\t\t1,\n\t\t2\n);\n"},
+             "UPDATE user\nSET\n(\n\tx,\n\ty\n) = (\n\tSELECT\n\t\t1,\n\t\t2\n);\n\n"},
             {"update user set x=1,y=2 where z=3",
-             "UPDATE user\nSET\n\tx = 1,\n\ty = 2\nWHERE z = 3;\n"},
+             "UPDATE user\nSET\n\tx = 1,\n\ty = 2\nWHERE z = 3;\n\n"},
         };
 
         TSetup setup;
@@ -443,15 +443,15 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(Delete) {
         TCases cases = {
             {"delete from user",
-             "DELETE FROM user;\n"},
+             "DELETE FROM user;\n\n"},
             {"delete from user where 1=1",
-             "DELETE FROM user\nWHERE 1 = 1;\n"},
+             "DELETE FROM user\nWHERE 1 = 1;\n\n"},
             {"delete from user on select 1 as x, 2 as y",
-             "DELETE FROM user\nON\nSELECT\n\t1 AS x,\n\t2 AS y;\n"},
+             "DELETE FROM user\nON\nSELECT\n\t1 AS x,\n\t2 AS y;\n\n"},
             {"delete from user on (x) values (1)",
-             "DELETE FROM user\nON (\n\tx\n)\nVALUES\n\t(1);\n"},
+             "DELETE FROM user\nON (\n\tx\n)\nVALUES\n\t(1);\n\n"},
             {"delete from user on (x,y) values (1,2), (3,4)",
-             "DELETE FROM user\nON (\n\tx,\n\ty\n)\nVALUES\n\t(1, 2),\n\t(3, 4);\n"},
+             "DELETE FROM user\nON (\n\tx,\n\ty\n)\nVALUES\n\t(1, 2),\n\t(3, 4);\n\n"},
         };
 
         TSetup setup;
@@ -461,39 +461,39 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(Into) {
         TCases cases = {
             {"insert into user select 1 as x",
-             "INSERT INTO user\nSELECT\n\t1 AS x;\n"},
+             "INSERT INTO user\nSELECT\n\t1 AS x;\n\n"},
             {"insert or abort into user select 1 as x",
-             "INSERT OR ABORT INTO user\nSELECT\n\t1 AS x;\n"},
+             "INSERT OR ABORT INTO user\nSELECT\n\t1 AS x;\n\n"},
             {"insert or revert into user select 1 as x",
-             "INSERT OR REVERT INTO user\nSELECT\n\t1 AS x;\n"},
+             "INSERT OR REVERT INTO user\nSELECT\n\t1 AS x;\n\n"},
             {"insert or ignore into user select 1 as x",
-             "INSERT OR IGNORE INTO user\nSELECT\n\t1 AS x;\n"},
+             "INSERT OR IGNORE INTO user\nSELECT\n\t1 AS x;\n\n"},
             {"upsert into user select 1 as x",
-             "UPSERT INTO user\nSELECT\n\t1 AS x;\n"},
+             "UPSERT INTO user\nSELECT\n\t1 AS x;\n\n"},
             {"replace into user select 1 as x",
-             "REPLACE INTO user\nSELECT\n\t1 AS x;\n"},
+             "REPLACE INTO user\nSELECT\n\t1 AS x;\n\n"},
             {"insert into user(x) values (1)",
-             "INSERT INTO user (\n\tx\n)\nVALUES\n\t(1);\n"},
+             "INSERT INTO user (\n\tx\n)\nVALUES\n\t(1);\n\n"},
             {"insert into user(x,y) values (1,2)",
-             "INSERT INTO user (\n\tx,\n\ty\n)\nVALUES\n\t(1, 2);\n"},
+             "INSERT INTO user (\n\tx,\n\ty\n)\nVALUES\n\t(1, 2);\n\n"},
             {"insert into plato.user select 1 as x",
-             "INSERT INTO plato.user\nSELECT\n\t1 AS x;\n"},
+             "INSERT INTO plato.user\nSELECT\n\t1 AS x;\n\n"},
             {"insert into @user select 1 as x",
-             "INSERT INTO @user\nSELECT\n\t1 AS x;\n"},
+             "INSERT INTO @user\nSELECT\n\t1 AS x;\n\n"},
             {"insert into $user select 1 as x",
-             "INSERT INTO $user\nSELECT\n\t1 AS x;\n"},
+             "INSERT INTO $user\nSELECT\n\t1 AS x;\n\n"},
             {"insert into @$user select 1 as x",
-             "INSERT INTO @$user\nSELECT\n\t1 AS x;\n"},
+             "INSERT INTO @$user\nSELECT\n\t1 AS x;\n\n"},
             {"upsert into user erase by (x,y) values (1)",
-             "UPSERT INTO user\n\tERASE BY (\n\t\tx,\n\t\ty\n\t)\nVALUES\n\t(1);\n"},
+             "UPSERT INTO user\n\tERASE BY (\n\t\tx,\n\t\ty\n\t)\nVALUES\n\t(1);\n\n"},
             {"insert into user with truncate select 1 as x",
-             "INSERT INTO user\n\tWITH truncate\nSELECT\n\t1 AS x;\n"},
+             "INSERT INTO user\n\tWITH truncate\nSELECT\n\t1 AS x;\n\n"},
             {"insert into user with (truncate,inferscheme='1') select 1 as x",
-             "INSERT INTO user\n\tWITH (truncate, inferscheme = '1')\nSELECT\n\t1 AS x;\n"},
+             "INSERT INTO user\n\tWITH (truncate, inferscheme = '1')\nSELECT\n\t1 AS x;\n\n"},
             {"insert into user with schema Struct<user:int32> select 1 as user",
-             "INSERT INTO user\n\tWITH SCHEMA Struct<user: int32>\nSELECT\n\t1 AS user;\n"},
+             "INSERT INTO user\n\tWITH SCHEMA Struct<user: int32>\nSELECT\n\t1 AS user;\n\n"},
             {"insert into user with schema (int32 as user) select 1 as user",
-             "INSERT INTO user\n\tWITH SCHEMA (int32 AS user)\nSELECT\n\t1 AS user;\n"},
+             "INSERT INTO user\n\tWITH SCHEMA (int32 AS user)\nSELECT\n\t1 AS user;\n\n"},
         };
 
         TSetup setup;
@@ -503,21 +503,21 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(Process) {
         TCases cases = {
             {"process user",
-             "PROCESS user;\n"},
+             "PROCESS user;\n\n"},
             {"process user using $f() as user",
-             "PROCESS user\nUSING $f() AS user;\n"},
+             "PROCESS user\nUSING $f() AS user;\n\n"},
             {"process user,user using $f()",
-             "PROCESS user, user\nUSING $f();\n"},
+             "PROCESS user, user\nUSING $f();\n\n"},
             {"process user using $f() where 1=1 having 1=1 assume order by user",
-             "PROCESS user\nUSING $f()\nWHERE 1 = 1\nHAVING 1 = 1\nASSUME ORDER BY\n\tuser;\n"},
+             "PROCESS user\nUSING $f()\nWHERE 1 = 1\nHAVING 1 = 1\nASSUME ORDER BY\n\tuser;\n\n"},
             {"process user using $f() union all process user using $f()",
-             "PROCESS user\nUSING $f()\nUNION ALL\nPROCESS user\nUSING $f();\n"},
+             "PROCESS user\nUSING $f()\nUNION ALL\nPROCESS user\nUSING $f();\n\n"},
             {"process user using $f() with foo=bar",
-             "PROCESS user\nUSING $f()\nWITH foo = bar;\n"},
+             "PROCESS user\nUSING $f()\nWITH foo = bar;\n\n"},
             {"discard process user using $f()",
-             "DISCARD PROCESS user\nUSING $f();\n"},
+             "DISCARD PROCESS user\nUSING $f();\n\n"},
             {"process user using $f() into result user",
-             "PROCESS user\nUSING $f()\nINTO RESULT user;\n"},
+             "PROCESS user\nUSING $f()\nINTO RESULT user;\n\n"},
         };
 
         TSetup setup;
@@ -527,25 +527,25 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(Reduce) {
         TCases cases = {
             {"reduce user on user using $f()",
-             "REDUCE user\nON\n\tuser\nUSING $f();\n"},
+             "REDUCE user\nON\n\tuser\nUSING $f();\n\n"},
             {"reduce user on user, using $f()",
-             "REDUCE user\nON\n\tuser,\nUSING $f();\n"},
+             "REDUCE user\nON\n\tuser,\nUSING $f();\n\n"},
             {"discard reduce user on user using $f();",
-             "DISCARD REDUCE user\nON\n\tuser\nUSING $f();\n"},
+             "DISCARD REDUCE user\nON\n\tuser\nUSING $f();\n\n"},
             {"reduce user on user using $f() into result user",
-             "REDUCE user\nON\n\tuser\nUSING $f()\nINTO RESULT user;\n"},
+             "REDUCE user\nON\n\tuser\nUSING $f()\nINTO RESULT user;\n\n"},
             {"reduce user on user using all $f()",
-             "REDUCE user\nON\n\tuser\nUSING ALL $f();\n"},
+             "REDUCE user\nON\n\tuser\nUSING ALL $f();\n\n"},
             {"reduce user on user using $f() as user",
-             "REDUCE user\nON\n\tuser\nUSING $f() AS user;\n"},
+             "REDUCE user\nON\n\tuser\nUSING $f() AS user;\n\n"},
             {"reduce user,user on user using $f()",
-             "REDUCE user, user\nON\n\tuser\nUSING $f();\n"},
+             "REDUCE user, user\nON\n\tuser\nUSING $f();\n\n"},
             {"reduce user on user,user using $f()",
-             "REDUCE user\nON\n\tuser,\n\tuser\nUSING $f();\n"},
+             "REDUCE user\nON\n\tuser,\n\tuser\nUSING $f();\n\n"},
             {"reduce user on user using $f() where 1=1 having 1=1 assume order by user",
-             "REDUCE user\nON\n\tuser\nUSING $f()\nWHERE 1 = 1\nHAVING 1 = 1\nASSUME ORDER BY\n\tuser;\n"},
+             "REDUCE user\nON\n\tuser\nUSING $f()\nWHERE 1 = 1\nHAVING 1 = 1\nASSUME ORDER BY\n\tuser;\n\n"},
             {"reduce user presort user,user on user using $f();",
-             "REDUCE user\nPRESORT\n\tuser,\n\tuser\nON\n\tuser\nUSING $f();\n"},
+             "REDUCE user\nPRESORT\n\tuser,\n\tuser\nON\n\tuser\nUSING $f();\n\n"},
         };
 
         TSetup setup;
@@ -555,111 +555,111 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(Select) {
         TCases cases = {
             {"select 1",
-             "SELECT\n\t1;\n"},
+             "SELECT\n\t1;\n\n"},
             {"select 1,",
-             "SELECT\n\t1,;\n"},
+             "SELECT\n\t1,;\n\n"},
             {"select 1 as x",
-             "SELECT\n\t1 AS x;\n"},
+             "SELECT\n\t1 AS x;\n\n"},
             {"select *",
-             "SELECT\n\t*;\n"},
+             "SELECT\n\t*;\n\n"},
             {"select a.*",
-             "SELECT\n\ta.*;\n"},
+             "SELECT\n\ta.*;\n\n"},
             {"select * without a",
-             "SELECT\n\t*\n\tWITHOUT\n\t\ta;\n"},
+             "SELECT\n\t*\n\tWITHOUT\n\t\ta;\n\n"},
             {"select * without a,b",
-             "SELECT\n\t*\n\tWITHOUT\n\t\ta,\n\t\tb;\n"},
+             "SELECT\n\t*\n\tWITHOUT\n\t\ta,\n\t\tb;\n\n"},
             {"select * without a,",
-             "SELECT\n\t*\n\tWITHOUT\n\t\ta,;\n"},
+             "SELECT\n\t*\n\tWITHOUT\n\t\ta,;\n\n"},
             {"select 1 from user",
-             "SELECT\n\t1\nFROM user;\n"},
+             "SELECT\n\t1\nFROM user;\n\n"},
             {"select 1 from plato.user",
-             "SELECT\n\t1\nFROM plato.user;\n"},
+             "SELECT\n\t1\nFROM plato.user;\n\n"},
             {"select 1 from $user",
-             "SELECT\n\t1\nFROM $user;\n"},
+             "SELECT\n\t1\nFROM $user;\n\n"},
             {"select 1 from @user",
-             "SELECT\n\t1\nFROM @user;\n"},
+             "SELECT\n\t1\nFROM @user;\n\n"},
             {"select 1 from @$user",
-             "SELECT\n\t1\nFROM @$user;\n"},
+             "SELECT\n\t1\nFROM @$user;\n\n"},
             {"select 1 from user view user",
-             "SELECT\n\t1\nFROM user\n\tVIEW user;\n"},
+             "SELECT\n\t1\nFROM user\n\tVIEW user;\n\n"},
             {"select 1 from user as user",
-             "SELECT\n\t1\nFROM user\n\tAS user;\n"},
+             "SELECT\n\t1\nFROM user\n\tAS user;\n\n"},
             {"select 1 from user as user(user)",
-             "SELECT\n\t1\nFROM user\n\tAS user (\n\t\tuser\n\t);\n"},
+             "SELECT\n\t1\nFROM user\n\tAS user (\n\t\tuser\n\t);\n\n"},
             {"select 1 from user as user(user, user)",
-             "SELECT\n\t1\nFROM user\n\tAS user (\n\t\tuser,\n\t\tuser\n\t);\n"},
+             "SELECT\n\t1\nFROM user\n\tAS user (\n\t\tuser,\n\t\tuser\n\t);\n\n"},
             {"select 1 from user with user=user",
-             "SELECT\n\t1\nFROM user\n\tWITH user = user;\n"},
+             "SELECT\n\t1\nFROM user\n\tWITH user = user;\n\n"},
             {"select 1 from user with (user=user, user=user)",
-             "SELECT\n\t1\nFROM user\n\tWITH (user = user, user = user);\n"},
+             "SELECT\n\t1\nFROM user\n\tWITH (user = user, user = user);\n\n"},
             {"select 1 from user sample 0.1",
-             "SELECT\n\t1\nFROM user\n\tSAMPLE 0.1;\n"},
+             "SELECT\n\t1\nFROM user\n\tSAMPLE 0.1;\n\n"},
             {"select 1 from user tablesample system(0.1)",
-             "SELECT\n\t1\nFROM user\n\tTABLESAMPLE SYSTEM (0.1);\n"},
+             "SELECT\n\t1\nFROM user\n\tTABLESAMPLE SYSTEM (0.1);\n\n"},
             {"select 1 from user tablesample bernoulli(0.1) repeatable(10)",
-             "SELECT\n\t1\nFROM user\n\tTABLESAMPLE BERNOULLI (0.1) REPEATABLE (10);\n"},
+             "SELECT\n\t1\nFROM user\n\tTABLESAMPLE BERNOULLI (0.1) REPEATABLE (10);\n\n"},
             {"select 1 from user flatten columns",
-             "SELECT\n\t1\nFROM user\n\tFLATTEN COLUMNS;\n"},
+             "SELECT\n\t1\nFROM user\n\tFLATTEN COLUMNS;\n\n"},
             {"select 1 from user flatten list by user",
-             "SELECT\n\t1\nFROM user\n\tFLATTEN LIST BY\n\t\tuser;\n"},
+             "SELECT\n\t1\nFROM user\n\tFLATTEN LIST BY\n\t\tuser;\n\n"},
             {"select 1 from user flatten list by (user,user)",
-             "SELECT\n\t1\nFROM user\n\tFLATTEN LIST BY (\n\t\tuser,\n\t\tuser\n\t);\n"},
+             "SELECT\n\t1\nFROM user\n\tFLATTEN LIST BY (\n\t\tuser,\n\t\tuser\n\t);\n\n"},
             {"select 1 from $user(1,2)",
-             "SELECT\n\t1\nFROM $user(1, 2);\n"},
+             "SELECT\n\t1\nFROM $user(1, 2);\n\n"},
             {"select 1 from $user(1,2) view user",
-             "SELECT\n\t1\nFROM $user(1, 2)\n\tVIEW user;\n"},
+             "SELECT\n\t1\nFROM $user(1, 2)\n\tVIEW user;\n\n"},
             {"select 1 from range('a','b')",
-             "SELECT\n\t1\nFROM range('a', 'b');\n"},
+             "SELECT\n\t1\nFROM range('a', 'b');\n\n"},
             {"from user select 1",
-             "FROM user\nSELECT\n\t1;\n"},
+             "FROM user\nSELECT\n\t1;\n\n"},
             {"select * from user as a join user as b on a.x=b.y",
-             "SELECT\n\t*\nFROM user\n\tAS a\nJOIN user\n\tAS b\nON a.x = b.y;\n"},
+             "SELECT\n\t*\nFROM user\n\tAS a\nJOIN user\n\tAS b\nON a.x = b.y;\n\n"},
             {"select * from user as a join user as b using(x)",
-             "SELECT\n\t*\nFROM user\n\tAS a\nJOIN user\n\tAS b\nUSING (x);\n"},
+             "SELECT\n\t*\nFROM user\n\tAS a\nJOIN user\n\tAS b\nUSING (x);\n\n"},
             {"select * from any user as a full join user as b on a.x=b.y",
-             "SELECT\n\t*\nFROM ANY user\n\tAS a\nFULL JOIN user\n\tAS b\nON a.x = b.y;\n"},
+             "SELECT\n\t*\nFROM ANY user\n\tAS a\nFULL JOIN user\n\tAS b\nON a.x = b.y;\n\n"},
             {"select * from user as a left join any user as b on a.x=b.y",
-             "SELECT\n\t*\nFROM user\n\tAS a\nLEFT JOIN ANY user\n\tAS b\nON a.x = b.y;\n"},
+             "SELECT\n\t*\nFROM user\n\tAS a\nLEFT JOIN ANY user\n\tAS b\nON a.x = b.y;\n\n"},
             {"select * from any user as a right join any user as b on a.x=b.y",
-             "SELECT\n\t*\nFROM ANY user\n\tAS a\nRIGHT JOIN ANY user\n\tAS b\nON a.x = b.y;\n"},
+             "SELECT\n\t*\nFROM ANY user\n\tAS a\nRIGHT JOIN ANY user\n\tAS b\nON a.x = b.y;\n\n"},
             {"select * from user as a cross join user as b",
-             "SELECT\n\t*\nFROM user\n\tAS a\nCROSS JOIN user\n\tAS b;\n"},
+             "SELECT\n\t*\nFROM user\n\tAS a\nCROSS JOIN user\n\tAS b;\n\n"},
             {"select 1 from user where key = 1",
-             "SELECT\n\t1\nFROM user\nWHERE key = 1;\n"},
+             "SELECT\n\t1\nFROM user\nWHERE key = 1;\n\n"},
             {"select 1 from user having count(*) = 1",
-             "SELECT\n\t1\nFROM user\nHAVING count(*) = 1;\n"},
+             "SELECT\n\t1\nFROM user\nHAVING count(*) = 1;\n\n"},
             {"select 1 from user group by key",
-             "SELECT\n\t1\nFROM user\nGROUP BY\n\tkey;\n"},
+             "SELECT\n\t1\nFROM user\nGROUP BY\n\tkey;\n\n"},
             {"select 1 from user group compact by key, value as v",
-             "SELECT\n\t1\nFROM user\nGROUP COMPACT BY\n\tkey,\n\tvalue AS v;\n"},
+             "SELECT\n\t1\nFROM user\nGROUP COMPACT BY\n\tkey,\n\tvalue AS v;\n\n"},
             {"select 1 from user group by key with combine",
-             "SELECT\n\t1\nFROM user\nGROUP BY\n\tkey\n\tWITH combine;\n"},
+             "SELECT\n\t1\nFROM user\nGROUP BY\n\tkey\n\tWITH combine;\n\n"},
             {"select 1 from user order by key asc",
-             "SELECT\n\t1\nFROM user\nORDER BY\n\tkey ASC;\n"},
+             "SELECT\n\t1\nFROM user\nORDER BY\n\tkey ASC;\n\n"},
             {"select 1 from user order by key, value desc",
-             "SELECT\n\t1\nFROM user\nORDER BY\n\tkey,\n\tvalue DESC;\n"},
+             "SELECT\n\t1\nFROM user\nORDER BY\n\tkey,\n\tvalue DESC;\n\n"},
             {"select 1 from user assume order by key",
-             "SELECT\n\t1\nFROM user\nASSUME ORDER BY\n\tkey;\n"},
+             "SELECT\n\t1\nFROM user\nASSUME ORDER BY\n\tkey;\n\n"},
             {"select 1 from user window w1 as (), w2 as ()",
-             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t),\n\tw2 AS (\n\t);\n"},
+             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t),\n\tw2 AS (\n\t);\n\n"},
             {"select 1 from user window w1 as (user)",
-             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tuser\n\t);\n"},
+             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tuser\n\t);\n\n"},
             {"select 1 from user window w1 as (partition by user)",
-             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tPARTITION BY\n\t\t\tuser\n\t);\n"},
+             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tPARTITION BY\n\t\t\tuser\n\t);\n\n"},
             {"select 1 from user window w1 as (partition by user, user)",
-             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tPARTITION BY\n\t\t\tuser,\n\t\t\tuser\n\t);\n"},
+             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tPARTITION BY\n\t\t\tuser,\n\t\t\tuser\n\t);\n\n"},
             {"select 1 from user window w1 as (order by user asc)",
-             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tORDER BY\n\t\t\tuser ASC\n\t);\n"},
+             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tORDER BY\n\t\t\tuser ASC\n\t);\n\n"},
             {"select 1 from user window w1 as (order by user, user desc)",
-             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tORDER BY\n\t\t\tuser,\n\t\t\tuser DESC\n\t);\n"},
+             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tORDER BY\n\t\t\tuser,\n\t\t\tuser DESC\n\t);\n\n"},
             {"select 1 from user window w1 as (rows between 1 preceding and 1 following)",
-             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING\n\t);\n"},
+             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING\n\t);\n\n"},
             {"select 1 limit 10",
-             "SELECT\n\t1\nLIMIT 10;\n"},
+             "SELECT\n\t1\nLIMIT 10;\n\n"},
             {"select 1 limit 10 offset 5",
-             "SELECT\n\t1\nLIMIT 10 OFFSET 5;\n"},
+             "SELECT\n\t1\nLIMIT 10 OFFSET 5;\n\n"},
             { "select 1 union all select 2",
-             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2;\n" },
+             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2;\n\n" },
         };
 
         TSetup setup;
@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"declare $_x AS list<int32>??;declare $_y AS int32 ? ? ;select 1<>2, 1??2,"
              "formattype(list<int32>), formattype(resource<user>),formattype(tuple<>), formattype(tuple<  >), formattype(int32 ? ? )",
              "DECLARE $_x AS list<int32>??;\nDECLARE $_y AS int32??;\nSELECT\n\t1 <> 2,\n\t1 ?? 2,\n\tformattype(list<int32>),"
-            "\n\tformattype(resource<user>),\n\tformattype(tuple<>),\n\tformattype(tuple< >),\n\tformattype(int32??" ");\n"
+            "\n\tformattype(resource<user>),\n\tformattype(tuple<>),\n\tformattype(tuple< >),\n\tformattype(int32??" ");\n\n"
             },
         };
 
@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"$f=($a,$b)->{$x=$a+$b;return $a*$x};$g=($a,$b?)->($a+$b??0);select $f(10,4),$g(1,2);",
              "$f = ($a, $b) -> {\n\t$x = $a + $b;\n\tRETURN $a * $x\n};\n"
              "$g = ($a, $b?) -> ($a + $b ?? 0);\n"
-            "SELECT\n\t$f(10, 4),\n\t$g(1, 2);\n"},
+            "SELECT\n\t$f(10, 4),\n\t$g(1, 2);\n\n"},
         };
 
         TSetup setup;
@@ -694,13 +694,13 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(NestedSelect) {
         TCases cases = {
             {"$x=select 1",
-             "$x =\n\tSELECT\n\t\t1;\n"},
+             "$x =\n\tSELECT\n\t\t1;\n\n"},
             {"$x=(select 1)",
-             "$x = (\n\tSELECT\n\t\t1\n);\n"},
+             "$x = (\n\tSELECT\n\t\t1\n);\n\n"},
             {"select 1 in (select 1)",
-             "SELECT\n\t1 IN (\n\t\tSELECT\n\t\t\t1\n\t);\n"},
+             "SELECT\n\t1 IN (\n\t\tSELECT\n\t\t\t1\n\t);\n\n"},
             {"select 1 in ((select 1))",
-             "SELECT\n\t1 IN (\n\t\t(\n\t\t\tSELECT\n\t\t\t\t1\n\t\t)\n\t);\n"},
+             "SELECT\n\t1 IN (\n\t\t(\n\t\t\tSELECT\n\t\t\t\t1\n\t\t)\n\t);\n\n"},
         };
 
         TSetup setup;
@@ -709,8 +709,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(Cast) {
         TCases cases = {
-            {"select cast(1 as string)","SELECT\n\tCAST(1 AS string);\n"},
-            {"select bitcast(1 as int32)","SELECT\n\tBITCAST(1 AS int32);\n"},
+            {"select cast(1 as string)","SELECT\n\tCAST(1 AS string);\n\n"},
+            {"select bitcast(1 as int32)","SELECT\n\tBITCAST(1 AS int32);\n\n"},
         };
 
         TSetup setup;
@@ -719,9 +719,9 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(StructLiteral) {
         TCases cases = {
-            {"select <||>","SELECT\n\t<||>;\n"},
-            {"select <|a:1|>","SELECT\n\t<|a: 1|>;\n"},
-            {"select <|a:1,b:2|>","SELECT\n\t<|a: 1, b: 2|>;\n"},
+            {"select <||>","SELECT\n\t<||>;\n\n"},
+            {"select <|a:1|>","SELECT\n\t<|a: 1|>;\n\n"},
+            {"select <|a:1,b:2|>","SELECT\n\t<|a: 1, b: 2|>;\n\n"},
         };
 
         TSetup setup;
@@ -731,11 +731,11 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(TableHints) {
         TCases cases = {
             {"select * from plato.T with schema(foo int32, bar list<string>) where key is not null",
-             "SELECT\n\t*\nFROM plato.T\n\tWITH SCHEMA (foo int32, bar list<string>)\nWHERE key IS NOT NULL;\n"},
+             "SELECT\n\t*\nFROM plato.T\n\tWITH SCHEMA (foo int32, bar list<string>)\nWHERE key IS NOT NULL;\n\n"},
             {"select * from plato.T with schema struct<foo:integer, Bar:list<string?>> where key<0",
-             "SELECT\n\t*\nFROM plato.T\n\tWITH SCHEMA struct<foo: integer, Bar: list<string?>>\nWHERE key < 0;\n"},
+             "SELECT\n\t*\nFROM plato.T\n\tWITH SCHEMA struct<foo: integer, Bar: list<string?>>\nWHERE key < 0;\n\n"},
             {"select * from plato.T with (foo=bar, x=$y, a=(a, b, c), u='aaa', schema (foo int32, bar list<string>))",
-             "SELECT\n\t*\nFROM plato.T\n\tWITH (foo = bar, x = $y, a = (a, b, c), u = 'aaa', SCHEMA (foo int32, bar list<string>));\n"},
+             "SELECT\n\t*\nFROM plato.T\n\tWITH (foo = bar, x = $y, a = (a, b, c), u = 'aaa', SCHEMA (foo int32, bar list<string>));\n\n"},
         };
 
         TSetup setup;
@@ -745,7 +745,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(BoolAsVariableName) {
         TCases cases = {
             {"$ False = True; select $ False;",
-             "$False = TRUE;\nSELECT\n\t$False;\n"},
+             "$False = TRUE;\nSELECT\n\t$False;\n\n"},
         };
 
         TSetup setup;
@@ -755,7 +755,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(WithSchemaEquals) {
         TCases cases = {
             {"select * from plato.T with (format= csv_with_names, schema=(year int32 Null, month String, day String not   null, a Utf8, b Uint16));",
-             "SELECT\n\t*\nFROM plato.T\n\tWITH (format = csv_with_names, SCHEMA = (year int32 NULL, month String, day String NOT NULL, a Utf8, b Uint16));\n"},
+             "SELECT\n\t*\nFROM plato.T\n\tWITH (format = csv_with_names, SCHEMA = (year int32 NULL, month String, day String NOT NULL, a Utf8, b Uint16));\n\n"},
              };
 
         TSetup setup;
@@ -765,7 +765,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(SquareBrackets) {
         TCases cases = {
             {"select a[0]",
-             "SELECT\n\ta[0];\n"},
+             "SELECT\n\ta[0];\n\n"},
         };
 
         TSetup setup;

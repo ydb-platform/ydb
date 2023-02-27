@@ -72,6 +72,12 @@ namespace NPQ {
 
 class TFormatFactory;
 
+struct TAppConfig : public NKikimrConfig::TAppConfig, public TThrRefBase, TNonCopyable {
+    explicit TAppConfig(const NKikimrConfig::TAppConfig& c)
+        : NKikimrConfig::TAppConfig(c)
+    {}
+};
+
 struct TAppData {
     static const ui32 MagicTag = 0x2991AAF8;
     const ui32 Magic;

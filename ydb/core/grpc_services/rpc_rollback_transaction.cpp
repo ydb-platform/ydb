@@ -95,8 +95,8 @@ private:
     }
 };
 
-void DoRollbackTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TRollbackTransactionRPC(p.release()));
+void DoRollbackTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TRollbackTransactionRPC(p.release()));
 }
 
 } // namespace NGRpcService

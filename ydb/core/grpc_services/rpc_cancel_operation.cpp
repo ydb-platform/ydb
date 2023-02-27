@@ -121,8 +121,8 @@ private:
 
 }; // TCancelOperationRPC
 
-void DoCancelOperationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TCancelOperationRPC(p.release()));
+void DoCancelOperationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TCancelOperationRPC(p.release()));
 }
 
 } // namespace NGRpcService

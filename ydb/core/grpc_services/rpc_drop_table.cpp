@@ -59,8 +59,8 @@ private:
     }
 };
 
-void DoDropTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TDropTableRPC(p.release()));
+void DoDropTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDropTableRPC(p.release()));
 }
 
 template<>

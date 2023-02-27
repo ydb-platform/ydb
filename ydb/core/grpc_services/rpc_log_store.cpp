@@ -638,37 +638,37 @@ private:
 using TDropLogStoreRPC = TDropLogRPC<TEvDropLogStoreRequest, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore>;
 using TDropLogTableRPC = TDropLogRPC<TEvDropLogTableRequest, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable>;
 
-void DoCreateLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TCreateLogStoreRPC(p.release()));
+void DoCreateLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TCreateLogStoreRPC(p.release()));
 }
 
-void DoDescribeLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TDescribeLogStoreRPC(p.release()));
+void DoDescribeLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDescribeLogStoreRPC(p.release()));
 }
 
-void DoDropLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TDropLogStoreRPC(p.release()));
+void DoDropLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDropLogStoreRPC(p.release()));
 }
 
-void DoAlterLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TAlterLogStoreRPC(p.release()));
+void DoAlterLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TAlterLogStoreRPC(p.release()));
 }
 
 
-void DoCreateLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TCreateLogTableRPC(p.release()));
+void DoCreateLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TCreateLogTableRPC(p.release()));
 }
 
-void DoDescribeLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TDescribeLogTableRPC(p.release()));
+void DoDescribeLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDescribeLogTableRPC(p.release()));
 }
 
-void DoDropLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TDropLogTableRPC(p.release()));
+void DoDropLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDropLogTableRPC(p.release()));
 }
 
-void DoAlterLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TAlterLogTableRPC(p.release()));
+void DoAlterLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TAlterLogTableRPC(p.release()));
 }
 
 }

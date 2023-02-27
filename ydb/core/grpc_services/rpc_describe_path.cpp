@@ -158,12 +158,12 @@ public:
     using TBaseDescribe<TDescribePathRPC, TEvDescribePathRequest, Ydb::Scheme::DescribePathResult>::TBaseDescribe;
 };
 
-void DoListDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TListDirectoryRPC(p.release()));
+void DoListDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TListDirectoryRPC(p.release()));
 }
 
-void DoDescribePathRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TDescribePathRPC(p.release()));
+void DoDescribePathRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDescribePathRPC(p.release()));
 }
 
 } // namespace NKikimr

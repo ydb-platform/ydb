@@ -118,7 +118,7 @@ public:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxyHandleMethods::Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Register(new TLoginRPC(ev->Release().Release()));
 }
 

@@ -142,8 +142,8 @@ public:
 
 }; // TListOperationsRPC
 
-void DoListOperationsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TListOperationsRPC(p.release()));
+void DoListOperationsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TListOperationsRPC(p.release()));
 }
 
 } // namespace NGRpcService

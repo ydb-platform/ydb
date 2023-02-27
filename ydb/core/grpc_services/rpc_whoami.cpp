@@ -85,8 +85,8 @@ private:
     std::unique_ptr<IRequestOpCtx> Request;
 };
 
-void DoWhoAmIRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TWhoAmIRPC(p.release()));
+void DoWhoAmIRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TWhoAmIRPC(p.release()));
 }
 
 } // namespace NGRpcService

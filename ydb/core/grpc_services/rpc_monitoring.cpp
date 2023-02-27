@@ -72,8 +72,8 @@ public:
     }
 };
 
-void DoSelfCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TSelfCheckRPC(p.release()));
+void DoSelfCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TSelfCheckRPC(p.release()));
 }
 
 class TNodeCheckRPC : public TRpcRequestActor<TNodeCheckRPC, TEvNodeCheckRequest, true> {
@@ -120,11 +120,11 @@ public:
     }
 };
 
-// void DoNodeCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-//     TActivationContext::AsActorContext().Register(new TNodeCheckRPC(p.release()));
+// void DoNodeCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+//     f.RegisterActor(new TNodeCheckRPC(p.release()));
 // }
 
-void TGRpcRequestProxy::Handle(TEvNodeCheckRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxyHandleMethods::Handle(TEvNodeCheckRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Register(new TNodeCheckRPC(ev->Release().Release()));
 }
 

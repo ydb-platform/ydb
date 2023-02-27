@@ -79,7 +79,7 @@ void TGRpcPQClusterDiscoveryService::StopService() noexcept {
     TGrpcServiceBase::StopService();
 }
 
-void TGRpcRequestProxy::Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxyHandleMethods::Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(ev->Forward(NPQ::NClusterDiscovery::MakeClusterDiscoveryServiceID()));
 }
 

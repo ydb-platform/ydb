@@ -68,8 +68,8 @@ private:
     }
 };
 
-void DoRenameTablesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TRenameTablesRPC(p.release()));
+void DoRenameTablesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TRenameTablesRPC(p.release()));
 }
 
 } // namespace NKikimr

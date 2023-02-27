@@ -9,6 +9,8 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
+#include <google/protobuf/text_format.h>
+
 #include <util/string/subst.h>
 
 namespace NKikimr {

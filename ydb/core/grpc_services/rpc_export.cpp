@@ -228,12 +228,12 @@ public:
     using TExportRPC::TExportRPC;
 };
 
-void DoExportToYtRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TExportToYtRPC(p.release()));
+void DoExportToYtRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TExportToYtRPC(p.release()));
 }
 
-void DoExportToS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TExportToS3RPC(p.release()));
+void DoExportToS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TExportToS3RPC(p.release()));
 }
 
 } // namespace NGRpcService

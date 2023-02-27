@@ -51,8 +51,8 @@ private:
     }
 };
 
-void DoDeleteSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TDeleteSessionRPC(p.release()));
+void DoDeleteSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDeleteSessionRPC(p.release()));
 }
 
 template<>

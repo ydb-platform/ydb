@@ -96,8 +96,8 @@ private:
     }
 };
 
-void DoDescribeCoordinationNode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TDescribeCoordinationNode(p.release()));
+void DoDescribeCoordinationNode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDescribeCoordinationNode(p.release()));
 }
 
 }

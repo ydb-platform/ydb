@@ -284,11 +284,11 @@ private:
 
 void DoExecuteQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     // Use default channel buffer size as inflight limit
-    ui64 inflightLimitBytes = f.GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    ui64 inflightLimitBytes = f.GetAppConfig()->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
 
     auto* req = dynamic_cast<TEvExecuteQueryRequest*>(p.release());
     Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    TActivationContext::AsActorContext().Register(new TExecuteQueryRPC(req, inflightLimitBytes));
+    f.RegisterActor(new TExecuteQueryRPC(req, inflightLimitBytes));
 }
 
 } // namespace NKikimr::NGRpcService

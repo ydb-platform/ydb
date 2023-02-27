@@ -110,8 +110,8 @@ public:
     }
 };
 
-void DoExplainYqlScript(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TExplainYqlScriptRPC(p.release()));
+void DoExplainYqlScript(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TExplainYqlScriptRPC(p.release()));
 }
 
 } // namespace NGRpcService

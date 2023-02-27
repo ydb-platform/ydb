@@ -119,7 +119,7 @@ void DoExecuteScriptRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityP
     Y_UNUSED(f);
     auto* req = dynamic_cast<TEvExecuteScriptRequest*>(p.release());
     Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    TActivationContext::AsActorContext().Register(new TExecuteScriptRPC(req));
+    f.RegisterActor(new TExecuteScriptRPC(req));
 }
 
 } // namespace NKikimr::NGRpcService

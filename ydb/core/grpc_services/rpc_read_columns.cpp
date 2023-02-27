@@ -788,8 +788,8 @@ private:
     }
 };
 
-void DoReadColumnsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadColumnsRPC(std::move(p)));
+void DoReadColumnsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TReadColumnsRPC(std::move(p)));
 }
 
 } // namespace NKikimr

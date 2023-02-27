@@ -58,8 +58,8 @@ private:
     }
 };
 
-void DoCreateCoordinationNode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TCreateCoordinationNodeRPC(p.release()));
+void DoCreateCoordinationNode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TCreateCoordinationNodeRPC(p.release()));
 }
 
 } // namespace NKikimr

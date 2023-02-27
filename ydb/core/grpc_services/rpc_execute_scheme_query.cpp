@@ -92,8 +92,8 @@ public:
     }
 };
 
-void DoExecuteSchemeQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TExecuteSchemeQueryRPC(p.release()));
+void DoExecuteSchemeQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TExecuteSchemeQueryRPC(p.release()));
 }
 
 template<>

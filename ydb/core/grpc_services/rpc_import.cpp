@@ -87,8 +87,8 @@ public:
     using TImportRPC::TImportRPC;
 };
 
-void DoImportFromS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TImportFromS3RPC(p.release()));
+void DoImportFromS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TImportFromS3RPC(p.release()));
 }
 
 } // namespace NGRpcService

@@ -92,8 +92,8 @@ public:
     }
 };
 
-void DoExplainDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TExplainDataQueryRPC(p.release()));
+void DoExplainDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TExplainDataQueryRPC(p.release()));
 }
 
 } // namespace NGRpcService

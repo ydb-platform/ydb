@@ -153,8 +153,8 @@ private:
     }
 };
 
-void DoDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TDescribeTableRPC(p.release()));
+void DoDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDescribeTableRPC(p.release()));
 }
 
 } // namespace NKikimr

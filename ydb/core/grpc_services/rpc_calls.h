@@ -3,6 +3,7 @@
 
 #include "local_rate_limiter.h"
 
+#include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/grpc_services/base/base.h>
 
 #include <ydb/public/api/protos/ydb_auth.pb.h>
@@ -45,6 +46,19 @@ void FillYdbStatus(Draft::Dummy::PingResponse& resp, const NYql::TIssues& issues
 
 template <>
 void FillYdbStatus(Ydb::Coordination::SessionResponse& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status);
+
+inline bool ValidateAndReplyOnError(IRequestProxyCtx* ctx) {
+    TString validationError;
+    if (!ctx->Validate(validationError)) {
+        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError);
+        ctx->RaiseIssue(issue);
+        ctx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        return false;
+    } else {
+        return true;
+    }
+}
+
 
 using TEvListEndpointsRequest = TGRpcRequestWrapper<TRpcServices::EvListEndpoints, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse, true>;
 

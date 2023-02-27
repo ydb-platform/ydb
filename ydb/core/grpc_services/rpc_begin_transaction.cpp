@@ -109,8 +109,8 @@ private:
     }
 };
 
-void DoBeginTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TBeginTransactionRPC(p.release()));
+void DoBeginTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TBeginTransactionRPC(p.release()));
 }
 
 } // namespace NGRpcService

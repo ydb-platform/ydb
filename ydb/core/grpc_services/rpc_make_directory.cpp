@@ -59,8 +59,8 @@ private:
     }
 };
 
-void DoMakeDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TMakeDirectoryRPC(p.release()));
+void DoMakeDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TMakeDirectoryRPC(p.release()));
 }
 
 } // namespace NGRpcService

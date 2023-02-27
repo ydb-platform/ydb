@@ -11,6 +11,8 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <google/protobuf/text_format.h>
+
 namespace NKikimr {
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)

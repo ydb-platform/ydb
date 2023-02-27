@@ -98,8 +98,8 @@ private:
     }
 };
 
-void DoCommitTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TCommitTransactionRPC(p.release()));
+void DoCommitTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TCommitTransactionRPC(p.release()));
 }
 
 } // namespace NGRpcService

@@ -765,8 +765,8 @@ private:
     bool HasPendingSuccess = false;
 };
 
-void DoReadTableRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TReadTableRPC(p.release()));
+void DoReadTableRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TReadTableRPC(p.release()));
 }
 
 } // namespace NGRpcService

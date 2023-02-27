@@ -93,8 +93,8 @@ private:
     }
 };
 
-void DoKeepAliveRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TKeepAliveRPC(p.release()));
+void DoKeepAliveRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TKeepAliveRPC(p.release()));
 }
 
 } // namespace NGRpcService

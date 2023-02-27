@@ -100,8 +100,8 @@ private:
     }
 };
 
-void DoModifyPermissionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TModifyPermissionsRPC(p.release()));
+void DoModifyPermissionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TModifyPermissionsRPC(p.release()));
 }
 
 template<>

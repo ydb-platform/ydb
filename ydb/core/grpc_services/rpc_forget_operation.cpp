@@ -122,8 +122,8 @@ private:
 
 }; // TForgetOperationRPC
 
-void DoForgetOperationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TForgetOperationRPC(p.release()));
+void DoForgetOperationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TForgetOperationRPC(p.release()));
 }
 
 } // namespace NGRpcService

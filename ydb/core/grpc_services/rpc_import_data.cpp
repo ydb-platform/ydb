@@ -436,8 +436,8 @@ private:
 
 }; // TImportDataRPC
 
-void DoImportDataRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TImportDataRPC(p.release()));
+void DoImportDataRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TImportDataRPC(p.release()));
 }
 
 } // namespace NGRpcService

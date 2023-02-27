@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "audit_log.h"
 #include "service_ratelimiter_events.h"
+#include "grpc_request_proxy_handle_methods.h"
 #include "local_rate_limiter.h"
 #include "operation_helpers.h"
 #include "rpc_calls.h"
@@ -22,8 +23,10 @@ namespace NGRpcService {
 
 template <typename TEvent>
 class TGrpcRequestCheckActor
-    : public TActorBootstrappedSecureRequest<TGrpcRequestCheckActor<TEvent>>
+    : public TGRpcRequestProxyHandleMethods
+    , public TActorBootstrappedSecureRequest<TGrpcRequestCheckActor<TEvent>>
     , public ICheckerIface
+    , public IFacilityProvider
 {
     using TSelf = TGrpcRequestCheckActor<TEvent>;
     using TBase = TActorBootstrappedSecureRequest<TGrpcRequestCheckActor>;
@@ -66,7 +69,7 @@ public:
         }
     }
 
-    void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) {
+    void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) override {
         TBase::SetEntries(entries);
     }
 
@@ -78,12 +81,14 @@ public:
         TIntrusivePtr<TSecurityObject> securityObject,
         TAutoPtr<TEventHandle<TEvent>> request,
         IGRpcProxyCounters::TPtr counters,
-        bool skipCheckConnectRigths)
+        bool skipCheckConnectRigths,
+        const IFacilityProvider* facilityProvider)
         : Owner_(owner)
         , Request_(std::move(request))
         , Counters_(counters)
         , SecurityObject_(std::move(securityObject))
         , SkipCheckConnectRigths_(skipCheckConnectRigths)
+        , FacilityProvider_(facilityProvider)
     {
         GrpcRequestBaseCtx_ = Request_->Get();
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
@@ -205,7 +210,7 @@ public:
         } else {
             GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_OK);
             GrpcRequestBaseCtx_->SetInternalToken(TBase::GetSerializedToken());
-            ReplyBackAndDie();
+            Continue();
         }
     }
 
@@ -217,6 +222,16 @@ public:
 
     void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
         TBase::PassAway();
+    }
+
+    TIntrusiveConstPtr<TAppConfig> GetAppConfig() const override {
+        return FacilityProvider_->GetAppConfig();
+    }
+
+    TActorId RegisterActor(IActor* actor) const override {
+        // CheckActor will die after creation rpc_ actor
+        // so we can use same mailbox
+        return this->RegisterWithSameMailbox(actor);
     }
 
 private:
@@ -363,6 +378,33 @@ private:
         TBase::PassAway();
     }
 
+    void Continue() {
+        if (!ValidateAndReplyOnError(GrpcRequestBaseCtx_)) {
+            TBase::PassAway();
+            return;
+        }
+        HandleAndDie(Request_);
+    }
+
+    void HandleAndDie(TAutoPtr<TEventHandle<TEvProxyRuntimeEvent>>& event) {
+        event->Release().Release()->Pass(*this);
+        TBase::PassAway();
+    }
+
+    void HandleAndDie(TAutoPtr<TEventHandle<TEvListEndpointsRequest>>&) {
+        ReplyBackAndDie();
+    }
+
+    void HandleAndDie(TRefreshTokenImpl::TPtr&) {
+        ReplyBackAndDie();
+    }
+
+    template <typename T>
+    void HandleAndDie(T& event) {
+        TGRpcRequestProxyHandleMethods::Handle(event, TlsActivationContext->AsActorContext());
+        TBase::PassAway();
+    }
+
     void ReplyBackAndDie() {
         TlsActivationContext->Send(Request_->Forward(Owner_));
         TBase::PassAway();
@@ -438,6 +480,7 @@ private:
     NRpcService::TRlConfig* RlConfig = nullptr;
     bool SkipCheckConnectRigths_ = false;
     std::vector<std::pair<TString, TString>> Attributes_;
+    const IFacilityProvider* FacilityProvider_;
 };
 
 // default behavior - attributes in schema
@@ -467,9 +510,10 @@ IActor* CreateGrpcRequestCheckActor(
     TIntrusivePtr<TSecurityObject> securityObject,
     TAutoPtr<TEventHandle<TEvent>> request,
     IGRpcProxyCounters::TPtr counters,
-    bool skipCheckConnectRigths) {
+    bool skipCheckConnectRigths,
+    const IFacilityProvider* facilityProvider) {
 
-    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRigths);
+    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRigths, facilityProvider);
 }
 
 }

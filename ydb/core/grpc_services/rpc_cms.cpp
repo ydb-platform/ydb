@@ -144,43 +144,43 @@ private:
     }
 };
 
-void DoCreateTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(
+void DoCreateTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(
         new TCmsRPC<TEvCreateTenantRequest,
                     TEvConsole::TEvCreateTenantRequest,
                     TEvConsole::TEvCreateTenantResponse>(p.release()));
 }
 
-void DoAlterTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(
+void DoAlterTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(
         new TCmsRPC<TEvAlterTenantRequest,
                     TEvConsole::TEvAlterTenantRequest,
                     TEvConsole::TEvAlterTenantResponse>(p.release()));
 }
 
-void DoGetTenantStatusRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(
+void DoGetTenantStatusRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(
         new TCmsRPC<TEvGetTenantStatusRequest,
                     TEvConsole::TEvGetTenantStatusRequest,
                     TEvConsole::TEvGetTenantStatusResponse>(p.release()));
 }
 
-void DoListTenantsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(
+void DoListTenantsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(
         new TCmsRPC<TEvListTenantsRequest,
                 TEvConsole::TEvListTenantsRequest,
                 TEvConsole::TEvListTenantsResponse>(p.release()));
 }
 
-void DoRemoveTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(
+void DoRemoveTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(
         new TCmsRPC<TEvRemoveTenantRequest,
                 TEvConsole::TEvRemoveTenantRequest,
                 TEvConsole::TEvRemoveTenantResponse>(p.release()));
 }
 
-void DoDescribeTenantOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(
+void DoDescribeTenantOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(
         new TCmsRPC<TEvDescribeTenantOptionsRequest,
                     TEvConsole::TEvDescribeTenantOptionsRequest,
                     TEvConsole::TEvDescribeTenantOptionsResponse>(p.release()));

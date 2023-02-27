@@ -54,8 +54,8 @@ private:
     }
 };
 
-void DoCopyTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TCopyTableRPC(p.release()));
+void DoCopyTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TCopyTableRPC(p.release()));
 }
 
 } // namespace NKikimr

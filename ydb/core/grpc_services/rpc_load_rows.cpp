@@ -713,15 +713,15 @@ private:
     }
 };
 
-void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     bool diskQuotaExceeded = p->GetDiskQuotaExceeded();
 
     if (GetProtoRequest(p.get())->has_arrow_batch_settings()) {
-        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(p.release(), diskQuotaExceeded));
+        f.RegisterActor(new TUploadColumnsRPCPublic(p.release(), diskQuotaExceeded));
     } else if (GetProtoRequest(p.get())->has_csv_settings()) {
-        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(p.release(), diskQuotaExceeded));
+        f.RegisterActor(new TUploadColumnsRPCPublic(p.release(), diskQuotaExceeded));
     } else {
-        TActivationContext::AsActorContext().Register(new TUploadRowsRPCPublic(p.release(), diskQuotaExceeded));
+        f.RegisterActor(new TUploadRowsRPCPublic(p.release(), diskQuotaExceeded));
     }
 }
 

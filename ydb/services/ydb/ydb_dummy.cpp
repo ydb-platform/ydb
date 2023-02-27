@@ -184,7 +184,7 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     }
 }
 
-void TGRpcRequestProxy::Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxyHandleMethods::Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Register(new TBiStreamPingRequestRPC(ev->Release().Release()));
 }
 

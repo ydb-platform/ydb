@@ -495,28 +495,28 @@ public:
 
 } // namespace
 
-void DoCreateRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TCreateRateLimiterResourceRPC(p.release()));
+void DoCreateRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TCreateRateLimiterResourceRPC(p.release()));
 }
 
-void DoAlterRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TAlterRateLimiterResourceRPC(p.release()));
+void DoAlterRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TAlterRateLimiterResourceRPC(p.release()));
 }
 
-void DoDropRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TDropRateLimiterResourceRPC(p.release()));
+void DoDropRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDropRateLimiterResourceRPC(p.release()));
 }
 
-void DoListRateLimiterResources(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TListRateLimiterResourcesRPC(p.release()));
+void DoListRateLimiterResources(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TListRateLimiterResourcesRPC(p.release()));
 }
 
-void DoDescribeRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TDescribeRateLimiterResourceRPC(p.release()));
+void DoDescribeRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDescribeRateLimiterResourceRPC(p.release()));
 }
 
-void DoAcquireRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TAcquireRateLimiterResourceRPC(p.release()));
+void DoAcquireRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TAcquireRateLimiterResourceRPC(p.release()));
 }
 
 template<>

@@ -229,8 +229,8 @@ private:
     TTableProfiles Profiles;
 };
 
-void DoCreateTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TCreateTableRPC(p.release()));
+void DoCreateTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TCreateTableRPC(p.release()));
 }
 
 template<>

@@ -489,9 +489,9 @@ private:
 
 } // namespace
 
-void DoStreamExecuteYqlScript(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& facility) {
-    ui64 rpcBufferSize = facility.GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
-    TActivationContext::AsActorContext().Register(new TStreamExecuteYqlScriptRPC(p.release(), rpcBufferSize));
+void DoStreamExecuteYqlScript(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    ui64 rpcBufferSize = f.GetAppConfig()->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    f.RegisterActor(new TStreamExecuteYqlScriptRPC(p.release(), rpcBufferSize));
 }
 
 } // namespace NGRpcService

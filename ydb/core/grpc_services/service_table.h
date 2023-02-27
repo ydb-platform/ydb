@@ -9,27 +9,27 @@ class IRequestOpCtx;
 class IRequestNoOpCtx;
 class IFacilityProvider;
 
-void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoCreateTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoDropTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoCopyTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoCopyTablesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoRenameTablesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoCreateSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoDeleteSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoKeepAliveRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoReadTableRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
-void DoExplainDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoPrepareDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoExecuteDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoExecuteSchemeQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoBeginTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoCommitTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoRollbackTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoDescribeTableOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
+void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoCreateTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoDropTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoCopyTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoCopyTablesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoRenameTablesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoCreateSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoDeleteSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoKeepAliveRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoReadTableRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+void DoExplainDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoPrepareDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoExecuteDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoExecuteSchemeQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoBeginTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoCommitTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoRollbackTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoDescribeTableOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 }
 }

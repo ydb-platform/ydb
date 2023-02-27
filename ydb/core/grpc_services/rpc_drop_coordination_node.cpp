@@ -57,8 +57,8 @@ private:
     }
 };
 
-void DoDropCoordinationNode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TDropCoordinationNodeRPC(p.release()));
+void DoDropCoordinationNode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDropCoordinationNodeRPC(p.release()));
 }
 
 } // namespace NKikimr

@@ -46,7 +46,7 @@ class TGRpcRequestProxySimple
     using TBase = TActorBootstrapped<TGRpcRequestProxySimple>;
 public:
     explicit TGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig)
-        : AppConfig(appConfig)
+        : AppConfig(MakeIntrusiveConst<TAppConfig>(appConfig))
     {
     }
 
@@ -74,7 +74,7 @@ private:
 
         THolder<TEvListEndpointsRequest> request(event->Release().Release());
         auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(request);
-        const auto& grpcConfig = AppConfig.GetGRpcConfig();
+        const auto& grpcConfig = AppConfig->GetGRpcConfig();
         AddEndpointsForGrpcConfig(grpcConfig, *result);
 
         for (const auto& externalEndpoint : grpcConfig.GetExtEndpoints()) {
@@ -125,7 +125,7 @@ private:
 
         {
             TSchemeBoardEvents::TDescribeSchemeResult schemeData;
-            Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(), schemeData, nullptr, event.Release(), Counters, false));
+            Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(), schemeData, nullptr, event.Release(), Counters, false, this));
             return;
         }
 
@@ -135,11 +135,15 @@ private:
         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
     }
 
-    const NKikimrConfig::TAppConfig& GetAppConfig() const override {
+    TIntrusiveConstPtr<TAppConfig> GetAppConfig() const override {
         return AppConfig;
     }
 
-    NKikimrConfig::TAppConfig AppConfig;
+    TActorId RegisterActor(IActor* actor) const override {
+        return TActivationContext::AsActorContext().Register(actor);
+    }
+
+    TIntrusiveConstPtr<TAppConfig> AppConfig;
     IGRpcProxyCounters::TPtr Counters;
 };
 

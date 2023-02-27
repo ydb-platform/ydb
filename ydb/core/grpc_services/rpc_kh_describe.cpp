@@ -351,8 +351,8 @@ private:
     }
 };
 
-void DoKikhouseDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TKikhouseDescribeTableRPC(std::move(p)));
+void DoKikhouseDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TKikhouseDescribeTableRPC(std::move(p)));
 }
 
 } // namespace NKikimr

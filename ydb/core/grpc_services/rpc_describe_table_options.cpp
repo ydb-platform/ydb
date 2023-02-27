@@ -207,8 +207,8 @@ private:
     TTableProfiles Profiles;
 };
 
-void DoDescribeTableOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TDescribeTableOptionsRPC(p.release()));
+void DoDescribeTableOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDescribeTableOptionsRPC(p.release()));
 }
 
 } // namespace NGRpcService

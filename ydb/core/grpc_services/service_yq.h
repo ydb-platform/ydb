@@ -25,7 +25,7 @@ public:
     TVector<TString> Sids;
 
     TGrpcYqRequestOperationCall(NGrpc::IRequestContextBase* ctx,
-        void (*cb)(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&),
+        void (*cb)(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider& f),
         const std::function<TVector<NPerms::TPermission>(const TReq&)>& permissions)
         : TGrpcRequestOperationCall<TReq, TResp>(ctx, cb, {}), Permissions(permissions) {
     }

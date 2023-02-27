@@ -147,8 +147,8 @@ private:
 
 };
 
-void DoCreateSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TCreateSessionRPC(p.release()));
+void DoCreateSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& provider) {
+    provider.RegisterActor(new TCreateSessionRPC(p.release()));
 }
 
 template<>

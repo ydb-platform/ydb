@@ -58,8 +58,8 @@ private:
     }
 };
 
-void DoRemoveDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TRemoveDirectoryRPC(p.release()));
+void DoRemoveDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TRemoveDirectoryRPC(p.release()));
 }
 
 } // namespace NGRpcService

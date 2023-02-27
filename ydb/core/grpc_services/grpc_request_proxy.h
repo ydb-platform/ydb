@@ -2,7 +2,8 @@
 
 #include "grpc_endpoint.h"
 
-#include "rpc_calls.h"
+
+#include "grpc_request_proxy_handle_methods.h"
 
 #include <library/cpp/actors/core/actor.h>
 
@@ -23,7 +24,7 @@ TString DatabaseFromDomain(const TAppData* appdata);
 IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig);
 IActor* CreateGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig);
 
-class TGRpcRequestProxy : public IFacilityProvider {
+class TGRpcRequestProxy : public TGRpcRequestProxyHandleMethods, public IFacilityProvider {
 public:
     enum EEv {
         EvRefreshTokenResponse = EventSpaceBegin(TKikimrEvents::ES_GRPC_REQUEST_PROXY),
@@ -49,29 +50,6 @@ public:
 
 protected:
     void Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx);
-
-    void Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvStreamTopicWriteRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvCommitOffsetRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQDropTopicRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQCreateTopicRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQAlterTopicRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvNodeCheckRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDropTopicRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvCreateTopicRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvAlterTopicRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDescribeConsumerRequest::TPtr& ev, const TActorContext& ctx);
 
     TActorId DiscoveryCacheActorID;
 };

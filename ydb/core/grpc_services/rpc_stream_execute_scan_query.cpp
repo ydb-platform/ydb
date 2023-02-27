@@ -505,10 +505,10 @@ private:
 } // namespace
 
 void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    ui64 rpcBufferSize = f.GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    ui64 rpcBufferSize = f.GetAppConfig()->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
     auto* req = dynamic_cast<TEvStreamExecuteScanQueryRequest*>(p.release());
     Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    TActivationContext::AsActorContext().Register(new TStreamExecuteScanQueryRPC(req, rpcBufferSize));
+    f.RegisterActor(new TStreamExecuteScanQueryRPC(req, rpcBufferSize));
 }
 
 } // namespace NGRpcService

@@ -190,8 +190,8 @@ private:
     }
 };
 
-void DoGetShardLocationsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TGetShardLocationsRPC(std::move(p)));
+void DoGetShardLocationsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TGetShardLocationsRPC(std::move(p)));
 }
 
 } // namespace NKikimr

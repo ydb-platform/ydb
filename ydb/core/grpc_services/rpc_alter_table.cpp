@@ -674,8 +674,8 @@ private:
     TTableProfiles Profiles;
 };
 
-void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TAlterTableRPC(p.release()));
+void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TAlterTableRPC(p.release()));
 }
 
 template<>

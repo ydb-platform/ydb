@@ -656,7 +656,7 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 } // namespace NKesus
 } // namespace NKikimr
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(
+void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(
         NKikimr::NGRpcService::TEvCoordinationSessionRequest::TPtr& ev,
         const NActors::TActorContext& ctx)
 {

@@ -283,8 +283,8 @@ private:
     TActorId PipeActorId_;
 };
 
-void DoGetOperationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TGetOperationRPC(p.release()));
+void DoGetOperationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TGetOperationRPC(p.release()));
 }
 
 } // namespace NGRpcService

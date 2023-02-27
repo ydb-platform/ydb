@@ -33,7 +33,6 @@ public:
         , TableId(MakeTableId(settings.GetTable()))
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
-        , ImmediateTx(settings.GetImmediateTx())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT) {
 
         KeyColumns.reserve(settings.GetKeyColumns().size());
@@ -273,11 +272,6 @@ private:
             Locks.push_back(lock);
         }
 
-        if (!Snapshot.IsValid() && !record.GetFinished()) {
-            // HEAD read was converted to repeatable read
-            Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
-        }
-
         switch (record.GetStatus().GetCode()) {
             case Ydb::StatusIds::SUCCESS:
                 break;
@@ -492,12 +486,9 @@ private:
         THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
         auto& record = request->Record;
 
-        if (Snapshot.IsValid()) {
-            record.MutableSnapshot()->SetStep(Snapshot.Step);
-            record.MutableSnapshot()->SetTxId(Snapshot.TxId);
-        } else {
-            YQL_ENSURE(ImmediateTx, "HEAD reading is only available for immediate txs");
-        }
+        YQL_ENSURE(Snapshot.IsValid(), "Invalid snapshot value");
+        record.MutableSnapshot()->SetStep(Snapshot.Step);
+        record.MutableSnapshot()->SetTxId(Snapshot.TxId);
 
         if (LockTxId && BrokenLocks.empty()) {
             record.SetLockTxId(*LockTxId);
@@ -616,7 +607,6 @@ private:
     const TTableId TableId;
     IKqpGateway::TKqpSnapshot Snapshot;
     const TMaybe<ui64> LockTxId;
-    const bool ImmediateTx;
     std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
     std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
     std::vector<TSysTables::TTableColumnInfo> Columns;

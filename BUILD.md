@@ -40,6 +40,8 @@
     sudo apt-get update
      ```
 
+   For Ubuntu 18, use `llvm-toolchain-$(lsb_release -cs)-12` in the command above.
+
 1. Install dependencies
 
     ```

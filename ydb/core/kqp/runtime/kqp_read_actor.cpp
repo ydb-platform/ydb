@@ -60,6 +60,8 @@ THolder<NKikimr::TEvDataShard::TEvReadAck> DefaultAckSettings() {
     return result;
 }
 
+NActors::TActorId PipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
+
 }
 
 
@@ -113,16 +115,40 @@ public:
         {
         }
 
-        TTableRange GetBounds() {
+        TTableRange GetBounds(bool reverse) {
             if (Ranges.empty()) {
                 YQL_ENSURE(!Points.empty());
-                return TTableRange(
-                    Points.front().GetCells(), true,
-                    Points.back().GetCells(), true);
+                if (reverse) {
+                    return TTableRange(
+                        Points.front().GetCells(), true,
+                        Points[FirstUnprocessedRequest.GetOrElse(Points.size() - 1)].GetCells(), true);
+                } else {
+                    return TTableRange(
+                        Points[FirstUnprocessedRequest.GetOrElse(0)].GetCells(), true,
+                        Points.back().GetCells(), true);
+                }
             } else {
-                return TTableRange(
-                    Ranges.front().From.GetCells(), Ranges.front().FromInclusive,
-                    Ranges.back().To.GetCells(), Ranges.back().ToInclusive);
+                if (reverse) {
+                    if (LastKey.empty()) {
+                        return TTableRange(
+                            Ranges.front().From.GetCells(), Ranges.front().FromInclusive,
+                            Ranges[FirstUnprocessedRequest.GetOrElse(Ranges.size() - 1)].To.GetCells(), Ranges.back().ToInclusive);
+                    } else {
+                        return TTableRange(
+                            Ranges.front().From.GetCells(), Ranges.front().FromInclusive,
+                            LastKey, false);
+                    }
+                } else {
+                    if (LastKey.empty()) {
+                        return TTableRange(
+                            Ranges[FirstUnprocessedRequest.GetOrElse(0)].From.GetCells(), Ranges.front().FromInclusive,
+                            Ranges.back().To.GetCells(), Ranges.back().ToInclusive);
+                    } else {
+                        return TTableRange(
+                            LastKey, false,
+                            Ranges.back().To.GetCells(), Ranges.back().ToInclusive);
+                    }
+                }
             }
         }
 
@@ -191,14 +217,17 @@ public:
             }
 
             if (reverse) {
-                auto rangeIt = Ranges.begin() + FirstUnprocessedRequest.GetOrElse(Ranges.size());
+                auto rangeIt = Ranges.begin() + FirstUnprocessedRequest.GetOrElse(Ranges.size() - 1);
 
                 if (!lastKeyEmpty) {
                     // It is range, where read was interrupted. Restart operation from last read key.
                     result.emplace_back(std::move(TSerializedTableRange(
                         rangeIt->From.GetBuffer(), TSerializedCellVec::Serialize(LastKey), rangeIt->ToInclusive, false
                         )));
+                } else {
+                    ++rangeIt;
                 }
+
                 result.insert(result.begin(), Ranges.begin(), rangeIt);
             } else {
                 auto rangeIt = Ranges.begin() + FirstUnprocessedRequest.GetOrElse(0);
@@ -374,6 +403,7 @@ public:
 
     bool StartTableScan() {
         const ui32 maxAllowedInFlight = Settings.GetSorted() ? 1 : MaxInFlight;
+        CA_LOG_D("effective maxinflight " << maxAllowedInFlight << " sorted " << Settings.GetSorted());
         bool isFirst = true;
         while (!PendingShards.Empty() && RunningReads() + 1 <= maxAllowedInFlight) {
             if (isFirst) {
@@ -409,7 +439,7 @@ public:
 
         state->ResolveAttempt++;
 
-        auto range = state->GetBounds();
+        auto range = state->GetBounds(Settings.GetReverse());
         TVector<TKeyDesc::TColumnOp> columns;
         columns.reserve(Settings.GetColumns().size());
         for (const auto& column : Settings.GetColumns()) {
@@ -601,11 +631,13 @@ public:
 
         state->RetryAttempt += 1;
         if (state->RetryAttempt >= MAX_SHARD_RETRIES) {
+            ResetRead(id);
             return ResolveShard(state);
         }
         CA_LOG_D("Retrying read #" << id);
 
         SendCancel(id);
+        ResetRead(id);
 
         if (Reads[id].SerializedContinuationToken) {
             NKikimrTxDataShard::TReadContinuationToken token;
@@ -686,7 +718,7 @@ public:
             << " lockTxId = " << Settings.GetLockTxId());
 
         ReadIdByTabletId[state->TabletId].push_back(id);
-        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
+        Send(::PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
             IEventHandle::FlagTrackDelivery);
     }
 
@@ -698,16 +730,21 @@ public:
             return;
         }
 
+        for (auto& issue : record.GetStatus().GetIssues()) {
+            CA_LOG_D("read id #" << id << " got issue " << issue.Getmessage());
+            Reads[id].Shard->Issues.push_back(issue);
+        }
         switch (record.GetStatus().GetCode()) {
             case Ydb::StatusIds::SUCCESS:
                 break;
             case Ydb::StatusIds::OVERLOADED:
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                for (auto& issue : record.GetStatus().GetIssues()) {
-                    CA_LOG_D("read id #" << id << " got issue " << issue.Getmessage());
-                    Reads[id].Shard->Issues.push_back(issue);
-                }
                 return RetryRead(id);
+            }
+            case Ydb::StatusIds::NOT_FOUND: {
+                auto shard = Reads[id].Shard;
+                ResetRead(id);
+                return ResolveShard(shard);
             }
             default: {
                 NYql::TIssues issues;
@@ -735,8 +772,11 @@ public:
 
 
         ReceivedRowCount += ev->Get()->GetRowsCount();
+        CA_LOG_D(TStringBuilder() << "new data for read #" << id
+            << " seqno = " << ev->Get()->Record.GetSeqNo()
+            << " finished = " << ev->Get()->Record.GetFinished()
+            << " pushed " << DebugPrintCells(ev->Get()));
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
-        CA_LOG_D(TStringBuilder() << "new data for read #" << id << " pushed");
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -753,6 +793,13 @@ public:
 
     size_t RunningReads() const {
         return Reads.size() - ResetReads;
+    }
+
+    void ResetRead(size_t id) {
+        if (Reads[id]) {
+            Reads[id].Reset();
+            ResetReads++;
+        }
     }
 
     ui64 GetInputIndex() const override {
@@ -824,6 +871,23 @@ public:
             stats.AddStatistics({sizeof(ui64) * rowsCnt, sizeof(ui64) * rowsCnt});
         }
         return stats;
+    }
+
+    TString DebugPrintCells(const TEvDataShard::TEvReadResult* result) {
+        if (result->Record.GetResultFormat() == NKikimrTxDataShard::EScanDataFormat::ARROW) {
+            return "{ARROW}";
+        }
+        TStringBuilder builder;
+        TVector<NScheme::TTypeInfo> types;
+        for (auto& column : Settings.GetColumns()) {
+            types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
+        }
+
+        for (size_t rowIndex = 0; rowIndex < result->GetRowsCount(); ++rowIndex) {
+            const auto& row = result->GetCells(rowIndex);
+            builder << "|" << DebugPrintPoint(types, row, *AppData()->TypeRegistry);
+        }
+        return builder;
     }
 
     NMiniKQL::TBytesStatistics PackCells(TResult& handle) {
@@ -918,7 +982,8 @@ public:
                         if (limit) {
                             request->Record.SetMaxRows(*limit);
                         }
-                        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), state->TabletId, true),
+                        CA_LOG_D("sending ack for read #" << id << " limit " << limit << " seqno = " << record.GetSeqNo());
+                        Send(::PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), state->TabletId, true),
                             IEventHandle::FlagTrackDelivery);
                     } else {
                         Reads[id].Finished = true;
@@ -929,8 +994,7 @@ public:
                     if (!record.GetFinished()) {
                         SendCancel(id);
                     }
-                    Reads[id].Reset();
-                    ResetReads++;
+                    ResetRead(id);
                 }
 
                 StartTableScan();
@@ -997,14 +1061,14 @@ public:
         auto* state = Reads[id].Shard;
         auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
         cancel->Record.SetReadId(id);
-        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId), IEventHandle::FlagTrackDelivery);
+        Send(::PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId), IEventHandle::FlagTrackDelivery);
     }
 
     void PassAway() override {
         {
             auto guard = BindAllocator();
             Results.clear();
-            Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+            Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         }
         TBase::PassAway();
     }
@@ -1099,6 +1163,10 @@ void InjectRangeEvReadSettings(const NKikimrTxDataShard::TEvRead& read) {
 
 void InjectRangeEvReadAckSettings(const NKikimrTxDataShard::TEvReadAck& ack) {
     ::DefaultRangeEvReadAckSettings.Data.MergeFrom(ack);
+}
+
+void InterceptReadActorPipeCache(NActors::TActorId id) {
+    ::PipeCacheId = id;
 }
 
 } // namespace NKqp

@@ -15,5 +15,7 @@ void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory);
 void InjectRangeEvReadSettings(const NKikimrTxDataShard::TEvRead&);
 void InjectRangeEvReadAckSettings(const NKikimrTxDataShard::TEvReadAck&);
 
+void InterceptReadActorPipeCache(NActors::TActorId);
+
 } // namespace NKqp
 } // namespace NKikimr

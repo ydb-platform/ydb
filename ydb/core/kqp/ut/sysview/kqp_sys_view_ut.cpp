@@ -82,11 +82,12 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
             [[72057594046644480u];[9u];["/Root/BatchUpload"];[5u]];
             [[72057594046644480u];[0u];["/Root/KeyValue"];[6u]];
             [[72057594046644480u];[0u];["/Root/KeyValue2"];[7u]];
-            [[72057594046644480u];[0u];["/Root/Test"];[8u]];
-            [[72057594046644480u];[0u];["/Root/Join1"];[9u]];
-            [[72057594046644480u];[1u];["/Root/Join1"];[9u]];
-            [[72057594046644480u];[0u];["/Root/Join2"];[10u]];
-            [[72057594046644480u];[1u];["/Root/Join2"];[10u]]
+            [[72057594046644480u];[0u];["/Root/KeyValueLargePartition"];[8u]];
+            [[72057594046644480u];[0u];["/Root/Test"];[9u]];
+            [[72057594046644480u];[0u];["/Root/Join1"];[10u]];
+            [[72057594046644480u];[1u];["/Root/Join1"];[10u]];
+            [[72057594046644480u];[0u];["/Root/Join2"];[11u]];
+            [[72057594046644480u];[1u];["/Root/Join2"];[11u]]
         ])", StreamResultToYson(it));
     }
 
@@ -170,16 +171,17 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         TString query = R"(
             SELECT OwnerId, PathId, PartIdx, Path
             FROM `/Root/.sys/partition_stats`
-            WHERE OwnerId = 72057594046644480ul AND PathId > 5u AND PathId <= 9u
+            WHERE OwnerId = 72057594046644480ul AND PathId > 5u AND PathId <= 10u
             ORDER BY PathId, PartIdx;
         )";
 
         TString expectedYson = R"([
             [[72057594046644480u];[6u];[0u];["/Root/KeyValue"]];
             [[72057594046644480u];[7u];[0u];["/Root/KeyValue2"]];
-            [[72057594046644480u];[8u];[0u];["/Root/Test"]];
-            [[72057594046644480u];[9u];[0u];["/Root/Join1"]];
-            [[72057594046644480u];[9u];[1u];["/Root/Join1"]]
+            [[72057594046644480u];[8u];[0u];["/Root/KeyValueLargePartition"]];
+            [[72057594046644480u];[9u];[0u];["/Root/Test"]];
+            [[72057594046644480u];[10u];[0u];["/Root/Join1"]];
+            [[72057594046644480u];[10u];[1u];["/Root/Join1"]]
         ])";
 
         auto it = client.StreamExecuteScanQuery(query).GetValueSync();
@@ -208,7 +210,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         TString expectedYson = R"([
             [[72057594046644480u];[6u];[0u];["/Root/KeyValue"]];
             [[72057594046644480u];[7u];[0u];["/Root/KeyValue2"]];
-            [[72057594046644480u];[8u];[0u];["/Root/Test"]]
+            [[72057594046644480u];[8u];[0u];["/Root/KeyValueLargePartition"]]
         ])";
 
         auto it = client.StreamExecuteScanQuery(query).GetValueSync();

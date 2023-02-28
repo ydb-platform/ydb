@@ -21,7 +21,8 @@ TExprBase KqpRemoveRedundantSortByPkBase(
     TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx,
     std::function<TMaybe<TTableData>(TExprBase)> tableAccessor,
-    std::function<TExprBase(TExprBase, NYql::TKqpReadTableSettings)> rebuildInput)
+    std::function<TExprBase(TExprBase, NYql::TKqpReadTableSettings)> rebuildInput,
+    bool allowSortForAllTables = false)
 {
     auto maybeSort = node.Maybe<TCoSort>();
     auto maybeTopSort = node.Maybe<TCoTopSort>();
@@ -128,7 +129,7 @@ TExprBase KqpRemoveRedundantSortByPkBase(
 
     bool olapTable = tableDesc.Metadata->Kind == EKikimrTableKind::Olap;
     if (direction == SortDirectionReverse) {
-        if (!olapTable && kqpCtx.IsScanQuery()) {
+        if (!allowSortForAllTables && !olapTable && kqpCtx.IsScanQuery()) {
             return node;
         }
 
@@ -141,7 +142,7 @@ TExprBase KqpRemoveRedundantSortByPkBase(
 
         input = rebuildInput(input, settings);
     } else if (direction == SortDirectionForward) {
-        if (olapTable) {
+        if (olapTable || allowSortForAllTables) {
             settings.SetSorted();
             input = rebuildInput(input, settings);
         }
@@ -222,7 +223,8 @@ NYql::NNodes::TExprBase KqpRemoveRedundantSortByPkOverSource(
                     [&](TExprBase input, NYql::TKqpReadTableSettings settings) {
                         newSettings.push_back(settings);
                         return input;
-                    });
+                    },
+                    /* allowSortForAllTables */ true);
                 if (newExpr.Ptr() != expr.Ptr()) {
                     bodyReplaces[expr.Raw()] = newExpr.Ptr();
                 }

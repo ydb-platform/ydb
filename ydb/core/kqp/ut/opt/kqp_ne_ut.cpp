@@ -3566,45 +3566,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-            --!syntax_v1
-            CREATE TABLE `KeyValueLimit` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-        )").GetValueSync());
-
-        AssertSuccessResult(session.ExecuteDataQuery(R"(
-
-            REPLACE INTO `KeyValueLimit` (Key, Value) VALUES
-                (101u, "Value1"),
-                (102u, "Value2"),
-                (103u, "Value3"),
-                (201u, "Value1"),
-                (202u, "Value2"),
-                (203u, "Value3"),
-                (301u, "Value1"),
-                (302u, "Value2"),
-                (303u, "Value3"),
-                (401u, "Value1"),
-                (402u, "Value2"),
-                (403u, "Value3"),
-                (501u, "Value1"),
-                (502u, "Value2"),
-                (503u, "Value3"),
-                (601u, "Value1"),
-                (602u, "Value2"),
-                (603u, "Value3"),
-                (701u, "Value1"),
-                (702u, "Value2"),
-                (703u, "Value3"),
-                (801u, "Value1"),
-                (802u, "Value2"),
-                (803u, "Value3");
-
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
-
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(2);
         InjectRangeEvReadSettings(evread);
@@ -3614,7 +3575,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT Key, Value FROM `/Root/KeyValueLimit` WHERE Key >= 202 ORDER BY Key LIMIT 5;
+                SELECT Key, Value FROM `/Root/KeyValueLargePartition` WHERE Key >= 202 ORDER BY Key LIMIT 5;
             )", TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[[202u];["Value2"]];[[203u];["Value3"]];[[301u];["Value1"]];[[302u];["Value2"]];[[303u];["Value3"]]])", FormatResultSetYson(result.GetResultSet(0)));

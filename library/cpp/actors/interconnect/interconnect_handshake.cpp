@@ -135,7 +135,6 @@ namespace NActors {
             } else {
                 PeerAddr.clear();
             }
-            HandshakeBroker = MakeHandshakeBrokerInId();
         }
 
         void UpdatePrefix() {
@@ -145,12 +144,21 @@ namespace NActors {
         void Run() override {
             UpdatePrefix();
 
+            bool isBrokerEnabled = !Socket && Common->OutgoingHandshakeInflightLimit;
             bool isBrokerActive = false;
 
-            if (Send(HandshakeBroker, new TEvHandshakeBrokerTake())) {
-                isBrokerActive = true;
-                WaitForSpecificEvent<TEvHandshakeBrokerPermit>("HandshakeBrokerPermit");
+            if (isBrokerEnabled) {
+                if (Send(HandshakeBroker, new TEvHandshakeBrokerTake())) {
+                    isBrokerActive = true;
+                    WaitForSpecificEvent<TEvHandshakeBrokerPermit>("HandshakeBrokerPermit");
+                }
             }
+
+            auto freeHandshakeBroker = [&]() {
+                if (isBrokerActive) {
+                    Send(HandshakeBroker, new TEvHandshakeBrokerFree());
+                }
+            };
 
             try {
                 // set up overall handshake process timer
@@ -159,6 +167,12 @@ namespace NActors {
                     timeout = DEFAULT_HANDSHAKE_TIMEOUT;
                 }
                 timeout += ResolveTimeout * 2;
+
+                if (Socket) {
+                    // Incoming handshakes have shorter timeout than outgoing
+                    timeout *= 0.9;
+                }
+
                 Deadline = Now() + timeout;
                 Schedule(Deadline, new TEvents::TEvWakeup);
 
@@ -194,15 +208,11 @@ namespace NActors {
             } catch (const TDtorException&) {
                 throw; // we can't use actor system when handling this exception
             } catch (...) {
-                if (isBrokerActive) {
-                    Send(HandshakeBroker, new TEvHandshakeBrokerFree());
-                }
+                freeHandshakeBroker();
                 throw;
             }
 
-            if (isBrokerActive) {
-                Send(HandshakeBroker, new TEvHandshakeBrokerFree());
-            }
+            freeHandshakeBroker();
             Socket.Reset();
         }
 

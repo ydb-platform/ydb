@@ -95,6 +95,7 @@ namespace NActors {
         std::shared_ptr<TEventFilter> EventFilter;
         TString Cookie; // unique random identifier of a node instance (generated randomly at every start)
         std::unordered_map<ui16, TString> ChannelName;
+        std::optional<ui32> OutgoingHandshakeInflightLimit;
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

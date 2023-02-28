@@ -687,13 +687,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // create poller actor (whether platform supports it)
             setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId));
 
-            // create handshake broker actor
-            setup->LocalServices.emplace_back(MakeHandshakeBrokerOutId(), TActorSetupCmd(CreateHandshakeBroker(),
-                TMailboxType::ReadAsFilled, systemPoolId));
-
-            setup->LocalServices.emplace_back(MakeHandshakeBrokerInId(), TActorSetupCmd(CreateHandshakeBroker(),
-                TMailboxType::ReadAsFilled, systemPoolId));
-
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
             TIntrusivePtr<TInterconnectProxyCommon> icCommon;
@@ -707,6 +700,15 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize();
             icCommon->LocalScopeId = ScopeId.GetInterconnectScopeId();
             icCommon->Cookie = icConfig.GetSuppressConnectivityCheck() ? TString() : CreateGuidAsString();
+
+            if (icConfig.HasOutgoingHandshakeInflightLimit()) {
+                icCommon->OutgoingHandshakeInflightLimit = icConfig.GetOutgoingHandshakeInflightLimit();
+
+                // create handshake broker actor
+                setup->LocalServices.emplace_back(MakeHandshakeBrokerOutId(), TActorSetupCmd(
+                        CreateHandshakeBroker(*icCommon->OutgoingHandshakeInflightLimit),
+                        TMailboxType::ReadAsFilled, systemPoolId));
+            }
 
 #define CHANNEL(NAME) {TInterconnectChannels::NAME, #NAME}
             icCommon->ChannelName = {

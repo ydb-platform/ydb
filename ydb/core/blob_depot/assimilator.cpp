@@ -372,19 +372,20 @@ namespace NKikimr::NBlobDepot {
                 (Status, resp.Status), (NumGetsUnprocessed, GetIdToUnprocessedPuts.size()));
             if (resp.Status == NKikimrProto::OK) {
                 std::vector<ui8> channels(1);
-                Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels);
-                TChannelInfo& channel = Self->Channels[channels.front()];
-                const ui64 value = channel.NextBlobSeqId++;
-                const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
-                const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
-                const ui64 putId = NextPutId++;
-                SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, resp.Buffer, TInstant::Max()), putId);
-                const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
-                Y_VERIFY(inserted);
-                const bool inserted1 = PutIdToKey.try_emplace(putId, TData::TKey(resp.Id), it->first).second;
-                Y_VERIFY(inserted1);
-                ++it->second;
-                getBytes += id.BlobSize();
+                if (!Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
+                    TChannelInfo& channel = Self->Channels[channels.front()];
+                    const ui64 value = channel.NextBlobSeqId++;
+                    const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
+                    const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
+                    const ui64 putId = NextPutId++;
+                    SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, resp.Buffer, TInstant::Max()), putId);
+                    const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
+                    Y_VERIFY(inserted);
+                    const bool inserted1 = PutIdToKey.try_emplace(putId, TData::TKey(resp.Id), it->first).second;
+                    Y_VERIFY(inserted1);
+                    ++it->second;
+                }
+                getBytes += resp.Id.BlobSize();
             } else if (resp.Status == NKikimrProto::NODATA) {
                 Self->Data->ExecuteTxCommitAssimilatedBlob(NKikimrProto::NODATA, TBlobSeqId(), TData::TKey(resp.Id),
                     TEvPrivate::EvTxComplete, SelfId(), it->first);

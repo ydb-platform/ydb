@@ -183,22 +183,31 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TBlobDepot::PickChannels(NKikimrBlobDepot::TChannelKind::E kind, std::vector<ui8>& channels) {
+    bool TBlobDepot::PickChannels(NKikimrBlobDepot::TChannelKind::E kind, std::vector<ui8>& channels) {
         const auto kindIt = ChannelKinds.find(kind);
         Y_VERIFY(kindIt != ChannelKinds.end());
         auto& kindv = kindIt->second;
 
         if (kindv.GroupAccumWeights.empty()) {
-            // recalculate group weights
-            ui64 accum = 0;
-            THashSet<ui32> seenGroups;
-            for (const auto& [channel, groupId] : kindv.ChannelGroups) {
-                if (const auto& [_, inserted] = seenGroups.insert(groupId); inserted) {
-                    accum += SpaceMonitor->GetGroupAllocationWeight(groupId);
-                    kindv.GroupAccumWeights.emplace_back(groupId, accum);
+            for (const bool stopOnLightYellow : {true, false}) {
+                // recalculate group weights
+                ui64 accum = 0;
+                THashSet<ui32> seenGroups;
+                for (const auto& [channel, groupId] : kindv.ChannelGroups) {
+                    if (const auto& [_, inserted] = seenGroups.insert(groupId); inserted) {
+                        if (const ui64 w = SpaceMonitor->GetGroupAllocationWeight(groupId, stopOnLightYellow)) {
+                            accum += w;
+                            kindv.GroupAccumWeights.emplace_back(groupId, accum);
+                        }
+                    }
+                }
+                if (!kindv.GroupAccumWeights.empty()) {
+                    break;
                 }
             }
-            Y_VERIFY(!kindv.GroupAccumWeights.empty());
+            if (kindv.GroupAccumWeights.empty()) {
+                return false; // no allocation possible
+            }
         }
 
         const auto [_, accum] = kindv.GroupAccumWeights.back();
@@ -220,6 +229,8 @@ namespace NKikimr::NBlobDepot {
             const size_t channelIndex = RandomNumber(channels.size());
             channel = channels[channelIndex];
         }
+
+        return true;
     }
 
     IActor *CreateBlobDepot(const TActorId& tablet, TTabletStorageInfo *info) {

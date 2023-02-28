@@ -237,20 +237,25 @@ namespace NKikimr::NBlobDepot {
 
         void IssuePut(TKey key, TString&& buffer, bool keep, bool doNotKeep) {
             std::vector<ui8> channels(1);
-            Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels);
-            TChannelInfo& channel = Self->Channels[channels.front()];
-            const ui64 value = channel.NextBlobSeqId++;
-            const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
-            const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, buffer.size());
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT91, "going to TEvPut", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                (Cookie, Ev->Cookie), (Key, key), (BlobId, id));
-            SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, std::move(buffer), TInstant::Max()),
-                (ui64)keep | (ui64)doNotKeep << 1);
-            const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
-            Y_VERIFY(inserted);
-            const bool inserted1 = IdToKey.try_emplace(id, std::move(key)).second;
-            Y_VERIFY(inserted1);
-            ++PutsInFlight;
+            if (Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
+                TChannelInfo& channel = Self->Channels[channels.front()];
+                const ui64 value = channel.NextBlobSeqId++;
+                const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
+                const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, buffer.size());
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT91, "going to TEvPut", (Id, Self->GetLogId()), (Sender, Ev->Sender),
+                    (Cookie, Ev->Cookie), (Key, key), (BlobId, id));
+                SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, std::move(buffer), TInstant::Max()),
+                    (ui64)keep | (ui64)doNotKeep << 1);
+                const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
+                Y_VERIFY(inserted);
+                const bool inserted1 = IdToKey.try_emplace(id, std::move(key)).second;
+                Y_VERIFY(inserted1);
+                ++PutsInFlight;
+            } else { // we couldn't restore this blob -- there was no place to write it to
+                ResolutionErrors.insert(key.GetBlobId());
+                ++PutsInFlight;
+                HandleTxComplete();
+            }
         }
 
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
@@ -271,7 +276,7 @@ namespace NKikimr::NBlobDepot {
                 TEvPrivate::EvTxComplete, SelfId(), 0, keep, doNotKeep);
 
             if (msg.Status != NKikimrProto::OK) { // do not reply OK to this item
-                ResolutionErrors.insert(msg.Id);
+                ResolutionErrors.insert(key.GetBlobId());
             }
         }
 

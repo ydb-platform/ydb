@@ -104,28 +104,28 @@ namespace NKikimr::NBlobDepot {
         BytesRead += record.GetBytesRead();
         BytesWritten += record.GetBytesWritten();
         MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
+        UpdateThroughputs(false);
     }
 
-    void TBlobDepot::UpdateThroughputs() {
+    void TBlobDepot::UpdateThroughputs(bool reschedule) {
         static constexpr TDuration Window = TDuration::Seconds(3);
 
         if (Config.HasVirtualGroupId() && !MetricsQ.empty()) {
             const TMonotonic now = TActivationContext::Monotonic();
             const TMonotonic left = now - Window;
             const auto comp = [](TMonotonic x, const auto& y) { return x < std::get<0>(y); };
-            const auto it = std::upper_bound(MetricsQ.begin(), MetricsQ.end(), left, comp);
-            if (it != MetricsQ.begin()) { // interpolate
+            if (const auto it = std::upper_bound(MetricsQ.begin(), MetricsQ.end(), left, comp); it != MetricsQ.begin()) {
                 MetricsQ.erase(MetricsQ.begin(), std::prev(it)); // remove all obsolete entries
-                Y_VERIFY(MetricsQ.size() >= 2);
-                const auto& [xTimestamp, xRead, xWritten] = MetricsQ[0];
-                auto& [yTimestamp, yRead, yWritten] = MetricsQ[1];
-                Y_VERIFY(xTimestamp <= left && left < yTimestamp);
-                const ui64 scale = 1'000'000;
-                const ui64 factor = (left - xTimestamp).MicroSeconds() * scale / (yTimestamp - xTimestamp).MicroSeconds();
-                yTimestamp = left;
-                yRead = xRead + (yRead - xRead) * factor / scale;
-                yWritten = xWritten + (yWritten - xWritten) * factor / scale;
-                MetricsQ.pop_front();
+                if (MetricsQ.size() >= 2) {
+                    auto& [xTimestamp, xRead, xWritten] = MetricsQ[0];
+                    const auto& [yTimestamp, yRead, yWritten] = MetricsQ[1];
+                    Y_VERIFY(xTimestamp <= left && left < yTimestamp);
+                    static constexpr ui64 scale = 1'000'000;
+                    const ui64 factor = (left - xTimestamp).MicroSeconds() * scale / (yTimestamp - xTimestamp).MicroSeconds();
+                    xTimestamp = left;
+                    xRead += (yRead - xRead) * factor / scale;
+                    xWritten += (yWritten - xWritten) * factor / scale;
+                }
             }
 
             ui64 readThroughput = 0;
@@ -144,8 +144,10 @@ namespace NKikimr::NBlobDepot {
             Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), ev.release());
         }
 
-        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvUpdateThroughputs, 0,
-            SelfId(), {}, nullptr, 0));
+        if (reschedule) {
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvUpdateThroughputs, 0,
+                SelfId(), {}, nullptr, 0));
+        }
     }
 
 } // NKikimr::NBlobDepot

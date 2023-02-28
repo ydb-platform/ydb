@@ -343,7 +343,7 @@ namespace NKikimr::NBlobDepot {
 
             virtual void OnUpdateBlock() {}
             virtual void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus /*status*/, TString /*dataOrErrorReason*/) {}
-            virtual void OnIdAllocated() {}
+            virtual void OnIdAllocated(bool /*success*/) {}
             virtual void OnDestroy(bool /*success*/) {}
 
         protected: // reading logic
@@ -441,7 +441,7 @@ namespace NKikimr::NBlobDepot {
             void RebuildHeap();
 
             void EnqueueQueryWaitingForId(TQuery *query);
-            void ProcessQueriesWaitingForId();
+            void ProcessQueriesWaitingForId(bool success);
         };
 
         THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;

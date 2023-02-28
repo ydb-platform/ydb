@@ -12,6 +12,7 @@ namespace NKikimr::NBlobDepot {
             bool StatusRequestInFlight = false;
             TStorageStatusFlags StatusFlags;
             float ApproximateFreeSpaceShare = 0.0f;
+            std::vector<ui8> Channels;
         };
 
         std::unordered_map<ui32, TGroupRecord> Groups;
@@ -27,13 +28,14 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvStatusResult::TPtr ev);
         void Kick();
 
-        ui64 GetGroupAllocationWeight(ui32 groupId) const;
+        ui64 GetGroupAllocationWeight(ui32 groupId, bool stopOnLightYellow) const;
         void SetSpaceColor(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
         NKikimrBlobStorage::TPDiskSpaceColor::E GetSpaceColor() const;
         float GetApproximateFreeSpaceShare() const;
 
     private:
         void Init();
+        void HandleYellowChannels();
     };
 
 } // NKikimr::NBlobDepot

@@ -92,7 +92,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::IssueAllocateIdsIfNeeded(TChannelKind& kind) {
-        if (!kind.IdAllocInFlight && kind.GetNumAvailableItems() < 100 && PipeId) {
+        if (!kind.IdAllocInFlight && kind.GetNumAvailableItems() < 100 && IsConnected) {
             const ui64 id = NextTabletRequestId++;
             STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA08, "IssueAllocateIdsIfNeeded", (AgentId, LogId),
                 (ChannelKind, NKikimrBlobDepot::TChannelKind::E_Name(kind.Kind)),
@@ -119,6 +119,8 @@ namespace NKikimr::NBlobDepot {
 
         if (msg.HasGivenIdRange()) {
             kind.IssueGivenIdRange(msg.GetGivenIdRange());
+        } else {
+            kind.ProcessQueriesWaitingForId(false);
         }
 
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA09, "TEvAllocateIdsResult", (AgentId, LogId), (Msg, msg),

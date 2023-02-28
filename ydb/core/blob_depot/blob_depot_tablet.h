@@ -200,7 +200,7 @@ namespace NKikimr::NBlobDepot {
 
         void InitChannelKinds();
         void InvalidateGroupForAllocation(ui32 groupId);
-        void PickChannels(NKikimrBlobDepot::TChannelKind::E kind, std::vector<ui8>& channels);
+        bool PickChannels(NKikimrBlobDepot::TChannelKind::E kind, std::vector<ui8>& channels);
 
         TString GetLogId() const {
             const auto *executor = Executor();
@@ -317,7 +317,7 @@ namespace NKikimr::NBlobDepot {
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
-        void UpdateThroughputs();
+        void UpdateThroughputs(bool reschedule = true);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation

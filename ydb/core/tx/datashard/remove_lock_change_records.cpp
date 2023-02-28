@@ -35,6 +35,12 @@ public:
                 continue;
             }
 
+            if (Self->GetVolatileTxManager().FindByCommitTxId(lockId)) {
+                // Don't remove records that are managed by volatile tx manager
+                Self->PendingLockChangeRecordsToRemove.pop_back();
+                continue;
+            }
+
             while (!it->second.Changes.empty() && removed < MaxRecordsToRemove) {
                 auto& record = it->second.Changes.back();
                 db.Table<Schema::LockChangeRecords>().Key(record.LockId, record.LockOffset).Delete();

@@ -48,6 +48,7 @@ namespace NKikimr::NDataShard {
         absl::flat_hash_set<ui64> Dependencies;
         absl::flat_hash_set<ui64> Dependents;
         absl::flat_hash_set<ui64> Participants;
+        std::optional<ui64> ChangeGroup;
         bool AddCommitted = false;
         absl::flat_hash_set<ui64> BlockedOperations;
         absl::flat_hash_set<ui64> WaitingRemovalOperations;
@@ -175,6 +176,7 @@ namespace NKikimr::NDataShard {
             TConstArrayRef<ui64> commitTxIds,
             TConstArrayRef<ui64> dependencies,
             TConstArrayRef<ui64> participants,
+            std::optional<ui64> changeGroup,
             TTransactionContext& txc);
 
         bool AttachVolatileTxCallback(

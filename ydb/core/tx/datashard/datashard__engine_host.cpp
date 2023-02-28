@@ -193,7 +193,11 @@ TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self) {
 }
 
 ///
-class TDataShardEngineHost : public TEngineHost, public IDataShardUserDb {
+class TDataShardEngineHost final
+    : public TEngineHost
+    , public IDataShardUserDb
+    , public IDataShardChangeGroupProvider
+{
 public:
     TDataShardEngineHost(TDataShard* self, TEngineBay& engineBay, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, ui32& lockNodeId, TInstant now)
         : TEngineHost(db, counters,
@@ -271,6 +275,24 @@ public:
         IsRepeatableSnapshot = true;
     }
 
+    bool HasChangeGroup() const override {
+        return bool(ChangeGroup);
+    }
+
+    ui64 GetChangeGroup() override {
+        if (!ChangeGroup) {
+            if (IsImmediateTx) {
+                NIceDb::TNiceDb db(DB);
+                ChangeGroup = Self->AllocateChangeRecordGroup(db);
+            } else {
+                // Distributed transactions have their group set to zero
+                ChangeGroup = 0;
+            }
+        }
+
+        return *ChangeGroup;
+    }
+
     IDataShardChangeCollector* GetChangeCollector(const TTableId& tableId) const override {
         auto it = ChangeCollectors.find(tableId.PathId);
         if (it != ChangeCollectors.end()) {
@@ -282,7 +304,12 @@ public:
             return it->second.Get();
         }
 
-        it->second.Reset(CreateChangeCollector(*Self, *const_cast<TDataShardEngineHost*>(this), DB, tableId.PathId.LocalPathId, IsImmediateTx));
+        it->second.Reset(CreateChangeCollector(
+            *Self,
+            *const_cast<TDataShardEngineHost*>(this),
+            *const_cast<TDataShardEngineHost*>(this),
+            DB,
+            tableId.PathId.LocalPathId));
         return it->second.Get();
     }
 
@@ -366,6 +393,10 @@ public:
         }
 
         return dependencies;
+    }
+
+    std::optional<ui64> GetVolatileChangeGroup() const {
+        return ChangeGroup;
     }
 
     bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override {
@@ -927,6 +958,7 @@ private:
     mutable absl::flat_hash_map<TPathId, NTable::ITransactionObserverPtr> TxObservers;
     mutable absl::flat_hash_set<ui64> VolatileCommitTxIds;
     mutable absl::flat_hash_set<ui64> VolatileDependencies;
+    std::optional<ui64> ChangeGroup = std::nullopt;
 };
 
 //
@@ -1154,6 +1186,13 @@ TVector<ui64> TEngineBay::GetVolatileDependencies() const {
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     return host->GetVolatileDependencies();
+}
+
+std::optional<ui64> TEngineBay::GetVolatileChangeGroup() const {
+    Y_VERIFY(EngineHost);
+
+    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
+    return host->GetVolatileChangeGroup();
 }
 
 IEngineFlat * TEngineBay::GetEngine() {

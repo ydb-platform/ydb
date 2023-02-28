@@ -46,7 +46,8 @@ public:
 
         if (eraseTx->HasDependents()) {
             TDataShardUserDb userDb(DataShard, txc.DB, readVersion);
-            THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, txc.DB, request.GetTableId(), false)};
+            TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
+            THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
             if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, changeCollector.Get())) {

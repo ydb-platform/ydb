@@ -324,6 +324,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 commitTxIds,
                 dataTx->GetVolatileDependencies(),
                 participants,
+                dataTx->GetVolatileChangeGroup(),
                 txc);
         }
 

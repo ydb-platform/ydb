@@ -1881,4 +1881,7 @@ message TTxVolatileDetails {
     // A list of volatile transaction ids that need to be committed or rolled back before this transaction commits.
     // This is because local db changes must be committed in the same order they performed writes.
     repeated uint64 Dependencies = 5 [packed = true];
+
+    // An optional change group for committing change collector changes
+    optional uint64 ChangeGroup = 6;
 }

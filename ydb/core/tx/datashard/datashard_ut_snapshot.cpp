@@ -1154,8 +1154,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         NKikimrTxDataShard::TKqpLocks_ELocksOp Op = NKikimrTxDataShard::TKqpLocks::Commit;
         TVector<TLockInfo> Locks;
 
-        void AddLocks(const TVector<TLockInfo>& locks) {
+        TInjectLocks& AddLocks(const TVector<TLockInfo>& locks) {
             Locks.insert(Locks.end(), locks.begin(), locks.end());
+            return *this;
         }
     };
 
@@ -3386,6 +3387,142 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto table1snapshot3 = ReadShardedTable(server, "/Root/table-1-moved", snapshot);
         UNIT_ASSERT_VALUES_EQUAL(table1snapshot3,
             "ERROR: WrongRequest\n");
+    }
+
+    Y_UNIT_TEST(LockedWriteWithAsyncIndexAndVolatileCommit) {
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        WaitTxNotification(server, sender,
+            AsyncAlterAddIndex(server, "/Root", "/Root/table-1",
+                TShardedTableOptions::TIndex{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}));
+
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+        WaitTxNotification(server, sender,
+            AsyncAlterAddIndex(server, "/Root", "/Root/table-2",
+                TShardedTableOptions::TIndex{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}));
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        TInjectLockSnapshotObserver observer(runtime);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+
+        // We will reuse this snapshot
+        auto snapshot = observer.Last.MvccSnapshot;
+
+        using NLongTxService::TLockHandle;
+        TLockHandle lock1handle(123, runtime.GetActorSystem(0));
+
+        // Write uncommitted changes to keys 1 and 2 using tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 21)
+                )")),
+            "<empty>");
+        auto locks1 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to keys 10 and 20 using tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 110), (20, 210)
+                )")),
+            "<empty>");
+        auto locks2 = observer.LastLocks;
+        observer.Inject = {};
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime, Q_(R"(
+                SELECT key, value
+                FROM `/Root/table-1` VIEW by_value
+                WHERE value in (1, 11, 21)
+                ORDER BY key
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime, Q_(R"(
+                SELECT key, value
+                FROM `/Root/table-2` VIEW by_value
+                WHERE value in (10, 110, 210)
+                ORDER BY key
+                )")),
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+
+        // Commit changes in tx 123
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+        observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace().AddLocks(locks1).AddLocks(locks2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (0, 0);
+                )")),
+            "<empty>");
+        observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime, Q_(R"(
+                SELECT key, value
+                FROM `/Root/table-1` VIEW by_value
+                WHERE value in (1, 11, 21)
+                ORDER BY key
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 21 } }");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime, Q_(R"(
+                SELECT key, value
+                FROM `/Root/table-2` VIEW by_value
+                WHERE value in (10, 110, 210)
+                ORDER BY key
+                )")),
+            "{ items { uint32_value: 10 } items { uint32_value: 110 } }, "
+            "{ items { uint32_value: 20 } items { uint32_value: 210 } }");
     }
 
 }

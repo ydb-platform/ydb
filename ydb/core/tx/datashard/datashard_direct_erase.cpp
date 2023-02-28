@@ -60,6 +60,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
     }
 
     std::optional<TDataShardUserDb> userDb;
+    std::optional<TDataShardChangeGroupProvider> groupProvider;
 
     THolder<IEraseRowsCondition> condition;
     if (params) {
@@ -69,7 +70,8 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         userDb.emplace(*self, params.Txc->DB, params.ReadVersion);
-        params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, params.Txc->DB, tableInfo, true));
+        groupProvider.emplace(*self, params.Txc->DB);
+        params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, *groupProvider, params.Txc->DB, tableInfo));
     }
 
     const bool breakWriteConflicts = self->SysLocksTable().HasWriteLocks(fullTableId);

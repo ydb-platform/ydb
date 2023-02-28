@@ -11,6 +11,38 @@ struct TUserTable;
 
 class IDataShardUserDb;
 
+class IDataShardChangeGroupProvider {
+protected:
+    ~IDataShardChangeGroupProvider() = default;
+
+public:
+    virtual bool HasChangeGroup() const = 0;
+    virtual ui64 GetChangeGroup() = 0;
+};
+
+class TDataShardChangeGroupProvider final
+    : public IDataShardChangeGroupProvider
+{
+public:
+    // Note: for distributed transactions group is expected to be 0
+    TDataShardChangeGroupProvider(TDataShard& self, NTable::TDatabase& db, std::optional<ui64> group = std::nullopt)
+        : Self(self)
+        , Db(db)
+        , Group(group)
+    { }
+
+    bool HasChangeGroup() const override {
+        return bool(Group);
+    }
+
+    ui64 GetChangeGroup() override;
+
+private:
+    TDataShard& Self;
+    NTable::TDatabase& Db;
+    std::optional<ui64> Group;
+};
+
 class IDataShardChangeCollector : public NMiniKQL::IChangeCollector {
 public:
     // basic change record's info
@@ -37,8 +69,18 @@ public:
     virtual TVector<TChange>&& GetCollected() = 0;
 };
 
-IDataShardChangeCollector* CreateChangeCollector(TDataShard& dataShard, IDataShardUserDb& userDb, NTable::TDatabase& db, const TUserTable& table, bool isImmediateTx);
-IDataShardChangeCollector* CreateChangeCollector(TDataShard& dataShard, IDataShardUserDb& userDb, NTable::TDatabase& db, ui64 tableId, bool isImmediateTx);
+IDataShardChangeCollector* CreateChangeCollector(
+        TDataShard& dataShard,
+        IDataShardUserDb& userDb,
+        IDataShardChangeGroupProvider& groupProvider,
+        NTable::TDatabase& db,
+        const TUserTable& table);
+IDataShardChangeCollector* CreateChangeCollector(
+        TDataShard& dataShard,
+        IDataShardUserDb& userDb,
+        IDataShardChangeGroupProvider& groupProvider,
+        NTable::TDatabase& db,
+        ui64 tableId);
 
 } // NDataShard
 } // NKikimr

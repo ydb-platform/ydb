@@ -61,9 +61,10 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     const bool breakWriteConflicts = BreakLocks && self->SysLocksTable().HasWriteLocks(fullTableId);
 
     TDataShardUserDb userDb(*self, txc.DB, readVersion);
+    TDataShardChangeGroupProvider groupProvider(*self, txc.DB);
 
     if (CollectChanges) {
-        ChangeCollector.Reset(CreateChangeCollector(*self, userDb, txc.DB, tableInfo, true));
+        ChangeCollector.Reset(CreateChangeCollector(*self, userDb, groupProvider, txc.DB, tableInfo));
     }
 
     // Prepare (id, Type) vector for value columns

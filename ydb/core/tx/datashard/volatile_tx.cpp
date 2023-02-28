@@ -14,6 +14,8 @@ namespace NKikimr::NDataShard {
         TTxType GetTxType() const override { return TXTYPE_VOLATILE_TX_COMMIT; }
 
         bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
+            NIceDb::TNiceDb db(txc.DB);
+
             Y_VERIFY(Self->VolatileTxManager.PendingCommitTxScheduled);
             Self->VolatileTxManager.PendingCommitTxScheduled = false;
 
@@ -36,7 +38,30 @@ namespace NKikimr::NDataShard {
                 }
             }
 
-            // TODO: commit change records
+            auto getGroup = [&]() -> ui64 {
+                if (!info->ChangeGroup) {
+                    if (info->Version.TxId != info->TxId) {
+                        // Assume it's an immediate transaction and allocate new group
+                        info->ChangeGroup = Self->AllocateChangeRecordGroup(db);
+                    } else {
+                        // Distributed transactions commit changes with group zero
+                        info->ChangeGroup = 0;
+                    }
+                }
+                return *info->ChangeGroup;
+            };
+
+            // First commit change records from any committed locks
+            for (ui64 commitTxId : info->CommitTxIds) {
+                if (commitTxId != info->TxId && Self->HasLockChangeRecords(commitTxId)) {
+                    Self->CommitLockChangeRecords(db, commitTxId, getGroup(), info->Version, Collected);
+                }
+            }
+
+            // Commit change records from the transaction itself
+            if (info->CommitTxIds.contains(info->TxId) && Self->HasLockChangeRecords(info->TxId)) {
+                Self->CommitLockChangeRecords(db, info->TxId, getGroup(), info->Version, Collected);
+            }
 
             Self->VolatileTxManager.PersistRemoveVolatileTx(TxId, txc);
 
@@ -52,6 +77,9 @@ namespace NKikimr::NDataShard {
         void Complete(const TActorContext& ctx) override {
             if (Delayed) {
                 OnCommitted(ctx);
+            }
+            if (Collected) {
+                Self->EnqueueChangeRecords(std::move(Collected));
             }
         }
 
@@ -71,6 +99,7 @@ namespace NKikimr::NDataShard {
 
     private:
         ui64 TxId;
+        TVector<IDataShardChangeCollector::TChange> Collected;
         bool Delayed = false;
     };
 
@@ -107,8 +136,6 @@ namespace NKikimr::NDataShard {
                 }
             }
 
-            // TODO: abort change records
-
             Self->VolatileTxManager.PersistRemoveVolatileTx(TxId, txc);
             return true;
         }
@@ -118,6 +145,9 @@ namespace NKikimr::NDataShard {
             Y_VERIFY(info && info->State == EVolatileTxState::Aborting);
             Y_VERIFY(info->AddCommitted);
 
+            // Make a copy since it will disappear soon
+            auto commitTxIds = info->CommitTxIds;
+
             // Run callbacks only after we successfully persist aborted tx
             Self->VolatileTxManager.RunAbortCallbacks(info);
 
@@ -126,6 +156,11 @@ namespace NKikimr::NDataShard {
             Self->VolatileTxManager.RemoveFromTxMap(info);
 
             Self->VolatileTxManager.RemoveVolatileTx(TxId);
+
+            // Schedule removal of all lock changes we were supposed to commit
+            for (ui64 commitTxId : commitTxIds) {
+                Self->ScheduleRemoveLockChanges(commitTxId);
+            }
 
             Self->CheckSplitCanStart(ctx);
         }
@@ -235,6 +270,9 @@ namespace NKikimr::NDataShard {
             info->Version = TRowVersion(details.GetVersionStep(), details.GetVersionTxId());
             info->CommitTxIds.insert(details.GetCommitTxIds().begin(), details.GetCommitTxIds().end());
             info->Dependencies.insert(details.GetDependencies().begin(), details.GetDependencies().end());
+            if (details.HasChangeGroup()) {
+                info->ChangeGroup = details.GetChangeGroup();
+            }
             info->AddCommitted = true; // we loaded it from local db, so it is committed
 
             if (!rowset.Next()) {
@@ -354,6 +392,7 @@ namespace NKikimr::NDataShard {
             TConstArrayRef<ui64> commitTxIds,
             TConstArrayRef<ui64> dependencies,
             TConstArrayRef<ui64> participants,
+            std::optional<ui64> changeGroup,
             TTransactionContext& txc)
     {
         using Schema = TDataShard::Schema;
@@ -372,6 +411,7 @@ namespace NKikimr::NDataShard {
         info->CommitTxIds.insert(commitTxIds.begin(), commitTxIds.end());
         info->Dependencies.insert(dependencies.begin(), dependencies.end());
         info->Participants.insert(participants.begin(), participants.end());
+        info->ChangeGroup = changeGroup;
 
         if (info->Participants.empty()) {
             // Transaction is committed when we don't have to wait for other participants
@@ -415,6 +455,10 @@ namespace NKikimr::NDataShard {
             auto* m = details.MutableDependencies();
             m->Add(info->Dependencies.begin(), info->Dependencies.end());
             std::sort(m->begin(), m->end());
+        }
+
+        if (info->ChangeGroup) {
+            details.SetChangeGroup(*info->ChangeGroup);
         }
 
         db.Table<Schema::TxVolatileDetails>().Key(info->TxId).Update(

@@ -26,7 +26,7 @@
 
 В схеме данных определяются следующие параметры партиционирования таблицы:
 
-#### AUTO_PARTITIONING_BY_SIZE {#auto-part-by-load}
+#### AUTO_PARTITIONING_BY_SIZE
 
 * Тип: `Enum` (`ENABLED`, `DISABLED`).
 * Значение по умолчанию: `ENABLED`.

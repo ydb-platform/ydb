@@ -1240,6 +1240,203 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT_VALUES_EQUAL(continueCounter, 4);
     }
 
+    Y_UNIT_TEST(ShouldRangeReadReverseLeftInclusive) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetReverse(true);
+        AddRangeQuery<ui32>(
+            *request1,
+            {8, 0, 0},
+            true,
+            {11, 11, 11},
+            true
+        );
+
+        // limit quota (enough to read all rows)
+        request1->Record.SetMaxRows(8);
+
+        ui32 continueCounter = 0;
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+                ++continueCounter;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        UNIT_ASSERT(readResult1);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->GetRowsCount(), 5);
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {11, 11, 11, 1111},
+            {8, 1, 1, 803},
+            {8, 1, 0, 802},
+            {8, 0, 1, 801},
+            {8, 0, 0, 800}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(continueCounter, 0);
+    }
+
+    Y_UNIT_TEST(ShouldRangeReadReverseLeftNonInclusive) {
+        // Regression test for KIKIMR-17253
+        // Version with no ACK: only reverse and left not inclusive like in ReadContinue
+
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetReverse(true);
+        AddRangeQuery<ui32>(
+            *request1,
+            {8, 0, 0},
+            false,
+            {11, 11, 11},
+            true
+        );
+
+        // limit quota (enough to read all rows)
+        request1->Record.SetMaxRows(8);
+
+        ui32 continueCounter = 0;
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+                ++continueCounter;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        UNIT_ASSERT(readResult1);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->GetRowsCount(), 4);
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {11, 11, 11, 1111},
+            {8, 1, 1, 803},
+            {8, 1, 0, 802},
+            {8, 0, 1, 801},
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(continueCounter, 0);
+    }
+
+    Y_UNIT_TEST(ShouldHandleReadAckWhenExhaustedRangeRead) {
+        // Regression test for KIKIMR-17253
+
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        AddRangeQuery<ui32>(
+            *request1,
+            {1, 1, 1},
+            true,
+            {11, 11, 11},
+            true
+        );
+
+        // limit quota
+        request1->Record.SetMaxRows(5);
+
+        ui32 continueCounter = 0;
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+                ++continueCounter;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        UNIT_ASSERT(readResult1);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->GetRowsCount(), 5);
+        UNIT_ASSERT(!readResult1->Record.GetFinished());
+
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {1, 1, 1, 100},
+            {3, 3, 3, 300},
+            {5, 5, 5, 500},
+            {8, 0, 0, 800},
+            {8, 0, 1, 801},
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(continueCounter, 0);
+
+        helper.SendReadAck("table-1", readResult1->Record, 8, 10000);
+
+        auto readResult2 = helper.WaitReadResult();
+        UNIT_ASSERT(readResult2);
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->GetRowsCount(), 3);
+        UNIT_ASSERT(readResult2->Record.GetFinished());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult2, {
+            {8, 1, 0, 802},
+            {8, 1, 1, 803},
+            {11, 11, 11, 1111}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(continueCounter, 1);
+    }
+
+    Y_UNIT_TEST(ShouldHandleReadAckWhenExhaustedRangeReadReverse) {
+        // Regression test for KIKIMR-17253
+
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetReverse(true);
+        AddRangeQuery<ui32>(
+            *request1,
+            {1, 1, 1},
+            true,
+            {11, 11, 11},
+            true
+        );
+
+        // limit quota
+        request1->Record.SetMaxRows(5);
+
+        ui32 continueCounter = 0;
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+                ++continueCounter;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        UNIT_ASSERT(readResult1);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->GetRowsCount(), 5);
+        UNIT_ASSERT(!readResult1->Record.GetFinished());
+
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {11, 11, 11, 1111},
+            {8, 1, 1, 803},
+            {8, 1, 0, 802},
+            {8, 0, 1, 801},
+            {8, 0, 0, 800}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(continueCounter, 0);
+
+        helper.SendReadAck("table-1", readResult1->Record, 8, 10000);
+
+        auto readResult2 = helper.WaitReadResult();
+        UNIT_ASSERT(readResult2);
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->GetRowsCount(), 3);
+        UNIT_ASSERT(readResult2->Record.GetFinished());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult2, {
+            {5, 5, 5, 500},
+            {3, 3, 3, 300},
+            {1, 1, 1, 100}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(continueCounter, 1);
+    }
+
     Y_UNIT_TEST(ShouldNotReadAfterCancel) {
         TTestHelper helper;
 

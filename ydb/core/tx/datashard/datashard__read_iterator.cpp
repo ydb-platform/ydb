@@ -315,17 +315,34 @@ public:
         const TSerializedTableRange& range)
     {
         bool fromInclusive;
+        bool toInclusive;
         TSerializedCellVec keyFromCells;
+        TSerializedCellVec keyToCells;
         if (Y_UNLIKELY(FirstUnprocessedQuery == State.FirstUnprocessedQuery && State.LastProcessedKey)) {
-            fromInclusive = false;
-            keyFromCells = TSerializedCellVec(State.LastProcessedKey);
+            if (!State.Reverse) {
+                keyFromCells = TSerializedCellVec(State.LastProcessedKey);
+                fromInclusive = false;
+
+                keyToCells = range.To;
+                toInclusive = range.ToInclusive;
+            } else {
+                // reverse
+                keyFromCells = range.From;
+                fromInclusive = true;
+
+                keyToCells = TSerializedCellVec(State.LastProcessedKey);
+                toInclusive = false;
+            }
         } else {
-            fromInclusive = range.FromInclusive;
             keyFromCells = range.From;
+            fromInclusive = range.FromInclusive;
+
+            keyToCells = range.To;
+            toInclusive = range.ToInclusive;
         }
+
         const auto keyFrom = ToRawTypeValue(keyFromCells, TableInfo, fromInclusive);
-        const TSerializedCellVec keyToCells(range.To);
-        const auto keyTo = ToRawTypeValue(keyToCells, TableInfo, !range.ToInclusive);
+        const auto keyTo = ToRawTypeValue(keyToCells, TableInfo, !toInclusive);
 
         // TODO: split range into parts like in read_columns
 
@@ -333,7 +350,7 @@ public:
         iterRange.MinKey = keyFrom;
         iterRange.MaxKey = keyTo;
         iterRange.MinInclusive = fromInclusive;
-        iterRange.MaxInclusive = range.ToInclusive;
+        iterRange.MaxInclusive = toInclusive;
         bool reverse = State.Reverse;
 
         EReadStatus result;

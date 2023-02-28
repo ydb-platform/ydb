@@ -734,7 +734,7 @@ int TCommandExplain::Run(TConfig& config) {
 }
 
 TCommandReadTable::TCommandReadTable()
-    : TYdbCommand("readtable", {}, "Stream read table")
+    : TYdbCommand("read", {"readtable"}, "Stream read table")
 {}
 
 void TCommandReadTable::Config(TConfig& config) {

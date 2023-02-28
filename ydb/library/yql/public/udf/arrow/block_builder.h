@@ -74,14 +74,19 @@ public:
         std::vector<TBlockArrayTree::Ptr> Children;
     };
 
-    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
-        : ArrowType(GetArrowType(typeInfoHelper, type))
+    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
+        : ArrowType(std::move(arrowType))
         , Pool(&pool)
         , MaxLen(maxLen)
         , MaxBlockSizeInBytes(typeInfoHelper.GetMaxBlockBytes())
     {
         Y_VERIFY(ArrowType);
         Y_VERIFY(maxLen > 0);
+    }
+
+    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
+        : TArrayBuilderBase(typeInfoHelper, GetArrowType(typeInfoHelper, type), pool, maxLen)
+    {
     }
 
     size_t MaxLength() const final {
@@ -292,6 +297,12 @@ private:
 template <typename T, bool Nullable>
 class TFixedSizeArrayBuilder : public TArrayBuilderBase {
 public:
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
+        : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    {
+        Reserve();
+    }
+
     TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen)
     {

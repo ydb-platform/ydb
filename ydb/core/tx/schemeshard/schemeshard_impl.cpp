@@ -3963,6 +3963,10 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , CompactionStarter(this)
     , BorrowedCompactionStarter(this)
     , ShardDeleter(info->TabletID)
+    , TableStatsQueue(this, 
+            COUNTER_STATS_QUEUE_SIZE,
+            COUNTER_STATS_WRITTEN,
+            COUNTER_STATS_BATCH_LATENCY)
     , AllowDataColumnForIndexTable(0, 0, 1)
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
@@ -4350,7 +4354,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvCleanDroppedSubDomains, Handle);
         HFuncTraced(TEvPrivate::TEvSubscribeToShardDeletion, Handle);
 
-        HFuncTraced(TEvPrivate::TEvPersistStats, Handle);
+        HFuncTraced(TEvPrivate::TEvPersistTableStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 

@@ -17,6 +17,7 @@
 #include "schemeshard_utils.h"
 #include "schemeshard_schema.h"
 #include "schemeshard__operation.h"
+#include "schemeshard__stats.h"
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
@@ -281,47 +282,9 @@ public:
     THashMap<TTxState::ETxType, ui32> InFlightLimits;
 
     // time when we opened the batch
-    TMonotonic StatsBatchStartTs;
-    bool StatsBatchScheduled = false;
-    bool PersistStatsPending = false;
-
-    struct TStatsQueueItem {
-        TEvDataShard::TEvPeriodicTableStats::TPtr Ev;
-        TPathId PathId;
-        TMonotonic Ts;
-
-        TStatsQueueItem(TEvDataShard::TEvPeriodicTableStats::TPtr ev, const TPathId& pathId)
-            : Ev(ev)
-            , PathId(pathId)
-            , Ts(AppData()->MonotonicTimeProvider->Now())
-        {}
-    };
-
-    struct TStatsId {
-        TPathId PathId;
-        TTabletId Datashard;
-
-        TStatsId(const TPathId& pathId, const TTabletId& datashard)
-            : PathId(pathId)
-            , Datashard(datashard)
-        {
-        }
-
-        bool operator==(const TStatsId& rhs) const {
-            return PathId == rhs.PathId && Datashard == rhs.Datashard;
-        }
-
-        struct THash {
-            inline size_t operator()(const TStatsId& obj) const {
-                return MultiHash(obj.PathId.Hash(), obj.Datashard);
-            }
-        };
-    };
-
-    using TStatsMap = THashMap<TStatsId, TStatsQueueItem*, TStatsId::THash>;
-
-    TStatsMap StatsMap;
-    TDeque<TStatsQueueItem> StatsQueue;
+    bool TableStatsBatchScheduled = false;
+    bool TablePersistStatsPending = false;
+    TStatsQueue<TEvDataShard::TEvPeriodicTableStats> TableStatsQueue;
 
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
@@ -1020,8 +983,9 @@ public:
     void Handle(TEvDataShard::TEvSplitAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSplitPartitioningChangedAck::TPtr& ev, const TActorContext& ctx);
 
-    void ScheduleStatsBatch(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvPersistStats::TPtr& ev, const TActorContext& ctx);
+    void ExecuteTableStatsBatch(const TActorContext& ctx);
+    void ScheduleTableStatsBatch(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPersistTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx);
 

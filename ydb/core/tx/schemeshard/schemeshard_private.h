@@ -24,7 +24,7 @@ struct TEvPrivate {
         EvRunBorrowedCompaction,
         EvCompletePublication,
         EvCompleteBarrier,
-        EvPersistStats,
+        EvPersistTableStats,
         EvConsoleConfigsTimeout,
         EvRunCdcStreamScan,
         EvEnd
@@ -159,8 +159,8 @@ struct TEvPrivate {
         }
     };
 
-    struct TEvPersistStats: public TEventLocal<TEvPersistStats, EvPersistStats> {
-        TEvPersistStats() = default;
+    struct TEvPersistTableStats: public TEventLocal<TEvPersistTableStats, EvPersistTableStats> {
+        TEvPersistTableStats() = default;
     };
 
     struct TEvConsoleConfigsTimeout: public TEventLocal<TEvConsoleConfigsTimeout, EvConsoleConfigsTimeout> {

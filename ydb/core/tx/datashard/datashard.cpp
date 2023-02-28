@@ -2930,12 +2930,22 @@ void TDataShard::AbortExpectationsFromDeletedTablet(ui64 tabletId, THashMap<ui64
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev); Y_UNUSED(ctx);
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Server connected at tablet %s %" PRIu64 ,
-              Executor()->GetStats().IsFollower ? "follower" : "leader", ev->Get()->TabletId);
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Server connected at "
+        << (Executor()->GetStats().IsFollower ? "follower " : "leader ")
+        << "tablet# " << ev->Get()->TabletId
+        << ", clientId# " << ev->Get()->ClientId
+        << ", serverId# " << ev->Get()->ServerId
+        << ", sessionId# " << ev->InterconnectSession);
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev); Y_UNUSED(ctx);
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Server disconnected at "
+        << (Executor()->GetStats().IsFollower ? "follower " : "leader ")
+        << "tablet# " << ev->Get()->TabletId
+        << ", clientId# " << ev->Get()->ClientId
+        << ", serverId# " << ev->Get()->ServerId
+        << ", sessionId# " << ev->InterconnectSession);
 }
 
 void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx) {

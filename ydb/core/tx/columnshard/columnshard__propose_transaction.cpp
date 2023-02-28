@@ -194,12 +194,18 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
         case NKikimrTxColumnShard::TX_KIND_DATA: {
             NKikimrTxDataShard::TDataTransaction dataTransaction;
             Y_VERIFY(dataTransaction.ParseFromString(record.GetTxBody()));
-            statusMessage = TStringBuilder() << "Data manipulation is unsupported for column shard TxId# " << txId << ":" << dataTransaction.DebugString() << Endl;
-            if ((record.GetFlags() & NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE) || Self->BasicTxInfo.contains(txId)) {
+
+            LOG_S_DEBUG("TTxProposeTransaction immediate data tx txId " << txId
+                << " '" << dataTransaction.DebugString()
+                << "' at tablet " << Self->TabletID());
+
+            bool isImmediate = record.GetFlags() & NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE;
+            if (isImmediate) {
                 for (auto&& task : dataTransaction.GetKqpTransaction().GetTasks()) {
                     for (auto&& o : task.GetOutputs()) {
                         for (auto&& c : o.GetChannels()) {
-                            TActorId actorId(c.GetDstEndpoint().GetActorId().GetRawX1(), c.GetDstEndpoint().GetActorId().GetRawX2());
+                            TActorId actorId(c.GetDstEndpoint().GetActorId().GetRawX1(),
+                                             c.GetDstEndpoint().GetActorId().GetRawX2());
                             NYql::NDqProto::TEvComputeChannelData evProto;
                             evProto.MutableChannelData()->SetChannelId(c.GetId());
                             evProto.MutableChannelData()->SetFinished(true);
@@ -211,9 +217,9 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                         }
                     }
                 }
-
                 status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
             } else {
+#if 0 // TODO
                 minStep = Self->GetAllowedStep();
                 maxStep = minStep + Self->MaxCommitTxDelay.MilliSeconds();
                 auto& txInfo = Self->BasicTxInfo[txId];
@@ -222,7 +228,10 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 txInfo.Source = Ev->Get()->GetSource();
                 txInfo.Cookie = Ev->Cookie;
                 Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, txInfo.MaxStep, txInfo.Source, txInfo.Cookie);
-                status = NKikimrTxColumnShard::EResultStatus::PREPARED;
+#endif
+                statusMessage = TStringBuilder() << "Planned data tx is not supported at ColumnShard txId "
+                    << txId << " '" << dataTransaction.DebugString() << "'";
+                //status = NKikimrTxColumnShard::EResultStatus::PREPARED;
             }
             break;
         }

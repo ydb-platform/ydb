@@ -3668,62 +3668,71 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    void TestOlapUpsert(ui32 numShards) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        //EnableDebugLogging(kikimr);
+
+        auto& server = kikimr.GetTestServer();
+        auto tableClient = kikimr.GetTableClient();
+        Tests::NCommon::THelper lHelper(server);
+
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/test_table`
+            (
+                WatchID Int64 NOT NULL,
+                CounterID Int32 NOT NULL,
+                URL Text NOT NULL,
+                Age Int16 NOT NULL,
+                Sex Int16 NOT NULL,
+                PRIMARY KEY (CounterID, WatchID)
+            )
+            PARTITION BY HASH(WatchID)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT =)" << numShards
+            << ")";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/test_table` (WatchID, CounterID, URL, Age, Sex) VALUES
+                (0, 15, 'aaaaaaa', 23, 1),
+                (0, 15, 'bbbbbbb', 23, 1),
+                (1, 15, 'ccccccc', 23, 1);
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); // TODO: snapshot isolation?
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            TString query = R"(
+                --!syntax_v1
+                SELECT CounterID, WatchID
+                FROM `/Root/test_table`
+                ORDER BY CounterID, WatchID
+            )";
+
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            //CompareYson(result, R"([[0;15];[1;15]])");
+            CompareYson(result, R"([])"); // FIXME
+        }
+    }
+
+    Y_UNIT_TEST(OlapUpsertImmediate) {
+        TestOlapUpsert(1);
+    }
+
     Y_UNIT_TEST(OlapUpsert) {
-        TPortManager pm;
-
-        ui32 grpcPort = pm.GetPort();
-        ui32 msgbPort = pm.GetPort();
-
-        Tests::TServerSettings serverSettings(msgbPort);
-        serverSettings.Port = msgbPort;
-        serverSettings.GrpcPort = grpcPort;
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableMetadataProvider(true)
-            .SetEnableOlapSchemaOperations(true);
-        ;
-
-        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
-        server->EnableGRpc(grpcPort);
-        //        server->SetupDefaultProfiles();
-        Tests::TClient client(serverSettings);
-
-        auto& runtime = *server->GetRuntime();
-        EnableDebugLogging(&runtime);
-
-        auto sender = runtime.AllocateEdgeActor();
-        server->SetupRootStoragePools(sender);
-        Tests::NCommon::THelper lHelper(*server);
-        lHelper.StartSchemaRequest(
-            R"(
-                CREATE TABLE `/Root/test_table`
-                (
-                    WatchID Int64 NOT NULL,
-                    CounterID Int32 NOT NULL,
-                    URL Text NOT NULL,
-                    Age Int16 NOT NULL,
-                    Sex Int16 NOT NULL,
-                    PRIMARY KEY (CounterID, WatchID)
-                )
-                PARTITION BY HASH(WatchID)
-                WITH (
-                    STORE = COLUMN,
-                    AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8
-                );
-            )"
-        );
-
-        lHelper.StartDataRequest(
-            R"(
-                UPSERT INTO `/Root/test_table` (WatchID, CounterID, URL, Age, Sex)
-                VALUES
-                    (0, 15, 'aaaaaaa', 23, 1),
-                    (0, 15, 'bbbbbbb', 23, 1),
-                    (0, 15, 'ccccccc', 23, 1)
-            )"
-        );
-
+        TestOlapUpsert(2); // it should lead to planned tx
     }
 
     Y_UNIT_TEST(OlapDeleteImmediate) {

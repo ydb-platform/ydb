@@ -59,7 +59,7 @@ Any command can be run from the command line with the `--help` option to get hel
 | [table index drop](../commands/secondary_index.md#drop) | Deleting an index |
 | [table query execute](../table-query-execute.md) | Executing a YQL query |
 | [table query explain](../commands/explain-plan.md) | YQL query execution plan |
-| [table readtable](../commands/readtable.md) | Streaming table reads |
+| [table read](../commands/readtable.md) | Streaming table reads |
 | [table ttl set](../table-ttl-set.md) | Setting TTL parameters |
 | [table ttl reset](../table-ttl-reset.md) | Resetting TTL parameters |
 | [tools copy](../tools-copy.md) | Copying tables |

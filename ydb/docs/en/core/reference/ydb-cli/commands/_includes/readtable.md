@@ -1,11 +1,11 @@
 # Streaming table reads
 
-To read an entire table snapshot, use the `readtable` subcommand. Data is transferred as a stream, which enables you to read any size table.
+To read an entire table snapshot, use the `read` subcommand. Data is transferred as a stream, which enables you to read any size table.
 
 Read data:
 
 ```bash
-{{ ydb-cli }} table readtable episodes \
+{{ ydb-cli }} table read episodes \
   --ordered \
   --limit 5 \
   --columns series_id,season_id,episode_id,title
@@ -38,7 +38,7 @@ Result:
 To only get the number of read entries, use the `--count-only` parameter:
 
 ```bash
-{{ ydb-cli }} table readtable episodes \
+{{ ydb-cli }} table read episodes \
   --columns series_id \
   --count-only
 ```

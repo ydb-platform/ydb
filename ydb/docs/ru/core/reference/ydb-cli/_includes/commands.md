@@ -59,7 +59,7 @@ table attribute drop | Удаление атрибута таблицы
 [table index drop](../commands/secondary_index.md#drop) | Удаление индекса
 [table query execute](../table-query-execute.md) | Исполнение YQL-запроса
 [table query explain](../commands/explain-plan.md) | План исполнения YQL-запроса
-[table readtable](../commands/readtable.md) | Потоковое чтение таблицы
+[table read](../commands/readtable.md) | Потоковое чтение таблицы
 [table ttl set](../table-ttl-set.md) | Установка параметров TTL
 [table ttl reset](../table-ttl-reset.md) | Сброс параметров TTL
 [tools copy](../tools-copy.md) | Копирование таблиц

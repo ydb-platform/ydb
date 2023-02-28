@@ -769,6 +769,7 @@ message TFeatureFlags {
     optional bool EnableDataShardVolatileTransactions = 85 [default = false];
     optional bool EnableTopicServiceTx = 86 [default = false];
     optional bool EnableLLVMCache = 87 [default = false];
+    optional bool EnableExternalDataSources = 88 [default = false];
 }
 
 

@@ -335,10 +335,10 @@ void TestDropExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikim
     response.Issues().PrintTo(Cerr);
     UNIT_ASSERT(response.Success());
 
-    auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
-    const auto& externalTable = externalTableDesc->ResultSet.at(0);
-    UNIT_ASSERT_EQUAL(externalTableDesc->ErrorCount, 1);
-    UNIT_ASSERT_EQUAL(externalTable.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
+    auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+    const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
+    UNIT_ASSERT_EQUAL(externalDataSourceDesc->ErrorCount, 1);
+    UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
 }
 
 } // namespace

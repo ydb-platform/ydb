@@ -47,6 +47,8 @@ sql_stmt_core:
   | create_object_stmt
   | alter_object_stmt
   | drop_object_stmt
+  | create_external_data_source_stmt
+  | drop_external_data_source_stmt
 ;
 
 expr:
@@ -452,6 +454,12 @@ values_source_row_list: values_source_row (COMMA values_source_row)*;
 values_source_row: LPAREN expr_list RPAREN;
 
 simple_values_source: expr_list | select_stmt;
+
+create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE object_ref
+    with_table_settings
+;
+
+drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE object_ref;
 
 create_object_stmt: CREATE OBJECT object_ref
     LPAREN TYPE object_type_ref RPAREN
@@ -917,6 +925,7 @@ keyword_compat: (
   | CREATE
   | CROSS
   | CURRENT
+  | DATA
   | DATABASE
   | DECIMAL
   | DECLARE
@@ -1022,6 +1031,7 @@ keyword_compat: (
   | SAVEPOINT
   | SEMI
   | SETS
+  | SOURCE
   | SUBQUERY
   | SYMBOLS
   | SYNC
@@ -1195,6 +1205,7 @@ CURRENT: C U R R E N T;
 CURRENT_TIME: C U R R E N T '_' T I M E;
 CURRENT_DATE: C U R R E N T '_' D A T E;
 CURRENT_TIMESTAMP: C U R R E N T '_' T I M E S T A M P;
+DATA: D A T A;
 DATABASE: D A T A B A S E;
 DECIMAL: D E C I M A L;
 DECLARE: D E C L A R E;
@@ -1336,6 +1347,7 @@ SELECT: S E L E C T;
 SEMI: S E M I;
 SET: S E T;
 SETS: S E T S;
+SOURCE: S O U R C E;
 STREAM: S T R E A M;
 STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;

@@ -28,6 +28,7 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <ydb/library/yql/utils/utf8.h>
+#include <ydb/library/yql/utils/yql_paths.h>
 
 #include <google/protobuf/repeated_field.h>
 
@@ -818,6 +819,7 @@ protected:
         bool alter, bool reset);
     bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value, TTableSettings& settings,
         bool alter = false);
+    bool StoreDataSourceSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
     bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings);
 
     TNodePtr TypeSimple(const TRule_type_name_simple& node, bool onlyDataAllowed);
@@ -849,6 +851,7 @@ protected:
     bool BindParameterClause(const TRule_bind_parameter& node, TDeferredAtom& result);
     bool ObjectFeatureValueClause(const TRule_object_feature_value & node, TDeferredAtom & result);
     bool ParseObjectFeatures(std::map<TString, TDeferredAtom> & result, const TRule_object_features & features);
+    bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom> & result, const TRule_with_table_settings & settings);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
     bool RoleParameters(const TRule_create_user_option& node, TRoleParameters& result) ;
 private:
@@ -2043,6 +2046,26 @@ namespace {
             break;
         }
         default:
+            return false;
+        }
+        return true;
+    }
+
+    bool StoreString(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
+        switch (from.Alt_case()) {
+        case TRule_table_setting_value::kAltTableSettingValue2: {
+            // STRING_VALUE
+            const TString stringValue(ctx.Token(from.GetAlt_table_setting_value2().GetToken1()));
+            auto unescaped = StringContent(ctx, ctx.Pos(), stringValue);
+            if (!unescaped) {
+                ctx.Error() << errorPrefix << " value cannot be unescaped";
+                return false;
+            }
+            to = TDeferredAtom(ctx.Pos(), unescaped->Content);
+            break;
+        }
+        default:
+            ctx.Error() << errorPrefix << " value should be a string literal";
             return false;
         }
         return true;
@@ -9191,7 +9214,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore27:
         {
-            // create_object_stmt: ALTER OBJECT name (TYPE type [SET k=v,...]);
+            // alter_object_stmt: ALTER OBJECT name (TYPE type [SET k=v,...]);
             auto& node = core.GetAlt_sql_stmt_core27().GetRule_alter_object_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref3().HasBlock1()) {
@@ -9213,7 +9236,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore28:
         {
-            // create_object_stmt: DROP OBJECT name (TYPE type [WITH k=v,...]);
+            // drop_object_stmt: DROP OBJECT name (TYPE type [WITH k=v,...]);
             auto& node = core.GetAlt_sql_stmt_core28().GetRule_drop_object_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref3().HasBlock1()) {
@@ -9233,6 +9256,43 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore29:
+        {
+            // create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE name WITH (k=v,...);
+            auto& node = core.GetAlt_sql_stmt_core29().GetRule_create_external_data_source_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref5().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseExternalDataSourceSettings(kv, node.GetRule_with_table_settings6())) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "EXTERNAL_DATA_SOURCE", std::move(kv), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore30:
+        {
+            // drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE name;
+            auto& node = core.GetAlt_sql_stmt_core30().GetRule_drop_external_data_source_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref5().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "EXTERNAL_DATA_SOURCE", {}, context));
             break;
         }
         default:
@@ -10794,6 +10854,54 @@ bool TSqlTranslation::ParseObjectFeatures(std::map<TString, TDeferredAtom>& resu
             }
         }
     } else {
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::StoreDataSourceSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result) {
+    YQL_ENSURE(value);
+
+    const TString key = to_lower(id.Name);
+    if (result.find(key) != result.end()) {
+        Ctx.Error() << to_upper(key) << " duplicate keys";
+        return false;
+    }
+
+    if (IsIn({"source_type", "installation", "location", "auth_method"}, key)) {
+        if (!StoreString(*value, result[key], Ctx, to_upper(key))) {
+            return false;
+        }
+    } else {
+        Ctx.Error() << "Unknown external data source setting: " << id.Name;
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settingsNode) {
+    const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
+    if (!StoreDataSourceSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(),
+            result)) {
+        return false;
+    }
+    for (auto& block : settingsNode.GetBlock4()) {
+        const auto& entry = block.GetRule_table_settings_entry2();
+        if (!StoreDataSourceSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), &entry.GetRule_table_setting_value3(), result)) {
+            return false;
+        }
+    }
+
+    if (result.find("source_type") == result.end()) {
+        Ctx.Error() << "SOURCE_TYPE requires key";
+        return false;
+    }
+    if (result.find("auth_method") == result.end()) {
+        Ctx.Error() << "AUTH_METHOD requires key";
+        return false;
+    }
+    if (result.find("installation") == result.end() && result.find("location") == result.end()) {
+        Ctx.Error() << "INSTALLATION or LOCATION must be specified";
         return false;
     }
     return true;

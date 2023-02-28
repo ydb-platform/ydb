@@ -988,6 +988,18 @@ private:
         VisitAllFields(TRule_drop_object_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateExternalDataSource(const TRule_create_external_data_source_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_external_data_source_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropExternalDataSource(const TRule_drop_external_data_source_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_external_data_source_stmt::GetDescriptor(), msg);
+    }
+
     void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
         for (int i = 0; i < descr->field_count(); ++i) {
             const NProtoBuf::FieldDescriptor* fd = descr->field(i);
@@ -1845,6 +1857,8 @@ TStaticData::TStaticData()
         {TRule_create_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateObject)},
         {TRule_alter_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterObject)},
         {TRule_drop_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropObject)},
+        {TRule_create_external_data_source_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateExternalDataSource)},
+        {TRule_drop_external_data_source_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropExternalDataSource)},
         })
 {
     // ensure that all statements has a visitor

@@ -751,7 +751,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                Cerr << line << Endl;
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'features"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'\"OVERRIDE\""));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
@@ -4702,5 +4701,138 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSource) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE"
+                );
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"NONE") '('"location" '"my-bucket") '('"source_type" '"ObjectStorage"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSourceWithTablePrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                pragma TablePathPrefix='/aba';
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE"
+                );
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "/aba/MyDataSource");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource;
+            )" , "<main>:3:56: Error: Unexpected token ';' : syntax error...\n\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE"
+                );
+            )" , "<main>:5:33: Error: SOURCE_TYPE requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    AUTH_METHOD="NONE"
+                );
+            )" , "<main>:5:33: Error: INSTALLATION or LOCATION must be specified\n");
+
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket"
+                );
+            )" , "<main>:5:30: Error: AUTH_METHOD requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE",
+                    OTHER="VALUE"
+                );
+            )" , "<main>:7:21: Error: Unknown external data source setting: OTHER\n");
+    }
+
+    Y_UNIT_TEST(DropExternalDataSourceWithTablePrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                DROP EXTERNAL DATA SOURCE MyDataSource;
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropExternalDataSource) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                pragma TablePathPrefix='/aba';
+                DROP EXTERNAL DATA SOURCE MyDataSource;
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "/aba/MyDataSource");
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 }

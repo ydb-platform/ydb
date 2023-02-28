@@ -547,14 +547,18 @@ class TSchemeOpRequestHandler: public TRequestHandlerBase<
     TEvTxUserProxy::TEvProposeTransactionStatus,
     IKqpGateway::TGenericResult>
 {
+    bool FailedOnAlreadyExists = false;
 public:
     using TBase = typename TSchemeOpRequestHandler::TBase;
     using TRequest = TEvTxUserProxy::TEvProposeTransaction;
     using TResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
     using TResult = IKqpGateway::TGenericResult;
 
-    TSchemeOpRequestHandler(TRequest* request, TPromise<TResult> promise)
-        : TBase(request, promise, {}) {}
+    TSchemeOpRequestHandler(TRequest* request, TPromise<TResult> promise, bool failedOnAlreadyExists)
+        : TBase(request, promise, {})
+        , FailedOnAlreadyExists(failedOnAlreadyExists)
+        {}
+
 
     void Bootstrap(const TActorContext& ctx) {
         TActorId txproxy = MakeTxProxyID();
@@ -604,7 +608,7 @@ public:
 
             case TEvTxUserProxy::TResultStatus::ExecComplete: {
                 if (response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess ||
-                    response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists)
+                    (!FailedOnAlreadyExists && response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists))
                 {
                     LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request"
                     << ", TxId: " << response.GetTxId());
@@ -1392,7 +1396,7 @@ public:
 
             NKikimrSchemeOp::TExternalDataSourceDescription& dataSourceDesc = *schemeTx.MutableCreateExternalDataSource();
             FillCreateExternalDataSourceDesc(dataSourceDesc, pathPair.second, settings);
-            return SendSchemeRequest(ev.Release());
+            return SendSchemeRequest(ev.Release(), true);
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
@@ -2128,10 +2132,10 @@ private:
         return promise.GetFuture();
     }
 
-    TFuture<TGenericResult> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request)
+    TFuture<TGenericResult> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request, bool failedOnAlreadyExists = false)
     {
         auto promise = NewPromise<TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(request, promise);
+        IActor* requestHandler = new TSchemeOpRequestHandler(request, promise, failedOnAlreadyExists);
         RegisterActor(requestHandler);
 
         return promise.GetFuture();

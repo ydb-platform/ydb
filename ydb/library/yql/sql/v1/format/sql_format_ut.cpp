@@ -273,6 +273,18 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         setup.Run(cases);
     }
 
+    Y_UNIT_TEST(ExternalDataSourceOperations) {
+        TCases cases = {
+            {"creAte exTernAl daTa SouRce usEr With (a = \"b\")",
+             "CREATE EXTERNAL DATA SOURCE usEr WITH (a = \"b\");\n"},
+            {"dRop exTerNal Data SouRce usEr",
+             "DROP EXTERNAL DATA SOURCE usEr;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
     Y_UNIT_TEST(TypeSelection) {
         TCases cases = {
             {"Select tYpe.* frOm Table tYpe",

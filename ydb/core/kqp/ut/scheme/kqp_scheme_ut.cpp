@@ -3595,6 +3595,147 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         session.Close().GetValueSync();
     }
+
+    Y_UNIT_TEST(CreateExternalDataSource) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
+        UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+        UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetSourceType(), "ObjectStorage");
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetInstallation(), "");
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "my-bucket");
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetName(), SplitPath(externalDataSourceName).back());
+        UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().HasNone());
+    }
+
+    Y_UNIT_TEST(DisableCreateExternalDataSource) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it");
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSourceValidation) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="UNKNOWN"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Authorization method not specified");
+    }
+
+    Y_UNIT_TEST(DropExternalDataSource) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        {
+            auto query = TStringBuilder() << R"(
+                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE"
+                );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = TStringBuilder() << R"( DROP EXTERNAL DATA SOURCE `)" << externalDataSourceName << "`";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
+        UNIT_ASSERT_EQUAL(externalDataSourceDesc->ErrorCount, 1);
+        UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
+    }
+
+    Y_UNIT_TEST(DisableDropExternalDataSource) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"( DROP EXTERNAL DATA SOURCE `)" << externalDataSourceName << "`";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it");
+    }
+
+    Y_UNIT_TEST(DoubleCreateExternalDataSource) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        {
+            auto query = TStringBuilder() << R"(
+                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE"
+                );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
+            UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+            UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetInstallation(), "");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "my-bucket");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetName(), SplitPath(externalDataSourceName).back());
+            UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().HasNone());
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE"
+                );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalDataSource', error: path exist");
+        }
+    }
 }
 
 } // namespace NKqp

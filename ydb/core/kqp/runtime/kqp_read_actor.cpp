@@ -1061,7 +1061,7 @@ public:
         auto* state = Reads[id].Shard;
         auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
         cancel->Record.SetReadId(id);
-        Send(::PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId), IEventHandle::FlagTrackDelivery);
+        Send(::PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId));
     }
 
     void PassAway() override {
@@ -1069,6 +1069,9 @@ public:
             auto guard = BindAllocator();
             Results.clear();
             Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+            for (size_t i = 0; i < Reads.size(); ++i) {
+                SendCancel(i);
+            }
         }
         TBase::PassAway();
     }

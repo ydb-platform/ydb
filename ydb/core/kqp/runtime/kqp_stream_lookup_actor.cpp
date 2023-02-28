@@ -182,6 +182,11 @@ private:
         {
             auto alloc = BindAllocator();
             Input.Clear();
+            for (auto& [id, state] : Reads) {
+                auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+                cancel->Record.SetReadId(id);
+                Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId));
+            }
         }
 
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));

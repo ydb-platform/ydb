@@ -111,6 +111,7 @@ public:
         AddHandler({TS3SourceSettings::CallableName()}, Hndl(&TSelf::HandleS3SourceSettings));
         AddHandler({TS3ParseSettings::CallableName()}, Hndl(&TSelf::HandleS3ParseSettingsBase));
         AddHandler({TS3ArrowSettings::CallableName()}, Hndl(&TSelf::HandleS3ParseSettingsBase));
+        AddHandler({TS3CoroArrowSettings::CallableName()}, Hndl(&TSelf::HandleS3ParseSettingsBase));
         AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfig));
     }
 
@@ -177,7 +178,7 @@ public:
         }
 
         const TTypeAnnotationNode* itemType = nullptr;
-        if (input->Content() == TS3ArrowSettings::CallableName()) {
+        if (input->Content() == TS3ArrowSettings::CallableName() || input->Content() == TS3CoroArrowSettings::CallableName()) {
             TVector<const TItemExprType*> blockRowTypeItems;
             for (const auto& x : rowType->Cast<TStructExprType>()->GetItems()) {
                 blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(x->GetName(), ctx.MakeType<TBlockExprType>(x->GetItemType())));

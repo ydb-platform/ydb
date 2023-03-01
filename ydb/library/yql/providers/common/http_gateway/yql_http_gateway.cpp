@@ -411,16 +411,18 @@ private:
             OnFinish(TIssues{error});
     }
 
-    void MaybeStart() {
+    void MaybeStart(long httpResponseCode = 0) {
         if (!HttpResponseCode) {
-            curl_easy_getinfo(GetHandle(), CURLINFO_RESPONSE_CODE, &HttpResponseCode);
+            if (!httpResponseCode) {
+                curl_easy_getinfo(GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
+            }
+            HttpResponseCode = httpResponseCode;
             OnStart(HttpResponseCode);
         }
     }
 
     void Done(CURLcode result, long httpResponseCode) final {
-        HttpResponseCode = httpResponseCode;
-        OnStart(HttpResponseCode);
+        MaybeStart(httpResponseCode);
         if (CURLE_OK != result) {
             return Fail(TIssue(TStringBuilder{} << "error: " << curl_easy_strerror(result) << " detailed: " << GetDetailedErrorText()));
         }

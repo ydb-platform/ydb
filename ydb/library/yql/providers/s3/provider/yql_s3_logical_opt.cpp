@@ -514,7 +514,7 @@ public:
             }
         }
 
-        if (outputRowDataItems.size() == 0 && readRowDataItems.size() != 0 && !parseSettingsBase.Maybe<TS3ArrowSettings>()) {
+        if (outputRowDataItems.size() == 0 && readRowDataItems.size() != 0 && !parseSettingsBase.Maybe<TS3ArrowSettings>() && !parseSettingsBase.Maybe<TS3CoroArrowSettings>()) {
             const TStructExprType* readRowDataType = ctx.MakeType<TStructExprType>(readRowDataItems);
             auto item = GetLightColumn(*readRowDataType);
             YQL_ENSURE(item);

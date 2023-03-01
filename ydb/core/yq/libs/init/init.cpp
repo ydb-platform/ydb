@@ -164,7 +164,7 @@ void Init(
 
     if (protoConfig.GetPrivateApi().GetEnabled()) {
         const auto& s3readConfig = protoConfig.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig();
-        auto s3HttpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(TDuration::MilliSeconds(s3readConfig.GetRetryConfig().GetMaxRetryTimeMs())); // if MaxRetryTimeMs is not set, default http gateway will use the default one
+        auto s3HttpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(TDuration::Max());
         NYql::NDq::TS3ReadActorFactoryConfig readActorFactoryCfg;
         if (const ui64 rowsInBatch = s3readConfig.GetRowsInBatch()) {
             readActorFactoryCfg.RowsInBatch = rowsInBatch;

@@ -77,6 +77,11 @@
             "Match": {"Type": "Callable", "Name": "S3ArrowSettings"}
         },
         {
+            "Name": "TS3CoroArrowSettings",
+            "Base": "TS3ParseSettingsBase",
+            "Match": {"Type": "Callable", "Name": "S3CoroArrowSettings"}
+        },
+        {
             "Name": "TS3Read",
             "Base": "TFreeArgCallable",
             "Match": {"Type": "Callable", "Name": "Read!"},

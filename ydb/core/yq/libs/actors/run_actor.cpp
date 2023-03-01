@@ -1661,6 +1661,10 @@ private:
         *gatewaysConfig.MutableS3() = Params.Config.GetGateways().GetS3();
         gatewaysConfig.MutableS3()->ClearClusterMapping();
 
+        auto* attr = gatewaysConfig.MutableS3()->MutableDefaultSettings()->Add();
+        attr->SetName("ArrowThreadPool");
+        attr->SetValue("false");
+
         THashMap<TString, TString> clusters;
 
         TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringEndpoint();
@@ -1698,7 +1702,8 @@ private:
         }
 
         {
-            dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory));
+            dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory, 
+                Params.Config.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetAllowLocalFiles()));
         }
 
         {

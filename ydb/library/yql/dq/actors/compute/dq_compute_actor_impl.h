@@ -1627,7 +1627,7 @@ protected:
         Y_VERIFY(!TaskRunner || info.Buffer);
 
         if (info.Finished) {
-            CA_LOG_D("Skip polling async input[" << inputIndex << "]: finished");
+            CA_LOG_T("Skip polling async input[" << inputIndex << "]: finished");
             return;
         }
 
@@ -1670,7 +1670,7 @@ protected:
 
             AsyncInputPush(std::move(batch), info, space, finished);
         } else {
-            CA_LOG_D("Skip polling async input[" << inputIndex << "]: no free space: " << freeSpace);
+            CA_LOG_T("Skip polling async input[" << inputIndex << "]: no free space: " << freeSpace);
             ContinueExecute(); // If there is no free space in buffer, => we have something to process
         }
     }

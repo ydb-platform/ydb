@@ -13,6 +13,7 @@ message TS3ReadActorFactoryConfig {
     uint64 RowsInBatch = 2; // Default = 1000
     uint64 MaxInflight = 3; // Default = 20
     uint64 DataInflight = 4; // Default = 200 MB
+    bool AllowLocalFiles = 5;
 }
 
 message TPqReadActorFactoryConfig {

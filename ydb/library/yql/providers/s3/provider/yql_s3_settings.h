@@ -17,6 +17,7 @@ struct TS3Settings {
     NCommon::TConfSetting<ui64, false> SerializeMemoryLimit; // Total serialization memory limit for all current blocks for all patition keys. Reachable in case of many but small partitions.
     NCommon::TConfSetting<ui64, false> InFlightMemoryLimit; // Maximum memory used by one sink.
     NCommon::TConfSetting<ui64, false> JsonListSizeLimit; // Limit of elements count in json list written to S3 file. Default: 10'000. Max: 100'000.
+    NCommon::TConfSetting<bool, false> ArrowThreadPool;
 };
 
 struct TS3ClusterSettings {

@@ -782,6 +782,11 @@ private:
                 }
             }
 
+            if (!reqs) {
+                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path prefix: '" << path << "' empty list for discovery"));
+                return false;
+            }
+
             for (auto& req : reqs) {
                 RequestsByNode_[read.Raw()].push_back(req);
                 if (PendingRequests_.find(req) == PendingRequests_.end()) {

@@ -248,6 +248,9 @@ namespace {
         if (profile->Has("iam-endpoint")) {
             Cout << "  iam-endpoint: " << profile->GetValue("iam-endpoint").as<TString>() << Endl;
         }
+        if (profile->Has("ca-file")) {
+            Cout << "  ca-file: " << profile->GetValue("ca-file").as<TString>() << Endl;
+        }
     }
 }
 
@@ -308,7 +311,8 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
         {"sa-key-file", SaKeyFile},
         {"user", User},
         {"password-file", PasswordFile},
-        {"iam-endpoint", IamEndpoint}
+        {"iam-endpoint", IamEndpoint},
+        {"ca-file", CaCertsFile}
     };
     while (Cin.ReadLine(line)) {
         Strip(line, trimmedLine);
@@ -355,6 +359,9 @@ void TCommandProfileCommon::ConfigureProfile(const TString& profileName, std::sh
     SetupProfileSetting("endpoint", Endpoint, existingProfile, profileName, profile, interactive, cmdLine);
     SetupProfileSetting("database", Database, existingProfile, profileName, profile, interactive, cmdLine);
     SetupProfileAuthentication(existingProfile, profileName, profile, config, interactive, cmdLine);
+    if (cmdLine && CaCertsFile) {
+        profile->SetValue("ca-file", CaCertsFile);
+    }
 
     if (interactive) {
         TString activeProfileName = profileManager->GetActiveProfileName();
@@ -584,7 +591,7 @@ bool TCommandProfileCommon::AnyProfileOptionInCommandLine() {
     return Endpoint || Database || TokenFile ||
            IamTokenFile || YcTokenFile ||
            SaKeyFile || UseMetadataCredentials || User ||
-           PasswordFile || IamEndpoint || AnonymousAuth;
+           PasswordFile || IamEndpoint || AnonymousAuth || CaCertsFile;
 }
 
 TCommandCreateProfile::TCommandCreateProfile()
@@ -618,6 +625,9 @@ void TCommandProfileCommon::Config(TConfig& config) {
         opts.AddLongOption("iam-endpoint", "Endpoint of IAM service to refresh token in YC OAuth or YC Service account authentication modes")
         .RequiredArgument("STR").StoreResult(&IamEndpoint);
     }
+    opts.AddLongOption("ca-file",
+        "Path to a file containing the PEM encoding of the server root certificates for tls connections.")
+        .RequiredArgument("PATH").StoreResult(&CaCertsFile);
     if (!IsStdinInteractive()) {
         GetOptionsFromStdin();
     }
@@ -969,6 +979,8 @@ void TCommandUpdateProfile::Config(TConfig& config) {
     if (config.UseIamAuth) {
         opts.AddLongOption("no-iam-endpoint", "Delete endpoint of IAM service from the profile").StoreTrue(&NoIamEndpoint);
     }
+    opts.AddLongOption("no-ca-file", "Delete path to file containing the PEM encoding of the "
+        "server root certificates for tls connections from the profile").StoreTrue(&NoCaCertsFile);
 }
 
 void TCommandUpdateProfile::ValidateNoOptions() {
@@ -990,6 +1002,10 @@ void TCommandUpdateProfile::ValidateNoOptions() {
         } else {
             if (IamEndpoint && NoIamEndpoint) {
                 str << "\"--iam-endpoint\" and \"--no-iam-endpoint\"";
+            } else {
+                if (CaCertsFile && NoCaCertsFile) {
+                    str << "\"--ca-file\" and \"--no-ca-file\"";
+                }
             }
         }
     }
@@ -1010,6 +1026,9 @@ void TCommandUpdateProfile::DropNoOptions(std::shared_ptr<IProfile> profile) {
     }
     if (NoAuth) {
         profile->RemoveValue("authentication");
+    }
+    if (NoCaCertsFile) {
+        profile->RemoveValue("ca-file");
     }
 }
 

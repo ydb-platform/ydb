@@ -26,7 +26,7 @@ public:
 protected:
     void ParseToken(TString& token, TString& tokenFile, const TString& envName, bool useDefaultToken = false);
     bool ParseProtocol(TConfig& config, TString& message);
-    void ParseCaCerts(TConfig& config);
+    virtual void ParseCaCerts(TConfig& config);
     virtual void ParseCredentials(TConfig& config);
     virtual void ParseAddress(TConfig& config) = 0;
 };

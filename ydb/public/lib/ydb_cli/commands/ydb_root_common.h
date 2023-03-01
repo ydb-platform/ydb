@@ -45,6 +45,7 @@ private:
     void ParseProfile();
     void ParseDatabase(TConfig& config);
     void ParseIamEndpoint(TConfig& config);
+    void ParseCaCerts(TConfig& config) override;
 
     TString Database;
 

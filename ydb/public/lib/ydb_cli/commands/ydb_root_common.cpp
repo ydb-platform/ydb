@@ -251,6 +251,25 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
 }
 
+void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
+    if (CaCertsFile.empty()) {
+        auto profile = Profile;
+        if (!profile) {
+            profile = ProfileManager->GetActiveProfile();
+        }
+        if (profile && profile->Has("ca-file")) {
+            CaCertsFile = profile->GetValue("ca-file").as<TString>();
+        }
+    }
+    if (!config.EnableSsl && !CaCertsFile.empty()) {
+        throw TMisuseException()
+            << "\"ca-file\" option provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
+    }
+    if (!CaCertsFile.empty()) {
+        config.CaCerts = ReadFromFile(CaCertsFile, "CA certificates");
+    }
+}
+
 void TClientCommandRootCommon::ParseAddress(TConfig& config) {
     TString hostname;
     TString port = "2135";

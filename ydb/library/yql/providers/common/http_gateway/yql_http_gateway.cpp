@@ -703,8 +703,6 @@ private:
                 Allocated.erase(it);
             }
 
-            if (Await.empty() && Allocated.empty())
-                Requests.clear();
         }
         if (easy) {
             easy->Done(result, httpResponseCode);
@@ -722,8 +720,6 @@ private:
 
             AllocatedSize = 0ULL;
             Allocated.clear();
-            if (Await.empty())
-                Requests.clear();
         }
 
         const TIssue error(curl_multi_strerror(result));
@@ -758,14 +754,8 @@ private:
             callback(TIssues{error});
             return;
         }
-        const std::unique_lock lock(Sync);
-        auto& entry = Requests[TKeyType(url, 0U, headers, data, retryPolicy)];
-        if (const auto& easy = entry.lock())
-            if (easy->AddCallback(callback))
-                return;
 
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url),  TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
-        entry = easy;
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);
     }
@@ -823,7 +813,6 @@ private:
 
 
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;
-    std::unordered_map<TKeyType, TEasyCurlBuffer::TWeakPtr, TKeyHash> Requests;
     std::priority_queue<std::pair<TInstant, TEasyCurlBuffer::TPtr>> Delayed;
 
     std::mutex Sync;

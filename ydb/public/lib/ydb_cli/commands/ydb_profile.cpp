@@ -321,11 +321,18 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
             continue;
         }
 
-        if (line.StartsWith("use-metadata-credentials")) {
+        if (trimmedLine.StartsWith("use-metadata-credentials")) {
             if (UseMetadataCredentials) {
                 throw TMisuseException() << "You entered too many \"use-metadata-credentials\" options.";
             }
             UseMetadataCredentials = true;
+            continue;
+        }
+        if (trimmedLine.StartsWith("anonymous-auth")) {
+            if (AnonymousAuth) {
+                throw TMisuseException() << "You entered too many \"anonymous-auth\" options.";
+            }
+            AnonymousAuth = true;
             continue;
         }
 

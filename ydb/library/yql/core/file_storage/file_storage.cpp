@@ -181,9 +181,6 @@ public:
         return Config;
     }
 
-    void SetTokenResolver(std::function<TString(const TString&, const TString&)> /*tokenResolver*/) final {
-    }
-
 private:
     TFileLinkPtr PutUrl(const THttpURL& url, const TString& token, const NFS::IDownloaderPtr& downloader) {
         return WithRetry<TDownloadError>(Config.GetRetryCount(), [&, this]() {

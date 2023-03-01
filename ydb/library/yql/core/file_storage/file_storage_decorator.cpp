@@ -38,8 +38,5 @@ TFsPath TFileStorageDecorator::GetTemp() const {
 const TFileStorageConfig& TFileStorageDecorator::GetConfig() const {
     return Inner_->GetConfig();
 }
-void TFileStorageDecorator::SetTokenResolver(std::function<TString(const TString&, const TString&)> tokenResolver) {
-    Inner_->SetTokenResolver(std::move(tokenResolver));
-}
 
 } // NYql

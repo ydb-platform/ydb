@@ -17,6 +17,8 @@ public:
 
 public:
     TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable data, IUdfResolver::TPtr udfResolver, TUdfIndex::TPtr udfIndex);
+    void SetTokenResolver(TTokenResolver tokenResolver);
+    void SetUrlPreprocessor(IUrlPreprocessing::TPtr urlPreprocessing);
 
     void AddUserDataBlock(const TStringBuf& name, const TUserDataBlock& block);
     void AddUserDataBlock(const TUserDataKey& key, const TUserDataBlock& block);
@@ -38,6 +40,7 @@ public:
     TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TStringBuf& name, ui32 maxFileCount = ~0u) const;
     static TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount = ~0u);
 
+    void FillUserDataUrls();
     std::map<TString, const TUserDataBlock*> GetDirectoryContent(const TStringBuf& path, ui32 maxFileCount = ~0u) const;
     static TString MakeFullName(const TStringBuf& name);
     static TString MakeFolderName(const TStringBuf& name);
@@ -62,6 +65,7 @@ public:
     NThreading::TFuture<std::function<TUserDataBlock()>> FreezeAsync(const TUserDataKey& key);
 
 private:
+    void TryFillUserDataUrl(TUserDataBlock& block) const;
     TUserDataBlock& RegisterLink(const TUserDataKey& key, TFileLinkPtr link);
 
 private:
@@ -69,6 +73,8 @@ private:
     TUserDataTable UserData_;
     IUdfResolver::TPtr UdfResolver;
     TUdfIndex::TPtr UdfIndex;
+    TTokenResolver TokenResolver_;
+    IUrlPreprocessing::TPtr UrlPreprocessing_;
 
     THashSet<TUserDataKey, TUserDataKey::THash, TUserDataKey::TEqualTo> ScannedUdfs;
     std::function<void(const TUserDataBlock& block)> ScanUdfStrategy_;

@@ -45,15 +45,25 @@ TUserDataStorage::TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable d
 {
 }
 
+void TUserDataStorage::SetTokenResolver(TTokenResolver tokenResolver) {
+    TokenResolver_ = std::move(tokenResolver);
+}
+
+void TUserDataStorage::SetUrlPreprocessor(IUrlPreprocessing::TPtr urlPreprocessing) {
+    UrlPreprocessing_ = std::move(urlPreprocessing);
+}
+
 void TUserDataStorage::AddUserDataBlock(const TStringBuf& name, const TUserDataBlock& block) {
     const auto key = ComposeUserDataKey(name);
     AddUserDataBlock(key, block);
 }
 
 void TUserDataStorage::AddUserDataBlock(const TUserDataKey& key, const TUserDataBlock& block) {
-    if (!UserData_.emplace(key, block).second) {
+    auto res = UserData_.emplace(key, block);
+    if (!res.second) {
         throw yexception() << "Failed to add user data block, key " << key << " already registered";
     }
+    TryFillUserDataUrl(res.first->second);
 }
 
 bool TUserDataStorage::ContainsUserDataBlock(const TStringBuf& name) const {
@@ -150,6 +160,26 @@ TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> TUserDataStorage::FindUser
     });
 
     return res;
+}
+
+void TUserDataStorage::FillUserDataUrls() {
+    for (auto& p : UserData_) {
+        TryFillUserDataUrl(p.second);
+    }
+}
+
+void TUserDataStorage::TryFillUserDataUrl(TUserDataBlock& block) const {
+    if (block.Type != EUserDataType::URL) {
+        return;
+    }
+
+    TString alias;
+    if (UrlPreprocessing_) {
+        std::tie(block.Data, alias) = UrlPreprocessing_->Preprocess(block.Data);
+    }
+    if (!block.UrlToken && TokenResolver_) {
+        block.UrlToken = TokenResolver_(block.Data, alias);
+    }
 }
 
 std::map<TString, const TUserDataBlock*> TUserDataStorage::GetDirectoryContent(const TStringBuf& path, ui32 maxFileCount) const {

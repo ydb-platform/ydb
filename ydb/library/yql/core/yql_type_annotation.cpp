@@ -38,6 +38,7 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     }
 
     Y_ENSURE(UserDataStorage);
+    UserDataStorage->FillUserDataUrls();
 
     // Disable "in progress" constraints
     DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());

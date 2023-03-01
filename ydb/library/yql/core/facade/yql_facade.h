@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/config/yql_config_provider.h>
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
+#include <ydb/library/yql/core/yql_user_data.h>
 #include <ydb/library/yql/sql/sql.h>
 
 #include <library/cpp/random_provider/random_provider.h>
@@ -52,6 +53,7 @@ public:
     void SetUdfResolver(IUdfResolver::TPtr udfResolver);
     void SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet);
     void SetFileStorage(TFileStoragePtr fileStorage);
+    void SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing);
     void EnableRangeComputeFor();
     void SetArrowResolver(IArrowResolver::TPtr arrowResolver);
 
@@ -80,6 +82,7 @@ private:
     TUdfIndex::TPtr UdfIndex_;
     TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     TFileStoragePtr FileStorage_;
+    IUrlPreprocessing::TPtr UrlPreprocessing_;
     TString Runner_;
     bool EnableRangeComputeFor_ = false;
     IArrowResolver::TPtr ArrowResolver_;
@@ -313,6 +316,7 @@ private:
         const TUdfIndex::TPtr& udfIndex,
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
+        const IUrlPreprocessing::TPtr& urlPreprocessing,
         const TGatewaysConfig* gatewaysConfig,
         const TString& filename,
         const TString& sourceCode,

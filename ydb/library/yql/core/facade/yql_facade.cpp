@@ -178,7 +178,11 @@ void TProgramFactory::SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet:
 }
 
 void TProgramFactory::SetFileStorage(TFileStoragePtr fileStorage) {
-    FileStorage_ = fileStorage;
+    FileStorage_ = std::move(fileStorage);
+}
+
+void TProgramFactory::SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing) {
+    UrlPreprocessing_ = std::move(urlPreprocessing);
 }
 
 void TProgramFactory::SetArrowResolver(IArrowResolver::TPtr arrowResolver) {
@@ -211,7 +215,7 @@ TProgramPtr TProgramFactory::Create(
 
     // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
-        UserDataTable_, Credentials_, moduleResolver, udfResolver, udfIndex, udfIndexPackageSet, FileStorage_,
+        UserDataTable_, Credentials_, moduleResolver, udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode);
 }
 
@@ -231,6 +235,7 @@ TProgram::TProgram(
         const TUdfIndex::TPtr& udfIndex,
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
+        const IUrlPreprocessing::TPtr& urlPreprocessing,
         const TGatewaysConfig* gatewaysConfig,
         const TString& filename,
         const TString& sourceCode,
@@ -276,15 +281,12 @@ TProgram::TProgram(
         modules->SetCredentials(Credentials_);
     }
     OperationOptions_.Runner = runner;
+    UserDataStorage_->SetUrlPreprocessor(urlPreprocessing);
 }
 
 TProgram::~TProgram() {
     try {
         CloseLastSession();
-        // Token resolver may keep some references to provider internal's. So reset it to release provider's data
-        if (FileStorage_) {
-            FileStorage_->SetTokenResolver({});
-        }
         // stop all non complete execution before deleting TExprCtx
         DataProviders_.clear();
     } catch (...) {
@@ -1406,9 +1408,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     tokenResolvers.push_back(BuildDefaultTokenResolver(typeAnnotationContext->Credentials));
-    if (FileStorage_) {
-        FileStorage_->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
-    }
+    typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
 
     return typeAnnotationContext;
 }

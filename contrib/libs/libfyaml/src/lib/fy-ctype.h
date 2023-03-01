@@ -149,9 +149,14 @@ static inline bool fy_is_ns_char(int c)
 	return fy_is_nb_char(c) && !fy_is_ws(c);
 }
 
-static inline bool fy_is_indicator(int c)
+static inline bool fy_is_start_indicator(int c)
 {
-	return !!fy_utf8_strchr("-?:,[]{}#&*!|>'\"%%@`", c);
+	return !!fy_utf8_strchr(",[]{}#&*!|>'\"%%@`", c);
+}
+
+static inline bool fy_is_indicator_before_space(int c)
+{
+	return !!fy_utf8_strchr("-:?`", c);
 }
 
 static inline bool fy_is_flow_indicator(int c)
@@ -282,7 +287,8 @@ FY_CTYPE_AT_BUILDER(print);
 FY_CTYPE_AT_BUILDER(printq);
 FY_CTYPE_AT_BUILDER(nb_char);
 FY_CTYPE_AT_BUILDER(ns_char);
-FY_CTYPE_AT_BUILDER(indicator);
+FY_CTYPE_AT_BUILDER(start_indicator);
+FY_CTYPE_AT_BUILDER(indicator_before_space);
 FY_CTYPE_AT_BUILDER(flow_indicator);
 FY_CTYPE_AT_BUILDER(path_flow_key_start);
 FY_CTYPE_AT_BUILDER(path_flow_key_end);

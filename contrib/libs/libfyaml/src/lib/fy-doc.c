@@ -3357,7 +3357,7 @@ bool fy_node_is_null(struct fy_node *fyn)
 	if (fyn->type != FYNT_SCALAR)
 		return false;
 
-	return fyn->scalar == NULL;
+	return fyn->scalar == NULL || fyn->scalar->scalar.is_null;
 }
 
 bool fy_node_is_attached(struct fy_node *fyn)

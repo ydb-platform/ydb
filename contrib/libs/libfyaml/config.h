@@ -4,6 +4,9 @@
 /* Define if building universal (internal helper macro) */
 /* #undef AC_APPLE_UNIVERSAL_BUILD */
 
+/* Define to 1 if ASAN is enabled */
+#define HAVE_ASAN 0
+
 /* Define to 1 if you have check available */
 #define HAVE_CHECK 0
 
@@ -96,7 +99,7 @@
 #define PACKAGE_NAME "libfyaml"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "libfyaml 0.7.12"
+#define PACKAGE_STRING "libfyaml 0.8"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "libfyaml"
@@ -105,7 +108,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "0.7.12"
+#define PACKAGE_VERSION "0.8"
 
 /* Define to necessary symbol if this constant uses a non-standard name on
    your system. */
@@ -208,7 +211,7 @@
 
 
 /* Version number of package */
-#define VERSION "0.7.12"
+#define VERSION "0.8"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

@@ -180,6 +180,13 @@ fy_reader_fill_atom_end(struct fy_reader *fyr, struct fy_atom *handle)
 	fy_reader_fill_atom_end_at(fyr, handle, NULL);
 }
 
+static inline void
+fy_atom_reset_storage_hints(struct fy_atom *handle)
+{
+	handle->storage_hint = 0;
+	handle->storage_hint_valid = false;
+}
+
 struct fy_atom *fy_reader_fill_atom(struct fy_reader *fyr, int advance, struct fy_atom *handle);
 struct fy_atom *fy_reader_fill_atom_mark(struct fy_reader *fyr, const struct fy_mark *start_mark,
 					 const struct fy_mark *end_mark, struct fy_atom *handle);

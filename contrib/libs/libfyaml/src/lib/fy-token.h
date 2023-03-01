@@ -105,6 +105,7 @@ struct fy_token {
 			const char *path_key;
 			size_t path_key_len;
 			char *path_key_storage;	/* if this is not null, it's \0 terminated */
+			bool is_null;		/* special case; the scalar was NULL */
 		} scalar;
 		struct {
 			unsigned int skip;

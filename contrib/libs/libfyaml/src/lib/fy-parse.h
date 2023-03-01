@@ -223,6 +223,9 @@ struct fy_parser {
 	struct fy_composer *fyc;
 	fy_parse_composer_cb fyc_cb;
 	void *fyc_userdata;
+
+	/* last generated event atom */
+	struct fy_atom last_event_handle;
 };
 
 static inline struct fy_input *

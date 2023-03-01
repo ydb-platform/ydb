@@ -78,6 +78,13 @@ static inline bool fy_emit_is_pretty_mode(const struct fy_emitter *emit)
 	return flags == FYECF_MODE_PRETTY;
 }
 
+static inline bool fy_emit_is_manual(const struct fy_emitter *emit)
+{
+	enum fy_emitter_cfg_flags flags = emit->cfg.flags & FYECF_MODE(FYECF_MODE_MASK);
+
+	return flags == FYECF_MODE_MANUAL;
+}
+
 static inline int fy_emit_indent(struct fy_emitter *emit)
 {
 	int indent;
@@ -704,7 +711,7 @@ void fy_emit_token_write_plain(struct fy_emitter *emit, struct fy_token *fyt, in
 	atom = fy_token_atom(fyt);
 
 	/* null and json mode */
-	if (fy_emit_is_json_mode(emit) && (!fyt || !atom || atom->size0)) {
+	if (fy_emit_is_json_mode(emit) && (/* (!fyt || !atom || atom->size0) || */ fyt->scalar.is_null)) {
 		fy_emit_puts(emit, wtype, "null");
 		goto out;
 	}
@@ -1244,7 +1251,7 @@ fy_emit_token_scalar_style(struct fy_emitter *emit, struct fy_token *fyt,
 {
 	const char *value = NULL;
 	size_t len = 0;
-	bool json, flow, is_json_plain;
+	bool json, flow, is_null_scalar, is_json_plain;
 	struct fy_atom *atom;
 	int aflags = -1;
 	const char *tag;
@@ -1260,34 +1267,38 @@ fy_emit_token_scalar_style(struct fy_emitter *emit, struct fy_token *fyt,
 
 	json = fy_emit_is_json_mode(emit);
 
-	/* literal in JSON mode is output as quoted */
-	if (json && (style == FYNS_LITERAL || style == FYNS_FOLDED))
-		return FYNS_DOUBLE_QUOTED;
+	is_null_scalar = !atom || fyt->scalar.is_null;
 
 	/* is this a plain json atom? */
 	is_json_plain = (json || emit->source_json || fy_emit_is_dejson_mode(emit)) &&
-			(!atom || atom->size0 ||
+			(is_null_scalar ||
 			!fy_atom_strcmp(atom, "false") ||
 			!fy_atom_strcmp(atom, "true") ||
 			!fy_atom_strcmp(atom, "null") ||
 			fy_atom_is_number(atom));
 
-	if (is_json_plain) {
-		tag = fy_token_get_text(fyt_tag, &tag_len);
-
-		/* XXX hardcoded string tag resultion */
-		if (tag && tag_len &&
-		     ((tag_len == 1 && *tag == '!') ||
-		      (tag_len == 21 && !memcmp(tag, "tag:yaml.org,2002:str", 21))))
+	if (json) {
+		/* literal in JSON mode is output as quoted */
+		if (style == FYNS_LITERAL || style == FYNS_FOLDED)
 			return FYNS_DOUBLE_QUOTED;
-	}
 
-	/* JSON NULL, but with plain style */
-	if (json && (style == FYNS_PLAIN || style == FYNS_ANY) && (!atom || (is_json_plain && !atom->size0)))
-		return FYNS_PLAIN;
+		if (is_json_plain) {
+			tag = fy_token_get_text(fyt_tag, &tag_len);
 
-	if (json)
+			/* XXX hardcoded string tag resultion */
+			if (tag && tag_len &&
+			     ((tag_len == 1 && *tag == '!') ||
+			      (tag_len == 21 && !memcmp(tag, "tag:yaml.org,2002:str", 21))))
+				return FYNS_DOUBLE_QUOTED;
+		}
+
+		/* JSON NULL, but with plain style */
+		if ((style == FYNS_PLAIN || style == FYNS_ANY) &&
+		    (is_null_scalar || (is_json_plain && !atom->size0)))
+			return FYNS_PLAIN;
+
 		return FYNS_DOUBLE_QUOTED;
+	}
 
 	aflags = fy_token_text_analyze(fyt);
 
@@ -1346,9 +1357,15 @@ out:
 				FYNS_PLAIN : FYNS_DOUBLE_QUOTED;
 	}
 
-	/* special handling for plains on start of line */
-	if ((aflags & FYTTAF_QUOTE_AT_0) && indent == 0 && style == FYNS_PLAIN)
-		style = FYNS_DOUBLE_QUOTED;
+	if (style == FYNS_PLAIN) {
+		/* plains in flow mode not being able to be plains
+		 * - plain in block mode that can't be plain in flow mode
+		 * - special handling for plains on start of line
+		 */
+		if ((flow && !(aflags & FYTTAF_CAN_BE_PLAIN_FLOW) && !is_null_scalar) ||
+		    ((aflags & FYTTAF_QUOTE_AT_0) && indent == 0))
+			style = FYNS_DOUBLE_QUOTED;
+	}
 
 	return style;
 }
@@ -1414,7 +1431,9 @@ static void fy_emit_sequence_prolog(struct fy_emitter *emit, struct fy_emit_save
 
 	sc->old_indent = sc->indent;
 	if (!json) {
-		if (fy_emit_is_block_mode(emit))
+		if (fy_emit_is_manual(emit))
+			sc->flow = (sc->xstyle == FYNS_BLOCK && was_flow) || sc->xstyle == FYNS_FLOW;
+		else if (fy_emit_is_block_mode(emit))
 			sc->flow = sc->empty;
 		else
 			sc->flow = fy_emit_is_flow_mode(emit) || emit->flow_level || sc->flow_token || sc->empty;
@@ -1501,6 +1520,7 @@ void fy_emit_sequence(struct fy_emitter *emit, struct fy_node *fyn, int flags, i
 	sc->empty = fy_node_list_empty(&fyn->sequence);
 	sc->flow_token = fyn->style == FYNS_FLOW;
 	sc->flow = !!(flags & DDNF_FLOW);
+	sc->xstyle = fyn->style;
 	sc->old_indent = sc->indent;
 
 	fy_emit_sequence_prolog(emit, sc);
@@ -1523,10 +1543,13 @@ static void fy_emit_mapping_prolog(struct fy_emitter *emit, struct fy_emit_save_
 {
 	bool json = fy_emit_is_json_mode(emit);
 	bool oneline = fy_emit_is_oneline(emit);
+	bool was_flow = sc->flow;
 
 	sc->old_indent = sc->indent;
 	if (!json) {
-		if (fy_emit_is_block_mode(emit))
+		if (fy_emit_is_manual(emit))
+			sc->flow = (sc->xstyle == FYNS_BLOCK && was_flow) || sc->xstyle == FYNS_FLOW;
+		else if (fy_emit_is_block_mode(emit))
 			sc->flow = sc->empty;
 		else
 			sc->flow = fy_emit_is_flow_mode(emit) || emit->flow_level || sc->flow_token || sc->empty;
@@ -1646,6 +1669,7 @@ void fy_emit_mapping(struct fy_emitter *emit, struct fy_node *fyn, int flags, in
 	sc->empty = fy_node_pair_list_empty(&fyn->mapping);
 	sc->flow_token = fyn->style == FYNS_FLOW;
 	sc->flow = !!(flags & DDNF_FLOW);
+	sc->xstyle = fyn->style;
 	sc->old_indent = sc->indent;
 
 	fy_emit_mapping_prolog(emit, sc);
@@ -2791,8 +2815,12 @@ fy_emit_peek_next_event(struct fy_emitter *emit)
 
 bool fy_emit_streaming_sequence_empty(struct fy_emitter *emit)
 {
+	enum fy_emitter_cfg_flags flags = emit->cfg.flags & FYECF_MODE(FYECF_MODE_MASK);
 	struct fy_eventp *fyepn;
 	struct fy_event *fyen;
+
+	if (flags == FYECF_MODE_BLOCK || flags == FYECF_MODE_DEJSON)
+		return false;
 
 	fyepn = fy_emit_peek_next_event(emit);
 	fyen = fyepn ? &fyepn->e : NULL;
@@ -2881,7 +2909,7 @@ static int fy_emit_streaming_node(struct fy_emitter *emit, struct fy_eventp *fye
 {
 	struct fy_event *fye = &fyep->e;
 	struct fy_emit_save_ctx *sc = &emit->s_sc;
-	enum fy_node_style style;
+	enum fy_node_style style, xstyle;
 	int ret, s_flags, s_indent;
 
 	if (fye->type != FYET_ALIAS && fye->type != FYET_SCALAR &&
@@ -2921,6 +2949,9 @@ static int fy_emit_streaming_node(struct fy_emitter *emit, struct fy_eventp *fye
 		s_flags = emit->s_flags;
 		s_indent = emit->s_indent;
 
+		xstyle = fye->sequence_start.sequence_start->type == FYTT_BLOCK_SEQUENCE_START ?
+			FYNS_BLOCK : FYNS_FLOW;
+
 		fy_emit_common_node_preamble(emit, fye->sequence_start.anchor, fye->sequence_start.tag, emit->s_flags, emit->s_indent);
 
 		/* create new context */
@@ -2928,9 +2959,9 @@ static int fy_emit_streaming_node(struct fy_emitter *emit, struct fy_eventp *fye
 		sc->flags = emit->s_flags & (DDNF_ROOT | DDNF_SEQ | DDNF_MAP);
 		sc->indent = emit->s_indent;
 		sc->empty = fy_emit_streaming_sequence_empty(emit);
-		sc->flow_token = fye->sequence_start.sequence_start &&
-				 fye->sequence_start.sequence_start->type == FYTT_FLOW_SEQUENCE_START;
+		sc->flow_token = xstyle == FYNS_FLOW;
 		sc->flow = !!(s_flags & DDNF_FLOW);
+		sc->xstyle = xstyle;
 		sc->old_indent = sc->indent;
 		sc->s_flags = s_flags;
 		sc->s_indent = s_indent;
@@ -2956,6 +2987,9 @@ static int fy_emit_streaming_node(struct fy_emitter *emit, struct fy_eventp *fye
 		s_flags = emit->s_flags;
 		s_indent = emit->s_indent;
 
+		xstyle = fye->mapping_start.mapping_start->type == FYTT_BLOCK_MAPPING_START ?
+			FYNS_BLOCK : FYNS_FLOW;
+
 		fy_emit_common_node_preamble(emit, fye->mapping_start.anchor, fye->mapping_start.tag, emit->s_flags, emit->s_indent);
 
 		/* create new context */
@@ -2963,9 +2997,9 @@ static int fy_emit_streaming_node(struct fy_emitter *emit, struct fy_eventp *fye
 		sc->flags = emit->s_flags & (DDNF_ROOT | DDNF_SEQ | DDNF_MAP);
 		sc->indent = emit->s_indent;
 		sc->empty = fy_emit_streaming_mapping_empty(emit);
-		sc->flow_token = fye->mapping_start.mapping_start &&
-				 fye->mapping_start.mapping_start->type == FYTT_FLOW_MAPPING_START;
+		sc->flow_token = xstyle == FYNS_FLOW;
 		sc->flow = !!(s_flags & DDNF_FLOW);
+		sc->xstyle = xstyle;
 		sc->old_indent = sc->indent;
 		sc->s_flags = s_flags;
 		sc->s_indent = s_indent;

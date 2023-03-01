@@ -53,6 +53,7 @@ struct fy_emit_save_ctx {
 	bool flow_token : 1;
 	bool flow : 1;
 	bool empty : 1;
+	enum fy_node_style xstyle;
 	int old_indent;
 	int flags;
 	int indent;

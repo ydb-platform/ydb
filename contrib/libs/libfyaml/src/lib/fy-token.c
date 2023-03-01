@@ -426,6 +426,7 @@ struct fy_token *fy_token_vcreate_rl(struct fy_token_list *fytl, enum fy_token_t
 		fyt->scalar.path_key = NULL;
 		fyt->scalar.path_key_len = 0;
 		fyt->scalar.path_key_storage = NULL;
+		fyt->scalar.is_null = false;	/* by default the scalar is not NULL */
 		break;
 	case FYTT_TAG:
 		fyt->tag.skip = va_arg(ap, unsigned int);
@@ -640,7 +641,7 @@ int fy_token_text_analyze(struct fy_token *fyt)
 	const char *s, *e;
 	const char *value = NULL;
 	enum fy_atom_style style;
-	int c, w, cn, cp, col;
+	int c, w, cn, cnn, cp, col;
 	size_t len;
 	int flags;
 
@@ -708,15 +709,21 @@ int fy_token_text_analyze(struct fy_token *fyt)
 	flags &= ~FYTTAF_CAN_BE_FOLDED;
 
 	/* plain scalars can't start with any indicator (or space/lb) */
-	if ((flags & (FYTTAF_CAN_BE_PLAIN | FYTTAF_CAN_BE_PLAIN_FLOW)) &&
-		(fy_is_indicator(cn) || fy_token_is_lb(fyt, cn) || fy_is_ws(cn)))
-		flags &= ~(FYTTAF_CAN_BE_PLAIN |
-			   FYTTAF_CAN_BE_PLAIN_FLOW);
+	if ((flags & (FYTTAF_CAN_BE_PLAIN | FYTTAF_CAN_BE_PLAIN_FLOW))) {
+		if (fy_is_start_indicator(cn) || fy_token_is_lb(fyt, cn) || fy_is_ws(cn))
+			flags &= ~(FYTTAF_CAN_BE_PLAIN | FYTTAF_CAN_BE_PLAIN_FLOW);
+	}
 
 	/* plain scalars in flow mode can't start with a flow indicator */
 	if ((flags & FYTTAF_CAN_BE_PLAIN_FLOW) &&
 		fy_is_flow_indicator(cn))
 		flags &= ~FYTTAF_CAN_BE_PLAIN_FLOW;
+
+	if ((flags & (FYTTAF_CAN_BE_PLAIN | FYTTAF_CAN_BE_PLAIN_FLOW))) {
+		cnn = fy_utf8_get(s, e - s, &w);
+		if (fy_is_ws(cnn) && fy_is_indicator_before_space(cn))
+			flags &= ~(FYTTAF_CAN_BE_PLAIN | FYTTAF_CAN_BE_PLAIN_FLOW);
+	}
 
 	/* plain unquoted path keys can only start with [a-zA-Z_] */
 	if ((flags & FYTTAF_CAN_BE_UNQUOTED_PATH_KEY) &&
@@ -1408,7 +1415,7 @@ unsigned int fy_analyze_scalar_content(const char *data, size_t size,
 
 		/* comment indicator can't be present after a space or lb */
 		/* : followed by blank can't be any plain */
-		if (flags & (FYACF_BLOCK_PLAIN | FYACF_FLOW_PLAIN) &&
+		if ((flags & (FYACF_BLOCK_PLAIN | FYACF_FLOW_PLAIN)) &&
 		    (((fy_is_blank(c) || fy_is_generic_lb_m(c, lb_mode)) && nextc == '#') ||
 		     (c == ':' && fy_is_blankz_m(nextc, lb_mode))))
 			flags &= ~(FYACF_BLOCK_PLAIN | FYACF_FLOW_PLAIN);
@@ -1866,4 +1873,10 @@ bool fy_token_has_any_comment(struct fy_token *fyt)
 			return true;
 	}
 	return false;
+}
+
+bool
+fy_token_scalar_is_null(struct fy_token *fyt)
+{
+	return !fyt || fyt->type != FYTT_SCALAR || fyt->scalar.is_null;
 }

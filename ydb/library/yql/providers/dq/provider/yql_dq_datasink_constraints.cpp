@@ -50,6 +50,8 @@ public:
             TDqPhyMapJoin::CallableName(),
             TDqPhyCrossJoin::CallableName(),
             TDqPhyJoinDict::CallableName(),
+        }, Hndl(&TDqDataSinkConstraintTransformer::HandleJoin));
+        AddHandler({
             TDqSink::CallableName(),
             TDqWrite::CallableName(),
             TDqQuery::CallableName(),
@@ -119,6 +121,119 @@ public:
 
         if (!map.empty())
             input.Ptr()->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(map)));
+
+        return TStatus::Ok;
+    }
+
+    TStatus HandleJoin(TExprBase input, TExprContext& ctx) {
+        const auto join = input.Cast<TDqJoinBase>();
+
+        const auto& joinType = join.JoinType().Ref();
+        if (const auto lEmpty = join.LeftInput().Ref().GetConstraint<TEmptyConstraintNode>(), rEmpty = join.RightInput().Ref().GetConstraint<TEmptyConstraintNode>(); lEmpty && rEmpty) {
+            input.Ptr()->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        } else if (lEmpty && joinType.Content().starts_with("Left")) {
+            input.Ptr()->AddConstraint(lEmpty);
+        } else if (rEmpty && joinType.Content().starts_with("Right")) {
+            input.Ptr()->AddConstraint(rEmpty);
+        } else if ((lEmpty || rEmpty) && (joinType.IsAtom("Inner") || joinType.Content().ends_with("Semi"))) {
+            input.Ptr()->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        }
+
+        const auto lUnique = join.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>();
+        const auto rUnique = join.RightInput().Ref().GetConstraint<TUniqueConstraintNode>();
+
+        if (lUnique || rUnique) {
+            std::vector<std::string_view> leftJoinKeys, rightJoinKeys;
+            const auto size = join.JoinKeys().Size();
+            leftJoinKeys.reserve(size);
+            rightJoinKeys.reserve(size);
+
+            const auto fullColumnName = [&ctx](const std::string_view& table, const std::string_view& column) -> std::string_view {
+                return table.empty() ? column : ctx.AppendString(TStringBuilder() << table << '.' << column);
+            };
+
+            for (const auto& keyTuple : join.JoinKeys()) {
+                const auto leftLabel = keyTuple.LeftLabel().Value();
+                const auto rightLabel = keyTuple.RightLabel().Value();
+
+                leftJoinKeys.emplace_back(
+                    join.LeftLabel().Maybe<TCoAtom>() || keyTuple.LeftColumn().Value().starts_with("_yql_dq_key_left_") ?
+                        keyTuple.LeftColumn().Value() : fullColumnName(leftLabel, keyTuple.LeftColumn().Value()));
+
+                rightJoinKeys.emplace_back(
+                    join.RightLabel().Maybe<TCoAtom>() || keyTuple.RightColumn().Value().starts_with("_yql_dq_key_right_") ?
+                        keyTuple.RightColumn().Value() : fullColumnName(rightLabel, keyTuple.RightColumn().Value()));
+
+            }
+
+            const TUniqueConstraintNode* unique = nullptr;
+            const TDistinctConstraintNode* distinct = nullptr;
+
+            const bool singleSide = joinType.Content().ends_with("Semi") || joinType.Content().ends_with("Only");
+            const bool leftSide = joinType.Content().starts_with("Left");
+            const bool rightSide = joinType.Content().starts_with("Right");
+
+            const bool lOneRow = lUnique && lUnique->HasEqualColumns(leftJoinKeys);
+            const bool rOneRow = rUnique && rUnique->HasEqualColumns(rightJoinKeys);
+            const bool bothOne = lOneRow && rOneRow;
+
+            const auto makeRename = [&ctx](const TExprBase& label) -> TConstraintNode::TPathReduce {
+                if (label.Ref().IsAtom()) {
+                    const auto table = label.Cast<TCoAtom>().Value();
+                    return [table, &ctx](const TConstraintNode::TPathType& path) -> std::vector<TConstraintNode::TPathType> {
+                        if (path.empty())
+                            return {path};
+                        auto out = path;
+                        out.front() = ctx.AppendString(TStringBuilder() << table << '.' << out.front());
+                        return {out};
+                    };
+                }
+                return {};
+            };
+
+            const auto leftRename = makeRename(join.LeftLabel());
+            const auto rightRename = makeRename(join.RightLabel());
+
+            if (singleSide) {
+                if (leftSide && lUnique)
+                    unique = leftRename ? lUnique->RenameFields(ctx, leftRename) : lUnique;
+                else if (rightSide && rUnique)
+                    unique = rightRename ? rUnique->RenameFields(ctx, rightRename) : rUnique;
+            } else if (joinType.IsAtom("Exclusion") || (lOneRow && rOneRow && joinType.IsAtom({"Inner", "Full", "Left", "Right"}))) {
+                if (lUnique && rUnique)
+                    unique = TUniqueConstraintNode::Merge(leftRename ? lUnique->RenameFields(ctx, leftRename) : lUnique, rightRename ? rUnique->RenameFields(ctx, rightRename) : rUnique, ctx);
+                else if (lUnique)
+                    unique = leftRename ? lUnique->RenameFields(ctx, leftRename) : lUnique;
+                else if (rUnique)
+                    unique = rightRename ? rUnique->RenameFields(ctx, rightRename) : rUnique;
+            }
+
+            const auto lDistinct = join.LeftInput().Ref().GetConstraint<TDistinctConstraintNode>();
+            const auto rDistinct = join.RightInput().Ref().GetConstraint<TDistinctConstraintNode>();
+
+            if (singleSide) {
+                if (leftSide && lDistinct)
+                    distinct = leftRename ? lDistinct->RenameFields(ctx, leftRename) : lDistinct;
+                else if (rightSide && rDistinct)
+                    distinct = rightRename ? rDistinct->RenameFields(ctx, rightRename) : rDistinct;
+            } else {
+                const bool useBoth = bothOne && joinType.IsAtom("Inner");
+                const bool useLeft = lDistinct && ((leftSide && rOneRow) || useBoth);
+                const bool useRight = rDistinct && ((rightSide && lOneRow) || useBoth);
+
+                if (useLeft && !useRight)
+                    distinct = leftRename ? lDistinct->RenameFields(ctx, leftRename) : lDistinct;
+                else if (useRight && !useLeft)
+                    distinct = rightRename ? rDistinct->RenameFields(ctx, rightRename) : rDistinct;
+                else if (useLeft && useRight)
+                    distinct = TDistinctConstraintNode::Merge(leftRename ? lDistinct->RenameFields(ctx, leftRename) : lDistinct, rightRename ? rDistinct->RenameFields(ctx, rightRename) : rDistinct, ctx);
+            }
+
+            if (unique)
+                input.Ptr()->AddConstraint(unique);
+            if (distinct)
+                input.Ptr()->AddConstraint(distinct);
+        }
 
         return TStatus::Ok;
     }

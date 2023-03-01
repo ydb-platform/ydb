@@ -259,8 +259,9 @@ struct TStaticData {
 class TVisitor {
     friend struct TStaticData;
 public:
-    TVisitor(const TVector<NSQLTranslation::TParsedToken>& comments)
+    TVisitor(const TParsedTokenList& parsedTokens, const TParsedTokenList& comments)
         : StaticData(TStaticData::GetInstance())
+        , ParsedTokens(parsedTokens)
         , Comments(comments)
     {
     }
@@ -269,7 +270,14 @@ public:
         addLine = true;
         IsSimpleStatement.emplace_back();
         Scopes.push_back(EScope::Default);
+        MarkedTokens.reserve(ParsedTokens.size());
+        MarkTokens(msg);
+        Y_ENSURE(MarkTokenStack.empty());
+        Y_ENSURE(TokenIndex == ParsedTokens.size());
+        TokenIndex = 0;
         Visit(msg);
+        Y_ENSURE(TokenIndex == ParsedTokens.size());
+        Y_ENSURE(MarkTokenStack.empty());
         for (; LastComment < Comments.size(); ++LastComment) {
             const auto text = Comments[LastComment].Content;
             AddComment(text);
@@ -285,6 +293,14 @@ public:
     }
 
 private:
+    struct TTokenInfo {
+        bool OpeningBracket = false;
+        bool ClosingBracket = false;
+        ui32 ClosingBracketIndex = 0;
+    };
+
+    using TMarkTokenStack = TVector<ui32>;
+
     void Out(TStringBuf s) {
         for (ui32 i = 0; i < s.Size(); ++i) {
             Out(s[i], i == 0);
@@ -325,6 +341,79 @@ private:
         }
 
         Out(text);
+    }
+
+    void MarkTokens(const NProtoBuf::Message& msg) {
+        const NProtoBuf::Descriptor* descr = msg.GetDescriptor();
+        auto scopePtr = StaticData.ScopeDispatch.FindPtr(descr);
+        if (scopePtr) {
+            if (*scopePtr == EScope::TypeName) {
+                ++InsideType;
+            }
+
+            Scopes.push_back(*scopePtr);
+        }
+
+        if (descr == TToken::GetDescriptor()) {
+            const auto& token = dynamic_cast<const TToken&>(msg);
+            MarkToken(token);
+        }
+
+        if (descr == TRule_lambda_body::GetDescriptor()) {
+            Y_ENSURE(TokenIndex >= 1);
+            auto prevIndex = TokenIndex - 1;
+            Y_ENSURE(prevIndex < ParsedTokens.size());
+            Y_ENSURE(ParsedTokens[prevIndex].Content == "{");
+            MarkedTokens[prevIndex].OpeningBracket = false;
+        }
+
+        VisitAllFieldsImpl<&TVisitor::MarkTokens>(descr, msg);
+        if (scopePtr) {
+            if (*scopePtr == EScope::TypeName) {
+                --InsideType;
+            }
+
+            Scopes.pop_back();
+        }
+    }
+
+    void MarkToken(const TToken& token) {
+        auto str = token.GetValue();
+        if (str == "<EOF>") {
+            return;
+        }
+
+        MarkedTokens.emplace_back();
+        if (str == "(" || str == "[" || str == "{" || str == "<|" || (InsideType && str == "<")) {
+            MarkTokenStack.push_back(TokenIndex);
+            auto& info = MarkedTokens[TokenIndex];
+            info.OpeningBracket = true;
+        } else if (str == ")") {
+            PopBracket("(");
+        } else if (str == "]") {
+            PopBracket("[");
+        } else if (str == "}") {
+            PopBracket("{");
+        } else if (str == "|>") {
+            PopBracket("<|");
+        } else if (InsideType && str == ">") {
+            PopBracket("<");
+        }
+
+        TokenIndex++;
+    }
+
+    void PopBracket(const TString& expected) {
+        Y_ENSURE(!MarkTokenStack.empty());
+        Y_ENSURE(MarkTokenStack.back() < ParsedTokens.size());
+        Y_ENSURE(ParsedTokens[MarkTokenStack.back()].Content == expected);
+        auto& openInfo = MarkedTokens[MarkTokenStack.back()];
+        if (openInfo.OpeningBracket) {
+            openInfo.ClosingBracketIndex = TokenIndex;
+            MarkedTokens[TokenIndex].ClosingBracket = true;
+        }
+
+        MarkTokenStack.pop_back();
     }
 
     void Visit(const NProtoBuf::Message& msg) {
@@ -995,21 +1084,27 @@ private:
     }
 
     void VisitDropExternalDataSource(const TRule_drop_external_data_source_stmt& msg) {
+        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_external_data_source_stmt::GetDescriptor(), msg);
     }
 
-    void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
+    template <void (TVisitor::*Func)(const NProtoBuf::Message&)>
+    void VisitAllFieldsImpl(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
         for (int i = 0; i < descr->field_count(); ++i) {
             const NProtoBuf::FieldDescriptor* fd = descr->field(i);
             NProtoBuf::TConstField field(msg, fd);
             if (field.IsMessage()) {
                 for (size_t j = 0; j < field.Size(); ++j) {
-                    Visit(*field.template Get<NProtoBuf::Message>(j));
+                    (this->*Func)(*field.template Get<NProtoBuf::Message>(j));
                 }
             }
         }
+    }
+
+    void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
+        VisitAllFieldsImpl<&TVisitor::Visit>(descr, msg);
     }
 
     void WriteComments() {
@@ -1082,10 +1177,41 @@ private:
 
         AfterDollarOrAt = (str == "$" || str == "@");
 
+        const auto& markedInfo = MarkedTokens[TokenIndex];
+        if (markedInfo.ClosingBracket) {
+            Y_ENSURE(!MarkTokenStack.empty());
+            auto beginTokenIndex = MarkTokenStack.back();
+            if (ParsedTokens[beginTokenIndex].Line != ParsedTokens[TokenIndex].Line) {
+                // multiline
+                PopCurrentIndent();
+                NewLine();
+            }
+
+            MarkTokenStack.pop_back();
+        }
+
         Out(str);
         if (str == ";") {
             Out('\n');
         }
+
+        if (markedInfo.OpeningBracket) {
+            MarkTokenStack.push_back(TokenIndex);
+            if (ParsedTokens[TokenIndex].Line != ParsedTokens[markedInfo.ClosingBracketIndex].Line) {
+                // multiline
+                PushCurrentIndent();
+                NewLine();
+            }
+        }
+
+        if (str == "," && !MarkTokenStack.empty()) {
+            // add line for trailing comma
+            if (TokenIndex + 1 < ParsedTokens.size() && ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 1].Line) {
+                NewLine();
+            }
+        }
+
+        TokenIndex++;
     }
 
     void VisitIntoValuesSource(const TRule_into_values_source& msg) {
@@ -1747,7 +1873,8 @@ private:
 
 private:
     const TStaticData& StaticData;
-    const TVector<NSQLTranslation::TParsedToken>& Comments;
+    const TParsedTokenList& ParsedTokens;
+    const TParsedTokenList& Comments;
     TStringBuilder SB;
     ui32 OutColumn = 0;
     ui32 OutLine = 1;
@@ -1767,6 +1894,10 @@ private:
     bool AfterQuestion = false;
     bool AfterLess = false;
     bool AfterKeyExpr = false;
+
+    ui32 TokenIndex = 0;
+    TMarkTokenStack MarkTokenStack;
+    TVector<TTokenInfo> MarkedTokens;
 };
 
 template <typename T>
@@ -1935,11 +2066,13 @@ public:
             }
 
             TVector<NSQLTranslation::TParsedToken> comments;
-            TParsedTokenList stmtTokens;
+            TParsedTokenList parsedTokens, stmtTokens;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
                     comments.emplace_back(std::move(token));
+                } else if (token.Name != "WS" && token.Name != "EOF") {
+                    parsedTokens.emplace_back(std::move(token));
                 }
             };
 
@@ -1954,7 +2087,7 @@ public:
                 continue;
             }
 
-            TVisitor visitor(comments);
+            TVisitor visitor(parsedTokens, comments);
             bool addLine;
             auto currentFormattedQuery = visitor.Process(*message, addLine);
             TParsedTokenList stmtFormattedTokens;

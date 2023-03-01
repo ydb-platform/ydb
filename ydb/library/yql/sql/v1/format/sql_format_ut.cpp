@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"values (1);","VALUES\n\t(1);\n\n"},
             {"values (1,2),(3,4);","VALUES\n\t(1, 2),\n\t(3, 4);\n\n"},
-            {"values ('a\nb');","VALUES\n\t('a\nb');\n\n"},
+            {"values ('a\nb');","VALUES\n\t(\n\t\t'a\nb'\n\t);\n\n"},
         };
 
         TSetup setup;
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(ExternalDataSourceOperations) {
         TCases cases = {
             {"creAte exTernAl daTa SouRce usEr With (a = \"b\")",
-             "CREATE EXTERNAL DATA SOURCE usEr WITH (a = \"b\");\n"},
+             "CREATE EXTERNAL DATA SOURCE usEr WITH (a = \"b\");\n\n"},
             {"dRop exTerNal Data SouRce usEr",
              "DROP EXTERNAL DATA SOURCE usEr;\n"},
         };
@@ -778,6 +778,380 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"select a[0]",
              "SELECT\n\ta[0];\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineList) {
+        TCases cases = {
+            {"select [\n]",
+             "SELECT\n\t[\n\t];\n\n"},
+            {"select [1\n]",
+             "SELECT\n\t[\n\t\t1\n\t];\n\n"},
+            {"select [\n1]",
+             "SELECT\n\t[\n\t\t1\n\t];\n\n"},
+            {"select [1,\n]",
+             "SELECT\n\t[\n\t\t1,\n\t];\n\n"},
+            {"select [1\n,]",
+             "SELECT\n\t[\n\t\t1,\n\t];\n\n"},
+            {"select [\n1,]",
+             "SELECT\n\t[\n\t\t1,\n\t];\n\n"},
+            {"select [1,2,\n3,4]",
+             "SELECT\n\t[\n\t\t1, 2,\n\t\t3, 4\n\t];\n\n"},
+            {"select [1,2,\n3,4,]",
+             "SELECT\n\t[\n\t\t1, 2,\n\t\t3, 4,\n\t];\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineTuple) {
+        TCases cases = {
+            {"select (\n)",
+             "SELECT\n\t(\n\t);\n\n"},
+            {"select (1,\n)",
+             "SELECT\n\t(\n\t\t1,\n\t);\n\n"},
+            {"select (1\n,)",
+             "SELECT\n\t(\n\t\t1,\n\t);\n\n"},
+            {"select (\n1,)",
+             "SELECT\n\t(\n\t\t1,\n\t);\n\n"},
+            {"select (1,2,\n3,4)",
+             "SELECT\n\t(\n\t\t1, 2,\n\t\t3, 4\n\t);\n\n"},
+            {"select (1,2,\n3,4,)",
+             "SELECT\n\t(\n\t\t1, 2,\n\t\t3, 4,\n\t);\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineSet) {
+        TCases cases = {
+            {"select {\n}",
+             "SELECT\n\t{\n\t};\n\n"},
+            {"select {1\n}",
+             "SELECT\n\t{\n\t\t1\n\t};\n\n"},
+            {"select {\n1}",
+             "SELECT\n\t{\n\t\t1\n\t};\n\n"},
+            {"select {1,\n}",
+             "SELECT\n\t{\n\t\t1,\n\t};\n\n"},
+            {"select {1\n,}",
+             "SELECT\n\t{\n\t\t1,\n\t};\n\n"},
+            {"select {\n1,}",
+             "SELECT\n\t{\n\t\t1,\n\t};\n\n"},
+            {"select {1,2,\n3,4}",
+             "SELECT\n\t{\n\t\t1, 2,\n\t\t3, 4\n\t};\n\n"},
+            {"select {1,2,\n3,4,}",
+             "SELECT\n\t{\n\t\t1, 2,\n\t\t3, 4,\n\t};\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineDict) {
+        TCases cases = {
+            {"select {0:1\n}",
+             "SELECT\n\t{\n\t\t0: 1\n\t};\n\n"},
+            {"select {\n0:1}",
+             "SELECT\n\t{\n\t\t0: 1\n\t};\n\n"},
+            {"select {0:1,\n}",
+             "SELECT\n\t{\n\t\t0: 1,\n\t};\n\n"},
+            {"select {0:1\n,}",
+             "SELECT\n\t{\n\t\t0: 1,\n\t};\n\n"},
+            {"select {\n0:1,}",
+             "SELECT\n\t{\n\t\t0: 1,\n\t};\n\n"},
+            {"select {10:1,20:2,\n30:3,40:4}",
+             "SELECT\n\t{\n\t\t10: 1, 20: 2,\n\t\t30: 3, 40: 4\n\t};\n\n"},
+            {"select {10:1,20:2,\n30:3,40:4,}",
+             "SELECT\n\t{\n\t\t10: 1, 20: 2,\n\t\t30: 3, 40: 4,\n\t};\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineFuncCall) {
+        TCases cases = {
+            {"select f(\n)",
+             "SELECT\n\tf(\n\t);\n\n"},
+            {"select f(1\n)",
+             "SELECT\n\tf(\n\t\t1\n\t);\n\n"},
+            {"select f(\n1)",
+             "SELECT\n\tf(\n\t\t1\n\t);\n\n"},
+            {"select f(1,\n)",
+             "SELECT\n\tf(\n\t\t1,\n\t);\n\n"},
+            {"select f(1\n,)",
+             "SELECT\n\tf(\n\t\t1,\n\t);\n\n"},
+            {"select f(\n1,)",
+             "SELECT\n\tf(\n\t\t1,\n\t);\n\n"},
+            {"select f(1,2,\n3,4)",
+             "SELECT\n\tf(\n\t\t1, 2,\n\t\t3, 4\n\t);\n\n"},
+            {"select f(1,2,\n3,4,)",
+             "SELECT\n\tf(\n\t\t1, 2,\n\t\t3, 4,\n\t);\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineStruct) {
+        TCases cases = {
+            {"select <|\n|>",
+             "SELECT\n\t<|\n\t|>;\n\n"},
+            {"select <|a:1\n|>",
+             "SELECT\n\t<|\n\t\ta: 1\n\t|>;\n\n"},
+            {"select <|\na:1|>",
+             "SELECT\n\t<|\n\t\ta: 1\n\t|>;\n\n"},
+            {"select <|a:1,\n|>",
+             "SELECT\n\t<|\n\t\ta: 1,\n\t|>;\n\n"},
+            {"select <|a:1\n,|>",
+             "SELECT\n\t<|\n\t\ta: 1,\n\t|>;\n\n"},
+            {"select <|\na:1,|>",
+             "SELECT\n\t<|\n\t\ta: 1,\n\t|>;\n\n"},
+            {"select <|a:1,b:2,\nc:3,d:4|>",
+             "SELECT\n\t<|\n\t\ta: 1, b: 2,\n\t\tc: 3, d: 4\n\t|>;\n\n"},
+            {"select <|a:1,b:2,\nc:3,d:4,|>",
+             "SELECT\n\t<|\n\t\ta: 1, b: 2,\n\t\tc: 3, d: 4,\n\t|>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineListType) {
+        TCases cases = {
+            {"select list<int32\n>",
+             "SELECT\n\tlist<\n\t\tint32\n\t>;\n\n"},
+            {"select list<\nint32>",
+             "SELECT\n\tlist<\n\t\tint32\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineOptionalType) {
+        TCases cases = {
+            {"select optional<int32\n>",
+             "SELECT\n\toptional<\n\t\tint32\n\t>;\n\n"},
+            {"select optional<\nint32>",
+             "SELECT\n\toptional<\n\t\tint32\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineStreamType) {
+        TCases cases = {
+            {"select stream<int32\n>",
+             "SELECT\n\tstream<\n\t\tint32\n\t>;\n\n"},
+            {"select stream<\nint32>",
+             "SELECT\n\tstream<\n\t\tint32\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineFlowType) {
+        TCases cases = {
+            {"select flow<int32\n>",
+             "SELECT\n\tflow<\n\t\tint32\n\t>;\n\n"},
+            {"select flow<\nint32>",
+             "SELECT\n\tflow<\n\t\tint32\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineSetType) {
+        TCases cases = {
+            {"select set<int32\n>",
+             "SELECT\n\tset<\n\t\tint32\n\t>;\n\n"},
+            {"select set<\nint32>",
+             "SELECT\n\tset<\n\t\tint32\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineTupleType) {
+        TCases cases = {
+            {"select tuple<\n>",
+             "SELECT\n\ttuple<\n\t\t \n\t>;\n\n"},
+            {"select tuple<int32\n>",
+             "SELECT\n\ttuple<\n\t\tint32\n\t>;\n\n"},
+            {"select tuple<\nint32>",
+             "SELECT\n\ttuple<\n\t\tint32\n\t>;\n\n"},
+            {"select tuple<int32,\n>",
+             "SELECT\n\ttuple<\n\t\tint32,\n\t>;\n\n"},
+            {"select tuple<int32\n,>",
+             "SELECT\n\ttuple<\n\t\tint32,\n\t>;\n\n"},
+            {"select tuple<\nint32,>",
+             "SELECT\n\ttuple<\n\t\tint32,\n\t>;\n\n"},
+            {"select tuple<\nint32,string,\ndouble,bool>",
+             "SELECT\n\ttuple<\n\t\tint32, string,\n\t\tdouble, bool\n\t>;\n\n"},
+            {"select tuple<\nint32,string,\ndouble,bool,>",
+             "SELECT\n\ttuple<\n\t\tint32, string,\n\t\tdouble, bool,\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineStructType) {
+        TCases cases = {
+            {"select struct<\n>",
+             "SELECT\n\tstruct<\n\t\t \n\t>;\n\n"},
+            {"select struct<a:int32\n>",
+             "SELECT\n\tstruct<\n\t\ta: int32\n\t>;\n\n"},
+            {"select struct<\na:int32>",
+             "SELECT\n\tstruct<\n\t\ta: int32\n\t>;\n\n"},
+            {"select struct<a:int32,\n>",
+             "SELECT\n\tstruct<\n\t\ta: int32,\n\t>;\n\n"},
+            {"select struct<a:int32\n,>",
+             "SELECT\n\tstruct<\n\t\ta: int32,\n\t>;\n\n"},
+            {"select struct<\na:int32,>",
+             "SELECT\n\tstruct<\n\t\ta: int32,\n\t>;\n\n"},
+            {"select struct<\na:int32,b:string,\nc:double,d:bool>",
+             "SELECT\n\tstruct<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool\n\t>;\n\n"},
+            {"select struct<\na:int32,b:string,\nc:double,d:bool,>",
+             "SELECT\n\tstruct<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool,\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineVariantOverTupleType) {
+        TCases cases = {
+            {"select variant<int32\n>",
+             "SELECT\n\tvariant<\n\t\tint32\n\t>;\n\n"},
+            {"select variant<\nint32>",
+             "SELECT\n\tvariant<\n\t\tint32\n\t>;\n\n"},
+            {"select variant<int32,\n>",
+             "SELECT\n\tvariant<\n\t\tint32,\n\t>;\n\n"},
+            {"select variant<int32\n,>",
+             "SELECT\n\tvariant<\n\t\tint32,\n\t>;\n\n"},
+            {"select variant<\nint32,>",
+             "SELECT\n\tvariant<\n\t\tint32,\n\t>;\n\n"},
+            {"select variant<\nint32,string,\ndouble,bool>",
+             "SELECT\n\tvariant<\n\t\tint32, string,\n\t\tdouble, bool\n\t>;\n\n"},
+            {"select variant<\nint32,string,\ndouble,bool,>",
+             "SELECT\n\tvariant<\n\t\tint32, string,\n\t\tdouble, bool,\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineVariantOverStructType) {
+        TCases cases = {
+            {"select variant<a:int32\n>",
+             "SELECT\n\tvariant<\n\t\ta: int32\n\t>;\n\n"},
+            {"select variant<\na:int32>",
+             "SELECT\n\tvariant<\n\t\ta: int32\n\t>;\n\n"},
+            {"select variant<a:int32,\n>",
+             "SELECT\n\tvariant<\n\t\ta: int32,\n\t>;\n\n"},
+            {"select variant<a:int32\n,>",
+             "SELECT\n\tvariant<\n\t\ta: int32,\n\t>;\n\n"},
+            {"select variant<\na:int32,>",
+             "SELECT\n\tvariant<\n\t\ta: int32,\n\t>;\n\n"},
+            {"select variant<\na:int32,b:string,\nc:double,d:bool>",
+             "SELECT\n\tvariant<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool\n\t>;\n\n"},
+            {"select variant<\na:int32,b:string,\nc:double,d:bool,>",
+             "SELECT\n\tvariant<\n\t\ta: int32, b: string,\n\t\tc: double, d: bool,\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineEnum) {
+        TCases cases = {
+            {"select enum<a\n>",
+             "SELECT\n\tenum<\n\t\ta\n\t>;\n\n"},
+            {"select enum<\na>",
+             "SELECT\n\tenum<\n\t\ta\n\t>;\n\n"},
+            {"select enum<a,\n>",
+             "SELECT\n\tenum<\n\t\ta,\n\t>;\n\n"},
+            {"select enum<a\n,>",
+             "SELECT\n\tenum<\n\t\ta,\n\t>;\n\n"},
+            {"select enum<\na,>",
+             "SELECT\n\tenum<\n\t\ta,\n\t>;\n\n"},
+            {"select enum<\na,b,\nc,d>",
+             "SELECT\n\tenum<\n\t\ta, b,\n\t\tc, d\n\t>;\n\n"},
+            {"select enum<\na,b,\nc,d,>",
+             "SELECT\n\tenum<\n\t\ta, b,\n\t\tc, d,\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineResourceType) {
+        TCases cases = {
+            {"select resource<foo\n>",
+             "SELECT\n\tresource<\n\t\tfoo\n\t>;\n\n"},
+            {"select resource<\nfoo>",
+             "SELECT\n\tresource<\n\t\tfoo\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineTaggedType) {
+        TCases cases = {
+            {"select tagged<int32,foo\n>",
+             "SELECT\n\ttagged<\n\t\tint32, foo\n\t>;\n\n"},
+            {"select tagged<int32,\nfoo>",
+             "SELECT\n\ttagged<\n\t\tint32,\n\t\tfoo\n\t>;\n\n"},
+            {"select tagged<int32\n,foo>",
+             "SELECT\n\ttagged<\n\t\tint32, foo\n\t>;\n\n"},
+            {"select tagged<\nint32,foo>",
+             "SELECT\n\ttagged<\n\t\tint32, foo\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineDictType) {
+        TCases cases = {
+            {"select dict<int32,string\n>",
+             "SELECT\n\tdict<\n\t\tint32, string\n\t>;\n\n"},
+            {"select dict<int32,\nstring>",
+             "SELECT\n\tdict<\n\t\tint32,\n\t\tstring\n\t>;\n\n"},
+            {"select dict<int32\n,string>",
+             "SELECT\n\tdict<\n\t\tint32, string\n\t>;\n\n"},
+            {"select dict<\nint32,string>",
+             "SELECT\n\tdict<\n\t\tint32, string\n\t>;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiLineCallableType) {
+        TCases cases = {
+            {"select callable<()->int32\n>",
+             "SELECT\n\tcallable<\n\t\t() -> int32\n\t>;\n\n"},
+            {"select callable<\n()->int32>",
+             "SELECT\n\tcallable<\n\t\t() -> int32\n\t>;\n\n"},
+            {"select callable<\n(int32)->int32>",
+             "SELECT\n\tcallable<\n\t\t(int32) -> int32\n\t>;\n\n"},
+            {"select callable<\n(int32,\ndouble)->int32>",
+             "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32,\n\t\t\tdouble\n\t\t) -> int32\n\t>;\n\n"},
+            {"select callable<\n(int32\n,double)->int32>",
+             "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32, double\n\t\t) -> int32\n\t>;\n\n"},
         };
 
         TSetup setup;

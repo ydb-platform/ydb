@@ -369,6 +369,10 @@ public:
         Counters->ReadActorsCount->Inc();
     }
 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::KQP_SOURCE_READ_ACTOR;
+    }
+
     virtual ~TKqpReadActor() {
         if (!Results.empty() && Alloc) {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);

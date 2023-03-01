@@ -2,8 +2,7 @@
 
 #include <util/string/join.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 using namespace NScheme;
 
@@ -16,9 +15,9 @@ namespace {
     }
 
     TStatus RecursiveList(TVector<TSchemeEntry>& dst, TSchemeClient& client,
-            const TString& path, const TRecursiveListSettings& settings, bool addSelf = false) {
-
-        auto list = client.ListDirectory(path, settings.ListDirectorySettings_).GetValueSync();
+            const TString& path, const TRecursiveListSettings& settings, bool addSelf = false)
+    {
+        auto list = client.ListDirectory(path, settings.ListDirectorySettings_).ExtractValueSync();
         if (!list.IsSuccess()) {
             return list;
         }
@@ -57,12 +56,11 @@ namespace {
 } // anonymous
 
 TRecursiveListResult RecursiveList(TSchemeClient& client, const TString& path,
-        const TRecursiveListSettings& settings, bool addSelf) {
-
+        const TRecursiveListSettings& settings, bool addSelf)
+{
     TVector<TSchemeEntry> entries;
     auto status = RecursiveList(entries, client, path, settings, addSelf);
     return {entries, status};
 }
 
-}
 }

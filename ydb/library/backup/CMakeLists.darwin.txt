@@ -18,7 +18,7 @@ target_link_libraries(kikimr_backup PUBLIC
   ydb-library-dynumber
   api-grpc
   api-protos
-  ydb_cli-dump-util
+  common
   public-lib-yson_value
   cpp-client-ydb_proto
   cpp-client-ydb_scheme

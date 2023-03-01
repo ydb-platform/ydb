@@ -7,8 +7,7 @@
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 inline void AddPath(NYql::TIssues& issues, const TString& path) {
     issues.AddIssue(NYql::TIssue(TStringBuilder() << "Path: " << path)
@@ -42,8 +41,6 @@ inline TResult Result(const TString& path, TStatus&& status) {
 
 TStatus DescribeTable(NTable::TTableClient& tableClient, const TString& path, TMaybe<NTable::TTableDescription>& out);
 
-void ExponentialBackoff(TDuration& sleep, TDuration max = TDuration::Minutes(5));
-
 NScheme::TDescribePathResult DescribePath(
     NScheme::TSchemeClient& schemeClient,
     const TString& path,
@@ -54,17 +51,4 @@ TStatus MakeDirectory(
     const TString& path,
     const NScheme::TMakeDirectorySettings& settings = {});
 
-TStatus RemoveDirectory(
-    NScheme::TSchemeClient& schemeClient,
-    const TString& path,
-    const NScheme::TRemoveDirectorySettings& settings = {});
-
-TStatus RemoveDirectoryRecursive(
-    NTable::TTableClient& tableClient,
-    NScheme::TSchemeClient& schemeClient,
-    const TString& path,
-    const NScheme::TRemoveDirectorySettings& settings = {},
-    bool removeSelf = true);
-
-} // NDump
-} // NYdb
+}

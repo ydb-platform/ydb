@@ -1,5 +1,6 @@
 #include "restore_import_data.h"
 
+#include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
@@ -801,15 +802,15 @@ class TDataWriter: public NPrivate::IDataWriter {
 
                 case EStatus::OVERLOADED:
                 case EStatus::CLIENT_RESOURCE_EXHAUSTED:
-                    ExponentialBackoff(retrySleep);
+                    NConsoleClient::ExponentialBackoff(retrySleep);
                     break;
 
                 case EStatus::UNAVAILABLE:
-                    ExponentialBackoff(retrySleep);
+                    NConsoleClient::ExponentialBackoff(retrySleep);
                     break;
 
                 case EStatus::TRANSPORT_UNAVAILABLE:
-                    ExponentialBackoff(retrySleep);
+                    NConsoleClient::ExponentialBackoff(retrySleep);
                     break;
 
                 default:

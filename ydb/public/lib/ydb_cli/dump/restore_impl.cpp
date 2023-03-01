@@ -4,7 +4,8 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
 #include <util/generic/hash.h>
@@ -65,7 +66,7 @@ bool HasRunningIndexBuilds(TOperationClient& client, const TString& dbPath) {
                 case EStatus::CLIENT_RESOURCE_EXHAUSTED:
                 case EStatus::UNAVAILABLE:
                 case EStatus::TRANSPORT_UNAVAILABLE:
-                    ExponentialBackoff(retrySleep);
+                    NConsoleClient::ExponentialBackoff(retrySleep);
                     break;
                 default:
                     Y_ENSURE(false, "Unexpected status while trying to list operations: " << operations.GetStatus());
@@ -160,7 +161,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
         switch (entry.Type) {
             case ESchemeEntryType::Directory: {
-                auto result = RemoveDirectoryRecursive(TableClient, SchemeClient, fullPath, {}, true);
+                auto result = NConsoleClient::RemoveDirectoryRecursive(SchemeClient, TableClient, fullPath);
                 if (!result.IsSuccess()) {
                     return restoreResult;
                 }

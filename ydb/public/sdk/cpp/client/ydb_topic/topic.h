@@ -476,7 +476,9 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
 
 
 // Settings for drop resource request.
-struct TDropTopicSettings : public TOperationRequestSettings<TDropTopicSettings> {};
+struct TDropTopicSettings : public TOperationRequestSettings<TDropTopicSettings> {
+    using TOperationRequestSettings<TDropTopicSettings>::TOperationRequestSettings;
+};
 
 // Settings for describe resource request.
 struct TDescribeTopicSettings : public TOperationRequestSettings<TDescribeTopicSettings> {

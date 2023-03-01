@@ -1242,7 +1242,9 @@ struct TCreateTableSettings : public TOperationRequestSettings<TCreateTableSetti
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TDropTableSettings : public TOperationRequestSettings<TDropTableSettings> {};
+struct TDropTableSettings : public TOperationRequestSettings<TDropTableSettings> {
+    using TOperationRequestSettings<TDropTableSettings>::TOperationRequestSettings;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

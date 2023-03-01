@@ -474,9 +474,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
 
         auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        if (Order != SortOrder::Descending) { // bug in datashard
-            UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(collectedKeys, Order)), ALL);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(collectedKeys, Order)), ALL);
     }
 
     Y_UNIT_TEST_SORT(ChoosePartition, Order) {
@@ -518,9 +516,6 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         shim->SetupResultsCapture(2);
         InterceptReadActorPipeCache(runtime->Register(shim));
         SendScanQuery(runtime, kqpProxy, sender, "SELECT Key FROM `/Root/KeyValueLargePartition`" + OrderBy(Order));
-        if (Order == SortOrder::Descending) { // bug in datashard
-            return;
-        }
 
         shim->ReadsReceived.WaitI();
         Cerr << "starting split -----------------------------------------------------------" << Endl;
@@ -580,9 +575,6 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         shim->SetupResultsCapture(1);
         InterceptReadActorPipeCache(runtime->Register(shim));
         SendScanQuery(runtime, kqpProxy, sender, "SELECT Key FROM `/Root/KeyValueLargePartition`" + OrderBy(Order));
-        if (Order == SortOrder::Descending) { // bug in datashard
-            return;
-        }
 
         shim->ReadsReceived.WaitI();
         Cerr << "starting split -----------------------------------------------------------" << Endl;

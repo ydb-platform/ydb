@@ -35,10 +35,6 @@ namespace {
 
 const TString AuthNode = "authentication";
 
-std::shared_ptr<IProfileManager> CreateYdbProfileManager(const TString& ydbDir) {
-    return CreateProfileManager(TStringBuilder() << HomeDir << '/' << ydbDir << "/config/config.yaml");
-}
-
 TCommandConfig::TCommandConfig()
     : TClientCommandTree("config", {}, "Manage YDB CLI configuration")
 {
@@ -270,7 +266,7 @@ void TCommandInit::Config(TConfig& config) {
 int TCommandInit::Run(TConfig& config) {
     //Y_UNUSED(config);
     Cout << "Welcome! This command will take you through the configuration process." << Endl;
-    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    auto profileManager = CreateProfileManager(config.ProfileFile);
     TString profileName;
     SetupProfileName(profileName, profileManager);
     ConfigureProfile(profileName, profileManager, config, true, false);
@@ -651,7 +647,7 @@ int TCommandCreateProfile::Run(TConfig& config) {
 //    Y_UNUSED(config);
     TString profileName = ProfileName;
     Interactive = (!AnyProfileOptionInCommandLine() || !profileName) && IsStdinInteractive();
-    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    auto profileManager = CreateProfileManager(config.ProfileFile);
     if (Interactive) {
         Cout << "Welcome! This command will take you through configuration profile creation process." << Endl;
     }
@@ -696,7 +692,7 @@ void TCommandDeleteProfile::Parse(TConfig& config) {
 
 int TCommandDeleteProfile::Run(TConfig& config) {
     Y_UNUSED(config);
-    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    auto profileManager = CreateProfileManager(config.ProfileFile);
     const auto profileNames = profileManager->ListProfiles();
     if (ProfileName) {
         if (find(profileNames.begin(), profileNames.end(), ProfileName) == profileNames.end()) {
@@ -777,7 +773,7 @@ void TCommandActivateProfile::Parse(TConfig& config) {
 }
 
 int TCommandActivateProfile::Run(TConfig& config) {
-    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    auto profileManager = CreateProfileManager(config.ProfileFile);
     const auto profileNames = profileManager->ListProfiles();
     if (ProfileName) {
         if (find(profileNames.begin(), profileNames.end(), ProfileName) == profileNames.end()) {
@@ -853,7 +849,7 @@ void TCommandDeactivateProfile::Config(TConfig& config) {
 }
 
 int TCommandDeactivateProfile::Run(TConfig& config) {
-    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    auto profileManager = CreateProfileManager(config.ProfileFile);
     TString currentActiveProfileName = profileManager->GetActiveProfileName();
     if (currentActiveProfileName) {
         profileManager->DeactivateProfile();
@@ -879,7 +875,7 @@ void TCommandListProfiles::Config(TConfig& config) {
 
 int TCommandListProfiles::Run(TConfig& config) {
     Y_UNUSED(config);
-    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    auto profileManager = CreateProfileManager(config.ProfileFile);
     const auto profileNames = profileManager->ListProfiles();
     TString activeProfileName = profileManager->GetActiveProfileName();
     for (const auto& profileName : profileNames) {
@@ -918,7 +914,7 @@ void TCommandGetProfile::Parse(TConfig& config) {
 
 int TCommandGetProfile::Run(TConfig& config) {
     Y_UNUSED(config);
-    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    auto profileManager = CreateProfileManager(config.ProfileFile);
     const auto profileNames = profileManager->ListProfiles();
     if (ProfileName) {
         if (find(profileNames.begin(), profileNames.end(), ProfileName) == profileNames.end()) {
@@ -1024,7 +1020,7 @@ void TCommandUpdateProfile::Parse(TConfig& config) {
 }
 
 int TCommandUpdateProfile::Run(TConfig& config) {
-    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    auto profileManager = CreateProfileManager(config.ProfileFile);
     if (!profileManager->HasProfile(ProfileName)) {
         Cerr << "No existing profile \"" << ProfileName << "\". "
              << "Run \"ydb config profile list\" without arguments to see existing profiles" << Endl;
@@ -1054,7 +1050,7 @@ void TCommandReplaceProfile::Parse(TConfig& config) {
 }
 
 int TCommandReplaceProfile::Run(TConfig& config) {
-    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    auto profileManager = CreateProfileManager(config.ProfileFile);
     profileManager->RemoveProfile(ProfileName);
     profileManager->CreateProfile(ProfileName);
     ConfigureProfile(ProfileName, profileManager, config, false, true);

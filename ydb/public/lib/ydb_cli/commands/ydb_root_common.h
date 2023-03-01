@@ -54,6 +54,7 @@ private:
     }
 
     TString ProfileName;
+    TString ProfileFile;
     std::shared_ptr<IProfile> Profile;
     std::shared_ptr<IProfileManager> ProfileManager;
 

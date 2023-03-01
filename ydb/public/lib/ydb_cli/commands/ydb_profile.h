@@ -6,8 +6,6 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-std::shared_ptr<IProfileManager> CreateYdbProfileManager(const TString& ydbDir);
-
 class TCommandConfig : public TClientCommandTree {
 public:
     TCommandConfig();

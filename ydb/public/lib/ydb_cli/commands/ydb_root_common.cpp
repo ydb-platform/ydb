@@ -69,7 +69,6 @@ void TClientCommandRootCommon::ValidateSettings() {
 }
 
 void TClientCommandRootCommon::FillConfig(TConfig& config) {
-    config.YdbDir = Settings.YdbDir;
     config.UseOAuthToken = Settings.UseOAuthToken.GetRef();
     config.UseIamAuth = Settings.UseIamAuth.GetRef();
     config.UseStaticCredentials = Settings.UseStaticCredentials.GetRef();
@@ -121,7 +120,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         .Optional().NoArgument().Handler0([&](){
             VerbosityLevel++;
         });
-
+    opts.AddLongOption('p', "profile", "Profile name to use configuration parameters from.")
+        .RequiredArgument("NAME").StoreResult(&ProfileName);
     TClientCommandRootBase::Config(config);
 
     if (config.UseIamAuth) {
@@ -217,8 +217,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             .StoreResult(&IamEndpoint);
     }
 
-    opts.AddLongOption('p', "profile", "Profile name to use configuration parameters from.")
-        .RequiredArgument("NAME").StoreResult(&ProfileName);
+    opts.AddLongOption("profile-file", "Path to config file with profile data in yaml format")
+        .RequiredArgument("PATH").StoreResult(&ProfileFile);
 
     TStringStream stream;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -232,7 +232,15 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 }
 
 void TClientCommandRootCommon::Parse(TConfig& config) {
-    ProfileManager = CreateYdbProfileManager(Settings.YdbDir);
+    if (ProfileFile.empty()) {
+        config.ProfileFile = TStringBuilder() << HomeDir << '/' << Settings.YdbDir << "/config/config.yaml";
+    } else {
+        config.ProfileFile = TFsPath(ProfileFile).RealLocation().GetPath();
+    }
+    if (TFsPath(config.ProfileFile).Exists() && !TFsPath(config.ProfileFile).IsFile()) {
+        throw TMisuseException() << "\'" << config.ProfileFile << "\' is not a file";
+    }
+    ProfileManager = CreateProfileManager(config.ProfileFile);
     ParseProfile();
 
     TClientCommandRootBase::Parse(config);

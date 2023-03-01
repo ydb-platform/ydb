@@ -106,7 +106,7 @@ public:
         TString IamEndpoint;
         TString YScope;
 
-        TString YdbDir;
+        TString ProfileFile;
         bool UseOAuthToken = true;
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;

@@ -80,7 +80,7 @@ private:
     void ReplyOk(const TActorContext& ctx, const ui64 dst);
     void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie);
 
-    void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, ui64 partitionQuotedTime, TDuration topicQuotedTime, ui64 queueTime, ui64 writeTime);
+    void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, TDuration partitionQuotedTime, TDuration topicQuotedTime, TDuration queueTime, TDuration writeTime);
 
     void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
@@ -291,6 +291,12 @@ private:
     void RequestConfig(const TActorContext& ctx);
     void HandleConfig(const NKikimrClient::TResponse& res, const TActorContext& ctx);
     void Initialize(const TActorContext& ctx);
+
+    template <typename T>
+    void EmplaceRequest(T&& body, const TActorContext& ctx) {
+        Requests.emplace_back(body, WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now() - TInstant::Zero());
+    }
+    void EmplaceResponse(TMessage&& message, const TActorContext& ctx);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

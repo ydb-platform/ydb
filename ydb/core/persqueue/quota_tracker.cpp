@@ -7,7 +7,6 @@ namespace NKikimr::NPQ {
         , SpeedPerSecond(speedPerSecond)
         , LastUpdateTime(timestamp)
         , MaxBurst(maxBurst)
-        , QuotedTime(0)
     {}
 
     void TQuotaTracker::UpdateConfig(const ui64 maxBurst, const ui64 speedPerSecond) {
@@ -17,14 +16,14 @@ namespace NKikimr::NPQ {
     }
 
     void TQuotaTracker::Update(const TInstant timestamp) {
-        ui64 ms = (timestamp - LastUpdateTime).MilliSeconds();
+        TDuration diff = timestamp - LastUpdateTime;
         LastUpdateTime = timestamp;
 
         if (AvailableSize < 0) {
-            QuotedTime += ms;
+            QuotedTime += diff;
         }
 
-        AvailableSize = Min<i64>(AvailableSize + (ui64)SpeedPerSecond * ms / 1000, MaxBurst);
+        AvailableSize = Min<i64>(AvailableSize + (ui64)SpeedPerSecond * diff.MicroSeconds() / 1000'000, MaxBurst);
     }
 
     bool TQuotaTracker::CanExaust(const TInstant timestamp) {
@@ -38,7 +37,7 @@ namespace NKikimr::NPQ {
         Update(timestamp);
     }
 
-    ui64 TQuotaTracker::GetQuotedTime(const TInstant timestamp) {
+    TDuration TQuotaTracker::GetQuotedTime(const TInstant timestamp) {
         Update(timestamp);
         return QuotedTime;
     }

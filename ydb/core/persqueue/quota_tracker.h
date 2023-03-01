@@ -14,7 +14,7 @@ namespace NKikimr::NPQ {
         bool CanExaust(const TInstant timestamp) ;
         void Exaust(const ui64 size, const TInstant timestamp);
 
-        ui64 GetQuotedTime(const TInstant timestamp);
+        TDuration GetQuotedTime(const TInstant timestamp);
         ui64 GetTotalSpeed() const;
 
     private:
@@ -23,7 +23,7 @@ namespace NKikimr::NPQ {
         TInstant LastUpdateTime;
         ui64 MaxBurst;
 
-        ui64 QuotedTime;
+        TDuration QuotedTime;
     };
 
 } // NKikimr::NPQ

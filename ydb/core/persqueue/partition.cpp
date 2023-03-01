@@ -310,7 +310,7 @@ void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TS
 void TPartition::ReplyWrite(
     const TActorContext& ctx, const ui64 dst, const TString& sourceId, const ui64 seqNo, const ui16 partNo, const ui16 totalParts,
     const ui64 offset, const TInstant writeTimestamp,  bool already, const ui64 maxSeqNo,
-    const ui64 partitionQuotedTime, const TDuration topicQuotedTime, const ui64 queueTime, const ui64 writeTime) {
+    const TDuration partitionQuotedTime, const TDuration topicQuotedTime, const TDuration queueTime, const TDuration writeTime) {
     Y_VERIFY(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
     Y_VERIFY(seqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, seqNo);
 
@@ -329,10 +329,10 @@ void TPartition::ReplyWrite(
         write->SetMaxSeqNo(maxSeqNo);
     write->SetOffset(offset);
 
-    write->SetPartitionQuotedTimeMs(partitionQuotedTime);
+    write->SetPartitionQuotedTimeMs(partitionQuotedTime.MilliSeconds());
     write->SetTopicQuotedTimeMs(topicQuotedTime.MilliSeconds());
-    write->SetTotalTimeInPartitionQueueMs(queueTime);
-    write->SetWriteTimeMs(writeTime);
+    write->SetTotalTimeInPartitionQueueMs(queueTime.MilliSeconds());
+    write->SetWriteTimeMs(writeTime.MilliSeconds());
 
     ctx.Send(Tablet, response.Release());
 }
@@ -868,6 +868,15 @@ void TPartition::Initialize(const TActorContext& ctx) {
             SetupTopicCounters(ctx);
         }
     }
+}
+
+void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
+    Responses.emplace_back(
+        message.Body,
+        WriteQuota->GetQuotedTime(ctx.Now()) - message.QuotedTime,
+        (ctx.Now() - TInstant::Zero()) - message.QueueTime,
+        ctx.Now()
+    );
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {
@@ -1926,14 +1935,13 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
         Owners[owner];
         it = Owners.find(owner);
     }
-    WriteQuota->Update(ctx.Now());
     if (it->second.NeedResetOwner || ev->Force) { //change owner
         Y_VERIFY(ReservedSize >= it->second.ReservedSize);
         ReservedSize -= it->second.ReservedSize;
 
         it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicConverter->GetClientsideName(), Partition, ctx);//will change OwnerCookie
         //cookie is generated. but answer will be sent when all inflight writes will be done - they in the same queue 'Requests'
-        Requests.emplace_back(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now().MilliSeconds(), 0);
+        EmplaceRequest(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, ctx);
         TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
         UpdateWriteBufferIsFullState(ctx.Now());
         ProcessReserveRequests(ctx);
@@ -2968,12 +2976,14 @@ void TPartition::OnReadRequestFinished(TReadInfo&& info, ui64 answerSize) {
 void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     ui64 offset = EndOffset;
     while (!Responses.empty()) {
-        const ui64 quotedTime = Responses.front().QuotedTime;
-        const ui64 queueTime = Responses.front().QueueTime;
-        const ui64 writeTime = ctx.Now().MilliSeconds() - Responses.front().WriteTime;
+        const auto& response = Responses.front();
 
-        if (Responses.front().IsWrite()) {
-            const auto& writeResponse = Responses.front().GetWrite();
+        const TDuration quotedTime = response.QuotedTime;
+        const TDuration queueTime = response.QueueTime;
+        const TDuration writeTime = ctx.Now() - response.WriteTimeBaseline;
+
+        if (response.IsWrite()) {
+            const auto& writeResponse = response.GetWrite();
             const TString& s = writeResponse.Msg.SourceId;
             const ui64& seqNo = writeResponse.Msg.SeqNo;
             const ui16& partNo = writeResponse.Msg.PartNo;
@@ -3026,21 +3036,21 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 ", Offset: " << offset << " is " << (already ? "already written" : "stored on disk")
             );
             if (PartitionWriteQuotaWaitCounter) {
-                PartitionWriteQuotaWaitCounter->IncFor(quotedTime);
+                PartitionWriteQuotaWaitCounter->IncFor(quotedTime.MilliSeconds());
             }
 
             if (!already && partNo + 1 == totalParts)
                 ++offset;
-        } else if (Responses.front().IsOwnership()) {
-            const TString& ownerCookie = Responses.front().GetOwnership().OwnerCookie;
+        } else if (response.IsOwnership()) {
+            const TString& ownerCookie = response.GetOwnership().OwnerCookie;
             auto it = Owners.find(TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie));
             if (it != Owners.end() && it->second.OwnerCookie == ownerCookie) {
-                ReplyOwnerOk(ctx, Responses.front().GetCookie(), ownerCookie);
+                ReplyOwnerOk(ctx, response.GetCookie(), ownerCookie);
             } else {
-                ReplyError(ctx, Responses.front().GetCookie(), NPersQueue::NErrorCode::WRONG_COOKIE, "new GetOwnership request is dropped already");
+                ReplyError(ctx, response.GetCookie(), NPersQueue::NErrorCode::WRONG_COOKIE, "new GetOwnership request is dropped already");
             }
-        } else if (Responses.front().IsRegisterMessageGroup()) {
-            const auto& body = Responses.front().GetRegisterMessageGroup().Body;
+        } else if (response.IsRegisterMessageGroup()) {
+            const auto& body = response.GetRegisterMessageGroup().Body;
 
             TMaybe<TPartitionKeyRange> keyRange;
             if (body.KeyRange) {
@@ -3049,14 +3059,14 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             Y_VERIFY(body.AssignedOffset);
             SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange));
-            ReplyOk(ctx, Responses.front().GetCookie());
-        } else if (Responses.front().IsDeregisterMessageGroup()) {
-            const auto& body = Responses.front().GetDeregisterMessageGroup().Body;
+            ReplyOk(ctx, response.GetCookie());
+        } else if (response.IsDeregisterMessageGroup()) {
+            const auto& body = response.GetDeregisterMessageGroup().Body;
 
             SourceIdStorage.DeregisterSourceId(body.SourceId);
-            ReplyOk(ctx, Responses.front().GetCookie());
-        } else if (Responses.front().IsSplitMessageGroup()) {
-            const auto& split = Responses.front().GetSplitMessageGroup();
+            ReplyOk(ctx, response.GetCookie());
+        } else if (response.IsSplitMessageGroup()) {
+            const auto& split = response.GetSplitMessageGroup();
 
             for (const auto& body : split.Deregistrations) {
                 SourceIdStorage.DeregisterSourceId(body.SourceId);
@@ -3072,7 +3082,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange), true);
             }
 
-            ReplyOk(ctx, Responses.front().GetCookie());
+            ReplyOk(ctx, response.GetCookie());
         } else {
             Y_FAIL("Unexpected message");
         }
@@ -4836,11 +4846,10 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
     ui64 size = 0;
-    WriteQuota->Update(ctx.Now());
     for (auto& msg: ev->Get()->Msgs) {
         size += msg.Data.size();
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
-        Requests.emplace_back(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now().MilliSeconds(), 0);
+        EmplaceRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, ctx);
         if (offset && needToChangeOffset)
             ++*offset;
     }
@@ -4886,8 +4895,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
             "SourceId not found, registration cannot be completed");
     }
 
-    WriteQuota->Update(ctx.Now());
-    Requests.emplace_back(TRegisterMessageGroupMsg(*ev->Get()), WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now().MilliSeconds(), 0);
+    EmplaceRequest(TRegisterMessageGroupMsg(*ev->Get()), ctx);
 }
 
 void TPartition::HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
@@ -4903,9 +4911,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const
         return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED,
             "SourceId doesn't exist");
     }
-
-    WriteQuota->Update(ctx.Now());
-    Requests.emplace_back(TDeregisterMessageGroupMsg(*ev->Get()), WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now().MilliSeconds(), 0);
+    
+    EmplaceRequest(TDeregisterMessageGroupMsg(*ev->Get()), ctx);
 }
 
 void TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
@@ -4943,8 +4950,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TAct
         }
     }
 
-    WriteQuota->Update(ctx.Now());
-    Requests.emplace_back(std::move(msg), WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now().MilliSeconds(), 0);
+    EmplaceRequest(std::move(msg), ctx);
 }
 
 std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool headCleared) {
@@ -5045,8 +5051,6 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
     //Process is following: if batch contains already written messages or only one client message part -> unpack it and process as several TClientBlobs
     //otherwise write this batch as is to head;
 
-    WriteQuota->Update(ctx.Now());
-
     while (!Requests.empty() && WriteCycleSize < MAX_WRITE_CYCLE_SIZE) { //head is not too big
         auto pp = Requests.front();
         Requests.pop_front();
@@ -5082,10 +5086,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 Y_VERIFY(pp.IsOwnership());
             }
 
-            pp.QuotedTime = WriteQuota->GetQuotedTime(ctx.Now()) - pp.QuotedTime; //change to duration
-            pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
-            pp.WriteTime = ctx.Now().MilliSeconds();
-            Responses.push_back(pp);
+            EmplaceResponse(std::move(pp), ctx);
             continue;
         }
 
@@ -5124,10 +5125,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             }
 
             TString().swap(p.Msg.Data);
-            pp.QuotedTime = WriteQuota->GetQuotedTime(ctx.Now()) - pp.QuotedTime; //change to duration
-            pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
-            pp.WriteTime = ctx.Now().MilliSeconds();
-            Responses.push_back(pp);
+            EmplaceResponse(std::move(pp), ctx);
             continue;
         }
 
@@ -5338,10 +5336,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
         }
         TString().swap(p.Msg.Data);
-        pp.QuotedTime = WriteQuota->GetQuotedTime(ctx.Now()) - pp.QuotedTime; //change to duration
-        pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
-        pp.WriteTime = ctx.Now().MilliSeconds();
-        Responses.push_back(pp);
+        EmplaceResponse(std::move(pp), ctx);
     }
 
     UpdateWriteBufferIsFullState(ctx.Now());

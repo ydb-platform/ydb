@@ -183,6 +183,8 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateExternalDataSource = 148         [(CounterOpts) = {Name: "InFlightOps/CreateExternalDataSource"}];
     COUNTER_IN_FLIGHT_OPS_TxDropExternalDataSource = 149           [(CounterOpts) = {Name: "InFlightOps/DropExternalDataSource"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterExternalDataSource = 150          [(CounterOpts) = {Name: "InFlightOps/AlterExternalDataSource"}];
+
+    COUNTER_PQ_STATS_QUEUE_SIZE = 151                         [(CounterOpts) = {Name: "PQStatsQueueSize"}];
 }
 
 enum ECumulativeCounters {
@@ -297,6 +299,8 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateExternalDataSource = 91  [(CounterOpts) = {Name: "FinishedOps/CreateExternalDataSource"}];
     COUNTER_FINISHED_OPS_TxDropExternalDataSource = 92    [(CounterOpts) = {Name: "FinishedOps/DropExternalDataSource"}];
     COUNTER_FINISHED_OPS_TxAlterExternalDataSource = 93   [(CounterOpts) = {Name: "FinishedOps/AlterExternalDataSource"}];
+
+    COUNTER_PQ_STATS_WRITTEN = 94                           [(CounterOpts) = {Name: "PQStatsWritten"}];
 }
 
 enum EPercentileCounters {
@@ -391,6 +395,17 @@ enum EPercentileCounters {
 
     COUNTER_STATS_BATCH_LATENCY = 5 [(CounterOpts) = {
         Name: "StatsBatchLatency",
+        Ranges: { Value: 1000        Name: "1 ms"         }
+        Ranges: { Value: 10000       Name: "10 ms"        }
+        Ranges: { Value: 50000       Name: "50 ms"        }
+        Ranges: { Value: 100000      Name: "100 ms"       }
+        Ranges: { Value: 200000      Name: "200 ms"       }
+        Ranges: { Value: 500000      Name: "500 ms"       }
+        Ranges: { Value: 1000000     Name: "1000 ms"      }
+    }];
+
+    COUNTER_PQ_STATS_BATCH_LATENCY = 6 [(CounterOpts) = {
+        Name: "PQStatsBatchLatency",
         Ranges: { Value: 1000        Name: "1 ms"         }
         Ranges: { Value: 10000       Name: "10 ms"        }
         Ranges: { Value: 50000       Name: "50 ms"        }

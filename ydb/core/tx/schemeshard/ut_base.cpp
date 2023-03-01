@@ -10550,7 +10550,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         );
     }
 
-    Y_UNIT_TEST(TopicMeteringModeAndStorageSize) {
+    Y_UNIT_TEST(TopicReserveSize) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -10558,7 +10558,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         const auto AssertReserve = [&] (TString path, ui64 expectedReservedStorage) {
             TestDescribeResult(DescribePath(runtime, path),
                                {NLs::Finished,
-                                NLs::PQReservedStorage(expectedReservedStorage)});
+                                NLs::TopicReservedStorage(expectedReservedStorage)});
         };
 
         // create with WriteSpeedInBytesPerSecond
@@ -10770,5 +10770,4 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         AssertReserve("/MyRoot/Topic2", 3 * 17);
     }
-
 }

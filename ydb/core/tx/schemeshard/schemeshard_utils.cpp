@@ -1,6 +1,7 @@
 #include "schemeshard_utils.h"
 
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 
 namespace NKikimr {
@@ -200,22 +201,8 @@ void TSelfPinger::ScheduleSelfPingWakeup(const NActors::TActorContext &ctx) {
 }
 
 PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions) {
-    const auto& partitionConfig = tabletConfig.GetPartitionConfig();
-
-    if (tabletConfig.GetMeteringMode() == NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY) {
-        const ui64 throughput = partitions * partitionConfig.GetWriteSpeedInBytesPerSecond();
-
-        Throughput = throughput;
-
-        if (partitionConfig.HasStorageLimitBytes()) {
-            Storage = partitions * partitionConfig.GetStorageLimitBytes();
-        } else {
-            Storage = throughput * partitionConfig.GetLifetimeSeconds();
-        }
-    } else {
-        Throughput = 0;
-        Storage = 0;
-    }
+    Storage = partitions * NPQ::TopicPartitionReserveSize(tabletConfig);
+    Throughput = partitions * NPQ::TopicPartitionReserveThroughput(tabletConfig);
 }
 
 }

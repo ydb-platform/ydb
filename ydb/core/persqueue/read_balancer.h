@@ -1,5 +1,7 @@
 #pragma once
 
+#include "utils.h"
+
 #include <util/system/hp_timer.h>
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -178,9 +180,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     }
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {
+        LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, TStringBuilder() << "TPersQueueReadBalancer::HandleWakeup");
+
         GetStat(ctx); //TODO: do it only on signals from outerspace right now
 
-        ctx.Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup()); //TODO: remove it
+        ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec()), new TEvents::TEvWakeup()); //TODO: remove it
     }
 
     void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
@@ -242,7 +246,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         }
         RegisterEvents.clear();
 
-        ctx.Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup()); //TODO: remove it
+        ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec()), new TEvents::TEvWakeup()); //TODO: remove it
         ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
     }
 
@@ -270,6 +274,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     TStringBuilder GetPrefix() const;
 
+    TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&);
     void RestartPipe(const ui64 tabletId, const TActorContext&);
     void CheckStat(const TActorContext&);
@@ -293,6 +298,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     struct TPipeInfo;
     void UnregisterSession(const TActorId& pipe, const TActorContext& ctx);
     void RebuildStructs();
+    ui64 PartitionReserveSize() {
+        return TopicPartitionReserveSize(TabletConfig);
+    }
+
 
     bool Inited;
     ui64 PathId;
@@ -431,6 +440,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui64 MaxAvgSpeedHour;
     ui64 TotalAvgSpeedDay;
     ui64 MaxAvgSpeedDay;
+    ui64 TotalDataSize;
+    ui64 TotalUsedReserveSize;
+
+    ui64 StatsReportRound;
 
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
@@ -467,6 +480,9 @@ public:
         , MaxAvgSpeedHour(0)
         , TotalAvgSpeedDay(0)
         , MaxAvgSpeedDay(0)
+        , TotalDataSize(0)
+        , TotalUsedReserveSize(0)
+        , StatsReportRound(0)
     {}
 
     STFUNC(StateInit) {

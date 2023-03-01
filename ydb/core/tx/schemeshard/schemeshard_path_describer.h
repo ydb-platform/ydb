@@ -32,7 +32,7 @@ class TPathDescriber {
     void DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pathEl, bool returnChannelsBinding);
     void DescribeUserAttributes(TPathElement::TPtr pathEl);
     void DescribePathVersion(const TPath& path);
-    void DescribeDomain(TPathElement::TPtr pathEl);
+    void DescribeDomain(TPathElement::TPtr pathEl) ;
     void DescribeDomainRoot(TPathElement::TPtr pathEl);
     void DescribeDomainExtra(TPathElement::TPtr pathEl);
     void DescribeRevertedMigrations(TPathElement::TPtr pathEl);

@@ -45,6 +45,7 @@ struct TEvPersQueue {
         EvProposeTransaction,
         EvProposeTransactionResult,
         EvCancelTransactionProposal,
+        EvPeriodicTopicStats,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -233,6 +234,9 @@ struct TEvPersQueue {
     };
 
     struct TEvCancelTransactionProposal : public TEventPB<TEvCancelTransactionProposal, NKikimrPQ::TEvCancelTransactionProposal, EvCancelTransactionProposal> {
+    };
+
+    struct TEvPeriodicTopicStats : public TEventPB<TEvPeriodicTopicStats, NKikimrPQ::TEvPeriodicTopicStats, EvPeriodicTopicStats> {
     };
 
 };

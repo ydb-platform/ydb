@@ -8,6 +8,7 @@
 #include "sourceid.h"
 #include "subscriber.h"
 #include "user_info.h"
+#include "utils.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
@@ -308,6 +309,15 @@ public:
         return BodySize + Head.PackedSize;
     }
 
+    ui64 MeteringDataSize(const TActorContext& ctx) const;
+
+    ui64 UsedReserveSize() {
+         return std::min<ui64>(Size(), ReserveSize());
+    }
+
+    ui64 ReserveSize() {
+        return TopicPartitionReserveSize(Config);
+    }
 
 
     //Bootstrap sends kvRead

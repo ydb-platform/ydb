@@ -27,6 +27,7 @@ struct TEvPrivate {
         EvPersistTableStats,
         EvConsoleConfigsTimeout,
         EvRunCdcStreamScan,
+        EvPersistTopicStats,
         EvEnd
     };
 
@@ -161,6 +162,10 @@ struct TEvPrivate {
 
     struct TEvPersistTableStats: public TEventLocal<TEvPersistTableStats, EvPersistTableStats> {
         TEvPersistTableStats() = default;
+    };
+
+    struct TEvPersistTopicStats: public TEventLocal<TEvPersistTopicStats, EvPersistTopicStats> {
+        TEvPersistTopicStats() = default;
     };
 
     struct TEvConsoleConfigsTimeout: public TEventLocal<TEvConsoleConfigsTimeout, EvConsoleConfigsTimeout> {

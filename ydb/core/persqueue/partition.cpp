@@ -1107,15 +1107,26 @@ void TPartition::HandleOnWrite(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActo
 }
 
 
+ui64 TPartition::MeteringDataSize(const TActorContext& ctx) const {
+    ui64 size = Size();
+    if (!DataKeysBody.empty()) {
+        size -= DataKeysBody.front().Size;
+    }
+    auto expired = ctx.Now() - TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds());
+    for(size_t i = 0; i < HeadKeys.size(); ++i) {
+        auto& key = HeadKeys[i];
+        if (expired < key.Timestamp) {
+            break;
+        }
+        size -= key.Size;
+    }
+    return size;
+}
+
 ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
     auto duration = ctx.Now() - LastUsedStorageMeterTimestamp;
     LastUsedStorageMeterTimestamp = ctx.Now();
-    ui64 size = Size();
-    if (DataKeysBody.size() > 0) {
-        size -= DataKeysBody.front().Size;
-    } else {
-        size = 0;
-    }
+    ui64 size = MeteringDataSize(ctx);
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
@@ -2203,7 +2214,8 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
     result.SetReadBytesQuota(maxQuota);
 
-    result.SetPartitionSize(Size());
+    result.SetPartitionSize(MeteringDataSize(ctx));
+    result.SetUsedReserveSize(UsedReserveSize());
     result.SetStartOffset(StartOffset);
     result.SetEndOffset(EndOffset);
 
@@ -2211,6 +2223,13 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     result.SetWriteLagMs(WriteLagMs.GetValue());
 
     *result.MutableErrors() = {Errors.begin(), Errors.end()};
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Topic PartitionStatus PartitionSize: " << result.GetPartitionSize()
+                << " UsedReserveSize: " << result.GetUsedReserveSize()
+                << " ReserveSize: " << ReserveSize()
+                << " PartitionConfig" << Config.GetPartitionConfig();
+    );
 
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result));
 }

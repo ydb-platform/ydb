@@ -286,6 +286,10 @@ public:
     bool TablePersistStatsPending = false;
     TStatsQueue<TEvDataShard::TEvPeriodicTableStats> TableStatsQueue;
 
+    bool TopicStatsBatchScheduled = false;
+    bool TopicPersistStatsPending = false;
+    TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats> TopicStatsQueue;
+
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
     bool CleanDroppedPathsInFly = false;
@@ -988,6 +992,11 @@ public:
     void Handle(TEvPrivate::TEvPersistTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx);
+
+    void ExecuteTopicStatsBatch(const TActorContext& ctx);
+    void ScheduleTopicStatsBatch(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPersistTopicStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev, const TActorContext& ctx);
 

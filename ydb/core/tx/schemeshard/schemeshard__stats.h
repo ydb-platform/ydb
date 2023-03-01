@@ -14,7 +14,7 @@ struct TStatsId {
     TPathId PathId;
     TTabletId Datashard;
 
-    TStatsId(const TPathId& pathId, const TTabletId& datashard)
+    TStatsId(const TPathId& pathId, const TTabletId datashard = TTabletId(0))
         : PathId(pathId)
         , Datashard(datashard)
     {

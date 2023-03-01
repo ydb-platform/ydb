@@ -985,6 +985,20 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
     }
 };
 
+struct TTopicStats {
+    TMessageSeqNo SeqNo;
+
+    ui64 DataSize = 0;
+    ui64 UsedReserveSize = 0;
+
+    TString ToString() const {
+        return TStringBuilder() << "TTopicStats {"
+                                << " DataSize: " << DataSize
+                                << " UsedReserveSize: " << UsedReserveSize
+                                << " }";
+    }
+};
+
 struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
     using TPtr = TIntrusivePtr<TTopicTabletInfo>;
     using TKeySchema = TVector<NScheme::TTypeInfo>;
@@ -1177,6 +1191,8 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TString PreSerializedPathDescription; // Cached path description
     TString PreSerializedPartitionsDescription; // Cached partition description
 
+    TTopicStats Stats;
+
     bool FillKeySchema(const NKikimrPQ::TPQTabletConfig& tabletConfig, TString& error);
     bool FillKeySchema(const TString& tabletConfig);
 
@@ -1322,6 +1338,12 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             ui64 DataSize = 0;
             ui64 IndexSize = 0;
         } Tables;
+
+        struct TTopics {
+            ui64 DataSize = 0;
+            ui64 ReserveSize = 0;
+            ui64 UsedReserveSize = 0;
+        } Topics;
     };
 
     struct TDiskSpaceQuotas {
@@ -1833,6 +1855,11 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
         i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
         counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
+    }
+
+    void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {}) {
+        DiskSpaceUsage.Topics.DataSize += (newAggr.DataSize - oldAggr.DataSize);
+        DiskSpaceUsage.Topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
     }
 
     const TDiskSpaceUsage& GetDiskSpaceUsage() const {

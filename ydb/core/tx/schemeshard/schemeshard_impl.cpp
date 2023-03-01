@@ -3967,6 +3967,10 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             COUNTER_STATS_QUEUE_SIZE,
             COUNTER_STATS_WRITTEN,
             COUNTER_STATS_BATCH_LATENCY)
+    , TopicStatsQueue(this,
+            COUNTER_PQ_STATS_QUEUE_SIZE,
+            COUNTER_PQ_STATS_WRITTEN,
+            COUNTER_PQ_STATS_BATCH_LATENCY)
     , AllowDataColumnForIndexTable(0, 0, 1)
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
@@ -4240,6 +4244,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvSplitAck, Handle);
         HFuncTraced(TEvDataShard::TEvSplitPartitioningChangedAck, Handle);
         HFuncTraced(TEvDataShard::TEvPeriodicTableStats, Handle);
+        HFuncTraced(TEvPersQueue::TEvPeriodicTopicStats, Handle);
         HFuncTraced(TEvDataShard::TEvGetTableStatsResult, Handle);
 
         //
@@ -4355,6 +4360,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvSubscribeToShardDeletion, Handle);
 
         HFuncTraced(TEvPrivate::TEvPersistTableStats, Handle);
+        HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 

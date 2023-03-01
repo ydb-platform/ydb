@@ -186,6 +186,8 @@ message TPQConfig {
     }
 
     optional TMoveTopicActorConfig MoveTopicActorConfig = 51;
+
+    optional uint64 BalancerWakeupIntervalSec = 54 [default = 30];
 }
 
 message TChannelProfile {
@@ -674,6 +676,8 @@ message TStatusResponse {
         repeated TErrorMessage Errors = 29;
 
         repeated TConsumerResult ConsumerResult = 30;
+
+        optional int64 UsedReserveSize = 31;
     }
 
     message TConsumerResult {
@@ -827,6 +831,16 @@ message TEvProposeTransactionResult {
 
 message TEvCancelTransactionProposal {
     optional uint64 TxId = 1;
+};
+
+message TEvPeriodicTopicStats {
+    required uint64 PathId = 1;
+
+    required uint64 Generation = 2;
+    required uint64 Round = 3;
+
+    required uint64 DataSize = 4;
+    required uint64 UsedReserveSize = 5;
 };
 
 message TTransaction {

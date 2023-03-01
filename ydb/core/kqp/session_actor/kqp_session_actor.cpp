@@ -645,7 +645,7 @@ public:
             QueryState ? std::move(QueryState->Orbit) : NLWTrace::TOrbit(),
             QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId());
 
-        RegisterWithSameMailbox(compileRequestActor);
+        CompileActorId = RegisterWithSameMailbox(compileRequestActor);
 
         Become(&TKqpSessionActor::CompileState);
     }
@@ -654,14 +654,18 @@ public:
         ReplyBusy(ev);
     }
 
-    void HandleCompile(TEvKqp::TEvCompileResponse::TPtr& ev) {
-        auto compileResult = ev->Get()->CompileResult;
+    void Handle(TEvKqp::TEvCompileResponse::TPtr& ev) {
+        if (ev->Sender != CompileActorId) {
+            return;
+        }
+        CompileActorId = TActorId{};
         TTimerGuard timer(this);
-        QueryState->Orbit = std::move(ev->Get()->Orbit);
-        QueryState->MaxReadType = compileResult->MaxReadType;
 
+        auto compileResult = ev->Get()->CompileResult;
         YQL_ENSURE(compileResult);
         YQL_ENSURE(QueryState);
+        QueryState->MaxReadType = compileResult->MaxReadType;
+        QueryState->Orbit = std::move(ev->Get()->Orbit);
 
         LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << compileResult->Status);
 
@@ -1192,7 +1196,7 @@ public:
         bool pure = tx && tx->IsPureTx();
         auto request = PrepareRequest(tx, pure, QueryState.get());
 
-        LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " commit: " << commit
+        LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " pure: " << pure << " commit: " << commit
                 << " txCtx.DeferredEffects.size(): " << txCtx.DeferredEffects.Size());
 
         if (!CheckTopicOperations()) {
@@ -1293,33 +1297,18 @@ public:
                 RequestCounters, Settings.Service.GetAggregationConfig(), Settings.Service.GetExecuterRetriesConfig());
 
         auto exId = RegisterWithSameMailbox(executerActor);
-        LOG_D("Created new KQP executer: " << exId);
+        LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
         Send(MakeTxProxyID(), ev.release());
         if (!isRollback) {
             Y_VERIFY(!ExecuterId);
-            ExecuterId = exId;
         }
+        ExecuterId = exId;
     }
 
 
     template<typename T>
     void HandleNoop(T&) {
-    }
-
-    void HandleTxResponse(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
-        if (ev->Sender == ExecuterId) {
-            auto& response = ev->Get()->Record.GetResponse();
-            TIssues issues;
-            IssuesFromMessage(response.GetIssues(), issues);
-
-            auto err = TStringBuilder() << "Got response from our executor: " << ev->Sender
-            << ", Status: " << ev->Get()->Record.GetResponse().GetStatus()
-            << ", Issues: " << issues.ToString()
-            <<  " while we are in " << CurrentStateFuncName();
-            LOG_E(err);
-            YQL_ENSURE(false, "" << err);
-        }
     }
 
     void HandleExecute(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -1444,14 +1433,23 @@ public:
         TlsActivationContext->Send(ev->Forward(ExecuterId));
     }
 
-    void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {
+    void Handle(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
 
-        ExecuterId = TActorId{};
+        if (CompileActorId) {
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), "Request timeout exceeded");
+            Send(std::exchange(CompileActorId, {}), abortEv.Release());
+        }
+
+        if (ExecuterId) {
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), "Request timeout exceeded");
+            Send(std::exchange(ExecuterId, {}), abortEv.Release());
+        }
 
         const auto& issues = ev->Get()->GetIssues();
-        LOG_I("Got TEvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()));
-        ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), "Got AbortExecution", MessageFromIssues(issues));
+        TString logMsg = TStringBuilder() << "got TEvAbortExecution in " << CurrentStateFuncName();
+        LOG_I(logMsg << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()));
+        ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), logMsg, MessageFromIssues(issues));
     }
 
     void CollectSystemViewQueryStats(const NKqpProto::TKqpStatsQuery* stats, TDuration queryDuration,
@@ -1922,6 +1920,9 @@ public:
     }
 
     void HandleCleanup(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        if (ev->Sender != ExecuterId) {
+            return;
+        }
         if (QueryState) {
             QueryState->Orbit = std::move(ev->Get()->Orbit);
         }
@@ -2033,7 +2034,10 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
-                hFunc(TEvKqpExecuter::TEvTxResponse, HandleTxResponse);
+
+                // forgotten messages from previous aborted request
+                hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
+                hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
             default:
                 UnexpectedEvent("ReadyState", ev);
             }
@@ -2048,13 +2052,16 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvQueryRequest, HandleCompile);
-                hFunc(TEvKqp::TEvCompileResponse, HandleCompile);
+                hFunc(TEvKqp::TEvCompileResponse, Handle);
 
+                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, Handle);
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCompile);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
-                hFunc(TEvKqpExecuter::TEvTxResponse, HandleTxResponse);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
+
+                // forgotten messages from previous aborted request
+                hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
             default:
                 UnexpectedEvent("CompileState", ev);
             }
@@ -2075,13 +2082,16 @@ public:
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
 
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleExecute);
-                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
+                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, Handle);
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, HandleExecute);
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleExecute);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
+
+                // forgotten messages from previous aborted request
+                hFunc(TEvKqp::TEvCompileResponse, Handle);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
@@ -2102,12 +2112,15 @@ public:
                 hFunc(TEvKqp::TEvQueryRequest, HandleCleanup);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleCleanup);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop);
-                hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCleanup);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(NGRpcService::TEvClientLost, HandleNoop);
+
+                // forgotten messages from previous aborted request
+                hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
+                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
@@ -2282,6 +2295,7 @@ private:
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
+    TActorId CompileActorId;
     TActorId ExecuterId;
 
     std::shared_ptr<TKqpQueryState> QueryState;

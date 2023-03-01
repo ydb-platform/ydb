@@ -47,9 +47,6 @@ public:
             Orbit,
             Query ? Query->UserSid : 0);
 
-        TimeoutTimerId = CreateLongTimer(ctx, Deadline - TInstant::Now(),
-            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
-
         TMaybe<TKqpQueryId> query;
         std::swap(Query, query);
 
@@ -119,20 +116,8 @@ public:
         DeferredResponse.Reset();
     }
 
-    void HandleTimeout(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_REQUEST, "Compile request deadline exceeded"
-            << ", self: " << ctx.SelfID);
-
-        NYql::TIssue issue(NYql::TPosition(), "Deadline exceeded during query compilation.");
-        return ReplyError(Ydb::StatusIds::TIMEOUT, {issue}, ctx);
-    }
-
-    void Die(const NActors::TActorContext& ctx) override {
-        if (TimeoutTimerId) {
-            ctx.Send(TimeoutTimerId, new TEvents::TEvPoisonPill());
-        }
-
-        TBase::Die(ctx);
+    void Handle(TEvKqp::TEvAbortExecution::TPtr& , const TActorContext &ctx) {
+        this->Die(ctx);
     }
 
 private:
@@ -141,7 +126,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvCompileResponse, Handle);
                 HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-                CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+                HFunc(TEvKqp::TEvAbortExecution, Handle);
             default:
                 UnexpectedEvent("MainState", ev->GetTypeRewrite(), ctx);
             }
@@ -327,7 +312,6 @@ private:
     bool KeepInCache = false;
     TInstant Deadline;
     TKqpDbCountersPtr DbCounters;
-    TActorId TimeoutTimerId;
     THashMap<TTableId, ui64> TableVersions;
     THolder<TEvKqp::TEvCompileResponse> DeferredResponse;
 

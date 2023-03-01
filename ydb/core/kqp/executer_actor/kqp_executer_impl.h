@@ -106,8 +106,8 @@ protected:
     };
 
 public:
-    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken, 
-        TKqpRequestCounters::TPtr counters, 
+    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
+        TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         ui64 spanVerbosity = 0, TString spanName = "no_name")
         : Request(std::move(request))
@@ -300,6 +300,7 @@ protected:
     STATEFN(ReadyState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpExecuter::TEvTxRequest, HandleReady);
+            hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
             default: {
                 UnexpectedEvent("ReadyState", ev->GetTypeRewrite());
             }
@@ -317,25 +318,6 @@ protected:
         auto progressEv = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
         ActorIdToProto(this->SelfId(), progressEv->Record.MutableExecuterActorId());
         this->Send(Target, progressEv.Release());
-
-        const auto now = TAppData::TimeProvider->Now();
-        const auto& ctx = TlsActivationContext->AsActorContext();
-        TMaybe<TDuration> timeout;
-        if (Deadline) {
-            timeout = *Deadline - now;
-            DeadlineActor = CreateLongTimer(ctx, *timeout,
-                new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup(0)));
-        }
-
-        TMaybe<TDuration> cancelAfter;
-        if (CancelAt) {
-            cancelAfter = *CancelAt - now;
-            CancelAtActor = CreateLongTimer(ctx, *cancelAfter,
-                new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup(1)));
-        }
-
-        LOG_I("Begin execution. Operation timeout: " << timeout << ", cancelAfter: " << cancelAfter
-            << ", txs: " << Request.Transactions.size());
 
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {
@@ -356,6 +338,7 @@ protected:
 
         ExecuterTableResolveSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterStateSpan.GetTraceId(), "ExecuterTableResolve", NWilson::EFlags::AUTO_END);
 
+        auto now = TAppData::TimeProvider->Now();
         StartResolveTime = now;
 
         if (Stats) {
@@ -531,21 +514,9 @@ protected:
         if (statusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
         } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
-            AbortExecutionAndDie(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
+            AbortExecutionAndDie(ev->Sender, NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
         } else {
             RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
-        }
-    }
-
-    void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
-        bool cancel = ev->Get()->Tag == 1;
-        LOG_I((cancel ? "CancelAt" : "Timeout") << " exceeded. Send timeout event to the rpc actor " << Target);
-        if (cancel) {
-            CancelAtActor = {};
-            AbortExecutionAndDie(NYql::NDqProto::StatusIds::CANCELLED, "Request timeout exceeded");
-        } else {
-            DeadlineActor = {};
-            AbortExecutionAndDie(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
         }
     }
 
@@ -1016,14 +987,18 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
-    void AbortExecutionAndDie(NYql::NDqProto::StatusIds::StatusCode status, const TString& message) {
+    void AbortExecutionAndDie(TActorId abortSender, NYql::NDqProto::StatusIds::StatusCode status, const TString& message) {
         LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << "," << message);
-        auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, "Request timeout exceeded");
         if (ExecuterSpan) {
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
         }
 
-        this->Send(Target, abortEv.Release());
+        // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
+        // If it have come from SessionActor there is no need to send new TEvAbortExecution back
+        if (abortSender != Target) {
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, "Request timeout exceeded");
+            this->Send(Target, abortEv.Release());
+        }
         Request.Transactions.crop(0);
         TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
         this->PassAway();
@@ -1112,12 +1087,6 @@ protected:
 protected:
     void PassAway() override {
         LOG_D("terminate execution.");
-        if (DeadlineActor) {
-            this->Send(DeadlineActor, new TEvents::TEvPoison);
-        }
-        if (CancelAtActor) {
-            this->Send(CancelAtActor, new TEvents::TEvPoison);
-        }
         if (KqpShardsResolverId) {
             this->Send(KqpShardsResolverId, new TEvents::TEvPoison);
         }
@@ -1172,9 +1141,7 @@ protected:
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
-    TActorId DeadlineActor;
     TMaybe<TInstant> CancelAt;
-    TActorId CancelAtActor;
     TActorId Target;
     ui64 TxId = 0;
 

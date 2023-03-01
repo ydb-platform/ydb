@@ -2059,7 +2059,6 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, StreamLookup
         TString tmpSessionId = CreateSessionRPC(runtime);
         auto req = MakeSimpleRequestRPC(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"), tmpSessionId, "", true);
         req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
-        req.mutable_operation_params()->mutable_cancel_after()->set_seconds(1);
         auto response = AwaitResponse(runtime, SendRequest(runtime, std::move(req)));
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::TIMEOUT);
     }
@@ -2085,7 +2084,6 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, StreamLookup
         TString tmpSessionId = CreateSessionRPC(runtime);
         auto req = MakeSimpleRequestRPC(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"), tmpSessionId, "", true);
         req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
-        req.mutable_operation_params()->mutable_cancel_after()->set_seconds(1);
         auto response = AwaitResponse(runtime, SendRequest(runtime, std::move(req)));
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::TIMEOUT);
     }
@@ -2229,7 +2227,6 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, StreamLookup) 
         auto sender4 = CreateSessionRPC(runtime);
         auto req = MakeSimpleRequestRPC(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;"), sender4, "", true);
         req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
-        req.mutable_operation_params()->mutable_cancel_after()->set_seconds(1);
         auto response = AwaitResponse(runtime, SendRequest(runtime, std::move(req)));
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::TIMEOUT);
     }
@@ -2270,7 +2267,6 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, StreamLookup) 
         auto sender5 = CreateSessionRPC(runtime);
         auto req = MakeSimpleRequestRPC(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;"), sender5, "", true);
         req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
-        req.mutable_operation_params()->mutable_cancel_after()->set_seconds(1);
         auto response = AwaitResponse(runtime, SendRequest(runtime, std::move(req)));
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::TIMEOUT);
     }

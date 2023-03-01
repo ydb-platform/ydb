@@ -387,26 +387,32 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             }));
     }
 
-    Y_UNIT_TEST(QueryExecCancel) {
+    Y_UNIT_TEST(QueryExecTimeoutCancel) {
         TKikimrRunner kikimr;
         CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto prepareResult = session.PrepareDataQuery(Q_(R"(
-            SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "11111";
-        )")).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
-        auto dataQuery = prepareResult.GetQuery();
+        for (auto status : {EStatus::TIMEOUT, EStatus::CANCELLED}) {
+            auto prepareResult = session.PrepareDataQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "11111";
+            )")).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+            auto dataQuery = prepareResult.GetQuery();
 
-        auto settings = TExecDataQuerySettings()
-            .CancelAfter(TDuration::MilliSeconds(100));
+            auto settings = TExecDataQuerySettings();
+            if (status == EStatus::TIMEOUT) {
+                settings.OperationTimeout(TDuration::MilliSeconds(100));
+            } else {
+                settings.CancelAfter(TDuration::MilliSeconds(100));
+            }
 
-        auto result = dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+            auto result = dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
 
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CANCELLED);
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status);
+        }
     }
 
     Y_UNIT_TEST(QueryExecTimeout) {

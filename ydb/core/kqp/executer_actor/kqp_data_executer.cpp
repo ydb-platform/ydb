@@ -269,7 +269,6 @@ public:
                 hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
                 hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-                hFunc(TEvents::TEvWakeup, HandleTimeout);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }
@@ -309,7 +308,6 @@ private:
                 hFunc(TEvDqCompute::TEvChannelData, HandleExecute); // from CA
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
                 hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
-                hFunc(TEvents::TEvWakeup, HandlePrepare);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
@@ -514,11 +512,6 @@ private:
     void HandlePrepare(TEvKqp::TEvAbortExecution::TPtr& ev) {
         CancelProposal(0);
         TBase::HandleAbortExecution(ev);
-    }
-
-    void HandlePrepare(TEvents::TEvWakeup::TPtr& ev) {
-        CancelProposal(0);
-        TBase::HandleTimeout(ev);
     }
 
     void CancelProposal(ui64 exceptShardId) {
@@ -909,7 +902,6 @@ private:
                 hFunc(TEvDqCompute::TEvState, HandleComputeStats);
                 hFunc(TEvDqCompute::TEvChannelData, HandleExecute);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
-                hFunc(TEvents::TEvWakeup, HandleTimeout);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
@@ -1933,7 +1925,6 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-                hFunc(TEvents::TEvWakeup, HandleTimeout);
                 default:
                     UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
             }
@@ -2186,7 +2177,7 @@ private:
 
         Planner = CreateKqpPlanner(TxId, SelfId(), {}, std::move(tasksPerNode), Request.Snapshot,
             Database, Nothing(), Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
-            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, false, Nothing(), 
+            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, false, Nothing(),
             ExecuterSpan, {}, ExecuterRetriesConfig);
         Planner->ProcessTasksForDataExecuter();
 

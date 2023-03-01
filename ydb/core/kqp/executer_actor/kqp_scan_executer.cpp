@@ -103,7 +103,6 @@ public:
                 hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-                hFunc(TEvents::TEvWakeup, HandleTimeout);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }
@@ -121,7 +120,6 @@ private:
                 hFunc(TEvDqCompute::TEvState, HandleComputeStats);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-                hFunc(TEvents::TEvWakeup, HandleTimeout);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvPrivate::TEvRetry, HandleRetry);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);

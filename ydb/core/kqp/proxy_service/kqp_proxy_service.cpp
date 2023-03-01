@@ -52,7 +52,7 @@ TString MakeKqpProxyBoardPath(const TString& database) {
 
 
 static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(5000);
-static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(10);
+static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(50);
 static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
 
 
@@ -115,11 +115,22 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         struct TEvCollectPeerProxyData: public TEventLocal<TEvCollectPeerProxyData, EEv::EvCollectPeerProxyData> {};
 
         struct TEvOnRequestTimeout: public TEventLocal<TEvOnRequestTimeout, EEv::EvOnRequestTimeout> {
-            public:
-                ui64 RequestId;
-                TDuration Timeout;
+            ui64 RequestId;
+            TDuration Timeout;
+            NYql::NDqProto::StatusIds::StatusCode Status;
+            int Round;
 
-            TEvOnRequestTimeout(ui64 requestId, TDuration timeout):  RequestId(requestId), Timeout(timeout) {};
+            TEvOnRequestTimeout(ui64 requestId, TDuration timeout, NYql::NDqProto::StatusIds::StatusCode status, int round)
+                : RequestId(requestId)
+                , Timeout(timeout)
+                , Status(status)
+                , Round(round)
+            {}
+
+            void TickNextRound() {
+                ++Round;
+                Timeout = DEFAULT_EXTRA_TIMEOUT_WAIT;
+            }
         };
 
         struct TEvCloseIdleSessions : public TEventLocal<TEvCloseIdleSessions, EEv::EvCloseIdleSessions> {};
@@ -539,13 +550,15 @@ public:
             }
         }
 
-        // We add extra milliseconds to the user-specified timeout, so it means we give additional priority for worker replies,
-        // because it is much better to give detailed error message rather than generic timeout.
-        // For example, it helps to avoid race in event order when worker and proxy recieve timeout at the same moment.
-        // If worker located in the different datacenter we should better substract some RTT estimate, but at this point it's not done.
+        auto cancelAfter = ev->Get()->GetCancelAfter();
         auto timeout = ev->Get()->GetOperationTimeout();
-        auto timeoutMs = GetQueryTimeout(queryType, timeout.MilliSeconds(), TableServiceConfig) + DEFAULT_EXTRA_TIMEOUT_WAIT;
-        StartQueryTimeout(requestId, timeoutMs);
+        auto timerDuration = GetQueryTimeout(queryType, timeout.MilliSeconds(), TableServiceConfig);
+        if (cancelAfter) {
+            timerDuration = Min(timerDuration, cancelAfter);
+        }
+        KQP_PROXY_LOG_D(TKqpRequestInfo(traceId, sessionId) << "TEvQueryRequest, set timer for: " << timerDuration << " timeout: " << timeout << " cancelAfter: " << cancelAfter);
+        auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
+        StartQueryTimeout(requestId, timerDuration, status);
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
         KQP_PROXY_LOG_D("Sent request to target, requestId: " << requestId
             << ", targetId: " << targetId << ", sessionId: " << sessionId);
@@ -933,10 +946,10 @@ public:
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 
-    void StartQueryTimeout(ui64 requestId, TDuration timeout) {
+    void StartQueryTimeout(ui64 requestId, TDuration timeout, NYql::NDqProto::StatusIds::StatusCode status = NYql::NDqProto::StatusIds::TIMEOUT) {
         TActorId timeoutTimer = CreateLongTimer(
             TlsActivationContext->AsActorContext(), timeout,
-            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvOnRequestTimeout(requestId, timeout))
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvOnRequestTimeout{requestId, timeout, status, 0})
         );
 
         KQP_PROXY_LOG_D("Scheduled timeout timer for requestId: " << requestId << " timeout: " << timeout << " actor id: " << timeoutTimer);
@@ -954,7 +967,9 @@ public:
     }
 
     void Handle(TEvPrivate::TEvOnRequestTimeout::TPtr& ev) {
+        auto* msg = ev->Get();
         ui64 requestId = ev->Get()->RequestId;
+        TimeoutTimers.erase(requestId);
 
         KQP_PROXY_LOG_D("Handle TEvPrivate::TEvOnRequestTimeout(" << requestId << ")");
         const TKqpProxyRequest* reqInfo = PendingRequests.FindPtr(requestId);
@@ -963,9 +978,20 @@ public:
             return;
         }
 
-        TString message = TStringBuilder() << "Query did not complete within specified timeout, session id " << reqInfo->SessionId;
-        KQP_PROXY_LOG_D("Reply timeout: requestId " <<  requestId << " sessionId" << reqInfo->SessionId);
-        ReplyProcessError(Ydb::StatusIds::TIMEOUT, message, requestId);
+        KQP_PROXY_LOG_D("Reply timeout: requestId " << requestId << " sessionId: " << reqInfo->SessionId
+            << " status: " << NYql::NDq::DqStatusToYdbStatus(msg->Status) << " round: " << msg->Round);
+
+        const TKqpSessionInfo* info = LocalSessions->FindPtr(reqInfo->SessionId);
+        if (msg->Round == 0 && info) {
+            TString message = TStringBuilder() << "request's " << (msg->Status == NYql::NDqProto::StatusIds::TIMEOUT ? "timeout" : "cancelAfter") << " exceeded";
+            Send(info->WorkerId, new TEvKqp::TEvAbortExecution(msg->Status, message));
+            auto newEv = ev->Release().Release();
+            newEv->TickNextRound();
+            Schedule(newEv->Timeout, newEv);
+        } else {
+            TString message = TStringBuilder() << "Query did not complete within specified timeout, session id " << reqInfo->SessionId;
+            ReplyProcessError(NYql::NDq::DqStatusToYdbStatus(msg->Status), message, requestId);
+        }
     }
 
     void Handle(TEvKqp::TEvCloseSessionResponse::TPtr& ev) {

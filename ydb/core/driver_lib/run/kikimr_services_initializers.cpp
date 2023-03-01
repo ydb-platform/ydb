@@ -207,6 +207,8 @@
 
 #include <util/system/hostname.h>
 
+#include <thread>
+
 namespace NKikimr {
 
 namespace NKikimrServicesInitializers {
@@ -566,20 +568,226 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     return result;
 }
 
+namespace {
+
+    enum class EPoolType : i8 {
+        System = 0,
+        User = 1,
+        Batch = 2,
+        IC = 3,
+    };
+
+    struct TShortPoolCfg {
+        i16 ThreadCount;
+        i16 MaxThreadCount;
+    };
+
+    constexpr i16 MaxPreparedCpuCount = 30;
+    constexpr i16 GRpcWorkerCountInMaxPreparedCpuCase = 4;
+    constexpr i16 CpuCountForEachGRpcWorker = MaxPreparedCpuCount / GRpcWorkerCountInMaxPreparedCpuCase;
+    constexpr i16 GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase = 1000;
+    constexpr i16 GRpcHandlersPerCompletionQueuePerCpu = GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase / MaxPreparedCpuCount;
+
+
+    TShortPoolCfg ComputeCpuTable[MaxPreparedCpuCount + 1][4] {
+        {  {0, 0},  {0, 0},   {0, 0}, {0, 0} },     // 0
+        {  {1, 1},  {0, 1},   {0, 1}, {0, 0} },     // 1
+        {  {1, 1},  {1, 2},   {0, 1}, {0, 1} },     // 2
+        {  {1, 2},  {1, 3},   {1, 1}, {0, 1} },     // 3
+        {  {1, 2},  {1, 4},   {1, 1}, {1, 2} },     // 4
+        {  {1, 3},  {2, 5},   {1, 1}, {1, 2} },     // 5
+        {  {1, 3},  {3, 6},   {1, 1}, {1, 2} },     // 6
+        {  {2, 4},  {3, 7},   {1, 2}, {1, 3} },     // 7
+        {  {2, 4},  {4, 8},   {1, 2}, {1, 3} },     // 8
+        {  {2, 5},  {4, 9},   {1, 2}, {2, 4} },     // 9
+        {  {2, 5},  {5, 10},  {1, 2}, {2, 4} },     // 10
+        {  {2, 6},  {6, 11},  {2, 3}, {2, 4} },     // 11
+        {  {2, 6},  {7, 12},  {2, 3}, {2, 5} },     // 12
+        {  {3, 7},  {7, 13},  {2, 3}, {2, 5} },     // 13
+        {  {3, 7},  {7, 14},  {2, 3}, {3, 6} },     // 14
+        {  {3, 8},  {8, 15},  {2, 4}, {3, 6} },     // 15
+        {  {3, 8},  {9, 16},  {2, 4}, {3, 6} },     // 16
+        {  {3, 9},  {10, 17}, {2, 4}, {3, 7} },     // 17
+        {  {3, 9},  {10, 18}, {3, 5}, {3, 7} },     // 18
+        {  {4, 10}, {10, 19}, {3, 5}, {4, 8} },     // 19
+        {  {4, 10}, {10, 20}, {3, 5}, {4, 8} },     // 20
+        {  {4, 11}, {11, 21}, {3, 5}, {4, 8} },     // 21
+        {  {4, 11}, {12, 22}, {3, 5}, {4, 9} },     // 22
+        {  {4, 12}, {13, 23}, {3, 6}, {4, 9} },     // 23
+        {  {4, 12}, {13, 24}, {3, 6}, {5, 10} },    // 24
+        {  {5, 13}, {13, 25}, {3, 6}, {5, 10} },    // 25
+        {  {5, 13}, {13, 26}, {4, 7}, {5, 10} },    // 26
+        {  {5, 14}, {14, 27}, {4, 7}, {5, 11} },    // 27
+        {  {5, 14}, {14, 28}, {4, 7}, {5, 11} },    // 28
+        {  {5, 15}, {15, 29}, {4, 8}, {6, 12} },    // 29
+        {  {5, 15}, {16, 30}, {4, 8}, {6, 12} },    // 30
+    };
+
+    TShortPoolCfg StorageCpuTable[MaxPreparedCpuCount + 1][4] {
+        {  {0, 0},   {0, 0},  {0, 0}, {0, 0} },     // 0
+        {  {1, 1},   {0, 1},  {0, 1}, {0, 0} },     // 1
+        {  {2, 2},   {0, 2},  {0, 1}, {0, 1} },     // 2
+        {  {1, 3},   {1, 3},  {1, 1}, {0, 1} },     // 3
+        {  {1, 4},   {1, 4},  {1, 1}, {1, 2} },     // 4
+        {  {2, 5},   {1, 5},  {1, 1}, {1, 2} },     // 5
+        {  {3, 6},   {1, 6},  {1, 1}, {1, 2} },     // 6
+        {  {4, 7},   {1, 7},  {1, 2}, {1, 3} },     // 7
+        {  {5, 8},   {1, 8},  {1, 2}, {1, 3} },     // 8
+        {  {5, 9},   {1, 9},  {1, 2}, {2, 4} },     // 9
+        {  {6, 10},  {1, 10}, {1, 2}, {2, 4} },     // 10
+        {  {6, 11},  {1, 11}, {2, 3}, {2, 4} },     // 11
+        {  {7, 12},  {1, 12}, {2, 3}, {2, 5} },     // 12
+        {  {8, 13},  {1, 13}, {2, 3}, {2, 5} },     // 13
+        {  {8, 14},  {1, 14}, {2, 3}, {3, 6} },     // 14
+        {  {9, 15},  {1, 15}, {2, 4}, {3, 6} },     // 15
+        {  {10, 16}, {1, 16}, {2, 4}, {3, 6} },     // 16
+        {  {11, 17}, {1, 17}, {2, 4}, {3, 7} },     // 17
+        {  {11, 18}, {1, 18}, {3, 5}, {3, 7} },     // 18
+        {  {11, 19}, {1, 19}, {3, 5}, {4, 8} },     // 19
+        {  {12, 20}, {1, 20}, {3, 5}, {4, 8} },     // 20
+        {  {13, 21}, {1, 21}, {3, 5}, {4, 8} },     // 21
+        {  {14, 22}, {1, 22}, {3, 6}, {4, 9} },     // 22
+        {  {15, 23}, {1, 23}, {3, 6}, {4, 9} },     // 23
+        {  {15, 24}, {1, 24}, {3, 6}, {5, 10} },    // 24
+        {  {16, 25}, {1, 25}, {3, 6}, {5, 10} },    // 25
+        {  {16, 26}, {1, 26}, {4, 7}, {5, 10} },    // 26
+        {  {17, 27}, {1, 27}, {4, 7}, {5, 11} },    // 27
+        {  {18, 28}, {1, 28}, {4, 7}, {5, 11} },    // 28
+        {  {18, 29}, {1, 29}, {4, 7}, {6, 12} },    // 28
+        {  {19, 30}, {1, 30}, {4, 8}, {6, 12} },    // 30
+    };
+
+    i16 GetIOThreadCount(i16 cpuCount) {
+        return (cpuCount - 1) / (MaxPreparedCpuCount * 2) + 1;
+    }
+
+    TShortPoolCfg GetShortPoolChg(EPoolType pool, i16 cpuCount, bool isStorage) {
+        auto &cpuTable = (isStorage ? StorageCpuTable : ComputeCpuTable);
+
+        i16 k = cpuCount / MaxPreparedCpuCount;
+        i16 mod = cpuCount % MaxPreparedCpuCount;
+        ui8 poolIdx = static_cast<i8>(pool);
+        if (!k) {
+            return cpuTable[cpuCount][poolIdx];
+        }
+
+        TShortPoolCfg result = cpuTable[MaxPreparedCpuCount][poolIdx];
+        result.ThreadCount *= k;
+        result.MaxThreadCount *= k;
+        TShortPoolCfg additional = cpuTable[mod][poolIdx];
+        result.ThreadCount += additional.ThreadCount;
+        result.MaxThreadCount += additional.MaxThreadCount;
+        return result;
+    }
+
+    i16 GetCpuCount() {
+        TAffinity affinity;
+        affinity.Current();
+        TCpuMask cpuMask = static_cast<TCpuMask>(affinity);
+        if (cpuMask.Size()) {
+            ui32 cpuCount = cpuMask.CpuCount();
+            return cpuCount ? cpuCount : std::thread::hardware_concurrency();
+        }
+        return std::thread::hardware_concurrency();
+    }
+}
+
+
 void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                    const NKikimr::TAppData* appData) {
-    Y_VERIFY(Config.HasActorSystemConfig());
-
     auto& systemConfig = Config.GetActorSystemConfig();
+    bool hasASCfg = Config.HasActorSystemConfig();
+    if (!hasASCfg || (systemConfig.HasUseAutoConfig() && systemConfig.GetUseAutoConfig())) {
+        auto *mutableSystemConfig = Config.MutableActorSystemConfig();
+        mutableSystemConfig->SetUseAutoConfig(true);
+        Y_VERIFY(!systemConfig.ExecutorSize());
+
+        i16 cpuCount = mutableSystemConfig->HasCpuCount() ? mutableSystemConfig->GetCpuCount() : GetCpuCount();
+        Y_VERIFY(cpuCount);
+        mutableSystemConfig->SetCpuCount(cpuCount);
+
+        if (!mutableSystemConfig->HasScheduler()) {
+            auto *scheduler = mutableSystemConfig->MutableScheduler();
+            scheduler->SetResolution(64);
+            scheduler->SetSpinThreshold(0);
+            scheduler->SetProgressThreshold(10'000);
+        }
+
+        mutableSystemConfig->SetIoExecutor(0);
+        auto *ioExecutor = mutableSystemConfig->AddExecutor();
+        ioExecutor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
+        ioExecutor->SetThreads(GetIOThreadCount(cpuCount));
+
+        ui16 poolCount = Min(5, cpuCount + 1);
+        TVector<TString> names = {"System", "User", "Batch", "IC"};
+        TVector<ui32> priorities = {30, 20, 10, 40};
+        switch (cpuCount) {
+        case 1:
+            mutableSystemConfig->SetUserExecutor(1);
+            mutableSystemConfig->SetSysExecutor(1);
+            mutableSystemConfig->SetBatchExecutor(1);
+            names = {"Common"};
+            priorities = {40,};
+            break;
+        case 2:
+            mutableSystemConfig->SetUserExecutor(1);
+            mutableSystemConfig->SetSysExecutor(1);
+            mutableSystemConfig->SetBatchExecutor(1);
+            names = {"Common"};
+            priorities = {40,};
+            poolCount = 2;
+            break;
+        case 3:
+            mutableSystemConfig->SetUserExecutor(1);
+            mutableSystemConfig->SetSysExecutor(1);
+            mutableSystemConfig->SetBatchExecutor(2);
+            names = {"Common", "Batch", "IC"};
+            priorities = {30, 10, 40,};
+            break;
+        default:
+            mutableSystemConfig->SetUserExecutor(1);
+            mutableSystemConfig->SetSysExecutor(2);
+            mutableSystemConfig->SetBatchExecutor(3);
+            break;
+        }
+        auto *serviceExecutor = mutableSystemConfig->AddServiceExecutor();
+        serviceExecutor->SetServiceName("Interconnect");
+        serviceExecutor->SetExecutorId(poolCount - 1);
+
+        bool isStorage = (mutableSystemConfig->GetNodeType() == NKikimrConfig::TActorSystemConfig::STORAGE);
+
+
+        for (ui32 poolType = 0; poolType < poolCount - 1; ++poolType) {
+            TShortPoolCfg cfg = GetShortPoolChg(static_cast<EPoolType>(poolType), cpuCount, isStorage);
+            auto *executor = mutableSystemConfig->AddExecutor();
+            executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+            executor->SetThreads(cpuCount == 2 ? 2 : cfg.ThreadCount);
+            executor->SetMaxThreads(cpuCount == 2 ? 2 : cfg.MaxThreadCount);
+            executor->SetPriority(priorities[poolType]);
+            executor->SetName(names[poolType]);
+            if (cpuCount == 1 || cpuCount == 2) {
+                executor->SetSpinThreshold(0);
+                executor->SetTimePerMailboxMicroSecs(100);
+            } else if (poolType == poolCount - 2) { // IC pool
+                executor->SetSpinThreshold(10);
+                executor->SetTimePerMailboxMicroSecs(100);
+                executor->SetMaxAvgPingDeviation(500);
+            } else {
+                executor->SetSpinThreshold(1);
+            }
+        }
+    }
+
+    Y_VERIFY(Config.HasActorSystemConfig());
     Y_VERIFY(systemConfig.HasScheduler());
     Y_VERIFY(systemConfig.ExecutorSize());
-
     const ui32 systemPoolId = appData->SystemPoolId;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
     setup->NodeId = NodeId;
     setup->MaxActivityType = GetActivityTypeCount();
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, setup->MaxActivityType, appData);
+
     for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) {
         const auto &execConfig = systemConfig.GetExecutor(poolId);
         if (execConfig.HasInjectMadSquirrels()) {
@@ -1598,6 +1806,22 @@ TGRpcServicesInitializer::TGRpcServicesInitializer(
 void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData)
 {
+    auto& systemConfig = Config.GetActorSystemConfig();
+    bool hasASCfg = Config.HasActorSystemConfig();
+
+    if (!hasASCfg || (systemConfig.HasUseAutoConfig() && systemConfig.GetUseAutoConfig())) {
+        auto *mutableSystemConfig = Config.MutableActorSystemConfig();
+        i16 cpuCount = mutableSystemConfig->HasCpuCount() ? mutableSystemConfig->GetCpuCount() : GetCpuCount();
+
+        auto *grpcConfig = Config.MutableGRpcConfig();
+        if (!grpcConfig->HasWorkerThreads()) {
+            grpcConfig->SetWorkerThreads(Max(2, cpuCount / CpuCountForEachGRpcWorker));
+        }
+        if  (!grpcConfig->HasHandlersPerCompletionQueue()) {
+            grpcConfig->SetHandlersPerCompletionQueue(GRpcHandlersPerCompletionQueuePerCpu * cpuCount);
+        }
+    }
+
     if (!IsServiceInitialized(setup, NMsgBusProxy::CreateMsgBusProxyId())
         && Config.HasGRpcConfig() && Config.GetGRpcConfig().GetStartGRpcProxy()) {
         IActor * proxy = NMsgBusProxy::CreateMessageBusServerProxy(nullptr);

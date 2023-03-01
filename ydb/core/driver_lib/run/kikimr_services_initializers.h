@@ -32,7 +32,7 @@ namespace NKikimrServicesInitializers {
 
 class IKikimrServicesInitializer : public IServiceInitializer {
 protected:
-    const NKikimrConfig::TAppConfig& Config;
+    NKikimrConfig::TAppConfig& Config;
     const ui32                       NodeId;
     const TKikimrScopeId             ScopeId;
 

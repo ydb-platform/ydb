@@ -40,6 +40,11 @@ message TAffinity {
 }
 
 message TActorSystemConfig {
+    enum ENodeType {
+        STORAGE = 1;
+        COMPUTE = 2;
+    }
+
     message TExecutor {
         enum EType {
             BASIC = 1;
@@ -113,6 +118,13 @@ message TActorSystemConfig {
     }
 
     optional TUnitedWorkers UnitedWorkers = 11;
+
+    optional bool UseAutoConfig = 12;
+
+    // Used only with UseAutoConfig;
+    optional uint32 CpuCount = 13;
+    optional ENodeType NodeType = 14 [default = COMPUTE];
+
 }
 
 message TStaticNameserviceConfig {

@@ -27,8 +27,8 @@ struct TBlockItemSerializeProps {
     bool IsFixed = true;      // true if each block item takes fixed size
 };
 
-template <typename T, bool Nullable>
-class TFixedSizeBlockReader : public IBlockReader {
+template<typename T, bool Nullable>
+class TFixedSizeBlockReader final : public IBlockReader {
 public:
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
@@ -74,7 +74,7 @@ public:
 };
 
 template<typename TStringType, bool Nullable>
-class TStringBlockReader : public IBlockReader {
+class TStringBlockReader final : public IBlockReader {
 public:
     using TOffset = typename TStringType::offset_type;
 
@@ -135,8 +135,8 @@ public:
     }
 };
 
-template <bool Nullable>
-class TTupleBlockReader : public IBlockReader {
+template<bool Nullable>
+class TTupleBlockReader final : public IBlockReader {
 public:
     TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
         : Children(std::move(children))
@@ -206,7 +206,7 @@ private:
     TVector<TBlockItem> Items;
 };
 
-class TExternalOptionalBlockReader : public IBlockReader {
+class TExternalOptionalBlockReader final : public IBlockReader {
 public:
     TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
         : Inner(std::move(inner))

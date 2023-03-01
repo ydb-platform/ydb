@@ -294,8 +294,8 @@ private:
     size_t CurrLen = 0;
 };
 
-template <typename T, bool Nullable>
-class TFixedSizeArrayBuilder : public TArrayBuilderBase {
+template<typename T, bool Nullable>
+class TFixedSizeArrayBuilder final : public TArrayBuilderBase {
 public:
     TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
         : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen)
@@ -432,9 +432,14 @@ private:
 };
 
 template<typename TStringType, bool Nullable>
-class TStringArrayBuilder : public TArrayBuilderBase {
+class TStringArrayBuilder final : public TArrayBuilderBase {
 public:
     using TOffset = typename TStringType::offset_type;
+    TStringArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
+        : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    {
+        Reserve();
+    }
 
     TStringArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen)
@@ -717,7 +722,7 @@ private:
 };
 
 template<bool Nullable>
-class TTupleArrayBuilder : public TArrayBuilderBase {
+class TTupleArrayBuilder final : public TArrayBuilderBase {
 public:
     TTupleArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen,
                        TVector<TArrayBuilderBase::Ptr>&& children)
@@ -878,7 +883,7 @@ private:
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
 };
 
-class TExternalOptionalArrayBuilder : public TArrayBuilderBase {
+class TExternalOptionalArrayBuilder final : public TArrayBuilderBase {
 public:
     TExternalOptionalArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, std::unique_ptr<TArrayBuilderBase>&& inner)
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen)

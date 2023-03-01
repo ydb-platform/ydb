@@ -103,6 +103,12 @@ std::shared_ptr<arrow::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len,
     return bitmap;
 }
 
+std::shared_ptr<arrow::Buffer> MakeDenseBitmapNegate(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool) {
+    auto bitmap = AllocateBitmapWithReserve(len, pool);
+    CompressSparseBitmapNegate(bitmap->mutable_data(), srcSparse, len);
+    return bitmap;
+}
+
 std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayData>& data, size_t offset, size_t len) {
     Y_ENSURE(data->length >= 0);
     Y_ENSURE(offset + len <= (size_t)data->length);

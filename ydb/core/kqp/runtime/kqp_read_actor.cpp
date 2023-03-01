@@ -318,7 +318,8 @@ public:
 public:
     TKqpReadActor(
         NKikimrTxDataShard::TKqpReadRangesSourceSettings&& settings,
-        const NYql::NDq::TDqAsyncIoFactory::TSourceArguments& args)
+        const NYql::NDq::TDqAsyncIoFactory::TSourceArguments& args,
+        TIntrusivePtr<TKqpCounters> counters)
         : Settings(std::move(settings))
         , LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ", CA Id " << args.ComputeActorId << ". ")
         , ComputeActorId(args.ComputeActorId)
@@ -326,6 +327,7 @@ public:
         , TypeEnv(args.TypeEnv)
         , HolderFactory(args.HolderFactory)
         , Alloc(args.Alloc)
+        , Counters(counters)
     {
         TableId = TTableId(
             Settings.GetTable().GetTableId().GetOwnerId(),
@@ -345,6 +347,7 @@ public:
                             Settings.GetKeyColumnTypeInfos(i).GetPgTypeId()
                         ) : nullptr));
         }
+        Counters->ReadActorsCount->Inc();
     }
 
     virtual ~TKqpReadActor() {
@@ -370,6 +373,7 @@ public:
     }
 
     void Bootstrap() {
+        Counters->ReadActorsCount->Inc();
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         Snapshot = IKqpGateway::TKqpSnapshot(Settings.GetSnapshot().GetStep(), Settings.GetSnapshot().GetTxId());
         THolder<TShardState> stateHolder = MakeHolder<TShardState>(Settings.GetShardIdHint());
@@ -437,6 +441,7 @@ public:
             return;
         }
 
+        Counters->IteratorsShardResolve->Inc();
         state->ResolveAttempt++;
 
         auto range = state->GetBounds(Settings.GetReverse());
@@ -588,6 +593,7 @@ public:
             }
         }
 
+        Counters->IteratorsReadSplits->Add(newShards.size() - 1);
         YQL_ENSURE(!newShards.empty());
         if (Settings.GetReverse()) {
             for (size_t i = 0; i < newShards.size(); ++i) {
@@ -650,6 +656,7 @@ public:
             }
         }
 
+        Counters->ReadActorRetries->Inc();
         StartRead(state);
     }
 
@@ -717,6 +724,7 @@ public:
             << " snapshot = (txid=" << Settings.GetSnapshot().GetTxId() << ",step=" << Settings.GetSnapshot().GetStep() << ")"
             << " lockTxId = " << Settings.GetLockTxId());
 
+        Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
         Send(::PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
             IEventHandle::FlagTrackDelivery);
@@ -728,6 +736,11 @@ public:
         if (!Reads[id] || Reads[id].Finished) {
             // dropped read
             return;
+        }
+
+        Counters->DataShardIteratorMessages->Inc();
+        if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+            Counters->DataShardIteratorFails->Inc();
         }
 
         for (auto& issue : record.GetStatus().GetIssues()) {
@@ -982,6 +995,7 @@ public:
                         if (limit) {
                             request->Record.SetMaxRows(*limit);
                         }
+                        Counters->SentIteratorAcks->Inc();
                         CA_LOG_D("sending ack for read #" << id << " limit " << limit << " seqno = " << record.GetSeqNo());
                         Send(::PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), state->TabletId, true),
                             IEventHandle::FlagTrackDelivery);
@@ -1058,6 +1072,7 @@ public:
         if (!Reads[id]) {
             return;
         }
+        Counters->SentIteratorCancels->Inc();
         auto* state = Reads[id].Shard;
         auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
         cancel->Record.SetReadId(id);
@@ -1065,6 +1080,7 @@ public:
     }
 
     void PassAway() override {
+        Counters->ReadActorsCount->Dec();
         {
             auto guard = BindAllocator();
             Results.clear();
@@ -1148,14 +1164,16 @@ private:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+
+    TIntrusivePtr<TKqpCounters> Counters;
 };
 
 
-void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory) {
+void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {
     factory.RegisterSource<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(
         TString(NYql::KqpReadRangesSourceName),
-        [] (NKikimrTxDataShard::TKqpReadRangesSourceSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
-            auto* actor = new TKqpReadActor(std::move(settings), args);
+        [counters] (NKikimrTxDataShard::TKqpReadRangesSourceSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
+            auto* actor = new TKqpReadActor(std::move(settings), args, counters);
             return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
         });
 }

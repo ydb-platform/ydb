@@ -305,12 +305,12 @@ private:
             IActor* computeActor;
             if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
                 computeActor = CreateKqpScanComputeActor(msg.GetSnapshot(), request.Executer, txId, std::move(dqTask),
-                    CreateKqpAsyncIoFactory(), AppData()->FunctionRegistry, runtimeSettings, memoryLimits, scanPolicy,
+                    CreateKqpAsyncIoFactory(Counters), AppData()->FunctionRegistry, runtimeSettings, memoryLimits, scanPolicy,
                     Counters, NWilson::TTraceId(ev->TraceId));
                 taskCtx.ComputeActorId = Register(computeActor);
             } else {
                 if (Y_LIKELY(!CaFactory)) {
-                    computeActor = CreateKqpComputeActor(request.Executer, txId, std::move(dqTask), CreateKqpAsyncIoFactory(),
+                    computeActor = CreateKqpComputeActor(request.Executer, txId, std::move(dqTask), CreateKqpAsyncIoFactory(Counters),
                         AppData()->FunctionRegistry, runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId));
                     taskCtx.ComputeActorId = Register(computeActor);
                 } else {

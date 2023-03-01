@@ -367,6 +367,18 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardResolve;
     NMonitoring::THistogramPtr ScanQueryRateLimitLatency;
 
+    // Iterator reads counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr IteratorsShardResolve;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IteratorsReadSplits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SentIteratorAcks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SentIteratorCancels;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CreatedIterators;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRetries;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorFails;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
+
     // Physical tx duration
     NMonitoring::THistogramPtr LiteralTxTotalTimeHistogram;
     NMonitoring::THistogramPtr DataTxTotalTimeHistogram;

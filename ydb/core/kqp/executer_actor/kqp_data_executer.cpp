@@ -1608,7 +1608,7 @@ private:
             return false;
         };
 
-        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), CreateKqpAsyncIoFactory(),
+        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), CreateKqpAsyncIoFactory(Counters->Counters),
             AppData()->FunctionRegistry, settings, limits);
         auto computeActorId = Register(computeActor);
         task.ComputeActorId = computeActorId;

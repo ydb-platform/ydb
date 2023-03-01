@@ -27,14 +27,16 @@ class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLooku
 public:
     TKqpStreamLookupActor(ui64 inputIndex, const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId,
         const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-        std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, NKikimrKqp::TKqpStreamLookupSettings&& settings)
+        std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, NKikimrKqp::TKqpStreamLookupSettings&& settings,
+        TIntrusivePtr<TKqpCounters> counters)
         : InputIndex(inputIndex), Input(input), ComputeActorId(computeActorId), TypeEnv(typeEnv)
         , HolderFactory(holderFactory), Alloc(alloc), TablePath(settings.GetTable().GetPath())
         , TableId(MakeTableId(settings.GetTable()))
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
-        , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT) {
-
+        , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
+        , Counters(counters)
+    {
         KeyColumns.reserve(settings.GetKeyColumns().size());
         i32 keyOrder = 0;
         for (const auto& keyColumn : settings.GetKeyColumns()) {
@@ -75,6 +77,7 @@ public:
     }
 
     void Bootstrap() {
+        Counters->StreamLookupActorsCount->Inc();
         ResolveTableShards();
         Become(&TKqpStreamLookupActor::StateFunc);
     }
@@ -179,10 +182,12 @@ private:
     }
 
     void PassAway() final {
+        Counters->StreamLookupActorsCount->Dec();
         {
             auto alloc = BindAllocator();
             Input.Clear();
             for (auto& [id, state] : Reads) {
+                Counters->SentIteratorCancels->Inc();
                 auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
                 cancel->Record.SetReadId(id);
                 Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId));
@@ -277,6 +282,11 @@ private:
             Locks.push_back(lock);
         }
 
+        Counters->DataShardIteratorMessages->Inc();
+        if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+            Counters->DataShardIteratorFails->Inc();
+        }
+
         switch (record.GetStatus().GetCode()) {
             case Ydb::StatusIds::SUCCESS:
                 break;
@@ -298,6 +308,7 @@ private:
         if (record.GetFinished()) {
             read.SetFinished();
         } else {
+            Counters->SentIteratorAcks->Inc();
             THolder<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
             request->Record.SetReadId(record.GetReadId());
             request->Record.SetSeqNo(record.GetSeqNo());
@@ -488,6 +499,7 @@ private:
         const auto readId = GetNextReadId();
         TReadState read(readId, shardId, std::move(keys));
 
+        Counters->CreatedIterators->Inc();
         THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
         auto& record = request->Record;
 
@@ -564,6 +576,7 @@ private:
         request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Read,
             keyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
 
+        Counters->IteratorsShardResolve->Inc();
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 
@@ -628,6 +641,8 @@ private:
     // stats
     ui64 ReadRowsCount = 0;
     ui64 ReadBytesCount = 0;
+
+    TIntrusivePtr<TKqpCounters> Counters;
 };
 
 } // namespace
@@ -635,9 +650,10 @@ private:
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateStreamLookupActor(ui64 inputIndex,
     const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId, const NMiniKQL::TTypeEnvironment& typeEnv,
     const NMiniKQL::THolderFactory& holderFactory, std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc,
-    NKikimrKqp::TKqpStreamLookupSettings&& settings) {
+    NKikimrKqp::TKqpStreamLookupSettings&& settings,
+    TIntrusivePtr<TKqpCounters> counters) {
     auto actor = new TKqpStreamLookupActor(inputIndex, input, computeActorId, typeEnv, holderFactory, alloc,
-        std::move(settings));
+        std::move(settings), counters);
     return {actor, actor};
 }
 

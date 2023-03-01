@@ -764,6 +764,18 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     ScanQueryRateLimitLatency = KqpGroup->GetHistogram(
         "ScanQuery/RateLimitLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
 
+    /* iterator reads */
+    IteratorsShardResolve = KqpGroup->GetCounter("IteratorReads/ShardResolves", true);
+    IteratorsReadSplits = KqpGroup->GetCounter("IteratorReads/ReadSplits", true);
+    SentIteratorAcks = KqpGroup->GetCounter("IteratorReads/SentAcks", true);
+    SentIteratorCancels = KqpGroup->GetCounter("IteratorReads/SentCancels", true);
+    CreatedIterators = KqpGroup->GetCounter("IteratorReads/Created", true);
+    ReadActorsCount = KqpGroup->GetCounter("IteratorReads/ReadActorCount", false);
+    StreamLookupActorsCount = KqpGroup->GetCounter("IteratorReads/StreamLookupActorCount", false);
+    ReadActorRetries = KqpGroup->GetCounter("IteratorReads/Retries", false);
+    DataShardIteratorFails = KqpGroup->GetCounter("IteratorReads/DatashardFails", true);
+    DataShardIteratorMessages = KqpGroup->GetCounter("IteratorReads/DatashardMessages", true);
+
     LiteralTxTotalTimeHistogram = KqpGroup->GetHistogram(
         "PhyTx/LiteralTxTotalTimeMs", NMonitoring::ExponentialHistogram(10, 2, 1));
     DataTxTotalTimeHistogram = KqpGroup->GetHistogram(

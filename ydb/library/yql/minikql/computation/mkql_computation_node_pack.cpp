@@ -838,6 +838,12 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
         break;
     }
 
+    case TType::EKind::Tagged: {
+        auto taggedType = static_cast<const TTaggedType*>(type);
+        PackImpl(taggedType->GetBaseType(), value);
+        break;
+    }
+
     default:
         THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
     }

@@ -406,13 +406,18 @@ void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& ou
         break;
     }
 
+    case TType::EKind::Tagged: {
+        auto baseType = static_cast<TTaggedType*>(type)->GetBaseType();
+        EncodeValue(baseType, value, output);
+        break;
+    }
+
     default:
         MKQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
     }
 }
 
 NUdf::TUnboxedValue DecodeImpl(TType* type, TStringBuf& input, const THolderFactory& factory, TVector<ui8>& buffer) {
-    Y_UNUSED(factory);
     switch (type->GetKind()) {
     case TType::EKind::Void:
         return NUdf::TUnboxedValue::Void();
@@ -487,6 +492,11 @@ NUdf::TUnboxedValue DecodeImpl(TType* type, TStringBuf& input, const THolderFact
         TType* altType = tupleType->GetElementType(alt);
         auto value = DecodeImpl(altType, input, factory, buffer);
         return factory.CreateVariantHolder(value.Release(), alt);
+    }
+
+    case TType::EKind::Tagged: {
+        auto baseType = static_cast<TTaggedType*>(type)->GetBaseType();
+        return DecodeImpl(baseType, input, factory, buffer);
     }
 
     // Struct and Dict may be encoded into a presort form only to canonize dict keys. No need to decode them.

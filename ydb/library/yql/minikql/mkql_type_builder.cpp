@@ -2014,6 +2014,10 @@ NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type) {
             return new TEmptyHash();
         case NMiniKQL::TType::EKind::Pg:
             return MakePgHash((const TPgType*)type);
+        case NMiniKQL::TType::EKind::Tagged: {
+            auto taggedType = static_cast<const TTaggedType*>(type);
+            return MakeHashImpl(taggedType->GetBaseType());
+        }
         default:
             throw TTypeNotSupported() << "Data, Pg, Optional, Tuple, Struct, List, Variant or Dict is expected for hashing";
     }
@@ -2056,6 +2060,10 @@ NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) {
             return new TCompare<NMiniKQL::TType::EKind::List>(type);
         case NMiniKQL::TType::EKind::Pg:
             return MakePgCompare((const TPgType*)type);
+        case NMiniKQL::TType::EKind::Tagged: {
+            auto taggedType = static_cast<const TTaggedType*>(type);
+            return MakeCompareImpl(taggedType->GetBaseType());
+        }
         default:
             throw TTypeNotSupported() << "Data, Pg, Optional, Variant over Tuple, Tuple or List is expected for comparing,"
             << "but got: " << PrintNode(type);
@@ -2102,6 +2110,10 @@ NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type) {
             return new TEquate<NMiniKQL::TType::EKind::Dict>(type);
         case NMiniKQL::TType::EKind::Pg:
             return MakePgEquate((const TPgType*)type);
+        case NMiniKQL::TType::EKind::Tagged: {
+            auto taggedType = static_cast<const TTaggedType*>(type);
+            return MakeEquateImpl(taggedType->GetBaseType());
+        }
         default:
             throw TTypeNotSupported() << "Data, Pg, Optional, Tuple, Struct, List, Variant or Dict is expected for equating";
     }

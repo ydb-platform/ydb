@@ -16,7 +16,7 @@
 namespace NYql {
 namespace NCommon {
 
-NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TProgramBuilder& pgmBuilder, IOutputStream& err, bool withTagged) {
+NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TProgramBuilder& pgmBuilder, IOutputStream& err) {
     switch (annotation.GetKind()) {
     case ETypeAnnotationKind::Data: {
         auto data = annotation.Cast<TDataExprType>();
@@ -42,7 +42,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         members.reserve(structObj->GetItems().size());
 
         for (auto& item : structObj->GetItems()) {
-            auto itemType = BuildType(*item->GetItemType(), pgmBuilder, err, withTagged);
+            auto itemType = BuildType(*item->GetItemType(), pgmBuilder, err);
             if (!itemType) {
                 return nullptr;
             }
@@ -53,7 +53,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::List: {
         auto list = annotation.Cast<TListExprType>();
-        auto itemType = BuildType(*list->GetItemType(), pgmBuilder, err, withTagged);
+        auto itemType = BuildType(*list->GetItemType(), pgmBuilder, err);
         if (!itemType) {
             return nullptr;
         }
@@ -62,7 +62,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::Optional: {
         auto optional = annotation.Cast<TOptionalExprType>();
-        auto itemType = BuildType(*optional->GetItemType(), pgmBuilder, err, withTagged);
+        auto itemType = BuildType(*optional->GetItemType(), pgmBuilder, err);
         if (!itemType) {
             return nullptr;
         }
@@ -74,7 +74,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         TVector<NKikimr::NMiniKQL::TType*> elements;
         elements.reserve(tuple->GetItems().size());
         for (auto& child : tuple->GetItems()) {
-            elements.push_back(BuildType(*child, pgmBuilder, err, withTagged));
+            elements.push_back(BuildType(*child, pgmBuilder, err));
             if (!elements.back()) {
                 return nullptr;
             }
@@ -87,7 +87,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         TVector<NKikimr::NMiniKQL::TType*> elements;
         elements.reserve(multi->GetItems().size());
         for (auto& child : multi->GetItems()) {
-            elements.push_back(BuildType(*child, pgmBuilder, err, withTagged));
+            elements.push_back(BuildType(*child, pgmBuilder, err));
             if (!elements.back()) {
                 return nullptr;
             }
@@ -97,8 +97,8 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::Dict: {
         auto dictType = annotation.Cast<TDictExprType>();
-        auto keyType = BuildType(*dictType->GetKeyType(), pgmBuilder, err, withTagged);
-        auto payloadType = BuildType(*dictType->GetPayloadType(), pgmBuilder, err, withTagged);
+        auto keyType = BuildType(*dictType->GetKeyType(), pgmBuilder, err);
+        auto payloadType = BuildType(*dictType->GetPayloadType(), pgmBuilder, err);
         if (!keyType || !payloadType) {
             return nullptr;
         }
@@ -107,7 +107,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::Type: {
         auto type = annotation.Cast<TTypeExprType>()->GetType();
-        return BuildType(*type, pgmBuilder, err, withTagged);
+        return BuildType(*type, pgmBuilder, err);
     }
 
     case ETypeAnnotationKind::Void: {
@@ -120,10 +120,10 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::Callable: {
         auto callable = annotation.Cast<TCallableExprType>();
-        auto returnType = BuildType(*callable->GetReturnType(), pgmBuilder, err, withTagged);
+        auto returnType = BuildType(*callable->GetReturnType(), pgmBuilder, err);
         NKikimr::NMiniKQL::TCallableTypeBuilder callableTypeBuilder(pgmBuilder.GetTypeEnvironment(), "", returnType);
         for (auto& child : callable->GetArguments()) {
-            callableTypeBuilder.Add(BuildType(*child.Type, pgmBuilder, err, withTagged));
+            callableTypeBuilder.Add(BuildType(*child.Type, pgmBuilder, err));
             if (!child.Name.empty()) {
                 callableTypeBuilder.SetArgumentName(child.Name);
             }
@@ -150,17 +150,13 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::Tagged: {
         auto tagged = annotation.Cast<TTaggedExprType>();
-        auto base = BuildType(*tagged->GetBaseType(), pgmBuilder, err, withTagged);
-        if (!withTagged) {
-            return base;
-        }
-
+        auto base = BuildType(*tagged->GetBaseType(), pgmBuilder, err);
         return pgmBuilder.NewTaggedType(base, tagged->GetTag());
     }
 
     case ETypeAnnotationKind::Variant: {
         auto var = annotation.Cast<TVariantExprType>();
-        auto underlyingType = BuildType(*var->GetUnderlyingType(), pgmBuilder, err, withTagged);
+        auto underlyingType = BuildType(*var->GetUnderlyingType(), pgmBuilder, err);
         if (!underlyingType) {
             return nullptr;
         }
@@ -169,7 +165,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::Stream: {
         auto stream = annotation.Cast<TStreamExprType>();
-        auto itemType = BuildType(*stream->GetItemType(), pgmBuilder, err, withTagged);
+        auto itemType = BuildType(*stream->GetItemType(), pgmBuilder, err);
         if (!itemType) {
             return nullptr;
         }
@@ -178,7 +174,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::Flow: {
         auto flow = annotation.Cast<TFlowExprType>();
-        auto itemType = BuildType(*flow->GetItemType(), pgmBuilder, err, withTagged);
+        auto itemType = BuildType(*flow->GetItemType(), pgmBuilder, err);
         if (!itemType) {
             return nullptr;
         }
@@ -205,7 +201,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::Block: {
         auto block = annotation.Cast<TBlockExprType>();
-        auto itemType = BuildType(*block->GetItemType(), pgmBuilder, err, withTagged);
+        auto itemType = BuildType(*block->GetItemType(), pgmBuilder, err);
         if (!itemType) {
             return nullptr;
         }
@@ -214,7 +210,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::Scalar: {
         auto scalar = annotation.Cast<TScalarExprType>();
-        auto itemType = BuildType(*scalar->GetItemType(), pgmBuilder, err, withTagged);
+        auto itemType = BuildType(*scalar->GetItemType(), pgmBuilder, err);
         if (!itemType) {
             return nullptr;
         }
@@ -229,17 +225,17 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
     }
 }
 
-NKikimr::NMiniKQL::TType* BuildType(TPositionHandle pos, const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TProgramBuilder& pgmBuilder, bool withTagged) {
+NKikimr::NMiniKQL::TType* BuildType(TPositionHandle pos, const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TProgramBuilder& pgmBuilder) {
     TStringStream err;
-    auto type = BuildType(annotation, pgmBuilder, err, withTagged);
+    auto type = BuildType(annotation, pgmBuilder, err);
     if (!type) {
         ythrow TNodeException(pos) << err.Str();
     }
     return type;
 }
 
-NKikimr::NMiniKQL::TType* BuildType(const TExprNode& owner, const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TProgramBuilder& pgmBuilder, bool withTagged) {
-    return BuildType(owner.Pos(), annotation, pgmBuilder, withTagged);
+NKikimr::NMiniKQL::TType* BuildType(const TExprNode& owner, const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TProgramBuilder& pgmBuilder) {
+    return BuildType(owner.Pos(), annotation, pgmBuilder);
 }
 
 const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMiniKQL::TType* type, TExprContext& ctx) {

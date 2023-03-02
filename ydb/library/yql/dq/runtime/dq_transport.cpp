@@ -374,6 +374,12 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
             }
             return 0;
         }
+
+        case TType::EKind::Tagged: {
+            auto taggedType = static_cast<const TTaggedType*>(type);
+            return EstimateSizeImpl(value, taggedType->GetBaseType(), fixed);
+        }
+
         case TType::EKind::Type:
         case TType::EKind::Stream:
         case TType::EKind::Callable:
@@ -381,7 +387,6 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
         case TType::EKind::Resource:
         case TType::EKind::Flow:
         case TType::EKind::ReservedKind:
-        case TType::EKind::Tagged:
         case TType::EKind::Block:
             THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
     }

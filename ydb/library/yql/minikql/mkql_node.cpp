@@ -2383,6 +2383,9 @@ EValueRepresentation GetValueRepresentation(const TType* type) {
         case TType::EKind::Pg:
             return EValueRepresentation::Any;
 
+        case TType::EKind::Tagged:
+            return GetValueRepresentation(static_cast<const TTaggedType*>(type)->GetBaseType());
+
         default:
             Y_FAIL("Unsupported type.");
     }

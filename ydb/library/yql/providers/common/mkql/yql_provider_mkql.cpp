@@ -2177,7 +2177,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.NewNull();
     });
 
-    AddCallable({"AsTagged","Untag","WithWorld"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({ "AsTagged","Untag" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto input = MkqlBuildExpr(node.Head(), ctx);
+        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.Nop(input, returnType);
+    });
+
+    AddCallable({"WithWorld"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
@@ -2246,7 +2252,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         YQL_ENSURE(node.ChildrenSize() == 8);
         std::string_view function = node.Head().Content();
         const auto runConfig = MkqlBuildExpr(*node.Child(1), ctx);
-        const auto userType = BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn(), ctx.ProgramBuilder, true);
+        const auto userType = BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn(), ctx.ProgramBuilder);
         const auto typeConfig = node.Child(3)->Content();
         const auto callableType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         const auto pos = ctx.ExprCtx.GetPosition(node.Pos());

@@ -658,6 +658,8 @@ public:
 
     TRuntimeNode NextValue(TRuntimeNode value);
 
+    TRuntimeNode Nop(TRuntimeNode value, TType* returnType);
+
     typedef TRuntimeNode (TProgramBuilder::*UnaryFunctionMethod)(TRuntimeNode);
     typedef TRuntimeNode (TProgramBuilder::*BinaryFunctionMethod)(TRuntimeNode, TRuntimeNode);
     typedef TRuntimeNode (TProgramBuilder::*TernaryFunctionMethod)(TRuntimeNode, TRuntimeNode, TRuntimeNode);

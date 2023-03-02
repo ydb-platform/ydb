@@ -63,6 +63,7 @@
 #include "mkql_map_join.h"
 #include "mkql_multimap.h"
 #include "mkql_next_value.h"
+#include "mkql_nop.h"
 #include "mkql_now.h"
 #include "mkql_null.h"
 #include "mkql_pickle.h"
@@ -336,6 +337,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"RoundUp", &WrapRound},
         {"RoundDown", &WrapRound},
         {"NextValue", &WrapNextValue},
+        {"Nop", &WrapNop},
     };
 };
 

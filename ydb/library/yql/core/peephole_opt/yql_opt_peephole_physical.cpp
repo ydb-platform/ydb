@@ -3767,42 +3767,6 @@ TExprNode::TPtr AutoMapGetElementhOfOptionalArray(const TExprNode::TPtr& node, T
             auto ret = ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
             return JustIf(!itemType->IsOptionalOrNull(), std::move(ret), ctx);
         }
-
-        constexpr auto typeName = TupleOrStruct ? "tuple" : "struct";
-        YQL_CLOG(DEBUG, CorePeepHole) << "Wrap " << node->Content() << " for optional " << typeName << '.';
-        return itemType->IsOptionalOrNull() ?
-            ctx.Builder(node->Pos())
-                .Callable("IfPresent")
-                    .Add(0, node->HeadPtr())
-                    .Lambda(1)
-                        .Param(typeName)
-                        .Callable(node->Content())
-                            .Arg(0, typeName)
-                            .Add(1, node->TailPtr())
-                        .Seal()
-                    .Seal()
-                    .Callable(2, "Nothing")
-                        .Add(0, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
-                    .Seal()
-                .Seal()
-            .Build():
-            ctx.Builder(node->Pos())
-                .Callable("IfPresent")
-                    .Add(0, node->HeadPtr())
-                    .Lambda(1)
-                        .Param(typeName)
-                        .Callable("Just")
-                            .Callable(0, node->Content())
-                                .Arg(0, typeName)
-                                .Add(1, node->TailPtr())
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Callable(2, "Nothing")
-                        .Add(0, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
-                    .Seal()
-                .Seal()
-            .Build();
     }
 
     return node;

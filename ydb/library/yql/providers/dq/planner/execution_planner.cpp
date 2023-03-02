@@ -478,8 +478,7 @@ namespace NYql::NDqs {
 
             TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
             TStringStream errorStream;
-            const bool withTagged = true;
-            auto type = NCommon::BuildType(*exprType, pgmBuilder, errorStream, withTagged);
+            auto type = NCommon::BuildType(*exprType, pgmBuilder, errorStream);
             return SerializeNode(type, typeEnv);
         }
         return {};
@@ -811,8 +810,7 @@ THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAll
 
             TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
             TStringStream errorStream;
-            const bool withTagged = true;
-            auto type = NCommon::BuildType(*exprType, pgmBuilder, errorStream, withTagged);
+            auto type = NCommon::BuildType(*exprType, pgmBuilder, errorStream);
             return SerializeNode(type, typeEnv);
         } else {
             return GetSerializedResultType(Program);

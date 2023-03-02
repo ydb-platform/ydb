@@ -538,8 +538,7 @@ public:
 private:
     NKikimr::NMiniKQL::TType* CompileType(TProgramBuilder& pgmBuilder, const TTypeAnnotationNode& inputType) {
         TStringStream errorStream;
-        const bool withTagged = true;
-        auto type = NCommon::BuildType(inputType, pgmBuilder, errorStream, withTagged);
+        auto type = NCommon::BuildType(inputType, pgmBuilder, errorStream);
         Y_ENSURE(type, "Failed to compile type: " << errorStream.Str());
         return type;
     }

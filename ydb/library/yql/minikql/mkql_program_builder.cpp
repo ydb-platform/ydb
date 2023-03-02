@@ -3170,7 +3170,7 @@ TRuntimeNode TProgramBuilder::Nth(TRuntimeNode tuple, ui32 index) {
     MKQL_ENSURE(index < type->GetElementsCount(), "Index out of range: " << index <<
         " is not less than " << type->GetElementsCount());
     auto itemType = type->GetElementType(index);
-    if (isOptional && !itemType->IsOptional()) {
+    if (isOptional && !itemType->IsOptional() && !itemType->IsNull() && !itemType->IsPg()) {
         itemType = TOptionalType::Create(itemType, Env);
     }
 
@@ -5248,6 +5248,16 @@ TRuntimeNode TProgramBuilder::NextValue(TRuntimeNode value) {
     TCallableBuilder callableBuilder(Env, __func__, TOptionalType::Create(valueType, Env));
     callableBuilder.Add(value);
 
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::Nop(TRuntimeNode value, TType* returnType) {
+    if constexpr (RuntimeVersion < 35U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(value);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

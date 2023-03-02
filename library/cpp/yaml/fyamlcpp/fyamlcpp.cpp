@@ -280,6 +280,11 @@ TNode TNodeRef::Copy() const {
     return TNode(fy_node_copy(fy_node_document(Node_), Node_));
 }
 
+TNode TNodeRef::Copy(const TDocument& to) const {
+    ENSURE_NODE_NOT_EMPTY(Node_);
+    return TNode(fy_node_copy(to.Document_.get(), Node_));
+}
+
 TString TNodeRef::Path() const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     char* path = fy_node_get_path(Node_);
@@ -801,12 +806,75 @@ void TDocument::UnregisterUserDataCleanup() {
     fy_document_unregister_meta(Document_.get());
 }
 
+TMark TDocument::BeginMark() const {
+    ENSURE_DOCUMENT_NOT_EMPTY(Document_);
+    auto* fyds = fy_document_get_document_state(Document_.get());
+    auto* mark = fy_document_state_start_mark(fyds);
+    return TMark{
+        mark->input_pos,
+        mark->line,
+        mark->column,
+    };
+}
+
+TMark TDocument::EndMark() const {
+    ENSURE_DOCUMENT_NOT_EMPTY(Document_);
+    auto* fyds = fy_document_get_document_state(Document_.get());
+    auto* mark = fy_document_state_end_mark(fyds);
+    return TMark{
+        mark->input_pos,
+        mark->line,
+        mark->column,
+    };
+}
+
 std::unique_ptr<char, void(*)(char*)> TJsonEmitter::EmitToCharArray() const {
     std::unique_ptr<char, void(*)(char*)> res(
-        fy_emit_document_to_string(
-            Document_.Document_.get(),
+        fy_emit_node_to_string(
+            Node_.Node_,
             (fy_emitter_cfg_flags)(FYECF_DEFAULT | FYECF_SORT_KEYS | FYECF_MODE_JSON_TP)), &NDetail::FreeChar);
     return res;
+}
+
+TParser::TParser(fy_parser* parser, fy_diag* diag)
+    : Parser_(parser, fy_parser_destroy)
+    , Diag_(diag, fy_diag_destroy)
+{}
+
+TParser TParser::Create(const char* stream)
+{
+    fy_diag_cfg dcfg;
+    fy_diag_cfg_default(&dcfg);
+    std::unique_ptr<fy_diag, void(*)(fy_diag*)> diag(fy_diag_create(&dcfg), fy_diag_destroy);
+    fy_diag_set_collect_errors(diag.get(), true);
+    fy_parse_cfg cfg{
+        "",
+        // FYPCF_PARSE_COMMENTS,
+        FYPCF_QUIET,
+        nullptr,
+        diag.get()
+    };
+    auto* parser = fy_parser_create(&cfg);
+    if (!parser) {
+        fy_diag_error* err;
+        void *iter = nullptr;
+        while ((err = fy_diag_errors_iterate(diag.get(), &iter)) != nullptr) {
+            ythrow yexception() << err->file << ":" << err->line << ":" << err->column << " " << err->msg;
+        }
+    }
+
+    fy_parser_set_string(parser, stream, -1);
+
+    return TParser(parser, diag.release());
+}
+
+std::optional<TDocument> TParser::NextDocument() {
+    auto* doc = fy_parse_load_document(Parser_.get());
+    if (!doc) {
+        return std::nullopt;
+    }
+
+    return TDocument(doc, fy_document_get_diag(doc));
 }
 
 namespace NDetail {

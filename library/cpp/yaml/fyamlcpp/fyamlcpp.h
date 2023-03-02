@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 
+struct fy_parser;
 struct fy_node;
 struct fy_document;
 struct fy_diag;
@@ -67,6 +68,8 @@ class TSequenceIterator;
 class TReverseSequenceIterator;
 class TSequence;
 class TJsonEmitter;
+class TParser;
+struct TMark;
 
 class TDocumentIterator {
     friend class TDocument;
@@ -88,6 +91,7 @@ class TNodeRef {
     friend class TSequence;
     friend class TSequenceIterator;
     friend class TReverseSequenceIterator;
+    friend class TJsonEmitter;
 
     TNodeRef(fy_node* node)
         : Node_(node)
@@ -111,6 +115,8 @@ public:
     ENodeType Type() const;
 
     TNode Copy() const;
+
+    TNode Copy(const TDocument& to) const;
 
     bool IsAlias() const;
 
@@ -500,7 +506,9 @@ private:
 
 class TDocument {
     friend class TNode;
+    friend class TNodeRef;
     friend class TJsonEmitter;
+    friend class TParser;
 
     TDocument(fy_document* doc = nullptr, fy_diag* diag = nullptr);
 
@@ -550,7 +558,6 @@ public:
         return it;
     }
 
-
     TDocumentNodeIterator end() {
         return TDocumentNodeIterator(TNodeRef(nullptr));
     }
@@ -558,6 +565,10 @@ public:
     TNodeRef CreateAlias(const TString& name);
 
     std::unique_ptr<char, void(*)(char*)> EmitToCharArray() const;
+
+    TMark BeginMark() const;
+
+    TMark EndMark() const;
 
 private:
     std::unique_ptr<fy_document, void(*)(fy_document*)> Document_;
@@ -578,16 +589,30 @@ private:
 
 class TJsonEmitter {
 public:
-    TJsonEmitter(const TDocument& doc) : Document_(doc) {}
+    TJsonEmitter(TDocument& doc) : Node_(doc.Root()) {}
+    TJsonEmitter(const TNodeRef& node) : Node_(node) {}
 
     std::unique_ptr<char, void(*)(char*)> EmitToCharArray() const;
 
 private:
-    const TDocument& Document_;
+    const TNodeRef Node_;
+};
 
-    fy_document* Document() const {
-        return Document_.Document_.get();
-    }
+class TParser {
+    TParser(fy_parser* doc, fy_diag* diag);
+public:
+    static TParser Create(const char* cstr);
+
+    std::optional<TDocument> NextDocument();
+private:
+    std::unique_ptr<fy_parser, void(*)(fy_parser*)> Parser_;
+    std::unique_ptr<fy_diag, void(*)(fy_diag*)> Diag_;
+};
+
+struct TMark {
+    size_t InputPos;
+    int Line;
+    int Column;
 };
 
 } // namesapce NFyaml

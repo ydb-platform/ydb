@@ -1709,6 +1709,11 @@ message TClientCertificateAuthorization {
     optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
 }
 
+message TLabel {
+    optional string Name = 1;
+    optional string Value = 2;
+}
+
 message TAppConfig {
     optional TActorSystemConfig ActorSystemConfig = 1;
     optional TLogConfig LogConfig = 2;
@@ -1774,6 +1779,7 @@ message TAppConfig {
     optional string ClusterYamlConfig = 101;
 
     optional TConfigVersion Version = 102;
+    repeated TLabel Labels = 103;
 }
 
 message TYdbVersion {

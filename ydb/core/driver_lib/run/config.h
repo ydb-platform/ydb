@@ -115,6 +115,8 @@ struct TKikimrRunConfig {
 
     TMap<TString, TString>     Labels;
 
+    TString                    ClusterName;
+
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,
                      ui32 nodeId = 0, const TKikimrScopeId& scopeId = {});
 };

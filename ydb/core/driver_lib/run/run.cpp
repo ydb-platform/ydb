@@ -329,6 +329,38 @@ public:
     }
 };
 
+class TLabelsInitializer : public IAppDataInitializer {
+    const NKikimrConfig::TAppConfig& Config;
+
+public:
+    TLabelsInitializer(const TKikimrRunConfig& runConfig)
+        : Config(runConfig.AppConfig)
+    {
+    }
+
+    virtual void Initialize(NKikimr::TAppData* appData) override
+    {
+        for (const auto& label : Config.GetLabels()) {
+            appData->Labels[label.GetName()] = label.GetValue();
+        }
+    }
+};
+
+class TClusterNameInitializer : public IAppDataInitializer {
+    const TKikimrRunConfig& Config;
+
+public:
+    TClusterNameInitializer(const TKikimrRunConfig& runConfig)
+        : Config(runConfig)
+    {
+    }
+
+    virtual void Initialize(NKikimr::TAppData* appData) override
+    {
+        appData->ClusterName = Config.ClusterName;
+    }
+};
+
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
@@ -1086,6 +1118,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     appDataInitializers.AddAppDataInitializer(new TDynamicNameserviceInitializer(runConfig));
     // setup cms
     appDataInitializers.AddAppDataInitializer(new TCmsInitializer(runConfig));
+    // setup labels
+    appDataInitializers.AddAppDataInitializer(new TLabelsInitializer(runConfig));
+    // setup cluster name
+    appDataInitializers.AddAppDataInitializer(new TClusterNameInitializer(runConfig));
 
     appDataInitializers.Initialize(AppData.Get());
 }

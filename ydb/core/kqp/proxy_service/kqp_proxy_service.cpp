@@ -12,7 +12,6 @@
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/core/kqp/runtime/kqp_spilling_file.h>
 #include <ydb/core/kqp/runtime/kqp_spilling.h>
@@ -109,6 +108,7 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
             EvCollectPeerProxyData,
             EvOnRequestTimeout,
             EvCloseIdleSessions,
+            EvResourcesSnapshot,
         };
 
         struct TEvReadyToPublishResources : public TEventLocal<TEvReadyToPublishResources, EEv::EvReadyToPublishResources> {};
@@ -134,6 +134,13 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         };
 
         struct TEvCloseIdleSessions : public TEventLocal<TEvCloseIdleSessions, EEv::EvCloseIdleSessions> {};
+
+        struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EEv::EvResourcesSnapshot> {
+            TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
+
+            TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
+                : Snapshot(std::move(snapshot)) {}
+        };
     };
 
 public:
@@ -144,7 +151,8 @@ public:
     TKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         TVector<NKikimrKqp::TKqpSetting>&& settings,
-        std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory)
+        std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
+        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources)
         : YqlLoggerScope(new NYql::NLog::TTlsLogBackend(new TNullLogBackend()))
         , LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
@@ -152,6 +160,7 @@ public:
         , QueryReplayFactory(std::move(queryReplayFactory))
         , PendingRequests()
         , ModuleResolverState()
+        , KqpProxySharedResources(std::move(kqpProxySharedResources))
     {}
 
     void Bootstrap() {
@@ -202,9 +211,12 @@ public:
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
-             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-             mon->RegisterActorPage(actorsMonPage, "kqp_proxy", "KQP Proxy", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+            NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actorsMonPage, "kqp_proxy", "KQP Proxy", false, 
+                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
         }
+
+        KqpRmServiceActor = MakeKqpRmServiceID(SelfId().NodeId());
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
@@ -310,13 +322,14 @@ public:
 
         SendWhiteboardRequest();
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
-            KQP_PROXY_LOG_E("Cannot start publishing usage, tenants: " << AppData()->TenantName << ", " << SelfDataCenterId.value_or("empty"));
+            KQP_PROXY_LOG_E("Cannot start publishing usage, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
             return;
         }
 
         auto groupId = GetDefaultStateStorageGroupId(AppData()->TenantName);
         if (!groupId) {
-            KQP_PROXY_LOG_D("Unable to determine default state storage group id for database " << AppData()->TenantName);
+            KQP_PROXY_LOG_D("Unable to determine default state storage group id for database " << 
+                AppData()->TenantName);
             return;
         }
 
@@ -328,13 +341,22 @@ public:
     }
 
     void PublishResourceUsage() {
+        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+        auto now = TAppData::TimeProvider->Now();
+        TDuration batchingInterval = TDuration::MilliSeconds(sbs.GetBoardPublishIntervalMs());
+
+        if (TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
+            if (!LastPublishResourcesAt.has_value() || now - *LastPublishResourcesAt < batchingInterval) {
+                LastPublishResourcesAt = TAppData::TimeProvider->Now();
+                Send(KqpRmServiceActor, std::make_unique<TEvKqp::TEvKqpProxyPublishRequest>());
+            }
+            return;
+        } 
+
         if (ResourcesPublishScheduled) {
             return;
         }
 
-        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-        auto now = TAppData::TimeProvider->Now();
-        TDuration batchingInterval = TDuration::MilliSeconds(sbs.GetBoardPublishIntervalMs());
         if (LastPublishResourcesAt && now - *LastPublishResourcesAt < batchingInterval) {
             ResourcesPublishScheduled = true;
             Schedule(batchingInterval, new TEvPrivate::TEvReadyToPublishResources());
@@ -692,7 +714,15 @@ public:
     }
 
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
-        LookupPeerProxyData();
+        if (!TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
+            LookupPeerProxyData();
+        } else {
+            GetKqpResourceManager()->RequestClusterResourcesInfo(
+                [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                    TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
+                    as->Send(eh);
+                });
+        }
         if (!ShutdownRequested) {
             const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
             ui64 millis = sbs.GetBoardLookupIntervalMs();
@@ -722,6 +752,38 @@ public:
         LocalDatacenterProxies.clear();
         for(auto& [ownerId, entry] : boardInfo->InfoEntries) {
             Y_PROTOBUF_SUPPRESS_NODISCARD PeerProxyNodeResources[idx].ParseFromString(entry.Payload);
+            if (getDataCenterId(PeerProxyNodeResources[idx]) == *SelfDataCenterId) {
+                LocalDatacenterProxies.emplace_back(PeerProxyNodeResources[idx].GetNodeId());
+            }
+            ++idx;
+        }
+
+        PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId);
+        TryKickSession();
+    }
+
+    void Handle(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
+        if (ev->Get()->Snapshot.empty()) {
+            PeerProxyNodeResources.clear();
+            KQP_PROXY_LOG_E("Can not find default state storage group for database " << 
+                AppData()->TenantName);
+            return;
+        }
+
+        Y_VERIFY(SelfDataCenterId);
+        PeerProxyNodeResources.resize(ev->Get()->Snapshot.size());
+        size_t idx = 0;
+        auto getDataCenterId = [](const auto& entry) {
+            return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId());
+        };
+
+        LocalDatacenterProxies.clear();
+        for(auto& nodeResource : ev->Get()->Snapshot) {
+            auto* proxyNodeResources = nodeResource.MutableKqpProxyNodeResources();
+            proxyNodeResources->SetNodeId(nodeResource.GetNodeId());
+
+            PeerProxyNodeResources[idx] = std::move(*proxyNodeResources);
+
             if (getDataCenterId(PeerProxyNodeResources[idx]) == *SelfDataCenterId) {
                 LocalDatacenterProxies.emplace_back(PeerProxyNodeResources[idx].GetNodeId());
             }
@@ -1028,6 +1090,7 @@ public:
             hFunc(TEvKqp::TEvPingSessionResponse, ForwardEvent);
             hFunc(TEvKqp::TEvInitiateShutdownRequest, Handle);
             hFunc(TEvPrivate::TEvOnRequestTimeout, Handle);
+            hFunc(TEvPrivate::TEvResourcesSnapshot, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionResponse, ForwardEvent);
             hFunc(TEvPrivate::TEvCloseIdleSessions, Handle);
@@ -1156,6 +1219,7 @@ private:
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration());
+        KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
 
         KQP_PROXY_LOG_D(requestInfo << "Created new session"
             << ", sessionId: " << sessionInfo->SessionId
@@ -1199,6 +1263,7 @@ private:
     void RemoveSession(const TString& sessionId, const TActorId& workerId) {
         if (!sessionId.empty()) {
             LocalSessions->Erase(sessionId);
+            KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
             PublishResourceUsage();
             if (ShutdownRequested) {
                 ShutdownState->Update(LocalSessions->size());
@@ -1208,6 +1273,7 @@ private:
         }
 
         LocalSessions->Erase(workerId);
+        KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
         PublishResourceUsage();
         if (ShutdownRequested) {
             ShutdownState->Update(LocalSessions->size());
@@ -1251,6 +1317,7 @@ private:
 
     TIntrusivePtr<TKqpCounters> Counters;
     std::unique_ptr<TLocalSessionsRegistry> LocalSessions;
+    std::shared_ptr<TKqpProxySharedResources> KqpProxySharedResources;
 
     bool ServerWorkerBalancerComplete = false;
     std::optional<TString> SelfDataCenterId;
@@ -1260,6 +1327,8 @@ private:
     bool ResourcesPublishScheduled = false;
     TString PublishBoardPath;
     std::optional<TInstant> LastPublishResourcesAt;
+    
+    TActorId KqpRmServiceActor;
     TActorId BoardLookupActor;
     TActorId BoardPublishActor;
     TActorId CompileService;
@@ -1274,9 +1343,11 @@ private:
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
-    std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory)
+    std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources)
 {
-    return new TKqpProxyService(logConfig, tableServiceConfig, std::move(settings), std::move(queryReplayFactory));
+    return new TKqpProxyService(logConfig, tableServiceConfig, std::move(settings), 
+        std::move(queryReplayFactory),std::move(kqpProxySharedResources));
 }
 
 } // namespace NKikimr::NKqp

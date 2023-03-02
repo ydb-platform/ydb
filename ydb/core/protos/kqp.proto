@@ -522,6 +522,8 @@ message TKqpNodeResources {
     }
     repeated TMemory Memory = 8;
     optional uint32 ExecutionUnits = 9;
+
+    optional TKqpProxyNodeResources KqpProxyNodeResources = 10;
 }
 
 /// Scans

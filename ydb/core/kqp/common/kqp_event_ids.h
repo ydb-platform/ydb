@@ -34,6 +34,7 @@ struct TKqpEvents {
         EvScriptResponse,
         EvFetchScriptResultsRequest,
         EvFetchScriptResultsResponse,
+        EvKqpProxyPublishRequest,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);

@@ -2280,14 +2280,17 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         enableSpilling.SetValue(appData->EnableKqpSpilling ? "true" : "false");
         settings.emplace_back(std::move(enableSpilling));
 
+        auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
+
         // Crate resource manager
-        auto rm = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr);
+        auto rm = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr, 
+            {}, kqpProxySharedResources);
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpRmServiceID(NodeId),
             TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));
 
         auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
-            std::move(settings), Factories->QueryReplayBackendFactory);
+            std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources));
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));

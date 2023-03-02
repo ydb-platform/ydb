@@ -17,6 +17,7 @@ target_link_libraries(core-kqp-rm_service PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
+  cpp-actors-interconnect
   ydb-core-actorlib_impl
   ydb-core-base
   core-cms-console
@@ -26,6 +27,7 @@ target_link_libraries(core-kqp-rm_service PUBLIC
   ydb-core-mon
   ydb-core-protos
   ydb-core-tablet
+  ydb-core-node_whiteboard
 )
 target_sources(core-kqp-rm_service PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm_service/kqp_resource_tracker.cpp

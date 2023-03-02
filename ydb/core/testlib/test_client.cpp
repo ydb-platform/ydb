@@ -753,18 +753,18 @@ namespace Tests {
             TActorId healthCheckId = Runtime->Register(healthCheck, nodeIdx);
             Runtime->RegisterService(NHealthCheck::MakeHealthCheckID(), healthCheckId, nodeIdx);
         }
-
         {
-            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(Settings->AppConfig.GetTableServiceConfig().GetResourceManager(), nullptr);
+            auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
+
+            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
+                Settings->AppConfig.GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources);
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
-        }
-
-        {
+            
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig.GetLogConfig(),
                                                                   Settings->AppConfig.GetTableServiceConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
-                                                                  nullptr);
+                                                                  nullptr, std::move(kqpProxySharedResources));
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
         }

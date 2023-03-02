@@ -718,6 +718,9 @@ struct TEvKqp {
         NLWTrace::TOrbit Orbit;
     };
 
+    struct TEvKqpProxyPublishRequest : 
+        public TEventLocal<TEvKqpProxyPublishRequest, TKqpEvents::EvKqpProxyPublishRequest> {};
+
     struct TEvCompileInvalidateRequest : public TEventLocal<TEvCompileInvalidateRequest,
         TKqpEvents::EvCompileInvalidateRequest>
     {

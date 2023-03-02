@@ -100,8 +100,13 @@ NActors::IActor* CreateTakeResourcesSnapshotActor(
 
 } // namespace NRm
 
+struct TKqpProxySharedResources {
+    std::atomic<ui32> AtomicLocalSessionCount{0};
+};
+
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {});
+    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {}, 
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr);
 
 NRm::IKqpResourceManager* GetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());
 NRm::IKqpResourceManager* TryGetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());

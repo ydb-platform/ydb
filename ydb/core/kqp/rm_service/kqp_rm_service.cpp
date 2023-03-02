@@ -1,14 +1,17 @@
 #include "kqp_rm_service.h"
 
+#include <ydb/core/base/location.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/resource_broker.h>
-#include <ydb/core/kqp/common/kqp.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -158,12 +161,14 @@ public:
     }
 
     TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-        TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId)
+        TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId, 
+        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources)
         : Config(config)
         , Counters(counters)
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , ExecutionUnitsResource(Config.GetComputeActorsCount())
         , ScanQueryMemoryResource(Config.GetQueryMemoryLimit())
+        , KqpProxySharedResources(std::move(kqpProxySharedResources))
     {}
 
     void Bootstrap() {
@@ -194,7 +199,12 @@ public:
                 ActorSystem, SelfId());
         }
 
+        WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
+
         Become(&TKqpResourceManagerActor::WorkState);
+
+        AskSelfNodeInfo();
+        SendWhiteboardRequest();
 
         auto rm = new TKqpNodeResourceManager(SelfId().NodeId(), this);
         with_lock (ResourceManagers.Lock) {
@@ -338,6 +348,33 @@ public:
 
         FireResourcesPublishing();
         return true;
+    }
+
+    void SendWhiteboardRequest() {
+        auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
+        Send(WhiteBoardService, ev.release(), IEventHandle::FlagTrackDelivery, SelfId().NodeId());
+    }
+
+    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.SystemStateInfoSize() != 1)  {
+            LOG_C("Unexpected whiteboard info");
+            return;
+        }
+
+        const auto& info = record.GetSystemStateInfo(0);
+        if (AppData()->UserPoolId >= info.PoolStatsSize()) {
+            LOG_C("Unexpected whiteboard info: pool size is smaller than user pool id"
+                << ", pool size: " << info.PoolStatsSize()
+                << ", user pool id: " << AppData()->UserPoolId);
+            return;
+        }
+
+        const auto& pool = info.GetPoolStats(AppData()->UserPoolId);
+
+        LOG_C("Received node white board pool stats: " << pool.usage());
+        ProxyNodeResources.SetCpuUsage(pool.usage());
+        ProxyNodeResources.SetThreads(pool.threads());
     }
 
     bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
@@ -588,9 +625,12 @@ public:
 private:
     STATEFN(WorkState) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(TEvPrivate::TEvPublishResources, HandleWork);
             hFunc(TEvPrivate::TEvSchedulePublishResources, HandleWork);
             hFunc(TEvPrivate::TEvTakeResourcesSnapshot, HandleWork);
+            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
+            hFunc(TEvKqp::TEvKqpProxyPublishRequest, HandleWork);
             hFunc(TEvResourceBroker::TEvConfigResponse, HandleWork);
             hFunc(TEvResourceBroker::TEvResourceBrokerResponse, HandleWork);
             hFunc(TEvTenantPool::TEvTenantPoolStatus, HandleWork);
@@ -615,6 +655,10 @@ private:
 
     void HandleWork(TEvPrivate::TEvSchedulePublishResources::TPtr&) {
         PublishResourceUsage("alloc");
+    }
+
+    void HandleWork(TEvKqp::TEvKqpProxyPublishRequest::TPtr&) {
+        PublishResourceUsage("kqp_proxy");
     }
 
     void HandleWork(TEvPrivate::TEvTakeResourcesSnapshot::TPtr& ev) {
@@ -650,6 +694,21 @@ private:
         with_lock (Lock) {
             ResourceBroker = ev->Get()->ResourceBroker;
         }
+    }
+
+    void AskSelfNodeInfo() {
+        Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
+    }
+
+    void Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev) {
+        auto selfDataCenterId = TString();
+        if (const auto& node = ev->Get()->Node) {
+            selfDataCenterId = node->Location.GetDataCenterId();
+        }
+
+        ProxyNodeResources.SetDataCenterNumId(DataCenterFromString(selfDataCenterId));
+        ProxyNodeResources.SetDataCenterId(selfDataCenterId);
+        PublishResourceUsage("data_center update");
     }
 
     void HandleWork(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev) {
@@ -867,6 +926,13 @@ private:
         NKikimrKqp::TKqpNodeResources payload;
         payload.SetNodeId(SelfId().NodeId());
         payload.SetTimestamp(now.Seconds());
+        auto* proxyNodeResources = payload.MutableKqpProxyNodeResources();
+        if (KqpProxySharedResources) {
+            ProxyNodeResources.SetActiveWorkersCount(KqpProxySharedResources->AtomicLocalSessionCount.load());
+        } else {
+            LOG_D("Don't set KqpProxySharedResources");
+        }
+        *proxyNodeResources = ProxyNodeResources;
         ActorIdToProto(MakeKqpResourceManagerServiceID(SelfId().NodeId()), payload.MutableResourceManagerActorId()); // legacy
         with_lock (Lock) {
             payload.SetAvailableComputeActors(ExecutionUnitsResource.Available()); // legacy
@@ -924,15 +990,21 @@ private:
 
     // pattern cache for different actors
     std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> PatternCache;
+
+    std::shared_ptr<TKqpProxySharedResources> KqpProxySharedResources;
+    NKikimrKqp::TKqpProxyNodeResources ProxyNodeResources;
+
+    TActorId WhiteBoardService;
 };
 
 } // namespace NRm
 
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker)
+    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker, 
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources)
 {
-    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker);
+    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources));
 }
 
 NRm::IKqpResourceManager* GetKqpResourceManager(TMaybe<ui32> _nodeId) {

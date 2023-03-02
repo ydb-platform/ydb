@@ -1260,6 +1260,7 @@ message TTableServiceConfig {
     optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
     optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
     optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
+    optional bool EnablePublishKqpProxyByRM = 34 [default = false];
 };
 
 // Config describes immediate controls and allows

@@ -547,7 +547,6 @@ class TSchemeOpRequestHandler: public TRequestHandlerBase<
     TEvTxUserProxy::TEvProposeTransactionStatus,
     IKqpGateway::TGenericResult>
 {
-    bool FailedOnAlreadyExists = false;
 public:
     using TBase = typename TSchemeOpRequestHandler::TBase;
     using TRequest = TEvTxUserProxy::TEvProposeTransaction;
@@ -708,6 +707,7 @@ public:
 
 private:
     TActorId ShemePipeActorId;
+    bool FailedOnAlreadyExists = false;
 };
 
 template<typename TResult>

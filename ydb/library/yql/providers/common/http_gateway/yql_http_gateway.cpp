@@ -756,7 +756,7 @@ private:
             callback(TIssues{error});
             return;
         }
-
+        const std::unique_lock lock(Sync);
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url),  TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);

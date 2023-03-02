@@ -598,6 +598,54 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(collectedKeys, Order)), ALL);
     }
+
+    Y_UNIT_TEST_SORT(AfterResolvePoints, Order) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        TFeatureFlags flags;
+        flags.SetEnablePredicateExtractForScanQueries(true);
+        settings.SetFeatureFlags(flags);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetTableClient();
+
+        auto& server = kikimr.GetTestServer();
+        auto* runtime = server.GetRuntime();
+        Y_UNUSED(runtime);
+        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+
+        auto sender = runtime->AllocateEdgeActor();
+        auto shards = GetTableShards(&server, sender, "/Root/KeyValueLargePartition");
+
+        TVector<ui64> collectedKeys;
+        CollectKeysTo(&collectedKeys, runtime, sender);
+
+        auto* shim = new TReadActorPipeCacheStub();
+        InterceptReadActorPipeCache(runtime->Register(shim));
+        shim->SetupCapture(0, 5);
+        SendScanQuery(runtime, kqpProxy, sender,
+            "PRAGMA Kikimr.OptEnablePredicateExtract=\"false\"; SELECT Key FROM `/Root/KeyValueLargePartition` where Key in (103, 302, 402, 502, 703)" + OrderBy(Order));
+
+        shim->ReadsReceived.WaitI();
+        Cerr << "starting split -----------------------------------------------------------" << Endl;
+        SetSplitMergePartCountLimit(runtime, -1);
+        {
+            auto senderSplit = runtime->AllocateEdgeActor();
+            ui64 txId = AsyncSplitTable(&server, senderSplit, "/Root/KeyValueLargePartition", shards.at(0), 400);
+            WaitTxNotification(&server, senderSplit, txId);
+        }
+        Cerr << "resume evread -----------------------------------------------------------" << Endl;
+        shim->SkipAll();
+        shim->SendCaptured(runtime);
+
+        auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(collectedKeys, Order)), ",103,302,402,502,703");
+    }
 }
 
 

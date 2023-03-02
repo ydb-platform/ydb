@@ -572,19 +572,23 @@ public:
         TVector<THolder<TShardState>> newShards;
         newShards.reserve(keyDesc->GetPartitions().size());
 
+        auto bounds = state->GetBounds(Settings.GetReverse());
+        size_t pointIndex = 0;
+
         for (ui64 idx = 0, i = 0; idx < keyDesc->GetPartitions().size(); ++idx) {
             const auto& partition = keyDesc->GetPartitions()[idx];
 
             TTableRange partitionRange{
-                idx == 0 ? state->Ranges.front().From.GetCells() : keyDesc->GetPartitions()[idx - 1].Range->EndKeyPrefix.GetCells(),
-                idx == 0 ? state->Ranges.front().FromInclusive : !keyDesc->GetPartitions()[idx - 1].Range->IsInclusive,
+                idx == 0 ? bounds.From : keyDesc->GetPartitions()[idx - 1].Range->EndKeyPrefix.GetCells(),
+                idx == 0 ? bounds.InclusiveFrom : !keyDesc->GetPartitions()[idx - 1].Range->IsInclusive,
                 keyDesc->GetPartitions()[idx].Range->EndKeyPrefix.GetCells(),
                 keyDesc->GetPartitions()[idx].Range->IsInclusive
             };
 
             CA_LOG_D("Processing resolved ShardId# " << partition.ShardId
                 << ", partition range: " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
-                << ", i: " << i << ", state ranges: " << state->Ranges.size());
+                << ", i: " << i << ", state ranges: " << state->Ranges.size()
+                << ", points: " << state->Points.size());
 
             auto newShard = MakeHolder<TShardState>(partition.ShardId);
 
@@ -592,28 +596,52 @@ public:
                 newShard->AssignContinuationToken(state.Get());
             }
 
-            for (ui64 j = i; j < state->Ranges.size(); ++j) {
-                CA_LOG_D("Intersect state range #" << j << " " << DebugPrintRange(KeyColumnTypes, state->Ranges[j].ToTableRange(), tr)
-                    << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr));
+            if (state->Points.empty()) {
+                Y_ASSERT(!state->Ranges.empty());
 
-                auto intersection = Intersect(KeyColumnTypes, partitionRange, state->Ranges[j].ToTableRange());
+                for (ui64 j = i; j < state->Ranges.size(); ++j) {
+                    CA_LOG_D("Intersect state range #" << j << " " << DebugPrintRange(KeyColumnTypes, state->Ranges[j].ToTableRange(), tr)
+                        << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr));
 
-                if (!intersection.IsEmptyRange(KeyColumnTypes)) {
-                    CA_LOG_D("Add range to new shardId: " << partition.ShardId
-                        << ", range: " << DebugPrintRange(KeyColumnTypes, intersection, tr));
+                    auto intersection = Intersect(KeyColumnTypes, partitionRange, state->Ranges[j].ToTableRange());
 
-                    newShard->Ranges.emplace_back(TSerializedTableRange(intersection));
-                } else {
-                    CA_LOG_D("empty intersection");
-                    if (j > i) {
-                        i = j - 1;
+                    if (!intersection.IsEmptyRange(KeyColumnTypes)) {
+                        CA_LOG_D("Add range to new shardId: " << partition.ShardId
+                            << ", range: " << DebugPrintRange(KeyColumnTypes, intersection, tr));
+
+                        newShard->Ranges.emplace_back(TSerializedTableRange(intersection));
+                    } else {
+                        CA_LOG_D("empty intersection");
+                        if (j > i) {
+                            i = j - 1;
+                        }
+                        break;
                     }
-                    break;
                 }
-            }
 
-            if (!newShard->Ranges.empty()) {
-                newShards.push_back(std::move(newShard));
+                if (!newShard->Ranges.empty()) {
+                    newShards.push_back(std::move(newShard));
+                }
+            } else {
+                while (pointIndex < state->Points.size()) {
+                    int intersection = ComparePointAndRange(
+                        state->Points[pointIndex].GetCells(),
+                        partitionRange,
+                        KeyColumnTypes,
+                        KeyColumnTypes);
+
+                    if (intersection == 0) {
+                        newShard->Points.push_back(state->Points[pointIndex]);
+                        CA_LOG_D("Add point to new shardId: " << partition.ShardId);
+                    }
+                    if (intersection < 0) {
+                        break;
+                    }
+                    pointIndex += 1;
+                }
+                if (!newShard->Points.empty()) {
+                    newShards.push_back(std::move(newShard));
+                }
             }
         }
 
@@ -838,8 +866,8 @@ public:
         ReceivedRowCount += ev->Get()->GetRowsCount();
         CA_LOG_D(TStringBuilder() << "new data for read #" << id
             << " seqno = " << ev->Get()->Record.GetSeqNo()
-            << " finished = " << ev->Get()->Record.GetFinished()
-            << " pushed " << DebugPrintCells(ev->Get()));
+            << " finished = " << ev->Get()->Record.GetFinished());
+        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()));
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }

@@ -34,7 +34,7 @@ struct TDefaultRangeEvReadSettings {
 
     TDefaultRangeEvReadSettings() {
         Data.SetMaxRows(32767);
-        Data.SetMaxBytes(200_MB);
+        Data.SetMaxBytes(5_MB);
     }
 
 } DefaultRangeEvReadSettings;
@@ -50,7 +50,7 @@ struct TDefaultRangeEvReadAckSettings {
 
     TDefaultRangeEvReadAckSettings() {
         Data.SetMaxRows(32767);
-        Data.SetMaxBytes(200_MB);
+        Data.SetMaxBytes(5_MB);
     }
 
 } DefaultRangeEvReadAckSettings;

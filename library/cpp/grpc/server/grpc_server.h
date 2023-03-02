@@ -67,6 +67,9 @@ struct TServerOptions {
     //! Memory quota size for grpc server in bytes. Zero means unlimited.
     DECLARE_FIELD(GRpcMemoryQuotaBytes, size_t, 0);
 
+    //! Enable Grpc memory quota feature.
+    DECLARE_FIELD(EnableGRpcMemoryQuota, bool, false);
+
     //! How long to wait until pending rpcs are forcefully terminated.
     DECLARE_FIELD(GRpcShutdownDeadline, TDuration, TDuration::Seconds(30));
 

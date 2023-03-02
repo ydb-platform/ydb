@@ -145,13 +145,17 @@ void TGRpcServer::Start() {
 
     if (Options_.GRpcMemoryQuotaBytes) {
         // See details KIKIMR-6932
-        /*
-        grpc::ResourceQuota quota("memory_bound");
-        quota.Resize(Options_.GRpcMemoryQuotaBytes);
+        if (Options_.EnableGRpcMemoryQuota) {
+            grpc::ResourceQuota quota("memory_bound");
+            quota.Resize(Options_.GRpcMemoryQuotaBytes);
 
-        builder.SetResourceQuota(quota);
-        */
-        Cerr << "GRpc memory quota temporarily disabled due to issues with grpc quoter" << Endl;
+            builder.SetResourceQuota(quota);
+
+            Cerr << "Set GRpc memory quota to: " << Options_.GRpcMemoryQuotaBytes << Endl;
+        } else {
+            Cerr << "GRpc memory quota was set but disabled due to issues with grpc quoter"
+                ", to enable it use EnableGRpcMemoryQuota option" << Endl;
+        }
     }
     Options_.ServerBuilderMutator(builder);
     builder.SetDefaultCompressionLevel(Options_.DefaultCompressionLevel);

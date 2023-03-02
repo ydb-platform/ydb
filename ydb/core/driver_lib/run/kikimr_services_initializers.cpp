@@ -584,10 +584,11 @@ namespace {
 
     constexpr i16 MaxPreparedCpuCount = 30;
     constexpr i16 GRpcWorkerCountInMaxPreparedCpuCase = 4;
+    constexpr i16 GrpcProxyCountInMaxPreparedCpuCase = 4;
     constexpr i16 CpuCountForEachGRpcWorker = MaxPreparedCpuCount / GRpcWorkerCountInMaxPreparedCpuCase;
+    constexpr i16 CpuCountForEachGRpcProxy = MaxPreparedCpuCount / GrpcProxyCountInMaxPreparedCpuCase;
     constexpr i16 GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase = 1000;
     constexpr i16 GRpcHandlersPerCompletionQueuePerCpu = GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase / MaxPreparedCpuCount;
-
 
     TShortPoolCfg ComputeCpuTable[MaxPreparedCpuCount + 1][4] {
         {  {0, 0},  {0, 0},   {0, 0}, {0, 0} },     // 0
@@ -1817,8 +1818,11 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         if (!grpcConfig->HasWorkerThreads()) {
             grpcConfig->SetWorkerThreads(Max(2, cpuCount / CpuCountForEachGRpcWorker));
         }
-        if  (!grpcConfig->HasHandlersPerCompletionQueue()) {
+        if (!grpcConfig->HasHandlersPerCompletionQueue()) {
             grpcConfig->SetHandlersPerCompletionQueue(GRpcHandlersPerCompletionQueuePerCpu * cpuCount);
+        }
+        if (!grpcConfig->HasGRpcProxyCount()) {
+            grpcConfig->SetGRpcProxyCount(Max(2, cpuCount / CpuCountForEachGRpcProxy));
         }
     }
 

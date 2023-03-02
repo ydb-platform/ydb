@@ -70,6 +70,7 @@ target_sources(core-cms-console PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__update_subdomain_key.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__update_tenant_state.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__update_tenant_pool_config.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/grpc_library_helper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/http.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/immediate_controls_configurator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/log_settings_configurator.cpp

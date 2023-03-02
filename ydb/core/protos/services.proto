@@ -156,6 +156,7 @@ enum EServiceKikimr {
     GRPC_PROXY_NO_CONNECT_ACCESS = 417;
     READ_TABLE_API = 414; // deprecated, use RPC_REQUEST
     RPC_REQUEST = 416;
+    GRPC_LIBRARY = 418;
 
     // KEY VALUE section
     KEYVALUE = 420;

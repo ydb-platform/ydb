@@ -28,6 +28,7 @@
 #include <ydb/core/control/immediate_control_board_actor.h>
 
 #include <library/cpp/actors/protos/services_common.pb.h>
+#include <ydb/core/cms/console/grpc_library_helper.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
@@ -900,6 +901,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 opts.SetKeepAliveEnable(false);
             }
         }
+        
+        NConsole::SetGRpcLibraryFunction();
 
 #define GET_PATH_TO_FILE(GRPC_CONFIG, PRIMARY_FIELD, SECONDARY_FIELD) \
         (GRPC_CONFIG.Has##PRIMARY_FIELD() ? GRPC_CONFIG.Get##PRIMARY_FIELD() : GRPC_CONFIG.Get##SECONDARY_FIELD())
@@ -1207,7 +1210,12 @@ void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)
 
         TString explanation;
         if (entry.HasLevel()) {
-            Y_VERIFY(LogSettings->SetLevel((NLog::EPriority)entry.GetLevel(), component, explanation) == 0);
+            auto prio = (NLog::EPriority)entry.GetLevel();
+            Y_VERIFY(LogSettings->SetLevel(prio, component, explanation) == 0);
+
+            if (component == NKikimrServices::GRPC_LIBRARY) {
+                NConsole::SetGRpcLibraryLogVerbosity(prio);
+            }
         }
         if (entry.HasSamplingLevel()) {
             Y_VERIFY(LogSettings->SetSamplingLevel((NLog::EPriority)entry.GetSamplingLevel(), component, explanation) == 0);

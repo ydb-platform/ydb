@@ -359,7 +359,7 @@ private:
                     pathList.emplace_back(NS3Details::TPath{entry.Path, 0, true});
                 }
 
-                YQL_CLOG(INFO, ProviderS3) << "Object " << req.S3Request.Pattern << " has " << listEntries.Objects.size() << " items with total size " << readSize;
+                YQL_CLOG(INFO, ProviderS3) << "Pattern " << req.S3Request.Pattern << " has " << listEntries.Size() << " items with total size " << readSize;
             }
 
             for (const auto& [extraValues, pathList] : pathsByExtraValues) {
@@ -794,9 +794,9 @@ private:
                     if (config.Generator) {
                         // postpone actual directory listing (will do it after path pruning)
                         NS3Lister::TListEntries entries{
-                            std::vector<NS3Lister::TObjectListEntry>{1},
-                            std::vector<NS3Lister::TDirectoryListEntry>{}};
-                        entries.Objects.back().Path = req.S3Request.Pattern;
+                            std::vector<NS3Lister::TObjectListEntry>{0},
+                            std::vector<NS3Lister::TDirectoryListEntry>{1}};
+                        entries.Directories.back().Path = req.S3Request.Pattern;
                         future = NThreading::MakeFuture<NS3Lister::TListResult>(std::move(entries));
                     } else {
                         future = ListingStrategy_->List(req.S3Request, req.Options);

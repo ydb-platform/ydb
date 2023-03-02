@@ -335,8 +335,9 @@ Upon successful database creation, the command execution status code shown on th
    sudo su - ydb
    cd /opt/ydb
    export LD_LIBRARY_PATH=/opt/ydb/lib
-   /opt/ydb/bin/ydbd server --grpcs-port 2136 --ic-port 19002 \
-       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem --ca /opt/ydb/certs/ca.crt \
+   /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
+       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
+       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
        --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
        --node-broker grpcs://<ydb1>:2135 \
        --node-broker grpcs://<ydb2>:2135 \
@@ -368,8 +369,10 @@ Upon successful database creation, the command execution status code shown on th
    SyslogFacility=daemon
    SyslogLevel=err
    Environment=LD_LIBRARY_PATH=/opt/ydb/lib
-   ExecStart=/opt/ydb/bin/ydbd server --grpcs-port 2136 --ic-port 19002 \
-       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem --ca /opt/ydb/certs/ca.crt \
+   ExecStart=/opt/ydb/bin/ydbd server \
+       --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
+       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
+       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
        --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
        --node-broker grpcs://<ydb1>:2135 \
        --node-broker grpcs://<ydb2>:2135 \

@@ -18,8 +18,8 @@ case "$1" in
 configure)
 
   # create ydb user & group
-  groupadd ydb || true
-  useradd ydb -g ydb || true
+  groupadd ydb 2>/dev/null || true
+  useradd ydb -g ydb 2>/dev/null || true
 
   # to make sure that YDB has access to block disks to run
   usermod -aG disk ydb
@@ -27,7 +27,7 @@ configure)
   # fix ownership of ydb stuff
   chown -R ydb:ydb /opt/ydb
 
-  mkdir /opt/ydb/cache
+  mkdir /opt/ydb/cache 2>/dev/null || true
   chown -R ydb:ydb /opt/ydb/cache
 
   if [ -x /bin/systemctl -a -f /etc/systemd/system/ydb-server-storage.service ]; then

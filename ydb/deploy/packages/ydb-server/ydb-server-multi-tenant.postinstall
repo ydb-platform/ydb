@@ -17,7 +17,7 @@ case "$1" in
 configure)
 
   # create ydb user & group
-  useradd ydb_tenant -g ydb || true
+  useradd ydb_tenant -g ydb 2>/dev/null || true
 
   chown -R ydb_tenant:ydb /opt/ydb-tenant
   chown ydb_tenant:ydb /opt/ydb/bin/ydb-server-mt*

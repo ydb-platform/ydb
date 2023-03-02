@@ -1898,7 +1898,7 @@ private:
                 ReadOnlyTx &&
                 !ImmediateTx &&
                 !HasPersistentChannels &&
-                !Database.empty() &&
+                (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot) &&
                 AppData()->FeatureFlags.GetEnableMvccSnapshotReads());
 
         if (forceSnapshot) {

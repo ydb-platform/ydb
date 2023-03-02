@@ -9,7 +9,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/formats/arrow_helpers.h>
-#include <ydb/core/formats/sharding.h>
+#include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -97,10 +97,8 @@ TFullSplitData SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
     Y_VERIFY(description.HasSharding() && description.GetSharding().HasHashSharding());
 
     auto& descSharding = description.GetSharding();
-    auto& hashSharding = descSharding.GetHashSharding();
 
     TVector<ui64> tabletIds(descSharding.GetColumnShards().begin(), descSharding.GetColumnShards().end());
-    TVector<TString> shardingColumns(hashSharding.GetColumns().begin(), hashSharding.GetColumns().end());
     ui32 numShards = tabletIds.size();
     Y_VERIFY(numShards);
     TFullSplitData result(numShards);
@@ -111,28 +109,15 @@ TFullSplitData SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
         return result;
     }
 
+    auto sharding = NSharding::TShardingBase::BuildShardingOperator(descSharding);
     std::vector<ui32> rowSharding;
-    if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N) {
-        NArrow::THashSharding sharding(numShards);
-        rowSharding = sharding.MakeSharding(batch, shardingColumns);
-    } else if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS) {
-        ui32 activeShards = NArrow::TLogsSharding::DEFAULT_ACITVE_SHARDS;
-        if (hashSharding.HasActiveShardsCount()) {
-            activeShards = hashSharding.GetActiveShardsCount();
-        }
-        NArrow::TLogsSharding sharding(numShards, activeShards);
-        rowSharding = sharding.MakeSharding(batch, shardingColumns);
+    if (sharding) {
+        rowSharding = sharding->MakeSharding(batch);
     }
-
     if (rowSharding.empty()) {
         result.ErrorString = "empty "
-            + NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction_Name(hashSharding.GetFunction())
-            + " sharding";
-        for (auto& column : shardingColumns) {
-            if (batch->schema()->GetFieldIndex(column) < 0) {
-                result.ErrorString += ", no column '" + column + "'";
-            }
-        }
+            + NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction_Name(descSharding.GetHashSharding().GetFunction())
+            + " sharding (" + (sharding ? sharding->DebugString() : "no sharding object") + ")";
         return result;
     }
 

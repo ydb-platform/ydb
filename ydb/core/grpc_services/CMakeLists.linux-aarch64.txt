@@ -40,6 +40,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   ydb-core-sys_view
   ydb-core-tx
   core-tx-datashard
+  core-tx-sharding
   tx-long_tx_service-public
   ydb-core-ydb_convert
   yq-libs-actors

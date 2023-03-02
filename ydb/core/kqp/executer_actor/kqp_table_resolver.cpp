@@ -159,12 +159,50 @@ private:
     STATEFN(ResolveKeysState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleResolveKeys);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveKeys);
             hFunc(TEvents::TEvPoison, HandleResolveKeys);
             default: {
                 LOG_C("ResolveKeysState: unexpected event " << ev->GetTypeRewrite());
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }
+    }
+
+    void HandleResolveKeys(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (ShouldTerminate) {
+            PassAway();
+            return;
+        }
+        auto& results = ev->Get()->Request->ResultSet;
+        if (results.size() != TableRequestIds.size()) {
+            ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TIssue(TStringBuilder() << "navigation problems for tables"));
+            return;
+        }
+        LOG_D("Navigated key sets: " << results.size());
+        for (auto& entry : results) {
+            if (!TableRequestIds.erase(entry.TableId)) {
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                    YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
+                        << "Incorrect tableId in reply " << entry.TableId << '.'));
+                return;
+            }
+            if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                    YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
+                        << "Failed to resolve table " << entry.TableId << " keys: " << entry.Status << '.'));
+                return;
+            }
+            auto* table = TableKeys.FindTablePtr(entry.TableId);
+            if (!table) {
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                    YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
+                        << "Incorrect tableId in table keys " << entry.TableId << '.'));
+                return;
+            }
+            table->ColumnTableInfo = entry.ColumnTableInfo;
+        }
+        NavigationFinished = true;
+        TryFinish();
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev) {
@@ -215,12 +253,8 @@ private:
         }
 
         timer.reset();
-
-        auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
-        replyEv->CpuTime = CpuTime;
-
-        Send(Owner, replyEv.release());
-        PassAway();
+        ResolvingFinished = true;
+        TryFinish();
     }
 
     void HandleResolveKeys(TEvents::TEvPoison::TPtr&) {
@@ -231,6 +265,7 @@ private:
     void ResolveKeys() {
         FillKqpTasksGraphStages(TasksGraph, Transactions);
 
+        auto requestNavigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->ResultSet.reserve(TasksGraph.GetStagesInfo().size());
         if (UserToken) {
@@ -249,6 +284,13 @@ private:
 
                 stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, operation);
 
+                if (stageInfo.Meta.TableKind == ETableKind::Olap && TableRequestIds.emplace(stageInfo.Meta.TableId).second) {
+                    auto& entry = requestNavigate->ResultSet.emplace_back();
+                    entry.TableId = stageInfo.Meta.TableId;
+                    entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+                    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
+                }
+
                 auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
                 entry.UserData = EncodeStageInfo(stageInfo);
                 switch (operation) {
@@ -266,7 +308,11 @@ private:
                 }
             }
         }
-
+        if (requestNavigate->ResultSet.size()) {
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
+        } else {
+            NavigationFinished = true;
+        }
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
     }
 
@@ -310,12 +356,26 @@ private:
         PassAway();
     }
 
+    void TryFinish() {
+        if (!NavigationFinished || !ResolvingFinished) {
+            return;
+        }
+        auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
+        replyEv->CpuTime = CpuTime;
+
+        Send(Owner, replyEv.release());
+        PassAway();
+    }
+
 private:
     const TActorId Owner;
     const ui64 TxId;
     const TMaybe<TString> UserToken;
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
     TKqpTableKeys& TableKeys;
+    THashSet<TTableId> TableRequestIds;
+    bool NavigationFinished = false;
+    bool ResolvingFinished = false;
 
     // TODO: TableResolver should not populate TasksGraph as it's not related to its job (bad API).
     TKqpTasksGraph& TasksGraph;

@@ -3,8 +3,8 @@
 #include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
+#include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/formats/arrow_helpers.h>
-#include <ydb/core/formats/sharding.h>
 #include <ydb/library/aclib/aclib.h>
 
 using namespace NYdb;
@@ -35,8 +35,8 @@ TVector<std::shared_ptr<arrow::RecordBatch>> SplitData(const TString& data, ui32
     std::shared_ptr<arrow::RecordBatch> batch = NArrow::DeserializeBatch(data, TTestOlap::ArrowSchema());
     Y_VERIFY(batch);
 
-    NArrow::TLogsSharding sharding(numBatches);
-    std::vector<ui32> rowSharding = sharding.MakeSharding(batch, {"timestamp", "uid"});
+    NSharding::TLogsSharding sharding(numBatches, { "timestamp", "uid" }, numBatches);
+    std::vector<ui32> rowSharding = sharding.MakeSharding(batch);
     Y_VERIFY(rowSharding.size() == (size_t)batch->num_rows());
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> sharded = NArrow::ShardingSplit(batch, rowSharding, numBatches);

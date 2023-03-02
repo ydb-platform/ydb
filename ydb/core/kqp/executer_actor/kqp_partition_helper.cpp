@@ -57,18 +57,36 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
     }
 
     NUdf::TUnboxedValue paramValue;
+    std::unique_ptr<NSharding::TShardingBase> sharding = table.BuildSharding();
+    std::unique_ptr<NSharding::TUnboxedValueReader> unboxedReader;
+    if (sharding) {
+        unboxedReader = std::make_unique<NSharding::TUnboxedValueReader>(structType, table.GetColumnsRemap(), sharding->GetShardingColumns());
+    }
     auto it = value.GetListIterator();
     while (it.Next(paramValue)) {
-        auto keyValue = MakeKeyCells(paramValue, table.KeyColumnTypes, keyColumnIndices,
-            typeEnv, /* copyValues */ true);
-        Y_VERIFY_DEBUG(keyValue.size() == keyLen);
+        ui64 shardId = 0;
+        if (sharding) {
+            shardId = key.GetPartitions()[sharding->CalcShardId(paramValue, *unboxedReader)].ShardId;
+        } else {
+            auto keyValue = MakeKeyCells(paramValue, table.KeyColumnTypes, keyColumnIndices,
+                typeEnv, /* copyValues */ true);
+            Y_VERIFY_DEBUG(keyValue.size() == keyLen);
+            const ui32 partitionIndex = FindKeyPartitionIndex(keyValue, key.GetPartitions(), table.KeyColumnTypes,
+                [](const auto& partition) { return *partition.Range; });
 
-        ui32 partitionIndex = FindKeyPartitionIndex(keyValue, key.GetPartitions(), table.KeyColumnTypes,
-            [] (const auto& partition) { return *partition.Range; });
+            shardId = key.GetPartitions()[partitionIndex].ShardId;
 
-        auto point = TSerializedCellVec(TSerializedCellVec::Serialize(keyValue));
-
-        ui64 shardId = key.GetPartitions()[partitionIndex].ShardId;
+            auto point = TSerializedCellVec(TSerializedCellVec::Serialize(keyValue));
+            auto& shardData = ret[shardId];
+            if (key.GetPartitions()[partitionIndex].Range->IsPoint) {
+                // singular case when partition is just a point
+                shardData.FullRange.emplace(TSerializedTableRange(point.GetBuffer(), "", true, true));
+                shardData.FullRange->Point = true;
+                shardData.Ranges.clear();
+            } else {
+                shardData.Ranges.emplace_back(std::move(point));
+            }
+        }
         auto& shardData = ret[shardId];
 
         for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
@@ -87,14 +105,6 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
 
         shardParamValues[shardId].emplace_back(std::move(paramValue));
 
-        if (key.GetPartitions()[partitionIndex].Range->IsPoint) {
-            // singular case when partition is just a point
-            shardData.FullRange.emplace(TSerializedTableRange(point.GetBuffer(), "", true, true));
-            shardData.FullRange->Point = true;
-            shardData.Ranges.clear();
-        } else {
-            shardData.Ranges.emplace_back(std::move(point));
-        }
         shardData.ParamType = itemType;
     }
 

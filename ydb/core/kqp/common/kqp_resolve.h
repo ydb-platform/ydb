@@ -1,9 +1,11 @@
 #pragma once
 
 #include <ydb/core/engine/mkql_keys.h>
+#include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/yql/minikql/mkql_node.h>
 
@@ -21,18 +23,30 @@ enum class ETableKind {
 
 class TKqpTableKeys {
 public:
-    struct TColumn {
-        ui32 Id;
-        NScheme::TTypeInfo Type;
-        TString TypeMod;
-    };
+    using TColumn = NSharding::TShardingBase::TColumn;
 
     struct TTable {
+    public:
         TString Path;
         TMap<TString, TColumn> Columns;
         TVector<TString> KeyColumns;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         ETableKind TableKind = ETableKind::Unknown;
+        TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfo;
+
+        const TMap<TString, TColumn>& GetColumnsRemap() const {
+            return Columns;
+        }
+
+        std::unique_ptr<NSharding::TShardingBase> BuildSharding() const {
+            if (ColumnTableInfo) {
+                auto result = NSharding::TShardingBase::BuildShardingOperator(ColumnTableInfo->Description.GetSharding());
+                YQL_ENSURE(result);
+                return result;
+            } else {
+                return nullptr;
+            }
+        }
     };
 
     TTable* FindTablePtr(const TTableId& id) {

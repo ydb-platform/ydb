@@ -104,6 +104,8 @@ void TKqpCountersBase::Init() {
         KqpGroup->GetCounter("Request/QueryTypeAstScan", true);
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_QUERY] =
         KqpGroup->GetCounter("Request/QueryTypeQuery", true);
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_FEDERATED_QUERY] =
+        KqpGroup->GetCounter("Request/QueryTypeFederatedQuery", true);
     OtherQueryTypes = KqpGroup->GetCounter("Requests/QueryTypeOther", true);
 
     QueriesWithRangeScan = KqpGroup->GetCounter("Query/WithRangeScan", true);

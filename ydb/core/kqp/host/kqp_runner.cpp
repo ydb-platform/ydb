@@ -177,7 +177,7 @@ public:
     TIntrusivePtr<TAsyncQueryResult> PrepareQuery(const TString& cluster, const TExprNode::TPtr& query,
         TExprContext& ctx, const IKikimrQueryExecutor::TExecuteSettings& settings) override
     {
-        YQL_ENSURE(TransformCtx->QueryCtx->Type == EKikimrQueryType::Query);
+        YQL_ENSURE(TransformCtx->QueryCtx->Type == EKikimrQueryType::Query || TransformCtx->QueryCtx->Type == EKikimrQueryType::FederatedQuery);
         YQL_ENSURE(TransformCtx->QueryCtx->PrepareOnly);
         YQL_ENSURE(TransformCtx->QueryCtx->PreparingQuery);
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
@@ -243,6 +243,7 @@ private:
             case EKikimrQueryType::Dml:
             case EKikimrQueryType::Scan:
             case EKikimrQueryType::Query:
+            case EKikimrQueryType::FederatedQuery:
                 break;
             default:
                 YQL_ENSURE(false, "PrepareQueryNewEngine, unexpected query type: " << queryType);

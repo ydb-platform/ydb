@@ -219,7 +219,8 @@ struct TKqpQueryState {
         return (
             type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
             type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
-            type == NKikimrKqp::QUERY_TYPE_SQL_QUERY
+            type == NKikimrKqp::QUERY_TYPE_SQL_QUERY ||
+            type == NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY
         );
     }
 
@@ -437,6 +438,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_DML:
             case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
+            case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
                 return true;
 
             // should not be compiled. TODO: forward to request executer
@@ -885,7 +887,8 @@ public:
                 YQL_ENSURE(
                     type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
                     type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
-                    type == NKikimrKqp::QUERY_TYPE_SQL_QUERY
+                    type == NKikimrKqp::QUERY_TYPE_SQL_QUERY ||
+                    type == NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY
                 );
                 break;
 
@@ -1462,7 +1465,8 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
-            case NKikimrKqp::QUERY_TYPE_SQL_QUERY: {
+            case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
+            case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY: {
                 TString text = QueryState->ExtractQueryText();
                 if (IsQueryAllowedToLog(text)) {
                     auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID();

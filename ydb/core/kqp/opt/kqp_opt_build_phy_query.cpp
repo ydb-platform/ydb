@@ -37,6 +37,10 @@ public:
                 querySettings.Type = EPhysicalQueryType::Query;
                 break;
             }
+            case EKikimrQueryType::FederatedQuery: {
+                querySettings.Type = EPhysicalQueryType::FederatedQuery;
+                break;
+            }
             default: {
                 YQL_ENSURE(false, "Unexpected query type: " << KqpCtx->QueryCtx->Type);
             }

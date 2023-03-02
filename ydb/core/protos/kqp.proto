@@ -38,6 +38,7 @@ enum EQueryType {
     QUERY_TYPE_SQL_SCRIPT_STREAMING = 11;
 
     QUERY_TYPE_SQL_QUERY = 12;
+    QUERY_TYPE_FEDERATED_QUERY = 13;
 };
 
 enum EQueryAction {

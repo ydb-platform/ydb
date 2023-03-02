@@ -67,6 +67,7 @@ enum class EKikimrQueryType {
     Scan,
     YqlScriptStreaming,
     Query,
+    FederatedQuery,
 };
 
 struct TKikimrQueryContext : TThrRefBase {
@@ -308,7 +309,7 @@ public:
                 return false;
             }
 
-            if (queryType == EKikimrQueryType::Query && (newOp & KikimrSchemeOps())) {
+            if ((queryType == EKikimrQueryType::Query || queryType == EKikimrQueryType::FederatedQuery) && (newOp & KikimrSchemeOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in query";
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));

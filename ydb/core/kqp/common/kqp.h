@@ -171,6 +171,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_AST_DML:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN:
             case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
+            case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
                 break;
 
             default:

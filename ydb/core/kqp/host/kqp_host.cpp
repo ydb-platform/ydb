@@ -679,6 +679,7 @@ public:
                 case EKikimrQueryType::Scan:
                     return KqpRunner->PrepareScanQuery(cluster, query, ctx, settings);
                 case EKikimrQueryType::Query:
+                case EKikimrQueryType::FederatedQuery:
                     return KqpRunner->PrepareQuery(cluster, query, ctx, settings);
                 case EKikimrQueryType::YqlScript:
                 case EKikimrQueryType::YqlScriptStreaming:
@@ -1032,7 +1033,14 @@ public:
     IAsyncQueryResultPtr PrepareQuery(const TString& query, const TPrepareSettings& settings) override {
         return CheckedProcessQuery(*ExprCtx,
             [this, &query, settings] (TExprContext& ctx) mutable {
-                return PrepareQueryInternal(query, settings, ctx);
+                return PrepareQueryInternal(query, EKikimrQueryType::Query, settings, ctx);
+            });
+    }
+
+    IAsyncQueryResultPtr PrepareFederatedQuery(const TString& query, const TPrepareSettings& settings) override {
+        return CheckedProcessQuery(*ExprCtx,
+            [this, &query, settings] (TExprContext& ctx) mutable {
+                return PrepareQueryInternal(query, EKikimrQueryType::FederatedQuery, settings, ctx);
             });
     }
 
@@ -1329,12 +1337,12 @@ private:
             SessionCtx, *ExecuteCtx);
     }
 
-    IAsyncQueryResultPtr PrepareQueryInternal(const TString& query, const TPrepareSettings& settings,
+    IAsyncQueryResultPtr PrepareQueryInternal(const TString& query, EKikimrQueryType queryType, const TPrepareSettings& settings,
         TExprContext& ctx)
     {
         SetupYqlTransformer();
 
-        SessionCtx->Query().Type = EKikimrQueryType::Query;
+        SessionCtx->Query().Type = queryType;
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         if (settings.DocumentApiRestricted) {

@@ -122,6 +122,7 @@ public:
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
+            case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
                 AsyncCompileResult = KqpHost->PrepareQuery(Query.Text, prepareSettings);
                 break;
 

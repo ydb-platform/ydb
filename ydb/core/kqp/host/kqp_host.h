@@ -52,6 +52,9 @@ public:
     /* Generic queries */
     virtual IAsyncQueryResultPtr PrepareQuery(const TString& query, const TPrepareSettings& settings) = 0;
 
+    /* Federated queries */
+    virtual IAsyncQueryResultPtr PrepareFederatedQuery(const TString& query, const TPrepareSettings& settings) = 0;
+
     /* Scripting */
     virtual IAsyncQueryResultPtr ValidateYqlScript(const TString& script) = 0;
     virtual TQueryResult SyncValidateYqlScript(const TString& script) = 0;

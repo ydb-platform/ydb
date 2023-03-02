@@ -50,7 +50,7 @@ inline NKikimrKqp::EQueryType GetQueryType(const Ydb::Query::ExecuteQueryRequest
 }
 
 inline NKikimrKqp::EQueryType GetQueryType(const Ydb::Query::ExecuteScriptRequest&) {
-    return NKikimrKqp::QUERY_TYPE_SQL_QUERY; // TODO: make new query type
+    return NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY;
 }
 
 } // namespace NQueryHelpersPrivate

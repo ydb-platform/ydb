@@ -44,6 +44,7 @@ NKqpProto::TKqpPhyQuery::EType GetPhyQueryType(const EPhysicalQueryType& type) {
         case EPhysicalQueryType::Data: return NKqpProto::TKqpPhyQuery::TYPE_DATA;
         case EPhysicalQueryType::Scan: return NKqpProto::TKqpPhyQuery::TYPE_SCAN;
         case EPhysicalQueryType::Query: return NKqpProto::TKqpPhyQuery::TYPE_QUERY;
+        case EPhysicalQueryType::FederatedQuery: return NKqpProto::TKqpPhyQuery::TYPE_FEDERATED_QUERY;
 
         case EPhysicalQueryType::Unspecified:
             break;
@@ -524,7 +525,7 @@ public:
                 [](const TItemExprType* first, const TItemExprType* second) {
                     return first->GetName() < second->GetName();
                 });
-            inputsParams.erase(std::unique(inputsParams.begin(), inputsParams.end(), 
+            inputsParams.erase(std::unique(inputsParams.begin(), inputsParams.end(),
                 [](const TItemExprType* first, const TItemExprType* second) {
                     return first->GetName() == second->GetName();
                 }),
@@ -715,7 +716,7 @@ private:
         for (auto&& i : *txProto.MutableStages()) {
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
-        
+
 
         YQL_ENSURE(hasEffectStage == txSettings.WithEffects);
 

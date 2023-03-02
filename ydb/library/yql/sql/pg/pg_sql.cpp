@@ -169,7 +169,7 @@ public:
         bool InjectRead = false;
     };
 
-    struct TInsertDesc {
+    struct TWriteRangeDesc {
         TAstNode* Sink = nullptr;
         TAstNode* Key = nullptr;
     };
@@ -271,6 +271,8 @@ public:
             return ParseDropStmt(CAST_NODE(DropStmt, node)) != nullptr;
         case T_VariableSetStmt:
             return ParseVariableSetStmt(CAST_NODE(VariableSetStmt, node)) != nullptr;
+        case T_DeleteStmt:
+            return ParseDeleteStmt(CAST_NODE(DeleteStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;
@@ -1137,6 +1139,88 @@ public:
         return Statements.back();
     }
 
+    [[nodiscard]]
+    TAstNode* ParseDeleteStmt(const DeleteStmt* value) {
+        if (value->usingClause) {
+            AddError("using is not supported");
+            return nullptr;
+        }
+        if (value->returningList) {
+            AddError("returning is not supported");
+            return nullptr;
+        }
+        if (value->withClause) {
+            AddError("with is not supported");
+            return nullptr;
+        }
+
+        if (!value->relation) {
+            AddError("DeleteStmt: expected relation");
+            return nullptr;
+        }
+
+        TVector<TAstNode*> fromList;
+        auto p = ParseRangeVar(value->relation);
+        if (!p.Source) {
+            return nullptr;
+        }
+        AddFrom(p, fromList);
+
+        TAstNode* whereFilter = nullptr;
+        if (value->whereClause) {
+            TExprSettings settings;
+            settings.AllowColumns = true;
+            settings.AllowSubLinks = true;
+            settings.Scope = "WHERE";
+            whereFilter = ParseExpr(value->whereClause, settings);
+            if (!whereFilter) {
+                return nullptr;
+            }
+        }
+
+        TAstNode* starLambda = L(A("lambda"), QL(), L(A("PgStar")));
+        TAstNode* resultItem = L(A("PgResultItem"), QAX(""), L(A("Void")), starLambda);
+
+        TVector<TAstNode*> setItemOptions;
+
+        setItemOptions.push_back(QL(QA("result"), QVL(resultItem)));
+        setItemOptions.push_back(QL(QA("from"), QVL(fromList.data(), fromList.size())));
+        setItemOptions.push_back(QL(QA("join_ops"), QVL(QL())));
+
+        NYql::TAstNode* lambda = nullptr;
+        if (whereFilter) {
+            lambda = L(A("lambda"), QL(), whereFilter);
+            setItemOptions.push_back(QL(QA("where"), L(A("PgWhere"), L(A("Void")), lambda)));
+        }
+
+        auto setItemNode = L(A("PgSetItem"), QVL(setItemOptions.data(), setItemOptions.size()));
+
+        TVector<TAstNode*> selectOptions;
+        selectOptions.push_back(QL(QA("set_items"), QVL(setItemNode)));
+        selectOptions.push_back(QL(QA("set_ops"), QVL(QA("push"))));
+
+        auto select = L(A("PgSelect"), QVL(selectOptions.data(), selectOptions.size()));
+
+        auto [sink, key] = ParseWriteRangeVar(value->relation);
+
+        Statements.push_back(L(
+            A("let"),
+            A("world"),
+            L(
+                A("Write!"),
+                A("world"),
+                sink,
+                key,
+                L(A("Void")),
+                QL(
+                    QL(QA("pg_delete"), select),
+                    QL(QA("mode"), QA("delete"))
+                )
+            )
+        ));
+        return Statements.back();
+    }
+
     TFromDesc ParseFromClause(const Node* node) {
         switch (NodeTag(node)) {
         case T_RangeVar:
@@ -1185,7 +1269,7 @@ public:
         return true;
     }
 
-    TInsertDesc ParseWriteRangeVar(const RangeVar* value) {
+    TWriteRangeDesc ParseWriteRangeVar(const RangeVar* value) {
         AT_LOCATION(value);
         if (StrLength(value->catalogname) > 0) {
             AddError("catalogname is not supported");
@@ -1210,7 +1294,7 @@ public:
         }
 
         auto sink = L(A("DataSink"), QAX(*p), QAX(schemaname));
-        auto key = L(A("Key"), QL(QA("table"), L(A("String"), QAX(value->relname))));
+        auto key = L(A("Key"), QL(QA("table"), L(A("String"), QAX(TablePathPrefix + value->relname))));
         return { sink, key };
     }
 
@@ -2672,6 +2756,10 @@ public:
 
     TAstNode* QVL(TAstNode** nodes, ui32 size, TPosition pos = {}) {
         return Q(VL(nodes, size, pos), pos);
+    }
+
+    TAstNode* QVL(TAstNode* node, TPosition pos = {}) {
+        return QVL(&node, 1, pos);
     }
 
     TAstNode* A(const TString& str, TPosition pos = {}, ui32 flags = 0) {

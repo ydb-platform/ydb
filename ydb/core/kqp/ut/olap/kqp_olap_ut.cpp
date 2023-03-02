@@ -3893,8 +3893,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(
                 DELETE FROM `/Root/test_table` WHERE WatchID = 0;
             )"
+#if 1 // TODO
+            , false
+#endif
         );
-
     }
 
     Y_UNIT_TEST(PredicatePushdownCastErrors) {

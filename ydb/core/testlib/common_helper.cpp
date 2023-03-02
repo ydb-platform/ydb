@@ -34,7 +34,7 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess)
                     TStringStream ss;
                     f.GetValueSync().GetIssues().PrintTo(ss, false);
                     Cerr << "REQUEST=" << request << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
-                    Y_VERIFY(expectation == f.GetValueSync().IsSuccess());
+                    UNIT_ASSERT(expectation == f.GetValueSync().IsSuccess());
                     *rrPtr = true;
                 });
         });
@@ -43,7 +43,7 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess)
         Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
     }
     Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << Endl;
-    Y_VERIFY(resultReady);
+    UNIT_ASSERT(resultReady);
 }
 
 void THelper::StartSchemaRequest(const TString& request, const bool expectSuccess, const bool waiting) const {
@@ -60,7 +60,7 @@ void THelper::StartSchemaRequest(const TString& request, const bool expectSucces
                 TStringStream ss;
                 f.GetValueSync().GetIssues().PrintTo(ss, false);
                 Cerr << "REQUEST=" << requestInt << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
-                Y_VERIFY(expectation == f.GetValueSync().IsSuccess(), "%d", expectation ? 1 : 0);
+                UNIT_ASSERT(expectation == f.GetValueSync().IsSuccess());
                 *rrPtr = true;
             });
         });
@@ -70,7 +70,7 @@ void THelper::StartSchemaRequest(const TString& request, const bool expectSucces
         while (!*rrPtr && start + TDuration::Seconds(20) > TInstant::Now()) {
             Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
         }
-        Y_VERIFY(*rrPtr);
+        UNIT_ASSERT(*rrPtr);
         Cerr << "FINISHED_REQUEST=" << request << ";EXPECTATION=" << expectation << ";WAITING=" << waiting << Endl;
     }
 }

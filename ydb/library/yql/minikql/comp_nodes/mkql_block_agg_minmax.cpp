@@ -8,6 +8,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
+#include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_block_reader.h>
 
@@ -21,24 +22,35 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool IsMin, typename T>
+template<typename T>
+inline bool AggLess(T a, T b) {
+    if constexpr (std::is_floating_point<T>::value) {
+        if (std::isunordered(a, b)) {
+            // biggest fp value in agg ordering is NaN
+            return std::isnan(a) < std::isnan(b);
+        }
+    }
+    return a < b;
+}    
+
+template <bool IsMin, typename T>
 inline T UpdateMinMax(T x, T y) {
     if constexpr (IsMin) {
-        return x < y ? x : y;
+        return AggLess(x, y) ? x : y;
     } else {
-        return x > y ? x : y;
+        return AggLess(y, x) ? x : y;
     }
 }
 
 template<bool IsMin, typename T>
 inline void UpdateMinMax(TMaybe<T>& state, bool& stateUpdated, T value) {
     if constexpr (IsMin) {
-        if (!state || value < *state) {
+        if (!state || AggLess(value, *state)) {
             state = value;
             stateUpdated = true;
         }
     } else {
-        if (!state || *state < value) {
+        if (!state || AggLess(*state, value)) {
             state = value;
             stateUpdated = true;
         }
@@ -72,31 +84,35 @@ class TMinMaxBlockGenericAggregator;
 template <bool IsNullable, typename TIn, bool IsMin>
 struct TState;
 
-template <typename TIn, bool IsMin>
-struct TState<true, TIn, IsMin> {
-    TIn Value_;
-    ui8 IsValid_ = 0;
-
-    TState() {
+template<typename TIn, bool IsMin>
+constexpr TIn InitialStateValue() {
+    static_assert(std::is_arithmetic<TIn>::value);
+    if constexpr (std::is_floating_point<TIn>::value) {
+        static_assert(std::numeric_limits<TIn>::has_infinity && std::numeric_limits<TIn>::has_quiet_NaN);
         if constexpr (IsMin) {
-            Value_ = std::numeric_limits<TIn>::max();
+            // biggest fp value in agg ordering is NaN
+            return std::numeric_limits<TIn>::quiet_NaN();
         } else {
-            Value_ = std::numeric_limits<TIn>::min();
+            return -std::numeric_limits<TIn>::infinity();
+        }
+    } else {
+        if constexpr (IsMin) {
+            return std::numeric_limits<TIn>::max();
+        } else {
+            return std::numeric_limits<TIn>::min();
         }
     }
+}
+
+template <typename TIn, bool IsMin>
+struct TState<true, TIn, IsMin> {
+    TIn Value_ = InitialStateValue<TIn, IsMin>();
+    ui8 IsValid_ = 0;
 };
 
 template <typename TIn, bool IsMin>
 struct TState<false, TIn, IsMin> {
-    TIn Value_;
-
-    TState() {
-        if constexpr (IsMin) {
-            Value_ = std::numeric_limits<TIn>::max();
-        } else {
-            Value_ = std::numeric_limits<TIn>::min();
-        }
-    }
+    TIn Value_ = InitialStateValue<TIn, IsMin>();
 };
 
 using TGenericState = NUdf::TUnboxedValuePod;
@@ -168,8 +184,6 @@ void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64
         stateItem = converter.MakeItem(*typedState);
 
         const auto& array = datum.array();
-
-        constexpr int updateCmp = IsMin ? -1 : 1;
 
         TBlockItem curr = reader.GetItem(*array, row);
         if (curr) {
@@ -387,7 +401,6 @@ void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64
         } else {
             auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
             ui64 fullIndex = row + array->offset;
-            // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
             if ((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) {
                 auto value = NUdf::TStringRef(data + offsets[row], offsets[row + 1] - offsets[row]);
                 UpdateMinMax<IsMin>(currentState, stateUpdated, value);
@@ -643,9 +656,8 @@ public:
                     auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
-                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn mask = -TIn((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                        value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & mask) | (value & ~mask)));
+                        ui8 notNull = (nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1;
+                        value = UpdateMinMax<IsMin>(value, SelectArg(notNull, ptr[i], value));
                     }
                 } else {
                     for (int64_t i = 0; i < len; ++i) {
@@ -666,18 +678,15 @@ public:
                     auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
-                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn mask = -TIn((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                        TIn filterMask = -TIn(filterBitmap[i]);
-                        mask &= filterMask;
-                        value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & mask) | (value & ~mask)));
-                        validCount += mask & 1;
+                        ui8 notNullAndFiltered = ((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) & filterBitmap[i];
+                        value = UpdateMinMax<IsMin>(value, SelectArg(notNullAndFiltered, ptr[i], value));
+                        validCount += notNullAndFiltered;
                     }
                 } else {
                     for (int64_t i = 0; i < len; ++i) {
-                        TIn filterMask = -TIn(filterBitmap[i]);
-                        validCount += filterBitmap[i];
-                        value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & filterMask) | (value & ~filterMask)));
+                        ui8 filtered = filterBitmap[i];
+                        value = UpdateMinMax<IsMin>(value, SelectArg(filtered, ptr[i], value));
+                        validCount += filtered;
                     }
                 }
 
@@ -727,10 +736,9 @@ static void PushValueToState(TState<IsNullable, TIn, IsMin>* typedState, const a
             } else {
                 auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                 ui64 fullIndex = row + array->offset;
-                // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                TIn mask = -TIn((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                typedState->Value_ = UpdateMinMax<IsMin>(typedState->Value_, TIn((ptr[row] & mask) | (typedState->Value_ & ~mask)));
-                typedState->IsValid_ |= mask & 1;
+                ui8 notNull = (nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1;
+                typedState->Value_ = UpdateMinMax<IsMin>(typedState->Value_, SelectArg(notNull, ptr[row], typedState->Value_));
+                typedState->IsValid_ |= notNull;
             }
         } else {
             typedState->Value_ = UpdateMinMax<IsMin>(typedState->Value_, ptr[row]);
@@ -938,6 +946,10 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareMinMax(TTupleType* tu
     case NUdf::EDataSlot::Uint64:
     case NUdf::EDataSlot::Timestamp:
         return PrepareMinMaxFixed<TTag, ui64, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+    case NUdf::EDataSlot::Float:
+        return PrepareMinMaxFixed<TTag, float, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+    case NUdf::EDataSlot::Double:
+        return PrepareMinMaxFixed<TTag, double, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
     default:
         throw yexception() << "Unsupported MIN/MAX input type";
     }

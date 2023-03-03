@@ -5514,11 +5514,11 @@ void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext
     FilterDeadlinedWrites(ctx);
 }
 
-bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
+bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, const TActorContext& ctx) {
 
     FilterDeadlinedWrites(ctx);
 
-    if (!WriteQuota->CanExaust(ctx.Now())) { // Waiting for partition quota.
+    if (!WriteQuota->CanExaust(now)) { // Waiting for partition quota.
         SetDeadlinesForWrites(ctx);
         return false;
     }
@@ -5527,7 +5527,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorCon
         SetDeadlinesForWrites(ctx);
 
         if (StartTopicQuotaWaitTimeForCurrentBlob == TInstant::Zero() && !Requests.empty()) {
-            StartTopicQuotaWaitTimeForCurrentBlob = TActivationContext::Now();
+            StartTopicQuotaWaitTimeForCurrentBlob = now;
         }
         return false;
     }
@@ -5616,8 +5616,9 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
     Y_VERIFY(Head.PackedSize + NewHead.PackedSize <= 2 * MaxSizeCheck);
-
-    WriteCycleStartTime = ctx.Now();
+    
+    TInstant now = ctx.Now();
+    WriteCycleStartTime = now;
 
     bool haveData = false;
     bool haveCheckDisk = false;
@@ -5627,17 +5628,17 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
         AddCheckDiskRequest(request.Get(), Config.GetPartitionConfig().GetNumChannels());
         haveCheckDisk = true;
     } else {
-        haveData = ProcessWrites(request.Get(), ctx);
+        haveData = ProcessWrites(request.Get(), now, ctx);
     }
     bool haveDrop = CleanUp(request.Get(), haveData, ctx);
 
     ProcessReserveRequests(ctx);
     if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted
         if (!Requests.empty()) { //there could be change ownership requests that
-            bool res = ProcessWrites(request.Get(), ctx);
+            bool res = ProcessWrites(request.Get(), now, ctx);
             Y_VERIFY(!res);
         }
-        Y_VERIFY(Requests.empty() || !WriteQuota->CanExaust(ctx.Now()) || WaitingForPreviousBlobQuota()); //in this case all writes must be processed or no quota left
+        Y_VERIFY(Requests.empty() || !WriteQuota->CanExaust(now) || WaitingForPreviousBlobQuota()); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
         BecomeIdle(ctx);
         return;

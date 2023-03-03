@@ -126,14 +126,29 @@ public:
     }
 
     bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
+        if constexpr (std::is_floating_point<T>::value) {
+            if (std::isunordered(lhs.As<T>(), rhs.As<T>())) {
+                return std::isnan(lhs.As<T>()) == std::isnan(rhs.As<T>());
+            }
+        }
         return lhs.As<T>() == rhs.As<T>();
     }
 
     bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
+        if constexpr (std::is_floating_point<T>::value) {
+            if (std::isunordered(lhs.As<T>(), rhs.As<T>())) {
+                return std::isnan(lhs.As<T>()) < std::isnan(rhs.As<T>());
+            }
+        }
         return lhs.As<T>() < rhs.As<T>();
     }
 
     bool DoGreater(TBlockItem lhs, TBlockItem rhs) const {
+        if constexpr (std::is_floating_point<T>::value) {
+            if (std::isunordered(lhs.As<T>(), rhs.As<T>())) {
+                return std::isnan(lhs.As<T>()) > std::isnan(rhs.As<T>());
+            }
+        }
         return lhs.As<T>() > rhs.As<T>();
     }
 };

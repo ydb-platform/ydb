@@ -28,7 +28,7 @@ struct TMax : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMax<TLeft,
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        if (std::is_floating_point<TOutput>()) {
+        if constexpr (std::is_floating_point<TOutput>()) {
             auto& context = ctx.Codegen->GetContext();
             auto& module = ctx.Codegen->GetModule();
             const auto fnType = FunctionType::get(GetTypeFor<TOutput>(context), {left->getType(), right->getType()}, false);
@@ -46,7 +46,24 @@ struct TMax : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMax<TLeft,
 };
 
 template<typename TType>
-using TAggrMax = TMax<TType, TType, TType>;
+struct TFloatAggrMax : public TSimpleArithmeticBinary<TType, TType, TType, TFloatAggrMax<TType>> {
+    static TType Do(TType left, TType right)
+    {
+        return  left > right || std::isnan(left) ? left : right;
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Gen(Value* left, Value* right, const TCodegenContext&, BasicBlock*& block)
+    {
+        const auto ugt = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_UGT, left, right, "greater", block);
+        const auto ord = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_ORD, ConstantFP::get(right->getType(), 0.0), right, "ordered", block);
+        const auto both = BinaryOperator::CreateAnd(ugt, ord, "and", block);
+        return SelectInst::Create(both, left, right, "max", block);
+    }
+#endif
+};
+
+template<typename TType>
+using TAggrMax = std::conditional_t<std::is_floating_point<TType>::value, TFloatAggrMax<TType>, TMax<TType, TType, TType>>;
 
 template<typename TType>
 struct TTzMax : public TSelectArithmeticBinaryCopyTimezone<TType, TTzMax<TType>> {
@@ -134,6 +151,25 @@ struct TDecimalMax {
 };
 
 template<NUdf::EDataSlot Slot>
+struct TDecimalAggrMax {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        const auto lv = left.GetInt128();
+        const auto rv = right.GetInt128();
+        return lv > rv ? left : right;
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* left, Value* right, const TCodegenContext&, BasicBlock*& block)
+    {
+        const auto l = GetterForInt128(left, block);
+        const auto r = GetterForInt128(right, block);
+        const auto greater = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, l, r, "greater", block);
+        const auto res = SelectInst::Create(greater, left, right, "max", block);
+        return res;
+    }
+#endif
+};
+
+template<NUdf::EDataSlot Slot>
 struct TCustomMax {
     static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod left, NUdf::TUnboxedValuePod right) {
         const bool r = CompareCustoms<Slot>(left, right) < 0;
@@ -175,7 +211,7 @@ void RegisterAggrMax(IBuiltinFunctionRegistry& registry) {
     RegisterDatetimeAggregateFunction<TAggrMax, TBinaryArgsSameOpt>(registry, "AggrMax");
     RegisterTzDatetimeAggregateFunction<TAggrTzMax, TBinaryArgsSameOpt>(registry, "AggrMax");
 
-    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TDecimal>, TDecimalMax, TBinaryArgsSameOpt>(registry, "AggrMax");
+    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrMax, TBinaryArgsSameOpt>(registry, "AggrMax");
 
     RegisterCustomAggregateFunction<NUdf::TDataType<char*>, TCustomMax, TBinaryArgsSameOpt>(registry, "AggrMax");
     RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUtf8>, TCustomMax, TBinaryArgsSameOpt>(registry, "AggrMax");

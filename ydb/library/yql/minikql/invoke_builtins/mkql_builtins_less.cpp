@@ -36,8 +36,9 @@ Y_FORCE_INLINE bool Less(T1 x, T2 y) {
     using FT = std::conditional_t<(sizeof(F1) > sizeof(F2)), F1, F2>;
     const auto l = static_cast<FT>(x);
     const auto r = static_cast<FT>(y);
-    if (Aggr && std::isunordered(l, r)) {
-        return std::isnan(l) && !std::isnan(r);
+    if constexpr (Aggr) {
+        if (std::isunordered(l, r))
+            return !std::isnan(l);
     }
     return l < r;
 }
@@ -62,7 +63,7 @@ Value* GenLessFloats<false>(Value* lhs, Value* rhs, BasicBlock* block) {
 template <>
 Value* GenLessFloats<true>(Value* lhs, Value* rhs, BasicBlock* block) {
     const auto ult = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_ULT, lhs, rhs, "less", block);
-    const auto ord = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_ORD, ConstantFP::get(rhs->getType(), 0.0), rhs, "ordered", block);
+    const auto ord = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_ORD, ConstantFP::get(lhs->getType(), 0.0), lhs, "ordered", block);
     return BinaryOperator::CreateAnd(ult, ord, "and", block);
 }
 

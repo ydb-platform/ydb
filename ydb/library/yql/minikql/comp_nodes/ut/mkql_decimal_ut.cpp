@@ -918,6 +918,133 @@ Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
+    Y_UNIT_TEST_LLVM(TestAggrMinMax) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto data1 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 13, 2);
+        const auto data2 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 13, 2);
+        const auto data3 = pb.NewDecimalLiteral(314, 13, 2);
+        const auto data4 = pb.NewDecimalLiteral(-213, 13, 2);
+        const auto data5 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 13, 2);
+        const auto dataType = pb.NewDecimalType(13, 2);
+        const auto list = pb.NewList(dataType, {data1, data2, data3, data4, data5});
+        const auto pgmReturn = pb.FlatMap(list,
+            [&](TRuntimeNode left) {
+            return pb.Map(list,
+                [&](TRuntimeNode right) {
+                return pb.NewTuple({pb.AggrMin(left, right), pb.AggrMax(left, right)});
+            });
+        });
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue().GetListIterator();
+        NUdf::TUnboxedValue item;
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  +NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  NYql::NDecimal::Nan());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  314);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  NYql::NDecimal::Nan());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -213);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  NYql::NDecimal::Nan());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  NYql::NDecimal::Nan());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  NYql::NDecimal::Nan());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  NYql::NDecimal::Inf());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  314);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  +NYql::NDecimal::Inf());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -213);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  +NYql::NDecimal::Inf());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  +NYql::NDecimal::Inf());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  314);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  NYql::NDecimal::Nan());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  314);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  +NYql::NDecimal::Inf());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  314);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  314);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -213);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  314);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  314);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -213);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  NYql::NDecimal::Nan());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -213);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  +NYql::NDecimal::Inf());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -213);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  314);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -213);
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  -213);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  -213);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  NYql::NDecimal::Nan());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  +NYql::NDecimal::Inf());
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  314);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  -213);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item.GetElement(0).GetInt128() ==  -NYql::NDecimal::Inf());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() ==  -NYql::NDecimal::Inf());
+
+        UNIT_ASSERT(!iterator.Next(item));
+        UNIT_ASSERT(!iterator.Next(item));
+    }
+
     Y_UNIT_TEST_LLVM(TestAddSub) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;

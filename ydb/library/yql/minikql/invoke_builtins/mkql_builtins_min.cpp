@@ -28,7 +28,7 @@ struct TMin : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMin<TLeft,
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        if (std::is_floating_point<TOutput>()) {
+        if constexpr (std::is_floating_point<TOutput>()) {
             auto& context = ctx.Codegen->GetContext();
             auto& module = ctx.Codegen->GetModule();
             const auto fnType = FunctionType::get(GetTypeFor<TOutput>(context), {left->getType(), right->getType()}, false);
@@ -41,6 +41,23 @@ struct TMin : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMin<TLeft,
             const auto res = SelectInst::Create(check, right, left, "min", block);
             return res;
         }
+    }
+#endif
+};
+
+template<typename TType>
+struct TFloatAggrMin : public TSimpleArithmeticBinary<TType, TType, TType, TFloatAggrMin<TType>> {
+    static TType Do(TType left, TType right)
+    {
+        return  left < right || std::isnan(right) ? left : right;
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Gen(Value* left, Value* right, const TCodegenContext&, BasicBlock*& block)
+    {
+        const auto ult = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_ULT, left, right, "less", block);
+        const auto ord = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_ORD, ConstantFP::get(left->getType(), 0.0), left, "ordered", block);
+        const auto both = BinaryOperator::CreateAnd(ult, ord, "and", block);
+        return SelectInst::Create(both, left, right, "min", block);
     }
 #endif
 };
@@ -92,8 +109,26 @@ struct TDecimalMin {
 #endif
 };
 
+template<NUdf::EDataSlot Slot>
+struct TDecimalAggrMin {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        const auto lv = left.GetInt128();
+        const auto rv = right.GetInt128();
+        return lv < rv ? left : right;
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* left, Value* right, const TCodegenContext&, BasicBlock*& block)
+    {
+        const auto l = GetterForInt128(left, block);
+        const auto r = GetterForInt128(right, block);
+        const auto less = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, l, r, "less", block);
+        return SelectInst::Create(less, left, right, "min", block);
+    }
+#endif
+};
+
 template<typename TType>
-using TAggrMin = TMin<TType, TType, TType>;
+using TAggrMin = std::conditional_t<std::is_floating_point<TType>::value, TFloatAggrMin<TType>, TMin<TType, TType, TType>>;
 
 template<typename TType>
 struct TTzMin : public TSelectArithmeticBinaryCopyTimezone<TType, TTzMin<TType>> {
@@ -175,7 +210,7 @@ void RegisterAggrMin(IBuiltinFunctionRegistry& registry) {
     RegisterDatetimeAggregateFunction<TAggrMin, TBinaryArgsSameOpt>(registry, "AggrMin");
     RegisterTzDatetimeAggregateFunction<TAggrTzMin, TBinaryArgsSameOpt>(registry, "AggrMin");
 
-    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TDecimal>, TDecimalMin, TBinaryArgsSameOpt>(registry, "AggrMin");
+    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrMin, TBinaryArgsSameOpt>(registry, "AggrMin");
 
     RegisterCustomAggregateFunction<NUdf::TDataType<char*>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
     RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUtf8>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");

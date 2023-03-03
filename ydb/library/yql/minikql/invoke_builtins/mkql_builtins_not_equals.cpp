@@ -36,8 +36,9 @@ Y_FORCE_INLINE bool NotEquals(T1 x, T2 y) {
     using FT = std::conditional_t<(sizeof(F1) > sizeof(F2)), F1, F2>;
     const auto l = static_cast<FT>(x);
     const auto r = static_cast<FT>(y);
-    if (Aggr && std::isunordered(l, r)) {
-        return std::isnan(l) != std::isnan(r);
+    if constexpr (Aggr) {
+        if (std::isunordered(l, r))
+            return std::isnan(l) != std::isnan(r);
     }
     return l != r;
 }

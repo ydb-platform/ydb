@@ -36,8 +36,9 @@ Y_FORCE_INLINE bool Greater(T1 x, T2 y) {
     using FT = std::conditional_t<(sizeof(F1) > sizeof(F2)), F1, F2>;
     const auto l = static_cast<FT>(x);
     const auto r = static_cast<FT>(y);
-    if (Aggr && std::isunordered(l, r)) {
-        return !std::isnan(l) && std::isnan(r);
+    if constexpr (Aggr) {
+        if (std::isunordered(l, r))
+            return !std::isnan(r);
     }
     return l > r;
 }
@@ -62,7 +63,7 @@ Value* GenGreaterFloats<false>(Value* lhs, Value* rhs, BasicBlock* block) {
 template <>
 Value* GenGreaterFloats<true>(Value* lhs, Value* rhs, BasicBlock* block) {
     const auto ugt = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_UGT, lhs, rhs, "greater", block);
-    const auto ord = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_ORD, ConstantFP::get(lhs->getType(), 0.0), lhs, "ordered", block);
+    const auto ord = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_ORD, ConstantFP::get(rhs->getType(), 0.0), rhs, "ordered", block);
     return BinaryOperator::CreateAnd(ugt, ord, "and", block);
 }
 

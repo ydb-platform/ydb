@@ -425,10 +425,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
         UNIT_ASSERT(item.GetElement(1).template Get<bool>()); // !=
-        UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-        UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-        UNIT_ASSERT(item.GetElement(4).template Get<bool>()); // >
-        UNIT_ASSERT(item.GetElement(5).template Get<bool>()); // >=
+        UNIT_ASSERT(item.GetElement(2).template Get<bool>()); // <
+        UNIT_ASSERT(item.GetElement(3).template Get<bool>()); // <=
+        UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
+        UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
@@ -449,6 +449,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
         UNIT_ASSERT(item.GetElement(1).template Get<bool>()); // !=
+        UNIT_ASSERT(item.GetElement(2).template Get<bool>()); // <
+        UNIT_ASSERT(item.GetElement(3).template Get<bool>()); // <=
+        UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
+        UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
+        UNIT_ASSERT(item.GetElement(1).template Get<bool>()); // !=
         UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
         UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
         UNIT_ASSERT(item.GetElement(4).template Get<bool>()); // >
@@ -457,18 +465,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
         UNIT_ASSERT(item.GetElement(1).template Get<bool>()); // !=
-        UNIT_ASSERT(item.GetElement(2).template Get<bool>()); // <
-        UNIT_ASSERT(item.GetElement(3).template Get<bool>()); // <=
-        UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-        UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-        UNIT_ASSERT(item.GetElement(1).template Get<bool>()); // !=
-        UNIT_ASSERT(item.GetElement(2).template Get<bool>()); // <
-        UNIT_ASSERT(item.GetElement(3).template Get<bool>()); // <=
-        UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-        UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
+        UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
+        UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
+        UNIT_ASSERT(item.GetElement(4).template Get<bool>()); // >
+        UNIT_ASSERT(item.GetElement(5).template Get<bool>()); // >=
 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(item.GetElement(0).template Get<bool>()); // ==
@@ -985,7 +985,134 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto result = graph->GetValue();
         UNBOXED_VALUE_STR_EQUAL(result, "1970-01-01T03:00:06,Africa/Asmara");
-   }
+    }
+
+    Y_UNIT_TEST_LLVM(TestAggrMinMaxFloats) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto data1 = pb.NewDataLiteral<float>(0.0f*HUGE_VALF);
+        const auto data2 = pb.NewDataLiteral<float>(HUGE_VALF);
+        const auto data3 = pb.NewDataLiteral<float>(3.14f);
+        const auto data4 = pb.NewDataLiteral<float>(-2.13f);
+        const auto data5 = pb.NewDataLiteral<float>(-HUGE_VALF);
+        const auto dataType = pb.NewDataType(NUdf::TDataType<float>::Id);
+        const auto list = pb.NewList(dataType, {data1, data2, data3, data4, data5});
+        const auto pgmReturn = pb.FlatMap(list,
+            [&](TRuntimeNode left) {
+            return pb.Map(list,
+                [&](TRuntimeNode right) {
+                return pb.NewTuple({pb.AggrMin(left, right), pb.AggrMax(left, right)});
+            });
+        });
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue().GetListIterator();
+        NUdf::TUnboxedValue item;
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(std::isnan(item.GetElement(0).Get<float>()));
+        UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), HUGE_VALF);
+        UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14f);
+        UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+        UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), HUGE_VALF);
+        UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14f);
+        UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14f);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14f);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14f);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+        UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14f);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -2.13f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), -2.13f);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), -2.13f);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT(std::isnan(item.GetElement(1).Get<float>()));
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), HUGE_VALF);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), 3.14f);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), -2.13f);
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<float>(), -HUGE_VALF);
+
+        UNIT_ASSERT(!iterator.Next(item));
+        UNIT_ASSERT(!iterator.Next(item));
+    }
 }
 
 }

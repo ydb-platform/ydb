@@ -105,11 +105,12 @@ public:
     }
 
     TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
-        const TKqpWorkerSettings& workerSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-        TIntrusivePtr<TKqpCounters> counters)
+        const TKqpWorkerSettings& workerSettings, NYql::IHTTPGateway::TPtr httpGateway,
+        TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
         : Owner(owner)
         , SessionId(sessionId)
         , Settings(workerSettings)
+        , HttpGateway(std::move(httpGateway))
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
@@ -147,7 +148,7 @@ public:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver,
-            AppData(ctx)->FunctionRegistry, !Settings.LongSession);
+            HttpGateway, AppData(ctx)->FunctionRegistry, !Settings.LongSession);
 
         Become(&TKqpWorkerActor::ReadyState);
     }
@@ -1064,6 +1065,7 @@ private:
     TActorId Owner;
     TString SessionId;
     TKqpWorkerSettings Settings;
+    NYql::IHTTPGateway::TPtr HttpGateway;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;
@@ -1081,9 +1083,10 @@ private:
 
 IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
+    NYql::IHTTPGateway::TPtr httpGateway,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
 {
-    return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, moduleResolverState, counters);
+    return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), moduleResolverState, counters);
 }
 
 } // namespace NKqp

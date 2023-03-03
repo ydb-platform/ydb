@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-kqp-executer_actor-ut PUBLIC
   core-kqp-host
   kqp-ut-common
   cpp-client-ydb_proto
+  providers-common-http_gateway
   yql-sql-pg_dummy
 )
 target_link_options(ydb-core-kqp-executer_actor-ut PRIVATE

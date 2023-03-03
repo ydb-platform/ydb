@@ -273,13 +273,14 @@ public:
     }
 
    TKqpSessionActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
-            const TKqpWorkerSettings& workerSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-            TIntrusivePtr<TKqpCounters> counters)
+            const TKqpWorkerSettings& workerSettings, NYql::IHTTPGateway::TPtr httpGateway,
+            TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
         : Owner(owner)
         , SessionId(sessionId)
         , Counters(counters)
         , Settings(workerSettings)
-        , ModuleResolverState(moduleResolverState)
+        , HttpGateway(std::move(httpGateway))
+        , ModuleResolverState(std::move(moduleResolverState))
         , KqpSettings(kqpSettings)
         , Config(CreateConfig(kqpSettings, workerSettings))
         , Transactions(*Config->_KqpMaxActiveTxPerSession.Get(), TDuration::Seconds(*Config->_KqpTxIdleTimeoutSec.Get()))
@@ -369,7 +370,7 @@ public:
 
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
-                ModuleResolverState, Counters));
+                HttpGateway, ModuleResolverState, Counters));
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
         TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
@@ -2293,6 +2294,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;
     TKqpWorkerSettings Settings;
+    NYql::IHTTPGateway::TPtr HttpGateway;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
@@ -2315,9 +2317,10 @@ private:
 
 IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
-    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
+    NYql::IHTTPGateway::TPtr httpGateway, TIntrusivePtr<TModuleResolverState> moduleResolverState,
+    TIntrusivePtr<TKqpCounters> counters)
 {
-    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, moduleResolverState, counters);
+    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), std::move(moduleResolverState), counters);
 }
 
 }

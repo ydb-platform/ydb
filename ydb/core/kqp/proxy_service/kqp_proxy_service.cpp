@@ -22,6 +22,7 @@
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/interconnect.h>
@@ -158,6 +159,7 @@ public:
         , TableServiceConfig(tableServiceConfig)
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , QueryReplayFactory(std::move(queryReplayFactory))
+        , HttpGateway(NYql::IHTTPGateway::Make()) // TODO: pass config and counters
         , PendingRequests()
         , ModuleResolverState()
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
@@ -201,7 +203,7 @@ public:
 
         // Create compile service
         CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(TableServiceConfig,
-            KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory)));
+            KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory), HttpGateway));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
 
@@ -1215,7 +1217,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters);
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, HttpGateway, ModuleResolverState, Counters);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration());
@@ -1305,6 +1307,7 @@ private:
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     TKqpSettings::TConstPtr KqpSettings;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
+    NYql::IHTTPGateway::TPtr HttpGateway;
 
     std::optional<TPeerStats> PeerStats;
     TKqpProxyRequestTracker PendingRequests;

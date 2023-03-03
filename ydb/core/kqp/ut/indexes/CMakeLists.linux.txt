@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-kqp-ut-indexes PUBLIC
   ydb-core-kqp
   cpp-threading-local_executor
   kqp-ut-common
+  providers-common-http_gateway
   yql-sql-pg_dummy
 )
 target_link_options(ydb-core-kqp-ut-indexes PRIVATE

@@ -51,7 +51,7 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
 
-    return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver, funcRegistry,
+    return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver, NYql::IHTTPGateway::Make(), funcRegistry,
         keepConfigChanges);
 }
 

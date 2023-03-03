@@ -12,7 +12,9 @@
 #include <ydb/library/yql/providers/config/yql_config_provider.h>
 #include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/sql/sql.h>
 
@@ -875,12 +877,14 @@ class TKqpHost : public IKqpHost {
 public:
     TKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster, const TString& database,
         TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
+        NYql::IHTTPGateway::TPtr httpGateway,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges)
         : Gateway(gateway)
         , Cluster(cluster)
         , ExprCtx(new TExprContext())
         , ModuleResolver(moduleResolver)
         , KeepConfigChanges(keepConfigChanges)
+        , HttpGateway(std::move(httpGateway))
         , SessionCtx(new TKikimrSessionContext(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider))
         , ClustersMap({{Cluster, TString(KikimrProviderName)}})
         , TypesCtx(MakeIntrusive<TTypeAnnotationContext>())
@@ -896,82 +900,6 @@ public:
         }
 
         SessionCtx->SetDatabase(database);
-        KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, *FuncRegistry, TAppData::TimeProvider, TAppData::RandomProvider);
-
-        ExprCtx->NodesAllocationLimit = SessionCtx->Config()._KqpExprNodesAllocationLimit.Get().GetRef();
-        ExprCtx->StringsAllocationLimit = SessionCtx->Config()._KqpExprStringsAllocationLimit.Get().GetRef();
-
-        THashSet<TString> providerNames {
-            TString(KikimrProviderName),
-            TString(YdbProviderName),
-        };
-
-        // Kikimr provider
-        auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, Cluster, SessionCtx, KqpRunner);
-        auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, Gateway, SessionCtx);
-        auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, Gateway, SessionCtx, queryExecutor);
-
-        FillSettings.AllResultsBytesLimit = Nothing();
-        FillSettings.RowsLimitPerWrite = SessionCtx->Config()._ResultRowsLimit.Get().GetRef();
-        FillSettings.Format = IDataProvider::EResultFormat::Custom;
-        FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
-
-        TypesCtx->AddDataSource(providerNames, kikimrDataSource);
-        TypesCtx->AddDataSink(providerNames, kikimrDataSink);
-        TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
-        TypesCtx->TimeProvider = TAppData::TimeProvider;
-        TypesCtx->RandomProvider = TAppData::RandomProvider;
-        TypesCtx->Modules = ModuleResolver;
-        TypesCtx->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, TUserDataTable(), nullptr, nullptr);
-        TypesCtx->JsonQueryReturnsJsonDocument = true;
-        TypesCtx->ArrowResolver = MakeSimpleArrowResolver(*FuncRegistry);
-
-        // Result provider
-        auto writerFactory = [] () { return MakeIntrusive<TKqpResultWriter>(); };
-        ResultProviderConfig = MakeIntrusive<TResultProviderConfig>(*TypesCtx, *FuncRegistry, FillSettings.Format,
-            FillSettings.FormatDetails, writerFactory);
-        auto resultProvider = CreateResultProvider(ResultProviderConfig);
-        TypesCtx->AddDataSink(ResultProviderName, resultProvider);
-        TypesCtx->AvailablePureResultDataSources = TVector<TString>(1, TString(KikimrProviderName));
-
-        // Config provider
-        const TGatewaysConfig* gatewaysConfig = nullptr; // TODO: can we get real gatewaysConfig here?
-        auto allowSettings = [](TStringBuf settingName) {
-            return settingName == "OrderedColumns"
-                || settingName == "DisableOrderedColumns"
-                || settingName == "Warning"
-                || settingName == "UseBlocks"
-                ;
-        };
-        auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
-        TypesCtx->AddDataSource(ConfigProviderName, configProvider);
-
-        YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
-
-        YqlTransformer = TTransformationPipeline(TypesCtx)
-            .AddServiceTransformers()
-            .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
-                NYql::NLog::ELevel::TRACE), "LogYqlTransform")
-            .AddPreTypeAnnotation()
-            // TODO: .AddExpressionEvaluation(*FuncRegistry)
-            .Add(new TFailExpressionEvaluation(), "FailExpressionEvaluation")
-            .AddIOAnnotation()
-            .AddTypeAnnotation()
-            .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
-            .AddPostTypeAnnotation()
-            .AddOptimization(true, false)
-            .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
-            .AddRun(&NullProgressWriter)
-            .Build();
-
-        DataQueryAstTransformer = TTransformationPipeline(TypesCtx)
-            .AddServiceTransformers()
-            .AddIntentDeterminationTransformer()
-            .AddTableMetadataLoaderTransformer()
-            .AddTypeAnnotationTransformer()
-            .Add(new TPrepareDataQueryAstTransformer(Cluster, ExecuteCtx, SessionCtx->QueryPtr(), KqpRunner),
-                "PrepareDataQueryAst")
-            .Build();
     }
 
     IAsyncQueryResultPtr ExecuteSchemeQuery(const TString& query, bool isSql) override {
@@ -1246,9 +1174,7 @@ private:
     }
 
     IAsyncQueryResultPtr ExecuteSchemeQueryInternal(const TString& query, bool isSql, TExprContext& ctx) {
-        SetupYqlTransformer();
-
-        SessionCtx->Query().Type = EKikimrQueryType::Ddl;
+        SetupYqlTransformer(EKikimrQueryType::Ddl);
 
         TMaybe<TSqlVersion> sqlVersion;
         auto queryExpr = CompileYqlQuery(query, isSql, false, ctx, sqlVersion);
@@ -1293,9 +1219,8 @@ private:
     IAsyncQueryResultPtr PrepareDataQueryInternal(const TString& query, const TPrepareSettings& settings,
         TExprContext& ctx)
     {
-        SetupYqlTransformer();
+        SetupYqlTransformer(EKikimrQueryType::Dml);
 
-        SessionCtx->Query().Type = EKikimrQueryType::Dml;
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         if (settings.DocumentApiRestricted) {
@@ -1316,9 +1241,8 @@ private:
         TExprContext& ctx)
     {
         IKikimrQueryExecutor::TExecuteSettings execSettings;
-        SetupDataQueryAstTransformer(execSettings);
+        SetupDataQueryAstTransformer(execSettings, EKikimrQueryType::Dml);
 
-        SessionCtx->Query().Type = EKikimrQueryType::Dml;
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         if (settings.DocumentApiRestricted) {
@@ -1340,9 +1264,8 @@ private:
     IAsyncQueryResultPtr PrepareQueryInternal(const TString& query, EKikimrQueryType queryType, const TPrepareSettings& settings,
         TExprContext& ctx)
     {
-        SetupYqlTransformer();
+        SetupYqlTransformer(queryType);
 
-        SessionCtx->Query().Type = queryType;
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         if (settings.DocumentApiRestricted) {
@@ -1369,9 +1292,8 @@ private:
     }
 
     IAsyncQueryResultPtr PrepareScanQueryInternal(const TString& query, TExprContext& ctx, EKikimrStatsMode statsMode = EKikimrStatsMode::None) {
-        SetupYqlTransformer();
+        SetupYqlTransformer(EKikimrQueryType::Scan);
 
-        SessionCtx->Query().Type = EKikimrQueryType::Scan;
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().StatsMode = statsMode;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
@@ -1388,9 +1310,8 @@ private:
 
     IAsyncQueryResultPtr PrepareScanQueryAstInternal(const TString& queryAst, TExprContext& ctx) {
         IKikimrQueryExecutor::TExecuteSettings settings;
-        SetupDataQueryAstTransformer(settings);
+        SetupDataQueryAstTransformer(settings, EKikimrQueryType::Scan);
 
-        SessionCtx->Query().Type = EKikimrQueryType::Scan;
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
 
@@ -1409,9 +1330,8 @@ private:
     IAsyncQueryResultPtr ExecuteYqlScriptInternal(const TString& script, NKikimrMiniKQL::TParams&& parameters,
         const TExecScriptSettings& settings, TExprContext& ctx)
     {
-        SetupYqlTransformer();
+        SetupYqlTransformer(EKikimrQueryType::YqlScript);
 
-        SessionCtx->Query().Type = EKikimrQueryType::YqlScript;
         SessionCtx->Query().Deadlines = settings.Deadlines;
         SessionCtx->Query().StatsMode = settings.StatsMode;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
@@ -1434,9 +1354,8 @@ private:
     IAsyncQueryResultPtr StreamExecuteYqlScriptInternal(const TString& script, NKikimrMiniKQL::TParams&& parameters,
         const NActors::TActorId& target,const TExecScriptSettings& settings, TExprContext& ctx)
     {
-        SetupYqlTransformer();
+        SetupYqlTransformer(EKikimrQueryType::YqlScriptStreaming);
 
-        SessionCtx->Query().Type = EKikimrQueryType::YqlScriptStreaming;
         SessionCtx->Query().Deadlines = settings.Deadlines;
         SessionCtx->Query().StatsMode = settings.StatsMode;
         SessionCtx->Query().ReplyTarget = target;
@@ -1458,9 +1377,8 @@ private:
     }
 
     IAsyncQueryResultPtr ValidateYqlScriptInternal(const TString& script, TExprContext& ctx) {
-        SetupSession();
+        SetupSession(EKikimrQueryType::YqlScript);
 
-        SessionCtx->Query().Type = EKikimrQueryType::YqlScript;
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().SuppressDdlChecks = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
@@ -1484,9 +1402,8 @@ private:
     }
 
     IAsyncQueryResultPtr ExplainYqlScriptInternal(const TString& script, TExprContext& ctx) {
-        SetupYqlTransformer();
+        SetupYqlTransformer(EKikimrQueryType::YqlScript);
 
-        SessionCtx->Query().Type = EKikimrQueryType::YqlScript;
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().SuppressDdlChecks = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
@@ -1501,7 +1418,107 @@ private:
             *PlanBuilder, sqlVersion, true /* UseDqExplain */);
     }
 
-    void SetupSession() {
+    void InitS3Provider() {
+        auto state = MakeIntrusive<NYql::TS3State>();
+        state->Types = TypesCtx.Get();
+        state->FunctionRegistry = FuncRegistry;
+        state->CredentialsFactory = nullptr; // TODO
+
+        state->Configuration->Init(NYql::TS3GatewayConfig(), TypesCtx);
+
+        auto dataSource = NYql::CreateS3DataSource(state, HttpGateway);
+        auto dataSink = NYql::CreateS3DataSink(state, HttpGateway);
+
+        TypesCtx->AddDataSource(NYql::S3ProviderName, std::move(dataSource));
+        TypesCtx->AddDataSink(NYql::S3ProviderName, std::move(dataSink));
+    }
+
+    void Init(EKikimrQueryType queryType) {
+        if (queryType == EKikimrQueryType::FederatedQuery) {
+            InitS3Provider();
+        }
+
+        KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, *FuncRegistry, TAppData::TimeProvider, TAppData::RandomProvider);
+
+        ExprCtx->NodesAllocationLimit = SessionCtx->Config()._KqpExprNodesAllocationLimit.Get().GetRef();
+        ExprCtx->StringsAllocationLimit = SessionCtx->Config()._KqpExprStringsAllocationLimit.Get().GetRef();
+
+        THashSet<TString> providerNames {
+            TString(KikimrProviderName),
+            TString(YdbProviderName),
+        };
+
+        // Kikimr provider
+        auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, Cluster, SessionCtx, KqpRunner);
+        auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, Gateway, SessionCtx);
+        auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, Gateway, SessionCtx, queryExecutor);
+
+        FillSettings.AllResultsBytesLimit = Nothing();
+        FillSettings.RowsLimitPerWrite = SessionCtx->Config()._ResultRowsLimit.Get().GetRef();
+        FillSettings.Format = IDataProvider::EResultFormat::Custom;
+        FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
+
+        TypesCtx->AddDataSource(providerNames, kikimrDataSource);
+        TypesCtx->AddDataSink(providerNames, kikimrDataSink);
+        TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
+        TypesCtx->TimeProvider = TAppData::TimeProvider;
+        TypesCtx->RandomProvider = TAppData::RandomProvider;
+        TypesCtx->Modules = ModuleResolver;
+        TypesCtx->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, TUserDataTable(), nullptr, nullptr);
+        TypesCtx->JsonQueryReturnsJsonDocument = true;
+        TypesCtx->ArrowResolver = MakeSimpleArrowResolver(*FuncRegistry);
+
+        // Result provider
+        auto writerFactory = [] () { return MakeIntrusive<TKqpResultWriter>(); };
+        ResultProviderConfig = MakeIntrusive<TResultProviderConfig>(*TypesCtx, *FuncRegistry, FillSettings.Format,
+            FillSettings.FormatDetails, writerFactory);
+        auto resultProvider = CreateResultProvider(ResultProviderConfig);
+        TypesCtx->AddDataSink(ResultProviderName, resultProvider);
+        TypesCtx->AvailablePureResultDataSources = TVector<TString>(1, TString(KikimrProviderName));
+
+        // Config provider
+        const TGatewaysConfig* gatewaysConfig = nullptr; // TODO: can we get real gatewaysConfig here?
+        auto allowSettings = [](TStringBuf settingName) {
+            return settingName == "OrderedColumns"
+                || settingName == "DisableOrderedColumns"
+                || settingName == "Warning"
+                || settingName == "UseBlocks"
+                ;
+        };
+        auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
+        TypesCtx->AddDataSource(ConfigProviderName, configProvider);
+
+        YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
+
+        YqlTransformer = TTransformationPipeline(TypesCtx)
+            .AddServiceTransformers()
+            .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
+                NYql::NLog::ELevel::TRACE), "LogYqlTransform")
+            .AddPreTypeAnnotation()
+            // TODO: .AddExpressionEvaluation(*FuncRegistry)
+            .Add(new TFailExpressionEvaluation(), "FailExpressionEvaluation")
+            .AddIOAnnotation()
+            .AddTypeAnnotation()
+            .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+            .AddPostTypeAnnotation()
+            .AddOptimization(true, false)
+            .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
+            .AddRun(&NullProgressWriter)
+            .Build();
+
+        DataQueryAstTransformer = TTransformationPipeline(TypesCtx)
+            .AddServiceTransformers()
+            .AddIntentDeterminationTransformer()
+            .AddTableMetadataLoaderTransformer()
+            .AddTypeAnnotationTransformer()
+            .Add(new TPrepareDataQueryAstTransformer(Cluster, ExecuteCtx, SessionCtx->QueryPtr(), KqpRunner),
+                "PrepareDataQueryAst")
+            .Build();
+    }
+
+    void SetupSession(EKikimrQueryType queryType) {
+        Init(queryType);
+
         ExprCtx->Reset();
         ExprCtx->Step.Done(TExprStep::ExprEval); // KIKIMR-8067
 
@@ -1512,10 +1529,12 @@ private:
         std::get<2>(TypesCtx->CachedRandom).reset();
 
         SessionCtx->Reset(KeepConfigChanges);
+
+        SessionCtx->Query().Type = queryType;
     }
 
-    void SetupYqlTransformer() {
-        SetupSession();
+    void SetupYqlTransformer(EKikimrQueryType queryType) {
+        SetupSession(queryType);
 
         YqlTransformer->Rewind();
 
@@ -1523,8 +1542,8 @@ private:
         ResultProviderConfig->CommittedResults.clear();
     }
 
-    void SetupDataQueryAstTransformer(const IKikimrQueryExecutor::TExecuteSettings& settings) {
-        SetupSession();
+    void SetupDataQueryAstTransformer(const IKikimrQueryExecutor::TExecuteSettings& settings, EKikimrQueryType queryType) {
+        SetupSession(queryType);
 
         DataQueryAstTransformer->Rewind();
 
@@ -1537,6 +1556,7 @@ private:
     THolder<TExprContext> ExprCtx;
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;
+    NYql::IHTTPGateway::TPtr HttpGateway;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     THashMap<TString, TString> ClustersMap;
@@ -1573,9 +1593,9 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-    const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges)
+    NYql::IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges)
 {
-    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, funcRegistry,
+    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, std::move(httpGateway), funcRegistry,
         keepConfigChanges);
 }
 

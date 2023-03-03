@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <library/cpp/actors/core/actorid.h>
 
@@ -27,6 +28,7 @@ struct TKqpWorkerSettings {
 
 IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
-    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters);
+    NYql::IHTTPGateway::TPtr httpGateway, TIntrusivePtr<TModuleResolverState> moduleResolverState,
+    TIntrusivePtr<TKqpCounters> counters);
 
 }  // namespace NKikimr::NKqp

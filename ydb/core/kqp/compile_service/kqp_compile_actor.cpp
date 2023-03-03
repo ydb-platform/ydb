@@ -41,11 +41,13 @@ public:
     }
 
     TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
-        const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-        TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query,
+        const TTableServiceConfig& serviceConfig, NYql::IHTTPGateway::TPtr httpGateway,
+        TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+        const TString& uid, const TKqpQueryId& query,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
         : Owner(owner)
+        , HttpGateway(std::move(httpGateway))
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
         , Uid(uid)
@@ -101,7 +103,7 @@ public:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Query.Cluster, Query.Database, Config, ModuleResolverState->ModuleResolver,
-            AppData(ctx)->FunctionRegistry, false);
+            HttpGateway, AppData(ctx)->FunctionRegistry, false);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = Query.Settings.DocumentApiRestricted;
@@ -123,8 +125,11 @@ public:
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
-            case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
                 AsyncCompileResult = KqpHost->PrepareQuery(Query.Text, prepareSettings);
+                break;
+
+            case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
+                AsyncCompileResult = KqpHost->PrepareFederatedQuery(Query.Text, prepareSettings);
                 break;
 
             default:
@@ -311,6 +316,7 @@ private:
 
 private:
     TActorId Owner;
+    NYql::IHTTPGateway::TPtr HttpGateway;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
     TString Uid;
@@ -348,11 +354,12 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
-    const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    const TTableServiceConfig& serviceConfig, NYql::IHTTPGateway::TPtr httpGateway,
+    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+    const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
 {
-    return new TKqpCompileActor(owner, kqpSettings, serviceConfig, moduleResolverState, counters, uid,
+    return new TKqpCompileActor(owner, kqpSettings, serviceConfig, std::move(httpGateway), moduleResolverState, counters, uid,
         std::move(query), userToken, dbCounters, std::move(traceId));
 }
 

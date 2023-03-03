@@ -12,7 +12,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 TReadInitAndAuthActor::TReadInitAndAuthActor(
         const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
         const TString& session, const NActors::TActorId& metaCache, const NActors::TActorId& newSchemeCache,
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NACLib::TUserToken> token,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
         const NPersQueue::TTopicsToConverter& topics, const TString& localCluster
 )
     : ParentId(parentId)

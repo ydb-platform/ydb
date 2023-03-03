@@ -12,10 +12,11 @@ IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& servic
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const NKikimrConfig::TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
+    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId = {});
 
-IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TString& userToken, const TMaybe<TString>& uid,
+IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
     NLWTrace::TOrbit orbit = {}, NWilson::TTraceId = {});
 

@@ -68,7 +68,7 @@ public:
     }
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-        const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, TWilsonKqp::ScanExecuter, "ScanExecuter")
@@ -797,7 +797,7 @@ private:
 } // namespace
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
 {

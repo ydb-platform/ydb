@@ -105,7 +105,7 @@ private:
 
 private:
     void BeginAuth() {
-        if (const auto& token = RequestEvent->GetInternalToken()) {
+        if (const auto& token = RequestEvent->GetSerializedToken()) {
             UserToken.Reset(new TUserToken(token));
         }
         ReadyToStart();

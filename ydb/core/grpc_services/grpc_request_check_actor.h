@@ -209,7 +209,7 @@ public:
             ReplyUnavailableAndDie(issues);
         } else {
             GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_OK);
-            GrpcRequestBaseCtx_->SetInternalToken(TBase::GetSerializedToken());
+            GrpcRequestBaseCtx_->SetInternalToken(TBase::GetParsedToken());
             Continue();
         }
     }
@@ -450,7 +450,8 @@ private:
         }
 
         const ui32 access = NACLib::ConnectDatabase;
-        if (SecurityObject_->CheckAccess(access, TBase::GetSerializedToken())) {
+        const auto& parsedToken = TBase::GetParsedToken();
+        if (parsedToken && SecurityObject_->CheckAccess(access, *parsedToken)) {
             return {false, std::nullopt};
         }
 

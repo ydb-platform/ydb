@@ -445,7 +445,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     UserAgent = "pqv1 server";
     LogSession(ctx);
 
-    if (Request->GetInternalToken().empty()) { // session without auth
+    if (Request->GetSerializedToken().empty()) { // session without auth
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
             Die(ctx);
@@ -607,7 +607,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
 
     SetMeteringMode(meteringMode);
 
-    if (Request->GetInternalToken().empty()) { // session without auth
+    if (Request->GetSerializedToken().empty()) { // session without auth
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
             Die(ctx);
@@ -619,7 +619,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     } else {
         Y_VERIFY(Request->GetYdbToken());
         Auth = *Request->GetYdbToken();
-        Token = new NACLib::TUserToken(Request->GetInternalToken());
+        Token = new NACLib::TUserToken(Request->GetSerializedToken());
 
         if (FirstACLCheck && IsQuotaRequired()) {
             Y_VERIFY(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
@@ -1395,8 +1395,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
     Y_UNUSED(ctx);
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "updating token");
 
-    if (ev->Get()->Authenticated && !ev->Get()->InternalToken.empty()) {
-        Token = new NACLib::TUserToken(ev->Get()->InternalToken);
+    if (ev->Get()->Authenticated && ev->Get()->InternalToken && !ev->Get()->InternalToken->GetSerializedToken().empty()) {
+        Token = ev->Get()->InternalToken;
         Request->SetInternalToken(ev->Get()->InternalToken);
         UpdateTokenAuthenticated = true;
         if (!ACLCheckInProgress) {

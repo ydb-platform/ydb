@@ -3,17 +3,17 @@
 #include "kqp_event_ids.h"
 
 #include <library/cpp/lwtrace/shuttle.h>
-#include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/api/protos/draft/ydb_query.pb.h>
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
-
+#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/draft/ydb_query.pb.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/ptr.h>
@@ -399,12 +399,17 @@ struct TEvKqp {
             return Record.GetRequestType();
         }
 
-        const TString& GetUserToken() const {
+        const TIntrusiveConstPtr<NACLib::TUserToken>& GetUserToken() const {
             if (RequestCtx && RequestCtx->GetInternalToken()) {
                 return RequestCtx->GetInternalToken();
             }
 
-            return Record.GetUserToken();
+            if (Token_) {
+                return Token_;
+            }
+
+            Token_ = new NACLib::TUserToken(Record.GetUserToken());
+            return Token_;
         }
 
         const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
@@ -490,6 +495,7 @@ struct TEvKqp {
         mutable std::shared_ptr<NGRpcService::IRequestCtxMtSafe> RequestCtx;
         mutable TString TraceId;
         mutable TString RequestType;
+        mutable TIntrusiveConstPtr<NACLib::TUserToken> Token_;
         TString Database;
         TString SessionId;
         TString YqlText;
@@ -661,7 +667,7 @@ struct TEvKqp {
         NKikimrKqp::TEvPingSessionResponse, TKqpEvents::EvPingSessionResponse> {};
 
     struct TEvCompileRequest : public TEventLocal<TEvCompileRequest, TKqpEvents::EvCompileRequest> {
-        TEvCompileRequest(const TString& userToken, const TMaybe<TString>& uid, TMaybe<TKqpQueryId>&& query,
+        TEvCompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid, TMaybe<TKqpQueryId>&& query,
             bool keepInCache, TInstant deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {})
             : UserToken(userToken)
             , Uid(uid)
@@ -674,7 +680,7 @@ struct TEvKqp {
             Y_ENSURE(Uid.Defined() != Query.Defined());
         }
 
-        TString UserToken;
+        TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TMaybe<TString> Uid;
         TMaybe<TKqpQueryId> Query;
         bool KeepInCache = false;
@@ -687,7 +693,7 @@ struct TEvKqp {
     };
 
     struct TEvRecompileRequest : public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
-        TEvRecompileRequest(const TString& userToken, const TString& uid, const TMaybe<TKqpQueryId>& query,
+        TEvRecompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& uid, const TMaybe<TKqpQueryId>& query,
             TInstant deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {})
             : UserToken(userToken)
             , Uid(uid)
@@ -696,7 +702,7 @@ struct TEvKqp {
             , DbCounters(dbCounters)
             , Orbit(std::move(orbit)) {}
 
-        TString UserToken;
+        TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Uid;
         TMaybe<TKqpQueryId> Query;
 

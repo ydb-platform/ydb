@@ -677,7 +677,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         TopicsToResolve.insert(path);
     }
 
-    if (Request->GetInternalToken().empty()) {
+    if (Request->GetSerializedToken().empty()) {
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             return CloseSession(PersQueue::ErrorCode::ACCESS_DENIED,
                 "unauthenticated access is forbidden, please provide credentials", ctx);
@@ -685,7 +685,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     } else {
         Y_VERIFY(Request->GetYdbToken());
         Auth = *(Request->GetYdbToken());
-        Token = new NACLib::TUserToken(Request->GetInternalToken());
+        Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
     TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal,
@@ -1402,8 +1402,8 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessBalancerDead(ui64 tabletId,
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr& ev , const TActorContext& ctx) {
-    if (ev->Get()->Authenticated && !ev->Get()->InternalToken.empty()) {
-        Token = new NACLib::TUserToken(ev->Get()->InternalToken);
+    if (ev->Get()->Authenticated && ev->Get()->InternalToken && !ev->Get()->InternalToken->GetSerializedToken().empty()) {
+        Token = ev->Get()->InternalToken;
         ForceACLCheck = true;
 
         if constexpr (!UseMigrationProtocol) {

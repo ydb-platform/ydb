@@ -747,7 +747,7 @@ protected:
     TString  FolderId_;
     size_t SecurityCheckRequestsToWaitFor_ = 2;
     TIntrusivePtr<TSecurityObject> SecurityObject_;
-    TIntrusivePtr<NACLib::TUserToken> UserToken_;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken_;
     TString  UserSID_; // identifies the client who sent this request
     bool UserExists_ = false;
     bool QueueExists_ = false;

@@ -64,6 +64,11 @@ TUserToken::TUserToken(NACLibProto::TUserToken&& token) {
 
 TUserToken::TUserToken(const TString& token) {
     Y_VERIFY(ParseFromString(token));
+    Serialized_ = token;
+}
+
+const TString& TUserToken::GetSerializedToken() const {
+    return Serialized_;
 }
 
 bool TUserToken::IsExist(const TSID& someSID) const {
@@ -101,6 +106,10 @@ TString TUserToken::GetOriginalUserToken() const {
 
 TString TUserToken::SerializeAsString() const {
     return NACLibProto::TUserToken::SerializeAsString();
+}
+
+void TUserToken::SaveSerializationInfo() {
+    Serialized_ = SerializeAsString();
 }
 
 TSID TUserToken::GetUserFromVector(const TVector<TSID>& userAndGroupSIDs) {

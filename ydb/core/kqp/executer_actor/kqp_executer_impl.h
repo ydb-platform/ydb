@@ -106,7 +106,8 @@ protected:
     };
 
 public:
-    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
+    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         ui64 spanVerbosity = 0, TString spanName = "no_name")
@@ -617,8 +618,7 @@ protected:
         }
 
         if (Request.RlPath) {
-            auto actorId = ReportToRl(ru, Database, UserToken.GetOrElse(""),
-                Request.RlPath.GetRef());
+            auto actorId = ReportToRl(ru, Database, UserToken->GetSerializedToken(), Request.RlPath.GetRef());
 
             LOG_D("Resource usage for last stat interval: " << consumption
                   << " ru: " << ru << " rl path: " << Request.RlPath.GetRef()
@@ -1136,7 +1136,7 @@ protected:
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
     const TString Database;
-    const TMaybe<TString> UserToken;
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant StartTime;
@@ -1180,14 +1180,12 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-IActor* CreateKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters);
-
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
 

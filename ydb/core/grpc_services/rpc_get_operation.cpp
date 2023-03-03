@@ -159,7 +159,7 @@ private:
 
         auto request = MakeHolder<NConsole::TEvConsole::TEvGetOperationRequest>();
         request->Record.MutableRequest()->set_id(GetProtoRequest()->id());
-        request->Record.SetUserToken(Request->GetInternalToken());
+        request->Record.SetUserToken(Request->GetSerializedToken());
         NTabletPipe::SendData(ctx, PipeActorId_, request.Release());
     }
 

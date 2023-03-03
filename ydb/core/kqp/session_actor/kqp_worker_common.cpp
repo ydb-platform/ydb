@@ -81,7 +81,7 @@ TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings) {
 }
 
 void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, const TKqpRequestInfo& requestInfo,
-    const TDuration& duration, Ydb::StatusIds::StatusCode status, const TString& userToken, ui64 parametersSize,
+    const TDuration& duration, Ydb::StatusIds::StatusCode status, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, ui64 parametersSize,
     NKikimrKqp::TEvQueryResponse *record, const std::function<TString()> extractQueryText)
 {
     auto logSettings = ctx.LoggerSettings();
@@ -106,7 +106,7 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
     }
 
     if (duration >= TDuration::MilliSeconds(thresholdMs)) {
-        auto username = NACLib::TUserToken(userToken).GetUserSID();
+        auto username = userToken->GetUserSID();
         if (username.empty()) {
             username = "UNAUTHENTICATED";
         }

@@ -76,14 +76,14 @@ void RefreshToken(const TString& token, const TString& database, const TActorCon
 void TRefreshTokenImpl::ReplyUnauthenticated(const TString&) {
     TActivationContext::Send(new IEventHandle(From_, TActorId(),
         new TGRpcRequestProxy::TEvRefreshTokenResponse
-            { false, "", false, IssueManager_.GetIssues()}));
+            { false, nullptr, false, IssueManager_.GetIssues()}));
 }
 
 void TRefreshTokenImpl::ReplyUnavaliable() {
     const TActorContext& ctx = TActivationContext::AsActorContext();
     ctx.Send(From_,
         new TGRpcRequestProxy::TEvRefreshTokenResponse
-            { false, "", true, IssueManager_.GetIssues()});
+            { false, nullptr, true, IssueManager_.GetIssues()});
 }
 
 } // namespace NGRpcService

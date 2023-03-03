@@ -55,7 +55,7 @@ struct TKqpQueryState {
     TString TraceId;
     TString RequestType;
     ui64 ParametersSize = 0;
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TActorId RequestActorId;
     TInstant StartTime;
     TDuration CpuTime;
@@ -203,7 +203,7 @@ public:
         QueryState->RequestType = event.GetRequestType();
         QueryState->StartTime = now;
         QueryState->ReplyFlags = queryRequest.GetReplyFlags();
-        QueryState->UserToken = event.GetUserToken();
+        QueryState->UserToken = new NACLib::TUserToken(event.GetUserToken());
         QueryState->RequestActorId = ActorIdFromProto(event.GetRequestActorId());
 
         if (GetStatsMode(queryRequest, EKikimrStatsMode::None) > EKikimrStatsMode::Basic) {
@@ -902,7 +902,7 @@ private:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
                 TString text = ExtractQueryText();
                 if (IsQueryAllowedToLog(text)) {
-                    auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
+                    auto userSID = QueryState->UserToken->GetUserSID();
                     NSysView::CollectQueryStats(ctx, stats, queryDuration, text,
                         userSID, QueryState->ParametersSize, database, type, requestUnits);
                 }

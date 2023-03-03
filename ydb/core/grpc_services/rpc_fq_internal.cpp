@@ -46,7 +46,7 @@ public:
         auto proxyCtx = dynamic_cast<IRequestProxyCtx*>(request);
         Y_VERIFY(proxyCtx);
         TString user;
-        const TString& internalToken = proxyCtx->GetInternalToken();
+        const TString& internalToken = proxyCtx->GetSerializedToken();
         if (internalToken) {
             NACLib::TUserToken userToken(internalToken);
             user = userToken.GetUserSID();

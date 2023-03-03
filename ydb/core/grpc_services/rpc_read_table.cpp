@@ -500,8 +500,8 @@ private:
 
         NKikimr::NTxProxy::TReadTableSettings settings;
 
-        if (Request_->GetInternalToken()) {
-            settings.UserToken = Request_->GetInternalToken();
+        if (Request_->GetSerializedToken()) {
+            settings.UserToken = Request_->GetSerializedToken();
         }
         settings.DatabaseName = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
 

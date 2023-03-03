@@ -249,7 +249,7 @@ protected:
         if (!result.Error.empty()) {
             //return TBase::HandleError(EResponseStatus::MSTATUS_ERROR, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, result.Error, ctx);
         } else {
-            UserToken = result.SerializedToken;
+            UserToken = result.Token->GetSerializedToken();
         }
         if (++Responses == Requests) {
             BuildAndRunProgram(ctx);
@@ -729,7 +729,7 @@ protected:
         if (!result.Error.empty()) {
             //return TBase::HandleError(EResponseStatus::MSTATUS_ERROR, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, result.Error, ctx);
         } else {
-            UserToken = result.SerializedToken;
+            UserToken = result.Token->GetSerializedToken();
         }
         BuildRequests(ctx);
     }

@@ -43,13 +43,13 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     PartitionId = request->Getpartition_id();
 
     TIntrusivePtr<NACLib::TUserToken> token;
-    if (Request_->GetInternalToken().empty()) {
+    if (Request_->GetSerializedToken().empty()) {
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             AnswerError("Unauthenticated access is forbidden, please provide credentials", PersQueue::ErrorCode::ACCESS_DENIED, ctx);
             return;
         }
     } else {
-        token = new NACLib::TUserToken(Request_->GetInternalToken());
+        token = new NACLib::TUserToken(Request_->GetSerializedToken());
     }
 
     THashSet<TString> topicsToResolve;

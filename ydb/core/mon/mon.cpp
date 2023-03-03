@@ -55,7 +55,7 @@ NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, N
         return new NActors::IEventHandle(
             owner,
             owner,
-            new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(TString(), token, token->SerializeAsString())
+            new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(TString(), token)
         );
     } else {
         return nullptr;

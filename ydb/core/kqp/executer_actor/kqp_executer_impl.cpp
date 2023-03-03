@@ -131,7 +131,8 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
 {
     if (request.Transactions.empty()) {

@@ -177,7 +177,7 @@ private:
 
 struct TKqpCompileRequest {
     TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache,
-        const TString& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
         NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {})
         : Sender(sender)
         , Query(std::move(query))
@@ -193,7 +193,7 @@ struct TKqpCompileRequest {
     TKqpQueryId Query;
     TString Uid;
     bool KeepInCache = false;
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TInstant Deadline;
     TKqpDbCountersPtr DbCounters;
     TActorId CompileActor;
@@ -432,7 +432,7 @@ private:
         *Counters->CompileQueryCacheSize = QueryCache.Size();
         *Counters->CompileQueryCacheBytes = QueryCache.Bytes();
 
-        auto userSid = NACLib::TUserToken(request.UserToken).GetUserSID();
+        auto userSid = request.UserToken->GetUserSID();
         auto dbCounters = request.DbCounters;
 
         if (request.Uid) {

@@ -152,13 +152,13 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             SetDatabase(proposal.get(), *this->Request_);
 
-            if (this->Request_->GetInternalToken().empty()) {
+            if (this->Request_->GetSerializedToken().empty()) {
                 if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                     return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                           "Unauthenticated access is forbidden, please provide credentials", ctx);
                 }
             } else {
-                proposal->Record.SetUserToken(this->Request_->GetInternalToken());
+                proposal->Record.SetUserToken(this->Request_->GetSerializedToken());
             }
 
             static_cast<TDerived*>(this)->FillProposeRequest(*proposal, ctx, workingDir, name);
@@ -179,13 +179,13 @@ namespace NKikimr::NGRpcProxy::V1 {
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             navigateRequest->ResultSet.emplace_back(entry);
 
-            if (this->Request_->GetInternalToken().empty()) {
+            if (this->Request_->GetSerializedToken().empty()) {
                 if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                     return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                           "Unauthenticated access is forbidden, please provide credentials", ctx);
                 }
             } else {
-                navigateRequest->UserToken = new NACLib::TUserToken(this->Request_->GetInternalToken());
+                navigateRequest->UserToken = new NACLib::TUserToken(this->Request_->GetSerializedToken());
             }
             if (!IsDead) {
                 ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));

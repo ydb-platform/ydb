@@ -42,7 +42,8 @@ public:
 
     TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
         const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-        TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
+        TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
@@ -314,7 +315,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     TString Uid;
     TKqpQueryId Query;
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
     TDuration CompilationTimeout;
@@ -348,7 +349,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
+    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
 {
     return new TKqpCompileActor(owner, kqpSettings, serviceConfig, moduleResolverState, counters, uid,

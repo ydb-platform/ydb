@@ -710,7 +710,7 @@ public:
     explicit TLongTxWriteRPC(std::unique_ptr<IRequestOpCtx> request)
         : TBase(request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())),
             TEvLongTxWriteRequest::GetProtoRequest(request)->path(),
-            request->GetInternalToken(),
+            request->GetSerializedToken(),
             TLongTxId(),
             TEvLongTxWriteRequest::GetProtoRequest(request)->dedup_id())
         , Request(std::move(request))
@@ -901,7 +901,7 @@ public:
     void Bootstrap() {
         const auto* req = TEvLongTxReadRequest::GetProtoRequest(Request);
 
-        if (const TString& internalToken = Request->GetInternalToken()) {
+        if (const TString& internalToken = Request->GetSerializedToken()) {
             UserToken.emplace(internalToken);
         }
 

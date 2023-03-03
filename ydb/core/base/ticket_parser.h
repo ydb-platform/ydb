@@ -178,14 +178,15 @@ namespace NKikimr {
         struct TEvAuthorizeTicketResult : TEventLocal<TEvAuthorizeTicketResult, EvAuthorizeTicketResult> {
             TString Ticket;
             TError Error;
-            TIntrusivePtr<NACLib::TUserToken> Token;
-            TString SerializedToken;
+            TIntrusiveConstPtr<NACLib::TUserToken> Token;
+            const TString SerializedToken;
 
-            TEvAuthorizeTicketResult(const TString& ticket, const TIntrusivePtr<NACLib::TUserToken>& token, const TString& serializedToken)
+            TEvAuthorizeTicketResult(const TString& ticket, const TIntrusiveConstPtr<NACLib::TUserToken>& token)
                 : Ticket(ticket)
                 , Token(token)
-                , SerializedToken(serializedToken)
-            {}
+                , SerializedToken(token ? token->GetSerializedToken() : "")
+            {
+            }
 
             TEvAuthorizeTicketResult(const TString& ticket, const TError& error)
                 : Ticket(ticket)

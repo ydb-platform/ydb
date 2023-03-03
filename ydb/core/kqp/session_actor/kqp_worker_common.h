@@ -123,7 +123,7 @@ inline ETableReadType ExtractMostHeavyReadType(const TString& queryPlan) {
 }
 
 void SlowLogQuery(const TActorContext &ctx, const NYql::TKikimrConfiguration* config, const TKqpRequestInfo& requestInfo,
-    const TDuration& duration, Ydb::StatusIds::StatusCode status, const TString& userToken, ui64 parametersSize,
+    const TDuration& duration, Ydb::StatusIds::StatusCode status, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, ui64 parametersSize,
     NKikimrKqp::TEvQueryResponse *record, const std::function<TString()> extractQueryText);
 
 NYql::TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings);

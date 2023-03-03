@@ -28,7 +28,7 @@ class TKqpPlanner {
 public:
     TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NYql::NDqProto::TDqTask>&& tasks,
         THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
-        const TString& database, const TMaybe<TString>& userToken, TInstant deadline,
+        const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
         const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages,
         bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& ExecuterSpan,
         TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
@@ -60,7 +60,7 @@ private:
     THashMap<ui64, TVector<NYql::NDqProto::TDqTask>> MainTasksPerNode;
     const IKqpGateway::TKqpSnapshot Snapshot;
     TString Database;
-    const TMaybe<TString> UserToken;
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
     const bool DisableLlvmForUdfStages;
@@ -78,7 +78,7 @@ private:
 
 std::unique_ptr<TKqpPlanner> CreateKqpPlanner(ui64 txId, const TActorId& executer, TVector<NYql::NDqProto::TDqTask>&& tasks,
     THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
-    const TString& database, const TMaybe<TString>& userToken, TInstant deadline,
+    const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
     const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages, bool enableLlvm,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,

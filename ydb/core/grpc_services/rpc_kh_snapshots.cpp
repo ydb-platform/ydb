@@ -105,7 +105,7 @@ public:
         auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(reqTimeout.MilliSeconds());
 
-        auto token = Request_->GetInternalToken();
+        auto token = Request_->GetSerializedToken();
         if (!token.empty()) {
             req->Record.SetUserToken(token);
         }
@@ -241,7 +241,7 @@ public:
         auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(reqTimeout.MilliSeconds());
 
-        auto token = Request_->GetInternalToken();
+        auto token = Request_->GetSerializedToken();
         if (!token.empty()) {
             req->Record.SetUserToken(token);
         }
@@ -382,7 +382,7 @@ public:
         auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(reqTimeout.MilliSeconds());
 
-        auto token = Request_->GetInternalToken();
+        auto token = Request_->GetSerializedToken();
         if (!token.empty()) {
             req->Record.SetUserToken(token);
         }

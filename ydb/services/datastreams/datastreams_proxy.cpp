@@ -778,7 +778,7 @@ namespace NKikimr::NDataStreams::V1 {
                                           "Request without dabase is forbiden", ctx);
         }
 
-        if (this->Request_->GetInternalToken().empty()) {
+        if (this->Request_->GetSerializedToken().empty()) {
             if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                 return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, NYds::EErrorCodes::BAD_REQUEST,
                                           "Unauthenticated access is forbidden, please provide credentials", ctx);
@@ -837,8 +837,8 @@ namespace NKikimr::NDataStreams::V1 {
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = NKikimr::SplitPath(path);
 
-        if (!this->Request_->GetInternalToken().empty()) {
-            schemeCacheRequest->UserToken = new NACLib::TUserToken(this->Request_->GetInternalToken());
+        if (!this->Request_->GetSerializedToken().empty()) {
+            schemeCacheRequest->UserToken = new NACLib::TUserToken(this->Request_->GetSerializedToken());
         }
 
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
@@ -1257,7 +1257,7 @@ namespace NKikimr::NDataStreams::V1 {
         auto topicInfo = navigate->ResultSet.begin();
         StreamName = NKikimr::CanonizePath(topicInfo->Path);
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            NACLib::TUserToken token(this->Request_->GetInternalToken());
+            NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
                                                         token)) {
@@ -1423,7 +1423,7 @@ namespace NKikimr::NDataStreams::V1 {
         const auto response = result->ResultSet.front();
 
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            NACLib::TUserToken token(this->Request_->GetInternalToken());
+            NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
                                                       token)) {
@@ -1674,7 +1674,7 @@ namespace NKikimr::NDataStreams::V1 {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.front();
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            NACLib::TUserToken token(this->Request_->GetInternalToken());
+            NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
                                                         token)) {

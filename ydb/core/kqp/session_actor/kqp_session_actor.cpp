@@ -89,7 +89,7 @@ struct TKqpQueryState {
 
     NKqpProto::TKqpStatsQuery Stats;
     bool KeepSession = false;
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
@@ -601,7 +601,7 @@ public:
         navigate->DatabaseName = CanonizePath(QueryState->GetDatabase());
         QueryState->TopicOperations.FillSchemeCacheNavigate(*navigate,
                                                             std::move(consumer));
-        navigate->UserToken = new NACLib::TUserToken(QueryState->UserToken);
+        navigate->UserToken = QueryState->UserToken;
 
         Become(&TKqpSessionActor::TopicOpsState);
         ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
@@ -1296,8 +1296,8 @@ public:
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
-                (QueryState && QueryState->UserToken) ? TMaybe<TString>(QueryState->UserToken) : Nothing(),
-                RequestCounters, Settings.Service.GetAggregationConfig(), Settings.Service.GetExecuterRetriesConfig());
+            QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
+            RequestCounters, Settings.Service.GetAggregationConfig(), Settings.Service.GetExecuterRetriesConfig());
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1469,7 +1469,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY: {
                 TString text = QueryState->ExtractQueryText();
                 if (IsQueryAllowedToLog(text)) {
-                    auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
+                    auto userSID = QueryState->UserToken->GetUserSID();
                     NSysView::CollectQueryStats(TlsActivationContext->AsActorContext(), stats, queryDuration, text,
                         userSID, QueryState->ParametersSize, database, type, requestUnits);
                 }
@@ -2226,8 +2226,6 @@ private:
         bool denied = false;
 
         TStringBuilder builder;
-        NACLib::TUserToken token(QueryState->UserToken);
-
         builder << "Access for topic(s)";
         for (auto& result : response.ResultSet) {
             if (result.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
@@ -2235,15 +2233,14 @@ private:
             }
 
             auto rights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
-            if (result.SecurityObject && !result.SecurityObject->CheckAccess(rights, token)) {
+            if (result.SecurityObject && !result.SecurityObject->CheckAccess(rights, *QueryState->UserToken)) {
                 builder << " '" << JoinPath(result.Path) << "'";
                 denied = true;
             }
         }
 
         if (denied) {
-            builder << " is denied for subject '" << token.GetUserSID() << "'";
-
+            builder << " is denied for subject '" << QueryState->UserToken->GetUserSID() << "'";
             message = std::move(builder);
         }
 

@@ -21,8 +21,8 @@ inline void SetRlPath(TEv& ev, const IRequestCtx& ctx) {
 
 template<typename TEv>
 inline void SetAuthToken(TEv& ev, const IRequestCtx& ctx) {
-    if (ctx.GetInternalToken()) {
-        ev->Record.SetUserToken(ctx.GetInternalToken());
+    if (ctx.GetSerializedToken()) {
+        ev->Record.SetUserToken(ctx.GetSerializedToken());
     }
 }
 

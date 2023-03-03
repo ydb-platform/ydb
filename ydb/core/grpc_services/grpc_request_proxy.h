@@ -36,11 +36,11 @@ public:
 
     struct TEvRefreshTokenResponse : public TEventLocal<TEvRefreshTokenResponse, EvRefreshTokenResponse> {
         bool Authenticated;
-        TString InternalToken;
+        TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
         bool Retryable;
         NYql::TIssues Issues;
 
-        TEvRefreshTokenResponse(bool ok, const TString& token, bool retryable, const NYql::TIssues& issues)
+        TEvRefreshTokenResponse(bool ok, const TIntrusiveConstPtr<NACLib::TUserToken>& token, bool retryable, const NYql::TIssues& issues)
             : Authenticated(ok)
             , InternalToken(token)
             , Retryable(retryable)

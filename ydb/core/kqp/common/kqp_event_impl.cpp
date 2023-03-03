@@ -42,8 +42,8 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
 
 void TEvKqp::TEvQueryRequest::PrepareRemote() const {
     if (RequestCtx) {
-        if (RequestCtx->GetInternalToken()) {
-            Record.SetUserToken(RequestCtx->GetInternalToken());
+        if (RequestCtx->GetSerializedToken()) {
+            Record.SetUserToken(RequestCtx->GetSerializedToken());
         }
 
         Record.MutableRequest()->SetDatabase(Database);

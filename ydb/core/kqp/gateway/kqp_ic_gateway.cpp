@@ -748,14 +748,6 @@ namespace {
 
 class TKikimrIcGateway : public IKqpGateway {
 private:
-    struct TUserTokenData {
-        TString Serialized;
-        NACLib::TUserToken Data;
-
-        TUserTokenData(const TString& serialized)
-            : Serialized(serialized)
-            , Data(serialized) {}
-    };
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 public:
@@ -786,11 +778,9 @@ public:
         return {};
     }
 
-    void SetToken(const TString& cluster, const TString& token) override {
+    void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
         YQL_ENSURE(cluster == Cluster);
-        if (!token.empty()) {
-            UserToken = TUserTokenData(token);
-        }
+        UserToken = token;
     }
 
     TVector<TString> GetCollectedSchemeData() override {
@@ -798,7 +788,7 @@ public:
     }
 
     TString GetTokenCompat() const {
-        return UserToken ? UserToken->Serialized : TString();
+        return UserToken ? UserToken->GetSerializedToken() : TString();
     }
 
     TFuture<TListPathResult> ListPath(const TString& cluster, const TString &path) override {
@@ -812,7 +802,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& describePath = *ev->Record.MutableDescribePath();
             describePath.SetPath(CanonizePath(path));
@@ -847,11 +837,8 @@ public:
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TTableMetadataResult>(cluster);
             }
-            if (UserToken) {
-                return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken->Data);
-            } else {
-                return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, Nothing());
-            }
+
+            return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken);
 
         } catch (yexception& e) {
             return MakeFuture(ResultFromException<TTableMetadataResult>(e));
@@ -907,7 +894,7 @@ public:
                     auto ev = MakeHolder<TRequest>();
                     ev->Record.SetDatabaseName(Database);
                     if (UserToken) {
-                        ev->Record.SetUserToken(UserToken->Serialized);
+                        ev->Record.SetUserToken(UserToken->GetSerializedToken());
                     }
                     auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
                     schemeTx.SetWorkingDir(pathPair.first);
@@ -997,7 +984,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1054,7 +1041,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpMoveTable);
@@ -1118,7 +1105,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1154,7 +1141,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1195,7 +1182,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1231,7 +1218,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1267,7 +1254,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1308,7 +1295,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
 
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
@@ -1342,7 +1329,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(database);
@@ -1388,7 +1375,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1429,7 +1416,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
 
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
@@ -1463,7 +1450,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(database);
@@ -1506,7 +1493,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(database);
@@ -1546,12 +1533,8 @@ public:
         ui32 GetNodeId() const {
             return Owner.NodeId;
         }
-        TMaybe<NACLib::TUserToken> GetUserToken() const {
-            if (Owner.UserToken) {
-                return Owner.UserToken->Data;
-            } else {
-                return {};
-            }
+        TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken() const {
+            return Owner.UserToken;
         }
     public:
         IObjectModifier(TKikimrIcGateway& owner)
@@ -1666,7 +1649,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(database);
@@ -1716,7 +1699,7 @@ public:
                 auto ev = MakeHolder<TRequest>();
                 ev->Record.SetDatabaseName(database);
                 if (UserToken) {
-                    ev->Record.SetUserToken(UserToken->Serialized);
+                    ev->Record.SetUserToken(UserToken->GetSerializedToken());
                 }
                 auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
                 schemeTx.SetWorkingDir(database);
@@ -1798,7 +1781,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(database);
@@ -1865,7 +1848,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1897,7 +1880,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1932,7 +1915,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1962,7 +1945,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1990,7 +1973,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -2023,7 +2006,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -2634,7 +2617,7 @@ private:
     ui32 NodeId;
     TKqpRequestCounters::TPtr Counters;
     TAlignedPagePoolCounters AllocCounters;
-    TMaybe<TUserTokenData> UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader;
 };
 

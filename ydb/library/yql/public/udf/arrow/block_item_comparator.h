@@ -14,7 +14,9 @@ public:
     virtual i64 Compare(TBlockItem lhs, TBlockItem rhs) const = 0;
     virtual bool Equals(TBlockItem lhs, TBlockItem rhs) const = 0;
     virtual bool Less(TBlockItem lhs, TBlockItem rhs) const = 0;
-    virtual bool Greater(TBlockItem lhs, TBlockItem rhs) const = 0;
+    inline bool Greater(TBlockItem lhs, TBlockItem rhs) const {
+        return Less(rhs, lhs);
+    }
 };
 
 
@@ -86,26 +88,6 @@ public:
             return Derived()->DoLess(lhs, rhs);
         }
     }
-
-    bool Greater(TBlockItem lhs, TBlockItem rhs) const final {
-        if constexpr (Nullable) {
-            if (lhs) {
-                if (rhs) {
-                    return Derived()->DoGreater(lhs, rhs);
-                } else {
-                    return true;
-                }
-            } else {
-                if (rhs) {
-                    return false;
-                } else {
-                    return false;
-                }
-            }
-        } else {
-            return Derived()->DoGreater(lhs, rhs);
-        }
-    }
 };
 
 template <typename T, bool Nullable>
@@ -142,15 +124,6 @@ public:
         }
         return lhs.As<T>() < rhs.As<T>();
     }
-
-    bool DoGreater(TBlockItem lhs, TBlockItem rhs) const {
-        if constexpr (std::is_floating_point<T>::value) {
-            if (std::isunordered(lhs.As<T>(), rhs.As<T>())) {
-                return std::isnan(lhs.As<T>()) > std::isnan(rhs.As<T>());
-            }
-        }
-        return lhs.As<T>() > rhs.As<T>();
-    }
 };
 
 template <typename TStringType, bool Nullable>
@@ -166,10 +139,6 @@ public:
 
     bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
         return lhs.AsStringRef() < rhs.AsStringRef();
-    }
-
-    bool DoGreater(TBlockItem lhs, TBlockItem rhs) const {
-        return lhs.AsStringRef() > rhs.AsStringRef();
     }
 };
 
@@ -217,21 +186,6 @@ public:
         return false;
     }
 
-    bool DoGreater(TBlockItem lhs, TBlockItem rhs) const {
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            auto res = Children_[i]->Compare(lhs.AsTuple()[i], rhs.AsTuple()[i]);
-            if (res > 0) {
-                return true;
-            }
-
-            if (res < 0) {
-                return false;
-            }
-        }
-
-        return false;
-    }
-
 private:
     const TVector<std::unique_ptr<IBlockItemComparator>> Children_;
 };
@@ -252,10 +206,6 @@ public:
 
     bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
         return Inner_->Less(lhs.GetOptionalValue(), rhs.GetOptionalValue());
-    }
-
-    bool DoGreater(TBlockItem lhs, TBlockItem rhs) const {
-        return Inner_->Greater(lhs.GetOptionalValue(), rhs.GetOptionalValue());
     }
 
 private:

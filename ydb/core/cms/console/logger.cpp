@@ -27,7 +27,7 @@ bool TLogger::DbCleanupLog(ui32 remainEntries,
     LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
                 "Removing " << (fromId - MinLogItemId + 1) << " log records");
 
-    for (ui64 id = fromId; id >= MinLogItemId; --id)
+    for (ui64 id = MinLogItemId; id <= fromId; ++id)
         db.Table<Schema::LogRecords>().Key(id).Delete();
 
     MinLogItemId = fromId + 1;

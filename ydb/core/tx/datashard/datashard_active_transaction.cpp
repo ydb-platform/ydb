@@ -560,7 +560,7 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
 
     DataTx->ReleaseTxData();
     // Immediate transactions have no body stored.
-    if (!IsImmediate()) {
+    if (!IsImmediate() && !HasVolatilePrepareFlag()) {
         UntrackMemory();
         TxBody.clear();
         TrackMemory();
@@ -633,7 +633,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
     // from the TxBody. For planned transaction we should
     // restore from local database.
     TVector<TSysTables::TLocksTable::TLock> locks;
-    if (!IsImmediate()) {
+    if (!IsImmediate() && !HasVolatilePrepareFlag()) {
         NIceDb::TNiceDb db(txc.DB);
         bool ok = self->TransQueue.LoadTxDetails(db, GetTxId(), Target, TxBody,
                                                  locks, ArtifactFlags);

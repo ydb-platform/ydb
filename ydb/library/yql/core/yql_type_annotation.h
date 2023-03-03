@@ -195,7 +195,6 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TUserDataTable UserDataStorageCrutches;
     TYqlOperationOptions OperationOptions;
     TCredentials::TPtr Credentials = MakeIntrusive<TCredentials>();
-    TUserCredentials UserCredentials;
     IModuleResolver::TPtr Modules;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport = false;

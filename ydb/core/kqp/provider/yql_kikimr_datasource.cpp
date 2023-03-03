@@ -321,8 +321,8 @@ public:
         }
 
         if (defaultToken.empty()) {
-            if (!Types.UserCredentials.OauthToken.empty()) {
-                defaultToken = Types.UserCredentials.OauthToken;
+            if (!Types.Credentials->GetUserCredentials().OauthToken.empty()) {
+                defaultToken = Types.Credentials->GetUserCredentials().OauthToken;
             }
         }
 

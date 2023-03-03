@@ -10104,11 +10104,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "unknown token: " << p1 << ", prefix: " << p0));
                 return IGraphTransformer::TStatus::Error;
             }
-            if (p1 == "oauth" && ctx.Types.UserCredentials.OauthToken.empty()) {
+            if (p1 == "oauth" && ctx.Types.Credentials->GetUserCredentials().OauthToken.empty()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "got empty Oauth token string"));
                 return IGraphTransformer::TStatus::Error;
             }
-            if (p1 == "cookie" && ctx.Types.UserCredentials.BlackboxSessionIdCookie.empty()) {
+            if (p1 == "cookie" && ctx.Types.Credentials->GetUserCredentials().BlackboxSessionIdCookie.empty()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "got empty session cookie"));
                 return IGraphTransformer::TStatus::Error;
             }

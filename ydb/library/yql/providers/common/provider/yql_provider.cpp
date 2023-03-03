@@ -643,9 +643,9 @@ static void GetToken(const TString& string, TString& out, const TTypeAnnotationC
     if (p0 == "api") {
         const auto p1 = string.substr(separator + 1);
         if (p1 == "oauth") {
-            out = type.UserCredentials.OauthToken;
+            out = type.Credentials->GetUserCredentials().OauthToken;
         } else if (p1 == "cookie") {
-            out = type.UserCredentials.BlackboxSessionIdCookie;
+            out = type.Credentials->GetUserCredentials().BlackboxSessionIdCookie;
         } else {
             YQL_ENSURE(false, "unexpected token id");
         }

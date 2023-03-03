@@ -24,7 +24,7 @@ public:
     }
 
     TString GetPeerName() const {
-        return TString(Context.peer());
+        return Context.peer();
     }
 
     TInstant Deadline() const {

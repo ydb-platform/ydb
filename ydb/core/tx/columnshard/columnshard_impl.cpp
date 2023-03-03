@@ -1029,18 +1029,18 @@ void TColumnShard::MapExternBlobs(const TActorContext& /*ctx*/, NOlap::TReadMeta
         }
     }
 
-    THashMap<TUnifiedBlobId, TUnifiedBlobId> extMap;
+    auto exported = std::make_shared<THashSet<TUnifiedBlobId>>();
 
     for (auto& blobId : uniqBlobs) {
         TEvictMetadata meta;
         auto evicted = BlobManager->GetEvicted(blobId, meta);
-        if (evicted.ExternBlob.IsValid()) {
-            extMap[blobId] = evicted.ExternBlob;
+        if (evicted.IsExternal()) {
+            exported->insert(blobId);
         }
     }
 
-    if (!extMap.empty()) {
-        metadata.ExternBlobs = std::make_shared<const THashMap<TUnifiedBlobId, TUnifiedBlobId>>(std::move(extMap));
+    if (!exported->empty()) {
+        metadata.ExternBlobs = exported;
     }
 }
 

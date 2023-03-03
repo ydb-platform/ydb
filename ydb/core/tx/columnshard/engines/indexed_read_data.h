@@ -48,7 +48,7 @@ struct TReadMetadataBase {
     std::shared_ptr<arrow::Schema> LoadSchema; // ResultSchema + required for intermediate operations
     std::shared_ptr<arrow::Schema> ResultSchema; // TODO: add Program modifications
     std::shared_ptr<NSsa::TProgram> Program;
-    std::shared_ptr<const THashMap<TUnifiedBlobId, TUnifiedBlobId>> ExternBlobs; // DS -> S3 map TODO: move out of base
+    std::shared_ptr<const THashSet<TUnifiedBlobId>> ExternBlobs;
     ESorting Sorting{ESorting::ASC}; // Sorting inside returned batches
     ui64 Limit{0}; // TODO
 

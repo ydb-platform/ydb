@@ -280,9 +280,15 @@ struct TEvPrivate {
         TEvObjectPathReadError(TIssues issues) : Issues(std::move(issues)) { }
     };
 
+    struct TReadRange {
+        int64_t Offset;
+        int64_t Length;
+    };
+
     struct TEvReadResult2 : public TEventLocal<TEvReadResult2, EvReadResult2> {
-        TEvReadResult2(IHTTPGateway::TContent&& result) : Failure(false), Result(std::move(result)) { }
-        TEvReadResult2(TIssues&& issues) : Failure(true), Result(""), Issues(std::move(issues)) { }
+        TEvReadResult2(TReadRange readRange, IHTTPGateway::TContent&& result) : ReadRange(readRange), Failure(false), Result(std::move(result)) { }
+        TEvReadResult2(TReadRange readRange, TIssues&& issues) : ReadRange(readRange), Failure(true), Result(""), Issues(std::move(issues)) { }
+        const TReadRange ReadRange;
         const bool Failure;
         IHTTPGateway::TContent Result;
         const TIssues Issues;
@@ -1176,16 +1182,16 @@ public:
             Y_VERIFY(0);
             return arrow::Result<std::shared_ptr<arrow::Buffer>>();
         }
-        arrow::Future<std::shared_ptr<arrow::Buffer>> ReadAsync(const arrow::io::IOContext&, int64_t, int64_t) override {
-            Y_VERIFY(0);
-            return arrow::Future<std::shared_ptr<arrow::Buffer>>();
+        // useful ones
+        arrow::Future<std::shared_ptr<arrow::Buffer>> ReadAsync(const arrow::io::IOContext&, int64_t position, int64_t nbytes) override {
+            return arrow::Future<std::shared_ptr<arrow::Buffer>>::MakeFinished(ReadAt(position, nbytes));
         }
-        // the only useful
         arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) override {
             return Coro->ReadAt(position, nbytes);
         }
-        // future work
-        arrow::Status WillNeed(const std::vector<arrow::io::ReadRange>&) override { return{}; }
+        arrow::Status WillNeed(const std::vector<arrow::io::ReadRange>& readRanges) override {
+            return Coro->WillNeed(readRanges);
+        }
 
     private:
         TS3ReadCoroImpl *const Coro;
@@ -1203,14 +1209,29 @@ public:
         virtual arrow::Status Seek(int64_t position) override { return Impl->Seek(position); }
         virtual arrow::Status Close() override { return Impl->Close(); }
         virtual bool closed() const override { return Impl->closed(); }
-        arrow::Result<int64_t> Read(int64_t nbytes, void* buffer) override { return Impl->Read(nbytes, buffer); }
-        arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override { return Impl->Read(nbytes); }
+        arrow::Result<int64_t> Read(int64_t nbytes, void* buffer) override {
+            auto result = Impl->Read(nbytes, buffer);
+            Coro->IngressBytes += nbytes;
+            return result;
+        }
+        arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override {
+            auto result = Impl->Read(nbytes);
+            Coro->IngressBytes += nbytes;
+            return result;
+        }
         arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) override {
             auto result = Impl->ReadAt(position, nbytes);
             Coro->IngressBytes += nbytes;
             return result;
         }
-        arrow::Status WillNeed(const std::vector<arrow::io::ReadRange>& ranges) override { return Impl->WillNeed(ranges); }
+        arrow::Future<std::shared_ptr<arrow::Buffer>> ReadAsync(const arrow::io::IOContext& ctx, int64_t position, int64_t nbytes) override {
+            auto result = Impl->ReadAsync(ctx, position, nbytes);
+            Coro->IngressBytes += nbytes;
+            return result;
+        }
+        arrow::Status WillNeed(const std::vector<arrow::io::ReadRange>& ranges) override {
+            return Impl->WillNeed(ranges); 
+        }
 
     private:
         TS3ReadCoroImpl *const Coro;
@@ -1228,17 +1249,17 @@ public:
             while (!Coro->InputFinished || !Coro->DeferredDataParts.empty()) {
                 Coro->ProcessOneEvent();
                 if (Coro->InputBuffer) {
-                    WorkingBuffer.swap(Coro->InputBuffer);
+                    RawDataBuffer.swap(Coro->InputBuffer);
                     Coro->InputBuffer.clear();
-                    auto rawData = const_cast<char*>(WorkingBuffer.data());
-                    working_buffer = NDB::BufferBase::Buffer(rawData, rawData + WorkingBuffer.size());
+                    auto rawData = const_cast<char*>(RawDataBuffer.data());
+                    working_buffer = NDB::BufferBase::Buffer(rawData, rawData + RawDataBuffer.size());
                     return true;
                 }
             }
             return false;
         }
         TS3ReadCoroImpl *const Coro;
-        TString WorkingBuffer;
+        TString RawDataBuffer;
     };
 
     void RunClickHouseParserOverHttp() {
@@ -1377,38 +1398,97 @@ public:
                 throw yexception() << status.ToString();
             }
         }
-
         LOG_CORO_D("RunThreadPoolBlockArrowParser FINISHED");
     }
 
-    arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) {
-        RetryStuff->Gateway->Download(Url + Path, RetryStuff->Headers,
-                            position,
-                            nbytes,
-                            std::bind(&OnResult, GetActorSystem(), SelfActorId, std::placeholders::_1),
-                            {},
-                            RetryStuff->RetryPolicy);
-        auto ev = WaitForSpecificEvent<TEvPrivate::TEvReadResult2>();
-        if (ev->Get()->Failure) {
-            throw yexception() << ev->Get()->Issues.ToOneLineString();
-        } else {
-            auto result = ev->Get()->Result.Extract();
-            IngressBytes += nbytes;
-            return arrow::Buffer::FromString(result);
-        }
-    }
+    struct TReadCache {
+        ui64 Cookie;
+        TString Data;
+    };
 
-    static void OnResult(TActorSystem* actorSystem, TActorId selfId, IHTTPGateway::TResult&& result) {
+    struct TReadRangeCompare
+    {
+        bool operator() (const TEvPrivate::TReadRange& lhs, const TEvPrivate::TReadRange& rhs) const
+        {
+            return (lhs.Offset < rhs.Offset) || (lhs.Offset == rhs.Offset && lhs.Length < rhs.Length);
+        }
+    };
+
+    ui64 RangeCookie = 0;
+    std::map<TEvPrivate::TReadRange, TReadCache, TReadRangeCompare> RangeCache;
+
+    static void OnResult(TActorSystem* actorSystem, TActorId selfId, TEvPrivate::TReadRange range, ui64 cookie, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U:
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(std::get<IHTTPGateway::TContent>(std::move(result)))));
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::get<IHTTPGateway::TContent>(std::move(result))), 0, cookie));
             return;
         case 1U:
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(std::get<TIssues>(std::move(result)))));
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::get<TIssues>(std::move(result))), 0, cookie));
             return;
         default:
             break;
         }
+    }
+
+    TReadCache& GetOrCreate(TEvPrivate::TReadRange range) {
+        auto it = RangeCache.find(range);
+        if (it != RangeCache.end()) {
+            return it->second;
+        }
+        RetryStuff->Gateway->Download(Url + Path, RetryStuff->Headers,
+                            range.Offset,
+                            range.Length,
+                            std::bind(&OnResult, GetActorSystem(), SelfActorId, range, ++RangeCookie, std::placeholders::_1),
+                            {},
+                            RetryStuff->RetryPolicy);
+        LOG_CORO_D("Download STARTED [" << range.Offset << "-" << range.Length << "], cookie: " << RangeCookie);
+        auto& result = RangeCache[range];
+        result.Cookie = RangeCookie; // may overwrite old range in case of desync?
+        return result;
+    }
+
+    arrow::Status WillNeed(const std::vector<arrow::io::ReadRange>& readRanges) {
+        if (!RangeCache.empty()) {
+            LOG_CORO_W("WillNeed is called before previous ranges are completely processed");
+            RangeCache.clear();
+        }
+        for (auto& range : readRanges) {
+            GetOrCreate(TEvPrivate::TReadRange{ .Offset = range.offset, .Length = range.length });
+        }
+        return {};
+    }
+
+    arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) {
+
+        LOG_CORO_D("ReadAt STARTED [" << position << "-" << nbytes << "]");
+        TEvPrivate::TReadRange range { .Offset = position, .Length = nbytes };
+        auto cache = GetOrCreate(range);
+        while (cache.Data.empty()) {
+            auto ev = WaitForSpecificEvent<TEvPrivate::TEvReadResult2>();
+            if (ev->Get()->Failure) {
+                throw yexception() << ev->Get()->Issues.ToOneLineString();
+            }
+            auto readyRange = ev->Get()->ReadRange;
+            LOG_CORO_D("Download FINISHED [" << readyRange.Offset << "-" << readyRange.Length << "], cookie: " << ev->Cookie);
+            IngressBytes += readyRange.Length;
+            if (range.Offset == readyRange.Offset && range.Length == readyRange.Length && ev->Cookie == cache.Cookie) {
+                cache.Data = ev->Get()->Result.Extract();
+                break;
+            } else {
+                auto it = RangeCache.find(readyRange);
+                if (it == RangeCache.end()) {
+                    LOG_CORO_W("Download completed for unknown/discarded range [" << readyRange.Offset << "-" << readyRange.Length << "]");
+                } else if (it->second.Cookie != ev->Cookie) {
+                    LOG_CORO_W("Mistmatched cookie for range [" << readyRange.Offset << "-" << readyRange.Length << "], received " << ev->Cookie << ", expected " << it->second.Cookie);
+                } else {
+                    it->second.Data = ev->Get()->Result.Extract();
+                }
+            }
+        }
+        TString data = cache.Data;
+        RangeCache.erase(range);
+        LOG_CORO_D("ReadAt FINISHED [" << position << "-" << nbytes << "] #" << data.size());
+        return arrow::Buffer::FromString(data);
     }
 
     void RunCoroBlockArrowParserOverHttp() {
@@ -1417,7 +1497,14 @@ public:
 
         std::shared_ptr<arrow::io::RandomAccessFile> arrowFile = std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit);
         std::unique_ptr<parquet::arrow::FileReader> fileReader;
-        THROW_ARROW_NOT_OK(parquet::arrow::OpenFile(arrowFile, arrow::default_memory_pool(), &fileReader));
+        parquet::arrow::FileReaderBuilder builder;
+        builder.memory_pool(arrow::default_memory_pool());
+        parquet::ArrowReaderProperties properties;
+        properties.set_cache_options(arrow::io::CacheOptions::LazyDefaults());
+        properties.set_pre_buffer(true);
+        builder.properties(properties);
+        THROW_ARROW_NOT_OK(builder.Open(arrowFile));
+        THROW_ARROW_NOT_OK(builder.Build(&fileReader));
 
         std::shared_ptr<arrow::Schema> schema;
         THROW_ARROW_NOT_OK(fileReader->GetSchema(&schema));
@@ -1430,7 +1517,6 @@ public:
 
             std::shared_ptr<arrow::Table> table;
             THROW_ARROW_NOT_OK(fileReader->ReadRowGroup(group, columnIndices, &table));
-
             auto reader = std::make_unique<arrow::TableBatchReader>(*table);
 
             std::shared_ptr<arrow::RecordBatch> batch;
@@ -1460,6 +1546,7 @@ public:
         parquet::arrow::FileReaderBuilder builder;
         builder.memory_pool(arrow::default_memory_pool());
         parquet::ArrowReaderProperties properties;
+        properties.set_cache_options(arrow::io::CacheOptions::LazyDefaults());
         properties.set_pre_buffer(true);
         builder.properties(properties);
         THROW_ARROW_NOT_OK(builder.Open(arrowFile));
@@ -1480,7 +1567,6 @@ public:
 
             std::shared_ptr<arrow::Table> table;
             THROW_ARROW_NOT_OK(fileReader->ReadRowGroup(group, columnIndices, &table));
-
             auto reader = std::make_unique<arrow::TableBatchReader>(*table);
 
             std::shared_ptr<arrow::RecordBatch> batch;
@@ -1671,13 +1757,21 @@ private:
                 if (ReadSpec->Compression) {
                     Issues.AddIssue(TIssue("Blocks optimisations are incompatible with external compression, use Pragma DisableUseBlocks"));
                     fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
-                } else if (ReadSpec->ThreadPool) {
-                    RunThreadPoolBlockArrowParser();
-                } else {
-                    if (Url.StartsWith("file://")) {
-                        RunCoroBlockArrowParserOverFile();
-                    } else {
-                        RunCoroBlockArrowParserOverHttp();
+                } else {                
+                    try {
+                        if (ReadSpec->ThreadPool) {
+                            RunThreadPoolBlockArrowParser();
+                        } else {
+                            if (Url.StartsWith("file://")) {
+                                RunCoroBlockArrowParserOverFile();
+                            } else {
+                                RunCoroBlockArrowParserOverHttp();
+                            }
+                        }
+                    } catch (const parquet::ParquetException& ex) {
+                        Issues.AddIssue(TIssue(ex.what()));
+                        fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                        RetryStuff->Cancel();
                     }
                 }
             } else {
@@ -1690,11 +1784,11 @@ private:
                 } catch (const TS3ReadError&) {
                     // Just to avoid parser error after transport failure
                     LOG_CORO_D("S3 read ERROR");
-                } catch (const NDB::Exception& err) {
+                } catch (const NDB::Exception& ex) {
                     TStringBuilder msgBuilder;
-                    msgBuilder << err.message();
-                    if (err.code()) {
-                        msgBuilder << " (code: " << err.code() << ")";
+                    msgBuilder << ex.message();
+                    if (ex.code()) {
+                        msgBuilder << " (code: " << ex.code() << ")";
                     }
                     Issues.AddIssue(TIssue(msgBuilder));
                     fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;

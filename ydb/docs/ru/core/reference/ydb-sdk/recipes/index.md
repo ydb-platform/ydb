@@ -27,6 +27,11 @@ description: "В данном разделе содержатся рецепты
 - [Установить размер пула сессий](session-pool-limit.md)
 - [Вставка данных](upsert.md)
 - [Пакетная вставка данных](bulk-upsert.md)
+<!-- - [Установка режима выполнения транзакции](tx-control.md)
+  - [SerializableReadWrite](tx-control-serializable-read-write.md)
+  - [OnlineReadOnly](tx-control-online-read-only.md)
+  - [StaleReadOnly](tx-control-stale-read-only.md)
+  - [SnapshotReadOnly](tx-control-snapshot-read-only.md) -->
 - [Диагностика проблем](debug.md)
   - [Включить логирование](debug-logs.md)
   - [Подключить метрики в Prometheus](debug-prometheus.md)

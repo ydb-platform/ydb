@@ -10,7 +10,7 @@ def add_options(p):
 
 
 def do(args):
-    base_config = common.fetch_base_config()
+    base_config = common.fetch_base_config(retrieveDevices=True)
     node_to_fqdn = common.fetch_node_to_fqdn_map()
 
     all_columns = [

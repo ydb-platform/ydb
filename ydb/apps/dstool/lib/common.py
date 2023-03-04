@@ -399,9 +399,9 @@ def invoke_wipe_request(request):
 
 
 @inmemcache('base_config_and_storage_pools')
-def fetch_base_config_and_storage_pools():
+def fetch_base_config_and_storage_pools(retrieveDevices=False):
     request = kikimr_bsconfig.TConfigRequest(Rollback=True)
-    request.Command.add().QueryBaseConfig.CopyFrom(kikimr_bsconfig.TQueryBaseConfig())
+    request.Command.add().QueryBaseConfig.CopyFrom(kikimr_bsconfig.TQueryBaseConfig(RetrieveDevices=retrieveDevices))
     request.Command.add().ReadStoragePool.BoxId = (1 << 64) - 1
     response = invoke_bsc_request(request)
     assert not response.Success
@@ -411,8 +411,8 @@ def fetch_base_config_and_storage_pools():
     return dict(BaseConfig=response.Status[0].BaseConfig, StoragePools=response.Status[1].StoragePool)
 
 
-def fetch_base_config():
-    return fetch_base_config_and_storage_pools()['BaseConfig']
+def fetch_base_config(retrieveDevices=False):
+    return fetch_base_config_and_storage_pools(retrieveDevices)['BaseConfig']
 
 
 def fetch_storage_pools():

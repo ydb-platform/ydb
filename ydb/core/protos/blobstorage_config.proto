@@ -252,6 +252,7 @@ message TProposeStoragePools {
 }
 
 message TQueryBaseConfig {
+    bool RetrieveDevices = 1;
 }
 
 message TReadSettings {

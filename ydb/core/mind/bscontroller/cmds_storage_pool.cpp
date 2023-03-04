@@ -448,27 +448,31 @@ namespace NKikimr::NBsController {
         // settings->AddSerialManagementStage(Self.SerialManagementStage);
     }
 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& /*cmd*/, TStatus& status) {
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {
         NKikimrBlobStorage::TBaseConfig *pb = status.MutableBaseConfig();
-        DrivesSerials.ForEach([&](const auto& serial, const auto& driveInfo) {
-            auto device = pb->AddDevice();
-            device->SetSerialNumber(serial.Serial);
-            device->SetBoxId(driveInfo.BoxId);
-            if (driveInfo.NodeId) {
-                device->SetNodeId(driveInfo.NodeId.GetRef());
-            }
-            if (driveInfo.PDiskId) {
-                device->SetPDiskId(driveInfo.PDiskId.GetRef());
-            }
-            if (driveInfo.Path) {
-                device->SetPath(driveInfo.Path.GetRef());
-            }
-            if (driveInfo.Guid) {
-                device->SetGuid(driveInfo.Guid.GetRef());
-            }
-            device->SetLifeStage(driveInfo.LifeStage);
-            device->SetType(driveInfo.PDiskType);
-        });
+
+        if (cmd.GetRetrieveDevices()) {
+            DrivesSerials.ForEach([&](const auto& serial, const auto& driveInfo) {
+                auto device = pb->AddDevice();
+                device->SetSerialNumber(serial.Serial);
+                device->SetBoxId(driveInfo.BoxId);
+                if (driveInfo.NodeId) {
+                    device->SetNodeId(driveInfo.NodeId.GetRef());
+                }
+                if (driveInfo.PDiskId) {
+                    device->SetPDiskId(driveInfo.PDiskId.GetRef());
+                }
+                if (driveInfo.Path) {
+                    device->SetPath(driveInfo.Path.GetRef());
+                }
+                if (driveInfo.Guid) {
+                    device->SetGuid(driveInfo.Guid.GetRef());
+                }
+                device->SetLifeStage(driveInfo.LifeStage);
+                device->SetType(driveInfo.PDiskType);
+            });
+        }
+
         PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
             Serialize(pb->AddPDisk(), pdiskId, pdiskInfo);
         });

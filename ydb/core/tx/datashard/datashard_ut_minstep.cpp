@@ -66,11 +66,14 @@ TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
 }
 
 Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
-    void TestDropTablePlanComesNotTooEarly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus) {
+    void TestDropTablePlanComesNotTooEarly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus, bool disableSnaphots = true) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
+        if (disableSnaphots) {
+            serverSettings.SetEnableMvccSnapshotReads(false);
+        }
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(app);
@@ -381,11 +384,14 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         TestAlterProposeRebootMinStep(ERebootOnPropose::SchemeShard);
     }
 
-    void TestDropTableCompletesQuickly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus) {
+    void TestDropTableCompletesQuickly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus, bool disableSnaphots = false) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
+        if (disableSnaphots) {
+            serverSettings.SetEnableMvccSnapshotReads(false);
+        }
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(app);
@@ -481,7 +487,8 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
     Y_UNIT_TEST(TestDropTableCompletesQuicklyRO) {
         TestDropTableCompletesQuickly(
             "SELECT * FROM `/Root/table-1` UNION ALL SELECT * FROM `/Root/table-2`;",
-            Ydb::StatusIds::SUCCESS
+            Ydb::StatusIds::SUCCESS,
+            true
         );
     }
 

@@ -1528,6 +1528,7 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetEnableMvccSnapshotReads(false);
     serverSettings.SetDomainName("Root")
         .SetAppConfig(app)
         .SetUseRealThreads(false);
@@ -1864,6 +1865,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
 Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetEnableMvccSnapshotReads(false);
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false);
 
@@ -2292,6 +2294,7 @@ Y_UNIT_TEST(TestCopyTableNoDeadlock) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetEnableMvccSnapshotReads(false);
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
         .SetAppConfig(app);
@@ -2475,6 +2478,7 @@ Y_UNIT_TEST(TestPlannedCancelSplit) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetEnableMvccSnapshotReads(false);
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
         .SetAppConfig(app);

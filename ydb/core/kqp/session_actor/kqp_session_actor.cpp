@@ -717,30 +717,7 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        THashSet<TString> tablesSet;
-        const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        for (const auto& phyTx: phyQuery.GetTransactions()) {
-            for (const auto& stage: phyTx.GetStages()) {
-                for (const auto& tableOp: stage.GetTableOps()) {
-                    tablesSet.insert(tableOp.GetTable().GetPath());
-                }
-
-                for (const auto& input : stage.GetInputs()) {
-                    if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
-                        tablesSet.insert(input.GetStreamLookup().GetTable().GetPath());
-                    }
-                }
-
-                for (const auto& source : stage.GetSources()) {
-                    if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
-                        tablesSet.insert(source.GetReadRangesSource().GetTable().GetPath());
-                    }
-                }
-            }
-        }
-        TVector<TString> tables(tablesSet.begin(), tablesSet.end());
-
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(tables);
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables());
         Send(snapMgrActorId, ev.release());
 
         QueryState->TxCtx->SnapshotHandle.ManagingActor = snapMgrActorId;

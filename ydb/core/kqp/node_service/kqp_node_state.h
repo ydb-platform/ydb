@@ -28,7 +28,7 @@ struct TTaskContext {
 // describes single TEvStartKqpTasksRequest request
 struct TTasksRequest {
     // when task is finished it will be removed from this map
-    TMap<ui64, TTaskContext> InFlyTasks;
+    THashMap<ui64, TTaskContext> InFlyTasks;
     TInstant Deadline;
     ui64 TotalMemory = 0;
     TActorId Executer;
@@ -45,7 +45,8 @@ struct TTxMeta {
 
 struct TState {
     THashMap<std::pair<ui64, const TActorId>, TTasksRequest> Requests;
-    TMap<ui64, TTxMeta> Meta;
+    THashMultiMap<ui64, const TActorId> SenderIdsByTxId;
+    THashMap<ui64, TTxMeta> Meta;
 
     bool Exists(ui64 txId, const TActorId& requester) const {
         return Requests.contains(std::make_pair(txId, requester));
@@ -73,17 +74,22 @@ struct TState {
             YQL_ENSURE(meta.MemoryPool == memoryPool);
         }
         auto ret = Requests.emplace(std::make_pair(txId, requester), std::move(request));
-        YQL_ENSURE(ret.second);
+        auto inserted = SenderIdsByTxId.insert(std::make_pair(txId, requester))->second;
+        YQL_ENSURE(ret.second && inserted);
+        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
     }
 
     std::tuple<TTaskContext*, TActorId, TTasksRequest*, TTxMeta*> GetTask(ui64 txId, ui64 taskId) {
-        for (auto& [key, request] : Requests) {
-            if (key.first != txId) {
-                continue;
-            }
-            auto taskIt = request.InFlyTasks.find(taskId);
-            if (taskIt != request.InFlyTasks.end()) {
-                return std::make_tuple(&taskIt->second, key.second, &request, Meta.FindPtr(txId));
+        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
+        const auto senders = SenderIdsByTxId.equal_range(txId);
+
+        for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
+            auto requestIt = Requests.find(*senderIt);
+            YQL_ENSURE(requestIt != Requests.end());
+
+            auto taskIt = requestIt->second.InFlyTasks.find(taskId);
+            if (taskIt != requestIt->second.InFlyTasks.end()) {
+                return std::make_tuple(&taskIt->second, senderIt->second, &requestIt->second, Meta.FindPtr(txId));
             }
         }
 
@@ -93,14 +99,20 @@ struct TState {
     TMaybe<TTaskContext> RemoveTask(ui64 txId, ui64 taskId, bool success,
         std::function<void(const TActorId&, const TTasksRequest&, const TTaskContext&, bool)>&& cb)
     {
-        for (auto& [key, request] : Requests) {
-            if (key.first == txId && request.InFlyTasks.contains(taskId)) {
-                auto task = std::move(request.InFlyTasks[taskId]);
-                request.InFlyTasks.erase(taskId);
+        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
+        const auto senders = SenderIdsByTxId.equal_range(txId);
+        for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
+            auto requestIt = Requests.find(*senderIt);
+            YQL_ENSURE(requestIt != Requests.end());
 
-                Y_VERIFY_DEBUG(request.TotalMemory >= task.Memory);
-                request.TotalMemory -= task.Memory;
-                request.ExecutionCancelled |= !success;
+            auto taskIt = requestIt->second.InFlyTasks.find(taskId);
+            if (taskIt != requestIt->second.InFlyTasks.end()) {
+                auto task = std::move(taskIt->second);
+                requestIt->second.InFlyTasks.erase(taskIt);
+
+                Y_VERIFY_DEBUG(requestIt->second.TotalMemory >= task.Memory);
+                requestIt->second.TotalMemory -= task.Memory;
+                requestIt->second.ExecutionCancelled |= !success;
 
                 auto& meta = Meta[txId];
                 Y_VERIFY_DEBUG(meta.TotalMemory >= task.Memory);
@@ -108,10 +120,12 @@ struct TState {
                 meta.TotalMemory -= task.Memory;
                 meta.TotalComputeActors--;
 
-                cb(key.second, request, task, meta.TotalComputeActors == 0);
+                cb(senderIt->second, requestIt->second, task, meta.TotalComputeActors == 0);
 
-                if (request.InFlyTasks.empty()) {
-                    Requests.erase(key);
+                if (requestIt->second.InFlyTasks.empty()) {
+                    Requests.erase(*senderIt);
+                    SenderIdsByTxId.erase(senderIt);
+                    YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
                 }
                 if (meta.TotalComputeActors == 0) {
                     Meta.erase(txId);
@@ -120,6 +134,7 @@ struct TState {
                 return std::move(task);
             }
         }
+
         return Nothing();
     }
 
@@ -132,6 +147,16 @@ struct TState {
 
         TMaybe<TTasksRequest> ret = std::move(*request);
         Requests.erase(key);
+
+        const auto senders = SenderIdsByTxId.equal_range(txId);
+        for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
+            if (senderIt->second == requester) {
+                SenderIdsByTxId.erase(senderIt);
+                break;
+            }
+        }
+
+        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
 
         auto& meta = Meta[txId];
         Y_VERIFY_DEBUG(meta.TotalMemory >= ret->TotalMemory);
@@ -149,23 +174,20 @@ struct TState {
     bool RemoveTx(ui64 txId, std::function<void(const TTasksRequest&)>&& cb) {
         Meta.erase(txId);
 
-        auto removeOne = [&]() {
-            for (auto& [key, request] : Requests) {
-                if (key.first == txId) {
-                    cb(request);
-                    Requests.erase(key);
-                    return true;
-                }
-            }
-            return false;
-        };
+        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
+        const auto senders = SenderIdsByTxId.equal_range(txId);
+        for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
+            auto requestIt = Requests.find(*senderIt);
+            YQL_ENSURE(requestIt != Requests.end());
 
-        ui32 count = 0;
-        while (removeOne()) {
-            ++count;
+            cb(requestIt->second);
+            Requests.erase(requestIt);
         }
 
-        return count > 0;
+        auto erased = SenderIdsByTxId.erase(txId);
+        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
+
+        return erased > 0;
     }
 
     ui64 UsedMemory(NRm::EKqpMemoryPool memoryPool) const {

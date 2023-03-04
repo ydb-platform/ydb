@@ -477,7 +477,7 @@ private:
     }
 
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev) {
-        TMap<ui64, TVector<std::pair<const TActorId, const NKqpNode::TTasksRequest*>>> byTx;
+        THashMap<ui64, TVector<std::pair<const TActorId, const NKqpNode::TTasksRequest*>>> byTx;
         for (auto& [key, request] : State.Requests) {
             byTx[key.first].emplace_back(key.second, &request);
         }

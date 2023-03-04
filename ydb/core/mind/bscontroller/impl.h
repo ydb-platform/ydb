@@ -1674,6 +1674,10 @@ public:
     // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
     IActor *CreateSelfHealActor();
 
+    bool IsGroupLayoutSanitizerEnabled() const {
+        return GroupLayoutSanitizer;
+    }
+
 private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Online state

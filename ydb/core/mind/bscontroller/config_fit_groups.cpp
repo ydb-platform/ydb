@@ -255,7 +255,8 @@ namespace NKikimr {
                                 }
                             }
                         }
-                        if ((replacedDisks.empty() && sanitizingRequest) || (replacedDisks.size() == 1 && hasMissingSlots)) {
+                        if ((replacedDisks.empty() && sanitizingRequest) ||
+                                (State.Self.IsGroupLayoutSanitizerEnabled() && replacedDisks.size() == 1 && hasMissingSlots)) {
                             auto result = SanitizeGroup(groupId, group, std::move(forbid), requiredSpace, AllowUnusableDisks);
 
                             if (replacedDisks.empty()) {

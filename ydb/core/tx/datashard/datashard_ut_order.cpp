@@ -1315,6 +1315,7 @@ Y_UNIT_TEST(TestOnlyDataTxLagCausesRejects) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetEnableMvccSnapshotReads(false);
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
         .SetAppConfig(app);

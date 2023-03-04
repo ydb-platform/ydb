@@ -5,6 +5,7 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
+#include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
 
 #include <arrow/scalar.h>
 #include <arrow/array/builder_primitive.h>
@@ -226,9 +227,8 @@ public:
                     auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
-                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
-                        sum += (ptr[i] & mask);
+                        ui8 notNull = (nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1;
+                        sum += SelectArg<TIn>(notNull, ptr[i], 0);
                     }
                 }
 
@@ -242,21 +242,16 @@ public:
                 if (array->GetNullCount() == 0) {
                     typedState->IsValid_ = 1;
                     for (int64_t i = 0; i < len; ++i) {
-                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn filterMask = -TIn(filterBitmap[i]);
-                        sum += ptr[i] & filterMask;
+                        sum += SelectArg<TIn>(filterBitmap[i], ptr[i], 0);
                     }
                 } else {
                     ui64 count = 0;
                     auto nullBitmapPtr = array->template GetValues<uint8_t>(0, 0);
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
-                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
-                        TIn filterMask = -TIn(filterBitmap[i]);
-                        mask &= filterMask;
-                        sum += (ptr[i] & mask);
-                        count += mask & 1;
+                        ui8 notNullAndFiltered = ((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) & filterBitmap[i];
+                        sum += SelectArg<TIn>(notNullAndFiltered, ptr[i], 0);
+                        count += notNullAndFiltered;
                     }
 
                     typedState->IsValid_ |= count ? 1 : 0; 
@@ -296,10 +291,9 @@ void PushValueToState(TSumState<TSum>* typedState, const arrow::Datum& datum, ui
         } else {
             auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
             ui64 fullIndex = row + array->offset;
-            // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-            TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
-            typedState->Sum_ += (ptr[row] & mask);
-            typedState->IsValid_ |= mask & 1;
+            ui8 notNull = (nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1;
+            typedState->Sum_ += SelectArg<TIn>(notNull, ptr[row], 0);
+            typedState->IsValid_ |= notNull;
         }
     }
 }
@@ -431,9 +425,7 @@ public:
             MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
             const ui8* filterBitmap = filterArray->template GetValues<uint8_t>(1);
             for (int64_t i = 0; i < len; ++i) {
-                // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                TIn filterMask = -TIn(filterBitmap[i]);
-                sum += ptr[i] & filterMask;
+                sum += SelectArg<TIn>(filterBitmap[i], ptr[i], 0);
             }
         }
 
@@ -576,8 +568,8 @@ public:
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
                         // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
-                        sum += double(ptr[i] & mask);
+                        ui8 notNull = (nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1;
+                        sum += double(SelectArg<TIn>(notNull, ptr[i], 0));
                     }
                 }
 
@@ -592,21 +584,17 @@ public:
                 ui64 count = typedState->Count_;
                 if (array->GetNullCount() == 0) {
                     for (int64_t i = 0; i < len; ++i) {
-                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn filterMask = -TIn(filterBitmap[i]);
-                        sum += double(ptr[i] & filterMask);
-                        count += filterMask & 1;
+                        ui8 filtered = filterBitmap[i];
+                        sum += double(SelectArg<TIn>(filterBitmap[i], ptr[i], 0));
+                        count += filtered;
                     }
                 } else {
                     auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
-                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn mask = -TIn((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                        TIn filterMask = -TIn(filterBitmap[i]);
-                        mask &= filterMask;
-                        sum += double(ptr[i] & mask);
-                        count += mask & 1;
+                        ui8 notNullAndFiltered = ((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) & filterBitmap[i];
+                        sum += double(SelectArg<TIn>(notNullAndFiltered, ptr[i], 0));
+                        count += notNullAndFiltered;
                     }
                 }
 
@@ -673,10 +661,9 @@ public:
             } else {
                 auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                 ui64 fullIndex = row + array->offset;
-                // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
-                typedState->Sum_ += double(ptr[row] & mask);
-                typedState->Count_ += mask & 1;
+                ui8 notNull = (nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1;
+                typedState->Sum_ += double(SelectArg<TIn>(notNull, ptr[row], 0));
+                typedState->Count_ += notNull;
             }
         }
     }
@@ -817,6 +804,10 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareSum(TTupleType* tuple
             return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<TTag, i64, i64, arrow::Int64Builder, arrow::Int64Scalar>>(filterColumn, argColumn, arrow::int64());
         case NUdf::EDataSlot::Uint64:
             return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<TTag, ui64, ui64, arrow::UInt64Builder, arrow::UInt64Scalar>>(filterColumn, argColumn, arrow::uint64());
+        case NUdf::EDataSlot::Float:
+            return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<TTag, float, float, arrow::UInt64Builder, arrow::UInt64Scalar>>(filterColumn, argColumn, arrow::uint64());
+        case NUdf::EDataSlot::Double:
+            return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<TTag, double, double, arrow::UInt64Builder, arrow::UInt64Scalar>>(filterColumn, argColumn, arrow::uint64());
         default:
             throw yexception() << "Unsupported SUM input type";
         }
@@ -838,6 +829,10 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareSum(TTupleType* tuple
             return std::make_unique<TPreparedSumBlockAggregator<TTag, i64, i64, arrow::Int64Builder, arrow::Int64Scalar>>(filterColumn, argColumn, arrow::int64());
         case NUdf::EDataSlot::Uint64:
             return std::make_unique<TPreparedSumBlockAggregator<TTag, ui64, ui64, arrow::UInt64Builder, arrow::UInt64Scalar>>(filterColumn, argColumn, arrow::uint64());
+        case NUdf::EDataSlot::Float:
+            return std::make_unique<TPreparedSumBlockAggregator<TTag, float, float, arrow::UInt64Builder, arrow::UInt64Scalar>>(filterColumn, argColumn, arrow::uint64());
+        case NUdf::EDataSlot::Double:
+            return std::make_unique<TPreparedSumBlockAggregator<TTag, double, double, arrow::UInt64Builder, arrow::UInt64Scalar>>(filterColumn, argColumn, arrow::uint64());
         default:
             throw yexception() << "Unsupported SUM input type";
         }
@@ -945,6 +940,10 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareAvgOverInput(TTupleTy
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, i64, arrow::Int64Scalar>>(filterColumn, argColumn, builderDataType);
     case NUdf::EDataSlot::Uint64:
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, ui64, arrow::UInt64Scalar>>(filterColumn, argColumn, builderDataType);
+    case NUdf::EDataSlot::Float:
+        return std::make_unique<TPreparedAvgBlockAggregator<TTag, float, arrow::FloatScalar>>(filterColumn, argColumn, builderDataType);
+    case NUdf::EDataSlot::Double:
+        return std::make_unique<TPreparedAvgBlockAggregator<TTag, double, arrow::DoubleScalar>>(filterColumn, argColumn, builderDataType);
     default:
         throw yexception() << "Unsupported AVG input type";
     }

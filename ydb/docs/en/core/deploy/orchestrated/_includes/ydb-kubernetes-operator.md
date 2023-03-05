@@ -41,7 +41,7 @@ Apply the manifest for creating a {{ ydb-short-name }} cluster:
    Run the command:
 
    ```bash
-   kubectl apply -f samples/storage.yaml
+   kubectl apply -f samples/storage-block-4-2.yaml
    ```
 
    This command creates a StatefulSet object that describes a set of containers with stable network IDs and disks assigned to them, as well as Service and ConfigMap objects that are required for the cluster to work.

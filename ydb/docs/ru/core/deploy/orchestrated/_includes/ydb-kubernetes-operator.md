@@ -41,7 +41,7 @@
   Выполните команду:
 
   ```bash
-  kubectl apply -f samples/storage.yaml
+  kubectl apply -f samples/storage-block-4-2.yaml
   ```
 
   Эта команда создаст объект StatefulSet, который описывает набор контейнеров с предсказуемыми сетевыми именами и закрепленными за ними дисками, а также необходимые для работы кластера объекты Service и ConfigMap.

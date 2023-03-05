@@ -706,7 +706,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(AlterObjectNoFeatures) {
         NYql::TAstParseResult res = SqlToYql("USE plato; ALTER OBJECT secretId (TYPE SECRET);");
         UNIT_ASSERT(!res.Root);
-        Cerr << Err2Str(res) << Endl;
     }
 
     Y_UNIT_TEST(DropObjectNoFeatures) {
@@ -1191,8 +1190,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             SELECT * FROM $squ2;
             SELECT * FROM $squ3;
         )");
-
-        Cerr << Err2Str(res) << Endl;
         UNIT_ASSERT(res.Root);
     }
 
@@ -1207,8 +1204,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             JOIN $right AS r
             ON l.key == r.key;
         )");
-
-        Cerr << Err2Str(res) << Endl;
         UNIT_ASSERT(res.Root);
     }
 
@@ -4405,6 +4400,10 @@ Y_UNIT_TEST_SUITE(AnsiOptionalAs) {
         ExpectFailWithError("PRAGMA DisableAnsiOptionalAs;\n"
                             "SELECT a b, c FROM plato.Input;",
                             "<main>:2:10: Error: Expecting mandatory AS here. Did you miss comma? Please add PRAGMA AnsiOptionalAs; for ANSI compatibility\n");
+    }
+
+    Y_UNIT_TEST(OptionalAsWithKeywords) {
+        UNIT_ASSERT(SqlToYql("PRAGMA AnsiOptionalAs; SELECT a type, b data, c source FROM plato.Input;").IsOk());
     }
 }
 

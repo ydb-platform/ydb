@@ -791,7 +791,6 @@ id_hint:
 ;
 
 id_as_compat: identifier | keyword_as_compat;
-keyword_as_compat: TYPE;
 
 // ANSI-aware versions of various identifiers with support double-quoted identifiers when PRAGMA AnsiQuotedIdentifiers; is present
 an_id: id | STRING_VALUE;
@@ -895,6 +894,13 @@ keyword_hint_uncompat:
   | COLUMNS
 ;
 
+keyword_as_compat:
+    DATA
+  | SOURCE
+  | TYPE
+;
+
+// insert new keyword into keyword_as_compat also
 keyword_compat: (
     ABORT
   | ACTION

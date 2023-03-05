@@ -373,6 +373,10 @@ public:
     BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc) \
     UDF(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks();)
 
+#define BEGIN_SIMPLE_STRICT_ARROW_UDF(udfName, signatureFunc) \
+    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc) \
+    UDF(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict();)
+
 #define END_ARROW_UDF(udfNameBlocks, exec) \
     inline bool udfNameBlocks::DeclareSignature(\
         const ::NYql::NUdf::TStringRef& name, \

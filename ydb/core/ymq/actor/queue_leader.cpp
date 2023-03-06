@@ -1737,8 +1737,8 @@ void TQueueLeader::StartLoadingInfly(ui64 shard, bool afterFailure) {
 
     LOG_SQS_INFO("Start loading infly for queue " << TLogQueueName(UserName_, QueueName_, shard));
     shardInfo.InflyLoadState = TShardInfo::EInflyLoadState::WaitingForDbAnswer;
-    Y_VERIFY(shardInfo.LoadInflyRequests == 0);
-    shardInfo.LoadInflyRequests = 2;
+    Y_VERIFY(!shardInfo.LoadInflyRequestInProcess);
+    shardInfo.LoadInflyRequestInProcess = true;
     shardInfo.NeedInflyReload = false;
     shardInfo.Infly = nullptr;
     TExecutorBuilder(SelfId(), "")
@@ -1759,33 +1759,15 @@ void TQueueLeader::StartLoadingInfly(ui64 shard, bool afterFailure) {
             .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
             .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueueVersion_, shard))
         .ParentBuilder().Start();
-
-    TExecutorBuilder(SelfId(), "")
-        .User(UserName_)
-        .Queue(QueueName_)
-        .Shard(shard)
-        .QueueLeader(SelfId())
-        .TablesFormat(TablesFormat_)
-        .QueryId(GET_STATE_ID)
-        .QueueVersion(QueueVersion_)
-        .Fifo(IsFifoQueue_)
-        .RetryOnTimeout()
-        .OnExecuted([this, shard](const TSqsEvents::TEvExecuted::TRecord& ev) { OnStateLoaded(shard, ev); })
-        .Counters(Counters_)
-        .Params()
-            .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
-            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
-            .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
-        .ParentBuilder().Start();
 }
 
 void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRecord& reply) {
     LOG_SQS_TRACE("Infly load reply for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": " << reply);
     auto& shardInfo = Shards_[shard];
-    Y_VERIFY(shardInfo.LoadInflyRequests > 0);
-    --shardInfo.LoadInflyRequests;
+    Y_VERIFY(shardInfo.LoadInflyRequestInProcess);
+    shardInfo.LoadInflyRequestInProcess = false;
     const bool ok = reply.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete;
-    if (shardInfo.InflyLoadState != TShardInfo::EInflyLoadState::Failed && ok) {
+    if (ok) {
         shardInfo.Infly = MakeIntrusive<TInflyMessages>();
         using NKikimr::NClient::TValue;
         const TValue val(TValue::Create(reply.GetExecutionEngineEvaluatedResponse()));
@@ -1810,6 +1792,16 @@ void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRec
         LWPROBE(LoadInfly, UserName_, QueueName_, shard, list.Size());
         shardInfo.InflyVersion = val["inflyVersion"];
         LOG_SQS_DEBUG("Infly version for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": " << shardInfo.InflyVersion);
+
+        auto messagesCount = val["messageCount"];
+        auto inflyCount = val["inflyCount"];
+        Y_VERIFY(i64(messagesCount) >= 0);
+        Y_VERIFY(i64(inflyCount) >= 0);
+        shardInfo.MessagesCount = static_cast<ui64>(i64(messagesCount));
+        shardInfo.InflyMessagesCount = static_cast<ui64>(i64(inflyCount));
+        shardInfo.ReadOffset = val["readOffset"];
+        shardInfo.CreatedTimestamp = TInstant::MilliSeconds(ui64(val["createdTimestamp"]));
+
         shardInfo.DelayStatisticsInited = true;
 
         if (shardInfo.NeedAddingMessagesToInfly) {
@@ -1821,61 +1813,16 @@ void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRec
             }
         }
 
-        if (shardInfo.LoadInflyRequests == 0) {
-            shardInfo.InflyLoadState = TShardInfo::EInflyLoadState::Loaded;
-            StartMessageRequestsAfterInflyLoaded(shard);
-            ProcessGetRuntimeQueueAttributes(shard);
-        }
+        shardInfo.InflyLoadState = TShardInfo::EInflyLoadState::Loaded;
+        StartMessageRequestsAfterInflyLoaded(shard);
+        ProcessGetRuntimeQueueAttributes(shard);
     } else {
-        if (!ok) {
-            LOG_SQS_ERROR("Failed to load infly for " << TLogQueueName(UserName_, QueueName_, shard) << ": " << reply);
-        }
-        if (shardInfo.InflyLoadState != TShardInfo::EInflyLoadState::Failed) {
-            FailMessageRequestsAfterInflyLoadFailure(shard);
-            FailGetRuntimeQueueAttributesForShard(shard);
-        }
-        shardInfo.InflyLoadState = TShardInfo::EInflyLoadState::Failed;
-        if (shardInfo.LoadInflyRequests == 0) {
-            ScheduleInflyLoadAfterFailure(shard);
-        }
-    }
-}
+        LOG_SQS_ERROR("Failed to load infly for " << TLogQueueName(UserName_, QueueName_, shard) << ": " << reply);
+        FailMessageRequestsAfterInflyLoadFailure(shard);
+        FailGetRuntimeQueueAttributesForShard(shard);
 
-void TQueueLeader::OnStateLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRecord& reply) {
-    auto& shardInfo = Shards_[shard];
-    Y_VERIFY(shardInfo.LoadInflyRequests > 0);
-    --shardInfo.LoadInflyRequests;
-    const bool ok = reply.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete;
-    if (shardInfo.InflyLoadState != TShardInfo::EInflyLoadState::Failed && ok) {
-        using NKikimr::NClient::TValue;
-        const TValue val(TValue::Create(reply.GetExecutionEngineEvaluatedResponse()));
-        const TValue state = val["state"];
-        auto messagesCount = state["MessageCount"];
-        auto inflyCount = state["InflyCount"];
-        Y_VERIFY(i64(messagesCount) >= 0);
-        Y_VERIFY(i64(inflyCount) >= 0);
-        shardInfo.MessagesCount = static_cast<ui64>(i64(messagesCount));
-        shardInfo.InflyMessagesCount = static_cast<ui64>(i64(inflyCount));
-        shardInfo.ReadOffset = state["ReadOffset"];
-        shardInfo.CreatedTimestamp = TInstant::MilliSeconds(ui64(state["CreatedTimestamp"]));
-
-        if (shardInfo.LoadInflyRequests == 0) {
-            shardInfo.InflyLoadState = TShardInfo::EInflyLoadState::Loaded;
-            StartMessageRequestsAfterInflyLoaded(shard);
-            ProcessGetRuntimeQueueAttributes(shard);
-        }
-    } else {
-        if (!ok) {
-            LOG_SQS_ERROR("Failed to load state for " << TLogQueueName(UserName_, QueueName_, shard) << ": " << reply);
-        }
-        if (shardInfo.InflyLoadState != TShardInfo::EInflyLoadState::Failed) {
-            FailMessageRequestsAfterInflyLoadFailure(shard);
-            FailGetRuntimeQueueAttributesForShard(shard);
-        }
         shardInfo.InflyLoadState = TShardInfo::EInflyLoadState::Failed;
-        if (shardInfo.LoadInflyRequests == 0) {
-            ScheduleInflyLoadAfterFailure(shard);
-        }
+        ScheduleInflyLoadAfterFailure(shard);
     }
 }
 

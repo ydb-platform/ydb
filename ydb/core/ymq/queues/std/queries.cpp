@@ -1169,37 +1169,21 @@ const char* const LoadInflyQuery = R"__(
             )__" STATE_KEYS_PARAM R"__(
         ))
         (let stateFields '(
-            'InflyVersion))
+            'InflyVersion
+            'InflyCount
+            'MessageCount
+            'ReadOffset
+            'CreatedTimestamp    
+        ))
         (let state (SelectRow stateTable stateRow stateFields))
 
         (return (Extend
             (AsList (SetResult 'inflyVersion (Coalesce (Member state 'InflyVersion) (Uint64 '0))))
+            (AsList (SetResult 'inflyCount (Member state 'InflyCount)))
+            (AsList (SetResult 'messageCount (Member state 'MessageCount)))
+            (AsList (SetResult 'readOffset (Member state 'ReadOffset)))
+            (AsList (SetResult 'createdTimestamp (Member state 'CreatedTimestamp)))
             (AsList (SetResult 'infly infly))))
-    )
-)__";
-
-const char* const GetStateQuery = R"__(
-    (
-        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
-        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
-        (let shard              (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
-
-        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
-
-        (let state (block '(
-            (let row '(
-                )__" STATE_KEYS_PARAM R"__(
-            ))
-            (let fields '(
-                'InflyCount
-                'MessageCount
-                'ReadOffset
-                'WriteOffset
-                'CreatedTimestamp))
-            (return (SelectRow stateTable row fields)))))
-
-        (return (AsList
-            (SetResult 'state state)))
     )
 )__";
 
@@ -1341,45 +1325,43 @@ const char* const GetQueuesListQuery = R"__(
 
 const char* GetStdQueryById(size_t id) {
     switch (id) {
-    case DELETE_MESSAGE_ID: // 0
+    case DELETE_MESSAGE_ID:
         return DeleteMessageQuery;
-    case WRITE_MESSAGE_ID: // 3
+    case WRITE_MESSAGE_ID:
         return WriteMessageQuery;
-    case PURGE_QUEUE_ID: // 4
+    case PURGE_QUEUE_ID:
         return PurgeQueueQuery;
-    case CHANGE_VISIBILITY_ID: // 5
+    case CHANGE_VISIBILITY_ID:
         return ChangeMessageVisibilityQuery;
-    case LIST_QUEUES_ID: // 8
+    case LIST_QUEUES_ID:
         return ListQueuesQuery;
-    case SET_QUEUE_ATTRIBUTES_ID: // 9
+    case SET_QUEUE_ATTRIBUTES_ID:
         return SetQueueAttributesQuery;
-    case SET_RETENTION_ID: // 10
+    case SET_RETENTION_ID:
         return SetRetentionQuery;
-    case LOAD_MESSAGES_ID: // 11
+    case LOAD_MESSAGES_ID:
         return LoadMessageQuery;
-    case INTERNAL_GET_QUEUE_ATTRIBUTES_ID: // 12
+    case INTERNAL_GET_QUEUE_ATTRIBUTES_ID:
         return InternalGetQueueAttributesQuery;
-    case PURGE_QUEUE_STAGE2_ID: // 13
+    case PURGE_QUEUE_STAGE2_ID:
         return PurgeQueueStage2Query;
-    case GET_OLDEST_MESSAGE_TIMESTAMP_METRIC_ID: // 15
+    case GET_OLDEST_MESSAGE_TIMESTAMP_METRIC_ID:
         return GetOldestMessageTimestampMetricsQuery;
-    case GET_RETENTION_OFFSET_ID: // 16
+    case GET_RETENTION_OFFSET_ID:
         return GetRetentionOffsetQuery;
-    case LOAD_INFLY_ID: // 17
+    case LOAD_INFLY_ID:
         return LoadInflyQuery;
-    case ADD_MESSAGES_TO_INFLY_ID: // 18
+    case ADD_MESSAGES_TO_INFLY_ID:
         return AddMessagesToInflyQuery;
-    case GET_STATE_ID: // 19
-        return GetStateQuery;
-    case LIST_DEAD_LETTER_SOURCE_QUEUES_ID: // 20
+    case LIST_DEAD_LETTER_SOURCE_QUEUES_ID:
         return ListDeadLetterSourceQueuesQuery;
-    case LOAD_OR_REDRIVE_MESSAGE_ID: // 21
+    case LOAD_OR_REDRIVE_MESSAGE_ID:
         return LoadOrRedriveMessageQuery;
-    case GET_USER_SETTINGS_ID: // 23
+    case GET_USER_SETTINGS_ID:
         return GetUserSettingsQuery;
-    case GET_QUEUES_LIST_ID: // 24
+    case GET_QUEUES_LIST_ID:
         return GetQueuesListQuery;
-    case GET_MESSAGE_COUNT_METRIC_ID: // 14
+    case GET_MESSAGE_COUNT_METRIC_ID:
         return GetMessageCountMetricsQuery;
     }
     return nullptr;

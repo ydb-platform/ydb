@@ -397,7 +397,7 @@ private:
             Failed, // waiting for scheduled retry
         };
         EInflyLoadState InflyLoadState = EInflyLoadState::New;
-        size_t LoadInflyRequests = 0;
+        bool LoadInflyRequestInProcess = false;
         size_t ActiveMessageRequests = 0;
         ui64 ReadOffset = 0;
         bool AddingMessagesToInfly = false;

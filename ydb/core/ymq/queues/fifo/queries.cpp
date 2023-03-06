@@ -1499,41 +1499,41 @@ const char* const ListDeadLetterSourceQueuesQuery = R"__(
 
 const char* GetFifoQueryById(size_t id) {
     switch (id) {
-    case DELETE_MESSAGE_ID: // 0
+    case DELETE_MESSAGE_ID:
         return DeleteMessageQuery;
-    case LOCK_GROUP_ID: // 1
+    case LOCK_GROUP_ID:
         return LockGroupsQuery;
-    case READ_MESSAGE_ID: // 2
+    case READ_MESSAGE_ID:
         return ReadMessageQuery;
-    case WRITE_MESSAGE_ID: // 3
+    case WRITE_MESSAGE_ID:
         return WriteMessageQuery;
-    case PURGE_QUEUE_ID: // 4
+    case PURGE_QUEUE_ID:
         return PurgeQueueQuery;
-    case CHANGE_VISIBILITY_ID: // 5
+    case CHANGE_VISIBILITY_ID:
         return ChangeMessageVisibilityQuery;
-    case CLEANUP_DEDUPLICATION_ID: // 6
+    case CLEANUP_DEDUPLICATION_ID:
         return DeduplicationCleanupQuery;
-    case CLEANUP_READS_ID: // 7
+    case CLEANUP_READS_ID:
         return ReadsCleanupQuery;
-    case LIST_QUEUES_ID: // 8
+    case LIST_QUEUES_ID:
         return ListQueuesQuery;
-    case SET_QUEUE_ATTRIBUTES_ID: // 9
+    case SET_QUEUE_ATTRIBUTES_ID:
         return SetQueueAttributesQuery;
-    case SET_RETENTION_ID: // 10
+    case SET_RETENTION_ID:
         return SetRetentionQuery;
-    case INTERNAL_GET_QUEUE_ATTRIBUTES_ID: // 13
+    case INTERNAL_GET_QUEUE_ATTRIBUTES_ID:
         return InternalGetQueueAttributesQuery;
-    case PURGE_QUEUE_STAGE2_ID: // 14
+    case PURGE_QUEUE_STAGE2_ID:
         return PurgeQueueStage2Query;
-    case GET_MESSAGE_COUNT_METRIC_ID: // 15
+    case GET_MESSAGE_COUNT_METRIC_ID:
         return GetMessageCountMetricsQuery;
-    case GET_OLDEST_MESSAGE_TIMESTAMP_METRIC_ID: // 16
+    case GET_OLDEST_MESSAGE_TIMESTAMP_METRIC_ID:
         return GetOldestMessageTimestampMetricsQuery;
-    case GET_RETENTION_OFFSET_ID: // 17
+    case GET_RETENTION_OFFSET_ID:
         return GetRetentionOffsetQuery;
-    case LIST_DEAD_LETTER_SOURCE_QUEUES_ID: // 18
+    case LIST_DEAD_LETTER_SOURCE_QUEUES_ID:
         return ListDeadLetterSourceQueuesQuery;
-    case READ_OR_REDRIVE_MESSAGE_ID: // 22
+    case READ_OR_REDRIVE_MESSAGE_ID:
         return ReadOrRedriveMessageQuery;
     }
 

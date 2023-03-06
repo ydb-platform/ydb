@@ -414,7 +414,7 @@ struct TQueryTypeCounters {
 // These counters are present in queue counters and in user counters.
 struct TTransactionCounters : public TAtomicRefCount<TTransactionCounters> {
     // Query types are declared in ydb/core/ymq/base/query_id.h.
-    TQueryTypeCounters QueryTypeCounters[EQueryId::QUERY_VECTOR_SIZE]; // 23 types at all. 15 for std. 16 for fifo. 2 for user.
+    TQueryTypeCounters QueryTypeCounters[EQueryId::QUERY_VECTOR_SIZE];
 
     std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters; // counters for kikimr core.
 

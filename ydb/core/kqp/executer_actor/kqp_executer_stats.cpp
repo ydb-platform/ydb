@@ -151,6 +151,7 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
             auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
 
             stageStats->SetTotalTasksCount(stageStats->GetTotalTasksCount() + 1);
+            stageStats->SetTotalErrorsCount(stageStats->GetTotalErrorsCount() + task.GetErrorsCount());
             UpdateAggr(stageStats->MutableCpuTimeUs(), task.GetCpuTimeUs());
             UpdateAggr(stageStats->MutableInputRows(), task.GetInputRows());
             UpdateAggr(stageStats->MutableInputBytes(), task.GetInputBytes());

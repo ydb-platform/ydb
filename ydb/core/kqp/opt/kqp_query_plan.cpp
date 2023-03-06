@@ -1653,6 +1653,8 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         SetNonZero(node, "PendingInputTimeUs", taskStats.GetPendingInputTimeUs());
         SetNonZero(node, "PendingOutputTimeUs", taskStats.GetPendingOutputTimeUs());
 
+        SetNonZero(node, "ErrorsCount", taskStats.GetErrorsCount());
+
         for (auto& inputStats : taskStats.GetInputChannels()) {
             auto& inputNode = node["InputChannels"].AppendValue(NJson::TJsonValue());
             fillInputStats(inputNode, inputStats);
@@ -1688,6 +1690,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["TotalInputBytes"] = (*stat)->GetInputBytes().GetSum();
                 stats["TotalOutputRows"] = (*stat)->GetOutputRows().GetSum();
                 stats["TotalOutputBytes"] = (*stat)->GetOutputBytes().GetSum();
+                stats["TotalErrosCount"] = (*stat)->GetTotalErrorsCount();
 
                 for (auto& caStats : (*stat)->GetComputeActors()) {
                     auto& caNode = stats["ComputeNodes"].AppendValue(NJson::TJsonValue());

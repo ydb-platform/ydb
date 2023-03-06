@@ -258,6 +258,8 @@ public:
             // NKqpProto::TKqpComputeActorExtraStats extraStats;
 
             auto* taskStats = dst->MutableTasks(0);
+            taskStats->SetErrorsCount(ErrorsCount);
+
             auto* tableStats = taskStats->AddTables();
 
             tableStats->SetTablePath(ScanData->TablePath);
@@ -609,6 +611,8 @@ private:
 
         YQL_ENSURE(state->Generation == msg.GetGeneration());
 
+        ++ErrorsCount;
+
         if (state->State == EShardState::Starting) {
             // TODO: Do not parse issues here, use status code.
             if (FindSchemeErrorInIssues(status, issues)) {
@@ -633,6 +637,9 @@ private:
             return;
         }
         YQL_ENSURE(ScanData);
+
+        ++ErrorsCount;
+
         auto& msg = *ev->Get();
 
         if (auto costsState = InFlightShards.GetCostsState(msg.TabletId)) {
@@ -1235,6 +1242,7 @@ private:
     NWilson::TProfileSpan KqpComputeActorSpan;
     TInFlightShards InFlightShards;
     ui32 ScansCounter = 0;
+    ui32 ErrorsCount = 0;
 
     std::set<ui32> TrackingNodes;
     ui32 MaxInFlight = 1024;

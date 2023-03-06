@@ -157,6 +157,7 @@ message TDqTaskStats {
     repeated TDqAsyncInputBufferStats InputTransforms = 155;
     string HostName = 156;
     uint32 NodeId = 157;
+    uint32 ErrorsCount = 158;
 
     google.protobuf.Any Extra = 200;
 }
@@ -228,6 +229,8 @@ message TDqStageStats {
     repeated TDqTableAggrStats Tables = 16; // is it required?
 
     repeated TDqComputeActorStats ComputeActors = 17; // more detailed stats
+
+    uint32 TotalErrorsCount = 18;
 
     google.protobuf.Any Extra = 100;
 }

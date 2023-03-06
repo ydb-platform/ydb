@@ -2169,6 +2169,28 @@ private:
             YQL_ENSURE(it != ShardIdToNodeId.end());
 
             for (auto& taskDesc : tasks) {
+                ui64 taskId = taskDesc.GetId();
+                auto& task = TasksGraph.GetTask(taskId);
+                for (ui64 outputIndex = 0; outputIndex < task.Outputs.size(); ++outputIndex) {
+                    auto& output = task.Outputs[outputIndex];
+                    auto* protoOutput = taskDesc.MutableOutputs(outputIndex);
+
+                    for (ui64 outputChannelIndex = 0; outputChannelIndex < output.Channels.size(); ++outputChannelIndex) {
+                        ui64 outputChannelId = output.Channels[outputChannelIndex];
+                        auto* protoChannel = protoOutput->MutableChannels(outputChannelIndex);
+
+                        ui64 dstTaskId = TasksGraph.GetChannel(outputChannelId).DstTask;
+                        if (dstTaskId == 0) {
+                            continue;
+                        }
+
+                        auto& dstTask = TasksGraph.GetTask(dstTaskId);
+                        if (dstTask.ComputeActorId) {
+                            protoChannel->MutableDstEndpoint()->Clear();
+                            ActorIdToProto(dstTask.ComputeActorId, protoChannel->MutableDstEndpoint()->MutableActorId());
+                        }
+                    }
+                }
                 remoteComputeTasksCnt += 1;
                 FillInputSettings(taskDesc);
                 PendingComputeTasks.insert(taskDesc.GetId());

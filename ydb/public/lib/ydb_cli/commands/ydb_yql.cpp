@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
 #include <util/generic/queue.h>
 
 namespace NYdb {
@@ -20,7 +21,7 @@ void TCommandYql::Config(TConfig& config) {
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
     config.Opts->AddLongOption('s', "script", "Text of script to execute").RequiredArgument("[String]").StoreResult(&Script);
     config.Opts->AddLongOption('f', "file", "Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
-
+  
     AddParametersOption(config, "script");
 
     AddFormats(config, {
@@ -56,8 +57,13 @@ void TCommandYql::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseFormats();
     if (!Script && !ScriptFile) {
+#ifdef _win32_
         throw TMisuseException() << "Neither \"Text of script\" (\"--script\", \"-s\") "
-            << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
+            << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided. "
+            << "Interactive CLI is not supported on Windows.";
+#else
+        Interactive = true;
+#endif
     }
     if (Script && ScriptFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
@@ -66,25 +72,81 @@ void TCommandYql::Parse(TConfig& config) {
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
     }
-    ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-        ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
+    if (!Interactive) {
+        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
+            ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
+    }
     ParseParameters(config);
 }
 
 int TCommandYql::Run(TConfig& config) {
+    if (Interactive) {
+        // run interactive cli
+
+        class TLogic : public TInteractiveCli::ILogic {
+        public:
+            TLogic(TCommandYql *base, TConfig& config)
+                : Base(base)
+                , Config(config)
+            {}
+
+            virtual bool Ready(const std::string &text) override {
+                bool done = text.find(';') != std::string::npos;
+                return done;
+            }
+
+            virtual void Run(const std::string &text, const std::string &stat) override {
+                Y_UNUSED(stat);
+                try {
+                    Base->RunCommand(Config, TString(text.c_str()));
+                } catch (TYdbErrorException &error) {
+                    Cerr << error;
+                }
+                TTerminalOutput::Print("\n");
+            }
+
+        private:
+            TCommandYql* Base;
+            TConfig& Config;
+        };
+
+    
+        TTerminalOutput::Print("\033[32mYDB Interactive CLI \033[0m");
+        TTerminalOutput::Print("\033[31m(experimental, no compatibility guarantees)\033[0m\n\n");
+        TInteractiveCli::TConfig interactiveCfg;
+        interactiveCfg.Prompt = "\033[32m=> \033[0m";
+        TInteractiveCli cli(std::make_shared<TLogic>(this, config), std::move(interactiveCfg));
+        cli.Run();
+        while(true) {
+            // blocking until input
+            auto action = GetKeyboardAction();
+            cli.HandleInput(action);
+        }
+
+        return EXIT_SUCCESS;
+    } else {
+        return RunCommand(config, Script);    
+    }
+}
+
+int TCommandYql::RunCommand(TConfig& config, const TString &script) {
     TDriver driver = CreateDriver(config);
     NScripting::TScriptingClient client(driver);
 
     NScripting::TExecuteYqlRequestSettings settings;
     settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
-    SetInterruptHandlers();
+
+    if (!Interactive) {
+        SetInterruptHandlers();
+    }
+
     if (!Parameters.empty() || !IsStdinInteractive()) {
         THolder<TParamsBuilder> paramBuilder;
         while (!IsInterrupted() && 
             GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
             
             auto asyncResult = client.StreamExecuteYqlScript(
-                    Script,
+                    script,
                     paramBuilder->Build(),
                     FillSettings(settings)
             );
@@ -97,8 +159,8 @@ int TCommandYql::Run(TConfig& config) {
         }
     } else {
         auto asyncResult = client.StreamExecuteYqlScript(
-                Script,
-                FillSettings(settings)
+            script,
+            FillSettings(settings)
         );
 
         auto result = asyncResult.GetValueSync();

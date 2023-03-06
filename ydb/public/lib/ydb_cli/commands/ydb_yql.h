@@ -21,11 +21,13 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
+    int RunCommand(TConfig& config, const TString &script);
     bool PrintResponse(NScripting::TYqlResultPartIterator& result);
 
     TString CollectStatsMode;
     TString Script;
     TString ScriptFile;
+    bool Interactive = false;
 };
 
 }

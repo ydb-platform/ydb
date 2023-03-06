@@ -38,6 +38,8 @@ target_link_libraries(clicommands PUBLIC
   library-cpp-resource
 )
 target_sources(clicommands PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/term_io.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/stock_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/kv_workload.cpp

@@ -122,6 +122,9 @@ struct fy_document {
 	fy_node_meta_clear_fn meta_clear_fn;
 	void *meta_user;
 
+	fy_document_on_destroy_fn on_destroy_fn;
+	void *userdata;
+
 	struct fy_path_expr_document_data *pxdd;
 };
 /* only the list declaration/methods */

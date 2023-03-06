@@ -4796,6 +4796,76 @@ fy_document_unregister_meta(struct fy_document *fyd)
 	FY_EXPORT;
 
 /**
+ * fy_document_get_userdata() - Get the userdata pointer of a document
+ *
+ * Return the userdata pointer of a document.
+ *
+ * @fyn: The document to get userdata from
+ *
+ * Returns:
+ * The stored userdata pointer
+ */
+void *
+fy_document_get_userdata(struct fy_document *fyd)
+	FY_EXPORT;
+
+/**
+ * fy_document_set_userdata() - Set the userdata pointer of a document
+ *
+ * Set the userdata pointer of a document. If @userdata is NULL
+ * then clear the userdata.
+ *
+ * @fyd: The document to set userdata
+ * @userdata: The userdata pointer
+ *
+ * Returns:
+ * 0 on success, -1 on error
+ */
+int
+fy_document_set_userdata(struct fy_document *fyd, void *userdata)
+	FY_EXPORT;
+
+/**
+ * typedef fy_document_on_destroy_fn - Userdata clear method
+ *
+ * This is the callback called just before document is destroyed.
+ *
+ * @fyd: The document which will be destroyed
+ * @userdata: The userdata pointer of a document
+ *
+ */
+typedef void (*fy_document_on_destroy_fn)(struct fy_document *fyd, void *userdata);
+
+/**
+ * fy_document_register_on_destroy() - Register an on_destroy hook
+ *
+ * Register an on_destroy hook, to be called when
+ * the document is freed via a final call to fy_document_destroy().
+ *
+ * @fyd: The document which the hook is registered to
+ * @on_destroy_fn: The on_destroy hook method
+ *
+ * Returns:
+ * 0 on success, -1 if another hook is already registered.
+ */
+int
+fy_document_register_on_destroy(struct fy_document *fyd,
+				fy_document_on_destroy_fn on_destroy_fn)
+	FY_EXPORT;
+
+/**
+ * fy_document_unregister_on_destroy() - Unregister an on_destroy hook
+ *
+ * Unregister the currently active on_destroy hook.
+ *
+ * @fyd: The document to unregister it's on_destroy hook.
+ */
+void
+fy_document_unregister_on_destroy(struct fy_document *fyd)
+	FY_EXPORT;
+
+
+/**
  * fy_node_set_marker() - Set a marker of a node
  *
  * Sets the marker of the given node, while returning

@@ -386,6 +386,9 @@ void fy_parse_document_destroy(struct fy_parser *fyp, struct fy_document *fyd)
 
 	fy_diag_unref(fyd->diag);
 
+	if (fyd->on_destroy_fn)
+		fyd->on_destroy_fn(fyd, fyd->userdata);
+
 	free(fyd);
 }
 
@@ -6304,6 +6307,40 @@ void fy_document_unregister_meta(struct fy_document *fyd)
 
 	fyd->meta_clear_fn = NULL;
 	fyd->meta_user = NULL;
+}
+
+int fy_document_set_userdata(struct fy_document *fyd, void *userdata)
+{
+	if (!fyd || !userdata)
+		return -1;
+
+	fyd->userdata = userdata;
+
+	return 0;
+}
+
+void* fy_document_get_userdata(struct fy_document *fyd)
+{
+	return fyd->userdata;
+}
+
+int fy_document_register_on_destroy(struct fy_document *fyd,
+				    fy_document_on_destroy_fn on_destroy_fn)
+{
+	if (!fyd || !on_destroy_fn)
+		return -1;
+
+	fyd->on_destroy_fn = on_destroy_fn;
+
+	return 0;
+}
+
+void fy_document_unregister_on_destroy(struct fy_document *fyd)
+{
+	if (!fyd)
+		return;
+
+	fyd->on_destroy_fn = NULL;
 }
 
 bool fy_node_set_marker(struct fy_node *fyn, unsigned int marker)

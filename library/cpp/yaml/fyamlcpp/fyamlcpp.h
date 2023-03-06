@@ -4,6 +4,7 @@
 #include <util/system/compiler.h>
 #include <util/system/yassert.h>
 #include <util/stream/str.h>
+#include <util/generic/hash_set.h>
 
 #include <memory>
 #include <optional>
@@ -116,7 +117,7 @@ public:
 
     TNode Copy() const;
 
-    TNode Copy(const TDocument& to) const;
+    TNode Copy(TDocument& to) const;
 
     bool IsAlias() const;
 
@@ -509,7 +510,9 @@ class TDocument {
     friend class TNodeRef;
     friend class TJsonEmitter;
     friend class TParser;
+    friend class TMapping;
 
+    TDocument(TString str, fy_document* doc = nullptr, fy_diag* diag = nullptr);
     TDocument(fy_document* doc = nullptr, fy_diag* diag = nullptr);
 
 public:
@@ -518,7 +521,7 @@ public:
         , Diag_(std::move(other.Diag_))
     {}
 
-    static TDocument Parse(const char* cstr);
+    static TDocument Parse(TString cstr);
 
     TDocument Clone() const;
 
@@ -583,6 +586,14 @@ private:
         }
     }
 
+    static void DestroyDocumentStrings(fy_document *fyd, void *user) {
+        Y_UNUSED(fyd);
+        if (user) {
+            auto* data = reinterpret_cast<THashSet<TString>*>(user);
+            delete data;
+        }
+    }
+
     bool RegisterUserDataCleanup();
     void UnregisterUserDataCleanup();
 };
@@ -599,12 +610,13 @@ private:
 };
 
 class TParser {
-    TParser(fy_parser* doc, fy_diag* diag);
+    TParser(TString rawStream, fy_parser* doc, fy_diag* diag);
 public:
-    static TParser Create(const char* cstr);
+    static TParser Create(TString str);
 
     std::optional<TDocument> NextDocument();
 private:
+    TString RawDocumentStream_;
     std::unique_ptr<fy_parser, void(*)(fy_parser*)> Parser_;
     std::unique_ptr<fy_diag, void(*)(fy_diag*)> Diag_;
 };

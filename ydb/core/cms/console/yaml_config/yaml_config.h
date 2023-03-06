@@ -1,6 +1,9 @@
 #pragma once
 
 #include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
+#include <library/cpp/actors/core/actor.h>
+
+#include <ydb/core/protos/config.pb.h>
 
 #include <openssl/sha.h>
 
@@ -98,6 +101,11 @@ TDocumentConfig Resolve(
     const TSet<TNamedLabel>& labels);
 
 /**
+ * Converts YAML representation to ProtoBuf
+ */
+NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUnknown = false);
+
+/**
  * TLabel is a representation of label for config resolution
  *
  * It can be in three states:
@@ -142,4 +150,14 @@ struct TResolvedConfig {
  */
 TResolvedConfig ResolveAll(NFyaml::TDocument& doc);
 
-}// namespace NYamlConfig
+/**
+ * Validates single YAML volatile config schema
+ */
+void ValidateVolatileConfig(NFyaml::TDocument& doc);
+
+/**
+ * Appends volatile configs to the end of selectors list
+ */
+void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatileConfig);
+
+} // namespace NYamlConfig

@@ -1,6 +1,9 @@
 #include "yaml_config.h"
 #include "yaml_config_impl.h"
 
+#include <library/cpp/protobuf/json/json2proto.h>
+#include <ydb/core/base/appdata.h>
+
 namespace NYamlConfig {
 
 inline const TMap<TString, EYamlConfigLabelTypeClass> ClassMapping{
@@ -378,6 +381,31 @@ bool Fit(
     return true;
 }
 
+NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUnknown) {
+    TStringStream sstr;
+
+    sstr << NFyaml::TJsonEmitter(node);
+
+    TString resolvedJsonConfig = sstr.Str();
+
+    NJson::TJsonValue json;
+
+    NJson::ReadJsonTree(resolvedJsonConfig, &json);
+
+    NKikimrConfig::TAppConfig yamlProtoConfig;
+
+    NProtobufJson::TJson2ProtoConfig c;
+    c.SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense);
+    c.SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive);
+    c.CastRobust = true;
+    c.MapAsObject = true;
+    c.AllowUnknownFields = allowUnknown;
+
+    NProtobufJson::MergeJson2Proto(json, yamlProtoConfig, c);
+
+    return yamlProtoConfig;
+}
+
 TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
 {
     TVector<TString> labelNames;
@@ -490,6 +518,44 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
     }
 
     return {labelNames, std::move(configs)};
+}
+
+void ValidateVolatileConfig(NFyaml::TDocument& doc) {
+    auto root = doc.Root();
+    auto seq = root.Sequence();
+    if (seq.size() == 0) {
+        ythrow yexception() << "Empty volatile config";
+    }
+    for (auto& elem : seq) {
+        auto map = elem.Map();
+        if (map.size() != 3) {
+            ythrow yexception() << "Invalid volatile config element: " << elem.Path();
+        }
+        for (auto& mapElem : map) {
+            auto key = mapElem.Key().Scalar();
+            if (key == "description") {
+                mapElem.Value().Scalar();
+            } else if (key == "selector") {
+                mapElem.Value().Map();
+            } else if (key == "config") {
+                mapElem.Value().Map();
+            } else {
+                ythrow yexception() << "Unknown element in volatile config: " << elem.Path();
+            }
+        }
+    }
+}
+
+void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatileConfig) {
+    auto configRoot = config.Root();
+    auto volatileConfigRoot = volatileConfig.Root();
+
+    auto seq = volatileConfigRoot.Sequence();
+    auto selectors = configRoot.Map().at("selector_config").Sequence();
+    for (auto& elem : seq) {
+        auto node = elem.Copy(config);
+        selectors.Append(node.Ref());
+    }
 }
 
 } // namespace NYamlConfig

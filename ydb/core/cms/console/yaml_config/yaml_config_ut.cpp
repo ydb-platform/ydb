@@ -703,6 +703,77 @@ const char *UnresolvedAllConfig14 = R"(---
       ? 14
 )";
 
+const char *SimpleConfig = R"(---
+cluster: test
+version: 12.1
+config:
+  num: 1
+allowed_labels:
+  tenant:
+    type: string
+
+selector_config: []
+)";
+
+const char *VolatilePart = R"(
+- description: test 4
+  selector:
+    tenant: /dev_global
+  config:
+    actor_system_config: {}
+    cms_config:
+      sentinel_config:
+        enable: false
+- description: test 5
+  selector:
+    canary: true
+  config:
+    actor_system_config: {}
+    cms_config:
+      sentinel_config:
+        enable: true
+)";
+
+const char *Concatenated = R"(---
+cluster: test
+version: 12.1
+config:
+  num: 1
+allowed_labels:
+  tenant:
+    type: string
+selector_config: [
+  {
+    description: test 4,
+    selector: {
+      tenant: /dev_global
+    },
+    config: {
+      actor_system_config: {},
+      cms_config: {
+        sentinel_config: {
+          enable: false
+        }
+      }
+    }
+  },
+  {
+    description: test 5,
+    selector: {
+      canary: true
+    },
+    config: {
+      actor_system_config: {},
+      cms_config: {
+        sentinel_config: {
+          enable: true
+        }
+      }
+    }
+  }
+  ]
+)";
+
 using EType = NYamlConfig::TLabel::EType;
 
 TMap<TSet<TVector<NYamlConfig::TLabel>>, TVector<int>> ExpectedResolved =
@@ -1324,5 +1395,14 @@ Y_UNIT_TEST_SUITE(YamlConfig) {
             UNIT_ASSERT_VALUES_EQUAL(resolved.Configs.size(), 72);
             // TODO extend ExpectedResolved manually and compare
         }
+    }
+
+    Y_UNIT_TEST(AppendVolatileConfig) {
+        auto cfg = NFyaml::TDocument::Parse(SimpleConfig);
+        auto volatilePart = NFyaml::TDocument::Parse(VolatilePart);
+        NYamlConfig::AppendVolatileConfigs(cfg, volatilePart);
+        TStringStream stream;
+        stream << cfg;
+        UNIT_ASSERT_VALUES_EQUAL(stream.Str(), TString(Concatenated));
     }
 }

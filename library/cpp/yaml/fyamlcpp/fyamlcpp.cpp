@@ -2,10 +2,22 @@
 
 #include <contrib/libs/libfyaml/include/libfyaml.h>
 
+#include <util/digest/murmur.h>
+
 namespace NFyaml {
 
 #define ENSURE_NODE_NOT_EMPTY(NODE) Y_ENSURE_EX(NODE, TFyamlEx() << "Expected non-empty Node")
 #define ENSURE_DOCUMENT_NOT_EMPTY(NODE) Y_ENSURE_EX(NODE, TFyamlEx() << "Expected non-empty Document")
+
+const char* zstr = "";
+
+struct TStringHashT {
+    size_t operator()(const TString& str) const {
+        auto* ptr = str.empty() ? zstr : &str[0];
+        return MurmurHash<size_t>(reinterpret_cast<char*>(&ptr), sizeof(ptr));
+    }
+};
+
 
 enum class EErrorType {
     Debug = FYET_DEBUG,
@@ -280,8 +292,12 @@ TNode TNodeRef::Copy() const {
     return TNode(fy_node_copy(fy_node_document(Node_), Node_));
 }
 
-TNode TNodeRef::Copy(const TDocument& to) const {
+TNode TNodeRef::Copy(TDocument& to) const {
     ENSURE_NODE_NOT_EMPTY(Node_);
+    auto* fromDoc = fy_node_document(Node_);
+    auto& fromUserdata = *reinterpret_cast<THashSet<TString, TStringHashT>*>(fy_document_get_userdata(fromDoc));
+    auto& toUserdata = *reinterpret_cast<THashSet<TString, TStringHashT>*>(fy_document_get_userdata(to.Document_.get()));
+    toUserdata.insert(fromUserdata.begin(), fromUserdata.end());
     return TNode(fy_node_copy(to.Document_.get(), Node_));
 }
 
@@ -694,6 +710,16 @@ TDocumentNodeIterator& TDocumentNodeIterator::operator++() {
     return *this;
 }
 
+TDocument::TDocument(TString str, fy_document* doc, fy_diag* diag)
+    : Document_(doc, fy_document_destroy)
+    , Diag_(diag, fy_diag_destroy)
+{
+    auto* userdata = new THashSet<TString, TStringHashT>({str});
+    fy_document_set_userdata(doc, userdata);
+    fy_document_register_on_destroy(doc, &DestroyDocumentStrings);
+    RegisterUserDataCleanup();
+}
+
 TDocument::TDocument(fy_document* doc, fy_diag* diag)
     : Document_(doc, fy_document_destroy)
     , Diag_(diag, fy_diag_destroy)
@@ -701,7 +727,9 @@ TDocument::TDocument(fy_document* doc, fy_diag* diag)
     RegisterUserDataCleanup();
 }
 
-TDocument TDocument::Parse(const char* cstr) {
+
+TDocument TDocument::Parse(TString str) {
+    auto* cstr = str.empty() ? zstr : &str[0];
     fy_diag_cfg dcfg;
     fy_diag_cfg_default(&dcfg);
     std::unique_ptr<fy_diag, void(*)(fy_diag*)> diag(fy_diag_create(&dcfg), fy_diag_destroy);
@@ -721,12 +749,19 @@ TDocument TDocument::Parse(const char* cstr) {
             ythrow yexception() << err->file << ":" << err->line << ":" << err->column << " " << err->msg;
         }
     }
-    return TDocument(doc, diag.release());
+    return TDocument(std::move(str), doc, diag.release());
 }
 
 TDocument TDocument::Clone() const {
     ENSURE_DOCUMENT_NOT_EMPTY(Document_);
     fy_document* doc = fy_document_clone(Document_.get());
+    fy_document_set_userdata(
+        doc,
+        new THashSet<TString, TStringHashT>(
+            *reinterpret_cast<THashSet<TString, TStringHashT>*>(fy_document_get_userdata(Document_.get()))
+        )
+    );
+    fy_document_register_on_destroy(doc, &DestroyDocumentStrings);
     return TDocument(doc, fy_document_get_diag(doc));
 }
 
@@ -836,13 +871,15 @@ std::unique_ptr<char, void(*)(char*)> TJsonEmitter::EmitToCharArray() const {
     return res;
 }
 
-TParser::TParser(fy_parser* parser, fy_diag* diag)
-    : Parser_(parser, fy_parser_destroy)
+TParser::TParser(TString rawStream, fy_parser* parser, fy_diag* diag)
+    : RawDocumentStream_(std::move(rawStream))
+    , Parser_(parser, fy_parser_destroy)
     , Diag_(diag, fy_diag_destroy)
 {}
 
-TParser TParser::Create(const char* stream)
+TParser TParser::Create(TString str)
 {
+    auto* stream = str.empty() ? zstr : &str[0];
     fy_diag_cfg dcfg;
     fy_diag_cfg_default(&dcfg);
     std::unique_ptr<fy_diag, void(*)(fy_diag*)> diag(fy_diag_create(&dcfg), fy_diag_destroy);
@@ -865,7 +902,7 @@ TParser TParser::Create(const char* stream)
 
     fy_parser_set_string(parser, stream, -1);
 
-    return TParser(parser, diag.release());
+    return TParser(std::move(str), parser, diag.release());
 }
 
 std::optional<TDocument> TParser::NextDocument() {
@@ -874,7 +911,7 @@ std::optional<TDocument> TParser::NextDocument() {
         return std::nullopt;
     }
 
-    return TDocument(doc, fy_document_get_diag(doc));
+    return TDocument(RawDocumentStream_, doc, fy_document_get_diag(doc));
 }
 
 namespace NDetail {

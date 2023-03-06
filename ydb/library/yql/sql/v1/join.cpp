@@ -567,9 +567,7 @@ public:
             if (extraMembers) {
                 sourceNode = Y(useOrderedForSource ? "OrderedMap" : "Map", sourceNode, BuildLambda(Pos, Y("row"), extraMembers, "row"));
             }
-            if (ctx.EnableSystemColumns && source->IsTableSource()) {
-                sourceNode = Y("RemoveSystemMembers", sourceNode);
-            }
+            sourceNode = Y("RemoveSystemMembers", sourceNode);
             equiJoin = L(equiJoin, Q(Y(sourceNode, BuildQuotedAtom(source->GetPos(), source->GetLabel()))));
         }
         TNodePtr removeMembers;

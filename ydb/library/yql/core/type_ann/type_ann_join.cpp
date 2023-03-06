@@ -270,22 +270,6 @@ namespace NTypeAnnImpl {
             }
 
             auto structType = itemType->Cast<TStructExprType>();
-            if (!options.KeepSysColumns && AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) {
-                if (updatedChildren.empty()) {
-                    updatedChildren = input->ChildrenList();
-                }
-                updatedChildren[idx] = ctx.Expr.ChangeChild(listPair, 0,
-                    ctx.Expr.Builder(list.Pos())
-                        .Callable("RemovePrefixMembers")
-                            .Add(0, listPair.HeadPtr())
-                            .List(1)
-                                .Atom(0, "_yql_sys_", TNodeFlags::Default)
-                            .Seal()
-                        .Seal()
-                        .Build()
-                    );
-                continue;
-            }
             if (auto err = labels.Add(ctx.Expr, *listPair.Child(1), structType)) {
                 ctx.Expr.AddError(*err);
                 ctx.Expr.AddError(TIssue(
@@ -541,7 +525,7 @@ namespace NTypeAnnImpl {
         if (!EnsureTupleOfAtoms(rightKeyColumns, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-      
+
 
         const auto& leftRenames = *input->Child(5);
         const auto& rightRenames = *input->Child(6);
@@ -602,7 +586,7 @@ namespace NTypeAnnImpl {
             } else {
                     resultItems[index] = columnType;
             }
-            
+
         }
 
         for (ui32 i = 0; i < rightRenames.ChildrenSize(); i += 2) {
@@ -636,7 +620,7 @@ namespace NTypeAnnImpl {
             } else {
                 resultItems[index] = columnType;
             }
-            
+
         }
 
         const auto resultItemType = ctx.Expr.MakeType<TMultiExprType>(resultItems);
@@ -650,7 +634,7 @@ namespace NTypeAnnImpl {
 
     IGraphTransformer::TStatus GraceJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
- 
+
         if (!EnsureArgsCount(*input, 7, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -666,11 +650,11 @@ namespace NTypeAnnImpl {
         }
 
         if ( !EnsureWideFlowType(*input->Child(0), ctx.Expr) ) {
-            return IGraphTransformer::TStatus::Error;           
+            return IGraphTransformer::TStatus::Error;
         }
 
         if ( !EnsureWideFlowType(*input->Child(1), ctx.Expr) ) {
-            return IGraphTransformer::TStatus::Error;           
+            return IGraphTransformer::TStatus::Error;
         }
 
          return GraceJoinCoreWrapperImp(input, *leftItemType->Cast<TMultiExprType>(), *rightItemType->Cast<TMultiExprType>(), ctx);

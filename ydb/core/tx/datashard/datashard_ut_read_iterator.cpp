@@ -1072,6 +1072,23 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         });
     }
 
+    Y_UNIT_TEST(ShouldReverseReadMultipleKeys) {
+        TTestHelper helper;
+
+        auto request = helper.GetBaseReadRequest("table-1", 1);
+        AddKeyQuery(*request, {3, 3, 3});
+        AddKeyQuery(*request, {1, 1, 1});
+        AddKeyQuery(*request, {5, 5, 5});
+        request->Record.SetReverse(true);
+
+        auto readResult = helper.SendRead("table-1", request.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+            {5, 5, 5, 500},
+            {1, 1, 1, 100},
+            {3, 3, 3, 300},
+        });
+    }
+
     Y_UNIT_TEST(ShouldReadMultipleKeysOneByOne) {
         TTestHelper helper;
 
@@ -1118,6 +1135,65 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto readResult3 = helper.WaitReadResult();
         CheckResult(helper.Tables["table-1"].UserTable, *readResult3, {
             {5, 5, 5, 500}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(continueCounter, 2);
+
+        const auto& record3 = readResult3->Record;
+        UNIT_ASSERT(!record3.GetLimitReached());
+        UNIT_ASSERT(record3.HasFinished());
+        UNIT_ASSERT_VALUES_EQUAL(record3.GetReadId(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(record3.GetSeqNo(), 3UL);
+        // TODO: check continuation token
+    }
+
+    Y_UNIT_TEST(ShouldReverseReadMultipleKeysOneByOne) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        AddKeyQuery(*request1, {3, 3, 3});
+        AddKeyQuery(*request1, {1, 1, 1});
+        AddKeyQuery(*request1, {5, 5, 5});
+        request1->Record.SetMaxRowsInResult(1);
+        request1->Record.SetReverse(true);
+
+        ui32 continueCounter = 0;
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+                ++continueCounter;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {5, 5, 5, 500}
+        });
+
+        const auto& record1 = readResult1->Record;
+        UNIT_ASSERT(!record1.GetLimitReached());
+        UNIT_ASSERT(record1.HasSeqNo());
+        //UNIT_ASSERT(!record1.HasFinished());
+        UNIT_ASSERT_VALUES_EQUAL(record1.GetReadId(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(record1.GetSeqNo(), 1UL);
+        // TODO: check continuation token
+
+        auto readResult2 = helper.WaitReadResult();
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult2, {
+            {1, 1, 1, 100}
+        });
+
+        const auto& record2 = readResult2->Record;
+        UNIT_ASSERT(!record2.GetLimitReached());
+        UNIT_ASSERT(!record2.HasFinished());
+        UNIT_ASSERT_VALUES_EQUAL(record2.GetReadId(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(record2.GetSeqNo(), 2UL);
+        // TODO: check continuation token
+
+        auto readResult3 = helper.WaitReadResult();
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult3, {
+            {3, 3, 3, 300}
         });
 
         UNIT_ASSERT_VALUES_EQUAL(continueCounter, 2);
@@ -1238,6 +1314,83 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT(readResult6);
         UNIT_ASSERT(readResult6->Record.GetLimitReached()); // quota is empty now
         UNIT_ASSERT_VALUES_EQUAL(continueCounter, 4);
+    }
+
+    Y_UNIT_TEST(ShouldReverseReadMultipleRanges) {
+        TTestHelper helper;
+
+        auto request = helper.GetBaseReadRequest("table-1", 1);
+        AddRangeQuery<ui32>(
+            *request,
+            {1, 0, 0},
+            true,
+            {5, 5, 5},
+            true
+        );
+        AddRangeQuery<ui32>(
+            *request,
+            {8, 1, 1},
+            true,
+            {11, 11, 11},
+            true
+        );
+
+        request->Record.SetReverse(true);
+
+        auto readResult = helper.SendRead("table-1", request.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+            {11, 11, 11, 1111},
+            {8, 1, 1, 803},
+            {5, 5, 5, 500},
+            {3, 3, 3, 300},
+            {1, 1, 1, 100},
+        });
+    }
+
+    Y_UNIT_TEST(ShouldReverseReadMultipleRangesOneByOneWithAcks) {
+        TTestHelper helper;
+
+        auto request = helper.GetBaseReadRequest("table-1", 1);
+        AddRangeQuery<ui32>(
+            *request,
+            {1, 0, 0},
+            true,
+            {5, 5, 5},
+            true
+        );
+        AddRangeQuery<ui32>(
+            *request,
+            {8, 1, 1},
+            true,
+            {11, 11, 11},
+            true
+        );
+
+        request->Record.SetReverse(true);
+        request->Record.SetMaxRows(1);
+
+        std::vector<std::vector<ui32>> gold = {
+            {11, 11, 11, 1111},
+            {8, 1, 1, 803},
+            {5, 5, 5, 500},
+            {3, 3, 3, 300},
+            {1, 1, 1, 100},
+        };
+
+        auto readResult = helper.SendRead("table-1", request.release());
+        UNIT_ASSERT(readResult);
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+            gold[0]
+        });
+
+        for (size_t i = 1; i < gold.size(); ++i) {
+            helper.SendReadAck("table-1", readResult->Record, 1, 10000);
+            readResult = helper.WaitReadResult();
+            UNIT_ASSERT(readResult);
+            CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+                gold[i]
+            });
+        }
     }
 
     Y_UNIT_TEST(ShouldRangeReadReverseLeftInclusive) {

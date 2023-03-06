@@ -264,7 +264,7 @@ class TReader {
 
     std::vector<NScheme::TTypeInfo> ColumnTypes;
 
-    ui32 FirstUnprocessedQuery;
+    ui32 FirstUnprocessedQuery; // must be unsigned
     TString LastProcessedKey;
 
     ui64 RowsRead = 0;
@@ -351,7 +351,7 @@ public:
         iterRange.MaxKey = keyTo;
         iterRange.MinInclusive = fromInclusive;
         iterRange.MaxInclusive = toInclusive;
-        bool reverse = State.Reverse;
+        const bool reverse = State.Reverse;
 
         EReadStatus result;
         if (!reverse) {
@@ -432,7 +432,9 @@ public:
     // TODO: merge ReadRanges and ReadKeys to single template Read?
 
     bool ReadRanges(TTransactionContext& txc, const TActorContext& ctx) {
-        for (; FirstUnprocessedQuery < State.Request->Ranges.size(); ++FirstUnprocessedQuery) {
+        // note that FirstUnprocessedQuery is unsigned and if we do reverse iteration,
+        // then it will also become less than size() when finished
+        while (FirstUnprocessedQuery < State.Request->Ranges.size()) {
             if (ShouldStop())
                 return true;
 
@@ -440,7 +442,7 @@ public:
             auto status = ReadRange(txc, ctx, range);
             switch (status) {
             case EReadStatus::Done:
-                continue;
+                break;
             case EReadStatus::StoppedByLimit:
                 return true;
             case EReadStatus::NeedData:
@@ -448,13 +450,20 @@ public:
                     return true;
                 return false;
             }
+
+            if (!State.Reverse)
+               FirstUnprocessedQuery++;
+            else
+               FirstUnprocessedQuery--;
         }
 
         return true;
     }
 
     bool ReadKeys(TTransactionContext& txc, const TActorContext& ctx) {
-        for (; FirstUnprocessedQuery < State.Request->Keys.size(); ++FirstUnprocessedQuery) {
+        // note that FirstUnprocessedQuery is unsigned and if we do reverse iteration,
+        // then it will also become less than size() when finished
+        while (FirstUnprocessedQuery < State.Request->Keys.size()) {
             if (ShouldStop())
                 return true;
 
@@ -462,7 +471,7 @@ public:
             auto status = ReadKey(txc, ctx, key, FirstUnprocessedQuery);
             switch (status) {
             case EReadStatus::Done:
-                continue;
+                break;
             case EReadStatus::StoppedByLimit:
                 return true;
             case EReadStatus::NeedData:
@@ -470,6 +479,11 @@ public:
                     return true;
                 return false;
             }
+
+            if (!State.Reverse)
+               FirstUnprocessedQuery++;
+            else
+               FirstUnprocessedQuery--;
         }
 
         return true;
@@ -1177,6 +1191,9 @@ public:
         }
 
         state.Reverse = record.GetReverse();
+        if (state.Reverse) {
+            state.FirstUnprocessedQuery = Request->Keys.size() + Request->Ranges.size() - 1;
+        }
 
         if (state.PathId.OwnerId != Self->TabletID()) {
             // owner is schemeshard, read user table

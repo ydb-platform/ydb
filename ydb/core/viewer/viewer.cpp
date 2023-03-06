@@ -20,7 +20,7 @@
 #include "browse_pq.h"
 #include "browse_db.h"
 #include "counters_hosts.h"
-#include "healthcheck.h"
+#include "json_healthcheck.h"
 
 #include "json_handlers.h"
 
@@ -353,7 +353,7 @@ private:
             return;
         }
         if (filename.StartsWith("healthcheck")) {
-            ctx.ExecutorThread.RegisterActor(new THealthCheck(this, ev));
+            ctx.ExecutorThread.RegisterActor(new TJsonHealthCheck(this, ev));
             return;
         }
         // TODO: check path validity

@@ -16,6 +16,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, InFlightMemoryLimit);
     REGISTER_SETTING(*this, JsonListSizeLimit).Upper(100'000);
     REGISTER_SETTING(*this, ArrowThreadPool);
+    REGISTER_SETTING(*this, ArrowReadAheadRowGroupCount);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {

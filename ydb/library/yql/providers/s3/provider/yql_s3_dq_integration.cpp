@@ -194,8 +194,7 @@ public:
                 }
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3ParseSettingsBase>()
-                        .CallableName((supportedArrowTypes && format == "parquet") ? 
-                          (State_->Configuration->ArrowThreadPool.Get().GetOrElse(true) ? TS3ArrowSettings::CallableName() : TS3CoroArrowSettings::CallableName() ):
+                        .CallableName((supportedArrowTypes && format == "parquet") ? TS3ArrowSettings::CallableName():
                                                                                      TS3ParseSettings::CallableName())
                         .Paths(s3ReadObject.Object().Paths())
                         .Token<TCoSecureParam>()
@@ -277,8 +276,9 @@ public:
             if (const auto mayParseSettings = settings.Maybe<TS3ParseSettingsBase>()) {
                 const auto parseSettings = mayParseSettings.Cast();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
-                srcDesc.SetArrow(bool(parseSettings.Maybe<TS3ArrowSettings>()) || bool(parseSettings.Maybe<TS3CoroArrowSettings>()));
-                srcDesc.SetThreadPool(bool(parseSettings.Maybe<TS3ArrowSettings>()));
+                srcDesc.SetArrow(bool(parseSettings.Maybe<TS3ArrowSettings>()));
+                srcDesc.SetThreadPool(State_->Configuration->ArrowThreadPool.Get().GetOrElse(true));
+                srcDesc.SetReadAheadRowGroupCount(State_->Configuration->ArrowReadAheadRowGroupCount.Get().GetOrElse(0));
 
                 const TStructExprType* fullRowType = parseSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 // exclude extra columns to get actual row type we need to read from input

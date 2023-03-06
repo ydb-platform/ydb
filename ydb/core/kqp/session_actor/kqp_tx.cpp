@@ -78,26 +78,6 @@ std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& typ
     return res;
 }
 
-bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx,
-        TExprContext& ctx) {
-    auto [success, issues] = MergeLocks(type, value, txCtx);
-    if (!success) {
-        if (!txCtx.GetSnapshot().IsValid()) {
-            for (auto& issue : issues) {
-                ctx.AddError(std::move(issue));
-            }
-            return false;
-        } else {
-            txCtx.Locks.MarkBroken(issues.back());
-            if (txCtx.TxHasEffects()) {
-                txCtx.Locks.ReportIssues(ctx);
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
     TKqpTransactionInfo txInfo;
 

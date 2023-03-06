@@ -1054,39 +1054,6 @@ public:
         return QueryState->QueryData;
     }
 
-    bool ShouldAcquireLocks(const NKqpProto::TKqpPhyQuery* query) {
-        auto& txCtx = *QueryState->TxCtx;
-
-        if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
-            return false;
-        }
-
-        if (txCtx.Locks.Broken()) {
-            return false;  // Do not acquire locks after first lock issue
-        }
-
-        if (!txCtx.DeferredEffects.Empty()) {
-            return true; // Acquire locks in read write tx
-        }
-
-        YQL_ENSURE(query);
-        for (auto& tx : query->GetTransactions()) {
-            if (tx.GetHasEffects()) {
-                return true; // Acquire locks in read write tx
-            }
-        }
-
-        if (!QueryState->Commit) {
-            return true; // Is not a commit tx
-        }
-
-        if (txCtx.GetSnapshot().IsValid()) {
-            return false; // It is a read only tx with snapshot, no need to acquire locks
-        }
-
-        return true;
-    }
-
     TQueryData::TPtr CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx) {
         for (const auto& paramBinding : tx->GetParamBindings()) {
             QueryState->QueryData->MaterializeParamValue(true, paramBinding);
@@ -1248,7 +1215,7 @@ public:
             }
 
             request.TopicOperations = std::move(txCtx.TopicOperations);
-        } else if (ShouldAcquireLocks(query)) {
+        } else if (txCtx.ShouldAcquireLocks(query, QueryState->Commit)) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
         }
 

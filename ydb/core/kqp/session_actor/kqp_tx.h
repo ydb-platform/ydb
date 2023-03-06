@@ -217,6 +217,37 @@ public:
         };
     }
 
+    bool ShouldAcquireLocks(const NKqpProto::TKqpPhyQuery* query, bool commit) {
+        if (*EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
+            return false;
+        }
+
+        if (Locks.Broken()) {
+            return false;  // Do not acquire locks after first lock issue
+        }
+
+        if (!DeferredEffects.Empty()) {
+            return true; // Acquire locks in read write tx
+        }
+
+        YQL_ENSURE(query);
+        for (auto& tx : query->GetTransactions()) {
+            if (tx.GetHasEffects()) {
+                return true; // Acquire locks in read write tx
+            }
+        }
+
+        if (!commit) {
+            return true; // Is not a commit tx
+        }
+
+        if (GetSnapshot().IsValid()) {
+            return false; // It is a read only tx with snapshot, no need to acquire locks
+        }
+
+        return true;
+    }
+
 public:
     struct TParamsState : public TThrRefBase {
         ui32 LastIndex = 0;
@@ -356,9 +387,6 @@ public:
         return std::exchange(ToBeAborted, {});
     }
 };
-
-bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx,
-    NYql::TExprContext& ctx);
 
 std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);

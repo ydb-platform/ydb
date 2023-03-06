@@ -372,7 +372,24 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<NodeId, PDiskId, VSlotId, State, ScrubCycleStartTime, ScrubCycleFinishTime, Success>;
     };
 
+    // the following table is obsolete, use DrivesSerials instead
     struct DriveSerial : Table<129> {
+        struct Serial : Column<1, NScheme::NTypeIds::String> {}; // PK
+        struct BoxId : Column<2, Box::BoxId::ColumnType> {};
+        struct NodeId : Column<3, Node::ID::ColumnType> {}; // FK PDisk.NodeID
+        struct PDiskId : Column<4, Node::NextPDiskID::ColumnType> {}; // FK PDisk.PDiskID
+        struct Guid : Column<5, PDisk::Guid::ColumnType> {}; // Check-only column for PDisk.Guid
+        struct LifeStage : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TDriveLifeStage::E; };
+        struct Kind : Column<7, HostConfigDrive::Kind::ColumnType> {};
+        struct PDiskType : Column<8, HostConfigDrive::TypeCol::ColumnType> { using Type = NKikimrBlobStorage::EPDiskType; };
+        struct PDiskConfig : Column<9, NScheme::NTypeIds::String> {};
+        struct Path : Column<10, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Serial>;
+        using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, PDiskType, PDiskConfig, Path>;
+    };
+
+    struct DrivesSerials : Table<130> {
         struct Serial : Column<1, NScheme::NTypeIds::String> {}; // PK
         struct BoxId : Column<2, Box::BoxId::ColumnType> {};
         struct NodeId : Column<3, Node::ID::ColumnType> {}; // FK PDisk.NodeID
@@ -410,7 +427,7 @@ struct Schema : NIceDb::Schema {
                                 MigrationPlan,
                                 MigrationEntry,
                                 ScrubState,
-                                DriveSerial
+                                DrivesSerials
                                 >;
 
     using TSettings = SchemaSettings<

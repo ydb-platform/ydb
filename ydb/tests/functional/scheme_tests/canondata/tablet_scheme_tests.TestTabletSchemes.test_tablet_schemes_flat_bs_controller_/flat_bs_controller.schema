@@ -1365,8 +1365,55 @@
         }
     },
     {
-        "TableId": 129,
-        "TableName": "DriveSerial",
+        "TableId": 100,
+        "TableName": "Box",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "BoxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Name",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Generation",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
+    },
+    {
+        "TableId": 130,
+        "TableName": "DrivesSerials",
         "TableKey": [
             1
         ],
@@ -1436,53 +1483,6 @@
                     8,
                     9,
                     10
-                ],
-                "RoomID": 0,
-                "Codec": 0,
-                "InMemory": false,
-                "Cache": 0,
-                "Small": 4294967295,
-                "Large": 4294967295
-            }
-        },
-        "Rooms": {
-            "0": {
-                "Main": 1,
-                "Outer": 1,
-                "Blobs": 1
-            }
-        }
-    },
-    {
-        "TableId": 100,
-        "TableName": "Box",
-        "TableKey": [
-            1
-        ],
-        "ColumnsAdded": [
-            {
-                "ColumnId": 1,
-                "ColumnName": "BoxId",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 2,
-                "ColumnName": "Name",
-                "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 3,
-                "ColumnName": "Generation",
-                "ColumnType": "Uint64"
-            }
-        ],
-        "ColumnsDropped": [],
-        "ColumnFamilies": {
-            "0": {
-                "Columns": [
-                    1,
-                    2,
-                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -7,6 +7,12 @@
 
 
 add_subdirectory(lib)
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
 add_library(math_udf INTERFACE)
 target_link_libraries(math_udf INTERFACE

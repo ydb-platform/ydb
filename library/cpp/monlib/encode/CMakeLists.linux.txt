@@ -12,6 +12,12 @@ add_subdirectory(legacy_protobuf)
 add_subdirectory(prometheus)
 add_subdirectory(spack)
 add_subdirectory(text)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(cpp-monlib-encode)
 target_link_libraries(cpp-monlib-encode PUBLIC

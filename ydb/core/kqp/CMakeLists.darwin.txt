@@ -26,6 +26,12 @@ add_subdirectory(runtime)
 add_subdirectory(session_actor)
 add_subdirectory(topics)
 add_subdirectory(ut)
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
 add_library(ydb-core-kqp INTERFACE)
 target_link_libraries(ydb-core-kqp INTERFACE

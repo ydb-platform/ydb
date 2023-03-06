@@ -9,6 +9,12 @@
 add_subdirectory(engines)
 add_subdirectory(ut_rw)
 add_subdirectory(ut_schema)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(core-tx-columnshard)
 target_compile_options(core-tx-columnshard PRIVATE

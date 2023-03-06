@@ -6,6 +6,22 @@
 # original buildsystem will not be accepted.
 
 
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+set(
+  ANTLR_PACKAGE_NAME
+  NSQLv1Generated
+)
 
 add_library(proto_ast-gen-v1_proto)
 target_include_directories(proto_ast-gen-v1_proto PUBLIC
@@ -36,10 +52,6 @@ run_antlr(
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto
   -language
   protobuf
-)
-set(
-  ANTLR_PACKAGE_NAME
-  NSQLv1Generated
 )
 configure_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in

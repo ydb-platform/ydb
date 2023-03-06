@@ -8,6 +8,12 @@
 
 add_subdirectory(common)
 add_subdirectory(slow)
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
 add_executable(ydb-core-persqueue-ut)
 target_compile_options(ydb-core-persqueue-ut PRIVATE

@@ -122,6 +122,7 @@ message TDqTaskStats {
     uint64 TaskId = 1;
     uint32 StageId = 2;
     uint64 CpuTimeUs = 3;        // total cpu time (build & compute)
+    uint64 SourceCpuTimeUs = 15; // time consumed in source
     uint64 FirstRowTimeMs = 4;   // first row time, timestamp in millis
     uint64 FinishTimeMs = 5;     // task finish time, timestamp in millis
     uint64 InputRows = 6;

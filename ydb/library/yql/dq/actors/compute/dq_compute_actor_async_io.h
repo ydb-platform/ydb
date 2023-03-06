@@ -87,6 +87,10 @@ struct IDqComputeActorAsyncInput {
         return 0;
     }
 
+    virtual TDuration GetCpuTime() {
+        return TDuration::Zero();
+    }
+
     virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
 
     virtual void FillExtraStats(NDqProto::TDqTaskStats* /* stats */, bool /* finalized stats */) { }

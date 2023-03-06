@@ -934,7 +934,6 @@ private:
     // Cpu quota
     TActorId QuoterServiceActorId;
     TInstant CpuTimeQuotaAsked;
-    TDuration CpuTimeSpent;
     std::unique_ptr<NTaskRunnerActor::TEvContinueRun> ContinueRunEvent;
     TInstant ContinueRunStartWaitTime;
     bool ContinueRunInflight = false;

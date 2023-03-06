@@ -347,6 +347,7 @@ private:
         // basic stats
         ADD_COUNTER(CpuTimeUs)
         ADD_COUNTER(ComputeCpuTimeUs)
+        ADD_COUNTER(SourceCpuTimeUs)
         ADD_COUNTER(PendingInputTimeUs)
         ADD_COUNTER(PendingOutputTimeUs)
         ADD_COUNTER(FinishTimeUs)

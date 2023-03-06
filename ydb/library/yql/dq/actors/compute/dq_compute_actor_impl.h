@@ -241,6 +241,7 @@ protected:
         if (taskCounters) {
             MkqlMemoryQuota = taskCounters->GetCounter("MkqlMemoryQuota");
             OutputChannelSize = taskCounters->GetCounter("OutputChannelSize");
+            SourceCpuTimeMs = taskCounters->GetCounter("SourceCpuTimeMs", true);
         }
     }
 
@@ -1695,6 +1696,11 @@ protected:
 
     void OnNewAsyncInputDataArrived(const IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr& ev) {
         Y_VERIFY(SourcesMap.FindPtr(ev->Get()->InputIndex) || InputTransformsMap.FindPtr(ev->Get()->InputIndex));
+        auto cpuTimeDelta = TakeSourceCpuTimeDelta();
+        if (SourceCpuTimeMs) {
+            SourceCpuTimeMs->Add(cpuTimeDelta.MilliSeconds());
+        }
+        CpuTimeSpent += cpuTimeDelta;
         ContinueExecute();
     }
 
@@ -1880,6 +1886,22 @@ private:
     }
 
 public:
+
+    TDuration GetSourceCpuTime() const {
+        auto result = TDuration::Zero();
+        for (auto& [inputIndex, sourceInfo] : SourcesMap) {
+            result += sourceInfo.AsyncInput->GetCpuTime();
+        }
+        return result;
+    }
+
+    TDuration TakeSourceCpuTimeDelta() {
+        auto newSourceCpuTime = GetSourceCpuTime();
+        auto result = newSourceCpuTime - SourceCpuTime;
+        SourceCpuTime = newSourceCpuTime;
+        return result;
+    }
+
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
         if (!BasicStats) {
             return;
@@ -1931,6 +1953,7 @@ public:
             // More accurate cpu time counter:
             if (TDerived::HasAsyncTaskRunner) {
                 protoTask->SetCpuTimeUs(BasicStats->CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
+                protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
             }
 
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
@@ -2113,6 +2136,7 @@ protected:
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
     TDqComputeActorMetrics DqComputeActorMetrics;
     NWilson::TSpan ComputeActorSpan;
+    TDuration SourceCpuTime;
 private:
     bool Running = true;
     TInstant LastSendStatsTime;
@@ -2120,7 +2144,9 @@ private:
 protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryQuota;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputChannelSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SourceCpuTimeMs;
     THolder<NYql::TCounters> Stat;
+    TDuration CpuTimeSpent;
 };
 
 } // namespace NYql

@@ -1593,28 +1593,31 @@ bool TTableInfo::CheckSplitByLoad(
     if (!Shard2PartitionIdx.contains(shardIdx))
         return false;
 
+    if (!IsSplitByLoadEnabled(mainTableForIndex)) {
+        return false;
+    }
+
     // A shard can be overloaded by heavy reads of non-existing keys.
     // So we want to be able to split it even if it has no data.
     const ui64 MIN_ROWS_FOR_SPLIT_BY_LOAD = 0;
     const ui64 MIN_SIZE_FOR_SPLIT_BY_LOAD = 0;
 
-    const auto& partitionConfig = PartitionConfig();
-    const auto& policy = partitionConfig.GetPartitioningPolicy();
+    const auto& policy = PartitionConfig().GetPartitioningPolicy();
+
+    const auto settings = GetEffectiveSplitByLoadSettings(mainTableForIndex);
+    const i64 cpuPercentage = settings.GetCpuPercentageThreshold();
+    const float cpuUsageThreshold = 0.01 * (cpuPercentage ? cpuPercentage : (i64)splitSettings.FastSplitCpuPercentageThreshold);
 
     ui64 maxShards = policy.GetMaxPartitionsCount();
     if (maxShards == 0) {
-        // Don't want to trigger "too many shards" or "too many readsets" errors
-        maxShards = splitSettings.SplitByLoadMaxShardsDefault;
+        if (mainTableForIndex) {
+            // For index table maxShards defaults to a number of partitions of its main table
+            maxShards = mainTableForIndex->GetPartitions().size();
+        } else {
+            // Don't want to trigger "too many shards" or "too many readsets" errors
+            maxShards = splitSettings.SplitByLoadMaxShardsDefault;
+        }
     }
-
-    if (!IsSplitByLoadEnabled(mainTableForIndex)) {
-        return false;
-    }
-
-    const auto settings = GetEffectiveSplitByLoadSettings(mainTableForIndex);
-    i64 cpuPercentage = settings.GetCpuPercentageThreshold();
-
-    float cpuUsageThreshold = 0.01 * (cpuPercentage ? cpuPercentage : (i64)splitSettings.FastSplitCpuPercentageThreshold);
 
     const auto& stats = *Stats.PartitionStats.FindPtr(shardIdx);
     if (rowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD ||

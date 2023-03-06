@@ -36,7 +36,7 @@ public:
             auto groupStoragePool = db.Table<Schema::GroupStoragePool>().Range().Select();
             auto groupLatencies = db.Table<Schema::GroupLatencies>().Select();
             auto scrubState = db.Table<Schema::ScrubState>().Select();
-            auto drivesSerials = db.Table<Schema::DrivesSerials>().Select();
+            auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             if (!state.IsReady()
                     || !nodes.IsReady()
                     || !disk.IsReady()
@@ -55,7 +55,7 @@ public:
                     || !groupStoragePool.IsReady()
                     || !groupLatencies.IsReady()
                     || !scrubState.IsReady()
-                    || !drivesSerials.IsReady()) {
+                    || !pdiskSerial.IsReady()) {
                 return false;
             }
         }
@@ -235,7 +235,7 @@ public:
         if (!NTableAdapter::FetchTable<Schema::HostConfig>(db, Self, Self->HostConfigs)
                 || !NTableAdapter::FetchTable<Schema::Box>(db, Self, Self->Boxes)
                 || !NTableAdapter::FetchTable<Schema::BoxStoragePool>(db, Self, Self->StoragePools)
-                || !NTableAdapter::FetchTable<Schema::DrivesSerials>(db, Self, Self->DrivesSerials)) {
+                || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)) {
             return false;
         }
         for (const auto& [storagePoolId, storagePool] : Self->StoragePools) {

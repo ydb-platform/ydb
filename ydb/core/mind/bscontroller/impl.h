@@ -1273,7 +1273,7 @@ public:
     };
 
     struct TDriveSerialInfo {
-        using Table = Schema::DrivesSerials;
+        using Table = Schema::DriveSerial;
 
         Table::BoxId::Type BoxId;
         TMaybe<Table::NodeId::Type> NodeId;

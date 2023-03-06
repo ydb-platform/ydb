@@ -8,6 +8,7 @@
 
 add_subdirectory(arrow)
 add_subdirectory(common)
+add_subdirectory(cost)
 add_subdirectory(effects)
 add_subdirectory(federated_query)
 add_subdirectory(indexes)

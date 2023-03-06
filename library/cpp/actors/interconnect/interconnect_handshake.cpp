@@ -100,10 +100,6 @@ namespace NActors {
         TActorId HandshakeBroker;
 
     public:
-        static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::INTERCONNECT_HANDSHAKE;
-        }
-
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
                         ui32 nodeId, ui64 nextPacket, TString peerHostName, TSessionParams params)
             : TActorCoroImpl(StackSize, true, true) // allow unhandled poison pills and dtors
@@ -1072,11 +1068,12 @@ namespace NActors {
                                          const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
                                          TSessionParams params) {
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), self, peer, nodeId, nextPacket,
-            std::move(peerHostName), std::move(params)));
+            std::move(peerHostName), std::move(params)), IActor::INTERCONNECT_HANDSHAKE);
     }
 
     IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket) {
-        return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket)));
+        return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket)),
+            IActor::INTERCONNECT_HANDSHAKE);
     }
 
 }

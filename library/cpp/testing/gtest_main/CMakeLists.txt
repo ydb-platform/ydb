@@ -6,12 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(benchmark)
-add_subdirectory(common)
-add_subdirectory(gmock_in_unittest)
-add_subdirectory(gtest)
-add_subdirectory(gtest_extensions)
-add_subdirectory(gtest_main)
-add_subdirectory(hook)
-add_subdirectory(unittest)
-add_subdirectory(unittest_main)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

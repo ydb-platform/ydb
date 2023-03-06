@@ -8,9 +8,6 @@
 
 
 add_executable(ydb-core-blobstorage-base-ut)
-target_include_directories(ydb-core-blobstorage-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base
-)
 target_link_libraries(ydb-core-blobstorage-base-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
@@ -18,7 +15,8 @@ target_link_libraries(ydb-core-blobstorage-base-ut PUBLIC
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
-  cpp-testing-unittest_main
+  cpp-testing-gtest
+  cpp-testing-gtest_main
   core-blobstorage-base
   library-cpp-getopt
   library-cpp-svnversion

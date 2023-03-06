@@ -1,18 +1,19 @@
 #include "bufferwithgaps.h"
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/gtest/gtest.h>
+#include <ydb/library/testlib/unittest_gtest_macro_subst.h>
 
 using NKikimr::TBufferWithGaps;
 
-Y_UNIT_TEST_SUITE(BufferWithGaps) {
+namespace {
 
-    Y_UNIT_TEST(Basic) {
+    TEST(BufferWithGaps, Basic) {
         TBufferWithGaps buffer(0);
         TString data = "Hello!";
         buffer.SetData(TString(data));
         UNIT_ASSERT_STRINGS_EQUAL(data, buffer.Substr(0, buffer.Size()));
     }
 
-    Y_UNIT_TEST(IsReadable) {
+    TEST(BufferWithGaps, IsReadable) {
         TBufferWithGaps buffer(0);
         TString data = "Hello! How are you? I'm fine, and you? Me too, thanks!";
         TString gaps = "G           GGGG           GG              GGG G     G";

@@ -1,10 +1,11 @@
 #include "ptr.h"
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/gtest/gtest.h>
+#include <ydb/library/testlib/unittest_gtest_macro_subst.h>
 
 using namespace NKikimr;
 
-Y_UNIT_TEST_SUITE(PtrTest) {
+namespace {
 
     //////////////////////////////////////////////////////////////////////////////////////////
     // Basic test for TAtomicRefCountWithDeleter
@@ -40,22 +41,22 @@ Y_UNIT_TEST_SUITE(PtrTest) {
 
     using TTest1Ptr = TIntrusivePtr<TTest1>;
 
-    Y_UNIT_TEST(Test1) {
+    TEST(PtrTest, Test1) {
         TSimpleTestDeleter deleter;
 
-        UNIT_ASSERT_EQUAL(deleter.GetNum(), 0);
+        UNIT_ASSERT_EQUAL(deleter.GetNum(), 0u );
 
         {
             TTest1Ptr ptr1 = new TTest1(deleter);
             TTest1Ptr ptr2(ptr1);
         }
-        UNIT_ASSERT_EQUAL(deleter.GetNum(), 1);
+        UNIT_ASSERT_EQUAL(deleter.GetNum(), 1u );
 
         {
             TTest1Ptr ptr1 = new TTest1(deleter);
             TTest1Ptr ptr2(ptr1);
         }
-        UNIT_ASSERT_EQUAL(deleter.GetNum(), 2);
+        UNIT_ASSERT_EQUAL(deleter.GetNum(), 2u );
     }
 }
 

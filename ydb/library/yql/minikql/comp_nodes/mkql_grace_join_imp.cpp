@@ -79,10 +79,10 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     TableBuckets[bucket].TuplesNum++;
 
-    std::vector<ui64> & keyIntVals = TableBuckets[bucket].KeyIntVals;
-    std::vector<ui32> & stringsOffsets = TableBuckets[bucket].StringsOffsets;
-    std::vector<ui64> & dataIntVals = TableBuckets[bucket].DataIntVals;
-    std::vector<char> & stringVals = TableBuckets[bucket].StringsValues;
+    std::vector<ui64, TMKQLAllocator<ui64>> & keyIntVals = TableBuckets[bucket].KeyIntVals;
+    std::vector<ui32, TMKQLAllocator<ui32>> & stringsOffsets = TableBuckets[bucket].StringsOffsets;
+    std::vector<ui64, TMKQLAllocator<ui64>> & dataIntVals = TableBuckets[bucket].DataIntVals;
+    std::vector<char, TMKQLAllocator<char>> & stringVals = TableBuckets[bucket].StringsValues;
 
     ui32 offset = keyIntVals.size(); // Offset of tuple inside the keyIntVals vector
 
@@ -146,7 +146,7 @@ void TTable::ResetIterator() {
 }
 
 // Checks if there are more tuples and sets bucketId and tupleId to next valid. 
-inline bool HasMoreTuples(std::vector<TTableBucket> & tableBuckets, ui64 & bucketId, ui64 & tupleId ) {
+inline bool HasMoreTuples(std::vector<TTableBucket, TMKQLAllocator<TTableBucket>> & tableBuckets, ui64 & bucketId, ui64 & tupleId ) {
 
     if (bucketId >= tableBuckets.size()) return false;
 
@@ -251,14 +251,14 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind ) {
 
 
     ui64 tuplesFound = 0;
-    std::vector<ui64> joinSlots, spillSlots, slotToIdx;
-    std::vector<ui32> stringsOffsets1, stringsOffsets2;
+    std::vector<ui64, TMKQLAllocator<ui64>> joinSlots, spillSlots, slotToIdx;
+    std::vector<ui32, TMKQLAllocator<ui32>> stringsOffsets1, stringsOffsets2;
     ui64 reservedSize = 6 * (DefaultTupleBytes * DefaultTuplesNum) / sizeof(ui64);
     joinSlots.reserve( reservedSize );
     spillSlots.reserve( reservedSize );
     stringsOffsets1.reserve(JoinTable1->NumberOfStringColumns + JoinTable1->NumberOfIColumns + 1);
     stringsOffsets2.reserve(JoinTable2->NumberOfStringColumns + JoinTable2->NumberOfIColumns + 1);
-    std::vector < JoinTuplesIds > joinResults;
+    std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>> joinResults;
 
 
     for (ui64 bucket = 0; bucket < NumberOfBuckets; bucket++) {
@@ -459,8 +459,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind ) {
         
         TableBuckets[bucket].JoinIds = std::move(joinResults);
         if ( JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) {
-            std::vector<ui32> & rightIds = TableBuckets[bucket].RightIds;
-            std::vector<JoinTuplesIds> & joinIds = TableBuckets[bucket].JoinIds;
+            std::vector<ui32, TMKQLAllocator<ui32>> & rightIds = TableBuckets[bucket].RightIds;
+            std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>> & joinIds = TableBuckets[bucket].JoinIds;
             rightIds.clear();
             rightIds.reserve(joinIds.size());
             for (const auto & id: joinIds) {
@@ -560,7 +560,7 @@ inline bool TTable::HasJoinedTupleId(TTable *joinedTable, ui32 &tupleId2) {
         CurrIterBucket = joinedTable->CurrIterBucket;
         CurrJoinIdsIterIndex = 0;
     }
-    std::vector<JoinTuplesIds> &jids = TableBuckets[CurrIterBucket].JoinIds;
+    auto& jids = TableBuckets[CurrIterBucket].JoinIds;
 
     if (CurrJoinIdsIterIndex < jids.size() && joinedTable->CurrIterIndex == jids[CurrJoinIdsIterIndex].id1)
     {
@@ -573,7 +573,7 @@ inline bool TTable::HasJoinedTupleId(TTable *joinedTable, ui32 &tupleId2) {
     }
 }
 
-inline bool HasRightIdMatch(ui64 currId, ui64 & rightIdIter, const std::vector<ui32> & rightIds) {
+inline bool HasRightIdMatch(ui64 currId, ui64 & rightIdIter, const std::vector<ui32, TMKQLAllocator<ui32>> & rightIds) {
 
     if (rightIdIter >= rightIds.size()) return false;
 
@@ -581,12 +581,7 @@ inline bool HasRightIdMatch(ui64 currId, ui64 & rightIdIter, const std::vector<u
 
     if (rightIdIter >= rightIds.size()) return false;
 
-    if (currId == rightIds[rightIdIter]) {
-        return true;
-    } else {
-        return false;
-    }
-
+    return currId == rightIds[rightIdIter];
 }
 
 
@@ -640,7 +635,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
                 JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td1);
                 JoinTable2->GetTupleData(CurrIterBucket, tupleId2, td2);
                 CurrJoinIdsIterIndex++;
-                std::vector<JoinTuplesIds> & jids = TableBuckets[CurrIterBucket].JoinIds;
+                auto& jids = TableBuckets[CurrIterBucket].JoinIds;
                 if ( (CurrJoinIdsIterIndex == jids.size()) || ( JoinTable1->CurrIterIndex != jids[CurrJoinIdsIterIndex].id1) ) JoinTable1->CurrIterIndex++;
 
                 return true;
@@ -664,7 +659,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
                 JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td2);
                 JoinTable2->GetTupleData(CurrIterBucket, tupleId2, td1);
                 CurrJoinIdsIterIndex++;
-                std::vector<JoinTuplesIds> & jids = TableBuckets[CurrIterBucket].JoinIds;
+                auto& jids = TableBuckets[CurrIterBucket].JoinIds;
                 if ( (CurrJoinIdsIterIndex == jids.size()) || ( JoinTable1->CurrIterIndex != jids[CurrJoinIdsIterIndex].id1) ) JoinTable1->CurrIterIndex++;
                 return true;
             } else {
@@ -767,7 +762,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
                 JoinTable1->GetTupleData(CurrIterBucket, JoinTable1->CurrIterIndex, td1);
                 JoinTable2->GetTupleData(CurrIterBucket, tupleId2, td2);
                 CurrJoinIdsIterIndex++;
-                std::vector<JoinTuplesIds> & jids = TableBuckets[CurrIterBucket].JoinIds;
+                auto& jids = TableBuckets[CurrIterBucket].JoinIds;
                 if ( (CurrJoinIdsIterIndex == jids.size()) || ( JoinTable1->CurrIterIndex != jids[CurrJoinIdsIterIndex].id1) ) JoinTable1->CurrIterIndex++;
 
                 return true;
@@ -786,7 +781,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
                 CurrIterBucket = JoinTable2->CurrIterBucket;
                 CurrJoinIdsIterIndex = 0;
             }
-            std::vector<ui32> & rightIds = TableBuckets[CurrIterBucket].RightIds;
+            auto& rightIds = TableBuckets[CurrIterBucket].RightIds;
              if (HasRightIdMatch(JoinTable2->CurrIterIndex, CurrJoinIdsIterIndex, rightIds)) {
                 JoinTable2->CurrIterIndex++;
                 continue;
@@ -809,7 +804,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
                 CurrJoinIdsIterIndex++;
-                std::vector<JoinTuplesIds> & jids = TableBuckets[CurrIterBucket].JoinIds;
+                auto& jids = TableBuckets[CurrIterBucket].JoinIds;
                 if ( (CurrJoinIdsIterIndex == jids.size()) || ( JoinTable1->CurrIterIndex != jids[CurrJoinIdsIterIndex].id1) ) JoinTable1->CurrIterIndex++;
                 continue;
             } else {
@@ -828,7 +823,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
                 CurrIterBucket = JoinTable2->CurrIterBucket;
                 CurrJoinIdsIterIndex = 0;
             }
-            std::vector<ui32> & rightIds = TableBuckets[CurrIterBucket].RightIds;
+            auto& rightIds = TableBuckets[CurrIterBucket].RightIds;
              if (HasRightIdMatch(JoinTable2->CurrIterIndex, CurrJoinIdsIterIndex, rightIds)) {
                 JoinTable2->CurrIterIndex++;
                 continue;

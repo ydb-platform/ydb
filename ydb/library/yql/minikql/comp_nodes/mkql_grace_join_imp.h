@@ -45,16 +45,16 @@ struct JoinTuplesIds {
 
 struct TTableBucket {
     ui64 TuplesNum = 0;  // Total number of tuples in bucket
-    std::vector<ui64> KeyIntVals;  // Vector to store table key values
-    std::vector<ui64> DataIntVals; // Vector to store data values in bucket
-    std::vector<char> StringsValues; // Vector to store data strings values
-    std::vector<ui32> StringsOffsets; // Vector to store strings values sizes (offsets in StringsValues are calculated) for particular tuple.
-    std::vector<char> InterfaceValues; // Vector to store types to work through external-provided IHash, IEquate interfaces
-    std::vector<ui32> InterfaceOffsets; // Vector to store sizes of columns to work through IHash, IEquate interfaces 
+    std::vector<ui64, TMKQLAllocator<ui64>> KeyIntVals;  // Vector to store table key values
+    std::vector<ui64, TMKQLAllocator<ui64>> DataIntVals; // Vector to store data values in bucket
+    std::vector<char, TMKQLAllocator<char>> StringsValues; // Vector to store data strings values
+    std::vector<ui32, TMKQLAllocator<ui32>> StringsOffsets; // Vector to store strings values sizes (offsets in StringsValues are calculated) for particular tuple.
+    std::vector<char, TMKQLAllocator<char>> InterfaceValues; // Vector to store types to work through external-provided IHash, IEquate interfaces
+    std::vector<ui32, TMKQLAllocator<ui32>> InterfaceOffsets; // Vector to store sizes of columns to work through IHash, IEquate interfaces 
  
-    std::vector<JoinTuplesIds>  JoinIds;    // Results of join operations stored as index of tuples in buckets 
+    std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>>  JoinIds;    // Results of join operations stored as index of tuples in buckets 
                                             // of two tables with the same number
-    std::vector<ui32> RightIds; // Sorted Ids of right table joined tuples to process full join and exclusion join
+    std::vector<ui32, TMKQLAllocator<ui32>> RightIds; // Sorted Ids of right table joined tuples to process full join and exclusion join
  };
 
 
@@ -104,16 +104,16 @@ class TTable {
     ui64 BytesInKeyIntColumns = sizeof(ui64) * NumberOfKeyIntColumns;
     
     // Table data is partitioned in buckets based on key value
-    std::vector<TTableBucket> TableBuckets;
+    std::vector<TTableBucket, TMKQLAllocator<TTableBucket>> TableBuckets;
 
     // Temporary vector for tuples manipulation;
-    std::vector<ui64> TempTuple;
+    std::vector<ui64, TMKQLAllocator<ui64>> TempTuple;
 
     // Hashes for interface - based columns values
-    std::vector<ui64> IColumnsHashes;
+    std::vector<ui64, TMKQLAllocator<ui64>> IColumnsHashes;
 
     // Serialized values for interface-based columns
-    std::vector<std::vector<char>> IColumnsVals;
+    std::vector<std::vector<char, TMKQLAllocator<char>>, TMKQLAllocator<std::vector<char, TMKQLAllocator<char>>>> IColumnsVals;
 
     // Current iterator index for NextTuple iterator
     ui64 CurrIterIndex = 0;

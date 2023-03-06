@@ -162,9 +162,16 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 if (updatedTagToPos.contains(tag)) {
                     needUpdate = true;
                     FillDataFromUpdate(tag, updatedTagToPos.at(tag), updates);
-                } else if (rop == ERowOp::Reset) {
+                } else {
                     Y_VERIFY(userTable->Columns.contains(tag));
-                    FillDataWithNull(tag, userTable->Columns.at(tag).Type);
+                    const auto& column = userTable->Columns.at(tag);
+
+                    if (rop == ERowOp::Reset && !column.IsKey) {
+                        FillDataWithNull(tag, column.Type);
+                    } else {
+                        Y_VERIFY(tagToPos.contains(tag));
+                        FillDataFromRowState(tag, tagToPos.at(tag), row, column.Type);
+                    }
                 }
             }
 
@@ -248,6 +255,11 @@ void TAsyncIndexChangeCollector::FillKeyWithNull(TTag tag, NScheme::TTypeInfo ty
     IndexKeyVals.emplace_back(TRawTypeValue({}, type));
     IndexKeyTags.emplace_back(tag);
     TagsSeen.insert(tag);
+}
+
+void TAsyncIndexChangeCollector::FillDataFromRowState(TTag tag, TPos pos, const TRowState& rowState, NScheme::TTypeInfo type) {
+    Y_VERIFY(pos < rowState.Size());
+    IndexDataVals.emplace_back(tag, ECellOp::Set, TRawTypeValue(rowState.Get(pos).AsRef(), type));
 }
 
 void TAsyncIndexChangeCollector::FillDataFromUpdate(TTag tag, TPos pos, TArrayRef<const TUpdateOp> updates) {

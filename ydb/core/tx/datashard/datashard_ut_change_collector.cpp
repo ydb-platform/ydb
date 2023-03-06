@@ -579,6 +579,29 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
         });
     }
 
+    Y_UNIT_TEST(ImplicitlyUpdateCoveredColumn) {
+        const auto schema = TShardedTableOptions()
+            .Columns({
+                {"a", "Uint32", true, false},
+                {"b", "Uint32", false, false},
+                {"c", "Uint32", false, false},
+            })
+            .Indexes({
+                {"by_b", {"b"}, {"c"}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+            });
+
+        Run("/Root/path", schema, TVector<TString>{
+            "UPSERT INTO `/Root/path` (a, b, c) VALUES (1, 10, 100);",
+            "UPSERT INTO `/Root/path` (a, b) VALUES (1, 20);",
+        }, {
+            {"by_b", {
+                TStructRecord(NTable::ERowOp::Upsert, {{"b", 10}, {"a", 1}}, {{"c", 100}}),
+                TStructRecord(NTable::ERowOp::Erase, {{"b", 10}, {"a", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"b", 20}, {"a", 1}}, {{"c", 100}}),
+            }},
+        });
+    }
+
 } // AsyncIndexChangeCollector
 
 Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {

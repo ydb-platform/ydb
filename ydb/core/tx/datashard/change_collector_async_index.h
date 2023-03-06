@@ -34,6 +34,7 @@ class TAsyncIndexChangeCollector: public TBaseChangeCollector {
     void FillKeyFromKey(NTable::TTag tag, NTable::TPos pos, TArrayRef<const TRawTypeValue> key);
     void FillKeyFromUpdate(NTable::TTag tag, NTable::TPos pos, TArrayRef<const NTable::TUpdateOp> updates);
     void FillKeyWithNull(NTable::TTag tag, NScheme::TTypeInfo type);
+    void FillDataFromRowState(NTable::TTag tag, NTable::TPos pos, const NTable::TRowState& rowState, NScheme::TTypeInfo type);
     void FillDataFromUpdate(NTable::TTag tag, NTable::TPos pos, TArrayRef<const NTable::TUpdateOp> updates);
     void FillDataWithNull(NTable::TTag tag, NScheme::TTypeInfo type);
 

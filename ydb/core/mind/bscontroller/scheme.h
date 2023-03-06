@@ -388,6 +388,8 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, PDiskType, PDiskConfig, Path>;
     };
 
+    // struct VirtualGroupPool : Table<130> {};
+
     using TTables = SchemaTables<
                                 Node,
                                 PDisk,

@@ -452,7 +452,7 @@ THttpIncomingResponse::THttpIncomingResponse(THttpOutgoingRequestPtr request)
     : Request(request)
 {}
 
-THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status, TStringBuf message, TStringBuf contentType, TStringBuf body, TInstant lastModified) {
+THttpOutgoingResponsePtr THttpIncomingRequest::CreateIncompleteResponse(TStringBuf status, TStringBuf message) {
     TStringBuf version = Version;
     if (version != "1.0" && version != "1.1") {
         version = "1.1";
@@ -462,19 +462,30 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status,
     if (!Endpoint->WorkerName.empty()) {
         response->Set("X-Worker-Name", Endpoint->WorkerName);
     }
-    if (!contentType.empty() && !body.empty()) {
-        response->Set<&THttpResponse::ContentType>(contentType);
+    return response;
+}
+
+THttpOutgoingResponsePtr THttpIncomingRequest::CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers) {
+    THttpOutgoingResponsePtr response = CreateIncompleteResponse(status, message);
+    response->Set(headers);
+    return response;
+}
+
+THttpOutgoingResponsePtr THttpIncomingRequest::CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers, TStringBuf body) {
+    THttpOutgoingResponsePtr response = CreateIncompleteResponse(status, message, headers);
+    if (!response->ContentType.empty() && !body.empty()) {
         if (!Endpoint->CompressContentTypes.empty()) {
-            contentType = contentType.Before(';');
+            TStringBuf contentType = response->ContentType.Before(';');
             Trim(contentType, ' ');
             if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
                 response->EnableCompression();
             }
         }
     }
-    if (lastModified) {
-        response->Set<&THttpResponse::LastModified>(lastModified.FormatGmTime("%a, %d %b %Y %H:%M:%S GMT"));
-    }
+    return response;
+}
+
+void THttpIncomingRequest::FinishResponse(THttpOutgoingResponsePtr& response, TStringBuf body) {
     if (response->IsNeedBody() || !body.empty()) {
         if (Method == "HEAD") {
             response->Set<&THttpResponse::ContentLength>(ToString(body.size()));
@@ -482,7 +493,35 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status,
             response->SetBody(body);
         }
     }
+}
+
+THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status, TStringBuf message) {
+    THttpOutgoingResponsePtr response = CreateIncompleteResponse(status, message);
+    FinishResponse(response);
     return response;
+}
+
+THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status, TStringBuf message, const THeaders& headers) {
+    THttpOutgoingResponsePtr response = CreateIncompleteResponse(status, message, headers);
+    FinishResponse(response);
+    return response;
+}
+
+THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status, TStringBuf message, const THeaders& headers, TStringBuf body) {
+    THttpOutgoingResponsePtr response = CreateIncompleteResponse(status, message, headers, body);
+    FinishResponse(response, body);
+    return response;
+}
+
+THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status, TStringBuf message, TStringBuf contentType, TStringBuf body, TInstant lastModified) {
+    NHttp::THeadersBuilder headers;
+    if (!contentType.empty() && !body.empty()) {
+        headers.Set("Content-Type", contentType);
+    }
+    if (lastModified) {
+        headers.Set("Last-Modified", lastModified.FormatGmTime("%a, %d %b %Y %H:%M:%S GMT"));
+    }
+    return CreateResponse(status, message, headers, body);
 }
 
 THttpIncomingRequestPtr THttpIncomingRequest::Duplicate() {

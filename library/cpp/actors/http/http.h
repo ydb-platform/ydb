@@ -741,14 +741,24 @@ public:
     THttpOutgoingResponsePtr CreateResponseNotFound(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 404
     THttpOutgoingResponsePtr CreateResponseServiceUnavailable(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 503
     THttpOutgoingResponsePtr CreateResponseGatewayTimeout(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 504
+    THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message);
+    THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message, const THeaders& headers);
+    THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message, const THeaders& headers, TStringBuf body);
     THttpOutgoingResponsePtr CreateResponse(
             TStringBuf status,
             TStringBuf message,
-            TStringBuf contentType = TStringBuf(),
+            TStringBuf contentType,
             TStringBuf body = TStringBuf(),
             TInstant lastModified = TInstant());
 
+    THttpOutgoingResponsePtr CreateIncompleteResponse(TStringBuf status, TStringBuf message);
+    THttpOutgoingResponsePtr CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers);
+    THttpOutgoingResponsePtr CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers, TStringBuf body);
+
     THttpIncomingRequestPtr Duplicate();
+
+private:
+    void FinishResponse(THttpOutgoingResponsePtr& response, TStringBuf body = TStringBuf());
 };
 
 class THttpIncomingResponse;

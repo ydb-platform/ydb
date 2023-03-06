@@ -230,6 +230,69 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(requestData, "GET /data/url HTTP/1.1\r\nHost: www.yandex.ru\r\nAccept: */*\r\nCookie: cookie1=123456; cookie2=45678;\r\n");
     }
 
+    Y_UNIT_TEST(BasicRenderOutgoingResponse) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n");
+
+        NHttp::THttpOutgoingResponsePtr httpResponseOk = request->CreateResponseOK("response ok");
+        UNIT_ASSERT_EQUAL(httpResponseOk->Stage, NHttp::THttpOutgoingResponse::ERenderStage::Done);
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseOk->Status, "200");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseOk->Message, "OK");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseOk->ContentType, "text/html");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseOk->Body, "response ok");
+
+        NHttp::THttpOutgoingResponsePtr httpResponseBadRequest = request->CreateResponseBadRequest();
+        UNIT_ASSERT_EQUAL(httpResponseBadRequest->Stage, NHttp::THttpOutgoingResponse::ERenderStage::Done);
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseBadRequest->Status, "400");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseBadRequest->Message, "Bad Request");
+        UNIT_ASSERT(httpResponseBadRequest->ContentType.empty());
+        UNIT_ASSERT(httpResponseBadRequest->Body.empty());
+
+        NHttp::THttpOutgoingResponsePtr httpResponseNotFound = request->CreateResponseNotFound();
+        UNIT_ASSERT_EQUAL(httpResponseNotFound->Stage, NHttp::THttpOutgoingResponse::ERenderStage::Done);
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseNotFound->Status, "404");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseNotFound->Message, "Not Found");
+        UNIT_ASSERT(httpResponseNotFound->ContentType.empty());
+        UNIT_ASSERT(httpResponseNotFound->Body.empty());
+
+        NHttp::THttpOutgoingResponsePtr httpResponseServiceUnavailable = request->CreateResponseServiceUnavailable();
+        UNIT_ASSERT_EQUAL(httpResponseServiceUnavailable->Stage, NHttp::THttpOutgoingResponse::ERenderStage::Done);
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseServiceUnavailable->Status, "503");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseServiceUnavailable->Message, "Service Unavailable");
+        UNIT_ASSERT(httpResponseServiceUnavailable->ContentType.empty());
+        UNIT_ASSERT(httpResponseServiceUnavailable->Body.empty());
+
+        NHttp::THttpOutgoingResponsePtr httpResponseGatewayTimeout = request->CreateResponseGatewayTimeout("gateway timeout body");
+        UNIT_ASSERT_EQUAL(httpResponseGatewayTimeout->Stage, NHttp::THttpOutgoingResponse::ERenderStage::Done);
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseGatewayTimeout->Status, "504");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseGatewayTimeout->Message, "Gateway Timeout");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseGatewayTimeout->ContentType, "text/html");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseGatewayTimeout->Body, "gateway timeout body");
+
+        NHttp::THttpOutgoingResponsePtr httpIncompleteResponse = request->CreateIncompleteResponse("401", "Unauthorized");
+        UNIT_ASSERT_EQUAL(httpIncompleteResponse->Stage, NHttp::THttpOutgoingResponse::ERenderStage::Header);
+        UNIT_ASSERT_STRINGS_EQUAL(httpIncompleteResponse->Status, "401");
+        UNIT_ASSERT_STRINGS_EQUAL(httpIncompleteResponse->Message, "Unauthorized");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->CreateResponse("401", "Unauthorized");
+        UNIT_ASSERT_EQUAL(httpResponse->Stage, NHttp::THttpOutgoingResponse::ERenderStage::Done);
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponse->Status, "401");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponse->Message, "Unauthorized");
+
+        NHttp::THeadersBuilder headers;
+        NHttp::TCookiesBuilder cookies;
+        cookies.Set("cookie1", "123456");
+        headers.Set("Set-Cookie", cookies.Render());
+        headers.Set("Location", "http://www.yandex.ru/data/url");
+
+        NHttp::THttpOutgoingResponsePtr httpResponseRedirect = request->CreateResponse("302", "Found", headers);
+        UNIT_ASSERT_EQUAL(httpResponseRedirect->Stage, NHttp::THttpOutgoingResponse::ERenderStage::Done);
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseRedirect->Status, "302");
+        UNIT_ASSERT_STRINGS_EQUAL(httpResponseRedirect->Message, "Found");
+        UNIT_ASSERT_STRING_CONTAINS(httpResponseRedirect->Headers, "Set-Cookie: cookie1=123456;");
+        UNIT_ASSERT_STRING_CONTAINS(httpResponseRedirect->Headers, "Location: http://www.yandex.ru/data/url");
+    }
+
     Y_UNIT_TEST(BasicRunning4) {
         NActors::TTestActorRuntimeBase actorSystem;
         TPortManager portManager;

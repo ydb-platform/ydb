@@ -18,6 +18,23 @@ private:
         { }
     };
 
+    struct TResultEvent {
+        TBasicTxInfo TxInfo;
+        NKikimrTxColumnShard::EResultStatus Status;
+
+        TResultEvent(TBasicTxInfo&& txInfo, NKikimrTxColumnShard::EResultStatus status)
+            : TxInfo(std::move(txInfo))
+            , Status(status)
+        {}
+
+        THolder<IEventBase> MakeEvent(ui64 tabletId) const {
+            auto result = MakeHolder<TEvColumnShard::TEvProposeTransactionResult>(
+                tabletId, TxInfo.TxKind, TxInfo.TxId, Status);
+            result->Record.SetStep(TxInfo.PlanStep);
+            return result;
+        }
+    };
+
     enum class ETriggerActivities {
         NONE,
         POST_INSERT,
@@ -62,14 +79,15 @@ public:
         }
 
         // Process a single transaction at the front of the queue
-        if (Self->PlanQueue) {
+        if (!Self->PlanQueue.empty()) {
             ui64 step;
             ui64 txId;
             {
-                auto it = Self->PlanQueue.begin();
-                step = it->Step;
-                txId = it->TxId;
-                Self->PlanQueue.erase(it);
+                auto node = Self->PlanQueue.extract(Self->PlanQueue.begin());
+                auto& item = node.value();
+                step = item.Step;
+                txId = item.TxId;
+                Self->RunningQueue.emplace(std::move(item));
             }
 
             auto& txInfo = Self->BasicTxInfo.at(txId);
@@ -150,11 +168,8 @@ public:
             }
 
             // Currently transactions never fail and there are no dependencies between them
-            auto txKind = txInfo.TxKind;
-            auto status = NKikimrTxColumnShard::SUCCESS;
-            auto result = MakeHolder<TEvColumnShard::TEvProposeTransactionResult>(Self->TabletID(), txKind, txId, status);
-            result->Record.SetStep(step);
-            TxEvents.emplace_back(txInfo.Source, txInfo.Cookie, std::move(result));
+            txInfo.PlanStep = step;
+            TxResults.emplace_back(TResultEvent(std::move(txInfo), NKikimrTxColumnShard::SUCCESS));
 
             Self->BasicTxInfo.erase(txId);
             Schema::EraseTxInfo(db, txId);
@@ -163,7 +178,7 @@ public:
         }
 
         Self->ProgressTxInFlight = false;
-        if (Self->PlanQueue) {
+        if (!Self->PlanQueue.empty()) {
             Self->EnqueueProgressTx(ctx);
         }
         return true;
@@ -174,6 +189,14 @@ public:
 
         for (auto& rec : TxEvents) {
             ctx.Send(rec.Target, rec.Event.Release(), 0, rec.Cookie);
+        }
+
+        for (auto& res : TxResults) {
+            TPlanQueueItem txItem(res.TxInfo.PlanStep, res.TxInfo.TxId);
+            Self->RunningQueue.erase(txItem);
+
+            auto event = res.MakeEvent(Self->TabletID());
+            ctx.Send(res.TxInfo.Source, event.Release(), 0, res.TxInfo.Cookie);
         }
 
         Self->UpdateBlobMangerCounters();
@@ -195,7 +218,8 @@ public:
     }
 
 private:
-    TVector<TEvent> TxEvents;
+    std::vector<TResultEvent> TxResults;
+    std::vector<TEvent> TxEvents;
     ETriggerActivities Trigger{ETriggerActivities::NONE};
 };
 
@@ -204,6 +228,32 @@ void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {
         ProgressTxInFlight = true;
         Execute(new TTxProgressTx(this), ctx);
     }
+}
+
+void TColumnShard::Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx) {
+    auto& record = Proto(ev->Get());
+    ui64 step = record.GetStep();
+    ui64 txId = record.GetTxId();
+    LOG_S_DEBUG("CheckTransaction planStep " << step << " txId " << txId << " at tablet " << TabletID());
+
+    TPlanQueueItem frontTx(LastPlannedStep, 0);
+    if (!RunningQueue.empty()) {
+        frontTx = TPlanQueueItem(RunningQueue.begin()->Step, RunningQueue.begin()->TxId);
+    } else if (!PlanQueue.empty()) {
+        frontTx = TPlanQueueItem(PlanQueue.begin()->Step, PlanQueue.begin()->TxId);
+    }
+
+    bool finished = step < frontTx.Step || (step == frontTx.Step && txId < frontTx.TxId);
+    if (finished) {
+        auto txKind = NKikimrTxColumnShard::ETransactionKind::TX_KIND_COMMIT;
+        auto status = NKikimrTxColumnShard::SUCCESS;
+        auto result = MakeHolder<TEvColumnShard::TEvProposeTransactionResult>(TabletID(), txKind, txId, status);
+        result->Record.SetStep(step);
+
+        ctx.Send(ev->Get()->GetSource(), result.Release());
+    }
+
+    // For now do not return result for not finished tx. It would be sent in TTxProgressTx::Complete()
 }
 
 }

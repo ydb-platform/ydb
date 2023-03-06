@@ -205,7 +205,7 @@ void TColumnShard::RescheduleWaitingReads() {
 }
 
 TRowVersion TColumnShard::GetMaxReadVersion() const {
-    if (PlanQueue) {
+    if (!PlanQueue.empty()) {
         // We may only read just before the first transaction in the queue
         auto it = PlanQueue.begin();
         return TRowVersion(it->Step, it->TxId).Prev();

@@ -540,51 +540,20 @@ private:
         }
     }
 
-    // Expects NKikimrTxColumnShard::EResultStatus
-    static Ydb::StatusIds::StatusCode ConvertToYdbStatus(ui32 columnShardStatus) {
-        switch (columnShardStatus) {
-        case NKikimrTxColumnShard::UNSPECIFIED:
-            return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-
-        case NKikimrTxColumnShard::PREPARED:
-        case NKikimrTxColumnShard::SUCCESS:
-            return Ydb::StatusIds::SUCCESS;
-
-        case NKikimrTxColumnShard::ABORTED:
-            return Ydb::StatusIds::ABORTED;
-
-        case NKikimrTxColumnShard::ERROR:
-            return Ydb::StatusIds::GENERIC_ERROR;
-
-        case NKikimrTxColumnShard::TIMEOUT:
-            return Ydb::StatusIds::TIMEOUT;
-
-        case NKikimrTxColumnShard::SCHEMA_ERROR:
-        case NKikimrTxColumnShard::SCHEMA_CHANGED:
-            return Ydb::StatusIds::SCHEME_ERROR;
-
-        case NKikimrTxColumnShard::OVERLOADED:
-            return Ydb::StatusIds::OVERLOADED;
-
-        default:
-            return Ydb::StatusIds::GENERIC_ERROR;
-        }
-    }
-
     void Handle(TEvColumnShard::TEvWriteResult::TPtr& ev) {
         auto gProfile = ActorSpan.StartStackTimeGuard("WriteResult");
         const auto* msg = ev->Get();
         ui64 shardId = msg->Record.GetOrigin();
         Y_VERIFY(WaitShards.count(shardId) || ShardsWrites.count(shardId));
 
-        auto status = msg->Record.GetStatus();
+        const auto status = (NKikimrTxColumnShard::EResultStatus)msg->Record.GetStatus();
         if (status == NKikimrTxColumnShard::OVERLOADED) {
             if (RetryWriteRequest(shardId)) {
                 return;
             }
         }
         if (status != NKikimrTxColumnShard::SUCCESS) {
-            auto ydbStatus = ConvertToYdbStatus(status);
+            auto ydbStatus = NColumnShard::ConvertToYdbStatus(status);
             return ReplyError(ydbStatus,
                 TStringBuilder() << "Cannot write data into shard " << shardId << " in longTx " << LongTxId.ToString());
         }

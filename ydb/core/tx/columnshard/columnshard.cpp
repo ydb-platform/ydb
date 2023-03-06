@@ -247,8 +247,15 @@ ui64 TColumnShard::MemoryUsage() const {
         PathsToDrop.size() * sizeof(ui64) +
         Ttl.PathsCount() * sizeof(TTtl::TDescription) +
         SchemaPresets.size() * sizeof(TSchemaPreset) +
+        BasicTxInfo.size() * sizeof(TBasicTxInfo) +
+        DeadlineQueue.size() * sizeof(TDeadlineQueueItem) +
+        (PlanQueue.size() + RunningQueue.size()) * sizeof(TPlanQueueItem) +
+        ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
         AltersInFlight.size() * sizeof(TAlterMeta) +
         CommitsInFlight.size() * sizeof(TCommitMeta) +
+        LongTxWrites.size() * (sizeof(TWriteId) + sizeof(TLongTxWriteInfo)) +
+        LongTxWritesByUniqueId.size() * (sizeof(TULID) + sizeof(void*)) +
+        (WaitingReads.size() + WaitingScans.size()) * (sizeof(TRowVersion) + sizeof(void*)) +
         TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
         TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
     if (PrimaryIndex) {

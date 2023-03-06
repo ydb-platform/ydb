@@ -109,6 +109,7 @@ class TColumnShard
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
@@ -212,6 +213,7 @@ protected:
             HFunc(TEvTabletPipe::TEvServerConnected, Handle);
             HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             HFunc(TEvColumnShard::TEvProposeTransaction, Handle);
+            HFunc(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
             HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle);
             HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
             HFunc(TEvColumnShard::TEvScan, Handle);
@@ -369,10 +371,10 @@ private:
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
     TSet<TDeadlineQueueItem> DeadlineQueue;
-    TSet<TPlanQueueItem> PlanQueue;
+    std::set<TPlanQueueItem> PlanQueue;
+    std::set<TPlanQueueItem> RunningQueue;
     bool ProgressTxInFlight = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
-
     THashMap<ui64, TAlterMeta> AltersInFlight;
     THashMap<ui64, TCommitMeta> CommitsInFlight; // key is TxId from propose
     THashMap<ui32, TSchemaPreset> SchemaPresets;

@@ -134,6 +134,12 @@ message TEvProposeTransaction {
     optional uint64 Flags = 7;
 }
 
+message TEvCheckPlannedTransaction {
+    optional NActorsProto.TActorId Source = 1;
+    optional uint64 Step = 2;
+    optional uint64 TxId = 3;
+}
+
 message TEvProposeTransactionResult {
     optional EResultStatus Status = 1;
     optional ETransactionKind TxKind = 2;

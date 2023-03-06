@@ -117,8 +117,20 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
         }
         case NKikimrTxColumnShard::TX_KIND_COMMIT: {
             if (Self->CommitsInFlight.contains(txId)) {
-                statusMessage = TStringBuilder()
-                    << "Commit TxId# " << txId << " has already been proposed";
+                LOG_S_DEBUG("TTxProposeTransaction CommitTx (retry) TxId " << txId << " at tablet " << Self->TabletID());
+
+                Y_VERIFY(Self->BasicTxInfo.contains(txId));
+                const auto& txInfo = Self->BasicTxInfo[txId];
+
+                if (txInfo.Source != Ev->Get()->GetSource() || txInfo.Cookie != Ev->Cookie) {
+                    statusMessage = TStringBuilder()
+                        << "Another commit TxId# " << txId << " has already been proposed";
+                    break;
+                }
+
+                maxStep = txInfo.MaxStep;
+                minStep = maxStep - Self->MaxCommitTxDelay.MilliSeconds(); // TODO: improve this code
+                status = NKikimrTxColumnShard::EResultStatus::PREPARED;
                 break;
             }
 

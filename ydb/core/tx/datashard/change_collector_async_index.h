@@ -30,14 +30,13 @@ class TAsyncIndexChangeCollector: public TBaseChangeCollector {
     auto CacheTags(const TTableId& tableId) const;
     TArrayRef<NTable::TTag> GetTagsToSelect(const TTableId& tableId, NTable::ERowOp rop) const;
 
-    void FillKeyFromRowState(NTable::TTag tag, NTable::TPos pos, const NTable::TRowState& rowState, NScheme::TTypeInfo type);
-    void FillKeyFromKey(NTable::TTag tag, NTable::TPos pos, TArrayRef<const TRawTypeValue> key);
-    void FillKeyFromUpdate(NTable::TTag tag, NTable::TPos pos, TArrayRef<const NTable::TUpdateOp> updates);
-    void FillKeyWithNull(NTable::TTag tag, NScheme::TTypeInfo type);
-    void FillDataFromRowState(NTable::TTag tag, NTable::TPos pos, const NTable::TRowState& rowState, NScheme::TTypeInfo type);
-    void FillDataFromUpdate(NTable::TTag tag, NTable::TPos pos, TArrayRef<const NTable::TUpdateOp> updates);
-    void FillDataWithNull(NTable::TTag tag, NScheme::TTypeInfo type);
+    void AddValue(TVector<NTable::TUpdateOp>& out, const NTable::TUpdateOp& update);
+    void AddRawValue(TVector<NTable::TUpdateOp>& out, NTable::TTag tag, const TRawTypeValue& value);
+    void AddCellValue(TVector<NTable::TUpdateOp>& out, NTable::TTag tag, const TCell& cell, NScheme::TTypeInfo type);
+    void AddNullValue(TVector<NTable::TUpdateOp>& out, NTable::TTag tag, NScheme::TTypeInfo type);
 
+    void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
+        TArrayRef<const NTable::TUpdateOp> key, TArrayRef<const NTable::TUpdateOp> data);
     void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags,
         TArrayRef<const NTable::TUpdateOp> updates);
@@ -57,10 +56,9 @@ private:
     mutable THashMap<TTableId, TCachedTags> CachedTags;
 
     // reused between Collect() calls, cleared after every Clear() call
-    THashSet<NTable::TTag> TagsSeen;
-    TVector<NTable::TTag> IndexKeyTags;
-    TVector<TRawTypeValue> IndexKeyVals;
-    TVector<NTable::TUpdateOp> IndexDataVals;
+    THashSet<NTable::TTag> KeyTagsSeen;
+    TVector<NTable::TUpdateOp> KeyVals;
+    TVector<NTable::TUpdateOp> DataVals;
 
 }; // TAsyncIndexChangeCollector
 

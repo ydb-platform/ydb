@@ -111,24 +111,28 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         }
 
         if (generateDeletions) {
-            bool needDeletion = false;
+            bool needDeletion = rop == ERowOp::Erase || rop == ERowOp::Reset;
 
             for (const auto tag : index.KeyColumnIds) {
-                if (updatedTagToPos.contains(tag) || rop == ERowOp::Erase || rop == ERowOp::Reset) {
+                if (updatedTagToPos.contains(tag)) {
                     needDeletion = true;
                 }
 
                 Y_VERIFY(tagToPos.contains(tag));
                 Y_VERIFY(userTable->Columns.contains(tag));
-                FillKeyFromRowState(tag, tagToPos.at(tag), row, userTable->Columns.at(tag).Type);
+                AddCellValue(KeyVals, tag, row.Get(tagToPos.at(tag)), userTable->Columns.at(tag).Type);
+                KeyTagsSeen.insert(tag);
             }
 
             for (TPos pos = 0; pos < userTable->KeyColumnIds.size(); ++pos) {
-                FillKeyFromKey(userTable->KeyColumnIds.at(pos), pos, key);
+                const auto& tag = userTable->KeyColumnIds.at(pos);
+                if (!KeyTagsSeen.contains(tag)) {
+                    AddRawValue(KeyVals, tag, key.at(pos));
+                }
             }
 
             if (needDeletion) {
-                Persist(tableId, pathId, ERowOp::Erase, IndexKeyVals, IndexKeyTags, {});
+                Persist(tableId, pathId, ERowOp::Erase, KeyVals, {});
             }
 
             Clear();
@@ -140,43 +144,49 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             for (const auto tag : index.KeyColumnIds) {
                 if (updatedTagToPos.contains(tag)) {
                     needUpdate = true;
-                    FillKeyFromUpdate(tag, updatedTagToPos.at(tag), updates);
+                    AddValue(KeyVals, updates.at(updatedTagToPos.at(tag)));
+                    KeyTagsSeen.insert(tag);
                 } else {
                     Y_VERIFY(userTable->Columns.contains(tag));
                     const auto& column = userTable->Columns.at(tag);
 
                     if (rop == ERowOp::Reset && !column.IsKey) {
-                        FillKeyWithNull(tag, column.Type);
+                        AddNullValue(KeyVals, tag, column.Type);
+                        KeyTagsSeen.insert(tag);
                     } else {
                         Y_VERIFY(tagToPos.contains(tag));
-                        FillKeyFromRowState(tag, tagToPos.at(tag), row, column.Type);
+                        AddCellValue(KeyVals, tag, row.Get(tagToPos.at(tag)), column.Type);
+                        KeyTagsSeen.insert(tag);
                     }
                 }
             }
 
             for (TPos pos = 0; pos < userTable->KeyColumnIds.size(); ++pos) {
-                FillKeyFromKey(userTable->KeyColumnIds.at(pos), pos, key);
+                const auto& tag = userTable->KeyColumnIds.at(pos);
+                if (!KeyTagsSeen.contains(tag)) {
+                    AddRawValue(KeyVals, tag, key.at(pos));
+                }
             }
 
             for (const auto tag : index.DataColumnIds) {
                 if (updatedTagToPos.contains(tag)) {
                     needUpdate = true;
-                    FillDataFromUpdate(tag, updatedTagToPos.at(tag), updates);
+                    AddValue(DataVals, updates.at(updatedTagToPos.at(tag)));
                 } else {
                     Y_VERIFY(userTable->Columns.contains(tag));
                     const auto& column = userTable->Columns.at(tag);
 
                     if (rop == ERowOp::Reset && !column.IsKey) {
-                        FillDataWithNull(tag, column.Type);
+                        AddNullValue(DataVals, tag, column.Type);
                     } else {
                         Y_VERIFY(tagToPos.contains(tag));
-                        FillDataFromRowState(tag, tagToPos.at(tag), row, column.Type);
+                        AddCellValue(DataVals, tag, row.Get(tagToPos.at(tag)), column.Type);
                     }
                 }
             }
 
             if (needUpdate) {
-                Persist(tableId, pathId, ERowOp::Upsert, IndexKeyVals, IndexKeyTags, IndexDataVals);
+                Persist(tableId, pathId, ERowOp::Upsert, KeyVals, DataVals);
             }
 
             Clear();
@@ -221,58 +231,34 @@ TArrayRef<TTag> TAsyncIndexChangeCollector::GetTagsToSelect(const TTableId& tabl
     }
 }
 
-void TAsyncIndexChangeCollector::FillKeyFromRowState(TTag tag, TPos pos, const TRowState& rowState, NScheme::TTypeInfo type) {
-    Y_VERIFY(pos < rowState.Size());
-
-    IndexKeyVals.emplace_back(rowState.Get(pos).AsRef(), type);
-    IndexKeyTags.emplace_back(tag);
-    TagsSeen.insert(tag);
+void TAsyncIndexChangeCollector::AddValue(TVector<TUpdateOp>& out, const TUpdateOp& update) {
+    Y_VERIFY_S(update.Op == ECellOp::Set, "Unexpected op: " << update.Op.Raw());
+    out.push_back(update);
 }
 
-void TAsyncIndexChangeCollector::FillKeyFromKey(TTag tag, TPos pos, TArrayRef<const TRawTypeValue> key) {
-    Y_VERIFY(pos < key.size());
+void TAsyncIndexChangeCollector::AddRawValue(TVector<TUpdateOp>& out, TTag tag, const TRawTypeValue& value) {
+    AddValue(out, TUpdateOp(tag, ECellOp::Set, value));
+}
 
-    if (TagsSeen.contains(tag)) {
-        return;
+void TAsyncIndexChangeCollector::AddCellValue(TVector<TUpdateOp>& out, TTag tag, const TCell& cell, NScheme::TTypeInfo type) {
+    AddRawValue(out, tag, TRawTypeValue(cell.AsRef(), type));
+}
+
+void TAsyncIndexChangeCollector::AddNullValue(TVector<TUpdateOp>& out, TTag tag, NScheme::TTypeInfo type) {
+    AddCellValue(out, tag, {}, type);
+}
+
+void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
+        TArrayRef<const TUpdateOp> keyVals, TArrayRef<const TUpdateOp> dataVals)
+{
+    TVector<TRawTypeValue> key(Reserve(keyVals.size()));
+    TVector<TTag> keyTags(Reserve(keyVals.size()));
+    for (const auto& v : keyVals) {
+        key.push_back(v.Value);
+        keyTags.push_back(v.Tag);
     }
 
-    IndexKeyVals.emplace_back(key.at(pos));
-    IndexKeyTags.emplace_back(tag);
-}
-
-void TAsyncIndexChangeCollector::FillKeyFromUpdate(TTag tag, TPos pos, TArrayRef<const TUpdateOp> updates) {
-    Y_VERIFY(pos < updates.size());
-
-    const auto& update = updates.at(pos);
-    Y_VERIFY_S(update.Op == ECellOp::Set, "Unexpected op: " << update.Op.Raw());
-
-    IndexKeyVals.emplace_back(update.Value);
-    IndexKeyTags.emplace_back(tag);
-    TagsSeen.insert(tag);
-}
-
-void TAsyncIndexChangeCollector::FillKeyWithNull(TTag tag, NScheme::TTypeInfo type) {
-    IndexKeyVals.emplace_back(TRawTypeValue({}, type));
-    IndexKeyTags.emplace_back(tag);
-    TagsSeen.insert(tag);
-}
-
-void TAsyncIndexChangeCollector::FillDataFromRowState(TTag tag, TPos pos, const TRowState& rowState, NScheme::TTypeInfo type) {
-    Y_VERIFY(pos < rowState.Size());
-    IndexDataVals.emplace_back(tag, ECellOp::Set, TRawTypeValue(rowState.Get(pos).AsRef(), type));
-}
-
-void TAsyncIndexChangeCollector::FillDataFromUpdate(TTag tag, TPos pos, TArrayRef<const TUpdateOp> updates) {
-    Y_VERIFY(pos < updates.size());
-
-    const auto& update = updates.at(pos);
-    Y_VERIFY_S(update.Op == ECellOp::Set, "Unexpected op: " << update.Op.Raw());
-
-    IndexDataVals.emplace_back(tag, ECellOp::Set, update.Value);
-}
-
-void TAsyncIndexChangeCollector::FillDataWithNull(TTag tag, NScheme::TTypeInfo type) {
-    IndexDataVals.emplace_back(tag, ECellOp::Set, TRawTypeValue({}, type));
+    Persist(tableId, pathId, rop, key, keyTags, dataVals);
 }
 
 void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
@@ -284,10 +270,9 @@ void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId&
 }
 
 void TAsyncIndexChangeCollector::Clear() {
-    TagsSeen.clear();
-    IndexKeyTags.clear();
-    IndexKeyVals.clear();
-    IndexDataVals.clear();
+    KeyTagsSeen.clear();
+    KeyVals.clear();
+    DataVals.clear();
 }
 
 } // NDataShard

@@ -1270,13 +1270,14 @@ public:
         std::unique_ptr<NDB::ReadBuffer> decompressorBuffer;
         NDB::ReadBuffer* buffer = coroBuffer.get();
 
+        // lz4 decompressor reads signature in ctor, w/o actual data it will be deadlocked
+        DownloadStart(RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize);
+
         if (ReadSpec->Compression) {
             decompressorBuffer = MakeDecompressor(*buffer, ReadSpec->Compression);
-            YQL_ENSURE(buffer, "Unsupported " << ReadSpec->Compression << " compression.");
+            YQL_ENSURE(decompressorBuffer, "Unsupported " << ReadSpec->Compression << " compression.");
             buffer = decompressorBuffer.get();
         }
-
-        DownloadStart(RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize);
 
         auto stream = std::make_unique<NDB::InputStreamFromInputFormat>(
             NDB::FormatFactory::instance().getInputFormat(
@@ -1303,7 +1304,7 @@ public:
 
         if (ReadSpec->Compression) {
             decompressorBuffer = MakeDecompressor(*buffer, ReadSpec->Compression);
-            YQL_ENSURE(buffer, "Unsupported " << ReadSpec->Compression << " compression.");
+            YQL_ENSURE(decompressorBuffer, "Unsupported " << ReadSpec->Compression << " compression.");
             buffer = decompressorBuffer.get();
         }
 

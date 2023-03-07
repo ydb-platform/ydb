@@ -76,10 +76,20 @@ struct aws_host_listener;
 
 struct aws_host_listener_options;
 
+struct aws_host_resolver_purge_host_options {
+    /* the host to purge the cache for */
+    const struct aws_string *host;
+    /* Callback to invoke when the purge is complete */
+    aws_simple_completion_callback *on_host_purge_complete_callback;
+    /* user_data will be passed as it is in the callback. */
+    void *user_data;
+};
+
 /** should you absolutely disdain the default implementation, feel free to implement your own. */
 struct aws_host_resolver_vtable {
     /** clean up everything you allocated, but not resolver itself. */
     void (*destroy)(struct aws_host_resolver *resolver);
+
     /** resolve the host by host_name, the user owns host_name, so it needs to be copied if you persist it,
      * invoke res with the result. This function should never block. */
     int (*resolve_host)(
@@ -88,12 +98,28 @@ struct aws_host_resolver_vtable {
         aws_on_host_resolved_result_fn *res,
         const struct aws_host_resolution_config *config,
         void *user_data);
+
     /** gives your implementation a hint that an address has some failed connections occuring. Do whatever you want (or
      * nothing) about it.
      */
-    int (*record_connection_failure)(struct aws_host_resolver *resolver, struct aws_host_address *address);
-    /** wipe out anything you have cached. */
+    int (*record_connection_failure)(struct aws_host_resolver *resolver, const struct aws_host_address *address);
+
+    /**
+     * @Deprecated Use purge_cache_with_callback instead
+     * wipe out anything you have cached. */
     int (*purge_cache)(struct aws_host_resolver *resolver);
+
+    /** wipe out anything you have cached. */
+    int (*purge_cache_with_callback)(
+        struct aws_host_resolver *resolver,
+        aws_simple_completion_callback *on_purge_cache_complete_callback,
+        void *user_data);
+
+    /** wipe out anything cached for a specific host */
+    int (*purge_host_cache)(
+        struct aws_host_resolver *resolver,
+        const struct aws_host_resolver_purge_host_options *options);
+
     /** get number of addresses for a given host. */
     size_t (*get_host_address_count)(
         struct aws_host_resolver *resolver,
@@ -212,12 +238,29 @@ AWS_IO_API int aws_host_resolver_resolve_host(
  */
 AWS_IO_API int aws_host_resolver_record_connection_failure(
     struct aws_host_resolver *resolver,
-    struct aws_host_address *address);
+    const struct aws_host_address *address);
 
 /**
+ * @Deprecated Use purge_cache_with_callback instead
  * calls purge_cache on the vtable.
  */
 AWS_IO_API int aws_host_resolver_purge_cache(struct aws_host_resolver *resolver);
+
+/**
+ * Calls aws_host_resolver_purge_cache_with_callback on the vtable which will wipe out everything host resolver has
+ * cached.
+ */
+AWS_IO_API int aws_host_resolver_purge_cache_with_callback(
+    struct aws_host_resolver *resolver,
+    aws_simple_completion_callback *on_purge_cache_complete_callback,
+    void *user_data);
+
+/**
+ * Removes the cache for a host asynchronously.
+ */
+AWS_IO_API int aws_host_resolver_purge_host_cache(
+    struct aws_host_resolver *resolver,
+    const struct aws_host_resolver_purge_host_options *options);
 
 /**
  * get number of addresses for a given host.

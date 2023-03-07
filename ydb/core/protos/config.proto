@@ -1451,10 +1451,23 @@ message TAuditConfig {
         TXT = 2;
     }
 
-    optional string AuditFilePath = 1;
-    optional EFormat Format = 2 [default = JSON];
-    optional string LogName = 3;
-    optional bool UnifiedAgentEnable = 4 [default = false];
+    message TStderrBackend {
+        optional EFormat Format = 1 [default = JSON];
+    }
+
+    message TFileBackend {
+        optional EFormat Format = 1 [default = JSON];
+        optional string FilePath = 2;
+    }
+
+    message TUnifiedAgentBackend {
+        optional EFormat Format = 1 [default = JSON];
+        optional string LogName = 2;
+    }
+
+    optional TStderrBackend StderrBackend = 1;
+    optional TFileBackend FileBackend = 2;
+    optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
 };
 
 message THiveTabletLimit {

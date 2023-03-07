@@ -72,15 +72,15 @@ struct TEvAuditLog
     };
 };
 
-class TAuditJsonLogActor final
-    : public TActor<TAuditJsonLogActor>
+class TAuditLogActor final
+    : public TActor<TAuditLogActor>
 {
 private:
-    const THolder<TLogBackend> AuditFile;
+    const TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> LogBackends;
 public:
-    TAuditJsonLogActor(THolder<TLogBackend> auditFile)
+    TAuditLogActor(TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> logBackends)
         : TActor(&TThis::StateWork)
-          , AuditFile(std::move(auditFile))
+        , LogBackends(std::move(logBackends))
     {
     }
 
@@ -99,35 +99,15 @@ private:
         const TEvAuditLog::TEvWriteAuditLog::TPtr& ev,
         const TActorContext& ctx);
 
-    void HandleUnexpectedEvent(STFUNC_SIG);
-};
+    static void WriteLog(
+        const TString& log, 
+        const TVector<THolder<TLogBackend>>& logBackends);
 
-class TAuditTxtLogActor final
-    : public TActor<TAuditTxtLogActor>
-{
-private:
-    const THolder<TLogBackend> AuditFile;
-public:
-    TAuditTxtLogActor(THolder<TLogBackend> auditFile)
-        : TActor(&TThis::StateWork)
-          , AuditFile(std::move(auditFile))
-    {
-    }
+    static TString GetJsonLog(
+        const TEvAuditLog::TEvWriteAuditLog::TPtr& ev);
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::AUDIT_WRITER_ACTOR;
-    }
-
-private:
-    STFUNC(StateWork);
-
-    void HandlePoisonPill(
-        const TEvents::TEvPoisonPill::TPtr& ev,
-        const TActorContext& ctx);
-
-    void HandleWriteAuditLog(
-        const TEvAuditLog::TEvWriteAuditLog::TPtr& ev,
-        const TActorContext& ctx);
+    static TString GetTxtLog(
+        const TEvAuditLog::TEvWriteAuditLog::TPtr& ev);
 
     void HandleUnexpectedEvent(STFUNC_SIG);
 };
@@ -140,7 +120,6 @@ inline NActors::TActorId MakeAuditServiceID() {
     return NActors::TActorId(0, TStringBuf("YDB_AUDIT"));
 }
 
-THolder<NActors::IActor> CreateAuditWriter(
-    THolder<TLogBackend> auditFile, NKikimrConfig::TAuditConfig_EFormat format);
+THolder<NActors::IActor> CreateAuditWriter(TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> logBackends);
 
 }   // namespace NKikimr::NAudit

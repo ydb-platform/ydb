@@ -2592,12 +2592,12 @@ TAuditWriterInitializer::TAuditWriterInitializer(const TKikimrRunConfig &runConf
 
 void TAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData)
 {
-    auto fileBackend = CreateAuditLogBackendWithUnifiedAgent(KikimrRunConfig, appData->Counters);
-    if (!fileBackend)
-            return;
+    auto logBackends = CreateAuditLogBackends(KikimrRunConfig, appData->Counters);
 
-    const auto format = Config.GetAuditConfig().GetFormat();
-    auto actor = NAudit::CreateAuditWriter(std::move(fileBackend), format);
+    if (logBackends.size() == 0)
+        return;
+
+    auto actor = NAudit::CreateAuditWriter(std::move(logBackends));
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         NAudit::MakeAuditServiceID(),

@@ -9,17 +9,10 @@ namespace NKikimr::NAudit {
 
 std::atomic<bool> AUDIT_LOG_ENABLED = false;
 
-THolder<NActors::IActor> CreateAuditWriter(THolder<TLogBackend> auditFile, NKikimrConfig::TAuditConfig_EFormat format)
+THolder<NActors::IActor> CreateAuditWriter(TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> logBackends)
 {
     AUDIT_LOG_ENABLED.store(true);
-    switch (format) {
-        case NKikimrConfig::TAuditConfig::JSON:
-            return MakeHolder<TAuditJsonLogActor>(std::move(auditFile));
-        case NKikimrConfig::TAuditConfig::TXT:
-            return MakeHolder<TAuditTxtLogActor>(std::move(auditFile));
-        default:
-            return MakeHolder<TAuditJsonLogActor>(std::move(auditFile));
-    }
+    return MakeHolder<TAuditLogActor>(std::move(logBackends));
 }
 
 void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TStringBuf, TString>>& parts)

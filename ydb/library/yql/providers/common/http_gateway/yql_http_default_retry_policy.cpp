@@ -2,7 +2,7 @@
 
 namespace NYql {
 
-IRetryPolicy<long>::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime) {
+IRetryPolicy<long>::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries) {
     if (!maxTime) {
         maxTime = TDuration::Minutes(5);
     }
@@ -25,7 +25,7 @@ IRetryPolicy<long>::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime) {
     TDuration::MilliSeconds(10), // minDelay
     TDuration::MilliSeconds(200), // minLongRetryDelay
     TDuration::Seconds(30), // maxDelay
-    std::numeric_limits<size_t>::max(), // maxRetries
+    maxRetries, // maxRetries
     maxTime); // maxTime
 }
 

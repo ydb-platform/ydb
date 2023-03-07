@@ -27,34 +27,34 @@ int curlTrace(CURL *handle, curl_infotype type,
     Y_UNUSED(data);
 
     TStringBuf buf(data, size);
+    TStringBuilder sb;
     switch (type) {
     case CURLINFO_TEXT:
-        Cerr << "== Info: " << buf;
+        sb << "== Info: " << buf;
         break;
     case CURLINFO_HEADER_OUT:
-        Cerr << "=> Send header (" << size << " bytes):" << Endl << buf;
+        sb << "=> Send header (" << size << " bytes):" << Endl << buf;
         break;
     case CURLINFO_HEADER_IN:
-        Cerr << "<= Recv header (" << size << " bytes):" << buf;
+        sb << "<= Recv header (" << size << " bytes):" << buf;
         break;
-    default:
-        return 0;
-
-/*
-    case CURLINFO_DATA_OUT:
-        Cerr << "=> Send data (" << size << " bytes)" << Endl;
+    /*case CURLINFO_DATA_OUT:
+        sb << "=> Send data (" << size << " bytes)" << Endl;
         break;
     case CURLINFO_SSL_DATA_OUT:
-        Cerr << "=> Send SSL data (" << size << " bytes)" << Endl;
+        sb << "=> Send SSL data (" << size << " bytes)" << Endl;
         break;
     case CURLINFO_DATA_IN:
-        Cerr << "<= Recv data (" << size << " bytes)" << Endl;
+        sb << "<= Recv data (" << size << " bytes)" << Endl;
         break;
     case CURLINFO_SSL_DATA_IN:
-        Cerr << "<= Recv SSL data (" << size << " bytes)" << Endl;
-        break;
-*/
+        sb << "<= Recv SSL data (" << size << " bytes)" << Endl;
+        break;*/
+    default:
+        return 0;
     }
+    
+    Cerr << sb;
 
     return 0;
 }
@@ -64,10 +64,10 @@ namespace NYql {
 namespace {
 
 struct TCurlInitConfig {
-    ui64 RequestTimeout = 0;
+    ui64 RequestTimeout = 150;
     ui64 LowSpeedTime = 0;
     ui64 LowSpeedLimit = 0;
-    ui64 ConnectionTimeout = 0;
+    ui64 ConnectionTimeout = 15;
     ui64 BytesPerSecondLimit = 0;
     ui64 BufferSize = CURL_MAX_WRITE_SIZE;
 };

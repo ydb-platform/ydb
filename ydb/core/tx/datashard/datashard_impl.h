@@ -978,6 +978,14 @@ class TDataShard
             >;
         };
 
+        struct LockVolatileDependencies : Table<35> {
+            struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct TxId : Column<2, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<LockId, TxId>;
+            using TColumns = TableColumns<LockId, TxId>;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
@@ -985,7 +993,8 @@ class TDataShard
             ReplicationSourceOffsets, ReplicationSources, DstReplicationSourceOffsetsReceived,
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
-            TxVolatileDetails, TxVolatileParticipants, CdcStreamScans>;
+            TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
+            LockVolatileDependencies>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user

@@ -74,6 +74,26 @@ bool TDataShardLocksDb::Load(TVector<TLockRow>& rows) {
         }
     }
 
+    // Load volatile dependencies
+    {
+        auto rowset = db.Table<Schema::LockVolatileDependencies>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            auto lockId = rowset.GetValue<Schema::LockVolatileDependencies::LockId>();
+            auto it = lockIndex.find(lockId);
+            if (it != lockIndex.end()) {
+                auto& lock = rows[it->second];
+                auto txId = rowset.GetValue<Schema::LockVolatileDependencies::TxId>();
+                lock.VolatileDependencies.push_back(txId);
+            }
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+    }
+
     return true;
 }
 
@@ -169,6 +189,20 @@ void TDataShardLocksDb::PersistRemoveConflict(ui64 lockId, ui64 otherLockId) {
     using Schema = TDataShard::Schema;
     NIceDb::TNiceDb db(DB);
     db.Table<Schema::LockConflicts>().Key(lockId, otherLockId).Delete();
+    HasChanges_ = true;
+}
+
+void TDataShardLocksDb::PersistAddVolatileDependency(ui64 lockId, ui64 txId) {
+    using Schema = TDataShard::Schema;
+    NIceDb::TNiceDb db(DB);
+    db.Table<Schema::LockVolatileDependencies>().Key(lockId, txId).Update();
+    HasChanges_ = true;
+}
+
+void TDataShardLocksDb::PersistRemoveVolatileDependency(ui64 lockId, ui64 txId) {
+    using Schema = TDataShard::Schema;
+    NIceDb::TNiceDb db(DB);
+    db.Table<Schema::LockVolatileDependencies>().Key(lockId, txId).Delete();
     HasChanges_ = true;
 }
 

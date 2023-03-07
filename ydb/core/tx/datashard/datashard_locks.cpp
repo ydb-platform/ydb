@@ -158,6 +158,12 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     Y_VERIFY(IsPersistent());
     Y_VERIFY(db, "Cannot persist lock without a db");
 
+    // Remove persistent volatile dependencies
+    for (ui64 txId : VolatileDependencies) {
+        db->PersistRemoveVolatileDependency(LockId, txId);
+    }
+    VolatileDependencies.clear();
+
     // Remove persistent conflicts
     for (auto& pr : ConflictLocks) {
         TLockInfo* otherLock = pr.first;
@@ -236,6 +242,15 @@ void TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
     }
 }
 
+void TLockInfo::AddVolatileDependency(ui64 txId, ILocksDb* db) {
+    Y_VERIFY(LockId != txId, "Unexpected volatile dependency between a lock and itself");
+
+    if (VolatileDependencies.insert(txId).second && IsPersistent()) {
+        Y_VERIFY(db, "Cannot persist dependencies without a db");
+        db->PersistAddVolatileDependency(LockId, txId);
+    }
+}
+
 void TLockInfo::PersistConflicts(ILocksDb* db) {
     Y_VERIFY(IsPersistent());
     Y_VERIFY(db, "Cannot persist conflicts without a db");
@@ -251,6 +266,9 @@ void TLockInfo::PersistConflicts(ILocksDb* db) {
         if (!!(pr.second & ELockConflictFlags::BreakUsOnTheirCommit)) {
             db->PersistAddConflict(otherLock->LockId, LockId);
         }
+    }
+    for (ui64 txId : VolatileDependencies) {
+        db->PersistAddVolatileDependency(LockId, txId);
     }
 }
 
@@ -272,6 +290,7 @@ void TLockInfo::CleanupConflicts() {
             otherLock->ConflictLocks.erase(this);
         }
         ConflictLocks.clear();
+        VolatileDependencies.clear();
     }
 }
 
@@ -303,6 +322,12 @@ void TLockInfo::RestorePersistentConflict(TLockInfo* otherLock) {
 
     this->ConflictLocks[otherLock] |= ELockConflictFlags::BreakThemOnOurCommit;
     otherLock->ConflictLocks[this] |= ELockConflictFlags::BreakUsOnTheirCommit;
+}
+
+void TLockInfo::RestorePersistentVolatileDependency(ui64 txId) {
+    Y_VERIFY(IsPersistent());
+
+    VolatileDependencies.insert(txId);
 }
 
 // TTableLocks
@@ -775,6 +800,9 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
             for (auto& writeConflictLock : Update->WriteConflictLocks) {
                 lock->AddConflict(&writeConflictLock, Db);
             }
+            for (ui64 txId : Update->VolatileDependencies) {
+                lock->AddVolatileDependency(txId, Db);
+            }
 
             if (lock->GetWriteTables() && !lock->IsPersistent()) {
                 // We need to persist a new lock
@@ -999,6 +1027,12 @@ void TSysLocks::AddWriteConflict(const TTableId& tableId, const TArrayRef<const 
     }
 }
 
+void TSysLocks::AddVolatileDependency(ui64 txId) {
+    Y_VERIFY(Update && Update->LockTxId);
+
+    Update->AddVolatileDependency(txId);
+}
+
 void TSysLocks::BreakAllLocks(const TTableId& tableId) {
     Y_VERIFY(Update);
     Y_VERIFY(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
@@ -1144,6 +1178,9 @@ bool TSysLocks::Load(ILocksDb& db) {
             if (auto* otherLock = Locker.FindLockPtr(conflictId)) {
                 lock->RestorePersistentConflict(otherLock);
             }
+        }
+        for (ui64 txId : lockRow.VolatileDependencies) {
+            lock->RestorePersistentVolatileDependency(txId);
         }
     }
 

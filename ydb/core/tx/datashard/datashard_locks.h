@@ -8,6 +8,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <library/cpp/cache/cache.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/list.h>
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
@@ -42,6 +43,7 @@ public:
 
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
+        TVector<ui64> VolatileDependencies;
     };
 
     virtual bool Load(TVector<TLockRow>& rows) = 0;
@@ -65,6 +67,10 @@ public:
     // Persist a conflict, i.e. this lock must break some other lock on commit
     virtual void PersistAddConflict(ui64 lockId, ui64 otherLockId) = 0;
     virtual void PersistRemoveConflict(ui64 lockId, ui64 otherLockId) = 0;
+
+    // Persist volatile dependencies, i.e. which undecided transactions must be waited for on commit
+    virtual void PersistAddVolatileDependency(ui64 lockId, ui64 txId) = 0;
+    virtual void PersistRemoveVolatileDependency(ui64 lockId, ui64 txId) = 0;
 };
 
 class TLocksDataShard {
@@ -310,16 +316,25 @@ public:
     void PersistRanges(ILocksDb* db);
 
     void AddConflict(TLockInfo* otherLock, ILocksDb* db);
+    void AddVolatileDependency(ui64 txId, ILocksDb* db);
     void PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
 
     void RestorePersistentRange(ui64 rangeId, const TPathId& tableId, ELockRangeFlags flags);
     void RestorePersistentConflict(TLockInfo* otherLock);
+    void RestorePersistentVolatileDependency(ui64 txId);
 
     template<class TCallback>
     void ForAllConflicts(TCallback&& callback) {
         for (auto& pr : ConflictLocks) {
             callback(pr.first);
+        }
+    }
+
+    template<class TCallback>
+    void ForAllVolatileDependencies(TCallback&& callback) {
+        for (auto& item : VolatileDependencies) {
+            callback(item);
         }
     }
 
@@ -367,6 +382,7 @@ private:
 
     // A set of locks we must break on commit
     THashMap<TLockInfo*, ELockConflictFlags> ConflictLocks;
+    absl::flat_hash_set<ui64> VolatileDependencies;
     TVector<TPersistentRange> PersistentRanges;
 
     ui64 LastOpId = 0;
@@ -651,6 +667,7 @@ struct TLocksUpdate {
     TIntrusiveList<TLockInfo, TLockInfoReadConflictListTag> ReadConflictLocks;
     TIntrusiveList<TLockInfo, TLockInfoWriteConflictListTag> WriteConflictLocks;
     TIntrusiveList<TTableLocks, TTableLocksWriteConflictShardListTag> WriteConflictShardLocks;
+    absl::flat_hash_set<ui64> VolatileDependencies;
 
     TIntrusiveList<TLockInfo, TLockInfoEraseListTag> EraseLocks;
 
@@ -719,6 +736,10 @@ struct TLocksUpdate {
 
     void AddWriteConflictShardLocks(TTableLocks* table) {
         WriteConflictShardLocks.PushBack(table);
+    }
+
+    void AddVolatileDependency(ui64 txId) {
+        VolatileDependencies.insert(txId);
     }
 
     void AddEraseLock(TLockInfo* lock) {
@@ -814,6 +835,7 @@ public:
     void AddReadConflict(ui64 conflictId);
     void AddWriteConflict(ui64 conflictId);
     void AddWriteConflict(const TTableId& tableId, const TArrayRef<const TCell>& key);
+    void AddVolatileDependency(ui64 txId);
     void BreakAllLocks(const TTableId& tableId);
     void BreakSetLocks();
     bool IsMyKey(const TArrayRef<const TCell>& key) const;

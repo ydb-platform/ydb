@@ -34,6 +34,10 @@ public:
     void PersistAddConflict(ui64 lockId, ui64 otherLockId) override;
     void PersistRemoveConflict(ui64 lockId, ui64 otherLockId) override;
 
+    // Persist volatile dependencies, i.e. which undecided transactions must be waited for on commit
+    void PersistAddVolatileDependency(ui64 lockId, ui64 txId) override;
+    void PersistRemoveVolatileDependency(ui64 lockId, ui64 txId) override;
+
 private:
     TDataShard& Self;
     NTable::TDatabase& DB;

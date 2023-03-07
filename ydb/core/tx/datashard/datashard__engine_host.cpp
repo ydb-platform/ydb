@@ -321,6 +321,14 @@ public:
             return;
         }
 
+        if (auto lock = Self->SysLocksTable().GetRawLock(lockId, TRowVersion::Min())) {
+            lock->ForAllVolatileDependencies([this](ui64 txId) {
+                if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
+                    VolatileTxId = EngineBay.GetTxId();
+                }
+            });
+        }
+
         if (VolatileTxId) {
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                 "Scheduling commit of lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self->TabletID());
@@ -902,7 +910,9 @@ public:
 
     void AddWriteConflict(ui64 txId) const {
         if (auto* info = Self->GetVolatileTxManager().FindByCommitTxId(txId)) {
-            Y_FAIL("TODO: add future lock dependency from %" PRIu64 " on %" PRIu64, LockTxId, info->TxId);
+            if (info->State != EVolatileTxState::Aborting) {
+                Self->SysLocksTable().AddVolatileDependency(info->TxId);
+            }
         } else {
             Self->SysLocksTable().AddWriteConflict(txId);
         }

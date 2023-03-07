@@ -7,5 +7,5 @@
 
 
 if (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin.txt)
+  include(CMakeLists.darwin-x86_64.txt)
 endif()

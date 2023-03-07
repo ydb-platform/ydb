@@ -1646,6 +1646,19 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, SourceType, Location, Installation, Auth, ExternalTableReferences>;
     };
 
+    struct PersQueueGroupStats : Table<106> {
+        struct PathId :          Column<1, NScheme::NTypeIds::Uint64> {};
+
+        struct SeqNoGeneration : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SeqNoRound :      Column<3, NScheme::NTypeIds::Uint64> {};
+
+        struct DataSize :        Column<4, NScheme::NTypeIds::Uint64> {};
+        struct UsedReserveSize : Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, SeqNoGeneration, SeqNoRound, DataSize, UsedReserveSize>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1750,7 +1763,8 @@ struct Schema : NIceDb::Schema {
         BlobDepots,
         CdcStreamScanShardStatus,
         ExternalTable,
-        ExternalDataSource
+        ExternalDataSource,
+        PersQueueGroupStats
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

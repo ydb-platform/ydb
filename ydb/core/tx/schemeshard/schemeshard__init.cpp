@@ -2485,6 +2485,34 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read PersQueue groups stats
+        {
+            auto rowset = db.Table<Schema::PersQueueGroupStats>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+            while (!rowset.EndOfSet()) {
+                TLocalPathId localPathId = rowset.GetValue<Schema::PersQueueGroupStats::PathId>();
+                TPathId pathId(selfId, localPathId);
+
+                auto it = Self->Topics.find(pathId);
+                if (it == Self->Topics.end()) {
+                    continue;
+                }
+
+                auto& topic = it->second;
+                topic->Stats.SeqNo = TMessageSeqNo(rowset.GetValue<Schema::PersQueueGroupStats::SeqNoGeneration>(), rowset.GetValue<Schema::PersQueueGroupStats::SeqNoRound>());
+                topic->Stats.DataSize = rowset.GetValue<Schema::PersQueueGroupStats::DataSize>();
+                topic->Stats.UsedReserveSize = rowset.GetValue<Schema::PersQueueGroupStats::UsedReserveSize>();
+
+                Self->ResolveDomainInfo(pathId)->AggrDiskSpaceUsage(topic->Stats, {});
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
 
         // Read RTMR volumes
         {

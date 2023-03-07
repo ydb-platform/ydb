@@ -505,4 +505,65 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         Assert(69, 0); //  67 - it is unstable value. it can change if internal message store change
     }
+
+    Y_UNIT_TEST(PeriodicTopicStatsReload) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto& appData = runtime.GetAppData();
+
+        ui64 txId = 100;
+
+        // disable batching
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        // apply config via reboot
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        const auto AssertTopicSize = [&] (ui64 expectedAccountSize, ui64 expectedUsedReserveSize) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic1"),
+                               {NLs::Finished,
+                                NLs::TopicAccountSize(expectedAccountSize),
+                                NLs::TopicUsedReserveSize(expectedUsedReserveSize)});
+        };
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 1
+                    WriteSpeedInBytesPerSecond : 7
+
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AssertTopicSize(7, 0);
+
+
+        ui64 topic1Id = DescribePath(runtime, "/MyRoot/Topic1").GetPathDescription().GetSelf().GetPathId();
+
+        ui64 generation = 1;
+        ui64 round = 97;
+
+        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, round, 17, 7);
+        AssertTopicSize(17, 7);
+
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        AssertTopicSize(17, 7); // loaded from db
+
+        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, round - 1, 19, 7);
+
+        AssertTopicSize(17, 7); // not changed because round is less
+    }
+
 };

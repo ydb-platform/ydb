@@ -47,9 +47,11 @@ bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQ
 
     oldStats = newStats;
 
-    if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
-        NIceDb::TNiceDb db(txc.DB);
+    NIceDb::TNiceDb db(txc.DB);
 
+    Self->PersistPersQueueGroupStats(db, pathId, newStats);
+
+    if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
         auto subDomainId = Self->ResolvePathIdForDomain(pathId);
         Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
 

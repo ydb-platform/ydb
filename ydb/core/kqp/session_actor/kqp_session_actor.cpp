@@ -206,8 +206,12 @@ struct TKqpQueryState {
         return cStats;
     }
 
-    bool CollectStatsDefined() const {
-        return GetStatsMode() != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+    bool ReportStats() const {
+        return GetStatsMode() != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE
+            // always report stats for scripting subrequests
+            || GetType() == NKikimrKqp::QUERY_TYPE_AST_DML
+            || GetType() == NKikimrKqp::QUERY_TYPE_AST_SCAN
+        ;
     }
 
     bool HasPreparedQuery() const {
@@ -1449,7 +1453,7 @@ public:
                 [this]() { return this->QueryState->ExtractQueryText(); });
         }
 
-        if (QueryState->CollectStatsDefined()) {
+        if (QueryState->ReportStats()) {
             response->SetQueryPlan(SerializeAnalyzePlan(*stats));
             response->MutableQueryStats()->Swap(stats);
         }

@@ -904,17 +904,16 @@ TExprNode::TPtr SqueezeJoinInputToDict(TExprNode::TPtr&& input, size_t width, co
 using TModifyKeysList = std::vector<std::tuple<TCoAtom, TCoAtom, ui32, const TTypeAnnotationNode*>>;
 
 template<bool LeftOrRight>
-bool PrepareJoinSide(
-    TDqConnection& connection,
+TCoLambda PrepareJoinSide(
+    TPositionHandle pos,
     const std::map<std::string_view, ui32>& columns,
     const std::vector<TCoAtom>& keys,
     TModifyKeysList& remap,
     bool filter,
     TExprNode::TListType& keysList,
-    TExprContext& ctx,
-    IOptimizationContext& optCtx) {
+    TExprContext& ctx) {
 
-    TCoArgument inputArg{ctx.NewArgument(connection.Pos(), "flow")};
+    TCoArgument inputArg{ctx.NewArgument(pos, "flow")};
     auto preprocess = ctx.Builder(inputArg.Pos())
         .Callable("Map")
             .Add(0, inputArg.Ptr())
@@ -940,7 +939,7 @@ bool PrepareJoinSide(
                                         .Arg(0, "row")
                                         .Add(1, std::get<0>(key).Ptr())
                                     .Seal()
-                                    .Add(1, ExpandType(connection.Pos(), *std::get<const TTypeAnnotationNode*>(key), ctx))
+                                    .Add(1, ExpandType(pos, *std::get<const TTypeAnnotationNode*>(key), ctx))
                                 .Seal()
                             .Seal();
                         }
@@ -970,22 +969,15 @@ bool PrepareJoinSide(
         }
     }
 
-    const auto lambda = Build<TCoLambda>(ctx, preprocess->Pos())
-        .Args({inputArg})
-        .Body(std::move(preprocess))
-        .Done();
-
-    if (const auto cn = DqPushLambdaToStageUnionAll(connection.Cast<TDqCnUnionAll>(), lambda, {}, ctx, optCtx))
-        connection = cn.Cast();
-    else
-        return false;
-
     for (auto& key : remap) {
         const auto index = std::get<ui32>(key);
         keysList[index] = ctx.ChangeChild(*keysList[index], LeftOrRight ? TDqJoinKeyTuple::idx_LeftColumn : TDqJoinKeyTuple::idx_RightColumn, std::get<1>(key).Ptr());
     }
 
-    return true;
+    return Build<TCoLambda>(ctx, preprocess->Pos())
+        .Args({inputArg})
+        .Body(std::move(preprocess))
+        .Done();
 }
 
 TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotationNode& resutType, const std::string_view& tableName, TExprContext& ctx) {
@@ -1102,16 +1094,24 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
 
     if (!remapLeft.empty() || !remapRight.empty()) {
         auto joinKeys = join.JoinKeys().Ref().ChildrenList();
-        auto connLeft = join.LeftInput().Cast<TDqConnection>();
-        auto connRight = join.RightInput().Cast<TDqConnection>();
+        auto connLeft = join.LeftInput().Cast<TDqCnUnionAll>();
+        auto connRight = join.RightInput().Cast<TDqCnUnionAll>();
+
+        std::vector<std::pair<TDqCnUnionAll, TCoLambda>> remaps;
 
         if (!remapLeft.empty())
-            if (!PrepareJoinSide<true>(connLeft, leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx, optCtx))
-                return join;
+            remaps.emplace_back(connLeft, PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx));
 
         if (!remapRight.empty())
-            if (!PrepareJoinSide<false>(connRight, rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx, optCtx))
-                return join;
+            remaps.emplace_back(connRight, PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx));
+
+        DqPushLambdasToStagesUnionAll(remaps, ctx, optCtx);
+
+        if (!remapLeft.empty())
+            connLeft = remaps.front().first;
+
+        if (!remapRight.empty())
+            connRight = remaps.back().first;
 
         const auto& items = GetSeqItemType(*join.Ref().GetTypeAnn()).Cast<TStructExprType>()->GetItems();
         TExprNode::TListType fields(items.size());

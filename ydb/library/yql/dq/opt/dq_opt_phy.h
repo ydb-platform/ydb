@@ -19,6 +19,8 @@ TExprNode::TPtr DqBuildPushableStage(const NNodes::TDqConnection& connection, TE
 NNodes::TMaybeNode<NNodes::TDqConnection> DqPushLambdaToStageUnionAll(const NNodes::TDqConnection& connection, const NNodes::TCoLambda& lambda,
     const TVector<NNodes::TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx);
 
+void DqPushLambdasToStagesUnionAll(std::vector<std::pair<NNodes::TDqCnUnionAll, NNodes::TCoLambda>>& items, TExprContext& ctx, IOptimizationContext& optCtx);
+
 NNodes::TExprBase DqPushSkipNullMembersToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 

@@ -546,26 +546,15 @@ TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& f
         .Done();
 }
 
-} // namespace
-
-TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& outputIndex, const TCoLambda& lambda,
+TMaybeNode<TDqStage> DqPushLambdasToStage(const TDqStage& stage, const std::map<ui32, TCoLambda>& lambdas,
     const TVector<TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx)
 {
-    YQL_CLOG(TRACE, CoreDq) << "stage #" << stage.Ref().UniqueId() << ": " << PrintDqStageOnly(stage, ctx)
-        << ", add lambda to output #" << outputIndex.Value();
-
-    if (IsDqDependsOnStage(lambda, stage)) {
-        YQL_CLOG(TRACE, CoreDq) << "Lambda " << lambda.Ref().Dump() << " depends on stage: " << PrintDqStageOnly(stage, ctx);
-        return {};
-    }
-
     auto program = stage.Program();
-    ui32 index = FromString<ui32>(outputIndex.Value());
     ui32 branchesCount = GetStageOutputsCount(stage);
 
     TExprNode::TPtr newProgram;
     if (branchesCount == 1) {
-        newProgram = ctx.FuseLambdas(lambda.Ref(), program.Ref());
+        newProgram = ctx.FuseLambdas(lambdas.at(0U).Ref(), program.Ref());
     } else {
         auto dqReplicate = program.Body().Cast<TDqReplicate>();
 
@@ -584,8 +573,8 @@ TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& o
             YQL_ENSURE(branchLambda.Args().Size() == 1);
 
             TExprNode::TPtr newBranchProgram;
-            if (index == i) {
-                newBranchProgram = ctx.FuseLambdas(lambda.Ref(), branchLambda.Ref());
+            if (const auto it = lambdas.find(i); lambdas.cend() != it) {
+                newBranchProgram = ctx.FuseLambdas(it->second.Ref(), branchLambda.Ref());
             } else {
                 newBranchProgram = ctx.DeepCopyLambda(branchLambda.Ref());
             }
@@ -632,6 +621,23 @@ TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& o
     return newStage;
 }
 
+} // namespace
+
+TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& outputIndex, const TCoLambda& lambda,
+    const TVector<TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx)
+{
+    YQL_CLOG(TRACE, CoreDq) << "stage #" << stage.Ref().UniqueId() << ": " << PrintDqStageOnly(stage, ctx)
+        << ", add lambda to output #" << outputIndex.Value();
+
+    if (IsDqDependsOnStage(lambda, stage)) {
+        YQL_CLOG(TRACE, CoreDq) << "Lambda " << lambda.Ref().Dump() << " depends on stage: " << PrintDqStageOnly(stage, ctx);
+        return {};
+    }
+
+    const auto index = FromString<ui32>(outputIndex.Value());
+    return DqPushLambdasToStage(stage, {{index, lambda}}, lambdaInputs, ctx, optCtx);
+}
+
 TExprNode::TPtr DqBuildPushableStage(const NNodes::TDqConnection& connection, TExprContext& ctx) {
     auto stage = connection.Output().Stage().Cast<TDqStage>();
     auto program = stage.Program();
@@ -673,6 +679,32 @@ TMaybeNode<TDqConnection> DqPushLambdaToStageUnionAll(const TDqConnection& conne
         .Done();
 
     return TDqConnection(ctx.ChangeChild(connection.Ref(), TDqConnection::idx_Output, output.Ptr()));
+}
+
+void DqPushLambdasToStagesUnionAll(std::vector<std::pair<TDqCnUnionAll, TCoLambda>>& items, TExprContext& ctx, IOptimizationContext& optCtx)
+{
+    TNodeMap<std::pair<std::map<ui32, TCoLambda>, TDqStage>> map(items.size());
+
+    for (const auto& item: items) {
+        const auto& output = item.first.Output();
+        const auto index = FromString<ui32>(output.Index().Value());
+        const auto ins = map.emplace(output.Stage().Raw(), std::make_pair(std::map<ui32, TCoLambda>(), output.Stage().Cast<TDqStage>())).first;
+        ins->second.first.emplace(index, item.second);
+    }
+
+    for (auto& item : map) {
+        item.second.second = DqPushLambdasToStage(item.second.second, item.second.first, {}, ctx, optCtx).Cast();
+    }
+
+    for (auto& item: items) {
+        const auto& output = item.first.Output();
+        item.first = Build<TDqCnUnionAll>(ctx, item.first.Pos())
+            .Output<TDqOutput>()
+                .Stage(map.find(output.Stage().Raw())->second.second)
+                .Index(output.Index())
+                .Build()
+            .Done();
+    }
 }
 
 TExprBase DqPushSkipNullMembersToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,

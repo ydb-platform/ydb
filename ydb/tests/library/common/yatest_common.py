@@ -3,7 +3,7 @@ import os
 
 import yatest.common as ya_common
 import yatest.common.network as ya_common_network
-import ydb.tests.oss_canonical as oss_canonical
+import ydb.tests.oss.canonical as oss_canonical
 """
 For yatest.common package see file
 library/python/testing/yatest_common/yatest/common/__init__.py

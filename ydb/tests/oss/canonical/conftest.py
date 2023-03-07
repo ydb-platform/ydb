@@ -1,5 +1,5 @@
 import pytest
-from ydb.tests.oss_canonical import canons_meta, is_oss
+from ydb.tests.oss.canonical import canons_meta, is_oss
 
 
 @pytest.fixture(scope='function', autouse=is_oss)

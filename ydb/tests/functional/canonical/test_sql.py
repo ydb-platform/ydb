@@ -9,7 +9,7 @@ import uuid
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.oss_canonical import set_canondata_root, is_oss
+from ydb.tests.oss.canonical import set_canondata_root, is_oss
 import ydb
 import ydb.issues
 from ydb.public.api.protos import ydb_table_pb2

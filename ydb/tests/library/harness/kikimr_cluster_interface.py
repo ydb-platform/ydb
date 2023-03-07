@@ -11,7 +11,7 @@ from ydb.tests.library.common.protobuf_console import (
     RemoveTenantRequest, GetOperationRequest)
 import ydb.public.api.protos.ydb_cms_pb2 as cms_tenants_pb
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
-from ydb.tests.ydb_sdk_import import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

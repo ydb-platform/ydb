@@ -2,7 +2,7 @@
 
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.ydb_sdk_import import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_item, has_items
 import os

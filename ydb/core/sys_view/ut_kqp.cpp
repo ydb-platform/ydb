@@ -770,7 +770,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(QueryStatsAllTables) {
         auto check = [&] (const TString& queryText) {
-            TTestEnv env{TTestEnv::DisableSourcesTag};
+            TTestEnv env;
             CreateRootTable(env);
 
             TTableClient client(env.GetDriver());
@@ -797,7 +797,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(QueryStatsRetries) {
-        TTestEnv env{TTestEnv::DisableSourcesTag};
+        TTestEnv env;
         CreateRootTable(env);
 
         TString queryText("SELECT * FROM `Root/Table0`");

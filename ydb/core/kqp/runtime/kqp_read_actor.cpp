@@ -94,8 +94,6 @@ public:
     };
 
     struct TShardState : public TIntrusiveListItem<TShardState> {
-        TSmallVec<TSerializedTableRange> Ranges;
-        TSmallVec<TSerializedCellVec> Points;
 
         TOwnedCellVec LastKey;
         TMaybe<ui32> FirstUnprocessedRequest;
@@ -106,13 +104,6 @@ public:
 
         size_t ResolveAttempt = 0;
         size_t RetryAttempt = 0;
-
-        void AssignContinuationToken(TShardState* state) {
-            if (state->LastKey.DataSize() != 0) {
-                LastKey = std::move(state->LastKey);
-            }
-            FirstUnprocessedRequest = state->FirstUnprocessedRequest;
-        }
 
         TShardState(ui64 tabletId)
             : TabletId(tabletId)
@@ -247,9 +238,6 @@ public:
                 // And push all others
                 result.insert(result.end(), rangeIt, Ranges.end());
             }
-            for (auto& range : result) {
-                MakePrefixRange(range, keyTypes.size());
-            }
         }
 
         void FillUnprocessedPoints(TVector<TSerializedCellVec>& result, bool reverse) const {
@@ -267,6 +255,9 @@ public:
                 FillUnprocessedPoints(ev.Keys, reversed);
             } else {
                 FillUnprocessedRanges(ev.Ranges, keyTypes, reversed);
+                for (auto& range : ev.Ranges) {
+                    MakePrefixRange(range, keyTypes.size());
+                }
             }
         }
 
@@ -291,6 +282,26 @@ public:
             }
             return DebugPrintPoint(keyTypes, LastKey, *AppData()->TypeRegistry);
         }
+
+        bool HasRanges() {
+            return !Ranges.empty();
+        }
+
+        bool HasPoints() {
+            return !Points.empty();
+        }
+
+        void AddRange(TSerializedTableRange&& range) {
+            Ranges.push_back(std::move(range));
+        }
+
+        void AddPoint(TSerializedCellVec&& point) {
+            Points.push_back(std::move(point));
+        }
+
+    private:
+        TSmallVec<TSerializedTableRange> Ranges;
+        TSmallVec<TSerializedCellVec> Points;
     };
 
     using TShardQueue = TIntrusiveListWithAutoDelete<TShardState, TDelete>;
@@ -410,17 +421,17 @@ public:
         auto& state = *stateHolder.Release();
 
         if (Settings.HasFullRange()) {
-            state.Ranges.push_back(TSerializedTableRange(Settings.GetFullRange()));
+            state.AddRange(TSerializedTableRange(Settings.GetFullRange()));
         } else {
             YQL_ENSURE(Settings.HasRanges());
             if (Settings.GetRanges().KeyRangesSize() > 0) {
                 YQL_ENSURE(Settings.GetRanges().KeyPointsSize() == 0);
                 for (const auto& range : Settings.GetRanges().GetKeyRanges()) {
-                    state.Ranges.push_back(TSerializedTableRange(range));
+                    state.AddRange(TSerializedTableRange(range));
                 }
             } else {
                 for (const auto& point : Settings.GetRanges().GetKeyPoints()) {
-                    state.Points.push_back(TSerializedCellVec(point));
+                    state.AddPoint(TSerializedCellVec(point));
                 }
             }
         }
@@ -578,8 +589,18 @@ public:
 
         auto bounds = state->GetBounds(Settings.GetReverse());
         size_t pointIndex = 0;
+        size_t rangeIndex = 0;
+        TVector<TSerializedTableRange> ranges;
+        if (state->HasRanges()) {
+            state->FillUnprocessedRanges(ranges, KeyColumnTypes, Settings.GetReverse());
+        }
 
-        for (ui64 idx = 0, i = 0; idx < keyDesc->GetPartitions().size(); ++idx) {
+        TVector<TSerializedCellVec> points;
+        if (state->HasPoints()) {
+            state->FillUnprocessedPoints(points, Settings.GetReverse());
+        }
+
+        for (ui64 idx = 0; idx < keyDesc->GetPartitions().size(); ++idx) {
             const auto& partition = keyDesc->GetPartitions()[idx];
 
             TTableRange partitionRange{
@@ -591,51 +612,46 @@ public:
 
             CA_LOG_D("Processing resolved ShardId# " << partition.ShardId
                 << ", partition range: " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
-                << ", i: " << i << ", state ranges: " << state->Ranges.size()
-                << ", points: " << state->Points.size());
+                << ", i: " << rangeIndex << ", state ranges: " << ranges.size()
+                << ", points: " << points.size());
 
             auto newShard = MakeHolder<TShardState>(partition.ShardId);
 
-            if (((!Settings.GetReverse() && idx == 0) || (Settings.GetReverse() && idx + 1 == keyDesc->GetPartitions().size())) && state) {
-                newShard->AssignContinuationToken(state.Get());
-            }
-
-            if (state->Points.empty()) {
-                Y_ASSERT(!state->Ranges.empty());
-
-                for (ui64 j = i; j < state->Ranges.size(); ++j) {
-                    CA_LOG_D("Intersect state range #" << j << " " << DebugPrintRange(KeyColumnTypes, state->Ranges[j].ToTableRange(), tr)
+            if (state->HasRanges()) {
+                for (ui64 j = rangeIndex; j < ranges.size(); ++j) {
+                    CA_LOG_D("Intersect state range #" << j << " " << DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)
                         << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr));
 
-                    auto intersection = Intersect(KeyColumnTypes, partitionRange, state->Ranges[j].ToTableRange());
+                    auto intersection = Intersect(KeyColumnTypes, partitionRange, ranges[j].ToTableRange());
 
                     if (!intersection.IsEmptyRange(KeyColumnTypes)) {
                         CA_LOG_D("Add range to new shardId: " << partition.ShardId
                             << ", range: " << DebugPrintRange(KeyColumnTypes, intersection, tr));
 
-                        newShard->Ranges.emplace_back(TSerializedTableRange(intersection));
+                        newShard->AddRange(TSerializedTableRange(intersection));
                     } else {
                         CA_LOG_D("empty intersection");
-                        if (j > i) {
-                            i = j - 1;
+                        if (j > rangeIndex) {
+                            rangeIndex = j - 1;
                         }
                         break;
                     }
                 }
 
-                if (!newShard->Ranges.empty()) {
+                if (newShard->HasRanges()) {
                     newShards.push_back(std::move(newShard));
                 }
-            } else {
-                while (pointIndex < state->Points.size()) {
+            }
+            if (state->HasPoints()) {
+                while (pointIndex < points.size()) {
                     int intersection = ComparePointAndRange(
-                        state->Points[pointIndex].GetCells(),
+                        points[pointIndex].GetCells(),
                         partitionRange,
                         KeyColumnTypes,
                         KeyColumnTypes);
 
                     if (intersection == 0) {
-                        newShard->Points.push_back(state->Points[pointIndex]);
+                        newShard->AddPoint(std::move(points[pointIndex]));
                         CA_LOG_D("Add point to new shardId: " << partition.ShardId);
                     }
                     if (intersection < 0) {
@@ -643,14 +659,14 @@ public:
                     }
                     pointIndex += 1;
                 }
-                if (!newShard->Points.empty()) {
+                if (newShard->HasPoints()) {
                     newShards.push_back(std::move(newShard));
                 }
             }
         }
 
-        Counters->IteratorsReadSplits->Add(newShards.size() - 1);
         YQL_ENSURE(!newShards.empty());
+        Counters->IteratorsReadSplits->Add(newShards.size() - 1);
         if (Settings.GetReverse()) {
             for (size_t i = 0; i < newShards.size(); ++i) {
                 PendingShards.PushBack(newShards[i].Release());
@@ -802,6 +818,7 @@ public:
             << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
             << ", limit: " << limit
             << ", readId = " << id
+            << ", reverse = " << record.GetReverse()
             << " snapshot = (txid=" << Settings.GetSnapshot().GetTxId() << ",step=" << Settings.GetSnapshot().GetStep() << ")"
             << " lockTxId = " << Settings.GetLockTxId());
 
@@ -813,6 +830,24 @@ public:
 
     void NotifyCA() {
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+    }
+
+    TString DebugPrintContionuationToken(TString s) {
+        NKikimrTxDataShard::TReadContinuationToken token;
+        Y_VERIFY(token.ParseFromString(s));
+        TString lastKey = "(empty)";
+        if (!token.GetLastProcessedKey().empty()) {
+            TStringBuilder builder;
+            TVector<NScheme::TTypeInfo> types;
+            for (auto& column : Settings.GetColumns()) {
+                types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
+            }
+
+            TSerializedCellVec row(token.GetLastProcessedKey());
+
+            lastKey = DebugPrintPoint(types, row.GetCells(), *AppData()->TypeRegistry);
+        }
+        return TStringBuilder() << "first request = " << token.GetFirstUnprocessedQuery() << " lastkey = " << lastKey;
     }
 
     void HandleRead(TEvDataShard::TEvReadResult::TPtr ev) {
@@ -875,7 +910,7 @@ public:
         CA_LOG_D(TStringBuilder() << "new data for read #" << id
             << " seqno = " << ev->Get()->Record.GetSeqNo()
             << " finished = " << ev->Get()->Record.GetFinished());
-        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()));
+        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
         NotifyCA();
     }

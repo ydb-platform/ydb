@@ -372,77 +372,86 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
     template <SortOrder OPT>                                                                                            \
     void TTestCase##N<OPT>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
+    struct TTestSetup {
+        TTestSetup(TString table = "/Root/KeyValueLargePartition")
+            : Table(table)
+        {
+            TKikimrSettings settings;
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+            settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+            TFeatureFlags flags;
+            flags.SetEnablePredicateExtractForScanQueries(true);
+            settings.SetFeatureFlags(flags);
+            settings.SetAppConfig(appConfig);
+
+            Kikimr.ConstructInPlace(settings);
+
+            auto db = Kikimr->GetTableClient();
+
+            Server = &Kikimr->GetTestServer();
+            Runtime = Server->GetRuntime();
+            KqpProxy = MakeKqpProxyID(Runtime->GetNodeId(0));
+
+            Sender = Runtime->AllocateEdgeActor();
+
+            CollectKeysTo(&CollectedKeys, Runtime, Sender);
+
+            SetSplitMergePartCountLimit(Runtime, -1);
+        }
+
+        TVector<ui64> Shards() {
+            return GetTableShards(Server, Sender, Table);
+        }
+
+        void Split(ui64 shard, ui32 key) {
+            auto senderSplit = Runtime->AllocateEdgeActor();
+            ui64 txId = AsyncSplitTable(Server, senderSplit, Table, shard, key);
+            WaitTxNotification(Server, senderSplit, txId);
+        }
+
+        void AssertSuccess() {
+            auto reply = Runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(Sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        }
+
+        void SendScanQuery(TString text) {
+           ::NKikimr::NKqp::NTestSuiteKqpSplit::SendScanQuery(Runtime, KqpProxy, Sender, text);
+        }
+
+        TMaybe<TKikimrRunner> Kikimr;
+        TVector<ui64> CollectedKeys;
+        Tests::TServer* Server;
+        NActors::TTestActorRuntime* Runtime;
+        TActorId KqpProxy;
+        TActorId Sender;
+
+        TString Table;
+    };
+
     Y_UNIT_TEST_SORT(AfterResolve, Order) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForScanQueries(true);
-        settings.SetFeatureFlags(flags);
-        settings.SetAppConfig(appConfig);
+        TTestSetup s;
 
-        TKikimrRunner kikimr(settings);
-
-        auto db = kikimr.GetTableClient();
-
-        auto& server = kikimr.GetTestServer();
-        auto* runtime = server.GetRuntime();
-        Y_UNUSED(runtime);
-        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
-
-        auto sender = runtime->AllocateEdgeActor();
-        auto shards = GetTableShards(&server, sender, "/Root/KeyValueLargePartition");
-
-        TVector<ui64> collectedKeys;
-        CollectKeysTo(&collectedKeys, runtime, sender);
-
+        auto shards = s.Shards();
         auto* shim = new TReadActorPipeCacheStub();
-        InterceptReadActorPipeCache(runtime->Register(shim));
+        InterceptReadActorPipeCache(s.Runtime->Register(shim));
         shim->SetupCapture(0, 1);
-        SendScanQuery(runtime, kqpProxy, sender, "SELECT Key FROM `/Root/KeyValueLargePartition`" + OrderBy(Order));
+        s.SendScanQuery("SELECT Key FROM `/Root/KeyValueLargePartition`" + OrderBy(Order));
 
         shim->ReadsReceived.WaitI();
         Cerr << "starting split -----------------------------------------------------------" << Endl;
-        SetSplitMergePartCountLimit(runtime, -1);
-        {
-            auto senderSplit = runtime->AllocateEdgeActor();
-            ui64 txId = AsyncSplitTable(&server, senderSplit, "/Root/KeyValueLargePartition", shards.at(0), 400);
-            WaitTxNotification(&server, senderSplit, txId);
-        }
+        s.Split(shards.at(0), 400);
         Cerr << "resume evread -----------------------------------------------------------" << Endl;
         shim->SkipAll();
-        shim->SendCaptured(runtime);
+        shim->SendCaptured(s.Runtime);
 
-        auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(collectedKeys, Order)), ALL);
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, Order)), ALL);
     }
 
     Y_UNIT_TEST_SORT(AfterResult, Order) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForScanQueries(true);
-        settings.SetFeatureFlags(flags);
-        settings.SetAppConfig(appConfig);
-
-        TKikimrRunner kikimr(settings);
-
-        auto db = kikimr.GetTableClient();
-
-        auto& server = kikimr.GetTestServer();
-        auto* runtime = server.GetRuntime();
-        Y_UNUSED(runtime);
-        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
-
-        auto sender = runtime->AllocateEdgeActor();
-        auto shards = GetTableShards(&server, sender, "/Root/KeyValueLargePartition");
-
-        TVector<ui64> collectedKeys;
-        CollectKeysTo(&collectedKeys, runtime, sender);
+        TTestSetup s;
+        auto shards = s.Shards();
 
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(8);
@@ -456,51 +465,97 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         auto* shim = new TReadActorPipeCacheStub();
         shim->SetupCapture(1, 1);
         shim->SetupResultsCapture(1);
-        InterceptReadActorPipeCache(runtime->Register(shim));
-        SendScanQuery(runtime, kqpProxy, sender, "SELECT Key FROM `/Root/KeyValueLargePartition`" + OrderBy(Order));
+        InterceptReadActorPipeCache(s.Runtime->Register(shim));
+        s.SendScanQuery("SELECT Key FROM `/Root/KeyValueLargePartition`" + OrderBy(Order));
 
         shim->ReadsReceived.WaitI();
         Cerr << "starting split -----------------------------------------------------------" << Endl;
-        SetSplitMergePartCountLimit(runtime, -1);
-        {
-            auto senderSplit = runtime->AllocateEdgeActor();
-            ui64 txId = AsyncSplitTable(&server, senderSplit, "/Root/KeyValueLargePartition", shards.at(0), 400);
-            WaitTxNotification(&server, senderSplit, txId);
-        }
+        s.Split(shards.at(0), 400);
         Cerr << "resume evread -----------------------------------------------------------" << Endl;
         shim->SkipAll();
         shim->AllowResults();
-        shim->SendCaptured(runtime);
+        shim->SendCaptured(s.Runtime);
 
-        auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(collectedKeys, Order)), ALL);
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, Order)), ALL);
+    }
+
+    const TString SegmentsResult = ",101,102,103,202,203,301,303,401,403,501,502,601,602,603,702,703,801";
+    const TString SegmentsRequest =
+            "SELECT Key FROM `/Root/KeyValueLargePartition` where \
+            (Key >= 101 and Key <= 103) \
+            or (Key >= 202 and Key <= 301) \
+            or (Key >= 303 and Key <= 401) \
+            or (Key >= 403 and Key <= 502) \
+            or (Key >= 601 and Key <= 603) \
+            or (Key >= 702 and Key <= 801) \
+            ";
+    
+    Y_UNIT_TEST_SORT(AfterResultMultiRange, Order) {
+        TTestSetup s;
+        NKikimrTxDataShard::TEvRead evread;
+        evread.SetMaxRowsInResult(5);
+        evread.SetMaxRows(5);
+        InjectRangeEvReadSettings(evread);
+
+        auto shards = s.Shards();
+
+        NKikimrTxDataShard::TEvReadAck evreadack;
+        evreadack.SetMaxRows(5);
+        InjectRangeEvReadAckSettings(evreadack);
+
+        auto* shim = new TReadActorPipeCacheStub();
+        shim->SetupCapture(1, 1);
+        shim->SetupResultsCapture(1);
+        InterceptReadActorPipeCache(s.Runtime->Register(shim));
+        s.SendScanQuery(SegmentsRequest + OrderBy(Order));
+
+        shim->ReadsReceived.WaitI();
+        Cerr << "starting split -----------------------------------------------------------" << Endl;
+        s.Split(shards.at(0), 404);
+        Cerr << "resume evread -----------------------------------------------------------" << Endl;
+        shim->SkipAll();
+        shim->AllowResults();
+        shim->SendCaptured(s.Runtime);
+
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, Order)), SegmentsResult);
+    }
+
+    Y_UNIT_TEST_SORT(AfterResultMultiRangeSegmentPartition, Order) {
+        TTestSetup s;
+        auto shards = s.Shards();
+
+        NKikimrTxDataShard::TEvRead evread;
+        evread.SetMaxRowsInResult(5);
+        evread.SetMaxRows(5);
+        InjectRangeEvReadSettings(evread);
+
+        NKikimrTxDataShard::TEvReadAck evreadack;
+        evreadack.SetMaxRows(5);
+        InjectRangeEvReadAckSettings(evreadack);
+
+        auto* shim = new TReadActorPipeCacheStub();
+        shim->SetupCapture(1, 1);
+        shim->SetupResultsCapture(1);
+        InterceptReadActorPipeCache(s.Runtime->Register(shim));
+        s.SendScanQuery(SegmentsRequest + OrderBy(Order));
+
+        shim->ReadsReceived.WaitI();
+        Cerr << "starting split -----------------------------------------------------------" << Endl;
+        s.Split(shards.at(0), 501);
+        Cerr << "resume evread -----------------------------------------------------------" << Endl;
+        shim->SkipAll();
+        shim->AllowResults();
+        shim->SendCaptured(s.Runtime);
+
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, Order)), SegmentsResult);
     }
 
     Y_UNIT_TEST_SORT(ChoosePartition, Order) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForScanQueries(true);
-        settings.SetFeatureFlags(flags);
-        settings.SetAppConfig(appConfig);
-
-        TKikimrRunner kikimr(settings);
-
-        auto db = kikimr.GetTableClient();
-
-        auto& server = kikimr.GetTestServer();
-        auto* runtime = server.GetRuntime();
-        Y_UNUSED(runtime);
-        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
-
-        auto sender = runtime->AllocateEdgeActor();
-        auto shards = GetTableShards(&server, sender, "/Root/KeyValueLargePartition");
-
-        TVector<ui64> collectedKeys;
-        CollectKeysTo(&collectedKeys, runtime, sender);
+        TTestSetup s;
+        auto shards = s.Shards();
 
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(8);
@@ -514,52 +569,25 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         auto* shim = new TReadActorPipeCacheStub();
         shim->SetupCapture(2, 1);
         shim->SetupResultsCapture(2);
-        InterceptReadActorPipeCache(runtime->Register(shim));
-        SendScanQuery(runtime, kqpProxy, sender, "SELECT Key FROM `/Root/KeyValueLargePartition`" + OrderBy(Order));
+        InterceptReadActorPipeCache(s.Runtime->Register(shim));
+        s.SendScanQuery("SELECT Key FROM `/Root/KeyValueLargePartition`" + OrderBy(Order));
 
         shim->ReadsReceived.WaitI();
         Cerr << "starting split -----------------------------------------------------------" << Endl;
-        SetSplitMergePartCountLimit(runtime, -1);
-        {
-            auto senderSplit = runtime->AllocateEdgeActor();
-            ui64 txId = AsyncSplitTable(&server, senderSplit, "/Root/KeyValueLargePartition", shards.at(0), 400);
-            WaitTxNotification(&server, senderSplit, txId);
-        }
+        s.Split(shards.at(0), 400);
         Cerr << "resume evread -----------------------------------------------------------" << Endl;
         shim->SkipAll();
         shim->AllowResults();
-        shim->SendCaptured(runtime);
+        shim->SendCaptured(s.Runtime);
 
-        auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(collectedKeys, Order)), ALL);
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, Order)), ALL);
     }
 
 
     Y_UNIT_TEST_SORT(BorderKeys, Order) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForScanQueries(true);
-        settings.SetFeatureFlags(flags);
-        settings.SetAppConfig(appConfig);
-
-        TKikimrRunner kikimr(settings);
-
-        auto db = kikimr.GetTableClient();
-
-        auto& server = kikimr.GetTestServer();
-        auto* runtime = server.GetRuntime();
-        Y_UNUSED(runtime);
-        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
-
-        auto sender = runtime->AllocateEdgeActor();
-        auto shards = GetTableShards(&server, sender, "/Root/KeyValueLargePartition");
-
-        TVector<ui64> collectedKeys;
-        CollectKeysTo(&collectedKeys, runtime, sender);
+        TTestSetup s;
+        auto shards = s.Shards();
 
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(12);
@@ -573,78 +601,44 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         auto* shim = new TReadActorPipeCacheStub();
         shim->SetupCapture(1, 1);
         shim->SetupResultsCapture(1);
-        InterceptReadActorPipeCache(runtime->Register(shim));
-        SendScanQuery(runtime, kqpProxy, sender, "SELECT Key FROM `/Root/KeyValueLargePartition`" + OrderBy(Order));
+        InterceptReadActorPipeCache(s.Runtime->Register(shim));
+        s.SendScanQuery("SELECT Key FROM `/Root/KeyValueLargePartition`" + OrderBy(Order));
 
         shim->ReadsReceived.WaitI();
         Cerr << "starting split -----------------------------------------------------------" << Endl;
-        SetSplitMergePartCountLimit(runtime, -1);
-        {
-            auto senderSplit = runtime->AllocateEdgeActor();
-            ui64 txId = AsyncSplitTable(&server, senderSplit, "/Root/KeyValueLargePartition", shards.at(0), 402);
-            WaitTxNotification(&server, senderSplit, txId);
 
-            shards = GetTableShards(&server, sender, "/Root/KeyValueLargePartition");
+        s.Split(shards.at(0), 402);
+        shards = s.Shards();
+        s.Split(shards.at(1), 404);
 
-            txId = AsyncSplitTable(&server, senderSplit, "/Root/KeyValueLargePartition", shards.at(1), 404);
-            WaitTxNotification(&server, senderSplit, txId);
-        }
         Cerr << "resume evread -----------------------------------------------------------" << Endl;
         shim->SkipAll();
         shim->AllowResults();
-        shim->SendCaptured(runtime);
+        shim->SendCaptured(s.Runtime);
 
-        auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(collectedKeys, Order)), ALL);
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, Order)), ALL);
     }
 
     Y_UNIT_TEST_SORT(AfterResolvePoints, Order) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForScanQueries(true);
-        settings.SetFeatureFlags(flags);
-        settings.SetAppConfig(appConfig);
-
-        TKikimrRunner kikimr(settings);
-
-        auto db = kikimr.GetTableClient();
-
-        auto& server = kikimr.GetTestServer();
-        auto* runtime = server.GetRuntime();
-        Y_UNUSED(runtime);
-        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
-
-        auto sender = runtime->AllocateEdgeActor();
-        auto shards = GetTableShards(&server, sender, "/Root/KeyValueLargePartition");
-
-        TVector<ui64> collectedKeys;
-        CollectKeysTo(&collectedKeys, runtime, sender);
+        TTestSetup s;
+        auto shards = s.Shards();
 
         auto* shim = new TReadActorPipeCacheStub();
-        InterceptReadActorPipeCache(runtime->Register(shim));
+        InterceptReadActorPipeCache(s.Runtime->Register(shim));
         shim->SetupCapture(0, 5);
-        SendScanQuery(runtime, kqpProxy, sender,
+        s.SendScanQuery(
             "PRAGMA Kikimr.OptEnablePredicateExtract=\"false\"; SELECT Key FROM `/Root/KeyValueLargePartition` where Key in (103, 302, 402, 502, 703)" + OrderBy(Order));
 
         shim->ReadsReceived.WaitI();
         Cerr << "starting split -----------------------------------------------------------" << Endl;
-        SetSplitMergePartCountLimit(runtime, -1);
-        {
-            auto senderSplit = runtime->AllocateEdgeActor();
-            ui64 txId = AsyncSplitTable(&server, senderSplit, "/Root/KeyValueLargePartition", shards.at(0), 400);
-            WaitTxNotification(&server, senderSplit, txId);
-        }
+        s.Split(shards.at(0), 400);
         Cerr << "resume evread -----------------------------------------------------------" << Endl;
         shim->SkipAll();
-        shim->SendCaptured(runtime);
+        shim->SendCaptured(s.Runtime);
 
-        auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(collectedKeys, Order)), ",103,302,402,502,703");
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, Order)), ",103,302,402,502,703");
     }
 }
 

@@ -251,6 +251,10 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
     NGrpc::IQueueClientContextPtr prevConnectTimeoutContext;
     NGrpc::IQueueClientContextPtr prevConnectDelayContext;
 
+    // Callbacks
+    std::function<void(TPlainStatus&&, typename IProcessor::TPtr&&)> connectCallback;
+    std::function<void(bool)> connectTimeoutCallback;
+
     if (!status.Ok()) {
         Log.Write(TLOG_INFO, GetLogPrefix() << "Got error. Status: " << status.Status
                                             << ". Description: " << IssuesSingleLineString(status.Issues));
@@ -301,29 +305,26 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
 
         // Destroy all partition streams before connecting.
         DestroyAllPartitionStreamsImpl(deferred);
+
+        connectCallback = [wire = Tracker->MakeTrackedWire(),
+                                sessionImpl = this->shared_from_this(),
+                                connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
+            sessionImpl->OnConnect(std::move(st), std::move(processor), connectContext); // OnConnect could be called inplace!
+        };
+
+        connectTimeoutCallback = [wire = Tracker->MakeTrackedWire(),
+                                    sessionImpl = this->shared_from_this(),
+                                    connectTimeoutContext = connectTimeoutContext](bool ok) {
+            if (ok) {
+                sessionImpl->OnConnectTimeout(connectTimeoutContext);
+            }
+        };
     }
 
     // Cancel previous operations.
     Cancel(prevConnectContext);
     Cancel(prevConnectTimeoutContext);
     Cancel(prevConnectDelayContext);
-
-    auto connectCallback = [weakThis = TSingleClusterReadSessionImpl<UseMigrationProtocol>::weak_from_this(),
-                            connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
-        if (auto sharedThis = weakThis.lock()) {
-            sharedThis->OnConnect(std::move(st), std::move(processor),
-                                  connectContext); // OnConnect could be called inplace!
-        }
-    };
-
-    auto connectTimeoutCallback = [weakThis = TSingleClusterReadSessionImpl<UseMigrationProtocol>::weak_from_this(),
-                                   connectTimeoutContext = connectTimeoutContext](bool ok) {
-        if (ok) {
-            if (auto sharedThis = weakThis.lock()) {
-                sharedThis->OnConnectTimeout(connectTimeoutContext);
-            }
-        }
-    };
 
     Y_ASSERT(connectContext);
     Y_ASSERT(connectTimeoutContext);
@@ -343,6 +344,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
 template <bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::BreakConnectionAndReconnectImpl(
     TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
     Log.Write(TLOG_INFO,
               GetLogPrefix() << "Break connection due to unexpected message from server. Status: " << status.Status
                              << ", Issues: \"" << IssuesSingleLineString(status.Issues) << "\"");
@@ -351,7 +353,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::BreakConnectionAndReco
     Processor = nullptr;
     RetryState = Settings.RetryPolicy_->CreateRetryState(); // Explicitly create retry state to determine whether we should connect to server again.
 
-    deferred.DeferReconnection(TSingleClusterReadSessionImpl<UseMigrationProtocol>::shared_from_this(), ErrorHandler, std::move(status));
+    deferred.DeferReconnection(this->shared_from_this(), ErrorHandler, std::move(status));
 }
 
 template<bool UseMigrationProtocol>
@@ -420,7 +422,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
 }
 
 template<>
-inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>& deferred) { // Assumes that we're under lock.
+inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
     Log.Write(TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
     TClientMessage<true> req;
     auto& init = *req.mutable_init_request();
@@ -450,7 +453,8 @@ inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>
 }
 
 template<>
-inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<false>& deferred) { // Assumes that we're under lock.
+inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
     Log.Write(TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
     TClientMessage<false> req;
     auto& init = *req.mutable_init_request();
@@ -486,7 +490,9 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImpl() { // Assumes that we're under lock.
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImpl() {
+    Y_VERIFY(Lock.IsLocked());
+
     if (!Closing
         && !Aborting
         && !WaitingReadResponse
@@ -531,7 +537,8 @@ TString GetCluster(const TPartitionStreamImpl<UseMigrationProtocol>* partitionSt
 }
 
 template<bool UseMigrationProtocol>
-bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::IsActualPartitionStreamImpl(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream) { // Assumes that we're under lock.
+bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::IsActualPartitionStreamImpl(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream) {
+    Y_VERIFY(Lock.IsLocked());
     auto actualPartitionStreamIt = PartitionStreams.find(partitionStream->GetAssignId());
     return actualPartitionStreamIt != PartitionStreams.end()
         && GetPartitionStreamId(actualPartitionStreamIt->second.Get()) == GetPartitionStreamId(partitionStream);
@@ -750,7 +757,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnUserRetrievedEvent(i
 
 template <bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::WriteToProcessorImpl(
-    TClientMessage<UseMigrationProtocol>&& req) { // Assumes that we're under lock.
+    TClientMessage<UseMigrationProtocol>&& req) {
+    Y_VERIFY(Lock.IsLocked());
 
     if (Processor) {
         Processor->Write(std::move(req));
@@ -759,6 +767,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::WriteToProcessorImpl(
 
 template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::HasCommitsInflightImpl() const {
+    Y_VERIFY(Lock.IsLocked());
     for (const auto& [id, partitionStream] : PartitionStreams) {
         if (partitionStream->HasCommitsInflight())
             return true;
@@ -768,7 +777,11 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::HasCommitsInflightImpl
 
 template <bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
-    TDeferredActions<UseMigrationProtocol>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<UseMigrationProtocol>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+    if (Aborting) {
+        return;
+    }
     if (Closing && !HasCommitsInflightImpl()) {
         Processor->Cancel();
         CallCloseCallbackImpl();
@@ -778,14 +791,13 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
     if (Processor) {
         ServerMessage->Clear();
 
-        auto callback = [weakThis = TSingleClusterReadSessionImpl<UseMigrationProtocol>::weak_from_this(),
+        auto callback = [wire = Tracker->MakeTrackedWire(),
+                         sessionImpl = this->shared_from_this(),
                          connectionGeneration = ConnectionGeneration,
                          // Capture message & processor not to read in freed memory.
                          serverMessage = ServerMessage,
                          processor = Processor](NGrpc::TGrpcStatus&& grpcStatus) {
-            if (auto sharedThis = weakThis.lock()) {
-                sharedThis->OnReadDone(std::move(grpcStatus), connectionGeneration);
-            }
+            sessionImpl->OnReadDone(std::move(grpcStatus), connectionGeneration);
         };
 
         deferred.DeferReadFromProcessor(Processor, ServerMessage.get(), std::move(callback));
@@ -885,7 +897,8 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::InitResponse&& msg,
-    TDeferredActions<true>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
     Y_UNUSED(deferred);
 
     Log.Write(TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
@@ -900,7 +913,8 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch&& msg,
-    TDeferredActions<true>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
     if (Closing || Aborting) {
         return; // Don't process new data.
     }
@@ -987,7 +1001,9 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::Assigned&& msg,
-    TDeferredActions<true>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     auto partitionStream = MakeIntrusive<TPartitionStreamImpl<true>>(
         NextPartitionStreamId, msg.topic().path(), msg.cluster(),
         msg.partition() + 1, // Group.
@@ -1020,7 +1036,9 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::Release&& msg,
-    TDeferredActions<true>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     auto partitionStreamIt = PartitionStreams.find(msg.assign_id());
     if (partitionStreamIt == PartitionStreams.end()) {
         return;
@@ -1045,7 +1063,8 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::Committed&& msg,
-    TDeferredActions<true>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
 
     Log.Write(TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
 
@@ -1081,7 +1100,9 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::PartitionStatus&& msg,
-    TDeferredActions<true>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     auto partitionStreamIt = PartitionStreams.find(msg.assign_id());
     if (partitionStreamIt == PartitionStreams.end()) {
         return;
@@ -1100,7 +1121,9 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::InitResponse&& msg,
-    TDeferredActions<false>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<false>& deferred) {
+
+    Y_VERIFY(Lock.IsLocked());
     Y_UNUSED(deferred);
 
     RetryState = nullptr;
@@ -1115,7 +1138,9 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::ReadResponse&& msg,
-    TDeferredActions<false>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     if (Closing || Aborting) {
         return; // Don't process new data.
     }
@@ -1194,7 +1219,9 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::StartPartitionSessionRequest&& msg,
-    TDeferredActions<false>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     auto partitionStream = MakeIntrusive<TPartitionStreamImpl<false>>(
         NextPartitionStreamId, msg.partition_session().path(), msg.partition_session().partition_id(),
         msg.partition_session().partition_session_id(), msg.committed_offset(),
@@ -1223,7 +1250,9 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::StopPartitionSessionRequest&& msg,
-    TDeferredActions<false>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
     if (partitionStreamIt == PartitionStreams.end()) {
         return;
@@ -1247,7 +1276,8 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::CommitOffsetResponse&& msg,
-    TDeferredActions<false>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
 
     Log.Write(TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
 
@@ -1268,7 +1298,9 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::PartitionSessionStatusResponse&& msg,
-    TDeferredActions<false>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
     if (partitionStreamIt == PartitionStreams.end()) {
         return;
@@ -1287,7 +1319,8 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::UpdateTokenResponse&& msg,
-    TDeferredActions<false>& deferred) { // Assumes that we're under lock.
+    TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
     // TODO
     Y_UNUSED(msg, deferred);
 }
@@ -1296,6 +1329,11 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StartDecompressionTasksImpl(TDeferredActions<UseMigrationProtocol>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
+    if (Aborting) {
+        return;
+    }
     UpdateMemoryUsageStatisticsImpl();
     const i64 limit = GetDecompressedDataSizeLimit();
     Y_VERIFY(limit > 0);
@@ -1319,6 +1357,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StartDecompressionTask
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DestroyAllPartitionStreamsImpl(TDeferredActions<UseMigrationProtocol>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     using TClosedEvent = std::conditional_t<
         UseMigrationProtocol,
             NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent,
@@ -1402,23 +1442,30 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Abort() {
     Log.Write(TLOG_DEBUG, GetLogPrefix() << "Abort session to cluster");
 
     with_lock (Lock) {
-        if (!Aborting) {
-            Aborting = true;
-            CloseCallback = {};
+        AbortImpl();
+    }
+}
 
-            // Cancel(ClientContext); // Don't cancel, because this is used only as factory for other contexts.
-            Cancel(ConnectContext);
-            Cancel(ConnectTimeoutContext);
-            Cancel(ConnectDelayContext);
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
+    Y_VERIFY(Lock.IsLocked());
 
-            if (ClientContext) {
-                ClientContext->Cancel();
-                ClientContext.reset();
-            }
+    if (!Aborting) {
+        Aborting = true;
+        CallCloseCallbackImpl();
 
-            if (Processor) {
-                Processor->Cancel();
-            }
+        // Cancel(ClientContext); // Don't cancel, because this is used only as factory for other contexts.
+        Cancel(ConnectContext);
+        Cancel(ConnectTimeoutContext);
+        Cancel(ConnectDelayContext);
+
+        if (ClientContext) {
+            ClientContext->Cancel();
+            ClientContext.reset();
+        }
+
+        if (Processor) {
+            Processor->Cancel();
         }
     }
 }
@@ -1453,15 +1500,13 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<vo
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CallCloseCallbackImpl() {
+    Y_VERIFY(Lock.IsLocked());
+
     if (CloseCallback) {
         CloseCallback();
         CloseCallback = {};
     }
-    Aborting = true; // So abort call will have no effect.
-    if (ClientContext) {
-        ClientContext->Cancel();
-        ClientContext.reset();
-    }
+    AbortImpl();
 }
 
 template<bool UseMigrationProtocol>
@@ -1509,6 +1554,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DumpStatisticsToLog(TL
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UpdateMemoryUsageStatisticsImpl() {
+    Y_VERIFY(Lock.IsLocked());
+
     const TInstant now = TInstant::Now();
     const ui64 delta = (now - UsageStatisticsLastUpdateTime).MilliSeconds();
     UsageStatisticsLastUpdateTime = now;
@@ -1654,9 +1701,11 @@ bool TReadSessionEventInfo<UseMigrationProtocol>::IsDataEvent() const {
 template <bool UseMigrationProtocol>
 TReadSessionEventsQueue<UseMigrationProtocol>::TReadSessionEventsQueue(
     const TAReadSessionSettings<UseMigrationProtocol>& settings,
-    std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session)
+    std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session,
+    std::shared_ptr<TImplTracker> tracker)
     : TParent(settings)
-    , Session(std::move(session)) {
+    , Session(std::move(session))
+    , Tracker(std::move(tracker)) {
     const auto& h = TParent::Settings.EventHandlers_;
 
     if constexpr (UseMigrationProtocol) {
@@ -1973,7 +2022,7 @@ template <bool UseMigrationProtocol>
 bool TReadSessionEventsQueue<UseMigrationProtocol>::TryApplyCallbackToEventImpl(typename TParent::TEvent& event,
                                                                                 TDeferredActions<UseMigrationProtocol>& deferred)
 {
-    THandlersVisitor visitor(TParent::Settings, event, deferred);
+    THandlersVisitor visitor(TParent::Settings, event, deferred, Tracker);
     return visitor.Visit();
 }
 
@@ -2002,14 +2051,20 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::ApplyCallbackToEventImpl(TDa
     Y_VERIFY(HasEventCallbacks);
 
     if (TParent::Settings.EventHandlers_.DataReceivedHandler_) {
-        auto action = [func = TParent::Settings.EventHandlers_.DataReceivedHandler_, data = std::move(data), eventsInfo = std::move(eventsInfo)]() mutable {
+        auto action = [wire = Tracker->MakeTrackedWire(),
+                       func = TParent::Settings.EventHandlers_.DataReceivedHandler_,
+                       data = std::move(data),
+                       eventsInfo = std::move(eventsInfo)]() mutable {
             func(data);
             eventsInfo.OnUserRetrievedEvent();
         };
 
         deferred.DeferStartExecutorTask(TParent::Settings.EventHandlers_.HandlersExecutor_, std::move(action));
     } else if (TParent::Settings.EventHandlers_.CommonHandler_) {
-        auto action = [func = TParent::Settings.EventHandlers_.CommonHandler_, data = std::move(data), eventsInfo = std::move(eventsInfo)]() {
+        auto action = [wire = Tracker->MakeTrackedWire(),
+                       func = TParent::Settings.EventHandlers_.CommonHandler_,
+                       data = std::move(data),
+                       eventsInfo = std::move(eventsInfo)]() mutable {
             typename TParent::TEvent event(std::move(data));
 
             func(event);

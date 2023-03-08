@@ -6314,6 +6314,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), 0);
 
+        decompressor->RunAllTasks();
+        executor->RunAllTasks();
+
         session->Close(TDuration::Seconds(10));
 
         driver->Stop();

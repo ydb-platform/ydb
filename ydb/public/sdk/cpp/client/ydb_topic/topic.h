@@ -524,7 +524,7 @@ struct TWriteStat : public TThrRefBase {
 };
 
 class TContinuationToken : public TMoveOnly {
-    friend class TWriteSession;
+    friend class TWriteSessionImpl;
 private:
     TContinuationToken() = default;
 };
@@ -1235,8 +1235,12 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! Function to handle all event types.
         //! If event with current type has no handler for this type of event,
         //! this handler (if specified) will be used.
-        //! If this handler is not specified, event can be received with TReadSession::GetEvent() method.
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TEvent&)>, CommonHandler);
+        //! If this handler is not specified, event can be received with TWriteSession::GetEvent() method.
+        std::function<void(TWriteSessionEvent::TEvent&)> CommonHandler_;
+        TSelf& CommonHandler(std::function<void(TWriteSessionEvent::TEvent&)>&& handler) {
+            CommonHandler_ = std::move(handler);
+            return static_cast<TSelf&>(*this);
+        }
 
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.

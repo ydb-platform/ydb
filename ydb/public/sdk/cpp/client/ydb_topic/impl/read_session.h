@@ -2,6 +2,7 @@
 
 #include "topic_impl.h"
 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/impl_tracker.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
 
 namespace NYdb::NTopic {
@@ -120,6 +121,7 @@ private:
     NPersQueue::IErrorHandler<false>::TPtr ErrorHandler;
     TDbDriverStatePtr DbDriverState;
     TAdaptiveLock Lock;
+    std::shared_ptr<NPersQueue::TImplTracker> Tracker;
     std::shared_ptr<NPersQueue::TReadSessionEventsQueue<false>> EventsQueue;
 
     NPersQueue::TSingleClusterReadSessionImpl<false>::TPtr Session;

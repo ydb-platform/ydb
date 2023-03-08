@@ -34,11 +34,16 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
 TReadSession::~TReadSession() {
     Abort(EStatus::ABORTED, "Aborted");
     ClearAllEvents();
+
+    if (Tracker) {
+        Tracker->AsyncComplete().Wait();
+    }
 }
 
 void TReadSession::Start() {
     ErrorHandler = MakeIntrusive<NPersQueue::TErrorHandler<false>>(weak_from_this());
-    EventsQueue = std::make_shared<NPersQueue::TReadSessionEventsQueue<false>>(Settings, weak_from_this());
+    Tracker = std::make_shared<NPersQueue::TImplTracker>();
+    EventsQueue = std::make_shared<NPersQueue::TReadSessionEventsQueue<false>>(Settings, weak_from_this(), Tracker);
 
     if (!ValidateSettings()) {
         return;
@@ -58,6 +63,8 @@ void TReadSession::Start() {
 }
 
 void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     // Create cluster sessions.
     Log.Write(
         TLOG_DEBUG,
@@ -78,7 +85,8 @@ void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>
         EventsQueue,
         ErrorHandler,
         context,
-        1, 1);
+        1, 1,
+        Tracker);
 
     deferred.DeferStartSession(Session);
 }
@@ -271,23 +279,28 @@ void TReadSession::DumpCountersToLog(size_t timeNumber) {
 
 void TReadSession::ScheduleDumpCountersToLog(size_t timeNumber) {
     with_lock(Lock) {
+        if (Aborting || Closing) {
+            return;
+        }
         DumpCountersContext = Connections->CreateContext();
-    }
-    if (DumpCountersContext) {
-        auto callback = [self = weak_from_this(), timeNumber](bool ok) {
-            if (ok) {
-                if (auto sharedSelf = self.lock()) {
-                    sharedSelf->DumpCountersToLog(timeNumber);
+        if (DumpCountersContext) {
+            auto callback = [self = weak_from_this(), timeNumber](bool ok) {
+                if (ok) {
+                    if (auto sharedSelf = self.lock()) {
+                        sharedSelf->DumpCountersToLog(timeNumber);
+                    }
                 }
-            }
-        };
-        Connections->ScheduleCallback(TDuration::Seconds(1),
-                                      std::move(callback),
-                                      DumpCountersContext);
+            };
+            Connections->ScheduleCallback(TDuration::Seconds(1),
+                                        std::move(callback),
+                                        DumpCountersContext);
+        }
     }
 }
 
 void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, NPersQueue::TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     if (!Aborting) {
         Aborting = true;
         Log.Write(TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
@@ -301,10 +314,14 @@ void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, NPersQueue::TDefe
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, NYql::TIssues&& issues, NPersQueue::TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     AbortImpl(TSessionClosedEvent(statusCode, std::move(issues)), deferred);
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, const TString& message, NPersQueue::TDeferredActions<false>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     NYql::TIssues issues;
     issues.AddIssue(message);
     AbortImpl(statusCode, std::move(issues), deferred);

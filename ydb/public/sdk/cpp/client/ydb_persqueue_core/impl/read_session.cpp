@@ -57,6 +57,10 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
 TReadSession::~TReadSession() {
     Abort(EStatus::ABORTED, "Aborted");
     ClearAllEvents();
+
+    if (Tracker) {
+        Tracker->AsyncComplete().Wait();
+    }
 }
 
 Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest TReadSession::MakeClusterDiscoveryRequest() const {
@@ -71,7 +75,8 @@ Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest TReadSession::MakeClus
 
 void TReadSession::Start() {
     ErrorHandler = MakeIntrusive<TErrorHandler<true>>(weak_from_this());
-    EventsQueue = std::make_shared<TReadSessionEventsQueue<true>>(Settings, weak_from_this());
+    Tracker = std::make_shared<TImplTracker>();
+    EventsQueue = std::make_shared<TReadSessionEventsQueue<true>>(Settings, weak_from_this(), Tracker);
 
     if (!ValidateSettings()) {
         return;
@@ -165,6 +170,8 @@ void TReadSession::ProceedWithoutClusterDiscovery() {
 }
 
 void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     // Create cluster sessions.
     ui64 partitionStreamIdStart = 1;
     const size_t clusterSessionsCount = ClusterSessions.size();
@@ -196,7 +203,9 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
                 EventsQueue,
                 ErrorHandler,
                 context,
-                partitionStreamIdStart++, clusterSessionsCount);
+                partitionStreamIdStart++,
+                clusterSessionsCount,
+                Tracker);
 
         deferred.DeferStartSession(clusterSessionInfo.Session);
     }
@@ -304,6 +313,10 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
 }
 
 void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+    if (Aborting || Closing) {
+        return;
+    }
     Log.Write(TLOG_DEBUG, GetLogPrefix() << "Restart cluster discovery in " << delay);
     auto startCallback = [self = weak_from_this()](bool ok) {
         if (ok) {
@@ -403,6 +416,8 @@ bool TReadSession::Close(TDuration timeout) {
 }
 
 void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     if (!Aborting) {
         Aborting = true;
         Log.Write(TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
@@ -424,10 +439,14 @@ void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions<
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, NYql::TIssues&& issues, TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     AbortImpl(TSessionClosedEvent(statusCode, std::move(issues)), deferred);
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<true>& deferred) {
+    Y_VERIFY(Lock.IsLocked());
+
     NYql::TIssues issues;
     issues.AddIssue(message);
     AbortImpl(statusCode, std::move(issues), deferred);
@@ -577,19 +596,22 @@ void TReadSession::DumpCountersToLog(size_t timeNumber) {
 
 void TReadSession::ScheduleDumpCountersToLog(size_t timeNumber) {
     with_lock(Lock) {
+        if (Aborting || Closing) {
+            return;
+        }
         DumpCountersContext = Connections->CreateContext();
-    }
-    if (DumpCountersContext) {
-        auto callback = [self = weak_from_this(), timeNumber](bool ok) {
-            if (ok) {
-                if (auto sharedSelf = self.lock()) {
-                    sharedSelf->DumpCountersToLog(timeNumber);
+        if (DumpCountersContext) {
+            auto callback = [self = weak_from_this(), timeNumber](bool ok) {
+                if (ok) {
+                    if (auto sharedSelf = self.lock()) {
+                        sharedSelf->DumpCountersToLog(timeNumber);
+                    }
                 }
-            }
-        };
-        Connections->ScheduleCallback(TDuration::Seconds(1),
-                                      std::move(callback),
-                                      DumpCountersContext);
+            };
+            Connections->ScheduleCallback(TDuration::Seconds(1),
+                                        std::move(callback),
+                                        DumpCountersContext);
+        }
     }
 }
 

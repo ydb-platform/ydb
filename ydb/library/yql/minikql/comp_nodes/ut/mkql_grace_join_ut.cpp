@@ -25,7 +25,7 @@ constexpr bool IsVerbose = false;
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
     Y_UNIT_TEST(TestMem1) {
-             
+    TSetup<false> setup;
     const ui64 TupleSize = 1024;
     const ui64 NBuckets = 128;
     const ui64 NTuples = 10000;
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
     Y_UNIT_TEST_LLVM(TestImp1) {
-
+            TSetup<LLVM> setup;
             ui64 tuple[11] = {0,1,2,3,4,5,6,7,8,9,10};
             ui32 strSizes[2] = {4, 4};
             char * strVals[] = {(char *)"aaaaa", (char *)"bbbb"};

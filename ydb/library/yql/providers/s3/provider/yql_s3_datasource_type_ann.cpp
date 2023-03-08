@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -76,6 +77,166 @@ bool ValidateS3Paths(const TExprNode& node, const TStructExprType*& extraColumns
             return false;
         }
     }
+    return true;
+}
+
+class TTypeValidator {
+    using TTypesContainer = std::unordered_set<const TTypeAnnotationNode*, TTypeAnnotationNode::THash, TTypeAnnotationNode::TEqual>;
+
+public:
+    TTypeValidator(TExprContext& ctx, const TExprNode::TPtr& input, const TStructExprType* columnsType)
+        : Ctx(ctx)
+        , Input(input)
+        , ColumnsType(columnsType)
+        , IntegerTypes(CreateIntegerAvailableTypes())
+        , CommonTypes(CreateCommonAvailableTypes())
+        , EnumTypes(CreateEnumAvailableTypes())
+        , DateTypes(CreateDateAvailableTypes())
+    {}
+
+    bool ValidatePartitonBy(const std::vector<TString>& partitionedBy) {
+        TSet<TString> partitionedByColumns{partitionedBy.begin(), partitionedBy.end()};
+        for (auto item: ColumnsType->GetItems()) {
+            if (!partitionedByColumns.contains(item->GetName())) {
+                continue;
+            }
+            if (!ValidateCommonType(item)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool ValidateProjection(const TString& projection, const std::vector<TString>& partitionedBy) {
+        auto generator = NPathGenerator::CreatePathGenerator(projection, partitionedBy);
+        TMap<TString, NPathGenerator::IPathGenerator::EType> projectionColumns;
+        for (const auto& column: generator->GetConfig().Rules) {
+            projectionColumns[column.Name] = column.Type;
+        }
+        for (auto item: ColumnsType->GetItems()) {
+            auto it = projectionColumns.find(item->GetName());
+            if (it == projectionColumns.end()) {
+                continue;
+            }
+            if (!ValidateType(item, it->second)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+private:
+    bool ValidateCommonType(const TItemExprType* item) {
+        return ValidateType(item, CommonTypes);
+    }
+
+    bool ValidateType(const TItemExprType* item, NYql::NPathGenerator::IPathGenerator::EType type) {
+        switch (type) {
+            case NYql::NPathGenerator::IPathGenerator::EType::INTEGER:
+                return ValidateIntegerType(item);
+            case NYql::NPathGenerator::IPathGenerator::EType::ENUM:
+                return ValidateEnumType(item);
+            case NYql::NPathGenerator::IPathGenerator::EType::DATE:
+                return ValidateDateType(item);
+            case NYql::NPathGenerator::IPathGenerator::EType::UNDEFINED:
+                Ctx.AddError(TIssue(Ctx.GetPosition(Input->Child(TS3ReadObject::idx_RowType)->Pos()), TStringBuilder{} << "Projection column \"" << item->GetName() << "\" has undefined projection type"));
+                return false;
+        }
+    }
+
+    bool ValidateDateType(const TItemExprType* item) {
+        return ValidateType(item, DateTypes);
+    }
+
+    bool ValidateIntegerType(const TItemExprType* item) {
+        return ValidateType(item, IntegerTypes);
+    }
+
+    bool ValidateEnumType(const TItemExprType* item) {
+        return ValidateType(item, EnumTypes);
+    }
+
+    bool ValidateType(const TItemExprType* item, const TTypesContainer& availableTypes) {
+        auto it = availableTypes.find(item->GetItemType());
+        if (it != availableTypes.end()) {
+            return true;
+
+        }
+        Ctx.AddError(TIssue(Ctx.GetPosition(Input->Child(TS3ReadObject::idx_RowType)->Pos()), TStringBuilder{} << "Projection column \"" << item->GetName() << "\" has invalid type " << *item->GetItemType()));
+        return false;
+    }
+
+    TTypesContainer CreateIntegerAvailableTypes() const {
+        return {
+            Ctx.MakeType<TDataExprType>(EDataSlot::String),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Utf8),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Int64)
+        };
+    }
+
+    TTypesContainer CreateEnumAvailableTypes() const {
+        return {
+            Ctx.MakeType<TDataExprType>(EDataSlot::String)
+        };
+    }
+
+    TTypesContainer CreateCommonAvailableTypes() const {
+        return {
+            Ctx.MakeType<TDataExprType>(EDataSlot::String),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Utf8),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Int64),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Uint64),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Int32),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Uint32),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Date)
+        };
+    }
+
+    TTypesContainer CreateDateAvailableTypes() const {
+        return {
+            Ctx.MakeType<TDataExprType>(EDataSlot::String),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Utf8),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Uint32),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Date)
+        };
+    }
+
+private:
+    TExprContext& Ctx;
+    const TExprNode::TPtr& Input;
+    const TStructExprType* ColumnsType;
+    const TTypesContainer IntegerTypes;
+    const TTypesContainer CommonTypes;
+    const TTypesContainer EnumTypes;
+    const TTypesContainer DateTypes;
+};
+
+
+bool ValidateProjectionTypes(const TStructExprType* columnsType, const TString& projection, const std::vector<TString>& partitionedBy, const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!columnsType) {
+        return true;
+    }
+
+    TTypeValidator typeValidator(ctx, input, columnsType);
+    if (!projection && !partitionedBy.empty()) {
+        if (!typeValidator.ValidatePartitonBy(partitionedBy)) {
+            return false;
+        }
+    }
+
+    if (!projection || partitionedBy.empty()) {
+        return true;
+    }
+
+    try {
+        if (!typeValidator.ValidateProjection(projection, partitionedBy)) {
+            return false;
+        }
+    } catch (...) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3ReadObject::idx_RowType)->Pos()), CurrentExceptionMessage()));
+        return false;
+    }
+
     return true;
 }
 
@@ -225,6 +386,8 @@ public:
             return TStatus::Error;
         }
 
+        std::vector<TString> partitionedBy;
+        TString projection;
         {
             THashSet<TStringBuf> columns;
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
@@ -243,14 +406,23 @@ public:
                                 return TStatus::Error;
                             }
                             columns.erase(column->Content());
+                            partitionedBy.push_back(TString{column->Content()});
                         }
                         if (columns.empty()) {
                             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Table contains no columns except partitioning columns"));
                             return TStatus::Error;
                         }
+
+                    }
+                    if (name == "projection"sv) {
+                        projection = settingNode->Tail().Content();
                     }
                 }
             }
+        }
+
+        if (!ValidateProjectionTypes(rowType->Cast<TStructExprType>(), projection, partitionedBy, input, ctx)) {
+            return TStatus::Error;
         }
 
         input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{

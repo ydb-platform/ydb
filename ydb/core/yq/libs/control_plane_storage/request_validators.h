@@ -81,6 +81,7 @@ NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobu
 
 NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings = false);
 NYql::TIssues ValidateProjectionColumns(const YandexQuery::Schema& schema, const TVector<TString>& partitionedBy);
+NYql::TIssues ValidateProjection(const YandexQuery::Schema& schema, const TString& projection, const TVector<TString>& partitionedBy);
 
 template<typename T>
 NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<YandexQuery::BindingSetting::BindingCase>& availableBindings)
@@ -137,7 +138,7 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<YandexQuer
                             }
                             projectionStr = projection.ToJsonPretty();
                         }
-                        NYql::NPathGenerator::CreatePathGenerator(projectionStr, partitionedBy); // an exception is thrown if an error occurs
+                        issues.AddIssues(ValidateProjection(subset.schema(), projectionStr, partitionedBy));
                     } catch (...) {
                         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST,CurrentExceptionMessage()));
                     }

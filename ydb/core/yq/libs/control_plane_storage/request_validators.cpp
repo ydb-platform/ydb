@@ -2,6 +2,85 @@
 
 namespace NYq {
 
+namespace {
+
+NYql::TIssues ValidateProjectionType(const NYdb::TType& columnType, const TString& columnName, const std::vector<NYdb::TType>& availableTypes) {
+    return FindIf(availableTypes, [&columnType](const auto& availableType) { return NYdb::TypesEqual(availableType, columnType); }) == availableTypes.end()
+        ? NYql::TIssues{MakeErrorIssue(TIssuesIds::BAD_REQUEST, TStringBuilder{} << "Column \"" << columnName << "\" from projection does not support " << columnType.ToString() << " type")}
+        : NYql::TIssues{};
+}
+
+NYql::TIssues ValidateIntegerProjectionType(const NYdb::TType& columnType, const TString& columnName) {
+    static const std::vector<NYdb::TType> availableTypes {
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::String)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Int64)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Utf8)
+            .Build()
+    };
+    return ValidateProjectionType(columnType, columnName, availableTypes);
+}
+
+NYql::TIssues ValidateEnumProjectionType(const NYdb::TType& columnType, const TString& columnName) {
+    static const std::vector<NYdb::TType> availableTypes {
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::String)
+            .Build()
+    };
+    return ValidateProjectionType(columnType, columnName, availableTypes);
+}
+
+NYql::TIssues ValidateCommonProjectionType(const NYdb::TType& columnType, const TString& columnName) {
+    static const std::vector<NYdb::TType> availableTypes {
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::String)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Int64)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Utf8)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Int32)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Uint32)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Uint64)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Date)
+            .Build()
+    };
+    return ValidateProjectionType(columnType, columnName, availableTypes);
+}
+
+NYql::TIssues ValidateDateProjectionType(const NYdb::TType& columnType, const TString& columnName) {
+    static const std::vector<NYdb::TType> availableTypes {
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::String)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Utf8)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Uint32)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Date)
+            .Build()
+    };
+    return ValidateProjectionType(columnType, columnName, availableTypes);
+}
+
+}
+
 NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& setting, const TSet<YandexQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire) {
     NYql::TIssues issues;
     if (!availableConnections.contains(setting.connection_case())) {
@@ -196,25 +275,42 @@ NYql::TIssues ValidateProjectionColumns(const YandexQuery::Schema& schema, const
     for (const auto& column: schema.column()) {
         types[column.name()] = column.type();
     }
-    static const TSet<Ydb::Type::PrimitiveTypeId> availableProjectionTypes {
-        Ydb::Type::STRING,
-        Ydb::Type::UTF8,
-        Ydb::Type::INT32,
-        Ydb::Type::INT64,
-        Ydb::Type::UINT32,
-        Ydb::Type::UINT64,
-        Ydb::Type::DATE
-    };
     for (const auto& parititonedColumn: partitionedBy) {
         auto it = types.find(parititonedColumn);
         if (it == types.end()) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, TStringBuilder{} << "Column " << parititonedColumn << " from partitioned_by does not exist in the scheme. Please add such a column to your scheme"));
             continue;
         }
-        const auto& type = it->second;
-        const auto typeId = type.type_id();
-        if (!availableProjectionTypes.contains(typeId)) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, TStringBuilder{} << "Column " << parititonedColumn << " from partitioned_by does not support " << Ydb::Type::PrimitiveTypeId_Name(typeId) << " type"));
+        NYdb::TType columnType{it->second};
+        issues.AddIssues(ValidateCommonProjectionType(columnType, parititonedColumn));
+    }
+    return issues;
+}
+
+NYql::TIssues ValidateProjection(const YandexQuery::Schema& schema, const TString& projection, const TVector<TString>& partitionedBy) {
+    auto generator =NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy); // an exception is thrown if an error occurs
+    TMap<TString, NYql::NPathGenerator::IPathGenerator::EType> projectionColumns;
+    for (const auto& column: generator->GetConfig().Rules) {
+        projectionColumns[column.Name] = column.Type;
+    }
+    NYql::TIssues issues;
+    for (const auto& column: schema.column()) {
+        auto it = projectionColumns.find(column.name());
+        if (it != projectionColumns.end()) {
+            switch (it->second) {
+                case NYql::NPathGenerator::IPathGenerator::EType::INTEGER:
+                    issues.AddIssues(ValidateIntegerProjectionType(NYdb::TType{column.type()}, column.name()));
+                    break;
+                case NYql::NPathGenerator::IPathGenerator::EType::ENUM:
+                    issues.AddIssues(ValidateEnumProjectionType(NYdb::TType{column.type()}, column.name()));
+                    break;
+                case NYql::NPathGenerator::IPathGenerator::EType::DATE:
+                    issues.AddIssues(ValidateDateProjectionType(NYdb::TType{column.type()}, column.name()));
+                    break;
+                case NYql::NPathGenerator::IPathGenerator::EType::UNDEFINED:
+                    issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, TStringBuilder{} << "Column \"" << column.name() << "\" from projection has undefined generator type"));
+                    break;
+            }
         }
     }
     return issues;

@@ -853,9 +853,12 @@ void TTable::Clear() {
             tb.DataIntVals.clear();
             tb.StringsOffsets.clear();
             tb.StringsValues.clear();
+            tb.InterfaceValues.clear();
+            tb.InterfaceOffsets.clear();
             tb.JoinIds.clear();
+            tb.RightIds.clear();
         }
-           
+
 
 }
 

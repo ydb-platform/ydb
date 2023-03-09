@@ -1576,7 +1576,7 @@ private:
         YQL_ENSURE(result.second);
     }
 
-    void ExecuteDataComputeTask(NDqProto::TDqTask&& taskDesc) {
+    void ExecuteDataComputeTask(NDqProto::TDqTask&& taskDesc, bool shareMailbox) {
         auto taskId = taskDesc.GetId();
         auto& task = TasksGraph.GetTask(taskId);
 
@@ -1603,7 +1603,8 @@ private:
 
         auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), CreateKqpAsyncIoFactory(Counters->Counters),
             AppData()->FunctionRegistry, settings, limits);
-        auto computeActorId = Register(computeActor);
+
+        auto computeActorId = shareMailbox ? RegisterWithSameMailbox(computeActor) : Register(computeActor);
         task.ComputeActorId = computeActorId;
 
         LOG_D("Executing task: " << taskId << " on compute actor: " << task.ComputeActorId);
@@ -2156,10 +2157,11 @@ private:
 
         // first, start compute tasks
         TVector<ui64> computeTaskIds{Reserve(ComputeTasks.size())};
+        bool shareMailbox = (ComputeTasks.size() <= 1);
         for (auto&& taskDesc : ComputeTasks) {
             computeTaskIds.emplace_back(taskDesc.GetId());
             FillInputSettings(taskDesc);
-            ExecuteDataComputeTask(std::move(taskDesc));
+            ExecuteDataComputeTask(std::move(taskDesc), shareMailbox);
         }
 
         size_t remoteComputeTasksCnt = 0;

@@ -266,6 +266,7 @@ void TPartitionFixture::CreatePartitionActor(ui32 id,
                                      false,
                                      Config,
                                      *TabletCounters,
+                                     false,
                                      newPartition,
                                      std::move(txs));
     ActorId = Ctx->Runtime->Register(actor);

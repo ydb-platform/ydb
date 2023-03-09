@@ -785,6 +785,7 @@ message TFeatureFlags {
     optional bool EnableTopicServiceTx = 86 [default = false];
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
+    optional bool EnableTopicDiskSubDomainQuota = 89 [default = false];
 }
 
 

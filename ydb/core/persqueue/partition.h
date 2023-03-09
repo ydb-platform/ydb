@@ -133,6 +133,7 @@ private:
     void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void HandleDataRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
     void HandleDataRead(const NKikimrClient::TResponse& range, const TActorContext& ctx);
     void HandleGetDiskStatus(const NKikimrClient::TResponse& res, const TActorContext& ctx);
@@ -200,6 +201,7 @@ private:
     bool IsQuotingEnabled() const;
     bool ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, const TActorContext& ctx);
     bool WaitingForPreviousBlobQuota() const;
+    bool WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 withSize = 0) const;
     size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request);
     std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const;
     std::pair<TKey, ui32> Compact(const TKey& key, const ui32 size, bool headCleared);
@@ -327,7 +329,7 @@ public:
 
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
-               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
+               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace,
                bool newPartition = false,
                TVector<TTransaction> distrTxs = {});
 
@@ -339,11 +341,11 @@ public:
 
     ui64 MeteringDataSize(const TActorContext& ctx) const;
 
-    ui64 UsedReserveSize() {
-         return std::min<ui64>(Size(), ReserveSize());
+    ui64 UsedReserveSize(const TActorContext& ctx) const {
+         return std::min<ui64>(MeteringDataSize(ctx), ReserveSize());
     }
 
-    ui64 ReserveSize() {
+    ui64 ReserveSize() const {
         return TopicPartitionReserveSize(Config);
     }
 
@@ -396,6 +398,7 @@ private:
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, HandleOnInit);
             HFuncTraced(TEvPQ::TEvTxCommit, HandleOnInit);
             HFuncTraced(TEvPQ::TEvTxRollback, HandleOnInit);
+            HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
             break;
@@ -447,6 +450,7 @@ private:
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, Handle);
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
+            HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
 
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
@@ -500,6 +504,7 @@ private:
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, Handle);
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
+            HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
 
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
@@ -633,6 +638,7 @@ private:
     TInstant CurrentTimestamp;
 
     bool DiskIsFull;
+    bool SubDomainOutOfSpace;
 
     TSet<THasDataReq> HasDataRequests;
     TSet<THasDataDeadline> HasDataDeadlines;

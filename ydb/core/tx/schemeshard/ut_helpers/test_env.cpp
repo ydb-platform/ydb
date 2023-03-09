@@ -530,6 +530,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
     app.SetEnableAlterDatabaseCreateHiveFirst(opts.EnableAlterDatabaseCreateHiveFirst_);
+    app.SetEnableTopicDiskSubDomainQuota(opts.EnableTopicDiskSubDomainQuota_);
 
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);

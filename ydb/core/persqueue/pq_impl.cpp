@@ -621,7 +621,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         if (Partitions.find(partitionId) == Partitions.end()) {
             Partitions.emplace(partitionId, TPartitionInfo(
                 ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                            IsLocalDC, DCId, IsServerless, Config, *Counters,
+                                            IsLocalDC, DCId, IsServerless, Config, *Counters, SubDomainOutOfSpace,
                                             true)),
                 GetPartitionKeyRange(partition),
                 true,
@@ -787,7 +787,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                        IsLocalDC, DCId, IsServerless, Config, *Counters,
+                                        IsLocalDC, DCId, IsServerless, Config, *Counters, SubDomainOutOfSpace,
                                         false)),
             GetPartitionKeyRange(partition),
             false,
@@ -3085,6 +3085,7 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
                                                        IsServerless,
                                                        config,
                                                        *Counters,
+                                                       SubDomainOutOfSpace,
                                                        true));
 
         Partitions.emplace(std::piecewise_construct,
@@ -3138,6 +3139,16 @@ NTabletPipe::TClientConfig TPersQueue::GetPipeClientConfig()
     return config;
 }
 
+void TPersQueue::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx)
+{
+    const TEvPQ::TEvSubDomainStatus& event = *ev->Get();
+    SubDomainOutOfSpace = event.SubDomainOutOfSpace();
+
+    for (auto& p : Partitions) {
+        ctx.Send(p.second.Actor, new TEvPQ::TEvSubDomainStatus(event.SubDomainOutOfSpace()));
+    }
+}
+
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
     SetActivityType(NKikimrServices::TActivity::PERSQUEUE_ACTOR);
@@ -3174,6 +3185,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvTxCalcPredicateResult, Handle);
         HFuncTraced(TEvPQ::TEvProposePartitionConfigResult, Handle);
         HFuncTraced(TEvPQ::TEvTxCommitDone, Handle);
+        HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         default:
             return false;
     }

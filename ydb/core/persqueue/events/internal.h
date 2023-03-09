@@ -126,6 +126,7 @@ struct TEvPQ {
         EvTxCommitDone,
         EvTxRollback,
         EvPartitionConfigChanged,
+        EvSubDomainStatus,
         EvEnd
     };
 
@@ -771,6 +772,18 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
+    };
+
+    struct TEvSubDomainStatus : public TEventPB<TEvSubDomainStatus, NKikimrPQ::TEvSubDomainStatus, EvSubDomainStatus> {
+        TEvSubDomainStatus() {
+        }
+
+        explicit TEvSubDomainStatus(bool subDomainOutOfSpace)
+        {
+            Record.SetSubDomainOutOfSpace(subDomainOutOfSpace);
+        }
+
+        bool SubDomainOutOfSpace() const { return Record.GetSubDomainOutOfSpace(); }
     };
 };
 

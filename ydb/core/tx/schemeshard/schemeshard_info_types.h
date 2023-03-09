@@ -1341,7 +1341,6 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
         struct TTopics {
             ui64 DataSize = 0;
-            ui64 ReserveSize = 0;
             ui64 UsedReserveSize = 0;
         } Topics;
     };
@@ -1533,6 +1532,12 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return PQReservedStorage;
     }
 
+    ui64 GetPQAccountStorage() const {
+        const auto& topics = DiskSpaceUsage.Topics;
+        return topics.DataSize - std::min(topics.UsedReserveSize, PQReservedStorage) + PQReservedStorage;
+
+    }
+
     void SetPQReservedStorage(ui64 val) {
         PQReservedStorage = val;
     }
@@ -1687,7 +1692,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             return false;
         }
 
-        if (DiskSpaceUsage.Tables.TotalSize > quotas.HardQuota) {
+        ui64 totalUsage = DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
+        if (totalUsage > quotas.HardQuota) {
             if (!DiskQuotaExceeded) {
                 counters->ChangeDiskSpaceQuotaExceeded(+1);
                 DiskQuotaExceeded = true;
@@ -1697,7 +1703,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             return false;
         }
 
-        if (DiskSpaceUsage.Tables.TotalSize < quotas.SoftQuota) {
+        if (totalUsage < quotas.SoftQuota) {
             if (DiskQuotaExceeded) {
                 counters->ChangeDiskSpaceQuotaExceeded(-1);
                 DiskQuotaExceeded = false;
@@ -1858,8 +1864,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {}) {
-        DiskSpaceUsage.Topics.DataSize += (newAggr.DataSize - oldAggr.DataSize);
-        DiskSpaceUsage.Topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
+        auto& topics = DiskSpaceUsage.Topics;
+        topics.DataSize += (newAggr.DataSize - oldAggr.DataSize);
+        topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
+
+        Y_VERIFY_S(topics.DataSize >= 0, "TDiskSpaceUsage.Topic.AccountSize: DataSize: " << topics.DataSize);
+        Y_VERIFY_S(topics.UsedReserveSize >= 0, "TDiskSpaceUsage.Topic.AccountSize: UsedReserveSize: " << topics.UsedReserveSize);
+        Y_VERIFY_S(topics.DataSize >= topics.UsedReserveSize, "TDiskSpaceUsage.Topic.AccountSize: DataSize: " << topics.DataSize << ", UsedReserveSize: " << topics.UsedReserveSize);
     }
 
     const TDiskSpaceUsage& GetDiskSpaceUsage() const {

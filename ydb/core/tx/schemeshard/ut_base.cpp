@@ -10770,4 +10770,118 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         AssertReserve("/MyRoot/Topic2", 3 * 17);
     }
+
+    Y_UNIT_TEST(FindSubDomainPathId) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "SubDomenA"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // create with WriteSpeedInBytesPerSecond
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot/SubDomenA", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 13
+                    WriteSpeedInBytesPerSecond : 19
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto subDomainPathId = DescribePath(runtime, "/MyRoot/SubDomenA").GetPathId();
+        auto topicTabletId = DescribePath(runtime, "/MyRoot/SubDomenA/Topic1", true, true, true)
+                .GetPathDescription().GetPersQueueGroup().GetPartitions()[0].GetTabletId();
+
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvSchemeShard::TEvFindTabletSubDomainPathId(topicTabletId));
+
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(handle, TDuration::Seconds(1));
+        UNIT_ASSERT(event);
+
+        UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, event->Record.GetSubDomainPathId());
+    }
+
+    Y_UNIT_TEST(FindSubDomainPathIdActor) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "SubDomenA"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // create with WriteSpeedInBytesPerSecond
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot/SubDomenA", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 13
+                    WriteSpeedInBytesPerSecond : 19
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto subDomainPathId = DescribePath(runtime, "/MyRoot/SubDomenA").GetPathId();
+        auto topicTabletId = DescribePath(runtime, "/MyRoot/SubDomenA/Topic1", true, true, true)
+                .GetPathDescription().GetPersQueueGroup().GetPartitions()[0].GetTabletId();
+
+        runtime.Register(CreateFindSubDomainPathIdActor(runtime.AllocateEdgeActor(), topicTabletId, TTestTxConfig::SchemeShard, false));
+
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvSubDomainPathIdFound>(handle, TDuration::Seconds(1));
+        UNIT_ASSERT(event);
+
+        UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, event->LocalPathId);
+    }
+
+    Y_UNIT_TEST(FindSubDomainPathIdActorAsync) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "SubDomenA"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // create with WriteSpeedInBytesPerSecond
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot/SubDomenA", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 13
+                    WriteSpeedInBytesPerSecond : 19
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto subDomainPathId = DescribePath(runtime, "/MyRoot/SubDomenA").GetPathId();
+        auto topicTabletId = DescribePath(runtime, "/MyRoot/SubDomenA/Topic1", true, true, true)
+                .GetPathDescription().GetPersQueueGroup().GetPartitions()[0].GetTabletId();
+
+        runtime.Register(CreateFindSubDomainPathIdActor(runtime.AllocateEdgeActor(), topicTabletId, TTestTxConfig::SchemeShard, true, TDuration::Seconds(2)));
+
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvSubDomainPathIdFound>(handle, TDuration::Seconds(2));
+        UNIT_ASSERT(event);
+
+        UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, event->LocalPathId);
+    }
 }

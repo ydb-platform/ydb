@@ -238,6 +238,5 @@ struct TEvPersQueue {
 
     struct TEvPeriodicTopicStats : public TEventPB<TEvPeriodicTopicStats, NKikimrPQ::TEvPeriodicTopicStats, EvPeriodicTopicStats> {
     };
-
 };
 } //NKikimr

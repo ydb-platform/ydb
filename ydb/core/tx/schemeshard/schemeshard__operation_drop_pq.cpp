@@ -190,6 +190,11 @@ public:
         domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount);
         domainInfo->DecPQReservedStorage(reserve.Storage);
         domainInfo->AggrDiskSpaceUsage({}, pqGroup->Stats);
+        if (domainInfo->CheckDiskSpaceQuotas(context.SS)) {
+            auto subDomainId = context.SS->ResolvePathIdForDomain(pathId);
+            context.SS->PersistSubDomainState(db, subDomainId, *domainInfo);
+            context.OnComplete.PublishToSchemeBoard(OperationId, subDomainId);
+        }
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(reserve.Throughput);
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(reserve.Storage);

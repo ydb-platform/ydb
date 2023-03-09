@@ -483,7 +483,7 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
 
 TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                        const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
-                       const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters,
+                       const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace,
                        bool newPartition,
                        TVector<TTransaction> distrTxs)
     : TabletID(tabletId)
@@ -518,6 +518,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , WriteNewMessages(0)
     , WriteNewMessagesInternal(0)
     , DiskIsFull(false)
+    , SubDomainOutOfSpace(subDomainOutOfSpace)
     , HasDataReqNum(0)
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
@@ -551,6 +552,11 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
     out << "Partition " << i32(Partition) << ": " << str;  res.push_back(out.Str()); out.Clear();
     if (DiskIsFull) {
         out << "DISK IS FULL";
+        res.push_back(out.Str());
+        out.Clear();
+    }
+    if (WaitingForSubDomainQuota(ctx)) {
+        out << "SubDomain is out of space";
         res.push_back(out.Str());
         out.Clear();
     }
@@ -1129,6 +1135,7 @@ ui64 TPartition::MeteringDataSize(const TActorContext& ctx) const {
         }
         size -= key.Size;
     }
+    Y_VERIFY(size >= 0, "Metering data size must be positive");
     return size;
 }
 
@@ -1207,6 +1214,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     NKikimrPQ::TPartitionMeta meta;
     meta.SetStartOffset(StartOffset);
     meta.SetEndOffset(Max(NewHead.GetNextOffset(), EndOffset));
+    meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
 
     TString out;
     Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
@@ -1525,7 +1533,7 @@ void TPartition::HandleMetaRead(const NKikimrClient::TResponse& response, const 
         };
     };
 
-    auto loadMeta = [](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
+    auto loadMeta = [&](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
         NKikimrPQ::TPartitionMeta meta;
         bool res = meta.ParseFromString(response.GetValue());
         Y_VERIFY(res);
@@ -1536,6 +1544,9 @@ void TPartition::HandleMetaRead(const NKikimrClient::TResponse& response, const 
            NewHead.Offset = Head.Offset = EndOffset;
            }
            */
+        if (CurrentStateFunc() == &TThis::StateInit) {
+            SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
+        }
     };
     handleReadResult(response.GetReadResult(0), loadMeta);
 
@@ -2031,6 +2042,7 @@ void TPartition::Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContex
 
 
 void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
+    const ui64 maxWriteInflightSize = Config.GetPartitionConfig().GetMaxWriteInflightSize();
 
     while (!ReserveRequests.empty()) {
         const TString& ownerCookie = ReserveRequests.front()->OwnerCookie;
@@ -2045,17 +2057,24 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
             ReserveRequests.pop_front();
             continue;
         }
-        if (ReservedSize + WriteInflightSize + WriteCycleSize + size <= Config.GetPartitionConfig().GetMaxWriteInflightSize() || ReservedSize + WriteInflightSize + WriteCycleSize == 0) {
-            it->second.AddReserveRequest(size, lastRequest);
-            ReservedSize += size;
 
-            ReplyOk(ctx, cookie);
-
-            ReserveRequests.pop_front();
-
-            continue;
+        const ui64 currentSize = ReservedSize + WriteInflightSize + WriteCycleSize;
+        if (currentSize != 0 && currentSize + size > maxWriteInflightSize) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: maxWriteInflightSize riched");            
+            break;
         }
-        break;
+
+        if (WaitingForSubDomainQuota(ctx, currentSize)) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: SubDomainOutOfSpace");            
+            break;
+        }
+
+        it->second.AddReserveRequest(size, lastRequest);
+        ReservedSize += size;
+
+        ReplyOk(ctx, cookie);
+
+        ReserveRequests.pop_front();
     }
     UpdateWriteBufferIsFullState(ctx.Now());
     TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
@@ -2131,7 +2150,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActor
 void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
     NKikimrPQ::TStatusResponse::TPartResult result;
     result.SetPartition(Partition);
-    if (DiskIsFull) {
+    if (DiskIsFull || WaitingForSubDomainQuota(ctx)) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_DISK_IS_FULL);
     } else if (EndOffset - StartOffset >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxCountInPartition()) ||
                Size() >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxSizeInPartition())) {
@@ -2223,7 +2242,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     result.SetReadBytesQuota(maxQuota);
 
     result.SetPartitionSize(MeteringDataSize(ctx));
-    result.SetUsedReserveSize(UsedReserveSize());
+    result.SetUsedReserveSize(UsedReserveSize(ctx));
     result.SetStartOffset(StartOffset);
     result.SetEndOffset(EndOffset);
 
@@ -5612,7 +5631,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, c
         return false;
     }
 
-    if (WaitingForPreviousBlobQuota()) { // Waiting for topic quota.
+    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) { // Waiting for topic quota.
         SetDeadlinesForWrites(ctx);
 
         if (StartTopicQuotaWaitTimeForCurrentBlob == TInstant::Zero() && !Requests.empty()) {
@@ -5712,7 +5731,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     bool haveData = false;
     bool haveCheckDisk = false;
 
-    if (!Requests.empty() && DiskIsFull) {
+    if (!Requests.empty() && (DiskIsFull || WaitingForSubDomainQuota(ctx))) {
         CancelAllWritesOnIdle(ctx);
         AddCheckDiskRequest(request.Get(), Config.GetPartitionConfig().GetNumChannels());
         haveCheckDisk = true;
@@ -5727,7 +5746,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
             bool res = ProcessWrites(request.Get(), now, ctx);
             Y_VERIFY(!res);
         }
-        Y_VERIFY(Requests.empty() || !WriteQuota->CanExaust(now) || WaitingForPreviousBlobQuota()); //in this case all writes must be processed or no quota left
+        Y_VERIFY(Requests.empty() || !WriteQuota->CanExaust(now) || WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
         BecomeIdle(ctx);
         return;
@@ -5875,6 +5894,10 @@ bool TPartition::WaitingForPreviousBlobQuota() const {
     return TopicQuotaRequestCookie != 0;
 }
 
+bool TPartition::WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 withSize) const {
+    return SubDomainOutOfSpace && AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() && MeteringDataSize(ctx) + withSize > ReserveSize();
+}
+
 void TPartition::WriteBlobWithQuota(THolder<TEvKeyValue::TEvRequest>&& request) {
     // Request quota and write blob.
     // Mirrored topics are not quoted in local dc.
@@ -5911,5 +5934,30 @@ bool TPartition::IsQuotingEnabled() const
     return NPQ::IsQuotingEnabled(AppData()->PQConfig,
                                  IsLocalDC);
 }
+
+void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx)
+{
+    const TEvPQ::TEvSubDomainStatus& event = *ev->Get();
+
+    bool statusChanged = SubDomainOutOfSpace != event.SubDomainOutOfSpace();
+    SubDomainOutOfSpace = event.SubDomainOutOfSpace();
+
+    if (statusChanged) {
+        LOG_INFO_S(
+            ctx, NKikimrServices::PERSQUEUE,
+            "SubDomainOutOfSpace was changed." <<
+            " Topic: \"" << TopicConverter->GetClientsideName() << "\"." <<
+            " Partition: " << Partition << "." <<
+            " SubDomainOutOfSpace: " << SubDomainOutOfSpace 
+        );
+
+        if (!SubDomainOutOfSpace) {
+            if (CurrentStateFunc() == &TThis::StateIdle) {
+                HandleWrites(ctx);
+            }
+        }
+    }
+}
+
 
 } // namespace NKikimr::NPQ

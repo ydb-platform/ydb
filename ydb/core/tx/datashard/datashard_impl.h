@@ -287,7 +287,6 @@ class TDataShard
     friend class TTxStartMvccStateChange;
     friend class TTxExecuteMvccStateChange;
 
-    class TFindSubDomainPathIdActor;
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
 
@@ -323,7 +322,7 @@ class TDataShard
             EvPersistScanStateAck,
             EvConditionalEraseRowsRegistered,
             EvAsyncJobComplete,
-            EvSubDomainPathIdFound,
+            EvSubDomainPathIdFound, // unused
             EvRequestChangeRecords,
             EvRemoveChangeRecords,
             EvReplicationSourceOffsets,
@@ -438,16 +437,6 @@ class TDataShard
             }
 
             TAutoPtr<IDestructable> Prod;
-        };
-
-        struct TEvSubDomainPathIdFound : public TEventLocal<TEvSubDomainPathIdFound, EvSubDomainPathIdFound> {
-            TEvSubDomainPathIdFound(ui64 schemeShardId, ui64 localPathId)
-                : SchemeShardId(schemeShardId)
-                , LocalPathId(localPathId)
-            { }
-
-            const ui64 SchemeShardId;
-            const ui64 LocalPathId;
         };
 
         struct TEvRequestChangeRecords : public TEventLocal<TEvRequestChangeRecords, EvRequestChangeRecords> {};
@@ -1220,7 +1209,7 @@ class TDataShard
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPrivate::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     // change sending
@@ -2766,7 +2755,7 @@ protected:
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-            HFunc(TEvPrivate::TEvSubDomainPathIdFound, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);

@@ -34,7 +34,12 @@ bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQ
     newStats.DataSize = rec.GetDataSize();
     newStats.UsedReserveSize = rec.GetUsedReserveSize();
 
-    auto& topic = Self->Topics[pathId];
+    const auto it = Self->Topics.find(pathId);
+    if (it == Self->Topics.end()) {
+        return true;
+    }
+
+    auto& topic = it->second;
     auto& oldStats = topic->Stats;
 
     if (newStats.SeqNo <= oldStats.SeqNo) {

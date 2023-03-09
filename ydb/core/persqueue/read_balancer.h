@@ -11,6 +11,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -192,6 +193,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     }
 
     void Die(const TActorContext& ctx) override {
+        StopFindSubDomainPathId();
+        StopWatchingSubDomainPathId();
+        
         for (auto& pipe : TabletPipes) {
             NTabletPipe::CloseClient(ctx, pipe.second);
         }
@@ -221,6 +225,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     }
 
     void InitDone(const TActorContext &ctx) {
+        StartFindSubDomainPathId(false);
 
         StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
 
@@ -272,6 +277,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&);
 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
+
     TStringBuilder GetPrefix() const;
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
@@ -302,6 +310,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         return TopicPartitionReserveSize(TabletConfig);
     }
 
+    void StopFindSubDomainPathId();
+    void StartFindSubDomainPathId(bool delayFirstRequest = true);
+
+    void StopWatchingSubDomainPathId();
+    void StartWatchingSubDomainPathId();
 
     bool Inited;
     ui64 PathId;
@@ -447,6 +460,14 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
+
+    TActorId FindSubDomainPathIdActor;
+
+    std::optional<TPathId> SubDomainPathId;
+    std::optional<TPathId> WatchingSubDomainPathId;
+
+    bool SubDomainOutOfSpace = false;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_READ_BALANCER_ACTOR;
@@ -499,6 +520,8 @@ public:
             HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             HFunc(TEvPersQueue::TEvCheckACL, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             default:
                 StateInitImpl(ev, ctx);
                 break;
@@ -526,6 +549,8 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvPersQueue::TEvStatusResponse, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
 
             default:
                 HandleDefaultEvents(ev, ctx);

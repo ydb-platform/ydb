@@ -1,4 +1,6 @@
 #include "read_balancer.h"
+
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -653,6 +655,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
         NTabletPipe::SendData(ctx, pipeClient, new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(tabletId, PathId));
     } else {
         NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus());
+        NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
     }
 }
 
@@ -728,6 +731,8 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     rec.SetRound(++StatsReportRound);
     rec.SetDataSize(TotalDataSize);
     rec.SetUsedReserveSize(TotalUsedReserveSize);
+
+    Y_VERIFY(TotalDataSize >= TotalUsedReserveSize);
 
     LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, 
             TStringBuilder() << "Send TEvPeriodicTopicStats PathId: " << PathId
@@ -1228,5 +1233,87 @@ void TPersQueueReadBalancer::TClientGroupInfo::ReleasePartition(const TActorId p
 }
 
 
+static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(1);
+
+
+void TPersQueueReadBalancer::StopFindSubDomainPathId() {
+    if (FindSubDomainPathIdActor) {
+        Send(FindSubDomainPathIdActor, new TEvents::TEvPoison);
+        FindSubDomainPathIdActor = { };
+    }
 }
+
+void TPersQueueReadBalancer::StartFindSubDomainPathId(bool delayFirstRequest) {
+    if (!FindSubDomainPathIdActor &&
+        SchemeShardId != 0 &&
+        (!SubDomainPathId || SubDomainPathId->OwnerId != SchemeShardId))
+    {
+        FindSubDomainPathIdActor = Register(CreateFindSubDomainPathIdActor(SelfId(), TabletID(), SchemeShardId, delayFirstRequest, MaxFindSubDomainPathIdDelay));
+    }
 }
+
+void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
+    const auto* msg = ev->Get();
+
+    if (FindSubDomainPathIdActor == ev->Sender) {
+        FindSubDomainPathIdActor = { };
+    }
+
+    if (SchemeShardId == msg->SchemeShardId &&
+       !SubDomainPathId || SubDomainPathId->OwnerId != msg->SchemeShardId)
+    {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            "Discovered subdomain " << msg->LocalPathId << " at RB " << TabletID());
+
+        SubDomainPathId.emplace(msg->SchemeShardId, msg->LocalPathId);
+        StartWatchingSubDomainPathId();
+    }
+}
+
+void TPersQueueReadBalancer::StopWatchingSubDomainPathId() {
+    if (WatchingSubDomainPathId) {
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove());
+        WatchingSubDomainPathId.reset();
+    }
+}
+
+void TPersQueueReadBalancer::StartWatchingSubDomainPathId() {
+    if (!SubDomainPathId || SubDomainPathId->OwnerId != SchemeShardId) {
+        return;
+    }
+
+    if (WatchingSubDomainPathId && *WatchingSubDomainPathId != *SubDomainPathId) {
+        StopWatchingSubDomainPathId();
+    }
+
+    if (!WatchingSubDomainPathId) {
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(*SubDomainPathId));
+        WatchingSubDomainPathId = *SubDomainPathId;
+    }
+}
+
+void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
+    const auto* msg = ev->Get();
+    if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
+        const bool outOfSpace = msg->Result->GetPathDescription()
+            .GetDomainDescription()
+            .GetDomainState()
+            .GetDiskQuotaExceeded();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            "Discovered subdomain " << msg->PathId << " state, outOfSpace = " << outOfSpace
+            << " at RB " << TabletID());
+
+        SubDomainOutOfSpace = outOfSpace;
+
+        for (auto& p : PartitionsInfo) {
+            const ui64& tabletId = p.second.TabletId;
+            TActorId pipeClient = GetPipeClient(tabletId, ctx);
+            NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(outOfSpace));
+        }
+    }
+}
+
+
+} // NPQ
+} // NKikimr

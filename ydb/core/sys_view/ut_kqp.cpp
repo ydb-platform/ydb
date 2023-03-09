@@ -93,7 +93,7 @@ void CreateTenantsAndTables(TTestEnv& env, bool extSchemeShard = true, ui64 part
     CreateTables(env, partitionCount);
 }
 
-void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1) {
+void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = false) {
     env.GetClient().CreateTable("/Root", Sprintf(R"(
         Name: "Table0"
         Columns { Name: "Key", Type: "Uint64" }
@@ -101,6 +101,17 @@ void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1) {
         KeyColumnNames: ["Key"]
         UniformPartitionsCount: %lu
     )", partitionCount));
+
+    if (fillTable) {
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
+            REPLACE INTO `Root/Table0` (Key, Value) VALUES
+                (0u, "X"),
+                (1u, "Y"),
+                (2u, "Z");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+    }
 }
 
 class TYsonFieldChecker {
@@ -1817,20 +1828,24 @@ Y_UNIT_TEST_SUITE(SystemView) {
         const TString& type)
     {
         TTestEnv env(1, 0);
-        CreateRootTable(env);
+        CreateRootTable(env, 1, /* fillTable */ true);
 
         TString query("SELECT * FROM `Root/Table0`");
         execQuery(env, query);
 
         TTableClient client(env.GetDriver());
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT QueryText, Type
-            FROM `Root/.sys/top_queries_by_read_bytes_one_minute`;
+            SELECT QueryText, Type, ReadRows
+            FROM `Root/.sys/top_queries_by_read_bytes_one_minute`
+            ORDER BY ReadRows DESC
+            LIMIT 1
+            ;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
         NKqp::CompareYson(
-            Sprintf("[[[\"%s\"];[\"%s\"]]]", query.c_str(), type.c_str()),
+            Sprintf("[[[\"%s\"];[\"%s\"];[3u]]]", query.c_str(), type.c_str()),
             NKqp::StreamResultToYson(it));
     }
 

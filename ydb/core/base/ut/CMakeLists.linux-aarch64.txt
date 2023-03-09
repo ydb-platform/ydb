@@ -32,6 +32,7 @@ target_link_options(ydb-core-base-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-base-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/ut/path_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/localdb_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/logoblob_ut.cpp

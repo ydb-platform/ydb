@@ -6,9 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(aws-c-cal)
-add_subdirectory(aws-c-common)
-add_subdirectory(aws-c-event-stream)
-add_subdirectory(aws-c-io)
-add_subdirectory(aws-checksums)
-add_subdirectory(s2n)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+endif()

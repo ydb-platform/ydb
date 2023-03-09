@@ -51,4 +51,6 @@ elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT
   include(CMakeLists.linux-aarch64.txt)
 elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
   include(CMakeLists.darwin-x86_64.txt)
+elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
+  include(CMakeLists.windows-x86_64.txt)
 endif()

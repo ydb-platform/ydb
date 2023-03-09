@@ -6,14 +6,12 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(abseil-cpp)
-add_subdirectory(abseil-cpp-tstring)
-add_subdirectory(aws)
-add_subdirectory(boost)
-add_subdirectory(cityhash-1.0.2)
-add_subdirectory(dragonbox)
-add_subdirectory(fast_float)
-add_subdirectory(googletest)
-add_subdirectory(nlohmann_json)
-add_subdirectory(thrift)
-add_subdirectory(uriparser)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
+  include(CMakeLists.windows-x86_64.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+endif()

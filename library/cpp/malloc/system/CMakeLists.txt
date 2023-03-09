@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-if (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+if (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
+  include(CMakeLists.windows-x86_64.txt)
+elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
   include(CMakeLists.darwin-x86_64.txt)
 endif()

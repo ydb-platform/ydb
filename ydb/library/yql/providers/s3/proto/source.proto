@@ -17,5 +17,6 @@ message TSource {
     map<string, string> Settings = 6;
     bool Arrow = 7;
     bool ThreadPool = 8;
-    uint64 ReadAheadRowGroupCount = 9;
+    uint64 ParallelRowGroupCount = 9;
+    bool RowGroupReordering = 10;
 }

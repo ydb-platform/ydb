@@ -18,7 +18,8 @@ struct TS3Settings {
     NCommon::TConfSetting<ui64, false> InFlightMemoryLimit; // Maximum memory used by one sink.
     NCommon::TConfSetting<ui64, false> JsonListSizeLimit; // Limit of elements count in json list written to S3 file. Default: 10'000. Max: 100'000.
     NCommon::TConfSetting<bool, false> ArrowThreadPool;
-    NCommon::TConfSetting<ui64, false> ArrowReadAheadRowGroupCount;
+    NCommon::TConfSetting<ui64, false> ArrowParallelRowGroupCount; // Number of parquet row groups to read in parallel, min == 1
+    NCommon::TConfSetting<bool, false> ArrowRowGroupReordering;    // Allow to push rows from file in any order, default false, but usually it is OK 
 };
 
 struct TS3ClusterSettings {

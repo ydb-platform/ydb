@@ -72,6 +72,7 @@
 #include <util/stream/format.h>
 #include <util/system/fstat.h>
 
+#include <algorithm>
 #include <queue>
 
 #ifdef THROW
@@ -1014,7 +1015,8 @@ struct TReadSpec {
 
     bool Arrow = false;
     bool ThreadPool = false;
-    ui64 ReadAheadRowGroupCount = 0;
+    ui64 ParallelRowGroupCount = 1;
+    bool RowGroupReordering = true;
     std::unordered_map<TStringBuf, TType*, THash<TStringBuf>> RowSpec;
     NDB::ColumnsWithTypeAndName CHColumns;
     std::shared_ptr<arrow::Schema> ArrowSchema;
@@ -1433,6 +1435,7 @@ public:
     struct TReadCache {
         ui64 Cookie = 0;
         TString Data;
+        std::optional<ui64> RowGroupIndex;
         bool Ready = false;
     };
 
@@ -1446,8 +1449,11 @@ public:
 
     ui64 RangeCookie = 0;
     std::map<TEvPrivate::TReadRange, TReadCache, TReadRangeCompare> RangeCache;
-    ui64 CacheInflightSize = 0;
-    ui64 ReadInflightSize = 0;
+    std::map<ui64, ui64> ReadInflightSize;
+    std::optional<ui64> CurrentRowGroupIndex;
+    std::map<ui64, ui64> RowGroupRangeInflight;
+    std::priority_queue<ui64, std::vector<ui64>, std::greater<ui64>> ReadyRowGroups;
+    std::map<ui64, ui64> RowGroupReaderIndex;
 
     static void OnResult(TActorSystem* actorSystem, TActorId selfId, TEvPrivate::TReadRange range, ui64 cookie, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
@@ -1462,6 +1468,18 @@ public:
         }
     }
 
+    ui64 DecreaseRowGroupInflight(ui64 rowGroupIndex) {
+        auto inflight = RowGroupRangeInflight[rowGroupIndex];
+        if (inflight > 1) {
+            RowGroupRangeInflight[rowGroupIndex] = --inflight;
+        } else {
+            inflight = 0;
+            RowGroupRangeInflight.erase(rowGroupIndex);
+        }
+        return inflight;
+    }
+
+
     TReadCache& GetOrCreate(TEvPrivate::TReadRange range) {
         auto it = RangeCache.find(range);
         if (it != RangeCache.end()) {
@@ -1475,7 +1493,18 @@ public:
                             RetryStuff->RetryPolicy);
         LOG_CORO_D("Download STARTED [" << range.Offset << "-" << range.Length << "], cookie: " << RangeCookie);
         auto& result = RangeCache[range];
-        result.Cookie = RangeCookie; // may overwrite old range in case of desync?
+        if (result.Cookie) {
+            // may overwrite old range in case of desync?
+            if (result.RowGroupIndex) {
+                LOG_CORO_W("RangeInfo DISCARDED [" << range.Offset << "-" << range.Length << "], cookie: " << RangeCookie << ", rowGroup " << *result.RowGroupIndex);
+                DecreaseRowGroupInflight(*result.RowGroupIndex);
+            }
+        }
+        result.RowGroupIndex = CurrentRowGroupIndex;
+        result.Cookie = RangeCookie;
+        if (CurrentRowGroupIndex) {
+            RowGroupRangeInflight[*CurrentRowGroupIndex]++;
+        }
         return result;
     }
 
@@ -1486,8 +1515,14 @@ public:
             HandleEvent(*ev);
             StartCycleCount = GetCycleCountFast();
         }
-        for (auto& range : readRanges) {
-            GetOrCreate(TEvPrivate::TReadRange{ .Offset = range.offset, .Length = range.length });
+        if (readRanges.empty()) { // select count(*) case
+            if (CurrentRowGroupIndex) {
+                ReadyRowGroups.push(*CurrentRowGroupIndex);
+            }
+        } else {
+            for (auto& range : readRanges) {
+                GetOrCreate(TEvPrivate::TReadRange{ .Offset = range.offset, .Length = range.length });
+            }
         }
         return {};
     }
@@ -1514,10 +1549,14 @@ public:
         } 
         
         it->second.Data = event.Get()->Result.Extract();
-        it->second.Ready = true;
         ui64 size = it->second.Data.size();
-        CacheInflightSize += size;
-        if (RawInflightSize) {
+        it->second.Ready = true;
+        if (it->second.RowGroupIndex) {
+            if (!DecreaseRowGroupInflight(*it->second.RowGroupIndex)) {
+                LOG_CORO_D("RowGroup #" << *it->second.RowGroupIndex << " is READY");
+                ReadyRowGroups.push(*it->second.RowGroupIndex);
+            }
+            ReadInflightSize[*it->second.RowGroupIndex] += size;
             RawInflightSize->Add(size);
         }
     }
@@ -1543,10 +1582,8 @@ public:
 
         TString data = cache.Data;
         RangeCache.erase(range);
-        auto size = data.size();
-        CacheInflightSize -= size;
-        ReadInflightSize += size;
-        LOG_CORO_D("ReadAt FINISHED [" << position << "-" << nbytes << "] #" << size);
+
+        LOG_CORO_D("ReadAt FINISHED [" << position << "-" << nbytes << "] #" << data.size());
 
         return arrow::Buffer::FromString(data);
     }
@@ -1555,7 +1592,7 @@ public:
 
         LOG_CORO_D("RunCoroBlockArrowParserOverHttp");
 
-        ui64 readerCount = ReadSpec->ReadAheadRowGroupCount + 1;
+        ui64 readerCount = std::max(1ul, ReadSpec->ParallelRowGroupCount);
 
         std::shared_ptr<parquet::FileMetaData> metadata;
         std::vector<std::unique_ptr<parquet::arrow::FileReader>> readers;
@@ -1583,7 +1620,10 @@ public:
 
             BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters);
 
-            if (readerCount > numGroups) {
+            if (columnIndices.empty()) {
+                // select count(*) case - single reader is enough
+                readerCount = 1;
+            } else if (readerCount > numGroups) {
                 readerCount = numGroups;
             }
 
@@ -1599,15 +1639,44 @@ public:
             }
 
             for (ui64 i = 0; i < readerCount; i++) {
-                THROW_ARROW_NOT_OK(readers[i]->WillNeedRowGroups({ static_cast<int>(i) }, columnIndices));
+                if (!columnIndices.empty()) {
+                    CurrentRowGroupIndex = i;
+                    THROW_ARROW_NOT_OK(readers[i]->WillNeedRowGroups({ static_cast<int>(i) }, columnIndices));
+                }
+                RowGroupReaderIndex[i] = i;
             }
 
-            ui64 currentReader = 0;
-            for (ui64 group = 0; group < numGroups; group++) {
+            ui64 nextGroup = readerCount;
+            ui64 readyGroupCount = 0;
+
+            while (readyGroupCount < numGroups) {
+
+                ui64 readyGroupIndex;
+                if (!columnIndices.empty()) {
+                    CpuTime += GetCpuTimeDelta();
+
+                    // if reordering is not allowed wait for row groups sequentially
+                    while (ReadyRowGroups.empty() 
+                            || (!ReadSpec->RowGroupReordering && ReadyRowGroups.top() > readyGroupCount) ) {
+                        ProcessOneEvent();
+                    }
+
+                    StartCycleCount = GetCycleCountFast();
+
+                    readyGroupIndex = ReadyRowGroups.top();
+                    ReadyRowGroups.pop();
+                } else {
+                    // select count(*) case - no columns, no download, just fetch meta info instantly
+                    readyGroupIndex = readyGroupCount;
+                }
+                auto readyReaderIndex = RowGroupReaderIndex[readyGroupIndex];
+                RowGroupReaderIndex.erase(readyGroupIndex);
 
                 std::shared_ptr<arrow::Table> table;
 
-                THROW_ARROW_NOT_OK(readers[currentReader]->DecodeRowGroups({ static_cast<int>(group) }, columnIndices, &table));
+                LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
+                THROW_ARROW_NOT_OK(readers[readyReaderIndex]->DecodeRowGroups({ static_cast<int>(readyGroupIndex) }, columnIndices, &table));
+                readyGroupCount++;
 
                 auto reader = std::make_unique<arrow::TableBatchReader>(*table);
                 std::shared_ptr<arrow::RecordBatch> batch;
@@ -1621,14 +1690,16 @@ public:
                     throw yexception() << status.ToString();
                 }
                 if (RawInflightSize) {
-                    RawInflightSize->Sub(ReadInflightSize);
-                    ReadInflightSize = 0;
+                    RawInflightSize->Sub(ReadInflightSize[readyGroupIndex]);
                 }
-                if (group + readerCount < numGroups) {
-                    THROW_ARROW_NOT_OK(readers[currentReader]->WillNeedRowGroups({ static_cast<int>(group + readerCount) }, columnIndices));
-                }
-                if (++currentReader >= readerCount) {
-                    currentReader = 0;
+                ReadInflightSize.erase(readyGroupIndex);
+                if (nextGroup < numGroups) {
+                    if (!columnIndices.empty()) {
+                        CurrentRowGroupIndex = nextGroup;
+                        THROW_ARROW_NOT_OK(readers[readyReaderIndex]->WillNeedRowGroups({ static_cast<int>(nextGroup) }, columnIndices));
+                    }
+                    RowGroupReaderIndex[nextGroup] = readyReaderIndex;
+                    nextGroup++;
                 }
             }
         }
@@ -1853,13 +1924,14 @@ public:
         if (DeferredDataParts.size() && DeferredQueueSize) {
             DeferredQueueSize->Sub(DeferredDataParts.size());
         }
-        if (CacheInflightSize || ReadInflightSize) {
-            if (RawInflightSize) {
-                RawInflightSize->Sub(ReadInflightSize + ReadInflightSize);
-            }
-            CacheInflightSize = 0;
-            ReadInflightSize = 0;
+        auto rawInflightSize = 0;
+        for (auto it : ReadInflightSize) {
+            rawInflightSize += it.second;
         }
+        if (rawInflightSize && RawInflightSize) {
+            RawInflightSize->Sub(rawInflightSize);
+        }
+        ReadInflightSize.clear();
     }
 
 private:
@@ -2753,7 +2825,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         const auto readSpec = std::make_shared<TReadSpec>();
         readSpec->Arrow = params.GetArrow();
         readSpec->ThreadPool = params.GetThreadPool();
-        readSpec->ReadAheadRowGroupCount = params.GetReadAheadRowGroupCount();
+        readSpec->ParallelRowGroupCount = std::max(1ul, params.GetParallelRowGroupCount());
+        readSpec->RowGroupReordering = params.GetRowGroupReordering();
         if (readSpec->Arrow) {
             arrow::SchemaBuilder builder;
             const TStringBuf blockLengthColumn("_yql_block_length"sv);

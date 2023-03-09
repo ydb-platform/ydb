@@ -1412,6 +1412,11 @@ namespace NSQLTranslationV1 {
         std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
     TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
         std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context);
+    TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
+        std::vector<std::pair<TString, TString>>&& targets,
+        std::map<TString, TNodePtr>&& settings,
+        const TObjectOperatorContext& context);
+    TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
     TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options,
         TScopedStatePtr scoped);
     TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);

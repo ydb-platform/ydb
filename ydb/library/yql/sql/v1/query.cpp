@@ -1532,6 +1532,127 @@ TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAt
     return new TDropRoles(pos, service, cluster, toDrop, isUser, force, scoped);
 }
 
+class TAsyncReplication
+    : public TAstListNode
+    , protected TObjectOperatorContext
+{
+protected:
+    virtual INode::TPtr FillOptions(INode::TPtr options) const = 0;
+
+public:
+    explicit TAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context)
+        : TAstListNode(pos)
+        , TObjectOperatorContext(context)
+        , Id(id)
+        , Mode(mode)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Scoped->UseCluster(ServiceId, Cluster);
+
+        auto keys = Y("Key", Q(Y(Q("id"), Y("String", BuildQuotedAtom(Pos, Id)))));
+        auto options = FillOptions(Y(Q(Y(Q("mode"), Q(Mode)))));
+
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, ServiceId), Scoped->WrapCluster(Cluster, ctx))),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(options))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+
+private:
+    const TString Id;
+    const TString Mode;
+
+}; // TAsyncReplication
+
+class TCreateAsyncReplication final: public TAsyncReplication {
+public:
+    explicit TCreateAsyncReplication(TPosition pos, const TString& id,
+            std::vector<std::pair<TString, TString>>&& targets,
+            std::map<TString, TNodePtr>&& settings,
+            const TObjectOperatorContext& context)
+        : TAsyncReplication(pos, id, "createAsyncReplication", context)
+        , Targets(std::move(targets))
+        , Settings(std::move(settings))
+    {
+    }
+
+protected:
+    INode::TPtr FillOptions(INode::TPtr options) const override {
+        if (!Targets.empty()) {
+            auto targets = Y();
+            for (auto&& [remote, local] : Targets) {
+                auto target = Y();
+                target = L(target, Q(Y(Q("remote"), Q(remote))));
+                target = L(target, Q(Y(Q("local"), Q(local))));
+                targets = L(targets, Q(target));
+            }
+            options = L(options, Q(Y(Q("targets"), Q(targets))));
+        }
+
+        if (!Settings.empty()) {
+            auto settings = Y();
+            for (auto&& [k, v] : Settings) {
+                if (v) {
+                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos, k), v)));
+                } else {
+                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos, k))));
+                }
+            }
+            options = L(options, Q(Y(Q("settings"), Q(settings))));
+        }
+
+        return options;
+    }
+
+private:
+    std::vector<std::pair<TString, TString>> Targets; // (remote, local)
+    std::map<TString, TNodePtr> Settings;
+
+}; // TCreateAsyncReplication
+
+TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
+        std::vector<std::pair<TString, TString>>&& targets,
+        std::map<TString, TNodePtr>&& settings,
+        const TObjectOperatorContext& context)
+{
+    return new TCreateAsyncReplication(pos, id, std::move(targets), std::move(settings), context);
+}
+
+class TDropAsyncReplication final: public TAsyncReplication {
+public:
+    explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
+        : TAsyncReplication(pos, id, "dropAsyncReplication", context)
+        , Cascade(cascade)
+    {
+    }
+
+protected:
+    INode::TPtr FillOptions(INode::TPtr options) const override {
+        if (Cascade) {
+            options = L(options, Q(Y(Q("cascade"))));
+        }
+
+        return options;
+    }
+
+private:
+    const bool Cascade;
+
+}; // TDropAsyncReplication
+
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
+    return new TDropAsyncReplication(pos, id, cascade, context);
+}
+
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "append"},

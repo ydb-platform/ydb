@@ -8685,6 +8685,34 @@ void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
     blocks.emplace_back(node);
 }
 
+static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out, const TRule_replication_settings_entry& in, TTranslation& ctx) {
+    auto key = Id(in.GetRule_an_id1(), ctx);
+    auto value = BuildLiteralSmartString(ctx.Context(), ctx.Token(in.GetToken3()));
+    // TODO(ilnaz): validate
+    out.emplace(std::move(key), value);
+    return true;
+}
+
+static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out, const TRule_replication_settings& in, TTranslation& ctx) {
+    if (!AsyncReplicationSettingsEntry(out, in.GetRule_replication_settings_entry1(), ctx)) {
+        return false;
+    }
+
+    for (auto& block : in.GetBlock2()) {
+        if (!AsyncReplicationSettingsEntry(out, block.GetRule_replication_settings_entry2(), ctx)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out, const TRule_replication_target& in, TTranslation& ctx) {
+    const TString remote = Id(in.GetRule_object_ref1().GetRule_id_or_at2(), ctx).second;
+    const TString local = Id(in.GetRule_object_ref3().GetRule_id_or_at2(), ctx).second;
+    out.emplace_back(remote, local);
+    return true;
+}
 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core) {
     TString internalStatementName;
@@ -9152,8 +9180,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, stmt);
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore25:
-        {
+        case TRule_sql_stmt_core::kAltSqlStmtCore25: {
             // drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;
             Ctx.BodyPart();
             auto& node = core.GetAlt_sql_stmt_core25().GetRule_drop_role_stmt1();
@@ -9188,8 +9215,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropRoles(pos, service, cluster, roles, isUser, force, Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore26:
-        {
+        case TRule_sql_stmt_core::kAltSqlStmtCore26: {
             // create_object_stmt: CREATE OBJECT name (TYPE type [WITH k=v,...]);
             auto& node = core.GetAlt_sql_stmt_core26().GetRule_create_object_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
@@ -9212,8 +9238,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore27:
-        {
+        case TRule_sql_stmt_core::kAltSqlStmtCore27: {
             // alter_object_stmt: ALTER OBJECT name (TYPE type [SET k=v,...]);
             auto& node = core.GetAlt_sql_stmt_core27().GetRule_alter_object_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
@@ -9234,8 +9259,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore28:
-        {
+        case TRule_sql_stmt_core::kAltSqlStmtCore28: {
             // drop_object_stmt: DROP OBJECT name (TYPE type [WITH k=v,...]);
             auto& node = core.GetAlt_sql_stmt_core28().GetRule_drop_object_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
@@ -9258,8 +9282,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore29:
-        {
+        case TRule_sql_stmt_core::kAltSqlStmtCore29: {
             // create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE name WITH (k=v,...);
             auto& node = core.GetAlt_sql_stmt_core29().GetRule_create_external_data_source_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
@@ -9279,8 +9302,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "EXTERNAL_DATA_SOURCE", std::move(kv), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore30:
-        {
+        case TRule_sql_stmt_core::kAltSqlStmtCore30: {
             // drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE name;
             auto& node = core.GetAlt_sql_stmt_core30().GetRule_drop_external_data_source_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
@@ -9293,6 +9315,51 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "EXTERNAL_DATA_SOURCE", {}, context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore31: {
+            // create_replication_stmt: CREATE ASYNC REPLICATION
+            auto& node = core.GetAlt_sql_stmt_core31().GetRule_create_replication_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref4().HasBlock1()) {
+                const auto& cluster = node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1();
+                if (!ClusterExpr(cluster, false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            std::vector<std::pair<TString, TString>> targets;
+            if (!AsyncReplicationTarget(targets, node.GetRule_replication_target6(), *this)) {
+                return false;
+            }
+            for (auto& block : node.GetBlock7()) {
+                if (!AsyncReplicationTarget(targets, block.GetRule_replication_target2(), *this)) {
+                    return false;
+                }
+            }
+
+            std::map<TString, TNodePtr> settings;
+            if (!AsyncReplicationSettings(settings, node.GetRule_replication_settings10(), *this)) {
+                return false;
+            }
+
+            const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildCreateAsyncReplication(Ctx.Pos(), id, std::move(targets), std::move(settings), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore32: {
+            // drop_replication_stmt: DROP ASYNC REPLICATION
+            auto& node = core.GetAlt_sql_stmt_core32().GetRule_drop_replication_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref4().HasBlock1()) {
+                const auto& cluster = node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1();
+                if (!ClusterExpr(cluster, false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildDropAsyncReplication(Ctx.Pos(), id, node.HasBlock5(), context));
             break;
         }
         default:

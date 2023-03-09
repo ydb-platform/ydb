@@ -49,6 +49,8 @@ sql_stmt_core:
   | drop_object_stmt
   | create_external_data_source_stmt
   | drop_external_data_source_stmt
+  | create_replication_stmt
+  | drop_replication_stmt
 ;
 
 expr:
@@ -608,6 +610,17 @@ drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMM
 role_name: an_id_or_type | bind_parameter;
 create_user_option: ENCRYPTED? PASSWORD expr;
 
+create_replication_stmt: CREATE ASYNC REPLICATION object_ref
+    FOR replication_target (COMMA replication_target)*
+    WITH LPAREN replication_settings RPAREN
+;
+
+replication_target: object_ref AS object_ref;
+replication_settings: replication_settings_entry (COMMA replication_settings_entry)*;
+replication_settings_entry: an_id EQUALS STRING_VALUE;
+
+drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
+
 action_or_subquery_args: opt_bind_parameter (COMMA opt_bind_parameter)*;
 
 define_action_or_subquery_stmt: DEFINE (ACTION|SUBQUERY) bind_parameter LPAREN action_or_subquery_args? RPAREN AS define_action_or_subquery_body END DEFINE;
@@ -896,6 +909,7 @@ keyword_hint_uncompat:
 
 keyword_as_compat:
     DATA
+  | REPLICATION
   | SOURCE
   | TYPE
 ;
@@ -1023,6 +1037,7 @@ keyword_compat: (
   | RELEASE
   | RENAME
   | REPLACE
+  | REPLICATION
   | RESET
   | RESPECT
   | RESTRICT
@@ -1332,6 +1347,7 @@ RELEASE: R E L E A S E;
 RENAME: R E N A M E;
 REPEATABLE: R E P E A T A B L E;
 REPLACE: R E P L A C E;
+REPLICATION: R E P L I C A T I O N;
 RESET: R E S E T;
 RESOURCE: R E S O U R C E;
 RESPECT: R E S P E C T;

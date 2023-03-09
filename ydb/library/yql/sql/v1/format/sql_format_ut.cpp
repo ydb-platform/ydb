@@ -285,6 +285,20 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         setup.Run(cases);
     }
 
+    Y_UNIT_TEST(AsyncReplication) {
+        TCases cases = {
+            {"create async replication user for table1 AS table2 with (user='foo')",
+             "CREATE ASYNC REPLICATION user FOR table1 AS table2 WITH (user = 'foo');\n\n"},
+            {"drop async replication user",
+             "DROP ASYNC REPLICATION user;\n"},
+            {"drop async replication user cascade",
+             "DROP ASYNC REPLICATION user CASCADE;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
     Y_UNIT_TEST(TypeSelection) {
         TCases cases = {
             {"Select tYpe.* frOm Table tYpe",

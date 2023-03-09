@@ -1090,6 +1090,19 @@ private:
         VisitAllFields(TRule_drop_external_data_source_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateAsyncReplication(const TRule_create_replication_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_replication_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropAsyncReplication(const TRule_drop_replication_stmt& msg) {
+        MarkAsSimple();
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_replication_stmt::GetDescriptor(), msg);
+    }
+
     template <void (TVisitor::*Func)(const NProtoBuf::Message&)>
     void VisitAllFieldsImpl(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
         for (int i = 0; i < descr->field_count(); ++i) {
@@ -1990,6 +2003,8 @@ TStaticData::TStaticData()
         {TRule_drop_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropObject)},
         {TRule_create_external_data_source_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateExternalDataSource)},
         {TRule_drop_external_data_source_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropExternalDataSource)},
+        {TRule_create_replication_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateAsyncReplication)},
+        {TRule_drop_replication_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropAsyncReplication)},
         })
 {
     // ensure that all statements has a visitor

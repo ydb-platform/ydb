@@ -269,6 +269,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT CHANGEFEED FROM CHANGEFEED").IsOk());
     }
 
+    Y_UNIT_TEST(ReplicationKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE REPLICATION (REPLICATION Uint32, PRIMARY KEY (REPLICATION));").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT REPLICATION FROM REPLICATION").IsOk());
+    }
+
     Y_UNIT_TEST(Jubilee) {
         NYql::TAstParseResult res = SqlToYql("USE plato; INSERT INTO Arcadia (r2000000) VALUES (\"2M GET!!!\");");
         UNIT_ASSERT(res.Root);
@@ -4826,6 +4831,82 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
                 UNIT_ASSERT_STRING_CONTAINS(line, "/aba/MyDataSource");
                 UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateAsyncReplicationParseCorrect) {
+        auto req = R"(
+            USE plato;
+            CREATE ASYNC REPLICATION MyReplication
+            FOR table1 AS table2, table3 AS table4
+            WITH (
+                ENDPOINT = "localhost:2135",
+                DATABASE = "/MyDatabase"
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createAsyncReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table1"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table2"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table3"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table4"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ENDPOINT"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DATABASE"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropAsyncReplicationParseCorrect) {
+        auto req = R"(
+            USE plato;
+            DROP ASYNC REPLICATION MyReplication;
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropAsyncReplication"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("cascade"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropAsyncReplicationCascade) {
+        auto req = R"(
+            USE plato;
+            DROP ASYNC REPLICATION MyReplication CASCADE;
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cascade"));
             }
         };
 

@@ -1,4 +1,5 @@
 #include "kqp_opt_phy_rules.h"
+#include "kqp_opt_phy_olap_filter_collection.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
@@ -14,34 +15,6 @@ static TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
 
 bool IsFalseLiteral(TExprBase node) {
     return node.Maybe<TCoBool>() && !FromString<bool>(node.Cast<TCoBool>().Literal().Value());
-}
-
-bool IsSupportedPredicate(const TCoCompare& predicate) {
-    if (predicate.Maybe<TCoCmpEqual>()) {
-        return true;
-    }
-
-    if (predicate.Maybe<TCoCmpLess>()) {
-        return true;
-    }
-
-    if (predicate.Maybe<TCoCmpGreater>()) {
-        return true;
-    }
-
-    if (predicate.Maybe<TCoCmpNotEqual>()) {
-        return true;
-    }
-
-    if (predicate.Maybe<TCoCmpGreaterOrEqual>()) {
-        return true;
-    }
-
-    if (predicate.Maybe<TCoCmpLessOrEqual>()) {
-        return true;
-    }
-
-    return false;
 }
 
 bool ValidateIfArgument(const TCoOptionalIf& optionalIf, const TExprNode* rawLambdaArg) {
@@ -77,184 +50,15 @@ bool ValidateIfArgument(const TCoOptionalIf& optionalIf, const TExprNode* rawLam
     return true;
 }
 
-bool IsSupportedDataType(const TCoDataCtor& node) {
-    if (node.Maybe<TCoUtf8>() ||
-        node.Maybe<TCoString>() ||
-        node.Maybe<TCoBool>() ||
-        node.Maybe<TCoFloat>() ||
-        node.Maybe<TCoDouble>() ||
-        node.Maybe<TCoInt8>() ||
-        node.Maybe<TCoInt16>() ||
-        node.Maybe<TCoInt32>() ||
-        node.Maybe<TCoInt64>() ||
-        node.Maybe<TCoUint8>() ||
-        node.Maybe<TCoUint16>() ||
-        node.Maybe<TCoUint32>() ||
-        node.Maybe<TCoUint64>())
-    {
-        return true;
-    }
-
-    return false;
-}
-
-bool IsSupportedCast(const TCoSafeCast& cast) {
-    auto maybeDataType = cast.Type().Maybe<TCoDataType>();
-    if (!maybeDataType) {
-        if (const auto maybeOptionalType = cast.Type().Maybe<TCoOptionalType>()) {
-            maybeDataType = maybeOptionalType.Cast().ItemType().Maybe<TCoDataType>();
-        }
-    }
-    YQL_ENSURE(maybeDataType.IsValid());
-
-    auto dataType = maybeDataType.Cast();
-    if (dataType.Type().Value() == "Int32") {
-        return cast.Value().Maybe<TCoString>().IsValid();
-    } else if (dataType.Type().Value() == "Timestamp") {
-        return cast.Value().Maybe<TCoUint32>().IsValid();
-    }
-    return false;
-}
-
-bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bool equality,
-    const TTypeAnnotationNode* inputType)
-{
-    const TExprNode::TPtr leftPtr = leftNode.Ptr();
-    const TExprNode::TPtr rightPtr = rightNode.Ptr();
-
-    auto getDataType = [inputType](const TExprNode::TPtr& node) {
-        auto type = node->GetTypeAnn();
-
-        if (type->GetKind() == ETypeAnnotationKind::Unit) {
-            auto rowType = inputType->Cast<TStructExprType>();
-            type = rowType->FindItemType(node->Content());
-        }
-
-        if (type->GetKind() == ETypeAnnotationKind::Optional) {
-            type = type->Cast<TOptionalExprType>()->GetItemType();
-        }
-
-        return type;
-    };
-
-    auto defaultCompare = [equality](const TTypeAnnotationNode* left, const TTypeAnnotationNode* right) {
-        if (equality) {
-            return CanCompare<true>(left, right);
-        }
-
-        return CanCompare<false>(left, right);
-    };
-
-    auto canCompare = [&defaultCompare](const TTypeAnnotationNode* left, const TTypeAnnotationNode* right) {
-        if (left->GetKind() != ETypeAnnotationKind::Data ||
-            right->GetKind() != ETypeAnnotationKind::Data)
-        {
-            return defaultCompare(left, right);
-        }
-
-        auto leftTypeId = GetDataTypeInfo(left->Cast<TDataExprType>()->GetSlot()).TypeId;
-        auto rightTypeId = GetDataTypeInfo(right->Cast<TDataExprType>()->GetSlot()).TypeId;
-
-        if (leftTypeId == rightTypeId) {
-            return ECompareOptions::Comparable;
-        }
-
-        /*
-         * Check special case UInt32 <-> Datetime in case i can't put it inside switch without lot of copypaste
-         */
-        if (leftTypeId == NYql::NProto::Uint32 && rightTypeId == NYql::NProto::Date) {
-            return ECompareOptions::Comparable;
-        }
-
-        /*
-         * SSA program requires strict equality of some types, otherwise columnshard fails to execute comparison
-         */
-        switch (leftTypeId) {
-            case NYql::NProto::Int8:
-            case NYql::NProto::Int16:
-            case NYql::NProto::Int32:
-                // SSA program cast those values to Int32
-                if (rightTypeId == NYql::NProto::Int8 ||
-                    rightTypeId == NYql::NProto::Int16 ||
-                    rightTypeId == NYql::NProto::Int32)
-                {
-                    return ECompareOptions::Comparable;
-                }
-                break;
-            case NYql::NProto::Uint16:
-                if (rightTypeId == NYql::NProto::Date) {
-                    return ECompareOptions::Comparable;
-                }
-                [[fallthrough]];
-            case NYql::NProto::Uint8:
-            case NYql::NProto::Uint32:
-                // SSA program cast those values to Uint32
-                if (rightTypeId == NYql::NProto::Uint8 ||
-                    rightTypeId == NYql::NProto::Uint16 ||
-                    rightTypeId == NYql::NProto::Uint32)
-                {
-                    return ECompareOptions::Comparable;
-                }
-                break;
-            case NYql::NProto::Date:
-                // See arcadia/ydb/library/yql/dq/runtime/dq_arrow_helpers.cpp SwitchMiniKQLDataTypeToArrowType
-                if (rightTypeId == NYql::NProto::Uint16) {
-                    return ECompareOptions::Comparable;
-                }
-                break;
-            case NYql::NProto::Datetime:
-                // See arcadia/ydb/library/yql/dq/runtime/dq_arrow_helpers.cpp SwitchMiniKQLDataTypeToArrowType
-                if (rightTypeId == NYql::NProto::Uint32) {
-                    return ECompareOptions::Comparable;
-                }
-                break;
-            case NYql::NProto::Bool:
-            case NYql::NProto::Int64:
-            case NYql::NProto::Uint64:
-            case NYql::NProto::Float:
-            case NYql::NProto::Double:
-            case NYql::NProto::Decimal:
-            case NYql::NProto::Timestamp:
-            case NYql::NProto::Interval:
-                // Obviosly here right node has not same type as left one
-                break;
-            default:
-                return defaultCompare(left, right);
-        }
-
-        return ECompareOptions::Uncomparable;
-    };
-
-    auto leftType = getDataType(leftPtr);
-    auto rightType = getDataType(rightPtr);
-
-    if (canCompare(leftType, rightType) == ECompareOptions::Uncomparable) {
-        YQL_CLOG(DEBUG, ProviderKqp) << "OLAP Pushdown: "
-            << "Uncompatible types in compare of nodes: "
-            << leftPtr->Content() << " of type " << FormatType(leftType)
-            << " and "
-            << rightPtr->Content() << " of type " << FormatType(rightType);
-
-        return false;
-    }
-
-    return true;
-}
-
-TVector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNode* rawLambdaArg)
+TVector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn)
 {
     TVector<TExprBase> out;
-
-    auto convertNode = [rawLambdaArg](const TExprBase& node) -> TMaybeNode<TExprBase> {
+    auto convertNode = [](const TExprBase& node) -> TMaybeNode<TExprBase> {
         if (node.Maybe<TCoNull>()) {
             return node;
         }
 
         if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
-            if (!IsSupportedCast(maybeSafeCast.Cast())) {
-                return NullNode;
-            }
-
             return node;
         }
 
@@ -263,18 +67,10 @@ TVector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNod
         }
 
         if (auto maybeData = node.Maybe<TCoDataCtor>()) {
-            if (!IsSupportedDataType(maybeData.Cast())) {
-                return NullNode;
-            }
-
             return node;
         }
 
         if (auto maybeMember = node.Maybe<TCoMember>()) {
-            if (maybeMember.Cast().Struct().Raw() != rawLambdaArg) {
-                return NullNode;
-            }
-
             return maybeMember.Cast().Name();
         }
 
@@ -313,54 +109,21 @@ TVector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNod
     return out;
 }
 
-TVector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const TCoCompare& predicate,
-    const TExprNode* rawLambdaArg, const TExprBase& input)
+TVector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const TCoCompare& predicate)
 {
     TVector<std::pair<TExprBase, TExprBase>> out;
-
-    auto left = ConvertComparisonNode(predicate.Left(), rawLambdaArg);
+    auto left = ConvertComparisonNode(predicate.Left());
 
     if (left.empty()) {
         return out;
     }
 
-    auto right = ConvertComparisonNode(predicate.Right(), rawLambdaArg);
-
+    auto right = ConvertComparisonNode(predicate.Right());
     if (left.size() != right.size()) {
         return out;
     }
 
-    TMaybeNode<TCoCmpEqual> maybeEqual = predicate.Maybe<TCoCmpEqual>();
-    TMaybeNode<TCoCmpNotEqual> maybeNotEqual = predicate.Maybe<TCoCmpNotEqual>();
-
-    bool equality = maybeEqual.IsValid() || maybeNotEqual.IsValid();
-    const TTypeAnnotationNode* inputType = input.Ptr()->GetTypeAnn();
-
-    switch (inputType->GetKind()) {
-        case ETypeAnnotationKind::Flow:
-            inputType = inputType->Cast<TFlowExprType>()->GetItemType();
-            break;
-        case ETypeAnnotationKind::Stream:
-            inputType = inputType->Cast<TStreamExprType>()->GetItemType();
-            break;
-        default:
-            YQL_ENSURE(false, "Unsupported type of incoming data: " << (ui32)inputType->GetKind());
-            // We do not know how process input that is not a sequence of elements
-            return out;
-    }
-
-    YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::Struct);
-
-    if (inputType->GetKind() != ETypeAnnotationKind::Struct) {
-        // We do not know how process input that is not a sequence of elements
-        return out;
-    }
-
     for (ui32 i = 0; i < left.size(); ++i) {
-        if (!IsComparableTypes(left[i], right[i], equality, inputType)) {
-            // Return empty vector
-            return TVector<std::pair<TExprBase, TExprBase>>();
-        }
         out.emplace_back(std::move(std::make_pair(left[i], right[i])));
     }
 
@@ -518,27 +281,17 @@ TMaybeNode<TCoAtomList> BuildColumnsFromLambda(const TCoLambda& lambda, TExprCon
 }
 #endif
 
-TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx, TPositionHandle pos, const TExprNode* lambdaArg)
+TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx, TPositionHandle pos)
 {
-    auto maybeMember = exists.Optional().Maybe<TCoMember>();
-
-    if (!maybeMember.IsValid()) {
-        return NullNode;
-    }
-
-    if (maybeMember.Cast().Struct().Raw() != lambdaArg) {
-        return NullNode;
-    }
-
-    auto columnName = maybeMember.Cast().Name();
+    auto columnName = exists.Optional().Cast<TCoMember>().Name();
 
     return Build<TKqpOlapFilterExists>(ctx, pos)
         .Column(columnName)
         .Done();
 }
 
-TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& flatmap,
-    TExprContext& ctx, TPositionHandle pos, const TExprNode* lambdaArg)
+TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap,
+    TExprContext& ctx, TPositionHandle pos)
 {
     /*
      * There are three ways of comparison in following format:
@@ -552,64 +305,34 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& flatmap,
      */
     TVector<std::pair<TExprBase, TExprBase>> out;
 
-    auto maybeFlatmap = flatmap.Lambda().Body().Maybe<TCoFlatMap>();
-
-    if (!maybeFlatmap.IsValid()) {
-        return NullNode;
-    }
-
-    auto right = ConvertComparisonNode(maybeFlatmap.Cast().Input(), lambdaArg);
-
-    if (right.empty()) {
-        return NullNode;
-    }
-
-    auto left = ConvertComparisonNode(flatmap.Input(), lambdaArg);
-
+    auto left = ConvertComparisonNode(inputFlatmap.Input());
     if (left.empty()) {
         return NullNode;
     }
 
-    auto maybeJust = maybeFlatmap.Cast().Lambda().Body().Maybe<TCoJust>();
-
-    if (!maybeJust.IsValid()) {
+    auto flatmap = inputFlatmap.Lambda().Body().Cast<TCoFlatMap>();
+    auto right = ConvertComparisonNode(flatmap.Input());
+    if (right.empty()) {
         return NullNode;
     }
 
-    auto maybePredicate = maybeJust.Cast().Input().Maybe<TCoCompare>();
-
-    if (!maybePredicate.IsValid()) {
-        return NullNode;
-    }
-
-    auto predicate = maybePredicate.Cast();
-
-    if (!IsSupportedPredicate(predicate)) {
-        return NullNode;
-    }
+    auto predicate = flatmap.Lambda().Body().Cast<TCoJust>().Input().Cast<TCoCompare>();
 
     TVector<std::pair<TExprBase, TExprBase>> parameters;
-
     if (left.size() != right.size()) {
         return NullNode;
     }
 
     for (ui32 i = 0; i < left.size(); ++i) {
-        out.emplace_back(std::move(std::make_pair(left[i], right[i])));
+        parameters.emplace_back(std::move(std::make_pair(left[i], right[i])));
     }
 
     return ComparisonPushdown(parameters, predicate, ctx, pos);
 }
 
-TMaybeNode<TExprBase> SimplePredicatePushdown(const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos,
-    const TExprNode* lambdaArg, const TExprBase& input)
+TMaybeNode<TExprBase> SimplePredicatePushdown(const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos)
 {
-    if (!IsSupportedPredicate(predicate)) {
-        return NullNode;
-    }
-
-    auto parameters = ExtractComparisonParameters(predicate, lambdaArg, input);
-
+    auto parameters = ExtractComparisonParameters(predicate);
     if (parameters.empty()) {
         return NullNode;
     }
@@ -617,54 +340,37 @@ TMaybeNode<TExprBase> SimplePredicatePushdown(const TCoCompare& predicate, TExpr
     return ComparisonPushdown(parameters, predicate, ctx, pos);
 }
 
-
-TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, TExprContext& ctx, TPositionHandle pos,
-    const TExprNode* lambdaArg, const TExprBase& input)
+TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, TExprContext& ctx, TPositionHandle pos)
 {
-    if (!coalesce.Value().Maybe<TCoBool>()) {
-        return NullNode;
-    }
-
-    if (coalesce.Value().Cast<TCoBool>().Literal().Value() != "false") {
-        return NullNode;
-    }
-
-    auto maybeFlatmap = coalesce.Predicate().Maybe<TCoFlatMap>();
-
-    if (maybeFlatmap.IsValid()) {
-        return SafeCastPredicatePushdown(maybeFlatmap.Cast(), ctx, pos, lambdaArg);
-    }
-
-    auto maybePredicate = coalesce.Predicate().Maybe<TCoCompare>();
-
-    if (maybePredicate.IsValid()) {
-        return SimplePredicatePushdown(maybePredicate.Cast(), ctx, pos, lambdaArg, input);
+    if (auto maybeFlatmap = coalesce.Predicate().Maybe<TCoFlatMap>()) {
+        return SafeCastPredicatePushdown(maybeFlatmap.Cast(), ctx, pos);
+    } else if (auto maybePredicate = coalesce.Predicate().Maybe<TCoCompare>()) {
+        return SimplePredicatePushdown(maybePredicate.Cast(), ctx, pos);
     }
 
     return NullNode;
 }
 
-TMaybeNode<TExprBase> PredicatePushdown(const TExprBase& predicate, TExprContext& ctx, TPositionHandle pos,
-    const TExprNode* lambdaArg, const TExprBase& input)
+TMaybeNode<TExprBase> PredicatePushdown(const TExprBase& predicate, TExprContext& ctx, TPositionHandle pos)
 {
     auto maybeCoalesce = predicate.Maybe<TCoCoalesce>();
     if (maybeCoalesce.IsValid()) {
-        return CoalescePushdown(maybeCoalesce.Cast(), ctx, pos, lambdaArg, input);
+        return CoalescePushdown(maybeCoalesce.Cast(), ctx, pos);
     }
 
     auto maybeExists = predicate.Maybe<TCoExists>();
     if (maybeExists.IsValid()) {
-        return ExistsPushdown(maybeExists.Cast(), ctx, pos, lambdaArg);
+        return ExistsPushdown(maybeExists.Cast(), ctx, pos);
     }
 
     auto maybePredicate = predicate.Maybe<TCoCompare>();
     if (maybePredicate.IsValid()) {
-        return SimplePredicatePushdown(maybePredicate.Cast(), ctx, pos, lambdaArg, input);
+        return SimplePredicatePushdown(maybePredicate.Cast(), ctx, pos);
     }
 
     if (predicate.Maybe<TCoNot>()) {
         auto notNode = predicate.Cast<TCoNot>();
-        auto pushedNot = PredicatePushdown(notNode.Value(), ctx, pos, lambdaArg, input);
+        auto pushedNot = PredicatePushdown(notNode.Value(), ctx, pos);
 
         if (!pushedNot.IsValid()) {
             return NullNode;
@@ -683,7 +389,7 @@ TMaybeNode<TExprBase> PredicatePushdown(const TExprBase& predicate, TExprContext
     pushedOps.reserve(predicate.Ptr()->ChildrenSize());
 
     for (auto& child: predicate.Ptr()->Children()) {
-        auto pushedChild = PredicatePushdown(TExprBase(child), ctx, pos, lambdaArg, input);
+        auto pushedChild = PredicatePushdown(TExprBase(child), ctx, pos);
 
         if (!pushedChild.IsValid()) {
             return NullNode;
@@ -711,7 +417,7 @@ TMaybeNode<TExprBase> PredicatePushdown(const TExprBase& predicate, TExprContext
         .Done();
 }
 
-} // annymous namespace end
+} // anonymous namespace end
 
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx)
@@ -739,24 +445,32 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     YQL_CLOG(TRACE, ProviderKqp) << "Initial OLAP lambda: " << KqpExprToPrettyString(lambda, ctx);
 
     auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
-
     if (!maybeOptionalIf.IsValid()) {
         return node;
     }
 
     auto optionalIf = maybeOptionalIf.Cast();
-
     if (!ValidateIfArgument(optionalIf, lambdaArg)) {
         return node;
     }
 
-    auto pushedPredicate = PredicatePushdown(
-        optionalIf.Predicate(), ctx, node.Pos(), lambdaArg, read.Process().Body()
-    );
+    TPredicateNode predicateTree(optionalIf.Predicate());
+    CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg, read.Process().Body());
 
-    if (!pushedPredicate.IsValid()) {
+    TPredicateNode predicatesToPush;
+    TPredicateNode remainingPredicates;
+    if (predicateTree.CanBePushed) {
+        predicatesToPush = predicateTree;
+        remainingPredicates.ExprNode = Build<TCoBool>(ctx, node.Pos()).Literal().Build("true").Done();
+    } else {
         return node;
     }
+
+    YQL_ENSURE(predicatesToPush.IsValid(), "Predicates to push is invalid");
+    YQL_ENSURE(remainingPredicates.IsValid(), "Remaining predicates is invalid");
+
+    auto pushedPredicate = PredicatePushdown(predicatesToPush.ExprNode.Cast(), ctx, node.Pos());
+    YQL_ENSURE(pushedPredicate.IsValid(), "Pushed predicate should be always valid!");
 
     auto olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
         .Input(read.Process().Body())
@@ -802,9 +516,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         .Lambda<TCoLambda>()
             .Args({"new_arg"})
             .Body<TCoOptionalIf>()
-                .Predicate<TCoBool>()
-                    .Literal().Build("true")
-                    .Build()
+                .Predicate(remainingPredicates.ExprNode.Cast())
                 .Value<TExprApplier>()
                     .Apply(optionalIf.Value())
                     .With(lambda.Args().Arg(0), "new_arg")

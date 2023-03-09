@@ -1150,6 +1150,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`level`, `uid`, `resource_id`) != (Int32("0"), "uid_3000001", "10011"))",
             R"(`level` = 0 OR `level` = 2 OR `level` = 1)",
             R"(`level` = 0 OR (`level` = 2 AND `uid` = "uid_3000002"))",
+            R"(`level` = 0 AND (`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
             R"(`level` = 0 OR `uid` = "uid_3000003")",
             R"(`level` = 0 AND `uid` = "uid_3000003")",
             R"(`level` = 0 AND `uid` = "uid_3000000")",

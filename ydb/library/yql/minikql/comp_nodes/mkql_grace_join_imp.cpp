@@ -251,14 +251,14 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind ) {
 
 
     ui64 tuplesFound = 0;
-    std::vector<ui64, TMKQLAllocator<ui64>> joinSlots, spillSlots, slotToIdx;
-    std::vector<ui32, TMKQLAllocator<ui32>> stringsOffsets1, stringsOffsets2;
+    std::vector<ui64, TMKQLAllocator<ui64, EMemorySubPool::Temporary>> joinSlots, spillSlots, slotToIdx;
+    std::vector<ui32, TMKQLAllocator<ui32, EMemorySubPool::Temporary>> stringsOffsets1, stringsOffsets2;
     ui64 reservedSize = 6 * (DefaultTupleBytes * DefaultTuplesNum) / sizeof(ui64);
     joinSlots.reserve( reservedSize );
     spillSlots.reserve( reservedSize );
     stringsOffsets1.reserve(JoinTable1->NumberOfStringColumns + JoinTable1->NumberOfIColumns + 1);
     stringsOffsets2.reserve(JoinTable2->NumberOfStringColumns + JoinTable2->NumberOfIColumns + 1);
-    std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>> joinResults;
+    std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds, EMemorySubPool::Temporary>> joinResults;
 
 
     for (ui64 bucket = 0; bucket < NumberOfBuckets; bucket++) {
@@ -457,7 +457,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind ) {
         });
 
         
-        TableBuckets[bucket].JoinIds = std::move(joinResults);
+        TableBuckets[bucket].JoinIds.assign(joinResults.begin(), joinResults.end());
         if ( JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) {
             std::vector<ui32, TMKQLAllocator<ui32>> & rightIds = TableBuckets[bucket].RightIds;
             std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>> & joinIds = TableBuckets[bucket].JoinIds;

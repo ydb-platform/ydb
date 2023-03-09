@@ -18,7 +18,7 @@ public:
             Event->Signal();
             Die(ctx);
         } else {
-            ctx.ExecutorThread.Send(ev->Forward(PDiskId));
+            Forward(ev, PDiskId);
         }
     }
 };

@@ -57,7 +57,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientConnected, HandlePipeClientConnected);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         default:
-            LOG_SQS_ERROR("Unknown type of event came to SQS node tracker actor: " << ev->Type << " (" << ev->GetBase()->ToString() << "), sender: " << ev->Sender);
+            LOG_SQS_ERROR("Unknown type of event came to SQS node tracker actor: " << ev->Type << " (" << ev->ToString() << "), sender: " << ev->Sender);
         }
     }
 

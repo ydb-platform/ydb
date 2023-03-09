@@ -270,13 +270,13 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
             << "[STATE] wait new reader event=" << WaitNextReaderEventInFlight
             << ", last received event time=" << LastReadEventTime
             << ", read futures inflight  " << ReadFuturesInFlight << ", last id=" << ReadFeatureId);
-        if (!ReadFeatures.empty()) { 
+        if (!ReadFeatures.empty()) {
             const auto& oldest = *ReadFeatures.begin();
             const auto& info = oldest.second;
             LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << "[STATE] The oldest read future id=" << oldest.first
             << ", ts=" << info.first << " age=" << (ctx.Now() - info.first)
-            << ", future state: " << info.second.Initialized() 
+            << ", future state: " << info.second.Initialized()
             << "/" << info.second.HasValue() << "/" << info.second.HasException());
         }
     }
@@ -388,7 +388,7 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, c
             } else {
                 ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(result.GetValue());
             }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
+            actorSystem->Send(new NActors::IEventHandleFat(selfId, selfId, ev.Release()));
         }
     );
     CredentialsRequestInFlight = true;
@@ -465,7 +465,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
         ScheduleConsumerCreation(ctx);
         return;
     }
-    
+
     LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << " read session created: " << ReadSession->GetSessionId());
 
@@ -556,11 +556,11 @@ void TMirrorer::StartWaitNextReaderEvent(const TActorContext& ctx) {
             selfId = SelfId(),
             futureId=futureId
         ](const NThreading::TFuture<void>&) {
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPQ::TEvReaderEventArrived(futureId)));
+            actorSystem->Send(new NActors::IEventHandleFat(selfId, selfId, new TEvPQ::TEvReaderEventArrived(futureId)));
         }
     );
-    
-    if (ReadFeatures.size() < MAX_READ_FUTURES_STORE) { 
+
+    if (ReadFeatures.size() < MAX_READ_FUTURES_STORE) {
         ReadFeatures[futureId] = {ctx.Now(), future};
     }
 }
@@ -578,7 +578,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
         return;
     }
     TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " got next reader event: " << bool(event)); 
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " got next reader event: " << bool(event));
 
     if (wakeup && !event) {
         return;

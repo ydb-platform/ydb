@@ -133,7 +133,7 @@ public:
 
     void PassAway() override {
         if (StorageStatsCalculatorId) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, StorageStatsCalculatorId, {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, StorageStatsCalculatorId, {}, nullptr, 0));
         }
 
         TActorBootstrapped::PassAway();
@@ -288,7 +288,7 @@ IActor* TBlobStorageController::CreateSystemViewsCollector() {
 }
 
 void TBlobStorageController::ForwardToSystemViewsCollector(STATEFN_SIG) {
-    TActivationContext::Send(ev->Forward(SystemViewsCollectorId));
+    TActivationContext::Forward(ev, SystemViewsCollectorId);
 }
 
 void TBlobStorageController::Handle(TEvPrivate::TEvUpdateSystemViews::TPtr&) {

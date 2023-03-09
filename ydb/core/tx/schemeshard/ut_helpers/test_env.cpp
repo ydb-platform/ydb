@@ -328,7 +328,7 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TFakeMetering:"
                         << " unhandled event type: " << ev->GetTypeRewrite()
-                        << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                        << " event: " << ev->ToString());
     }
 
 private:
@@ -708,7 +708,7 @@ void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &ru
     for (ui64 txId : txIds) {
         Cerr << Endl << "TestWaitNotification wait txId: " << txId << Endl;
         auto ev = new TEvSchemeShard::TEvNotifyTxCompletion(txId);
-        runtime.Send(new IEventHandle(subscriberActorId, sender, ev));
+        runtime.Send(new IEventHandleFat(subscriberActorId, sender, ev));
     }
 
     TAutoPtr<IEventHandle> handle;
@@ -797,7 +797,7 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
 
 void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {
     auto sender = runtime.AllocateEdgeActor();
-    runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
+    runtime.Schedule(new IEventHandleFat(sender, sender, new TEvents::TEvWakeup()), duration);
     runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
 }
 

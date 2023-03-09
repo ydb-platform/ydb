@@ -1320,8 +1320,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 }
                 default: {
                     Cerr << "... ignored event " << ev->GetTypeRewrite();
-                    if (ev->GetBase()) {
-                        Cerr << " " << ev->GetBase()->ToString();
+                    if (ev->HasEvent()) {
+                        Cerr << " " << ev->GetTypeName();
                     }
                     Cerr << Endl;
                 }

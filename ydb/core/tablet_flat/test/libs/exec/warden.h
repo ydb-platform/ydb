@@ -54,7 +54,7 @@ namespace NFake {
                     if (auto logl = Logger->Log(ELnLev::Abort)) {
                         logl
                             << "BS group " << group << " is not configured"
-                            << ", ev " << TypeName(*eh->GetBase());
+                            << ", ev " << eh->GetTypeName();
                     }
 
                     return; /* cannot process unknown groups */
@@ -70,17 +70,17 @@ namespace NFake {
                     if (auto logl = Logger->Log(ELnLev::Crit)) {
                         logl
                             << "BS group " << group << " is unavailable"
-                            << ", ev " << TypeName(*eh->GetBase());
+                            << ", ev " << eh->GetTypeName();
                     }
 
                     auto why = TEvents::TEvUndelivered::ReasonActorUnknown;
 
-                    TlsActivationContext->Send(eh->ForwardOnNondelivery(why));
+                    TlsActivationContext->Send(eh->ForwardOnNondelivery(eh, why));
 
                     return;
                 }
 
-                TlsActivationContext->Send(eh->Forward(proxy));
+                TlsActivationContext->Forward(eh, proxy);
 
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
                 if (std::exchange(Shutting, true)) {

@@ -159,7 +159,7 @@ private:
     STFUNC(StateInit)
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "StateInit event type: %" PRIx32 " event: %s",
-                  ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                  ev->GetTypeRewrite(), ev->ToString().data());
         StateInitImpl(ev, ctx);
     }
 
@@ -183,7 +183,7 @@ private:
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 Y_FAIL("TNodeBroker::StateWork unexpected event type: %" PRIx32 " event: %s from %s",
-                       ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?",
+                       ev->GetTypeRewrite(), ev->ToString().data(),
                        ev->Sender.ToString().data());
             }
         }

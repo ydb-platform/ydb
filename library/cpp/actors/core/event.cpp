@@ -7,7 +7,79 @@ namespace NActors {
         Max<ui64>(), Max<ui64>()
     };
 
-    TIntrusivePtr<TEventSerializedData> IEventHandle::ReleaseChainBuffer() {
+    TAutoPtr<IEventHandle>& IEventHandle::Forward(TAutoPtr<IEventHandle>& ev, TActorId recipient) {
+        if (ev->IsEventLight()) {
+            IEventHandleLight::GetLight(ev.Get())->Forward(recipient);
+        } else {
+            ev = IEventHandleFat::GetFat(ev.Get())->Forward(recipient);
+        }
+        return ev;
+    }
+
+    THolder<IEventHandle>& IEventHandle::Forward(THolder<IEventHandle>& ev, TActorId recipient) {
+        if (ev->IsEventLight()) {
+            IEventHandleLight::GetLight(ev.Get())->Forward(recipient);
+        } else {
+            ev = IEventHandleFat::GetFat(ev.Get())->Forward(recipient);
+        }
+        return ev;
+    }
+
+    TString IEventHandle::GetTypeName() const {
+        if (IsEventFat()) {
+            auto* ev = const_cast<IEventHandleFat*>(static_cast<const IEventHandleFat*>(this));
+            return ev->HasEvent() ? TypeName(*(ev->GetBase())) : TypeName(*this);
+        } else {
+            return TypeName(*this);
+        }
+    }
+
+    TString IEventHandle::ToString() const {
+        if (IsEventFat()) {
+            auto* ev = const_cast<IEventHandleFat*>(static_cast<const IEventHandleFat*>(this));
+            return ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?";
+        } else {
+            // TODO(xenoxeno):
+            return TypeName(*this);
+        }
+    }
+
+    bool IEventHandle::HasEvent() const {
+        if (IsEventLight()) {
+            return true;
+        } else {
+            return IEventHandleFat::GetFat(this)->HasEvent();
+        }
+    }
+
+    bool IEventHandle::HasBuffer() const {
+        if (IsEventLight()) {
+            return false;
+        } else {
+            return IEventHandleFat::GetFat(this)->HasBuffer();
+        }
+    }
+
+    TActorId IEventHandle::GetForwardOnNondeliveryRecipient() const {
+        if (IsEventLight()) {
+            return {};
+        } else {
+            return IEventHandleFat::GetFat(this)->GetForwardOnNondeliveryRecipient();
+        }
+    }
+
+    size_t IEventHandle::GetSize() const {
+        if (IsEventLight()) {
+            if (IsEventSerializable()) {
+                return IEventHandleLightSerializable::GetLightSerializable(this)->GetSize();
+            }
+        } else {
+            return IEventHandleFat::GetFat(this)->GetSize();
+        }
+        return 0;
+    }
+
+    TIntrusivePtr<TEventSerializedData> IEventHandleFat::ReleaseChainBuffer() {
         if (Buffer) {
             TIntrusivePtr<TEventSerializedData> result;
             DoSwap(result, Buffer);
@@ -24,7 +96,7 @@ namespace NActors {
         return new TEventSerializedData;
     }
 
-    TIntrusivePtr<TEventSerializedData> IEventHandle::GetChainBuffer() {
+    TIntrusivePtr<TEventSerializedData> IEventHandleFat::GetChainBuffer() {
         if (Buffer) {
             return Buffer;
         }
@@ -36,4 +108,6 @@ namespace NActors {
         }
         return new TEventSerializedData;
     }
+
+    std::vector<std::vector<IEventFactory*>*> TEventFactories::EventFactories;
 }

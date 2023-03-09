@@ -125,7 +125,7 @@ void TWaitForStreamClearanceUnit::ProcessEvent(TAutoPtr<NActors::IEventHandle> &
     default:
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TWaitForStreamClearanceUnit::ProcessEvent unhandled event type: " << ev->GetTypeRewrite()
-                    << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                    << " event: " << ev->ToString());
         Y_VERIFY_DEBUG(false, "unexpected event %" PRIu64, (ui64)ev->GetTypeRewrite());
     }
 }

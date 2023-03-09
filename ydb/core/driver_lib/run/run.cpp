@@ -1616,13 +1616,13 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     Y_UNUSED(graceful);
 
     if (EnabledGrpcService) {
-        ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));
+        ActorSystem->Send(new IEventHandleFat(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));
     }
 
     TIntrusivePtr<TDrainProgress> drainProgress(new TDrainProgress());
     if (AppData->FeatureFlags.GetEnableDrainOnShutdown() && GracefulShutdownSupported && ActorSystem) {
         drainProgress->OnSend();
-        ActorSystem->Send(new IEventHandle(MakeTenantPoolRootID(), {}, new TEvLocal::TEvLocalDrainNode(drainProgress)));
+        ActorSystem->Send(new IEventHandleFat(MakeTenantPoolRootID(), {}, new TEvLocal::TEvLocalDrainNode(drainProgress)));
     }
 
     if (KqpShutdownController) {
@@ -1654,10 +1654,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     if (ActorSystem) {
         ActorSystem->BroadcastToProxies([](const TActorId& proxyId) {
-            return new IEventHandle(proxyId, {}, new TEvInterconnect::TEvTerminate);
+            return new IEventHandleFat(proxyId, {}, new TEvInterconnect::TEvTerminate);
         });
-        ActorSystem->Send(new IEventHandle(MakeInterconnectListenerActorId(false), {}, new TEvents::TEvPoisonPill));
-        ActorSystem->Send(new IEventHandle(MakeInterconnectListenerActorId(true), {}, new TEvents::TEvPoisonPill));
+        ActorSystem->Send(new IEventHandleFat(MakeInterconnectListenerActorId(false), {}, new TEvents::TEvPoisonPill));
+        ActorSystem->Send(new IEventHandleFat(MakeInterconnectListenerActorId(true), {}, new TEvents::TEvPoisonPill));
     }
 
     if (SqsHttp) {

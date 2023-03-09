@@ -432,7 +432,7 @@ struct TTestHelper {
             TAutoPtr<IEventHandle> handle;
             runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsResponse>(handle);
             UNIT_ASSERT(handle);
-            auto event = handle->Release<TEvDataShard::TEvUploadRowsResponse>();
+            auto event = handle->CastAsLocal<TEvDataShard::TEvUploadRowsResponse>();
             UNIT_ASSERT(event->Record.GetStatus() == 0);
         }
     }
@@ -514,8 +514,8 @@ struct TTestHelper {
         if (!handle) {
             return nullptr;
         }
-        auto event = handle->Release<TEvDataShard::TEvReadResult>();
-        return std::unique_ptr<TEvDataShard::TEvReadResult>(event.Release());
+        std::unique_ptr<TEvDataShard::TEvReadResult> event(IEventHandle::Release<TEvDataShard::TEvReadResult>(handle));
+        return event;
     }
 
     std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
@@ -2112,7 +2112,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         // now allow to continue read
         shouldDrop = false;
-        TAutoPtr<TEvDataShard::TEvReadContinue> request = continueEvent->Release<TEvDataShard::TEvReadContinue>();
+        TAutoPtr<TEvDataShard::TEvReadContinue> request = IEventHandle::Release<TEvDataShard::TEvReadContinue>(continueEvent);
         UNIT_ASSERT_VALUES_EQUAL(request->ReadId, 1UL);
 
         const auto& table = helper.Tables["table-1"];
@@ -2206,7 +2206,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         // now allow to continue read and check we don't get extra read result with error
         shouldDrop = false;
-        TAutoPtr<TEvDataShard::TEvReadContinue> request = continueEvent->Release<TEvDataShard::TEvReadContinue>();
+        TAutoPtr<TEvDataShard::TEvReadContinue> request = IEventHandle::Release<TEvDataShard::TEvReadContinue>(continueEvent);
         UNIT_ASSERT_VALUES_EQUAL(request->ReadId, 1UL);
 
         const auto& table = helper.Tables["table-1"];
@@ -2325,7 +2325,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
                 ++continueCounter;
                 break;
             case TEvTabletPipe::EvServerConnected: {
-                auto* typedEvent = dynamic_cast<TEvTabletPipe::TEvServerConnected*>(ev->GetBase());
+                auto* typedEvent = ev->CastAsLocal<TEvTabletPipe::TEvServerConnected>();
                 ++serverConnectedCount;
                 if (typedEvent->ClientId.NodeId() != typedEvent->ServerId.NodeId()) {
                     connectedFromDifferentNode = true;

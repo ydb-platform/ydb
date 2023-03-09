@@ -415,7 +415,7 @@ bool TCms::CheckActionShutdownNode(const NKikimrCms::TAction &action,
         return false;
     }
 
-    if (!AppData(ctx)->DisableCheckingSysNodesCms && 
+    if (!AppData(ctx)->DisableCheckingSysNodesCms &&
         !CheckSysTabletsNode(action, opts, node, error)) {
         return false;
     }
@@ -478,7 +478,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
                                         const TActionOptions& opts,
                                         const TNodeInfo& node,
                                         TErrorInfo& error,
-                                        const TActorContext &ctx) const 
+                                        const TActorContext &ctx) const
 {
     TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
 
@@ -503,7 +503,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
     for (auto ringInfo : ClusterInfo->StateStorageRings) {
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Ring: " << ringInfo->RingId 
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Ring: " << ringInfo->RingId
                                                                  << "; State: " << TStateStorageRingInfo::RingStateToString(state));
 
         if (ringInfo->RingId == currentRing) {
@@ -539,9 +539,9 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
             if (restartRings + lockedRings > 1) {
                 error.Code = TStatus::DISALLOW_TEMP;
                 error.Reason = TStringBuilder() << "Too many unavailable state storage rings"
-                                                << ". Restarting rings: " 
+                                                << ". Restarting rings: "
                                                     << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
-                                                << ". Temporary (for a 2 minutes) locked rings: " 
+                                                << ". Temporary (for a 2 minutes) locked rings: "
                                                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                                                 << ". Maximum allowed number of unavailable rings for this mode: " << 1;
                 error.Deadline = defaultDeadline;
@@ -552,9 +552,9 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
             if (restartRings + lockedRings + disabledRings > (nToSelect - 1) / 2) {
                 error.Code = TStatus::DISALLOW_TEMP;
                 error.Reason = TStringBuilder() << "Too many unavailable state storage rings"
-                                                << ". Restarting rings: " 
+                                                << ". Restarting rings: "
                                                     << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
-                                                << ". Temporary (for a 2 minutes) locked rings: " 
+                                                << ". Temporary (for a 2 minutes) locked rings: "
                                                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                                                 << ". Disabled rings: " << disabledRings
                                                 << ". Maximum allowed number of unavailable rings for this mode: " << (nToSelect - 1) / 2;
@@ -577,38 +577,38 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
 }
 
 bool TCms::CheckSysTabletsNode(const TAction &action,
-                               const TActionOptions &opts, 
-                               const TNodeInfo &node, 
+                               const TActionOptions &opts,
+                               const TNodeInfo &node,
                                TErrorInfo &error) const
-{ 
+{
     if (node.Services & EService::DynamicNode || node.PDisks.size()) {
         return true;
     }
-    
+
     for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
             ui32 disabledNodesCnt = 1; // сounting including this node
             TErrorInfo err;
             TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
             TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-            
+
             for (auto &nodeId : ClusterInfo->TabletTypeToNodes[tabletType]) {
                 if (nodeId == node.NodeId) {
                     continue;
                 }
-                if (ClusterInfo->Node(nodeId).IsLocked(err, State->Config.DefaultRetryTime, 
-                                                       TActivationContext::Now(), duration) || 
+                if (ClusterInfo->Node(nodeId).IsLocked(err, State->Config.DefaultRetryTime,
+                                                       TActivationContext::Now(), duration) ||
                     ClusterInfo->Node(nodeId).IsDown(err, defaultDeadline))
-                { 
+                {
                     ++disabledNodesCnt;
                 }
             }
-            
+
             ui32 tabletNodes = ClusterInfo->TabletTypeToNodes[tabletType].size();
             switch (opts.AvailabilityMode) {
                 case MODE_MAX_AVAILABILITY:
                     if (tabletNodes > 1 && disabledNodesCnt * 2 > tabletNodes){
                         error.Code = TStatus::DISALLOW_TEMP;
-                        error.Reason = TStringBuilder() << NKikimrConfig::TBootstrap_ETabletType_Name(tabletType) 
+                        error.Reason = TStringBuilder() << NKikimrConfig::TBootstrap_ETabletType_Name(tabletType)
                                                         << " has too many locked nodes: " << disabledNodesCnt
                                                         << " limit: " << tabletNodes / 2 << " (50%)";
                         error.Deadline = defaultDeadline;
@@ -618,7 +618,7 @@ bool TCms::CheckSysTabletsNode(const TAction &action,
                 case MODE_KEEP_AVAILABLE:
                     if (tabletNodes > 1 && disabledNodesCnt > tabletNodes - 1) {
                         error.Code = TStatus::DISALLOW_TEMP;
-                        error.Reason = TStringBuilder() << NKikimrConfig::TBootstrap_ETabletType_Name(tabletType) 
+                        error.Reason = TStringBuilder() << NKikimrConfig::TBootstrap_ETabletType_Name(tabletType)
                                                         << " has too many locked nodes: " << disabledNodesCnt
                                                         << ". At least one node must be available";
                         error.Deadline = defaultDeadline;
@@ -636,7 +636,7 @@ bool TCms::CheckSysTabletsNode(const TAction &action,
                     return false;
             }
     }
- 
+
     return true;
 }
 
@@ -976,7 +976,7 @@ void TCms::ScheduleLogCleanup(const TActorContext &ctx)
 {
     LogCleanupTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
     CreateLongTimer(ctx, TDuration::Minutes(10),
-                    new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvCleanupLog),
+                    new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvCleanupLog),
                     AppData(ctx)->SystemPoolId,
                     LogCleanupTimerCookieHolder.Get());
 }
@@ -1042,7 +1042,7 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
 
     WalleCleanupTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
     CreateLongTimer(ctx, State->Config.DefaultWalleCleanupPeriod,
-                    new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvCleanupWalle),
+                    new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvCleanupWalle),
                     AppData(ctx)->SystemPoolId,
                     WalleCleanupTimerCookieHolder.Get());
 }
@@ -1196,7 +1196,7 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
               TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
-        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        auto handle = new IEventHandleFat(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxRemovePermissions(std::move(ids), std::move(ev->Release()), handle), ctx);
     } else {
         Reply(ev, std::move(resp), ctx);
@@ -1268,7 +1268,7 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
               TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
-        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        auto handle = new IEventHandleFat(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxRemoveRequest(id, std::move(ev->Release()), handle), ctx);
     } else {
         Reply(ev, std::move(resp), ctx);
@@ -1346,7 +1346,7 @@ void TCms::EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx)
     NextQueue.push(ev);
 }
 
-void TCms::StartCollecting(const TActorContext &ctx) 
+void TCms::StartCollecting(const TActorContext &ctx)
 {
     Y_VERIFY(Queue.empty());
     std::swap(NextQueue, Queue);
@@ -1686,7 +1686,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         if (ok)
             AcceptPermissions(resp->Record, reqId, user, ctx);
 
-        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        auto handle = new IEventHandleFat(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
     }
 }
@@ -1749,7 +1749,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         if (ok)
             AcceptPermissions(resp->Record, scheduled.RequestId, user, ctx, true);
 
-        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        auto handle = new IEventHandleFat(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
     }
 }
@@ -1949,7 +1949,7 @@ void TCms::Handle(TEvCms::TEvStoreWalleTask::TPtr &ev, const TActorContext &ctx)
 {
     auto event = ev->Get();
 
-    auto handle = new IEventHandle(ev->Sender, SelfId(), new TEvCms::TEvWalleTaskStored(event->Task.TaskId), 0, ev->Cookie);
+    auto handle = new IEventHandleFat(ev->Sender, SelfId(), new TEvCms::TEvWalleTaskStored(event->Task.TaskId), 0, ev->Cookie);
     Execute(CreateTxStoreWalleTask(event->Task, std::move(ev->Release()), handle), ctx);
 }
 
@@ -1960,7 +1960,7 @@ void TCms::Handle(TEvCms::TEvRemoveWalleTask::TPtr &ev, const TActorContext &ctx
 
     if (State->WalleTasks.contains(id)) {
         auto &task = State->WalleTasks.find(id)->second;
-        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        auto handle = new IEventHandleFat(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         if (State->ScheduledRequests.contains(task.RequestId)) {
             Execute(CreateTxRemoveRequest(task.RequestId, std::move(ev->Release()), handle), ctx);
         } else {

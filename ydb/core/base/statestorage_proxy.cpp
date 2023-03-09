@@ -540,7 +540,7 @@ public:
                 BLOG_W("ProxyRequest::StateInit unexpected event type# "
                     << ev->GetTypeRewrite()
                     << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << ev->ToString());
                 break;
         }
     }
@@ -558,7 +558,7 @@ public:
                 BLOG_W("ProxyRequest::StateLookup unexpected event type# "
                     << ev->GetTypeRewrite()
                     << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << ev->ToString());
                 break;
         }
     }
@@ -575,7 +575,7 @@ public:
                 BLOG_W("ProxyRequest::StateUpdate unexpected event type# "
                     << ev->GetTypeRewrite()
                     << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << ev->ToString());
                 break;
         }
     }
@@ -592,7 +592,7 @@ public:
                 BLOG_W("ProxyRequest::StateUpdateSig unexpected event type# "
                     << ev->GetTypeRewrite()
                     << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << ev->ToString());
                 break;
         }
     }
@@ -971,7 +971,7 @@ public:
 
     STATEFN(StateInit) {
         BLOG_TRACE("Proxy::StateInit ev type# " << ev->GetTypeRewrite() << " event: "
-            << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+            << ev->ToString());
 
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvRequestReplicasDumps, Handle);
@@ -986,7 +986,7 @@ public:
             hFunc(TEvStateStorage::TEvReplicaProbeSubscribe, Handle);
             hFunc(TEvStateStorage::TEvReplicaProbeUnsubscribe, Handle);
         default:
-            TActivationContext::Send(ev->Forward(RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo))));
+            TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo)));
             break;
         }
     }
@@ -1021,7 +1021,7 @@ public:
                 BLOG_W("ProxyStub::StateFunc unexpected event type# "
                     << ev->GetTypeRewrite()
                     << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << ev->ToString());
                 break;
         }
     }

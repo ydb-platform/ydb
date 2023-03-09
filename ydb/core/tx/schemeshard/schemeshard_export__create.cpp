@@ -731,7 +731,7 @@ private:
                         }
 
                         ctx.TActivationContext::Schedule(TDuration::Seconds(10),
-                            new IEventHandle(Self->SelfId(), Self->SelfId(), ev.Release()));
+                            new IEventHandleFat(Self->SelfId(), Self->SelfId(), ev.Release()));
                         Self->TxIdToExport[txId] = {exportInfo->Id, itemIdx};
 
                         return;

@@ -59,7 +59,7 @@ void TConsole::Enqueue(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::CMS,
               "TConsole::Enqueue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-              TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+              TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
     InitQueue.push_back(ev);
 }
 
@@ -135,7 +135,7 @@ void TConsole::ProcessEnqueuedEvents(const TActorContext &ctx)
         TAutoPtr<IEventHandle> &ev = InitQueue.front();
         LOG_DEBUG(ctx, NKikimrServices::CMS,
                   "TConsole::Dequeue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-                  TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                  TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
         ctx.ExecutorThread.Send(ev.Release());
         InitQueue.pop_front();
     }
@@ -156,12 +156,12 @@ void TConsole::ClearState()
 
 void TConsole::ForwardToConfigsManager(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
 {
-    ctx.Send(ev->Forward(ConfigsManager->SelfId()));
+    ctx.Forward(ev, ConfigsManager->SelfId());
 }
 
 void TConsole::ForwardToTenantsManager(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
 {
-    ctx.Send(ev->Forward(TenantsManager->SelfId()));
+    ctx.Forward(ev, TenantsManager->SelfId());
 }
 
 void TConsole::Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx)

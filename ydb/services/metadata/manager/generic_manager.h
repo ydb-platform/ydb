@@ -52,7 +52,7 @@ private:
         auto result = promise.GetFuture();
         auto c = std::make_shared<TOperationsController>(std::move(promise));
         auto command = std::make_shared<TCommand>(patch.GetRecord(), manager, c, context);
-        TActivationContext::Send(new IEventHandle(NProvider::MakeServiceId(nodeId), {},
+        TActivationContext::Send(new IEventHandleFat(NProvider::MakeServiceId(nodeId), {},
             new NProvider::TEvObjectsOperation(command)));
         return result;
     }

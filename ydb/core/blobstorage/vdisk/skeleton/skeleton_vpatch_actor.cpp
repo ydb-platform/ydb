@@ -733,7 +733,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
                 hFunc(TEvBlobStorage::TEvVPatchDiff, HandleForceEnd)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInStartState)
-                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << TypeName(*ev->GetBase()));
+                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ev->GetTypeName());
             }
         }
 
@@ -742,7 +742,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPatchDiff, Handle)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInWaitState)
-                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << TypeName(*ev->GetBase()));
+                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ev->GetTypeName());
             }
         }
 
@@ -753,7 +753,7 @@ namespace NKikimr::NPrivate {
                 IgnoreFunc(TEvBlobStorage::TEvVPatchXorDiffResult)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInWaitState)
                 sFunc(TEvVPatchDyingConfirm, PassAway)
-                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << TypeName(*ev->GetBase()));
+                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ev->GetTypeName());
             }
         }
 
@@ -763,7 +763,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPutResult, Handle)
                 IgnoreFunc(TEvBlobStorage::TEvVPatchXorDiffResult)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInDataStates)
-                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << TypeName(*ev->GetBase()));
+                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ev->GetTypeName());
             }
         }
 
@@ -773,7 +773,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPutResult, Handle)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInParityStates)
-                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << TypeName(*ev->GetBase()));
+                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ev->GetTypeName());
             }
         }
     };

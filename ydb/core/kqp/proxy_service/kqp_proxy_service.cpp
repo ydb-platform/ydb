@@ -214,7 +214,7 @@ public:
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "kqp_proxy", "KQP Proxy", false, 
+            mon->RegisterActorPage(actorsMonPage, "kqp_proxy", "KQP Proxy", false,
                 TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
         }
 
@@ -330,7 +330,7 @@ public:
 
         auto groupId = GetDefaultStateStorageGroupId(AppData()->TenantName);
         if (!groupId) {
-            KQP_PROXY_LOG_D("Unable to determine default state storage group id for database " << 
+            KQP_PROXY_LOG_D("Unable to determine default state storage group id for database " <<
                 AppData()->TenantName);
             return;
         }
@@ -353,7 +353,7 @@ public:
                 Send(KqpRmServiceActor, std::make_unique<TEvKqp::TEvKqpProxyPublishRequest>());
             }
             return;
-        } 
+        }
 
         if (ResourcesPublishScheduled) {
             return;
@@ -721,7 +721,7 @@ public:
         } else {
             GetKqpResourceManager()->RequestClusterResourcesInfo(
                 [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                    TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
+                    TAutoPtr<IEventHandle> eh = new IEventHandleFat(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
                     as->Send(eh);
                 });
         }
@@ -767,7 +767,7 @@ public:
     void Handle(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
         if (ev->Get()->Snapshot.empty()) {
             PeerProxyNodeResources.clear();
-            KQP_PROXY_LOG_E("Can not find default state storage group for database " << 
+            KQP_PROXY_LOG_E("Can not find default state storage group for database " <<
                 AppData()->TenantName);
             return;
         }
@@ -1013,7 +1013,7 @@ public:
     void StartQueryTimeout(ui64 requestId, TDuration timeout, NYql::NDqProto::StatusIds::StatusCode status = NYql::NDqProto::StatusIds::TIMEOUT) {
         TActorId timeoutTimer = CreateLongTimer(
             TlsActivationContext->AsActorContext(), timeout,
-            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvOnRequestTimeout{requestId, timeout, status, 0})
+            new IEventHandleFat(SelfId(), SelfId(), new TEvPrivate::TEvOnRequestTimeout{requestId, timeout, status, 0})
         );
 
         KQP_PROXY_LOG_D("Scheduled timeout timer for requestId: " << requestId << " timeout: " << timeout << " actor id: " << timeoutTimer);
@@ -1098,7 +1098,7 @@ public:
             hFunc(TEvPrivate::TEvCloseIdleSessions, Handle);
         default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
-                ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                ev->GetTypeRewrite(), ev->ToString().data());
         }
     }
 
@@ -1330,7 +1330,7 @@ private:
     bool ResourcesPublishScheduled = false;
     TString PublishBoardPath;
     std::optional<TInstant> LastPublishResourcesAt;
-    
+
     TActorId KqpRmServiceActor;
     TActorId BoardLookupActor;
     TActorId BoardPublishActor;
@@ -1349,7 +1349,7 @@ IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources)
 {
-    return new TKqpProxyService(logConfig, tableServiceConfig, std::move(settings), 
+    return new TKqpProxyService(logConfig, tableServiceConfig, std::move(settings),
         std::move(queryReplayFactory),std::move(kqpProxySharedResources));
 }
 

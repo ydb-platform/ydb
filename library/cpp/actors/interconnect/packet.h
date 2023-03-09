@@ -113,6 +113,7 @@ struct TEventHolder : TNonCopyable {
     TActorId ForwardRecipient;
     THolder<IEventBase> Event;
     TIntrusivePtr<TEventSerializedData> Buffer;
+    NActors::TEventSerializer EventSerializer;
     ui64 Serial;
     ui32 EventSerializedSize;
     ui32 EventActuallySerialized;
@@ -137,10 +138,11 @@ struct TEventHolder : TNonCopyable {
         const TActorId& s = d.Sender;
         const TActorId *f = ForwardRecipient ? &ForwardRecipient : nullptr;
         Span.EndError("nondelivery");
-        auto ev = Event
-            ? std::make_unique<IEventHandle>(r, s, Event.Release(), d.Flags, d.Cookie, f, Span.GetTraceId())
-            : std::make_unique<IEventHandle>(d.Type, d.Flags, r, s, std::move(Buffer), d.Cookie, f, Span.GetTraceId());
-        NActors::TActivationContext::Send(ev->ForwardOnNondelivery(NActors::TEvents::TEvUndelivered::Disconnected, unsure));
+        TAutoPtr<IEventHandle> ev = Event
+            ? new IEventHandleFat(r, s, Event.Release(), d.Flags, d.Cookie, f, Span.GetTraceId())
+            : new IEventHandleFat(d.Type, d.Flags, r, s, std::move(Buffer), d.Cookie, f, Span.GetTraceId());
+        ev = IEventHandle::ForwardOnNondelivery(ev, NActors::TEvents::TEvUndelivered::Disconnected, unsure);
+        NActors::TActivationContext::Send(ev);
     }
 
     void Clear() {

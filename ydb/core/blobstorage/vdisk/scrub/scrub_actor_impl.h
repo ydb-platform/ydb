@@ -80,8 +80,8 @@ namespace NKikimr {
         void UpdateReadableParts(const TLogoBlobID& fullId, NMatrix::TVectorType readable);
 
         ui64 GenerateRestoreCorruptedBlobQuery();
-        void Handle(TAutoPtr<TEventHandle<TEvRestoreCorruptedBlobResult>> ev);
-        void Handle(TAutoPtr<TEventHandle<TEvNonrestoredCorruptedBlobNotify>> ev);
+        void Handle(TAutoPtr<TEventHandleFat<TEvRestoreCorruptedBlobResult>> ev);
+        void Handle(TAutoPtr<TEventHandleFat<TEvNonrestoredCorruptedBlobNotify>> ev);
         void HandleGenerateRestoreCorruptedBlobQuery();
 
     public:

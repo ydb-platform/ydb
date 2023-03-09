@@ -447,7 +447,7 @@ public:
 
             default:
                 BLOG_W("Replica::StateInit unexpected event type# " << ev->GetTypeRewrite()
-                    << " event: " << ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                    << " event: " << ev->ToString());
                 break;
         }
     }

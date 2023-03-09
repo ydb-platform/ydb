@@ -72,7 +72,7 @@ public:
                 CompileRequestSpan.End();
             }
 
-            ctx.Send(Owner, ev->Release().Release());
+            ctx.Send(Owner, ev.Release());
             Die(ctx);
             return;
         }
@@ -83,12 +83,12 @@ public:
                 CompileRequestSpan.End();
             }
 
-            ctx.Send(Owner, ev->Release().Release());
+            ctx.Send(Owner, ev.Release());
             Die(ctx);
             return;
         }
 
-        DeferredResponse.Reset(ev->Release().Release());
+        DeferredResponse.Reset(ev.Release());
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext &ctx) {

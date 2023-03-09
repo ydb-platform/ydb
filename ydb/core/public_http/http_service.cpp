@@ -66,7 +66,7 @@ namespace {
             ev->CertificateFile = Config.GetCert();
             ev->PrivateKeyFile = Config.GetKey();
 
-            ctx.Send(new NActors::IEventHandle(MakePublicHttpServerID(), TActorId(), ev.Release(), 0, true));
+            ctx.Send(new NActors::IEventHandleFat(MakePublicHttpServerID(), TActorId(), ev.Release(), 0, true));
             ctx.Send(MakePublicHttpServerID(), new NHttp::TEvHttpProxy::TEvRegisterHandler("/", MakePublicHttpID()));
         }
 
@@ -119,7 +119,7 @@ namespace {
             return;
         }
 
-        
+
         auto actor = NKikimr::NPublicHttp::CreatePublicHttp(config, appData.Counters->GetSubgroup("counters", "public_http"));
         localServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             MakePublicHttpID(),

@@ -93,7 +93,7 @@ void TAuditLogActor::HandleUnexpectedEvent(STFUNC_SIG)
 
     LOG_W("TAuditLogActor:"
           << " unhandled event type: " << ev->GetTypeRewrite()
-          << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+          << " event: " << ev->GetTypeName());
 }
 
 }    // namespace NKikimr::NAudit

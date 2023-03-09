@@ -104,7 +104,7 @@ void TMeteringWriteActor::HandleUnexpectedEvent(STFUNC_SIG)
 
     LOG_W("TMeteringWriteActor:"
           << " unhandled event type: " << ev->GetTypeRewrite()
-          << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+          << " event: " << ev->ToString());
 }
 
 }   // namespace

@@ -7,7 +7,7 @@
 #include <library/cpp/actors/wilson/wilson_trace.h>
 
 namespace NActors {
-    class IEventHandle;
+    class IEventHandleFat;
 
     struct TConstIoVec {
         const void* Data;

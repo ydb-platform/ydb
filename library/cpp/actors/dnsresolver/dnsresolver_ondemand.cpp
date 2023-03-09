@@ -25,7 +25,7 @@ namespace NDnsResolver {
 
         void Forward(STATEFN_SIG) {
             ev->Rewrite(ev->GetTypeRewrite(), GetUpstream());
-            TActivationContext::Send(std::move(ev));
+            TActivationContext::Send(ev.Release());
         }
 
     private:

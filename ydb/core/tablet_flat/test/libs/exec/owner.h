@@ -77,7 +77,7 @@ namespace NFake {
 
                 Send(Agent, new TEvents::TEvPoison);
             } else {
-                Y_Fail("Unexpected event " << TypeName(*eh->GetBase()));
+                Y_Fail("Unexpected event " << eh->GetTypeName());
             }
         }
 

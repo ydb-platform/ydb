@@ -21,7 +21,7 @@ public:
 
     private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod*) const override {
-            ActorSystem->Send(new NActors::IEventHandle(
+            ActorSystem->Send(new NActors::IEventHandleFat(
                 CurrentActorId, NActors::TActorId(), new NDq::TEvDqCompute::TEvResumeExecution()));
             return NUdf::TUnboxedValue::Void();
         }

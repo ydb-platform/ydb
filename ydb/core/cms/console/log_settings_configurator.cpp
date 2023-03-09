@@ -44,7 +44,7 @@ public:
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
     }
@@ -56,7 +56,7 @@ TLogSettingsConfigurator::TLogSettingsConfigurator()
 {
 }
 
-TLogSettingsConfigurator::TLogSettingsConfigurator(const TString &pathToConfigCacheFile) 
+TLogSettingsConfigurator::TLogSettingsConfigurator(const TString &pathToConfigCacheFile)
 {
     PathToConfigCacheFile = pathToConfigCacheFile;
 }
@@ -110,7 +110,7 @@ void TLogSettingsConfigurator::SaveLogSettingsConfigToCache(const NKikimrConfig:
 
         if (!google::protobuf::TextFormat::ParseFromString(cacheFile.ReadAll(), &appConfig))
             ythrow yexception() << "Failed to parse config from cache file " << LastSystemError() << " " << LastSystemErrorText();
-        
+
         appConfig.MutableLogConfig()->CopyFrom(logConfig);
 
         TString proto;

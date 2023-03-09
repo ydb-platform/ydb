@@ -27,6 +27,11 @@ public:
     TMessageBusSecureRequest(Args&&... args)
         : TSecureRequestActor<TMessageBusServerRequestBase<TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>>>, TDerived>(std::forward<Args>(args)...)
     {}
+
+    template<typename T>
+    void Become(T stateFunc) {
+        IActorCallback::Become(stateFunc);
+    }
 };
 
 template <typename TDerived, typename TTabletReplyEvent, NKikimrServices::TActivity::EType Activity>

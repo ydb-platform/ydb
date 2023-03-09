@@ -219,7 +219,7 @@ private:
 
                 // run
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         replyTo,
                         selfId,
                         new TEvPushFinished(channelId, freeSpace),
@@ -228,7 +228,7 @@ private:
             } catch (...) {
                 auto status = taskRunner->GetStatus();
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         replyTo,
                         selfId,
                         MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
@@ -264,7 +264,7 @@ private:
                     source->Finish();
                 }
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         parentId,
                         selfId,
                         new TEvAsyncInputPushFinished(index, source->GetFreeSpace()),
@@ -273,7 +273,7 @@ private:
             } catch (...) {
                 auto status = taskRunner->GetStatus();
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         parentId,
                         selfId,
                         MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
@@ -329,7 +329,7 @@ private:
                 }
 
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         replyTo,
                         selfId,
                         new TEvChannelPopFinished(
@@ -345,7 +345,7 @@ private:
             } catch (...) {
                 auto status = taskRunner->GetStatus();
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         replyTo,
                         selfId,
                         MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
@@ -403,7 +403,7 @@ private:
                 event->Strings = std::move(batch);
                 // repack data and forward
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         selfId,
                         replyTo,
                         event.Release(),
@@ -412,7 +412,7 @@ private:
             } catch (...) {
                 auto status = taskRunner->GetStatus();
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         replyTo,
                         selfId,
                         MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
@@ -478,7 +478,7 @@ private:
                     sensors);
 
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         replyTo,
                         selfId,
                         event.Release(),
@@ -487,7 +487,7 @@ private:
             } catch (...) {
                 auto status = taskRunner->GetStatus();
                 actorSystem->Send(
-                    new IEventHandle(replyTo, selfId, MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(), 0, cookie));
+                    new IEventHandleFat(replyTo, selfId, MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(), 0, cookie));
             }
         });
     }
@@ -523,7 +523,7 @@ private:
                 }
 
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         replyTo,
                         selfId,
                         new TEvTaskRunFinished(
@@ -544,7 +544,7 @@ private:
             } catch (...) {
                 auto status = taskRunner->GetStatus();
                 actorSystem->Send(
-                    new IEventHandle(
+                    new IEventHandleFat(
                         replyTo,
                         selfId,
                         MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),

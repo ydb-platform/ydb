@@ -88,7 +88,7 @@ public:
         TimeoutTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
         auto event = new TConfigsProvider::TEvPrivate::TEvNotificationTimeout(Subscription);
         CreateLongTimer(ctx, TDuration::Minutes(10),
-                        new IEventHandle(SelfId(), SelfId(), event),
+                        new IEventHandleFat(SelfId(), SelfId(), event),
                         AppData(ctx)->SystemPoolId,
                         TimeoutTimerCookieHolder.Get());
     }
@@ -141,7 +141,7 @@ public:
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
     }
@@ -210,7 +210,7 @@ public:
         TimeoutTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
         auto event = new TConfigsProvider::TEvPrivate::TEvNotificationTimeout(Subscription);
         CreateLongTimer(ctx, TDuration::Minutes(10),
-                        new IEventHandle(SelfId(), SelfId(), event),
+                        new IEventHandleFat(SelfId(), SelfId(), event),
                         AppData(ctx)->SystemPoolId,
                         TimeoutTimerCookieHolder.Get());
     }
@@ -281,7 +281,7 @@ public:
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
     }
@@ -325,7 +325,7 @@ public:
 
             default:
                 Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                       ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                       ev->GetTypeRewrite(), ev->ToString().data());
                 break;
         }
     }
@@ -1065,8 +1065,8 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateConfigs::TPtr &ev, const TAct
     auto &event = ev->Get()->Event;
     if (event) {
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider send: " << event->GetBase()->ToString());
-        ctx.Send(event);
+                    "TConfigsProvider send: " << ev->ToString());
+        ctx.Send(event.Release());
     }
 
     ApplyConfigModifications(ev->Get()->Modifications, ctx);
@@ -1077,8 +1077,8 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
     auto &event = ev->Get()->Event;
     if (event) {
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider send: " << event->GetBase()->ToString());
-        ctx.Send(event);
+                    "TConfigsProvider send: " << ev->ToString());
+        ctx.Send(event.Release());
     }
 
     ApplySubscriptionModifications(ev->Get()->Modifications, ctx);

@@ -53,7 +53,7 @@ public:
             cFunc(TEvents::TSystem::Poison, PassAway);
             default:
                 LOG_C("Unexpected event type: " << ev->GetTypeRewrite()
-                    << ", event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "<serialized>"));
+                    << ", event: " << ev->GetTypeName());
         }
     }
 

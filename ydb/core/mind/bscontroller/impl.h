@@ -1611,12 +1611,12 @@ private:
         }
         for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId}) {
             if (const TActorId actorId = std::exchange(*ptr, {})) {
-                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+                TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
         }
         for (const auto& [id, info] : GroupMap) {
             if (const auto& actorId = info->VirtualGroupSetupMachineId) {
-                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+                TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
         }
         return TActor::PassAway();
@@ -1657,7 +1657,7 @@ private:
     void Enqueue(STFUNC_SIG) override {
         Y_UNUSED(ctx);
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC04, "Enqueue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
-            (Event, ev->HasEvent() ? ev->GetBase()->ToString() : "serialized"));
+            (Event, ev->ToString()));
         InitQueue.push_back(ev);
     }
 
@@ -1809,7 +1809,7 @@ public:
 
     STFUNC(StateInit) {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC05, "StateInit event", (Type, ev->GetTypeRewrite()),
-            (Event, ev->HasEvent() ? ev->GetBase()->ToString() : "serialized"));
+            (Event, ev->ToString()));
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             default:
@@ -1830,7 +1830,7 @@ public:
     }
 
     void PushProcessIncomingEvent() {
-        TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessIncomingEvent, 0, SelfId(), {}, nullptr, 0));
+        TActivationContext::Send(new IEventHandleFat(TEvPrivate::EvProcessIncomingEvent, 0, SelfId(), {}, nullptr, 0));
     }
 
     void ProcessIncomingEvent() {
@@ -1920,7 +1920,7 @@ public:
             default:
                 if (!HandleDefaultEvents(ev, ctx)) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
-                        (Event, ev->HasEvent() ? ev->GetBase()->ToString() : "serialized"));
+                        (Event, ev->ToString()));
                 }
             break;
         }
@@ -1942,7 +1942,7 @@ public:
         while (!InitQueue.empty()) {
             TAutoPtr<IEventHandle> &ev = InitQueue.front();
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSC08, "Dequeue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
-                (Event, ev->HasEvent() ? ev->GetBase()->ToString() : "serialized"));
+                (Event, ev->ToString()));
             TActivationContext::Send(ev.Release());
             InitQueue.pop_front();
         }

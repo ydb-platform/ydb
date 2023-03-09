@@ -471,7 +471,7 @@ private:
         if (!Connected) {
             for (auto&& alloc : OfflineAllocationEvSchedule) {
                 KESUS_PROXY_LOG_TRACE("Schedule offline allocation in " << alloc.first << ": " << PrintResources(*alloc.second));
-                TAutoPtr<IEventHandle> h = new IEventHandle(SelfId(), SelfId(), alloc.second.Release(), 0, OfflineAllocationCookie);
+                TAutoPtr<IEventHandle> h = new IEventHandleFat(SelfId(), SelfId(), alloc.second.Release(), 0, OfflineAllocationCookie);
                 TActivationContext::Schedule(alloc.first, std::move(h));
             }
         }
@@ -905,7 +905,7 @@ public:
                 KESUS_PROXY_LOG_WARN("TKesusQuoterProxy::StateFunc unexpected event type# "
                     << ev->GetTypeRewrite()
                     << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << ev->ToString());
                 Y_VERIFY_DEBUG(false, "Unknown event");
                 break;
         }

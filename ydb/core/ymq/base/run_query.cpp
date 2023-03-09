@@ -41,9 +41,9 @@ namespace NKikimr::NSQS {
         if (sendAfter == TDuration::Zero()) {
             ctx.Send(kqpActor, ev.Release());
         } else {
-            ctx.ExecutorThread.Schedule(sendAfter, new IEventHandle(kqpActor, ctx.SelfID, ev.Release()));
+            ctx.ExecutorThread.Schedule(sendAfter, new IEventHandleFat(kqpActor, ctx.SelfID, ev.Release()));
         }
     }
-    
-    
+
+
 } // namespace NKikimr::NSQS

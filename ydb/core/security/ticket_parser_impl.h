@@ -870,7 +870,7 @@ protected:
         THashMap<TString, TPermissionRecord> Permissions;
         TString Subject; // login
         TEvTicketParser::TError Error;
-        TDeque<THolder<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
+        TDeque<THolder<TEventHandleFat<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
         ui64 ResponsesLeft = 0;
         TInstant InitTime;
         TInstant RefreshTime;

@@ -438,24 +438,24 @@ protected:
         }
     };
 
-    template<typename TEv>
-    bool IsEventExpected(const TAutoPtr<TEventHandle<TEv>>& ev) {
+    template<typename TEvent>
+    bool IsEventExpected(const TAutoPtr<TEvent>& ev) {
         return (ev->Cookie == 0) || (ev->Cookie == OutgoingSequenceNumber);
     }
 
-    template<typename TEv>
-    void PostponeEvent(const TAutoPtr<TEventHandle<TEv>>& ev) {
-        TAutoPtr<IEventHandle> evb = ev.Release();
-        BLOG_D("Postpone event " << evb->Cookie);
+    template<typename TEvent>
+    void PostponeEvent(TAutoPtr<TEvent>& ev) {
+        BLOG_D("Postpone event " << ev->Cookie);
+        TAutoPtr<IEventHandle> evb(ev.Release());
         auto it = std::upper_bound(PostponedEvents.begin(), PostponedEvents.end(), evb, TEventsComparator());
         PostponedEvents.insert(it, evb);
     }
 
     void ReplayPostponedEvents() {
         if (!PostponedEvents.empty()) {
-            auto event = PostponedEvents.front();
+            TAutoPtr<IEventHandle> event = std::move(PostponedEvents.front());
             PostponedEvents.pop_front();
-            StateConnected(event, TActivationContext::AsActorContext());
+            StateConnected(event);
         }
     }
 
@@ -771,18 +771,17 @@ protected:
         return true;
     }
 
-    STATEFN(StateAccepting) {
+    LIGHTFN(StateAccepting) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleAccepting);
             hFunc(TEvPollerRegisterResult, HandleAccepting);
         }
     }
 
-    STATEFN(StateConnected) {
+    LIGHTFN(StateConnected) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleConnected);
             hFunc(TEvPollerRegisterResult, HandleConnected);
-
             hFunc(TEvPGEvents::TEvAuthResponse, HandleConnected);
             hFunc(TEvPGEvents::TEvQueryResponse, HandleConnected);
             hFunc(TEvPGEvents::TEvParseResponse, HandleConnected);

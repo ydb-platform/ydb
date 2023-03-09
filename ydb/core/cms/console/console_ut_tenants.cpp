@@ -394,9 +394,9 @@ struct CatchPoolEvent {
     TTenantTestRuntime::EEventAction operator()(TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev)
     {
         if (ev->HasEvent()
-            && (dynamic_cast<TTenantsManager::TEvPrivate::TEvPoolAllocated*>(ev->GetBase())
-                || dynamic_cast<TTenantsManager::TEvPrivate::TEvPoolFailed*>(ev->GetBase())
-                || dynamic_cast<TTenantsManager::TEvPrivate::TEvPoolDeleted*>(ev->GetBase()))) {
+            && (ev->Type == TTenantsManager::TEvPrivate::TEvPoolAllocated::EventType)
+                || (ev->Type == TTenantsManager::TEvPrivate::TEvPoolFailed::EventType)
+                || (ev->Type == TTenantsManager::TEvPrivate::TEvPoolDeleted::EventType)) {
             Captured.emplace_back(std::move(ev));
             return TTestActorRuntime::EEventAction::DROP;
         }
@@ -649,7 +649,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
 
 Y_UNIT_TEST_SUITE(TConsoleTests) {
     void RestartTenantPool(TTenantTestRuntime& runtime) {
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
+        runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(0), 0),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
 
@@ -819,13 +819,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     }
 
     void RunTestRestartConsoleAndPools(TTenantTestRuntime& runtime) {
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(1), 0),
+        runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(1), 0),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(2), 0),
+        runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(2), 0),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(3), 0),
+        runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(3), 0),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
 

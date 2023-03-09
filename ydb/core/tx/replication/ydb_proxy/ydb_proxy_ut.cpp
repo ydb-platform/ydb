@@ -92,14 +92,14 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
                 UNIT_ASSERT(desc.GetPathDescription().GetDomainDescription().HasSecurityState());
 
                 const auto& secState = desc.GetPathDescription().GetDomainDescription().GetSecurityState();
-                Server.GetRuntime()->Send(new IEventHandle(MakeTicketParserID(), Sender,
+                Server.GetRuntime()->Send(new IEventHandleFat(MakeTicketParserID(), Sender,
                     new TEvTicketParser::TEvUpdateLoginSecurityState(secState)));
             }
         }
 
         template <typename TEvResponse>
         auto Send(IEventBase* ev) {
-            Server.GetRuntime()->Send(new IEventHandle(YdbProxy, Sender, ev));
+            Server.GetRuntime()->Send(new IEventHandleFat(YdbProxy, Sender, ev));
             return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
         }
 

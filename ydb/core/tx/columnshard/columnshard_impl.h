@@ -197,8 +197,8 @@ protected:
         default:
             LOG_S_WARN("TColumnShard.StateBroken at " << TabletID()
                        << " unhandled event type: " << ev->GetTypeRewrite()
-                       << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
-            ctx.Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown));
+                       << " event: " << ev->ToString());
+            ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
         }
     }
@@ -234,7 +234,7 @@ protected:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_S_WARN("TColumnShard.StateWork at " << TabletID()
                            << " unhandled event type: "<< ev->GetTypeRewrite()
-                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                           << " event: " << ev->ToString());
             }
             break;
         }

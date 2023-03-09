@@ -23,7 +23,7 @@ STATEFN(TUserSettingsReader::StateFunc) {
         hFunc(TEvWakeup, HandleWakeup);
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
     default:
-        LOG_SQS_ERROR("Unknown type of event came to SQS user settings reader actor: " << ev->Type << " (" << ev->GetBase()->ToString() << "), sender: " << ev->Sender);
+        LOG_SQS_ERROR("Unknown type of event came to SQS user settings reader actor: " << ev->Type << " (" << ev->ToString() << "), sender: " << ev->Sender);
     }
 }
 

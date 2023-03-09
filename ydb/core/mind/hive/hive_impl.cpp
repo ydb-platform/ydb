@@ -479,7 +479,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
             BLOG_I("Primary(Sub)DomainKey is not set, setting it from TTabletStorageInfo::TenantPathId to " << Info()->TenantPathId);
 
             auto msg = MakeHolder<TEvHive::TEvConfigureHive>(TSubDomainKey(Info()->TenantPathId.OwnerId, Info()->TenantPathId.LocalPathId));
-            TEvHive::TEvConfigureHive::TPtr event((TEventHandle<TEvHive::TEvConfigureHive>*) new IEventHandle(
+            TEvHive::TEvConfigureHive::TPtr event((TEventHandleFat<TEvHive::TEvConfigureHive>*) new IEventHandleFat(
                 TActorId(), TActorId(), msg.Release()
             ));
             Execute(CreateConfigureSubdomain(event));
@@ -2371,7 +2371,7 @@ void THive::Handle(TEvHive::TEvInvalidateStoragePools::TPtr& ev) {
         }
     }
 
-    auto reply = std::make_unique<IEventHandle>(TEvHive::EvInvalidateStoragePoolsReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
+    auto reply = std::make_unique<IEventHandleFat>(TEvHive::EvInvalidateStoragePoolsReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
     if (ev->InterconnectSession) {
         reply->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
     }
@@ -2381,7 +2381,7 @@ void THive::Handle(TEvHive::TEvInvalidateStoragePools::TPtr& ev) {
 void THive::Handle(TEvHive::TEvReassignOnDecommitGroup::TPtr& ev) {
     const ui32 groupId = ev->Get()->Record.GetGroupId();
     BLOG_D("THive::Handle(TEvReassignOnDecommitGroup) GroupId# " << groupId);
-    auto reply = std::make_unique<IEventHandle>(TEvHive::EvReassignOnDecommitGroupReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
+    auto reply = std::make_unique<IEventHandleFat>(TEvHive::EvReassignOnDecommitGroupReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
     if (ev->InterconnectSession) {
         reply->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
     }
@@ -2505,7 +2505,7 @@ STFUNC(THive::StateWork) {
     default:
         if (!HandleDefaultEvents(ev, ctx)) {
             BLOG_W("THive::StateWork unhandled event type: " << ev->GetTypeRewrite()
-                   << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                   << " event: " << ev->ToString());
         }
         break;
     }

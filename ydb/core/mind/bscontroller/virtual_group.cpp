@@ -223,7 +223,7 @@ namespace NKikimr::NBsController {
                 if (State) {
                     State->ApplyConfigUpdates();
                 }
-                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Bootstrap, 0, Machine->SelfId(), {}, nullptr, 0));
+                TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Bootstrap, 0, Machine->SelfId(), {}, nullptr, 0));
             }
         };
 
@@ -550,7 +550,7 @@ namespace NKikimr::NBsController {
                 if (ErrorReason) {
                     ev->Record.SetErrorReason(ErrorReason);
                 }
-                auto reply = std::make_unique<IEventHandle>(Ev->Sender, Self->SelfId(), ev.release(), 0, Ev->Cookie);
+                auto reply = std::make_unique<IEventHandleFat>(Ev->Sender, Self->SelfId(), ev.release(), 0, Ev->Cookie);
                 if (Ev->InterconnectSession) {
                     reply->Rewrite(TEvInterconnect::EvForward, Ev->InterconnectSession);
                 }

@@ -3,7 +3,7 @@
 namespace NKikimr::NBsController {
 
     class TBlobStorageController::TTxGroupMetricsExchange : public TTransactionBase<TBlobStorageController> {
-        std::unique_ptr<TEventHandle<TEvBlobStorage::TEvControllerGroupMetricsExchange>> Ev;
+        std::unique_ptr<TEventHandleFat<TEvBlobStorage::TEvControllerGroupMetricsExchange>> Ev;
         std::unique_ptr<TEvBlobStorage::TEvControllerGroupMetricsExchange> Response;
 
     public:
@@ -20,7 +20,7 @@ namespace NKikimr::NBsController {
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXGME00, "TTxGroupMetricsExchange::Execute", (Record, record));
 
             NIceDb::TNiceDb db(txc.DB);
-            
+
             for (NKikimrBlobStorage::TGroupMetrics& item : *record.MutableGroupMetrics()) {
                 if (TGroupInfo *group = Self->FindGroup(item.GetGroupId())) {
                     group->GroupMetrics = std::move(item);

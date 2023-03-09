@@ -47,7 +47,7 @@ namespace NActors {
     void TInterconnectProxyTCP::Registered(TActorSystem* sys, const TActorId& owner) {
         if (!DynamicPtr) {
             // perform usual bootstrap for static nodes
-            sys->Send(new IEventHandle(TEvents::TSystem::Bootstrap, 0, SelfId(), owner, nullptr, 0));
+            sys->Send(new IEventHandleFat(TEvents::TSystem::Bootstrap, 0, SelfId(), owner, nullptr, 0));
         }
         if (const auto& mon = Common->RegisterMonPage) {
             TString path = Sprintf("peer%04" PRIu32, PeerNodeId);
@@ -509,7 +509,7 @@ namespace NActors {
                 if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
                     Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, ev->Cookie);
                 }
-                TActivationContext::Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected));
+                TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected));
                 break;
 
             case TEvInterconnect::TEvConnectNode::EventType:
@@ -591,7 +591,7 @@ namespace NActors {
                 // we have found cancellation request for the pending handshake request; so simply remove it from the
                 // deque, as we are not interested in failure reason; must likely it happens because of handshake timeout
                 if (pendingEvent->GetTypeRewrite() == TEvHandshakeFail::EventType) {
-                    TEvHandshakeFail::TPtr tmp(static_cast<TEventHandle<TEvHandshakeFail>*>(pendingEvent.Release()));
+                    TEvHandshakeFail::TPtr tmp(static_cast<TEventHandleFat<TEvHandshakeFail>*>(pendingEvent.Release()));
                     LogHandshakeFail(tmp, true);
                 }
                 PendingIncomingHandshakeEvents.erase(it);
@@ -605,7 +605,7 @@ namespace NActors {
 
         Y_VERIFY(Session && SessionID);
         ValidateEvent(ev, "ForwardSessionEventToSession");
-        InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev, TActivationContext::ActorContextFor(SessionID));
+        InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev);
     }
 
     void TInterconnectProxyTCP::GenerateHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
@@ -774,7 +774,7 @@ namespace NActors {
         for (auto& ev : PendingIncomingHandshakeEvents) {
             Send(ev->Sender, new TEvents::TEvPoisonPill);
             if (ev->GetTypeRewrite() == TEvHandshakeFail::EventType) {
-                TEvHandshakeFail::TPtr tmp(static_cast<TEventHandle<TEvHandshakeFail>*>(ev.Release()));
+                TEvHandshakeFail::TPtr tmp(static_cast<TEventHandleFat<TEvHandshakeFail>*>(ev.Release()));
                 LogHandshakeFail(tmp, true);
             }
         }

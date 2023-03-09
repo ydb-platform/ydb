@@ -115,6 +115,11 @@ namespace NActors {
 
         bool Send(TAutoPtr<IEventHandle> ev);
 
+        bool Forward(THolder<IEventHandle>& ev, const TActorId& recipient) {
+            IEventHandle::Forward(ev, recipient);
+            return Send(ev.Release());
+        }
+
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) {
             return GetActorContext().Schedule(delta, ev, cookie);
         }
@@ -157,7 +162,7 @@ namespace NActors {
         {}
 
         TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) override {
-            return new IEventHandle(TEvents::TSystem::Bootstrap, 0, self, parent, {}, 0);
+            return new IEventHandleFat(TEvents::TSystem::Bootstrap, 0, self, parent, {}, 0);
         }
 
     private:

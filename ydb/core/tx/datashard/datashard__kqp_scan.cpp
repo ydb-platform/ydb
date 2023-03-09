@@ -199,7 +199,7 @@ private:
         startConfig.Conf.ReadAheadHi = READAHEAD_HI;
 
         TimeoutActorId = CreateLongTimer(TlsActivationContext->AsActorContext(), Deadline - TInstant::Now(),
-            new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup));
+            new IEventHandleFat(SelfId(), SelfId(), new TEvents::TEvWakeup));
 
         if (Y_UNLIKELY(IsProfile())) {
             StartWaitTime = TInstant::Now();

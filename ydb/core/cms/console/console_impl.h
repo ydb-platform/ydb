@@ -120,7 +120,7 @@ private:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_CRIT_S(ctx, NKikimrServices::CMS,
                            "TConsole::StateWork unexpected event type: " << ev->GetTypeRewrite()
-                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                           << " event: " << ev->ToString());
             }
         }
     }

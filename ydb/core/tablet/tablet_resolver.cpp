@@ -312,8 +312,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         const std::pair<TActorId, TActorId> endpoint = SelectForward(ctx, entry, info, msg->TabletID);
         if (endpoint.first) {
             ctx.Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch));
-            if (!!msg->Ev)
-                ctx.ExecutorThread.Send(msg->Ev->Forward(msg->SelectActor(endpoint.second, endpoint.first)));
+            if (!!msg->Ev) {
+                IEventHandle::Forward(msg->Ev, msg->SelectActor(endpoint.second, endpoint.first));
+                ctx.ExecutorThread.Send(msg->Ev);
+            }
             return true;
         } else {
             return false;
@@ -863,7 +865,7 @@ public:
             HFunc(TEvents::TEvUndelivered, Handle);
             default:
                 LOG_WARN(ctx, NKikimrServices::TABLET_RESOLVER, "TTabletResolver::StateWork unexpected event type: %" PRIx32
-                    " event: %s", ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                    " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
                 break;
         }
     }

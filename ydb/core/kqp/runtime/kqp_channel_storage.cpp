@@ -74,7 +74,7 @@ private:
             default:
                 Y_FAIL("TKqpChannelStorageActor::WorkState unexpected event type: %" PRIx32 " event: %s",
                     ev->GetTypeRewrite(),
-                    ev->HasEvent() ? ev->GetBase()->ToString().c_str() : "serialized?");
+                    ev->ToString().data());
         }
     }
 

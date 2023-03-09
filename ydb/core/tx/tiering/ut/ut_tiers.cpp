@@ -150,9 +150,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         void CheckRuntime(TTestActorRuntime& runtime) {
             const auto pred = [this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event)->TTestActorRuntimeBase::EEventAction {
                 if (event->HasBuffer() && !event->HasEvent()) {
-                } else if (!event->GetBase()) {
+                } else if (!event->HasEvent()) {
                 } else {
-                    auto ptr = dynamic_cast<NMetadata::NProvider::TEvRefreshSubscriberData*>(event->GetBase());
+                    auto ptr = event->CastAsLocal<NMetadata::NProvider::TEvRefreshSubscriberData>();
                     if (ptr) {
                         CheckFound(ptr);
                     }

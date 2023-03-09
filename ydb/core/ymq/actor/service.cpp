@@ -42,8 +42,8 @@
 LWTRACE_USING(SQS_PROVIDER);
 
 template <>
-struct THash<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> : THash<const NActors::TEventHandle<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest>*> {
-    using TParent = THash<const NActors::TEventHandle<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest>*>;
+struct THash<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> : THash<const NActors::TEventHandleFat<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest>*> {
+    using TParent = THash<const NActors::TEventHandleFat<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest>*>;
     using TParent::operator();
     size_t operator()(const NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ptr) const {
         return TParent::operator()(ptr.Get());
@@ -139,7 +139,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
             Counters_ = Counters_->GetCountersForNotLeaderNode();
             LWPROBE(DestroyLeader, UserName_, QueueName_, reason);
             LOG_SQS_INFO("Stop local leader [" << UserName_ << "/" << QueueName_ << "] actor " << LocalLeader_);
-            TActivationContext::Send(new IEventHandle(LocalLeader_, SelfId(), new TEvPoisonPill()));
+            TActivationContext::Send(new IEventHandleFat(LocalLeader_, SelfId(), new TEvPoisonPill()));
             LocalLeader_ = TActorId();
             if (FolderId_) {
                 Y_VERIFY(FolderCounters_);
@@ -340,7 +340,7 @@ STATEFN(TSqsService::StateFunc) {
         hFunc(TSqsEvents::TEvUserSettingsChanged, HandleUserSettingsChanged);
         hFunc(TSqsEvents::TEvQueuesList, HandleQueuesList);
     default:
-        LOG_SQS_ERROR("Unknown type of event came to SQS service actor: " << ev->Type << " (" << ev->GetBase()->ToString() << "), sender: " << ev->Sender);
+        LOG_SQS_ERROR("Unknown type of event came to SQS service actor: " << ev->Type << " (" << ev->GetTypeName() << "), sender: " << ev->Sender);
     }
 }
 
@@ -431,7 +431,7 @@ void TSqsService::HandleGetLeaderNodeForQueueRequest(TSqsEvents::TEvGetLeaderNod
     if (!queuePtr->LeaderNodeId_) {
         LWPROBE(QueueRequestCacheMiss, userName, queueName, reqId, ev->Get()->ToStringHeader());
         RLOG_SQS_REQ_DEBUG(reqId, "Queue [" << userName << "/" << queueName << "] is waiting for connection to leader tablet.");
-        
+
         queuePtr->GetLeaderNodeRequests_.emplace(std::move(ev));
         if (QueuesWithGetNodeWaitingRequests.empty()) {
             Schedule(
@@ -662,7 +662,7 @@ void TSqsService::HandleGetQueueId(TSqsEvents::TEvGetQueueId::TPtr& ev) {
     const auto& info = *queueIt->second;
     RLOG_SQS_REQ_DEBUG(
         reqId,
-        "Queue id is " << info.QueueName_ << " and version is " << info.Version_ 
+        "Queue id is " << info.QueueName_ << " and version is " << info.Version_
             << " with shards count: " << info.ShardsCount_ << " tables format: " << info.TablesFormat_
     );
     Send(
@@ -749,7 +749,7 @@ void TSqsService::HandleNodeTrackingSubscriptionStatus(TSqsEvents::TEvNodeTracke
     auto nodeId = ev->Get()->NodeId;
     queue.SetLeaderNodeId(nodeId);
     LOG_SQS_DEBUG(
-        "Got node leader for queue [" << queue.UserName_ << "/" << queue.QueueName_ 
+        "Got node leader for queue [" << queue.UserName_ << "/" << queue.QueueName_
         << "]. Node: " << nodeId << " subscription id: " << subscriptionId
     );
     for (auto& req : queue.GetLeaderNodeRequests_) {
@@ -1089,7 +1089,7 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
         }
         user->GetQueueFolderIdAndCustomNameRequests_.erase(requests.first, requests.second);
     }
-    
+
     CreateNodeTrackingSubscription(queueInfo);
     LOG_SQS_DEBUG("Created queue record. Queue: [" << queue << "]. QueueIdNumber: " << queueInfo->Version_ << ". Leader tablet id: [" << leaderTabletId << "]. Node tracker subscription: " << queueInfo->NodeTrackingSubscriptionId);
     return ret;
@@ -1190,7 +1190,7 @@ void TSqsService::ProcessConnectTimeoutToLeader() {
         }
     }
     if (nextRunAfter != TDuration::Max()) {
-        Schedule(nextRunAfter, new TEvWakeup(CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG)); 
+        Schedule(nextRunAfter, new TEvWakeup(CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG));
     }
 }
 

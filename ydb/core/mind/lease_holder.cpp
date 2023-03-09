@@ -72,7 +72,7 @@ private:
 
         default:
             Y_FAIL("TLeaseHolder::StateIdle unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->ToString().data());
         }
     }
 
@@ -87,7 +87,7 @@ private:
 
         default:
             Y_FAIL("TLeaseHolder::StatePing unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->ToString().data());
         }
     }
 

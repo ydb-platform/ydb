@@ -377,7 +377,7 @@ public:
                 HttpGateway, ModuleResolverState, Counters));
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
-        TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
+        TlsActivationContext->Send(new IEventHandleFat(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
                     nullptr, std::move(ev->TraceId)));
         Become(&TKqpSessionActor::ExecuteState);
     }
@@ -2125,8 +2125,8 @@ private:
     }
 
     void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev) {
-        InternalError(TStringBuilder() << "TKqpSessionActor in state " << state << " recieve unexpected event " <<
-                TypeName(*ev.Get()->GetBase()) << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()));
+        InternalError(TStringBuilder() << "TKqpSessionActor in state " << state << " received unexpected event " <<
+                ev->GetTypeName() << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()));
     }
 
     void InternalError(const TString& message) {

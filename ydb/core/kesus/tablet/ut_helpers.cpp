@@ -55,7 +55,7 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
                     "TFakeMetering:"
                         << " unhandled event type: " << ev->GetTypeRewrite()
-                        << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                        << " event: " << ev->ToString());
     }
 };
 
@@ -105,7 +105,7 @@ void TTestContext::SetupTabletServices() {
 
 void TTestContext::Sleep(ui64 millis) {
     TActorId sender = Runtime->AllocateEdgeActor();
-    Runtime->Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), TDuration::MilliSeconds(millis), 0);
+    Runtime->Schedule(new IEventHandleFat(sender, sender, new TEvents::TEvWakeup()), TDuration::MilliSeconds(millis), 0);
     ExpectEdgeEvent<TEvents::TEvWakeup>(sender, 0);
 }
 

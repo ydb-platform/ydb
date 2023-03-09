@@ -47,11 +47,11 @@ namespace NActors {
             Cerr << " \"" << name << "\"";
         Cerr << ", ";
         if (ev->HasEvent())
-            Cerr << " : " << (PRINT_EVENT_BODY ? ev->GetBase()->ToString() : ev->GetBase()->ToStringHeader());
-        else if (ev->HasBuffer())
-            Cerr << " : BUFFER";
-        else
-            Cerr << " : EMPTY";
+            Cerr << " : " << (PRINT_EVENT_BODY ? ev->ToString() : ev->GetTypeName());
+        // else if (ev->HasBuffer())
+        //     Cerr << " : BUFFER";
+        // else
+        //     Cerr << " : EMPTY";
 
         Cerr << "\n";
     }
@@ -397,7 +397,7 @@ namespace NActors {
                             TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), ev->GetRecipientRewrite());
                             TActivationContext *prevTlsActivationContext = TlsActivationContext;
                             TlsActivationContext = &ctx;
-                            recipientActor->Receive(ev, ctx);
+                            recipientActor->Receive(ev);
                             TlsActivationContext = prevTlsActivationContext;
                             // we expect the logger to never die in tests
                         }
@@ -669,7 +669,7 @@ namespace NActors {
         while (!scheduledEvents.empty() && scheduledEvents.begin()->Deadline == time) {
 //            static THashMap<std::pair<TActorId, TString>, ui64> eventTypes;
             auto& item = *scheduledEvents.begin();
-            TString name = item.Event->GetBase() ? TypeName(*item.Event->GetBase()) : Sprintf("%08" PRIx32, item.Event->Type);
+            TString name = item.Event->GetTypeName();
 //            eventTypes[std::make_pair(item.Event->Recipient, name)]++;
             runtime.ScheduledCount++;
             if (runtime.ScheduledCount > runtime.ScheduledLimit) {
@@ -1420,18 +1420,23 @@ namespace NActors {
         }
     }
 
-    void TTestActorRuntimeBase::Send(IEventHandle* ev, ui32 senderNodeIndex, bool viaActorSystem) {
+    void TTestActorRuntimeBase::Send(const TActorId& recipient, const TActorId& sender, TAutoPtr<IEventHandleLight> ev, ui32 senderNodeIndex, bool viaActorSystem) {
+        ev->PrepareSend(recipient, sender);
+        Send(ev.Release(), senderNodeIndex, viaActorSystem);
+    }
+
+    void TTestActorRuntimeBase::Send(TAutoPtr<IEventHandle> ev, ui32 senderNodeIndex, bool viaActorSystem) {
         TGuard<TMutex> guard(Mutex);
         Y_VERIFY(senderNodeIndex < NodeCount, "senderNodeIndex# %" PRIu32 " < NodeCount# %" PRIu32,
             senderNodeIndex, NodeCount);
         SendInternal(ev, senderNodeIndex, viaActorSystem);
     }
 
-    void TTestActorRuntimeBase::SendAsync(IEventHandle* ev, ui32 senderNodeIndex) {
+    void TTestActorRuntimeBase::SendAsync(TAutoPtr<IEventHandle> ev, ui32 senderNodeIndex) {
         Send(ev, senderNodeIndex, true);
     }
 
-    void TTestActorRuntimeBase::Schedule(IEventHandle* ev, const TDuration& duration, ui32 nodeIndex) {
+    void TTestActorRuntimeBase::Schedule(TAutoPtr<IEventHandle> ev, const TDuration& duration, ui32 nodeIndex) {
         TGuard<TMutex> guard(Mutex);
         Y_VERIFY(nodeIndex < NodeCount);
         ui32 nodeId = FirstNodeId + nodeIndex;
@@ -1568,7 +1573,7 @@ namespace NActors {
         NeedMonitoring = true;
     }
 
-    void TTestActorRuntimeBase::SendInternal(IEventHandle* ev, ui32 nodeIndex, bool viaActorSystem) {
+    void TTestActorRuntimeBase::SendInternal(TAutoPtr<IEventHandle> ev, ui32 nodeIndex, bool viaActorSystem) {
         Y_VERIFY(nodeIndex < NodeCount);
         ui32 nodeId = FirstNodeId + nodeIndex;
         TNodeDataBase* node = Nodes[nodeId].Get();
@@ -1587,23 +1592,22 @@ namespace NActors {
         }
 
         Y_VERIFY(!ev->GetRecipientRewrite().IsService() && (targetNodeIndex == nodeIndex));
-        TAutoPtr<IEventHandle> evHolder(ev);
 
-        if (!AllowSendFrom(node, evHolder)) {
+        if (!AllowSendFrom(node, ev)) {
             return;
         }
 
         ui32 mailboxHint = ev->GetRecipientRewrite().Hint();
         TEventMailBox& mbox = GetMailbox(nodeId, mailboxHint);
         if (!mbox.IsActive(TInstant::MicroSeconds(CurrentTimestamp))) {
-            mbox.PushFront(evHolder);
+            mbox.PushFront(ev);
             return;
         }
 
         ui64 recipientLocalId = ev->GetRecipientRewrite().LocalId();
         if ((BlockedOutput.find(ev->Sender) == BlockedOutput.end()) && VERBOSE) {
             Cerr << "Send event, ";
-            PrintEvent(evHolder, this);
+            PrintEvent(ev, this);
         }
 
         EvCounters[ev->GetTypeRewrite()]++;
@@ -1624,7 +1628,7 @@ namespace NActors {
                 TCallstack::GetTlsCallstack() = ev->Callstack;
                 TCallstack::GetTlsCallstack().SetLinesToSkip();
 #endif
-                recipientActor->Receive(evHolder, ctx);
+                recipientActor->Receive(ev);
                 node->ExecutorThread->DropUnregistered();
             }
             CurrentRecipient = TActorId();
@@ -1634,10 +1638,8 @@ namespace NActors {
                 Cerr << "Failed to find actor with local id: " << recipientLocalId << "\n";
             }
 
-            auto forwardedEv = ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown);
-            if (!!forwardedEv) {
-                node->ActorSystem->Send(forwardedEv);
-            }
+            auto fw = IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown);
+            node->ActorSystem->Send(fw);
         }
     }
 
@@ -1864,7 +1866,8 @@ namespace NActors {
             if (HasReply) {
                 delete Context->Queue->Pop();
             }
-            ctx.ExecutorThread.Send(ev->Forward(originalSender));
+            IEventHandle::Forward(ev, originalSender);
+            ctx.ExecutorThread.Send(ev);
             if (!IsSync && Context->Queue->Head()) {
                 SendHead(ctx);
             }
@@ -1896,9 +1899,17 @@ namespace NActors {
         TAutoPtr<IEventHandle> GetForwardedEvent() {
             IEventHandle* ev = Context->Queue->Head();
             ReplyChecker->OnRequest(ev);
-            TAutoPtr<IEventHandle> forwardedEv = ev->HasEvent()
-                ? new IEventHandle(Delegatee, ReplyId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie)
-                : new IEventHandle(ev->GetTypeRewrite(), ev->Flags, Delegatee, ReplyId, ev->ReleaseChainBuffer(), ev->Cookie);
+            TAutoPtr<IEventHandle> forwardedEv;
+            if (ev->IsEventLight()) {
+                IEventHandleLight* evl = IEventHandleLight::GetLight(ev);
+                evl->PrepareSend(Delegatee, ReplyId);
+                forwardedEv = ev;
+            } else {
+                IEventHandleFat* evf = IEventHandleFat::GetFat(ev);
+                forwardedEv = ev->HasEvent()
+                    ? new IEventHandleFat(Delegatee, ReplyId, evf->ReleaseBase().Release(), evf->Flags, evf->Cookie)
+                    : new IEventHandleFat(evf->GetTypeRewrite(), evf->Flags, Delegatee, ReplyId, evf->ReleaseChainBuffer(), evf->Cookie);
+            }
 
             return forwardedEv;
         }

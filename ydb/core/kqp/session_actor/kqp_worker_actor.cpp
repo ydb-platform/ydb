@@ -1038,7 +1038,7 @@ private:
     void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev, const TActorContext& ctx) {
         TString message = TStringBuilder() << "TKqpWorkerActor in state "
             << state << " received unexpected event "
-            << TypeName(*ev.Get()->GetBase()) << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite());
+            << ev->GetTypeName() << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite());
 
         InternalError(message, ctx);
     }

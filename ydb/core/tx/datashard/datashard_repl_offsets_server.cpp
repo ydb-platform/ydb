@@ -314,8 +314,7 @@ void TDataShard::HandleByReplicationSourceOffsetsServer(STATEFN_SIG) {
     InvokeOtherActor(
         *ReplicationSourceOffsetsServer,
         &TReplicationSourceOffsetsServer::Receive,
-        ev,
-        TActivationContext::ActorContextFor(ReplicationSourceOffsetsServer->SelfId()));
+        ev);
 }
 
 } // namespace NKikimr::NDataShard

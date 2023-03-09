@@ -989,7 +989,7 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
     entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
     entry.Operation = op;
     entry.ShowPrivatePath = true;
-    runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvRequest(request.Release())));
+    runtime.Send(MakeSchemeCacheID(), sender, new TEvRequest(request.Release()));
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
     UNIT_ASSERT(ev);

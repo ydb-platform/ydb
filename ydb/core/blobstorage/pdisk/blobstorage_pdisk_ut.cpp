@@ -433,8 +433,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
                 NKikimrProto::OK);
 
-        TEvents::TEvUndelivered::TPtr ev = reinterpret_cast<TEventHandle<TEvents::TEvUndelivered>*>(
-            new IEventHandle(
+        TEvents::TEvUndelivered::TPtr ev = reinterpret_cast<TEventHandleFat<TEvents::TEvUndelivered>*>(
+            new IEventHandleFat(
                 testCtx.Sender, testCtx.Sender,
                 new TEvents::TEvUndelivered(0, 0)
             )
@@ -689,7 +689,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const TString data = PrepareData(4096);
 
         TActorTestContext testCtx({ false });
-        
+
         TVDiskMock mock(&testCtx);
         mock.InitFull();
 
@@ -701,12 +701,12 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     new NPDisk::TEvChunkRead(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
                             chunk, 0, data.size(), 0, nullptr),
                     NKikimrProto::OK);
-            UNIT_ASSERT_VALUES_EQUAL(evReadRes->Data.ToString(), data); 
+            UNIT_ASSERT_VALUES_EQUAL(evReadRes->Data.ToString(), data);
         };
 
         TString dataCopy = data;
         testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-            chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0), 
+            chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0),
             NKikimrProto::OK);
         mock.CommitReservedChunks();
 
@@ -743,7 +743,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const TString data = PrepareData(4096);
 
         TActorTestContext testCtx({ false });
-        
+
         TVDiskMock mock(&testCtx);
         mock.InitFull();
 
@@ -752,7 +752,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         TString dataCopy = data;
         testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-            chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0), 
+            chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0),
             NKikimrProto::OK);
         mock.CommitReservedChunks();
         testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
@@ -767,7 +767,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         testCtx.TestResponse<NPDisk::TEvYardControlResult>(
                 new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
                 NKikimrProto::OK);
-            
+
         testCtx.TestResponse<NPDisk::TEvYardControlResult>(
                 new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&testCtx.MainKey)),
                 NKikimrProto::CORRUPTED);
@@ -776,7 +776,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(SmallDisk) {
         for (ui64 diskSizeGb : {40, 20, 10}) {
             ui64 diskSize = diskSizeGb << 30;
-            TActorTestContext testCtx({ 
+            TActorTestContext testCtx({
                 .IsBad = false,
                 .DiskSize = diskSize,
                 .SmallDisk = true,
@@ -799,7 +799,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                             TString data(NPDisk::SmallDiskMaximumChunkSize, '0');
                             testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(
                                 evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound,
-                                chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), nullptr, false, 0), 
+                                chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), nullptr, false, 0),
                                 NKikimrProto::OK);
                             dataMb += NPDisk::SmallDiskMaximumChunkSize >> 20;
                         } else {

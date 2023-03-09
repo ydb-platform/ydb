@@ -2092,7 +2092,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
 
             ui32 resultLimit = 1024 * 1024;
-            runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit)));
+            runtime.Send(new IEventHandleFat(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit)));
             auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
             auto batchStats = scan->ArrowBatch;
             UNIT_ASSERT(batchStats);
@@ -2257,7 +2257,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         if (ev->GetTypeRewrite() != TPrivateEvent::EventType) {
             return nullptr;
         }
-        return dynamic_cast<TPrivateEvent*>(ev->GetBase());
+        return dynamic_cast<TPrivateEvent*>(ev->StaticCastAsLocal<IEventBase>());
     }
 
     void TestCompactionGC(bool enableSmallBlobs) {

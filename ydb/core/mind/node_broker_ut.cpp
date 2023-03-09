@@ -206,7 +206,7 @@ void Setup(TTestActorRuntime& runtime,
 
     auto scheduledFilter = [](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
         if (event->HasEvent()
-            && (dynamic_cast<TDynamicNameserver::TEvPrivate::TEvUpdateEpoch*>(event->GetBase())))
+            && event->Type == TDynamicNameserver::TEvPrivate::TEvUpdateEpoch::EventType)
             return false;
         return TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline);
     };
@@ -314,7 +314,7 @@ NKikimrNodeBroker::TEpoch WaitForEpochUpdate(TTestActorRuntime &runtime,
         struct TIsEvUpdateEpoch {
             bool operator()(IEventHandle &ev) {
                 if (ev.HasEvent()
-                    && (dynamic_cast<TNodeBroker::TEvPrivate::TEvUpdateEpoch*>(ev.GetBase())))
+                    && ev.Type == TNodeBroker::TEvPrivate::TEvUpdateEpoch::EventType)
                     return true;
                 return false;
             }
@@ -499,7 +499,7 @@ void CheckResolveNode(TTestActorRuntime &runtime,
                       const TString &addr)
 {
     TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId);
-    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandleFat(GetNameserviceActorId(), sender, event.Release()));
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvLocalNodeInfo>(handle);
@@ -514,7 +514,7 @@ void CheckResolveUnknownNode(TTestActorRuntime &runtime,
                              ui32 nodeId)
 {
     TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId);
-    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandleFat(GetNameserviceActorId(), sender, event.Release()));
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvLocalNodeInfo>(handle);
@@ -531,7 +531,7 @@ void GetNameserverNodesList(TTestActorRuntime &runtime,
 {
     ui32 maxStaticNodeId = runtime.GetAppData().DynamicNameserviceConfig->MaxStaticNodeId;
     TAutoPtr<TEvInterconnect::TEvListNodes> event = new TEvInterconnect::TEvListNodes;
-    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandleFat(GetNameserviceActorId(), sender, event.Release()));
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handle);
@@ -608,7 +608,7 @@ void CheckGetNode(TTestActorRuntime &runtime,
                   bool exists)
 {
     TAutoPtr<TEvInterconnect::TEvGetNode> event = new TEvInterconnect::TEvGetNode(nodeId);
-    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandleFat(GetNameserviceActorId(), sender, event.Release()));
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodeInfo>(handle);
@@ -1126,7 +1126,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         struct TIsEvUpdateEpoch {
             bool operator()(IEventHandle &ev) {
                 if (ev.HasEvent()
-                    && (dynamic_cast<TDynamicNameserver::TEvPrivate::TEvUpdateEpoch*>(ev.GetBase())))
+                    && (dynamic_cast<TDynamicNameserver::TEvPrivate::TEvUpdateEpoch*>(ev.StaticCastAsLocal<IEventBase>())))
                     return true;
                 return false;
             }

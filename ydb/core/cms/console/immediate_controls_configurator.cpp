@@ -32,7 +32,7 @@ public:
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
     }

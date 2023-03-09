@@ -60,11 +60,11 @@ namespace NActors {
                 TPeerInfo *peer = GetPeer(peerNodeId);
                 auto guard = TReadGuard(peer->Mutex);
                 if (peer->ActorSystem) {
-                    peer->ActorSystem->Send(new IEventHandle(peer->ProxyId, TActorId(), new TEvInject(std::move(messages),
+                    peer->ActorSystem->Send(new IEventHandleFat(peer->ProxyId, TActorId(), new TEvInject(std::move(messages),
                         originScopeId, senderSessionId)));
                 } else {
                     for (auto&& ev : messages) {
-                        TActivationContext::Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected));
+                        TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected));
                     }
                 }
             }
@@ -78,7 +78,7 @@ namespace NActors {
                 TPeerInfo *peer = GetPeer(peerNodeId);
                 auto guard = TReadGuard(peer->Mutex);
                 if (peer->ActorSystem) {
-                    peer->ActorSystem->Send(new IEventHandle(EvCheckSession, 0, peer->ProxyId, {}, nullptr, 0));
+                    peer->ActorSystem->Send(new IEventHandleFat(EvCheckSession, 0, peer->ProxyId, {}, nullptr, 0));
                 }
             }
 
@@ -114,7 +114,7 @@ namespace NActors {
 
                 void Terminate() {
                     for (auto&& ev : std::exchange(Queue, {})) {
-                        TActivationContext::Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected));
+                        TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected));
                     }
                     for (const auto& kv : Subscribers) {
                         Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second);
@@ -130,7 +130,7 @@ namespace NActors {
                             Subscribe(ev->Sender, ev->Cookie);
                         }
                         if (Queue.empty()) {
-                            TActivationContext::Send(new IEventHandle(EvRam, 0, SelfId(), {}, {}, 0));
+                            TActivationContext::Send(new IEventHandleFat(EvRam, 0, SelfId(), {}, {}, 0));
                         }
                         Queue.emplace_back(ev.Release());
                     }
@@ -193,7 +193,7 @@ namespace NActors {
                 }
 
                 template <typename TEvent>
-                bool CheckNodeStatus(TAutoPtr<TEventHandle<TEvent>>& ev) {
+                bool CheckNodeStatus(TAutoPtr<TEventHandleFat<TEvent>>& ev) {
                     if (PeerNodeStatus != EPeerNodeStatus::EXISTS) {
                         std::unique_ptr<IEventHandle> tmp(ev.Release());
                         CheckNonexistentNode(tmp);
@@ -201,7 +201,7 @@ namespace NActors {
                     }
                     return true;
                 }
-                
+
                 bool CheckNodeStatus(TAutoPtr<IEventHandle>& ev) {
                     if (PeerNodeStatus != EPeerNodeStatus::EXISTS) {
                         std::unique_ptr<IEventHandle> tmp(ev.Release());
@@ -210,7 +210,7 @@ namespace NActors {
                     }
                     return true;
                 }
-                
+
                 void CheckNonexistentNode(std::unique_ptr<IEventHandle>& ev) {
                     if (PeerNodeStatus == EPeerNodeStatus::UNKNOWN) {
                         WaitingConnections.emplace_back(ev.release());
@@ -224,15 +224,15 @@ namespace NActors {
                                 if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
                                     Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, ev->Cookie);
                                 }
-                                TActivationContext::Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected));
+                                TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected));
                                 break;
-                                
-                            case TEvents::TEvSubscribe::EventType: 
+
+                            case TEvents::TEvSubscribe::EventType:
                             case TEvInterconnect::TEvConnectNode::EventType:
                                 Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, ev->Cookie);
                                 break;
 
-                            case TEvents::TEvUnsubscribe::EventType: 
+                            case TEvents::TEvUnsubscribe::EventType:
                                 break;
 
                             default:
@@ -252,7 +252,7 @@ namespace NActors {
                     while (!WaitingConnections.empty()) {
                         TAutoPtr<IEventHandle> tmp(WaitingConnections.front().release());
                         WaitingConnections.pop_front();
-                        Receive(tmp, TActivationContext::AsActorContext());
+                        Receive(tmp);
                     }
                 }
             };
@@ -287,20 +287,28 @@ namespace NActors {
                     return; // drop messages from other sessions
                 }
                 if (auto *session = GetSession()) {
-                    for (auto&& ev : ev->Get()->Messages) {
-                        auto fw = std::make_unique<IEventHandle>(
-                            session->SelfId(),
-                            ev->Type,
-                            ev->Flags & ~IEventHandle::FlagForwardOnNondelivery,
-                            ev->Recipient,
-                            ev->Sender,
-                            ev->ReleaseChainBuffer(),
-                            ev->Cookie,
-                            msg->OriginScopeId,
-                            std::move(ev->TraceId)
-                        );
-                        if (!Common->EventFilter || Common->EventFilter->CheckIncomingEvent(*fw, Common->LocalScopeId)) {
-                            TActivationContext::Send(fw.release());
+                    for (auto&& evb : ev->Get()->Messages) {
+                        if (ev->IsEventLight()) {
+                            // TODO(xenoxeno):
+                            //if (!Common->EventFilter || Common->EventFilter->CheckIncomingEvent(*fw, Common->LocalScopeId)) {
+                                TActivationContext::Send(evb.release());
+                            //}
+                        } else {
+                            auto* ev = IEventHandleFat::GetFat(evb);
+                            auto fw = std::make_unique<IEventHandleFat>(
+                                session->SelfId(),
+                                ev->Type,
+                                ev->Flags & ~IEventHandle::FlagForwardOnNondelivery,
+                                ev->Recipient,
+                                ev->Sender,
+                                ev->ReleaseChainBuffer(),
+                                ev->Cookie,
+                                msg->OriginScopeId,
+                                std::move(ev->TraceId)
+                            );
+                            if (!Common->EventFilter || Common->EventFilter->CheckIncomingEvent(*fw, Common->LocalScopeId)) {
+                                TActivationContext::Send(fw.release());
+                            }
                         }
                     }
                 }
@@ -322,8 +330,7 @@ namespace NActors {
 
             void HandleSessionEvent(TAutoPtr<IEventHandle> ev) {
                 auto *session = GetSession();
-                InvokeOtherActor(*session, &TSessionMockActor::Receive, ev,
-                    TActivationContext::ActorContextFor(session->SelfId()));
+                InvokeOtherActor(*session, &TSessionMockActor::Receive, ev);
             }
 
             void Disconnect() {
@@ -344,7 +351,7 @@ namespace NActors {
                 return State.Inject(PeerNodeId, std::move(messages), Common->LocalScopeId, Session->SessionId);
             }
 
-            STRICT_STFUNC(StateFunc,
+            STRICT_LIGHTFN(StateFunc,
                 cFunc(TEvents::TSystem::Poison, PassAway)
                 fFunc(TEvInterconnect::EvForward, HandleSessionEvent)
                 fFunc(TEvInterconnect::EvConnectNode, HandleSessionEvent)

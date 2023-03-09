@@ -364,12 +364,7 @@ public:
         Y_VERIFY(!res, "failed to set log level: %s", explanation.data());
     }
 
-    bool Send(IEventHandle *ev, ui32 nodeId = 0) {
-        TAutoPtr<IEventHandle> wrapper(ev);
-        return Send(wrapper, nodeId);
-    }
-
-    bool Send(TAutoPtr<IEventHandle>& ev, ui32 nodeId) {
+    bool Send(TAutoPtr<IEventHandle> ev, ui32 nodeId = 0) {
         if (!ev) {
             return false;
         } else if (LoggerActorIds.count(ev->GetRecipientRewrite()) && ev->GetTypeRewrite() == NLog::TEvLog::EventType) {
@@ -398,8 +393,7 @@ public:
             Schedule(Clock, ev, nullptr, nodeId);
             return true;
         } else {
-            TAutoPtr<IEventHandle> wrapper(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown));
-            Send(wrapper, nodeId);
+            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown), nodeId);
             return false;
         }
     }
@@ -420,8 +414,17 @@ public:
         Y_VERIFY(ts >= Clock);
         nodeId = nodeId ? nodeId : CurrentNodeId;
         Y_VERIFY(nodeId);
-        if (ev && ev->HasEvent() && ev->GetTypeRewrite() == ev->Type && !EventName.count(ev->Type)) {
-            EventName.emplace(ev->Type, TypeName(*ev->GetBase()));
+        if (ev) {
+            if (ev->IsEventLight()) {
+                if (ev->GetTypeRewrite() == ev->Type && !EventName.count(ev->Type)) {
+                    EventName.emplace(ev->Type, TypeName(*ev));
+                }
+            } else {
+                auto* evf = IEventHandleFat::GetFat(ev.Get());
+                if (evf && evf->HasEvent() && evf->GetTypeRewrite() == evf->Type && !EventName.count(evf->Type)) {
+                    EventName.emplace(evf->Type, TypeName(*evf->GetBase()));
+                }
+            }
         }
         std::unique_ptr<IEventHandle> evPtr(ev.Release());
         if (!FilterEnqueue || FilterEnqueue(nodeId, evPtr, cookie, ts)) {
@@ -524,7 +527,7 @@ public:
                 const ui32 type = ev->GetTypeRewrite();
 
                 THPTimer timer;
-                actor->Receive(ev, TActivationContext::AsActorContext());
+                actor->Receive(ev);
                 const TDuration timing = TDuration::Seconds(timer.Passed());
 
                 const auto it = ActorName.find(actor);
@@ -619,13 +622,13 @@ public:
     }
 
     template<typename TEvent>
-    std::unique_ptr<TEventHandle<TEvent>> WaitForEdgeActorEvent(const TActorId& edgeActorId, bool termOnCapture = true) {
+    std::unique_ptr<TEventHandleFat<TEvent>> WaitForEdgeActorEvent(const TActorId& edgeActorId, bool termOnCapture = true) {
         auto ev = WaitForEdgeActorEvent({edgeActorId});
         Y_VERIFY(ev->GetTypeRewrite() == TEvent::EventType, "unexpected Event# 0x%08" PRIx32, ev->GetTypeRewrite());
         if (termOnCapture) {
             DestroyActor(edgeActorId);
         }
-        return std::unique_ptr<TEventHandle<TEvent>>(reinterpret_cast<TEventHandle<TEvent>*>(ev.release()));
+        return std::unique_ptr<TEventHandleFat<TEvent>>(reinterpret_cast<TEventHandleFat<TEvent>*>(ev.release()));
     }
 
     void DestroyActor(TActorId actorId) {
@@ -717,7 +720,7 @@ private:
         Y_VERIFY(nodeId);
         TActorId recip = ev->GetRecipientRewrite();
         if (recip.NodeId() && recip.NodeId() != nodeId) {
-            Y_VERIFY(!ev->HasEvent() || ev->GetBase()->IsSerializable(), "event can't pass through interconnect");
+            //Y_VERIFY(!ev->HasEvent() || ev->GetBase()->IsSerializable(), "event can't pass through interconnect");
             Y_VERIFY(ev->Recipient == recip, "original recipient actor id lost");
             recip = GetNode(nodeId)->ActorSystem->InterconnectProxy(recip.NodeId());
             ev->Rewrite(TEvInterconnect::EvForward, recip);

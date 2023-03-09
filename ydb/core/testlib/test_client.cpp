@@ -527,7 +527,7 @@ namespace Tests {
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
 
         //get NodesInfo, nodes hostname and port are interested
-        Runtime->Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
+        Runtime->Send(new IEventHandleFat(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = Runtime->GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
@@ -635,7 +635,7 @@ namespace Tests {
     void TServer::DestroyDynamicLocalService(ui32 nodeIdx) {
         Y_VERIFY(nodeIdx >= StaticNodes());
         TActorId local = MakeLocalID(Runtime->GetNodeId(nodeIdx)); // MakeTenantPoolRootID?
-        Runtime->Send(new IEventHandle(local, TActorId(), new TEvents::TEvPoisonPill()));
+        Runtime->Send(new IEventHandleFat(local, TActorId(), new TEvents::TEvPoisonPill()));
     }
 
     void TServer::SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData) {
@@ -760,7 +760,7 @@ namespace Tests {
                 Settings->AppConfig.GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources);
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
-            
+
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig.GetLogConfig(),
                                                                   Settings->AppConfig.GetTableServiceConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
@@ -1852,10 +1852,9 @@ namespace Tests {
         entry.Path = SplitPath(path);
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         runtime->Send(
-            new IEventHandle(
-                MakeSchemeCacheID(),
-                sender,
-                new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release())),
+            MakeSchemeCacheID(),
+            sender,
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()),
             nodeIdx);
         auto ev = runtime->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender);
         Y_VERIFY(ev);
@@ -2264,7 +2263,7 @@ namespace Tests {
             }
         } catch (TEmptyEventQueueException &) {}
 
-        runtime->Send(new IEventHandle(pipeClient, TActorId(), new TEvents::TEvPoisonPill()));
+        runtime->Send(new IEventHandleFat(pipeClient, TActorId(), new TEvents::TEvPoisonPill()));
         return res;
     }
 
@@ -2309,7 +2308,7 @@ namespace Tests {
             }
         } catch (TEmptyEventQueueException &) {}
 
-        runtime->Send(new IEventHandle(pipeClient, edge, new TEvents::TEvPoisonPill()));
+        runtime->Send(new IEventHandleFat(pipeClient, edge, new TEvents::TEvPoisonPill()));
         return res;
     }
 
@@ -2430,7 +2429,7 @@ namespace Tests {
 
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvGetConfigResult>(handle);
-        return handle->Release<NKesus::TEvKesus::TEvGetConfigResult>();
+        return THolder<NKesus::TEvKesus::TEvGetConfigResult>(IEventHandle::Release<NKesus::TEvKesus::TEvGetConfigResult>(handle));
     }
 
     bool IsServerRedirected() {

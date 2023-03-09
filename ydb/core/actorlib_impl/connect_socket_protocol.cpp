@@ -20,7 +20,7 @@ void TConnectSocketProtocol::ProtocolFunc(
 
     case TEvSocketError::EventType:
         {
-            auto errorMsg = ev->Get<TEvSocketError>();
+            auto errorMsg = IEventHandleFat::GetFat(ev)->Get<TEvSocketError>();
             if (Socket.Get() == errorMsg->Socket.Get())
                 CheckConnectResult(ctx, errorMsg->Error);
         }

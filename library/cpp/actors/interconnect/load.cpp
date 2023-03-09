@@ -82,7 +82,7 @@ namespace NInterconnect {
         )
 
         void Handle(TEvLoadMessage::TPtr& ev, const TActorContext& ctx) {
-            ctx.ExecutorThread.ActorSystem->Send(ev->Forward(Slaves[SlaveIndex]));
+            ctx.ExecutorThread.ActorSystem->Send(ev->Forward(Slaves[SlaveIndex]).Release());
             if (++SlaveIndex == Slaves.size()) {
                 SlaveIndex = 0;
             }

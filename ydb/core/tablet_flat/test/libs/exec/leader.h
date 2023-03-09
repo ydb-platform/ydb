@@ -70,7 +70,7 @@ namespace NFake {
             } else if (eh->CastAsLocal<NFake::TEvTerm>()) {
 
             } else {
-                Y_Fail("Unexpected event " << TypeName(*eh->GetBase()));
+                Y_Fail("Unexpected event " << eh->GetTypeName());
             }
         }
 

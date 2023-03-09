@@ -158,7 +158,7 @@ private:
 
     struct TResult {
         const ui64 ShardId;
-        THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
+        THolder<TEventHandleFat<TEvDataShard::TEvReadResult>> ReadResult;
         size_t UnprocessedResultRow = 0;
     };
 
@@ -316,7 +316,7 @@ private:
                 IEventHandle::FlagTrackDelivery);
         }
 
-        Results.emplace_back(TResult{read.ShardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
+        Results.emplace_back(TResult{read.ShardId, THolder<TEventHandleFat<TEvDataShard::TEvReadResult>>(ev.Release())});
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -581,7 +581,7 @@ private:
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 
         SchemeCacheRequestTimeoutTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), SchemeCacheRequestTimeout,
-            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvSchemeCacheRequestTimeout()));
+            new IEventHandleFat(SelfId(), SelfId(), new TEvPrivate::TEvSchemeCacheRequestTimeout()));
     }
 
     bool AllReadsFinished() const {

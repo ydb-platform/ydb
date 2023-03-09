@@ -412,7 +412,7 @@ void TPQTabletFixture::StartPQWriteStateObserver()
     FoundPQWriteState = false;
 
     auto observer = [this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
-        if (auto* kvResponse = dynamic_cast<TEvKeyValue::TEvResponse*>(event->GetBase())) {
+        if (auto* kvResponse = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
             if ((event->Sender == event->Recipient) &&
                 kvResponse->Record.HasCookie() &&
                 (kvResponse->Record.GetCookie() == 4)) { // TPersQueue::WRITE_STATE_COOKIE

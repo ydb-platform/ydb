@@ -478,10 +478,9 @@ void TDataShard::PrepareAndSaveOutReadSets(ui64 step,
 
 void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const {
     for (auto& x : delayedAcks) {
-        TEvTxProcessing::TEvReadSetAck* ev = dynamic_cast<TEvTxProcessing::TEvReadSetAck*>(x->GetBase());
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
                   "Send delayed Ack RS Ack at %" PRIu64 " %s",
-                  TabletID(), ev->ToString().data());
+                  TabletID(), x->ToString().data());
         ctx.ExecutorThread.Send(x.Release());
         IncCounter(COUNTER_ACK_SENT_DELAYED);
     }
@@ -2105,7 +2104,7 @@ void TDataShard::SendWithConfirmedReadOnlyLease(
         TSendState(const TActorId& sessionId, const TActorId& target, const TActorId& src, IEventBase* event, ui64 cookie)
         {
             const ui32 flags = 0;
-            Ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie);
+            Ev = MakeHolder<IEventHandleFat>(target, src, event, flags, cookie);
 
             if (sessionId) {
                 Ev->Rewrite(TEvInterconnect::EvForward, sessionId);
@@ -3606,7 +3605,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr &ev,
 
     for (auto &pr : Pipeline.GetDelayedAcks()) {
         for (auto &ack : pr.second) {
-            auto *ev = dynamic_cast<TEvTxProcessing::TEvReadSetAck*>(ack->GetBase());
+            auto *ev = ack->CastAsLocal<TEvTxProcessing::TEvReadSetAck>();
             if (ev) {
                 auto &rec = ev->Record;
                 auto &ack = *response->Record.AddDelayedRSAcks();
@@ -3870,7 +3869,7 @@ void SendViaSession(const TActorId& sessionId,
                     ui32 flags,
                     ui64 cookie)
 {
-    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie);
+    THolder<IEventHandle> ev = MakeHolder<IEventHandleFat>(target, src, event, flags, cookie);
 
     if (sessionId) {
         ev->Rewrite(TEvInterconnect::EvForward, sessionId);

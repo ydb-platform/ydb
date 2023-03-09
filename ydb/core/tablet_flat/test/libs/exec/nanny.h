@@ -134,7 +134,7 @@ namespace NFake {
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
                 DoSuicide();
             } else {
-                Y_Fail("Unexpected event " << TypeName(*eh->GetBase()));
+                Y_Fail("Unexpected event " << eh->GetTypeName());
             }
         }
 

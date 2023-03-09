@@ -45,7 +45,7 @@ private:
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         default:
             Y_FAIL("TYqlLogsUpdater: unexpected event type: %" PRIx32 " event: %s",
-                ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                ev->GetTypeRewrite(), ev->ToString().data());
         }
     }
 

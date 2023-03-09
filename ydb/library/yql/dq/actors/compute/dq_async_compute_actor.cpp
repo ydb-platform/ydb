@@ -778,7 +778,7 @@ private:
     template <class TEvPtr>
     void ForwardToCheckpoints(TEvPtr&& ev) {
         auto* x = reinterpret_cast<TAutoPtr<NActors::IEventHandle>*>(&ev);
-        Checkpoints->Receive(*x, TActivationContext::AsActorContext());
+        Checkpoints->Receive(*x);
         ev = nullptr;
     }
 

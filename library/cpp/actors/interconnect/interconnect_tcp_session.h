@@ -347,16 +347,16 @@ namespace NActors {
         void Terminate(TDisconnectReason reason);
         void PassAway() override;
 
-        void Forward(STATEFN_SIG);
-        void Subscribe(STATEFN_SIG);
-        void Unsubscribe(STATEFN_SIG);
+        void Forward(LIGHTFN_SIG);
+        void Subscribe(TAutoPtr<IEventHandle>& ev);
+        void Unsubscribe(TEvents::TEvUnsubscribe::TPtr);
 
-        STRICT_STFUNC(StateFunc,
+        STRICT_LIGHTFN(StateFunc,
             fFunc(TEvInterconnect::EvForward, Forward)
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
             fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
             fFunc(TEvents::TEvSubscribe::EventType, Subscribe)
-            fFunc(TEvents::TEvUnsubscribe::EventType, Unsubscribe)
+            hFunc(TEvents::TEvUnsubscribe, Unsubscribe)
             cFunc(TEvFlush::EventType, HandleFlush)
             hFunc(TEvPollerReady, Handle)
             hFunc(TEvPollerRegisterResult, Handle)
@@ -531,7 +531,7 @@ namespace NActors {
             auto sender = SelfId();
             const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
                 auto ev = new TEvSessionBufferSizeRequest();
-                return new IEventHandle(recp, sender, ev, IEventHandle::FlagTrackDelivery);
+                return new IEventHandleFat(recp, sender, ev, IEventHandle::FlagTrackDelivery);
             };
             RepliesNumber = TlsActivationContext->ExecutorThread.ActorSystem->BroadcastToProxies(eventFabric);
             Become(&TInterconnectSessionKiller::StateFunc);

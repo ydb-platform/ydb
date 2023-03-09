@@ -152,20 +152,20 @@ public:
         // notify all subscribers
         for (const auto& [actorId, cookie] : Subscribers) {
             auto ev = std::make_unique<TEvInterconnect::TEvNodeDisconnected>(Proxy->PeerNodeId);
-            Proxy->Mock->TestActorSystem->Send(new IEventHandle(actorId, SelfId(), ev.release(), 0, cookie),
+            Proxy->Mock->TestActorSystem->Send(new IEventHandleFat(actorId, SelfId(), ev.release(), 0, cookie),
                 Proxy->Node->NodeId);
         }
 
         // drop unsent messages
         for (auto& [_, queue] : Outbox) {
             for (auto& ev : queue) {
-                Proxy->Mock->TestActorSystem->Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected).Release(),
+                Proxy->Mock->TestActorSystem->Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected).Release(),
                     Proxy->Node->NodeId);
             }
         }
 
         // transit to self-destruction state
-        Proxy->Mock->TestActorSystem->Send(new IEventHandle(TEvents::TSystem::Poison, 0, SelfId(), {}, nullptr, 0),
+        Proxy->Mock->TestActorSystem->Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, SelfId(), {}, nullptr, 0),
             Proxy->Node->NodeId);
         Become(&TThis::StateUndelivered); // do not handle further events
 
@@ -178,7 +178,7 @@ public:
         if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
             TActor::PassAway();
         } else {
-            TActivationContext::Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown));
+            TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
         }
     }
 
@@ -215,7 +215,10 @@ public:
             const TInstant now = TActivationContext::Now();
             Y_VERIFY(now == NextSendTimestamp);
             Y_VERIFY(Proxy->Peer && Proxy->Peer->SessionActor);
-            const_cast<TScopeId&>(ev->OriginScopeId) = Proxy->Common->LocalScopeId;
+            if (ev->IsEventFat()) {
+                auto* evf = IEventHandleFat::GetFat(ev);
+                const_cast<TScopeId&>(evf->OriginScopeId) = Proxy->Common->LocalScopeId;
+            }
             Proxy->Peer->SessionActor->PutToInbox(ev);
 
             if (Outbox.empty()) {
@@ -230,7 +233,7 @@ public:
                 if (q.empty()) {
                     Outbox.erase(it);
                 }
-                
+
                 ScheduleSendEvent(ev);
             }
         }
@@ -262,25 +265,33 @@ public:
             const TInstant now = TActivationContext::Now();
             Y_VERIFY(now == NextReceiveTimestamp);
 
-            auto fw = std::make_unique<IEventHandle>(
-                SelfId(),
-                ev->Type,
-                ev->Flags & ~IEventHandle::FlagForwardOnNondelivery,
-                ev->Recipient,
-                ev->Sender,
-                ev->ReleaseChainBuffer(),
-                ev->Cookie,
-                ev->OriginScopeId,
-                std::move(ev->TraceId)
-            );
+            std::unique_ptr<IEventHandle> fw;
+            if (ev->IsEventFat()) {
+                auto* evf = IEventHandleFat::GetFat(ev);
+                fw = std::make_unique<IEventHandleFat>(
+                    SelfId(),
+                    evf->Type,
+                    evf->Flags & ~IEventHandle::FlagForwardOnNondelivery,
+                    evf->Recipient,
+                    evf->Sender,
+                    evf->ReleaseChainBuffer(),
+                    evf->Cookie,
+                    evf->OriginScopeId,
+                    std::move(evf->TraceId)
+                );
+            } else {
+                fw.reset(ev.Release());
+            }
 
             STLOG(PRI_TRACE, INTERCONNECT_SESSION, STIM04, Prefix << "HandleReceive", (SelfId, SelfId()),
                 (Type, fw->Type), (Sender, fw->Sender), (Recipient, fw->Recipient), (Flags, fw->Flags),
                 (Cookie, ev->Cookie));
 
-            auto& common = Proxy->Common;
-            if (!common->EventFilter || common->EventFilter->CheckIncomingEvent(*fw, common->LocalScopeId)) {
-                Proxy->Mock->TestActorSystem->Send(fw.release(), Proxy->Node->NodeId);
+            if (fw->IsEventFat()) {
+                auto& common = Proxy->Common;
+                if (!common->EventFilter || common->EventFilter->CheckIncomingEvent(*IEventHandleFat::GetFat(fw), common->LocalScopeId)) {
+                    Proxy->Mock->TestActorSystem->Send(fw.release(), Proxy->Node->NodeId);
+                }
             }
 
             if (Inbox.empty()) {
@@ -360,12 +371,12 @@ void TMock::TProxyActor::CreateSession() {
 
 void TMock::TProxyActor::ForwardToSession(TAutoPtr<IEventHandle> ev) {
     if (TSessionActor *session = GetSession()) {
-        InvokeOtherActor(*session, &TSessionActor::Receive, ev, TActivationContext::ActorContextFor(session->SelfId()));
+        InvokeOtherActor(*session, &TSessionActor::Receive, ev);
     } else {
         const bool first = PendingEvents.empty();
         PendingEvents.emplace_back(ev.Release());
         if (first) {
-            TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(EvDropPendingEvents, 0, SelfId(), {},
+            TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandleFat(EvDropPendingEvents, 0, SelfId(), {},
                 nullptr, ++DropPendingEventsCookie));
         }
     }
@@ -377,7 +388,7 @@ void TMock::TProxyActor::DropSessionEvent(std::unique_ptr<IEventHandle> ev) {
             if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
                 Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, ev->Cookie);
             }
-            TActivationContext::Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected));
+            TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected));
             break;
 
         case TEvInterconnect::EvConnectNode:
@@ -437,7 +448,7 @@ std::unique_ptr<IActor> TMock::CreateProxyActor(ui32 nodeId, ui32 peerNodeId,
 
     auto& ptr = Proxies[{nodeId, peerNodeId}];
     Y_VERIFY(!ptr); // no multiple proxies for the same direction are allowed
-    
+
     auto& node = Nodes[nodeId];
     if (!node) {
         node = std::make_shared<TNode>(nodeId, BurstCapacityBytes, BytesPerSecond);

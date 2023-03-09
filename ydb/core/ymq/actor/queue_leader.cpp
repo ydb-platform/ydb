@@ -109,7 +109,7 @@ STATEFN(TQueueLeader::StateInit) {
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted); // from executor
         hFunc(TEvWakeup, HandleWakeup);
     default:
-        LOG_SQS_ERROR("Unknown type of event came to SQS background queue " << TLogQueueName(UserName_, QueueName_) << " leader actor: " << ev->Type << " (" << ev->GetBase()->ToString() << "), sender: " << ev->Sender);
+        LOG_SQS_ERROR("Unknown type of event came to SQS background queue " << TLogQueueName(UserName_, QueueName_) << " leader actor: " << ev->Type << " (" << ev->GetTypeName() << "), sender: " << ev->Sender);
     }
 }
 
@@ -135,7 +135,7 @@ STATEFN(TQueueLeader::StateWorking) {
         hFunc(TSqsEvents::TEvInflyIsPurgingNotification, HandleInflyIsPurgingNotification);
         hFunc(TSqsEvents::TEvQueuePurgedNotification, HandleQueuePurgedNotification);
     default:
-        LOG_SQS_ERROR("Unknown type of event came to SQS background queue " << TLogQueueName(UserName_, QueueName_) << " leader actor: " << ev->Type << " (" << ev->GetBase()->ToString() << "), sender: " << ev->Sender);
+        LOG_SQS_ERROR("Unknown type of event came to SQS background queue " << TLogQueueName(UserName_, QueueName_) << " leader actor: " << ev->Type << " (" << ev->GetTypeName() << "), sender: " << ev->Sender);
     }
 }
 
@@ -892,7 +892,7 @@ void TQueueLeader::OnLoadStdMessagesBatchExecuted(ui64 shard, ui64 batchId, cons
             if (!prevRequestId || *prevRequestId != entry.RequestId) {
                 prevRequestId = &entry.RequestId;
                 RLOG_SQS_REQ_ERROR(entry.RequestId,
-                    "Batch transaction failed: " << reply << ". DlqExists=" << dlqExists << ". BatchId: " << batch->BatchId 
+                    "Batch transaction failed: " << reply << ". DlqExists=" << dlqExists << ". BatchId: " << batch->BatchId
                 );
             }
             OnLoadStdMessageResult(entry.RequestId, entry.Offset, success, nullptr, ignoreMessageLoadingErrors);

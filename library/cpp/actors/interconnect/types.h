@@ -64,6 +64,8 @@ namespace NActors {
 
 using NActors::IEventBase;
 using NActors::IEventHandle;
+using NActors::IEventHandleFat;
+using NActors::IEventHandleLight;
 using NActors::TActorId;
 using NActors::TConstIoVec;
 using NActors::TEventSerializedData;

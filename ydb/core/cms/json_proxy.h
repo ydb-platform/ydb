@@ -96,7 +96,7 @@ protected:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS, "HTTP::StateWork ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                      ev->GetTypeRewrite(), ev->ToString().data());
         }
     }
 

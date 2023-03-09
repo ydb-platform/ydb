@@ -145,7 +145,7 @@ namespace NWilson {
                     bool ok;
                     if (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
                         if (!Status.ok()) {
-                            LOG_ERROR_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, 
+                            LOG_ERROR_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */,
                                 "failed to commit traces: " << Status.error_message());
                         }
 
@@ -160,7 +160,7 @@ namespace NWilson {
             template<typename T>
             void ScheduleWakeup(T&& deadline) {
                 if (!WakeupScheduled) {
-                    TActivationContext::Schedule(deadline, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {},
+                    TActivationContext::Schedule(deadline, new IEventHandleFat(TEvents::TSystem::Wakeup, 0, SelfId(), {},
                         nullptr, 0));
                     WakeupScheduled = true;
                 }

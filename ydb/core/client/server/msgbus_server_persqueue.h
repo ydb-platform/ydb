@@ -182,6 +182,11 @@ protected:
 
     STFUNC(StateFunc);
 
+    template<typename T>
+    void Become(T stateFunc) {
+        IActorCallback::Become(stateFunc);
+    }
+
 protected:
     TActorId SchemeCache;
     TSchemeEntry SchemeEntry;
@@ -315,7 +320,7 @@ protected:
             HFunc(TPipeEvent, HandlePipeEvent);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
         default:
-            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << (ev->HasEvent() ? ev->GetBase()->ToString() : "<no data>"));
+            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << ev->ToString());
         }
     }
 
@@ -326,7 +331,7 @@ protected:
             HFunc(TEvTabletPipe::TEvClientConnected, HandlePipeEvent);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
         default:
-            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << (ev->HasEvent() ? ev->GetBase()->ToString() : "<no data>"));
+            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << ev->ToString());
         }
     }
 

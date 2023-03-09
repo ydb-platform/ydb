@@ -28,14 +28,14 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
 
         virtual ~TDyingChecker() {
             Write("TDyingChecker::~TDyingChecker");
-            TActivationContext::Send(new IEventHandle(MasterId, SelfId(), new TEvents::TEvPing()));
+            TActivationContext::Send(new IEventHandleFat(MasterId, SelfId(), new TEvents::TEvPing()));
         }
 
         bool DoBeforeReceiving(TAutoPtr<IEventHandle> &/*ev*/, const TActorContext &/*ctx*/) override {
             Write("TDyingChecker::DoBeforeReceiving");
             return true;
         }
-        
+
         void DoAfterReceiving(const TActorContext &/*ctx*/) override {
             Write("TDyingChecker::DoAfterReceiving");
         }
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         TSet<TActorId> ActorIds;
         TVector<THolder<IActor>> Actors;
         TActorId EdgeActor;
-        
+
         TTestMasterActor(TVector<THolder<IActor>> &&actors, TActorId edgeActor)
             : TActorBootstrapped()
             , Actors(std::move(actors))
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
                 return true;
             }
             Write("TFizzBuzzToFooBar::DoBeforeSending");
-            TEventHandle<TEvWords> *handle = reinterpret_cast<TEventHandle<TEvWords>*>(ev.Get());
+            TEventHandleFat<TEvWords> *handle = reinterpret_cast<TEventHandleFat<TEvWords>*>(ev.Get());
             UNIT_ASSERT(handle);
             TEvWords *event = handle->Get();
             TVector<TString> &words = event->Words;
@@ -124,12 +124,12 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
             Write("TFizzBuzzToFooBar::DoBeforeReceiving");
             return true;
         }
-        
+
         void DoAfterReceiving(const TActorContext &/*ctx*/) override {
             Write("TFizzBuzzToFooBar::DoAfterReceiving");
         }
-    };    
-    
+    };
+
     struct TWordEraser : TTestDecorator {
         TString ErasingWord;
 
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
                 return true;
             }
             Write("TWordEraser::DoBeforeSending");
-            TEventHandle<TEvWords> *handle = reinterpret_cast<TEventHandle<TEvWords>*>(ev.Get());
+            TEventHandleFat<TEvWords> *handle = reinterpret_cast<TEventHandleFat<TEvWords>*>(ev.Get());
             UNIT_ASSERT(handle);
             TEvWords *event = handle->Get();
             TVector<TString> &words = event->Words;
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
             Write("TWordEraser::DoBeforeReceiving");
             return true;
         }
-        
+
         void DoAfterReceiving(const TActorContext &/*ctx*/) override {
             Write("TWordEraser::DoAfterReceiving");
         }
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
                 return true;
             }
             Write("TWithoutWordsDroper::DoBeforeSending");
-            TEventHandle<TEvWords> *handle = reinterpret_cast<TEventHandle<TEvWords>*>(ev.Get());
+            TEventHandleFat<TEvWords> *handle = reinterpret_cast<TEventHandleFat<TEvWords>*>(ev.Get());
             UNIT_ASSERT(handle);
             TEvWords *event = handle->Get();
             return bool(event->Words);
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
             Write("TWithoutWordsDroper::DoBeforeReceiving");
             return true;
         }
-        
+
         void DoAfterReceiving(const TActorContext &/*ctx*/) override {
             Write("TWithoutWordsDroper::DoAfterReceiving");
         }
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         }
 
         STATEFN(State) {
-            TEventHandle<TEvWords> *handle = reinterpret_cast<TEventHandle<TEvWords>*>(ev.Get());
+            TEventHandleFat<TEvWords> *handle = reinterpret_cast<TEventHandleFat<TEvWords>*>(ev.Get());
             UNIT_ASSERT(handle);
             UNIT_ASSERT(handle->Sender == MasterId);
             TEvWords *event = handle->Get();
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
             return true;
         }
     };
-    
+
     bool ScheduledFilterFunc(NActors::TTestActorRuntimeBase& runtime, TAutoPtr<NActors::IEventHandle>& event,
             TDuration delay, TInstant& deadline) {
         if (runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite())) {

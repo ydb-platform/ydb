@@ -322,7 +322,7 @@ public:
             LOG_WARN_S(ctx, NKikimrServices::QUOTER_SERVICE, "TQuoterService::StateFunc unexpected event type# "
                 << ev->GetTypeRewrite()
                 << " event: "
-                << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                << ev->ToString());
             break;
         }
 

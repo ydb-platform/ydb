@@ -71,4 +71,20 @@ namespace NActors {
             return new TEv();
         }
     };
+
+    template<typename TEv, ui32 EventType0>
+    class TEventLight : public IEventHandleLight {
+    public:
+        static constexpr ui32 EventType = EventType0;
+
+        TEventLight()
+            : IEventHandleLight(EventType)
+        {}
+
+        TEv* Get() {
+            return static_cast<TEv*>(this);
+        }
+
+        using TPtr = TAutoPtr<TEv>;
+    };
 }

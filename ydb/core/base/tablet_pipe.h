@@ -225,7 +225,7 @@ namespace NKikimr {
             TEvClientCheckDelay() {}
         };
 
-        class TEvMessage : public TEventLocal<TEvMessage, EvMessage> {
+        class TEvMessage : public TEventLight<TEvMessage, EvMessage> {
         public:
             TEvMessage(const TActorId& sender, THolder<IEventBase> event)
                 : Type(event->Type())

@@ -42,7 +42,7 @@ void TFakeNodeWhiteboardService::Handle(TEvConfigsDispatcher::TEvGetConfigReques
                                         const TActorContext &ctx)
 {
     TGuard<TMutex> guard(Mutex);
-    Y_UNUSED(ev); 
+    Y_UNUSED(ev);
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableBootstrapConfig()->CopyFrom(BootstrapConfig);
     auto resp = MakeHolder<TEvConfigsDispatcher::TEvGetConfigResponse>();
@@ -372,7 +372,7 @@ inline void AddTablet(NKikimrConfig::TBootstrap::ETabletType type,
 }
 
 static NKikimrConfig::TBootstrap GenerateBootstrapConfig(TTestActorRuntime &runtime,
-                                                         const ui32 nodesCount, 
+                                                         const ui32 nodesCount,
                                                          const TNodeTenantsMap &tenants) {
     NKikimrConfig::TBootstrap res;
 
@@ -527,9 +527,9 @@ static void SetupServices(TTestActorRuntime &runtime,
 
 } // anonymous namespace
 
-TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options) 
+TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         : TTestBasicRuntime(options.NodeCount, options.DataCenterCount, false)
-        , CmsId(MakeCmsID(0)) 
+        , CmsId(MakeCmsID(0))
 {
     TFakeNodeWhiteboardService::Config.MutableResponse()->SetSuccess(true);
     TFakeNodeWhiteboardService::Config.MutableResponse()->ClearStatus();
@@ -549,7 +549,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
             ) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
-                event = event->Forward(fakeId);
+                IEventHandle::Forward(event, fakeId);
         }
         return TTestActorRuntime::EEventAction::PROCESS;
     };
@@ -575,7 +575,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     cmsConfig.MutableTenantLimits()->SetDisabledNodesRatioLimit(0);
     cmsConfig.MutableClusterLimits()->SetDisabledNodesRatioLimit(0);
     SetCmsConfig(cmsConfig);
-    
+
     // Need to allow restart state storage nodes
     AdvanceCurrentTime(TDuration::Minutes(2));
 }
@@ -597,7 +597,7 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
 TIntrusiveConstPtr<NKikimr::TStateStorageInfo> TCmsTestEnv::GetStateStorageInfo() {
     ui32 StateStorageGroup = 0;
     const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup);
-    Send(new IEventHandle(proxy, Sender, new TEvStateStorage::TEvListStateStorage()));
+    Send(new IEventHandleFat(proxy, Sender, new TEvStateStorage::TEvListStateStorage()));
 
     auto reply = GrabEdgeEventRethrow<TEvStateStorage::TEvListStateStorageResult>(Sender);
     const auto &rec = reply->Get()->Info;
@@ -851,10 +851,10 @@ TCmsTestEnv::CheckRequest(const TString &user,
 
 
 void TCmsTestEnv::CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask* req)
-{ 
+{
     TString TaskId = req->Task.TaskId;
     SendToPipe(CmsId, Sender, req, 0, GetPipeConfigWithRetries());
-    
+
     TAutoPtr<IEventHandle> handle;
     auto reply = GrabEdgeEventRethrow<TEvCms::TEvStoreWalleTaskFailed>(handle, TDuration::Seconds(30));
     UNIT_ASSERT(reply);

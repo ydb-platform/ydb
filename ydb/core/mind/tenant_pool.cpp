@@ -668,7 +668,7 @@ public:
         if (!ev)
             return "no event";
         return Sprintf("%" PRIx32 " event %s", ev->GetTypeRewrite(),
-                       ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized");
+                       ev->ToString().data());
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx)
@@ -733,7 +733,7 @@ public:
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
     }
@@ -809,12 +809,12 @@ public:
 
     void Handle(TEvents::TEvSubscribe::TPtr &ev, const TActorContext &ctx) {
         for (auto &pr : DomainTenantPools)
-            ctx.Send(new IEventHandle(pr.second, ev->Sender, new TEvents::TEvSubscribe()));
+            ctx.Send(new IEventHandleFat(pr.second, ev->Sender, new TEvents::TEvSubscribe()));
     }
 
     void Handle(TEvents::TEvUnsubscribe::TPtr &ev, const TActorContext &ctx) {
         for (auto &pr : DomainTenantPools)
-            ctx.Send(new IEventHandle(pr.second, ev->Sender, new TEvents::TEvUnsubscribe()));
+            ctx.Send(new IEventHandleFat(pr.second, ev->Sender, new TEvents::TEvUnsubscribe()));
     }
 
     void Handle(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {
@@ -872,7 +872,7 @@ public:
             HFunc(TEvLocal::TEvLocalDrainNode, Handle);
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
     }

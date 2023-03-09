@@ -364,11 +364,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            TActivationContext::Send(new IEventHandle(Request->Sender, Self->SelfId(), new NMon::TEvRemoteHttpInfoRes(
+            TActivationContext::Send(new IEventHandleFat(Request->Sender, Self->SelfId(), new NMon::TEvRemoteHttpInfoRes(
                 Stream.Str()), 0, Request->Cookie));
         }
     };
-    
+
     bool TBlobDepot::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) {
         if (!Executor() || !Executor()->GetStats().IsActive) {
             return false;

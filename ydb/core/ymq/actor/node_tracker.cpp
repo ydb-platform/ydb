@@ -84,13 +84,11 @@ namespace NKikimr::NSQS {
         navigateRequest->ResultSet.resize(2);
         navigateRequest->ResultSet.front().Path = TablePathSTD;
         navigateRequest->ResultSet.back().Path = TablePathFIFO;
+        auto ev = MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(navigateRequest.release());
+        ev->PrepareSend(SchemeCacheActor, SelfId());
         ctx.ExecutorThread.ActorSystem->Schedule(
             runAfter,
-            new IEventHandle(
-                SchemeCacheActor,
-                SelfId(),
-                new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release())
-            )
+            ev.Release()
         );
     }
 

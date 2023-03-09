@@ -36,7 +36,7 @@ std::unique_ptr<IEventHandle> CaptureAnyResult(TEnvironmentSetup& env, TActorId 
     });
 
     wakeup = env.Runtime->AllocateEdgeActor(sender.NodeId(), __FILE__, __LINE__);
-    env.Runtime->Schedule(deadline, new IEventHandle(TEvents::TSystem::Wakeup, 0, wakeup, {}, nullptr, 0), nullptr,
+    env.Runtime->Schedule(deadline, new IEventHandleFat(TEvents::TSystem::Wakeup, 0, wakeup, {}, nullptr, 0), nullptr,
         wakeup.NodeId());
     ids.insert(wakeup);
 
@@ -57,7 +57,7 @@ std::unique_ptr<IEventHandle> CaptureAnyResult(TEnvironmentSetup& env, TActorId 
 void SendTEvPut(TEnvironmentSetup& env, TActorId sender, ui32 groupId, TLogoBlobID id, TString data, ui64 cookie) {
     auto ev = new TEvBlobStorage::TEvPut(id, data, TInstant::Max());
 
-#ifdef LOG_PUT        
+#ifdef LOG_PUT
     Cerr << "Request# " << ev->Print(false) << Endl;
 #endif
 
@@ -66,7 +66,7 @@ void SendTEvPut(TEnvironmentSetup& env, TActorId sender, ui32 groupId, TLogoBlob
     });
 }
 
-TAutoPtr<TEventHandle<TEvBlobStorage::TEvPutResult>> CaptureTEvPutResult(TEnvironmentSetup& env, 
+TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvPutResult>> CaptureTEvPutResult(TEnvironmentSetup& env,
         TActorId sender, bool termOnCapture, bool withDeadline) {
     const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, termOnCapture, deadline);
@@ -79,7 +79,7 @@ TAutoPtr<TEventHandle<TEvBlobStorage::TEvPutResult>> CaptureTEvPutResult(TEnviro
     return res.Release();
 }
 
-void VerifyTEvPutResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvPutResult>> res, TBlobInfo& blob, TBSState& state) {
+void VerifyTEvPutResult(TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvPutResult>> res, TBlobInfo& blob, TBSState& state) {
     ui32 blockedGen = state[blob.Id.TabletID()].BlockedGen;
     ui32 softCollectGen = state[blob.Id.TabletID()].Channels[blob.Id.Channel()].SoftCollectGen;
     ui32 softCollectStep = state[blob.Id.TabletID()].Channels[blob.Id.Channel()].SoftCollectStep;
@@ -94,9 +94,9 @@ void VerifyTEvPutResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvPutResult>> res
         blob.Status = TBlobInfo::EStatus::UNKNOWN;
         return;
     }
-    
+
     if (blob.Id.Generation() <= blockedGen) {
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::BLOCKED, TStringBuilder() << 
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::BLOCKED, TStringBuilder() <<
             "Unblocked put over the barrier, blob id# " << blob.Id.ToString() << ", blocked generation# " << blockedGen);
     } else if (IsCollected(blob, softCollectGen, softCollectStep, hardCollectGen, hardCollectStep) ) {
         if (status == NKikimrProto::OK) {
@@ -130,12 +130,12 @@ void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, TLogoBlob
     });
 }
 
-TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
+TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvGetResult>> CaptureTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
     const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, termOnCapture, deadline);
     UNIT_ASSERT(res);
 
-#ifdef LOG_GET        
+#ifdef LOG_GET
     Cerr << "Response# " << res->Get()->ToString() << Endl;
 #endif
 
@@ -143,9 +143,9 @@ TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureTEvGetResult(TEnviro
 }
 
 
-void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res,
+void VerifyTEvGetResult(TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvGetResult>> res,
         TBlobInfo& blob, bool mustRestoreFirst, bool isIndexOnly, std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData,
-        TBSState& state) 
+        TBSState& state)
 {
     Y_UNUSED(forceBlockTabletData);
 
@@ -160,8 +160,8 @@ void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res
     if (status == NKikimrProto::OK) {
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
         if ((blob.Status == TBlobInfo::EStatus::COLLECTED) || IsCollected(blob, softCollectGen, softCollectStep, hardCollectGen, hardCollectStep)) {
-            if (responses[0].Status == NKikimrProto::OK) { 
-                Cerr << "Read over the barrier, blob id# " << responses[0].Id.ToString() << Endl; 
+            if (responses[0].Status == NKikimrProto::OK) {
+                Cerr << "Read over the barrier, blob id# " << responses[0].Id.ToString() << Endl;
             }
             blob.Status = TBlobInfo::EStatus::COLLECTED;
         } else if (blob.Status == TBlobInfo::EStatus::WRITTEN) {
@@ -176,8 +176,8 @@ void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res
                 blob.Status = TBlobInfo::EStatus::WRITTEN;
             }
         } else {
-            if (responses[0].Status != NKikimrProto::NODATA) { 
-                Cerr << "Read non-put blob id# " << responses[0].Id.ToString() << Endl; 
+            if (responses[0].Status != NKikimrProto::NODATA) {
+                Cerr << "Read non-put blob id# " << responses[0].Id.ToString() << Endl;
             }
         }
     }
@@ -185,7 +185,7 @@ void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res
 
 void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId,
         TBlobInfo& blob, bool mustRestoreFirst, bool isIndexOnly, std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData,
-        TBSState& state, bool withDeadline) 
+        TBSState& state, bool withDeadline)
 {
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
     SendTEvGet(env, sender, groupId, blob.Id, mustRestoreFirst, isIndexOnly, forceBlockTabletData);
@@ -218,12 +218,12 @@ void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, std::vect
     });
 }
 
-TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureMultiTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {    
+TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvGetResult>> CaptureMultiTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
     const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, termOnCapture, deadline);
     UNIT_ASSERT(res);
 
-#ifdef LOG_MULTIGET        
+#ifdef LOG_MULTIGET
     Cerr << "Response# " << res->Get()->ToString() << Endl;
 #endif
 
@@ -231,9 +231,9 @@ TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureMultiTEvGetResult(TE
 }
 
 
-void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res,
+void VerifyTEvGetResult(TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvGetResult>> res,
         std::vector<TBlobInfo>& blobs, bool mustRestoreFirst, bool isIndexOnly, std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData,
-        TBSState& state) 
+        TBSState& state)
 {
     Y_UNUSED(mustRestoreFirst);
     Y_UNUSED(forceBlockTabletData);
@@ -248,8 +248,8 @@ void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res
             ui32 hardCollectGen = state[blobs[i].Id.TabletID()].Channels[blobs[i].Id.Channel()].HardCollectGen;
             ui32 hardCollectStep = state[blobs[i].Id.TabletID()].Channels[blobs[i].Id.Channel()].HardCollectStep;
             if ((blobs[i].Status == TBlobInfo::EStatus::COLLECTED) || IsCollected(blobs[i], softCollectGen, softCollectStep, hardCollectGen, hardCollectStep)) {
-                if (responses[i].Status == NKikimrProto::OK) { 
-                    Cerr << "Read over the barrier, blob id# " << responses[i].Id.ToString() << Endl; 
+                if (responses[i].Status == NKikimrProto::OK) {
+                    Cerr << "Read over the barrier, blob id# " << responses[i].Id.ToString() << Endl;
                 }
                 blobs[i].Status = TBlobInfo::EStatus::COLLECTED;
             } else if (blobs[i].Status == TBlobInfo::EStatus::WRITTEN) {
@@ -262,8 +262,8 @@ void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res
                     blobs[i].Status = TBlobInfo::EStatus::WRITTEN;
                 }
             } else {
-                if (responses[i].Status != NKikimrProto::NODATA) { 
-                    Cerr << "Read over the barrier, blob id# " << responses[i].Id.ToString() << Endl; 
+                if (responses[i].Status != NKikimrProto::NODATA) {
+                    Cerr << "Read over the barrier, blob id# " << responses[i].Id.ToString() << Endl;
                 }
             }
         }
@@ -271,7 +271,7 @@ void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res
 }
 
 void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, std::vector<TBlobInfo>& blobs, bool mustRestoreFirst, bool isIndexOnly, std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData,
-        TBSState& state, bool withDeadline) 
+        TBSState& state, bool withDeadline)
 {
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
     SendTEvGet(env, sender, groupId, blobs, mustRestoreFirst, isIndexOnly, forceBlockTabletData);
@@ -281,11 +281,11 @@ void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, std::vector<
     VerifyTEvGetResult(res.Release(), blobs, mustRestoreFirst, isIndexOnly, forceBlockTabletData, state);
 }
 
-void SendTEvRange(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64 tabletId, 
+void SendTEvRange(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64 tabletId,
         TLogoBlobID from, TLogoBlobID to, bool mustRestoreFirst, bool indexOnly, ui64 cookie) {
     auto ev = new TEvBlobStorage::TEvRange(tabletId, from, to, mustRestoreFirst, TInstant::Max(), indexOnly);
 
-#ifdef LOG_RANGE        
+#ifdef LOG_RANGE
     Cerr << "Request# " << ev->ToString() << Endl;
 #endif
 
@@ -293,8 +293,8 @@ void SendTEvRange(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64 ta
         SendToBSProxy(sender, groupId, ev, cookie);
     });
 }
-    
-TAutoPtr<TEventHandle<TEvBlobStorage::TEvRangeResult>> CaptureTEvRangeResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
+
+TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvRangeResult>> CaptureTEvRangeResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
     const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(sender, termOnCapture, deadline);
     UNIT_ASSERT(res);
@@ -308,8 +308,8 @@ TAutoPtr<TEventHandle<TEvBlobStorage::TEvRangeResult>> CaptureTEvRangeResult(TEn
     return res.Release();
 }
 
-void VerifyTEvRangeResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvRangeResult>> res, ui64 tabletId, TLogoBlobID from, TLogoBlobID to, bool mustRestoreFirst, bool indexOnly,
-        std::vector<TBlobInfo>& blobs, TBSState& state) 
+void VerifyTEvRangeResult(TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvRangeResult>> res, ui64 tabletId, TLogoBlobID from, TLogoBlobID to, bool mustRestoreFirst, bool indexOnly,
+        std::vector<TBlobInfo>& blobs, TBSState& state)
 {
     NKikimrProto::EReplyStatus status = res->Get()->Status;
     auto& responses = res->Get()->Responses;
@@ -359,7 +359,7 @@ void VerifyTEvRangeResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvRangeResult>>
             ui32 softCollectStep = state[blob.Id.TabletID()].Channels[blob.Id.Channel()].SoftCollectStep;
             ui32 hardCollectGen = state[blob.Id.TabletID()].Channels[blob.Id.Channel()].HardCollectGen;
             ui32 hardCollectStep = state[blob.Id.TabletID()].Channels[blob.Id.Channel()].HardCollectStep;
-            if ((blob.Status == TBlobInfo::EStatus::WRITTEN) &&  !IsCollected(blob, softCollectGen, softCollectStep, hardCollectGen, hardCollectStep) && 
+            if ((blob.Status == TBlobInfo::EStatus::WRITTEN) &&  !IsCollected(blob, softCollectGen, softCollectStep, hardCollectGen, hardCollectStep) &&
                 blob.Id >= from && blob.Id <= to && expected.find(blob.Id) == expected.end()) {
                 UNIT_FAIL(TStringBuilder() << "TEvRange didn't find blob " << blob.Id.ToString());
             }
@@ -367,18 +367,18 @@ void VerifyTEvRangeResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvRangeResult>>
     }
 }
 
-void VerifiedRange(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, ui64 tabletId, TLogoBlobID from, TLogoBlobID to, 
-        bool mustRestoreFirst, bool indexOnly, std::vector<TBlobInfo>& blobs, TBSState& state, bool withDeadline) 
+void VerifiedRange(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, ui64 tabletId, TLogoBlobID from, TLogoBlobID to,
+        bool mustRestoreFirst, bool indexOnly, std::vector<TBlobInfo>& blobs, TBSState& state, bool withDeadline)
 {
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
     SendTEvRange(env, sender, groupId, tabletId, from, to, mustRestoreFirst, indexOnly);
     auto res = CaptureTEvRangeResult(env, sender, true, withDeadline);
     VerifyTEvRangeResult(res.Release(), tabletId, from, to, mustRestoreFirst, indexOnly, blobs, state);
-}  
+}
 
-void SendTEvDiscover(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64 tabletId, ui32 minGeneration, bool readBody, 
+void SendTEvDiscover(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64 tabletId, ui32 minGeneration, bool readBody,
         bool discoverBlockedGeneration, ui32 forceBlockedGeneration, bool fromLeader, ui64 cookie) {
-    auto ev = new TEvBlobStorage::TEvDiscover(tabletId, minGeneration, readBody, discoverBlockedGeneration, 
+    auto ev = new TEvBlobStorage::TEvDiscover(tabletId, minGeneration, readBody, discoverBlockedGeneration,
             TInstant::Max(), forceBlockedGeneration, fromLeader);
 
 #ifdef LOG_DISCOVER
@@ -390,7 +390,7 @@ void SendTEvDiscover(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64
     });
 }
 
-TAutoPtr<TEventHandle<TEvBlobStorage::TEvDiscoverResult>> CaptureTEvDiscoverResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
+TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvDiscoverResult>> CaptureTEvDiscoverResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
     const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvDiscoverResult>(sender, termOnCapture, deadline);
     UNIT_ASSERT(res);
@@ -402,8 +402,8 @@ TAutoPtr<TEventHandle<TEvBlobStorage::TEvDiscoverResult>> CaptureTEvDiscoverResu
     return res.Release();
 }
 
-void VerifyTEvDiscoverResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvDiscoverResult>> res, ui64 tabletId, ui32 minGeneration, bool readBody, 
-        bool discoverBlockedGeneration, ui32 forceBlockedGeneration, bool fromLeader, std::vector<TBlobInfo>& blobs, TBSState& state) 
+void VerifyTEvDiscoverResult(TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvDiscoverResult>> res, ui64 tabletId, ui32 minGeneration, bool readBody,
+        bool discoverBlockedGeneration, ui32 forceBlockedGeneration, bool fromLeader, std::vector<TBlobInfo>& blobs, TBSState& state)
 {
     ui32 blockedGen = state[tabletId].BlockedGen;
     Y_UNUSED(blockedGen);
@@ -464,7 +464,7 @@ void VerifyTEvDiscoverResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvDiscoverRe
     }
 }
 
-void VerifiedDiscover(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, ui64 tabletId, ui32 minGeneration, bool readBody, 
+void VerifiedDiscover(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, ui64 tabletId, ui32 minGeneration, bool readBody,
         bool discoverBlockedGeneration, ui32 forceBlockedGeneration, bool fromLeader, std::vector<TBlobInfo>& blobs, TBSState& state, bool withDeadline) {
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
     SendTEvDiscover(env, sender, groupId, tabletId, minGeneration, readBody, discoverBlockedGeneration, forceBlockedGeneration, fromLeader);
@@ -472,25 +472,25 @@ void VerifiedDiscover(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, ui64 ta
     VerifyTEvDiscoverResult(res.Release(), tabletId, minGeneration, readBody, discoverBlockedGeneration, forceBlockedGeneration, fromLeader, blobs, state);
 }
 
-void SendTEvCollectGarbage(TEnvironmentSetup& env, TActorId sender, ui32 groupId, 
+void SendTEvCollectGarbage(TEnvironmentSetup& env, TActorId sender, ui32 groupId,
     ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
     bool collect, ui32 collectGeneration,
     ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep,
-    bool isMultiCollectAllowed, bool hard, ui64 cookie) 
+    bool isMultiCollectAllowed, bool hard, ui64 cookie)
 {
     auto ev = new TEvBlobStorage::TEvCollectGarbage(tabletId, recordGeneration, perGenerationCounter, channel, collect, collectGeneration, collectStep,
                 keep, doNotKeep, TInstant::Max(), isMultiCollectAllowed, hard);
-    
+
 #ifdef LOG_COLLECT_GARBAGE
     Cerr << "Request# " << ev->Print(false) << Endl;
 #endif
-    
+
     env.Runtime->WrapInActorContext(sender, [&] {
         SendToBSProxy(sender, groupId, ev, cookie);
     });
-}  
-    
-TAutoPtr<TEventHandle<TEvBlobStorage::TEvCollectGarbageResult>> CaptureTEvCollectGarbageResult(TEnvironmentSetup& env, TActorId sender,
+}
+
+TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvCollectGarbageResult>> CaptureTEvCollectGarbageResult(TEnvironmentSetup& env, TActorId sender,
         bool termOnCapture, bool withDeadline) {
     const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender, termOnCapture, deadline);
@@ -501,13 +501,13 @@ TAutoPtr<TEventHandle<TEvBlobStorage::TEvCollectGarbageResult>> CaptureTEvCollec
 #endif
 
     return res.Release();
-} 
+}
 
-void VerifyTEvCollectGarbageResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvCollectGarbageResult>> res, 
+void VerifyTEvCollectGarbageResult(TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvCollectGarbageResult>> res,
     ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
     bool collect, ui32 collectGeneration,
     ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep,
-    bool isMultiCollectAllowed, bool hard, std::vector<TBlobInfo>& blobs, TBSState& state) 
+    bool isMultiCollectAllowed, bool hard, std::vector<TBlobInfo>& blobs, TBSState& state)
 {
     Y_UNUSED(perGenerationCounter);
     Y_UNUSED(isMultiCollectAllowed);
@@ -581,11 +581,11 @@ void VerifyTEvCollectGarbageResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvColl
     }
 }
 
-void VerifiedCollectGarbage(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, 
+void VerifiedCollectGarbage(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId,
     ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
     bool collect, ui32 collectGeneration,
     ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep,
-    bool isMultiCollectAllowed, bool hard, std::vector<TBlobInfo>& blobs, TBSState& state, bool withDeadline) 
+    bool isMultiCollectAllowed, bool hard, std::vector<TBlobInfo>& blobs, TBSState& state, bool withDeadline)
 {
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
 
@@ -598,33 +598,33 @@ void VerifiedCollectGarbage(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId,
         copyDoNotKeep.Reset(new TVector(*doNotKeep));
     }
 
-    SendTEvCollectGarbage(env, sender, groupId, tabletId, recordGeneration, perGenerationCounter, channel, collect, 
+    SendTEvCollectGarbage(env, sender, groupId, tabletId, recordGeneration, perGenerationCounter, channel, collect,
             collectGeneration, collectStep, keep, doNotKeep, isMultiCollectAllowed, hard);
 
     auto res = CaptureTEvCollectGarbageResult(env, sender, true, withDeadline);
-    VerifyTEvCollectGarbageResult(res.Release(), tabletId, recordGeneration, perGenerationCounter, channel, collect, 
+    VerifyTEvCollectGarbageResult(res.Release(), tabletId, recordGeneration, perGenerationCounter, channel, collect,
         collectGeneration, collectStep, copyKeep.Get(), copyDoNotKeep.Get(), isMultiCollectAllowed, hard, blobs, state);
 }
 
 
 void SendTEvBlock(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64 tabletId, ui32 generation, ui64 cookie) {
     auto ev = new TEvBlobStorage::TEvBlock(tabletId, generation, TInstant::Max());
-    
+
 #ifdef LOG_BLOCK
     Cerr << "Request# " << ev->Print(true) << Endl;
 #endif
-    
+
     env.Runtime->WrapInActorContext(sender, [&] {
         SendToBSProxy(sender, groupId, ev, cookie);
     });
 }
 
-TAutoPtr<TEventHandle<TEvBlobStorage::TEvBlockResult>> CaptureTEvBlockResult(TEnvironmentSetup& env, TActorId sender,
+TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvBlockResult>> CaptureTEvBlockResult(TEnvironmentSetup& env, TActorId sender,
         bool termOnCapture, bool withDeadline) {
     const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(sender, termOnCapture, deadline);
     UNIT_ASSERT(res);
-    
+
 #ifdef LOG_BLOCK
     Cerr << "Response# " << res->Get()->ToString() << Endl;
 #endif
@@ -632,7 +632,7 @@ TAutoPtr<TEventHandle<TEvBlobStorage::TEvBlockResult>> CaptureTEvBlockResult(TEn
     return res.Release();
 }
 
-void VerifyTEvBlockResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvBlockResult>> res, ui64 tabletId, ui32 generation, TBSState& state) {
+void VerifyTEvBlockResult(TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvBlockResult>> res, ui64 tabletId, ui32 generation, TBSState& state) {
     ui32& blockedGen = state[tabletId].BlockedGen;
     NKikimrProto::EReplyStatus status = res->Get()->Status;
     if (generation < blockedGen) {

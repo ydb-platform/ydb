@@ -115,7 +115,7 @@ namespace NKikimr {
         }
 
         template<typename TEvent>
-        bool CheckIfWriteAllowed(TAutoPtr<TEventHandle<TEvent>>& ev, const TActorContext& ctx) {
+        bool CheckIfWriteAllowed(TAutoPtr<TEventHandleFat<TEvent>>& ev, const TActorContext& ctx) {
             if (!SelfVDiskId.SameDisk(ev->Get()->Record.GetVDiskID())) {
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, TAppData::TimeProvider->Now());
             } else if (Config->BaseInfo.DonorMode) {
@@ -1969,7 +1969,7 @@ namespace NKikimr {
                     Db->ReplID.Set(ctx.Register(CreateReplActor(replCtx)));
                     ActiveActors.Insert(Db->ReplID); // keep forever
                     if (CommenceRepl) {
-                        TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(),
+                        TActivationContext::Send(new IEventHandleFat(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(),
                             nullptr, 0));
                     }
                 }
@@ -2330,16 +2330,16 @@ namespace NKikimr {
         void HandleCommenceRepl(const TActorContext& /*ctx*/) {
             CommenceRepl = true;
             if (Db->ReplID) {
-                TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(), nullptr, 0));
+                TActivationContext::Send(new IEventHandleFat(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(), nullptr, 0));
             }
         }
 
         void ForwardToScrubActor(STFUNC_SIG) {
-            ctx.Send(ev->Forward(ScrubId));
+            ctx.Forward(ev, ScrubId);
         }
 
         void ForwardToDefragActor(STFUNC_SIG) {
-            ctx.Send(ev->Forward(DefragId));
+            ctx.Forward(ev, DefragId);
         }
 
         void Handle(TEvReportScrubStatus::TPtr ev, const TActorContext& ctx) {
@@ -2362,7 +2362,7 @@ namespace NKikimr {
         }
 
         void ForwardToLogoBlobsLevelIndexActor(STFUNC_SIG) {
-            ctx.Send(ev->Forward(Hull->GetHullDs()->LogoBlobs->LIActor));
+            ctx.Forward(ev, Hull->GetHullDs()->LogoBlobs->LIActor);
         }
 
         void Handle(NPDisk::TEvChunkForgetResult::TPtr ev) {
@@ -2416,7 +2416,7 @@ namespace NKikimr {
             if (!SnapshotExpirationMap.empty()) {
                 const TMonotonic when = SnapshotExpirationMap.begin()->first;
                 if (SnapshotExpirationCheckSchedule.empty() || when < SnapshotExpirationCheckSchedule.front()) {
-                    TActivationContext::Schedule(when, new IEventHandle(TEvPrivate::EvCheckSnapshotExpiration, 0,
+                    TActivationContext::Schedule(when, new IEventHandleFat(TEvPrivate::EvCheckSnapshotExpiration, 0,
                         SelfId(), {}, nullptr, when.GetValue()));
                     SnapshotExpirationCheckSchedule.push_front(when);
                 }

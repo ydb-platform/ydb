@@ -22,11 +22,11 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStoreWalleTask Execute");
-        
+
         for (auto &perm : Task.Permissions) {
             if (Self->State->Permissions.find(perm) == Self->State->Permissions.end()) {
 
-                Response.Reset(new IEventHandle(Response->Recipient, Response->Sender,
+                Response.Reset(new IEventHandleFat(Response->Recipient, Response->Sender,
                                new TEvCms::TEvStoreWalleTaskFailed(Task.TaskId,
                                                                    TStringBuilder() << "There are no stored permissions for this task. "
                                                                                     << "Maybe cleanup ran before task been stored. "
@@ -57,7 +57,7 @@ public:
     }
 
 private:
-    TWalleTaskInfo Task; 
+    TWalleTaskInfo Task;
     THolder<IEventBase> Request;
     TAutoPtr<IEventHandle> Response;
 };

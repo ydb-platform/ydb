@@ -116,7 +116,7 @@
     const auto& currentTracer = component;                                                                                             \
     if (ev->HasEvent()) {                                                                                                              \
         LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s: %s",                                  \
-                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), SelfId().ToString().data(), ev->GetBase()->ToString().substr(0, 1000).data()); \
+                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), SelfId().ToString().data(), ev->ToString().substr(0, 1000).data()); \
     } else {                                                                                                                           \
         LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s",                                      \
                   __FUNCTION__, ev->Type, ev->Sender.ToString().data(), ev->Recipient.ToString().data());                                          \
@@ -205,7 +205,7 @@ namespace NActors {
                      std::shared_ptr<NMonitoring::TMetricRegistry> metrics);
         ~TLoggerActor();
 
-        void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+        void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TFlushLogBuffer, FlushLogBufferMessageEvent);
                 HFunc(NLog::TEvLog, HandleLogEvent);
@@ -316,7 +316,7 @@ namespace NActors {
     {
         const NLog::TSettings *mSettings = ctx.LoggerSettings();
         TLoggerActor::Throttle(*mSettings);
-        ctx.Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str))));
+        ctx.Send(new IEventHandleFat(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str))));
     }
 
     template <typename TCtx, typename... TArgs>

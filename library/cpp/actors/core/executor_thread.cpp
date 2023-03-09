@@ -96,13 +96,12 @@ namespace NActors {
 
     inline void LwTraceSlowDelivery(IEventHandle* ev, const std::type_info* actorType, ui32 poolId, const TActorId& currentRecipient,
                                     double delivMs, double sinceActivationMs, ui32 eventsExecutedBefore) {
-        const auto baseEv = (ev && ev->HasEvent()) ? ev->GetBase() : nullptr;
         LWPROBE(EventSlowDelivery,
                 poolId,
                 delivMs,
                 sinceActivationMs,
                 eventsExecutedBefore,
-                baseEv ? SafeTypeName(baseEv) : (ev ? ToString(ev->Type) : TString("nullptr")),
+                ev && ev->HasEvent() ? ev->GetTypeName() : (ev ? ToString(ev->Type) : TString("nullptr")),
                 currentRecipient.ToString(),
                 SafeTypeName(actorType));
     }
@@ -110,11 +109,10 @@ namespace NActors {
     inline void LwTraceSlowEvent(IEventHandle* ev, ui32 evTypeForTracing, const std::type_info* actorType, ui32 poolId,
                                  const TActorId& currentRecipient, double eventMs) {
         // Event could have been destroyed by actor->Receive();
-        const auto baseEv = (ev && ev->HasEvent()) ? ev->GetBase() : nullptr;
         LWPROBE(SlowEvent,
                 poolId,
                 eventMs,
-                baseEv ? SafeTypeName(baseEv) : ToString(evTypeForTracing),
+                ev && ev->HasEvent() ? ev->GetTypeName() : ToString(evTypeForTracing),
                 currentRecipient.ToString(),
                 SafeTypeName(actorType));
     }
@@ -178,7 +176,7 @@ namespace NActors {
                         NProfiling::TMemoryTagScope::Reset(ActorSystem->MemProfActivityBase + activityType);
                     }
 
-                    actor->Receive(ev, ctx);
+                    actor->Receive(ev);
 
                     size_t dyingActorsCnt = DyingActors.size();
                     Ctx.UpdateActorsStats(dyingActorsCnt);
@@ -204,7 +202,7 @@ namespace NActors {
                 } else {
                     actorType = nullptr;
 
-                    TAutoPtr<IEventHandle> nonDelivered = ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown);
+                    TAutoPtr<IEventHandle> nonDelivered = IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown);
                     if (nonDelivered.Get()) {
                         ActorSystem->Send(nonDelivered);
                     } else {

@@ -952,7 +952,7 @@ public:
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
                 LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateWork type: %" PRIx32
-                    " event: %s", ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                    " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
                 break;
         }
     }
@@ -1452,8 +1452,7 @@ public:
             auto actor = new TDomainLocal(domainsInfo, *domain, Config);
             DomainLocals[domainName] = ctx.Register(actor);
         }
-
-        ctx.Send(ev->Forward(DomainLocals[domainName]));
+        ctx.Forward(ev, DomainLocals[domainName]);
         return true;
     }
 
@@ -1518,7 +1517,7 @@ public:
         default:
             LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
                         "TLocal: Unhandled in StateResolveSubDomain type: " <<  ev->GetTypeRewrite() <<
-                        " event: " << ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                        " event: " << ev->ToString());
             break;
         }
     }

@@ -260,9 +260,10 @@ namespace NActors {
         bool DispatchEvents(const TDispatchOptions& options = TDispatchOptions());
         bool DispatchEvents(const TDispatchOptions& options, TDuration simTimeout);
         bool DispatchEvents(const TDispatchOptions& options, TInstant simDeadline);
-        void Send(IEventHandle* ev, ui32 senderNodeIndex = 0, bool viaActorSystem = false);
-        void SendAsync(IEventHandle* ev, ui32 senderNodeIndex = 0);
-        void Schedule(IEventHandle* ev, const TDuration& duration, ui32 nodeIndex = 0);
+        void Send(const TActorId& recipient, const TActorId& sender, TAutoPtr<IEventHandleLight> ev, ui32 senderNodeIndex = 0, bool viaActorSystem = false);
+        void Send(TAutoPtr<IEventHandle> ev, ui32 senderNodeIndex = 0, bool viaActorSystem = false);
+        void SendAsync(TAutoPtr<IEventHandle> ev, ui32 senderNodeIndex = 0);
+        void Schedule(TAutoPtr<IEventHandle> ev, const TDuration& duration, ui32 nodeIndex = 0);
         void ClearCounters();
         ui64 GetCounter(ui32 evType) const;
         TActorId GetLocalServiceId(const TActorId& serviceId, ui32 nodeIndex = 0);
@@ -301,7 +302,7 @@ namespace NActors {
                 if (event->GetTypeRewrite() != eventType)
                     return false;
 
-                TEvent* typedEvent = reinterpret_cast<TAutoPtr<TEventHandle<TEvent>>&>(event)->Get();
+                TEvent* typedEvent = event->Get<TEvent>();
                 if (predicate(*typedEvent)) {
                     handle = event;
                     return true;
@@ -314,7 +315,7 @@ namespace NActors {
                 Y_VERIFY(handle);
 
             if (handle) {
-                return reinterpret_cast<TAutoPtr<TEventHandle<TEvent>>&>(handle)->Get();
+                return handle->Get<TEvent>();
             } else {
                 return nullptr;
             }
@@ -369,7 +370,10 @@ namespace NActors {
             TAutoPtr<IEventHandle> handle;
             std::function<bool(const TEvent&)> truth = [](const TEvent&) { return true; };
             GrabEdgeEventIf(handle, truth, simTimeout);
-            return THolder(handle ? handle->Release<TEvent>().Release() : nullptr);
+            if (handle) {
+                return THolder<TEvent>(IEventHandle::Release<TEvent>(handle));
+            }
+            return {};
         }
 
         template<class TEvent>
@@ -398,7 +402,7 @@ namespace NActors {
                 Y_VERIFY(handle);
             if (handle) {
                 return std::make_tuple(handle->Type == TEvents::EventType
-                                       ? reinterpret_cast<TAutoPtr<TEventHandle<TEvents>>&>(handle)->Get()
+                                       ? handle->Get<TEvents>()
                                        : static_cast<TEvents*>(nullptr)...);
             }
             return {};
@@ -503,7 +507,7 @@ namespace NActors {
 
    private:
         IActor* FindActor(const TActorId& actorId, TNodeDataBase* node) const;
-        void SendInternal(IEventHandle* ev, ui32 nodeIndex, bool viaActorSystem);
+        void SendInternal(TAutoPtr<IEventHandle> ev, ui32 nodeIndex, bool viaActorSystem);
         TEventMailBox& GetMailbox(ui32 nodeId, ui32 hint);
         void ClearMailbox(ui32 nodeId, ui32 hint);
         void HandleNonEmptyMailboxesForEachContext(TEventMailboxId mboxId);
@@ -647,7 +651,7 @@ namespace NActors {
     TEvent* FindEvent(TEventsList& events) {
         for (auto& event : events) {
             if (event && event->GetTypeRewrite() == TEvent::EventType) {
-                return static_cast<TEvent*>(event->GetBase());
+                return event->CastAsLocal<TEvent>();
             }
         }
 
@@ -657,8 +661,8 @@ namespace NActors {
     template <typename TEvent>
     TEvent* FindEvent(TEventsList& events, const std::function<bool(const TEvent&)>& predicate) {
         for (auto& event : events) {
-            if (event && event->GetTypeRewrite() == TEvent::EventType && predicate(*static_cast<TEvent*>(event->GetBase()))) {
-                return static_cast<TEvent*>(event->GetBase());
+            if (event && event->GetTypeRewrite() == TEvent::EventType && predicate(*event->CastAsLocal<TEvent>())) {
+                return event->CastAsLocal<TEvent>();
             }
         }
 
@@ -671,7 +675,7 @@ namespace NActors {
         for (auto& event : events) {
             if (event && event->GetTypeRewrite() == TEvent::EventType) {
                 ev = event;
-                return static_cast<TEvent*>(ev->GetBase());
+                return ev->CastAsLocal<TEvent>();
             }
         }
 
@@ -686,7 +690,7 @@ namespace NActors {
             if (event && event->GetTypeRewrite() == TEvent::EventType) {
                 if (predicate(reinterpret_cast<const typename TEvent::TPtr&>(event))) {
                     ev = event;
-                    return static_cast<TEvent*>(ev->GetBase());
+                    return ev->CastAsLocal<TEvent>();
                 }
             }
         }

@@ -409,10 +409,7 @@ private:
 
     template <class TPrivateEvent>
     static TPrivateEvent* TryGetPrivateEvent(TAutoPtr<IEventHandle>& ev) {
-        if (ev->GetTypeRewrite() != TPrivateEvent::EventType) {
-            return nullptr;
-        }
-        return dynamic_cast<TPrivateEvent*>(ev->GetBase());
+        return ev->CastAsLocal<TPrivateEvent>();
     }
 
 public:

@@ -518,7 +518,7 @@ private:
             if (delayed) {
                 if (ShardsToRetry.empty()) {
                     TimeoutTimerActorId = CreateLongTimer(TRetryData::OverloadTimeout(),
-                        new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
+                        new IEventHandleFat(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
                 }
                 ShardsToRetry.insert(shardId);
             } else {

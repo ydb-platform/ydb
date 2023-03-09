@@ -36,7 +36,7 @@ public:
     }
 
     void Resend(const TActorIdentity& receiver) {
-        TActivationContext::Send(new IEventHandle(receiver, Sender, Event.Release()));
+        TActivationContext::Send(new IEventHandleFat(receiver, Sender, Event.Release()));
     }
 };
 
@@ -53,7 +53,7 @@ public:
     }
 
     template <class T>
-    void Add(TEventHandle<T>& ev) {
+    void Add(TEventHandleFat<T>& ev) {
         Add(ev.ReleaseBase(), ev.Sender);
     }
 

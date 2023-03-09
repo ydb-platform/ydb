@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, ev, 0));
+        runtime->Send(new IEventHandleFat(NHealthCheck::MakeHealthCheckID(), sender, ev, 0));
         NHealthCheck::TEvSelfCheckResult* result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
 
         UNIT_ASSERT(result != nullptr);
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     int const GROUP_START_ID = 1200;
     int const VCARD_START_ID = 5500;
-    
+
     void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size = 20000000, ui64 quota = 90000000) {
         auto record = (*ev)->Get()->MutableRecord();
         auto pool = record->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
@@ -173,13 +173,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     break;
                 }
             }
-            
+
             return TTestActorRuntime::EEventAction::PROCESS;
         };
         runtime.SetObserverFunc(observerFunc);
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
-        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        runtime.Send(new IEventHandleFat(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
 
         int groupIssuesCount = 0;
@@ -293,15 +293,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     break;
                 }
             }
-            
+
             return TTestActorRuntime::EEventAction::PROCESS;
         };
         runtime.SetObserverFunc(observerFunc);
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
-        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        runtime.Send(new IEventHandleFat(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
-        
+
         int storageIssuesCount = 0;
         for (const auto& issue_log : result->Result.Getissue_log()) {
             if (issue_log.type() == "STORAGE" && issue_log.reason_size() == 0 && issue_log.status() == status) {

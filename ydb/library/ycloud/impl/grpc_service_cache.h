@@ -142,7 +142,7 @@ public:
             hFunc(TEventResponseType, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
             default:
-                ctx.Send(ev->Forward(GetUnderlyingActor()));
+                ctx.Forward(ev, GetUnderlyingActor());
                 break;
         }
     }

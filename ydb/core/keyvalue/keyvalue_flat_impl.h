@@ -275,7 +275,7 @@ protected:
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE,
                 "KeyValue# " << TabletID()
                 << " Enqueue, event type# " << (ui32)ev->GetTypeRewrite()
-                << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().c_str() : "serialized?"));
+                << " event# " << ev->ToString());
         InitialEventsQueue.push_back(ev);
     }
 
@@ -500,7 +500,7 @@ public:
         RestoreActorActivity();
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " StateInit flat event type# " << (ui32)ev->GetTypeRewrite()
-                << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                << " event# " << ev->ToString());
         StateInitImpl(ev, ctx);
     }
 
@@ -532,7 +532,7 @@ public:
                 if (!HandleDefaultEvents(ev, ctx)) {
                     LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                             << " StateWork unexpected event type# " << (ui32)ev->GetTypeRewrite()
-                            << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                            << " event# " << ev->ToString());
                 }
                 break;
         }
@@ -546,7 +546,7 @@ public:
             default:
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                         << " BrokenState unexpected event type# " << (ui32)ev->GetTypeRewrite()
-                        << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                        << " event# " << ev->ToString());
                 break;
         }
     }
@@ -559,7 +559,7 @@ public:
             TAutoPtr<IEventHandle> &ev = InitialEventsQueue.front();
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                     << " Dequeue, event type# " << (ui32)ev->GetTypeRewrite()
-                    << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                    << " event# " << ev->ToString());
             ctx.ExecutorThread.Send(ev.Release());
             InitialEventsQueue.pop_front();
         }

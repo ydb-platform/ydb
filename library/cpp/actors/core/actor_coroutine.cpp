@@ -44,7 +44,7 @@ namespace NActors {
     THolder<IEventHandle> TActorCoroImpl::WaitForEvent(TInstant deadline) {
         const ui64 cookie = ++WaitCookie;
         if (deadline != TInstant::Max()) {
-            TActivationContext::Schedule(deadline, new IEventHandle(TEvents::TSystem::CoroTimeout, 0, SelfActorId, {}, 0, cookie));
+            TActivationContext::Schedule(deadline, new IEventHandleFat(TEvents::TSystem::CoroTimeout, 0, SelfActorId, {}, 0, cookie));
         }
 
         // ensure we have no unprocessed event and return back to actor system to receive one

@@ -234,7 +234,7 @@ namespace NActors {
                     sentCount = Min(eventsToBeSentSize, Cfg.RelaxedSendPaceEventsPerCycle);
                 }
                 for (ui32 i = 0; i < sentCount; ++i) {
-                    ctx.Send(EventsToBeSent.front());
+                    ctx.Send(EventsToBeSent.front().Release());
                     EventsToBeSent.pop_front();
                 }
 

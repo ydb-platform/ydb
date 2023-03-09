@@ -263,7 +263,7 @@ private:
 
     void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev, const TActorContext& ctx) {
         InternalError(TStringBuilder() << "TExecuteQueryRPC in state " << state << " received unexpected event " <<
-            TypeName(*ev.Get()->GetBase()) << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()), ctx);
+            ev->GetTypeName() << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()), ctx);
     }
 
 private:

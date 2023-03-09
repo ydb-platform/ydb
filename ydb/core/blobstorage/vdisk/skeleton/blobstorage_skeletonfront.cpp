@@ -56,7 +56,7 @@ namespace NKikimr {
         template<typename Func>
         void ApplyToRecord(IEventHandle& event, Func&& callback) {
             switch (event.GetTypeRewrite()) {
-#define EVENT_TYPE(EVENT) case TEvBlobStorage::EVENT::EventType: callback(static_cast<TEvBlobStorage::EVENT&>(*event.GetBase()).Record); return;
+#define EVENT_TYPE(EVENT) case TEvBlobStorage::EVENT::EventType: callback(event.CastAsLocal<TEvBlobStorage::EVENT>()->Record); return;
                 EVENT_TYPE(TEvVMovedPatch)
                 EVENT_TYPE(TEvVPatchStart)
                 EVENT_TYPE(TEvVPatchDiff)
@@ -578,7 +578,7 @@ namespace NKikimr {
                         TEvBlobStorage::TEvVWindowChange::DropConnection));
 
                     // small hack for older versions of BS_QUEUE that do not support DropConnection flag
-                    ctx.Send(new IEventHandle(winp->ActorId, serviceId, new TEvents::TEvUndelivered(0,
+                    ctx.Send(new IEventHandleFat(winp->ActorId, serviceId, new TEvents::TEvUndelivered(0,
                         TEvents::TEvUndelivered::ReasonActorUnknown)));
                 };
                 QueueBackpressure->ForEachWindow(callback);
@@ -594,15 +594,14 @@ namespace NKikimr {
             }
 
             void Completed(const TActorContext &ctx, const TVMsgContext &msgCtx, std::unique_ptr<IEventHandle> &evHandle) {
-                IEventBase *ev = evHandle->GetBase();
                 ReturnCookie(evHandle, true);
 
                 TInstant now = TAppData::TimeProvider->Now();
                 Y_VERIFY(msgCtx.ActorId);
                 auto feedback = QueueBackpressure->Processed(msgCtx.ActorId, msgCtx.MsgId, msgCtx.Cost, now);
                 NKikimrBlobStorage::TMsgQoS *msgQoS = nullptr;
-                switch (ev->Type()) {
-#define UPDATE_WINDOW_STATUS(TYPE) case TYPE::EventType: msgQoS = static_cast<TYPE&>(*ev).Record.MutableMsgQoS(); break;
+                switch (evHandle->Type) {
+#define UPDATE_WINDOW_STATUS(TYPE) case TYPE::EventType: msgQoS = evHandle->CastAsLocal<TYPE>()->Record.MutableMsgQoS(); break;
                     // all message types that have MsgQoS structure
                     UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVMovedPatchResult)
                     UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVPatchFoundParts)
@@ -1678,7 +1677,7 @@ namespace NKikimr {
         }
 
         void HandleCommenceRepl(const TActorContext& /*ctx*/) {
-            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, SkeletonId, SelfId(), nullptr, 0));
+            TActivationContext::Send(new IEventHandleFat(TEvBlobStorage::EvCommenceRepl, 0, SkeletonId, SelfId(), nullptr, 0));
         }
 
         void Handle(TEvReportScrubStatus::TPtr ev, const TActorContext& ctx) {
@@ -1853,7 +1852,7 @@ namespace NKikimr {
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVPut>;
 
         template<typename TEventType>
-        void CheckExecute(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
+        void CheckExecute(TAutoPtr<TEventHandleFat<TEventType>>& ev, const TActorContext& ctx) {
             if constexpr (IsPatchEvent<TEventType>) {
                 HandlePatchEvent(ev);
             } else if constexpr (IsWithoutQoS<TEventType>) {
@@ -1875,7 +1874,7 @@ namespace NKikimr {
         static constexpr bool IsWithoutVDiskId = std::is_same_v<TEv, Decayed>;
 
         template <typename TEventType>
-        void Check(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
+        void Check(TAutoPtr<TEventHandleFat<TEventType>>& ev, const TActorContext& ctx) {
             const auto& record = ev->Get()->Record;
             bool isSameVDisk = true;
             if constexpr (!IsWithoutVDiskId<TEventType>) {
@@ -1892,7 +1891,7 @@ namespace NKikimr {
         }
 
         template<typename TEv>
-        void ValidateEvent(TAutoPtr<TEventHandle<TEv>>& ev, const TActorContext& ctx) {
+        void ValidateEvent(TAutoPtr<TEventHandleFat<TEv>>& ev, const TActorContext& ctx) {
             TString errorReason;
             bool isQueryValid = Validate(ev->Get(), errorReason);
             if (!isQueryValid) {
@@ -1903,7 +1902,7 @@ namespace NKikimr {
         };
 
         void ForwardToSkeleton(STFUNC_SIG) {
-            ctx.Send(ev->Forward(SkeletonId));
+            ctx.Forward(ev, SkeletonId);
         }
 
         void HandleForwardToSkeleton(STFUNC_SIG) {
@@ -1960,7 +1959,7 @@ namespace NKikimr {
 #define HFuncStatus(TEvType, status, errorReason, now, wstatus) \
     case TEvType::EventType: \
     { \
-        TEvType::TPtr x(static_cast<TEventHandle<TEvType>*>(ev.release())); \
+        TEvType::TPtr x(static_cast<TEventHandleFat<TEvType>*>(ev.release())); \
         Reply(x, ctx, status, errorReason, now, wstatus); \
         break; \
     }

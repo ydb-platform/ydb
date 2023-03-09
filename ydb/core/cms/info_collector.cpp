@@ -73,7 +73,7 @@ private:
         default:
             LOG_E("Unexpected event"
                 << ": type# " << ev->GetTypeRewrite()
-                << ", event# " << (ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                << ", event# " << ev->ToString());
         }
     }
 
@@ -83,11 +83,11 @@ private:
 
     // Nodes
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev);
-    
+
     //Configs
     void RequestBootstrapConfig();
     void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev);
-    
+
     // State Storage
     void RequestStateStorageConfig();
     void Handle(TEvStateStorage::TEvListStateStorageResult::TPtr &ev);
@@ -129,7 +129,7 @@ private:
 
 void TInfoCollector::ReplyAndDie() {
     auto ev = MakeHolder<TCms::TEvPrivate::TEvClusterInfo>();
-    ev->Success = BaseConfigReceived 
+    ev->Success = BaseConfigReceived
                   && BootstrapConfigReceived
                   && StateStorageInfoReceived;
 
@@ -155,7 +155,7 @@ void TInfoCollector::ReplyAndDie() {
 }
 
 void TInfoCollector::MaybeReplyAndDie() {
-    if (!BaseConfigReceived 
+    if (!BaseConfigReceived
         || !BootstrapConfigReceived
         || !StateStorageInfoReceived) {
         return;
@@ -212,7 +212,7 @@ void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev
     BootstrapConfigReceived = true;
     if (!config->HasBootstrapConfig()){
         LOG_I("Couldn't collect bootstrap config from Console. Taking the local config");
-        bootstrap.CopyFrom(AppData()->BootstrapConfig); 
+        bootstrap.CopyFrom(AppData()->BootstrapConfig);
     } else {
         LOG_D("Got Bootstrap config"
               << ": record# " <<  config->ShortDebugString());

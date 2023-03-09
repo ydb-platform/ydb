@@ -18,7 +18,7 @@ namespace NGRpcService {
 
 class IRequestOpCtx;
 
-IEventBase* CreateNavigateForPath(const TString& path);
+IEventHandleLight* CreateNavigateForPath(const TString& path);
 TActorId CreatePipeClient(ui64 id, const TActorContext& ctx);
 Ydb::TOperationId ToOperationId(const NKikimrIndexBuilder::TIndexBuild& build);
 void ToOperation(const NKikimrIndexBuilder::TIndexBuild& build, Ydb::Operations::Operation* operation);

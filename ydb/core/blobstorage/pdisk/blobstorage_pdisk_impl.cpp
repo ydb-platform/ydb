@@ -734,7 +734,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                                 << " Send CutLog to# " << OwnerData[chunkOwner].CutLogId.ToString().data()
                                 << " ownerId#" << ui32(chunkOwner)
                                 << " cutLog# " << cutLog->ToString());
-                        ActorSystem->Send(new IEventHandle(OwnerData[chunkOwner].CutLogId, PDiskActor, cutLog.Release(),
+                        ActorSystem->Send(new IEventHandleFat(OwnerData[chunkOwner].CutLogId, PDiskActor, cutLog.Release(),
                                     IEventHandle::FlagTrackDelivery, 0));
                         OwnerData[chunkOwner].AskedToCutLogAt = now;
                     } else {
@@ -777,7 +777,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                                 << " cutLog# " << cutLog->ToString()
                                 << " LogChunks# " << str.Str());
                     }
-                    ActorSystem->Send(new IEventHandle(OwnerData[ownerFilter].CutLogId, PDiskActor, cutLog.Release(),
+                    ActorSystem->Send(new IEventHandleFat(OwnerData[ownerFilter].CutLogId, PDiskActor, cutLog.Release(),
                                 IEventHandle::FlagTrackDelivery, 0));
                     OwnerData[ownerFilter].AskedToCutLogAt = now;
                 } else {
@@ -1092,7 +1092,7 @@ std::unique_ptr<TEvChunkLockResult> TPDisk::ChunkLockFromQuota(TOwner owner, NKi
     ui32 number = Keeper.ColorFlagLimit(owner, color);
     ui32 used = Keeper.GetOwnerUsed(owner);
     if (number <= used) {
-        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, 
+        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK,
             "Can't lock chunks by color# " << TPDiskSpaceColor_Name(color) <<
             ", this space color flag is already raised. Marker# BPD33");
         return std::unique_ptr<TEvChunkLockResult>(new NPDisk::TEvChunkLockResult(NKikimrProto::ERROR,
@@ -1165,7 +1165,7 @@ void TPDisk::ChunkLock(TChunkLock &evChunkLock) {
     } else {
         result.reset(ChunkLockFromQuota(owner, evChunkLock.Color).release());
     }
-    
+
     LOG_INFO(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " Locked %" PRIu32 \
         " chunks from owner# " PRIu32, (ui32)PDiskId, (ui32)result->LockedChunks.size(), (ui32)owner);
 
@@ -3530,7 +3530,7 @@ void TPDisk::Update() {
             } else {
                 diskModeParams->LastSectorRate.store(SectorMapLastSectorRate);
             }
-            
+
             diskModeParams->SeekSleepMicroSeconds.store(SectorMapSeekSleepMicroSeconds);
         }
     }

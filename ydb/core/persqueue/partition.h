@@ -345,7 +345,7 @@ private:
     template <typename TEv>
     TString EventStr(const char * func, const TEv& ev) {
         TStringStream ss;
-        ss << func << " event# " << ev->GetTypeRewrite() << " (" << ev->GetBase()->ToStringHeader() << "), Tablet " << Tablet << ", Partition " << Partition
+        ss << func << " event# " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << "), Tablet " << Tablet << ", Partition " << Partition
            << ", Sender " << ev->Sender.ToString() << ", Recipient " << ev->Recipient.ToString() << ", Cookie: " << ev->Cookie;
         return ss.Str();
     }

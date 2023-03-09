@@ -493,7 +493,7 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
                 THolder<TEvPrivate::TEvOperationPlan> msg = MakeHolder<TEvPrivate::TEvOperationPlan>(ui64(step), ui64(txId));
-                TEvPrivate::TEvOperationPlan::TPtr personalEv = (TEventHandle<TEvPrivate::TEvOperationPlan>*) new IEventHandle(
+                TEvPrivate::TEvOperationPlan::TPtr personalEv = (TEventHandleFat<TEvPrivate::TEvOperationPlan>*) new IEventHandleFat(
                             context.SS->SelfId(), context.SS->SelfId(), msg.Release());
 
                 operation->Parts.at(partIdx)->HandleReply(personalEv, context);

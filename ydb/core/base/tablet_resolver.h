@@ -119,7 +119,7 @@ struct TEvTabletResolver {
         TString ToString() const {
             TStringStream str;
             str << "{EvForward TabletID: " << TabletID;
-            str << " Ev: " << (Ev ? Ev->GetBase()->ToString().data() : "nullptr");
+            str << " Ev: " << (Ev ? Ev->ToString() : "nullptr");
             str << " Flags: " << ResolveFlags.ToString();
             str << "}";
             return str.Str();

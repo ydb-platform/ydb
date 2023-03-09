@@ -565,7 +565,7 @@ void AcceptConfig(TTenantTestRuntime &runtime, TAutoPtr<IEventHandle>& handle)
     auto *response = new TEvConsole::TEvConfigNotificationResponse;
     response->Record.SetSubscriptionId(rec.GetSubscriptionId());
     response->Record.MutableConfigId()->CopyFrom(rec.GetConfigId());
-    runtime.Send(new IEventHandle(handle->Sender, runtime.Sender, response, 0, handle->Cookie));
+    runtime.Send(new IEventHandleFat(handle->Sender, runtime.Sender, response, 0, handle->Cookie));
 }
 
 NKikimrConsole::TConfig GetCurrentConfig(TTenantTestRuntime &runtime)
@@ -3425,12 +3425,12 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                     ++undelivered;
             }
             if (event->GetTypeRewrite() == TConfigsProvider::TEvPrivate::EvNotificationTimeout
-                && dynamic_cast<TConfigsProvider::TEvPrivate::TEvNotificationTimeout*>(event->GetBase())) {
+                && dynamic_cast<TConfigsProvider::TEvPrivate::TEvNotificationTimeout*>(event->StaticCastAsLocal<IEventBase>())) {
                 attemptFinished = true;
             }
             // Don't allow to cleanup config for missing node.
             if (event->GetTypeRewrite() == TConfigsManager::TEvPrivate::EvCleanupSubscriptions
-                && dynamic_cast<TConfigsManager::TEvPrivate::TEvCleanupSubscriptions*>(event->GetBase()))
+                && dynamic_cast<TConfigsManager::TEvPrivate::TEvCleanupSubscriptions*>(event->StaticCastAsLocal<IEventBase>()))
                 return TTestActorRuntime::EEventAction::DROP;
             return TTestActorRuntime::EEventAction::PROCESS;
         };
@@ -3485,7 +3485,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back([&](IEventHandle &ev) -> bool {
                 if (ev.GetTypeRewrite() == TConfigsManager::TEvPrivate::EvCleanupSubscriptions
-                    && dynamic_cast<TConfigsManager::TEvPrivate::TEvCleanupSubscriptions*>(ev.GetBase()))
+                    && dynamic_cast<TConfigsManager::TEvPrivate::TEvCleanupSubscriptions*>(ev.StaticCastAsLocal<IEventBase>()))
                     return true;
                 return false;
             }, 1);
@@ -3670,7 +3670,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options1);
 
-        runtime.Send(new IEventHandle(clientId, edgeId, new TEvents::TEvPoisonPill()), 0, true);
+        runtime.Send(new IEventHandleFat(clientId, edgeId, new TEvents::TEvPoisonPill()), 0, true);
 
         TDispatchOptions options2;
         options2.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionCanceled, 3);
@@ -3711,7 +3711,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         UNIT_ASSERT_VALUES_EQUAL(notification1->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification1->Get()->Record.GetConfig().ShortDebugString(), config1.ShortDebugString());
 
-        TAutoPtr<IEventHandle> handle =  new IEventHandle(
+        TAutoPtr<IEventHandle> handle =  new IEventHandleFat(
             runtime.GetInterconnectProxy(0, 1),
             runtime.Sender,
             new TEvInterconnect::TEvDisconnect());

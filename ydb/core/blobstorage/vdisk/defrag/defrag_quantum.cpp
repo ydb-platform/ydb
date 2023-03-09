@@ -71,7 +71,7 @@ namespace NKikimr {
                 try {
                     ev = WaitForSpecificEvent<TEvDefragRewritten>();
                 } catch (const TPoisonPillException&) {
-                    Send(new IEventHandle(TEvents::TSystem::Poison, 0, rewriterActorId, {}, nullptr, 0));
+                    Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, rewriterActorId, {}, nullptr, 0));
                     throw;
                 }
                 stat.RewrittenRecs = ev->Get()->RewrittenRecs;
@@ -92,7 +92,7 @@ namespace NKikimr {
         }
 
         void Yield() {
-            Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
+            Send(new IEventHandleFat(EvResume, 0, SelfActorId, {}, nullptr, 0));
             WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; });
         }
 

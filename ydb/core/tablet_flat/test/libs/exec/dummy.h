@@ -80,13 +80,13 @@ namespace NFake {
             } else if (eh->CastAsLocal<TEvTabletPipe::TEvServerDisconnected>()){
 
             } else if (!TTabletExecutedFlat::HandleDefaultEvents(eh, ctx)) {
-                Y_Fail("Unexpected event " << TypeName(*eh->GetBase()));
+                Y_Fail("Unexpected event " << eh->GetTypeName());
             }
         }
 
         void Enqueue(TEventHandlePtr &eh, const ::NActors::TActorContext&) override
         {
-            const auto *name = TypeName(*eh->GetBase()).c_str();
+            const auto *name = eh->GetTypeName().c_str();
 
             Y_FAIL("Got unexpected event %s on tablet booting", name);
         }

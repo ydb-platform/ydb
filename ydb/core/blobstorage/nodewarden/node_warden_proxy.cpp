@@ -87,8 +87,8 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
         // invalid group; proxy for this group is created at start
     } else if (noGroup) {
         const TActorId errorProxy = StartEjectedProxy(id);
-        TActivationContext::Send(ev->Forward(errorProxy));
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
+        TActivationContext::Forward(ev, errorProxy);
+        TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
         return;
     } else if (TGroupRecord& group = Groups[id]; !group.ProxyId) {
         if (TGroupID(id).ConfigurationType() == EGroupConfigurationType::Virtual) {
@@ -97,8 +97,7 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
             StartLocalProxy(id);
         }
     }
-
-    TActivationContext::Send(ev->Forward(ev->GetForwardOnNondeliveryRecipient()));
+    TActivationContext::Forward(ev, ev->GetForwardOnNondeliveryRecipient());
 }
 
 void TNodeWarden::Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::TPtr ev) {

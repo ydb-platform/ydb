@@ -4153,7 +4153,7 @@ void TSchemeShard::Enqueue(STFUNC_SIG) {
     Y_UNUSED(ctx);
     Y_FAIL_S("No enqueue method implemented."
               << " unhandled event type: " << ev->GetTypeRewrite()
-             << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+             << " event: " << ev->ToString());
 
 }
 
@@ -4211,7 +4211,7 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "StateConfigure:"
                            << " unhandled event type: " << ev->GetTypeRewrite()
-                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                           << " event: " << ev->ToString());
         }
     }
 }
@@ -4379,7 +4379,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "StateWork:"
                            << " unhandled event type: " << ev->GetTypeRewrite()
-                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                           << " event: " << ev->ToString());
         }
         break;
     }
@@ -4394,7 +4394,7 @@ void TSchemeShard::BrokenState(STFUNC_SIG) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "BrokenState:"
                            << " unhandled event type: " << ev->GetTypeRewrite()
-                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
+                           << " event: " << ev->ToString());
         }
         break;
     }

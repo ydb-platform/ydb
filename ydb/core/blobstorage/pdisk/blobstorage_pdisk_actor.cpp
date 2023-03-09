@@ -365,7 +365,7 @@ public:
                             try {
                                 FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
                                     cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.back(), TString(), false,
-                                    cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap, 
+                                    cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
                                     cfg->FeatureFlags.GetEnableSmallDiskOptimization());
                             } catch (NPDisk::TPDiskFormatBigChunkException) {
                                 FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
@@ -570,7 +570,7 @@ public:
         const NPDisk::TEvYardControl &evControl = *ev->Get();
         switch (evControl.Action) {
         case TEvYardControl::PDiskStart:
-            ControledStartResult = MakeHolder<IEventHandle>(ev->Sender, SelfId(),
+            ControledStartResult = MakeHolder<IEventHandleFat>(ev->Sender, SelfId(),
                     new TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
         break;
         default:
@@ -729,7 +729,7 @@ public:
             Y_VERIFY(mainKey);
             MainKey = *mainKey;
             StartPDiskThread();
-            ControledStartResult = MakeHolder<IEventHandle>(ev->Sender, SelfId(),
+            ControledStartResult = MakeHolder<IEventHandleFat>(ev->Sender, SelfId(),
                     new TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
             break;
         }
@@ -1055,7 +1055,7 @@ public:
                         NPDisk::TEvChunkUnlock(lockFrom), ev->Sender);
                     PDisk->InputRequest(request);
                 }
-            } 
+            }
         }
         if (cgi.Has("restartPDisk")) {
             if (Cfg->SectorMap || CurrentStateFunc() == &TPDiskActor::StateError) {

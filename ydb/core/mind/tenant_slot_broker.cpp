@@ -445,7 +445,7 @@ void TTenantSlotBroker::Enqueue(TAutoPtr<IEventHandle> &ev,
 {
     LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER,
               "Enqueue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-              TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+              TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
     InitQueue.push_back(ev);
 }
 
@@ -634,7 +634,7 @@ void TTenantSlotBroker::ProcessEnqueuedEvents(const TActorContext &ctx)
         TAutoPtr<IEventHandle> &ev = InitQueue.front();
         LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                   "Dequeue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-                  TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                  TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
         ctx.ExecutorThread.Send(ev.Release());
         InitQueue.pop_front();
     }

@@ -161,7 +161,7 @@ STATEFN(TSqsProxyService::StateFunc) {
         hFunc(TEvents::TEvUndelivered,              HandleUndelivered);
         hFunc(TSqsEvents::TEvGetLeaderNodeForQueueResponse, HandleGetLeaderNodeForQueueResponse);
     default:
-        LOG_SQS_ERROR("Unknown type of event came to SQS service actor: " << ev->Type << " (" << ev->GetBase()->ToString() << "), sender: " << ev->Sender);
+        LOG_SQS_ERROR("Unknown type of event came to SQS service actor: " << ev->Type << " (" << ev->GetTypeName() << "), sender: " << ev->Sender);
     }
 }
 

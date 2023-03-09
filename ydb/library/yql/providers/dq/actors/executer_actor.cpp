@@ -224,7 +224,7 @@ private:
 
         StartCounter("AllocateWorkers");
 
-        TActivationContext::Send(new IEventHandle(
+        TActivationContext::Send(new IEventHandleFat(
             GwmActorId,
             resourceAllocator,
             allocateRequest.Release(),
@@ -414,7 +414,7 @@ private:
     }
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
-        return new IEventHandle(self, parentId, new TEvents::TEvWakeup(), 0);
+        return new IEventHandleFat(self, parentId, new TEvents::TEvWakeup(), 0);
     }
 
     void OnWakeup() {

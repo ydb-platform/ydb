@@ -19,21 +19,11 @@
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
+#include "make_config.h"
+
 namespace NKikimr::NPQ {
 
-Y_UNIT_TEST_SUITE(TPartitionTests) {
-
 namespace NHelpers {
-
-struct TCreateConsumerParams {
-    TString Consumer;
-    ui64 Offset = 0;
-    ui32 Generation = 0;
-    ui32 Step = 0;
-    TString Session;
-    ui64 OffsetRewindSum = 0;
-    ui64 ReadRuleGeneration = 0;
-};
 
 struct TConfigParams {
     ui64 Version = 0;
@@ -51,6 +41,8 @@ struct TCreatePartitionParams {
 };
 
 }
+
+Y_UNIT_TEST_SUITE(TPartitionTests) {
 
 class TPartitionFixture : public NUnitTest::TBaseFixture {
 protected:
@@ -210,9 +202,6 @@ protected:
                                  ui64 begin, ui64 end,
                                  TMaybe<bool> predicate = Nothing());
 
-    static NKikimrPQ::TPQTabletConfig MakeConfig(ui64 version,
-                                                 const TVector<TCreateConsumerParams>& consumers);
-
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
 
@@ -236,8 +225,6 @@ void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
 void TPartitionFixture::TearDown(NUnitTest::TTestContext&)
 {
 }
-
-
 
 void TPartitionFixture::CreatePartitionActor(ui32 id,
                                              const TConfigParams& config,
@@ -693,7 +680,7 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
     auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSource());
-    auto* body = event->Record.MutableTxBody();
+    auto* body = event->Record.MutableData();
     auto* operation = body->MutableOperations()->Add();
     operation->SetPartitionId(partition);
     operation->SetBegin(begin);
@@ -807,27 +794,6 @@ TTransaction TPartitionFixture::MakeTransaction(ui64 step, ui64 txId,
     event->AddOperation(std::move(consumer), begin, end);
 
     return TTransaction(event, predicate);
-}
-
-NKikimrPQ::TPQTabletConfig TPartitionFixture::MakeConfig(ui64 version,
-                                                         const TVector<TCreateConsumerParams>& consumers)
-{
-    NKikimrPQ::TPQTabletConfig config;
-
-    config.SetVersion(version);
-
-    for (auto& c : consumers) {
-        config.AddReadRules(c.Consumer);
-        config.AddReadRuleGenerations(c.Generation);
-    }
-
-    config.SetTopicName("rt3.dc1--account--topic");
-    config.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
-    config.SetFederationAccount("account");
-    config.SetLocalDC(true);
-    config.SetYdbDatabasePath("");
-
-    return config;
 }
 
 Y_UNIT_TEST_F(Batching, TPartitionFixture)

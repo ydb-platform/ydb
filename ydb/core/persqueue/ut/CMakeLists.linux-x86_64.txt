@@ -53,6 +53,7 @@ target_sources(ydb-core-persqueue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/counters_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/pqtablet_mock.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/internals_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/make_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/metering_sink_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/mirrorer_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/pq_ut.cpp

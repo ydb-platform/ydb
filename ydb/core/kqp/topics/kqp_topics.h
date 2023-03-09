@@ -50,7 +50,7 @@ public:
                       const Ydb::Topic::OffsetsRange& range);
     void AddOperation(const TString& topic, ui32 partition);
 
-    void BuildTopicTxs(THashMap<ui64, NKikimrPQ::TKqpTransaction> &txs);
+    void BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs);
 
     void Merge(const TTopicPartitionOperations& rhs);
 
@@ -102,7 +102,7 @@ public:
                                     Ydb::StatusIds_StatusCode& status,
                                     TString& message);
 
-    void BuildTopicTxs(THashMap<ui64, NKikimrPQ::TKqpTransaction> &txs);
+    void BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs);
 
     void Merge(const TTopicOperations& rhs);
 

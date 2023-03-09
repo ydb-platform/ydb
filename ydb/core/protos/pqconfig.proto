@@ -786,7 +786,7 @@ message TPartitionOperation {
     optional string Path = 5; // topic path
 };
 
-message TKqpTransaction {
+message TDataTransaction {
     enum ELocksOp {
         Unspecified = 0;
         Validate = 1;
@@ -802,10 +802,18 @@ message TKqpTransaction {
     optional fixed64 LockTxId = 6;
 }
 
+message TConfigTransaction {
+    optional TPQTabletConfig TabletConfig = 2;
+    optional TBootstrapConfig BootstrapConfig = 3;
+}
+
 message TEvProposeTransaction {
     optional NActorsProto.TActorId Source = 1;
-    optional TKqpTransaction TxBody = 2;
-    optional uint64 TxId = 3;
+    optional uint64 TxId = 2;
+    oneof TxBody {
+        TDataTransaction Data = 3;
+        TConfigTransaction Config = 4;
+    }
 };
 
 message TEvProposeTransactionResult {
@@ -844,6 +852,12 @@ message TEvPeriodicTopicStats {
 };
 
 message TTransaction {
+    enum EKind {
+        KIND_UNKNOWN = 0;
+        KIND_DATA = 1;
+        KIND_CONFIG = 2;
+    };
+
     enum EState {
         UNKNOWN = 0;
         PREPARING = 1;
@@ -857,16 +871,27 @@ message TTransaction {
         EXECUTED = 9;
     };
 
+    optional EKind Kind = 11;
+    optional uint64 Step = 8;
     optional uint64 TxId = 1;
     optional EState State = 2;
     optional uint64 MinStep = 3;
     optional uint64 MaxStep = 4;
+
+    //
+    // TDataTransaction
+    //
     repeated uint64 Senders = 5;
     repeated uint64 Receivers = 6;
     repeated TPartitionOperation Operations = 7;
-    optional uint64 Step = 8;
     optional bool SelfPredicate = 9;  // только предикаты партиций. предикаты коллег отдельно
     optional bool AggrPredicate = 10; // заполненено одно из полей Senders or AggrPredicate
+
+    //
+    // TConfigTransaction
+    //
+    optional TPQTabletConfig TabletConfig = 12;
+    optional TBootstrapConfig BootstrapConfig = 13;
 };
 
 message TTabletTxInfo {

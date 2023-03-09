@@ -91,9 +91,10 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //response from KV on READ or WRITE config request
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleConfigWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
     void HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
     void ApplyNewConfigAndReply(const TActorContext& ctx);
+    void ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
+                        const TActorContext& ctx);
     void HandleStateWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
 
     void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
@@ -221,6 +222,8 @@ private:
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
     THashSet<ui64> ChangedTxs;
+    TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
+    TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
     bool WriteTxsInProgress = false;
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
 
@@ -238,6 +241,8 @@ private:
                          NKikimrClient::TKeyValueRequest& request);
     void ProcessDeleteTxs(const TActorContext& ctx,
                           NKikimrClient::TKeyValueRequest& request);
+    void ProcessConfigTx(const TActorContext& ctx,
+                         TEvKeyValue::TEvRequest* request);
     void AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request);
 
     void ScheduleProposeTransactionResult(const TDistributedTransaction& tx);
@@ -276,6 +281,29 @@ private:
     void SendProposeTransactionAbort(const TActorId& target,
                                      ui64 txId,
                                      const TActorContext& ctx);
+
+    void Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx);
+    void HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> event,
+                               const TActorContext& ctx);
+    void HandleConfigTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> event,
+                                 const TActorContext& ctx);
+
+    void SendEvProposePartitionConfig(const TActorContext& ctx,
+                                      TDistributedTransaction& tx);
+
+    void CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
+                             const TActorContext& ctx);
+    void EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const;
+
+    void BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,
+                          const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
+                          const TActorContext& ctx);
+    void EndWriteConfig(const NKikimrClient::TResponse& resp,
+                        const TActorContext& ctx);
+    void AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
+                           const NKikimrPQ::TPQTabletConfig& cfg,
+                           const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
+                           const TActorContext& ctx);
 };
 
 

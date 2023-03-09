@@ -1951,7 +1951,7 @@ private:
     }
 
     using TDatashardTxs = THashMap<ui64, NKikimrTxDataShard::TKqpTransaction>;
-    using TTopicTabletTxs = THashMap<ui64, NKikimrPQ::TKqpTransaction>;
+    using TTopicTabletTxs = THashMap<ui64, NKikimrPQ::TDataTransaction>;
 
     void ContinueExecute() {
         UseFollowers = Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
@@ -2115,13 +2115,13 @@ private:
                 for (auto& [_, tx] : topicTxs) {
                     switch (locksOp) {
                     case NKikimrTxDataShard::TKqpLocks::Commit:
-                        tx.SetOp(NKikimrPQ::TKqpTransaction::Commit);
+                        tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
                         break;
                     case NKikimrTxDataShard::TKqpLocks::Validate:
-                        tx.SetOp(NKikimrPQ::TKqpTransaction::Validate);
+                        tx.SetOp(NKikimrPQ::TDataTransaction::Validate);
                         break;
                     case NKikimrTxDataShard::TKqpLocks::Rollback:
-                        tx.SetOp(NKikimrPQ::TKqpTransaction::Rollback);
+                        tx.SetOp(NKikimrPQ::TDataTransaction::Rollback);
                         break;
                     case NKikimrTxDataShard::TKqpLocks::Unspecified:
                         break;
@@ -2303,7 +2303,7 @@ private:
             transaction.SetImmediate(ImmediateTx);
 
             ActorIdToProto(SelfId(), ev->Record.MutableSource());
-            ev->Record.MutableTxBody()->Swap(&transaction);
+            ev->Record.MutableData()->Swap(&transaction);
             ev->Record.SetTxId(TxId);
 
             auto traceId = ExecuterSpan.GetTraceId();

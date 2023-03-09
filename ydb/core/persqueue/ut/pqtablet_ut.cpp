@@ -20,11 +20,10 @@
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
+#include "make_config.h"
 #include "pqtablet_mock.h"
 
 namespace NKikimr::NPQ {
-
-Y_UNIT_TEST_SUITE(TPQTabletTests) {
 
 namespace NHelpers {
 
@@ -36,11 +35,17 @@ struct TTxOperation {
     TString Path;
 };
 
+struct TConfigParams {
+    TMaybe<NKikimrPQ::TPQTabletConfig> Tablet;
+    TMaybe<NKikimrPQ::TBootstrapConfig> Bootstrap;
+};
+
 struct TProposeTransactionParams {
     ui64 TxId = 0;
     TVector<ui64> Senders;
     TVector<ui64> Receivers;
     TVector<TTxOperation> TxOps;
+    TMaybe<TConfigParams> Configs;
 };
 
 struct TPlanStepParams {
@@ -65,6 +70,8 @@ using NKikimr::NPQ::NHelpers::CreatePQTabletMock;
 using TPQTabletMock = NKikimr::NPQ::NHelpers::TPQTabletMock;
 
 }
+
+Y_UNIT_TEST_SUITE(TPQTabletTests) {
 
 class TPQTabletFixture : public NUnitTest::TBaseFixture {
 protected:
@@ -208,37 +215,43 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
     auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
     THashSet<ui32> partitions;
 
-    //
-    // Source
-    //
     ActorIdToProto(Ctx->Edge, event->Record.MutableSource());
-
-    //
-    // TxBody
-    //
-    auto* body = event->Record.MutableTxBody();
-    for (auto& txOp : params.TxOps) {
-        auto* operation = body->MutableOperations()->Add();
-        operation->SetPartitionId(txOp.Partition);
-        operation->SetBegin(txOp.Begin);
-        operation->SetEnd(txOp.End);
-        operation->SetConsumer(txOp.Consumer);
-        operation->SetPath(txOp.Path);
-
-        partitions.insert(txOp.Partition);
-    }
-    for (ui64 tabletId : params.Senders) {
-        body->AddSendingShards(tabletId);
-    }
-    for (ui64 tabletId : params.Receivers) {
-        body->AddReceivingShards(tabletId);
-    }
-    body->SetImmediate(params.Senders.empty() && params.Receivers.empty() && (partitions.size() == 1));
-
-    //
-    // TxId
-    //
     event->Record.SetTxId(params.TxId);
+
+    if (params.Configs) {
+        //
+        // TxBody.Config
+        //
+        auto* body = event->Record.MutableConfig();
+        if (params.Configs->Tablet.Defined()) {
+            *body->MutableTabletConfig() = *params.Configs->Tablet;
+        }
+        if (params.Configs->Bootstrap.Defined()) {
+            *body->MutableBootstrapConfig() = *params.Configs->Bootstrap;
+        }
+    } else {
+        //
+        // TxBody.Data
+        //
+        auto* body = event->Record.MutableData();
+        for (auto& txOp : params.TxOps) {
+            auto* operation = body->MutableOperations()->Add();
+            operation->SetPartitionId(txOp.Partition);
+            operation->SetBegin(txOp.Begin);
+            operation->SetEnd(txOp.End);
+            operation->SetConsumer(txOp.Consumer);
+            operation->SetPath(txOp.Path);
+
+            partitions.insert(txOp.Partition);
+        }
+        for (ui64 tabletId : params.Senders) {
+            body->AddSendingShards(tabletId);
+        }
+        for (ui64 tabletId : params.Receivers) {
+            body->AddReceivingShards(tabletId);
+        }
+        body->SetImmediate(params.Senders.empty() && params.Receivers.empty() && (partitions.size() == 1));
+    }
 
     SendToPipe(Ctx->Edge,
                event.Release());
@@ -729,6 +742,76 @@ Y_UNIT_TEST_F(DropTablet_Before_Write, TPQTabletFixture)
     //
     WaitProposeTransactionResponse({.TxId=txId_2,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+}
+
+Y_UNIT_TEST_F(UpdateConfig_1, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    auto tabletConfig =
+        NHelpers::MakeConfig(2, {
+                             {.Consumer="client-1", .Generation=0},
+                             {.Consumer="client-3", .Generation=7}},
+                             2);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Configs=NHelpers::TConfigParams{
+                                  .Tablet=tabletConfig,
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig()
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+}
+
+Y_UNIT_TEST_F(UpdateConfig_2, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+
+    const ui64 txId_2 = 67891;
+    const ui64 txId_3 = 67892;
+
+    auto tabletConfig =
+        NHelpers::MakeConfig(2, {
+                             {.Consumer="client-1", .Generation=1},
+                             {.Consumer="client-2", .Generation=1}
+                             },
+                             3);
+
+    SendProposeTransactionRequest({.TxId=txId_2,
+                                  .Configs=NHelpers::TConfigParams{
+                                  .Tablet=tabletConfig,
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig()
+                                  }});
+    SendProposeTransactionRequest({.TxId=txId_3,
+                                  .TxOps={
+                                  {.Partition=1, .Consumer="client-2", .Begin=0, .End=0, .Path="/topic"},
+                                  {.Partition=2, .Consumer="client-1", .Begin=0, .End=0, .Path="/topic"}
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    WaitProposeTransactionResponse({.TxId=txId_3,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId_2, txId_3}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId_2, txId_3}});
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitProposeTransactionResponse({.TxId=txId_3,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 }
 
 }

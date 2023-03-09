@@ -57,11 +57,19 @@ struct TTransaction {
         Y_VERIFY(ChangeConfig);
     }
 
+    explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig) :
+        ProposeConfig(proposeConfig)
+    {
+        Y_VERIFY(ProposeConfig);
+    }
+
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
     TMaybe<bool> Predicate;
 
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
     bool SendReply;
+
+    TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> ProposeConfig;
 };
 
 class TPartition : public TActorBootstrapped<TPartition> {
@@ -212,6 +220,7 @@ private:
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event);
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
     void PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
+    void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> event);
     void RemoveDistrTx();
     void ProcessDistrTxs(const TActorContext& ctx);
     void ProcessDistrTx(const TActorContext& ctx);
@@ -274,18 +283,20 @@ private:
 
     bool BeginTransaction(const TEvPQ::TEvTxCalcPredicate& event,
                           const TActorContext& ctx);
+    bool BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event);
     void EndTransaction(const TEvPQ::TEvTxCommit& event,
                         const TActorContext& ctx);
     void EndTransaction(const TEvPQ::TEvTxRollback& event,
                         const TActorContext& ctx);
 
-    void BeginChangePartitionConfig(const TEvPQ::TEvChangePartitionConfig& event,
+    void BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
                                     const TActorContext& ctx);
-    void EndChangePartitionConfig(const TEvPQ::TEvChangePartitionConfig& event,
+    void EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
+                                  NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
 
-    void InitPendingUserInfoForImportantClients(const TEvPQ::TEvChangePartitionConfig& event,
+    void InitPendingUserInfoForImportantClients(const NKikimrPQ::TPQTabletConfig& config,
                                                 const TActorContext& ctx);
 
     void RequestConfig(const TActorContext& ctx);
@@ -297,6 +308,17 @@ private:
         Requests.emplace_back(body, WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now() - TInstant::Zero());
     }
     void EmplaceResponse(TMessage&& message, const TActorContext& ctx);
+
+    void Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx);
+
+    void HandleOnInit(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx);
+    void HandleOnInit(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx);
+    void HandleOnInit(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx);
+    void HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx);
+
+    void ChangePlanStepAndTxId(ui64 step, ui64 txId);
+
+    void ResendPendingEvents(const TActorContext& ctx);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -370,6 +392,10 @@ private:
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
             HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
+            HFuncTraced(TEvPQ::TEvTxCalcPredicate, HandleOnInit);
+            HFuncTraced(TEvPQ::TEvProposePartitionConfig, HandleOnInit);
+            HFuncTraced(TEvPQ::TEvTxCommit, HandleOnInit);
+            HFuncTraced(TEvPQ::TEvTxRollback, HandleOnInit);
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
             break;
@@ -418,6 +444,7 @@ private:
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
+            HFuncTraced(TEvPQ::TEvProposePartitionConfig, Handle);
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
 
@@ -470,6 +497,7 @@ private:
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnWrite);
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
+            HFuncTraced(TEvPQ::TEvProposePartitionConfig, Handle);
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
 
@@ -661,6 +689,8 @@ private:
     THolder<TMirrorerInfo> Mirrorer;
 
     TInstant LastUsedStorageMeterTimestamp;
+
+    TDeque<std::unique_ptr<IEventBase>> PendingEvents;
 };
 
 } // namespace NKikimr::NPQ

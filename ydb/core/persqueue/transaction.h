@@ -20,8 +20,11 @@ struct TDistributedTransaction {
 
     void OnProposeTransaction(const NKikimrPQ::TEvProposeTransaction& event,
                               ui64 minStep);
+    void OnProposeTransaction(const NKikimrPQ::TDataTransaction& txBody);
+    void OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody);
     void OnPlanStep(ui64 step);
     void OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event);
+    void OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event);
     void OnReadSet(const NKikimrTx::TEvReadSet& event,
                    const TActorId& sender,
                    std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack);
@@ -30,6 +33,8 @@ struct TDistributedTransaction {
 
     using EDecision = NKikimrTx::TReadSetData::EDecision;
     using EState = NKikimrPQ::TTransaction::EState;
+
+    NKikimrPQ::TTransaction::EKind Kind = NKikimrPQ::TTransaction::KIND_UNKNOWN;
 
     ui64 TxId = Max<ui64>();
     ui64 Step = Max<ui64>();
@@ -52,6 +57,9 @@ struct TDistributedTransaction {
 
     THashMap<NActors::TActorId, std::unique_ptr<TEvTxProcessing::TEvReadSetAck>> ReadSetAcks;
 
+    NKikimrPQ::TPQTabletConfig TabletConfig;
+    NKikimrPQ::TBootstrapConfig BootstrapConfig;
+
     bool WriteInProgress = false;
 
     void SetDecision(EDecision decision);
@@ -68,6 +76,9 @@ struct TDistributedTransaction {
     static void SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value);
 
     TString GetKey() const;
+
+    void AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx);
+    void AddCmdWriteConfigTx(NKikimrPQ::TTransaction& tx);
 };
 
 }

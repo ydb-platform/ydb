@@ -89,7 +89,7 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
     HasWriteOperations_ = true;
 }
 
-void TTopicPartitionOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TKqpTransaction> &txs)
+void TTopicPartitionOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs)
 {
     Y_VERIFY(TabletId_.Defined());
     Y_VERIFY(Partition_.Defined());
@@ -326,7 +326,7 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
     return true;
 }
 
-void TTopicOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TKqpTransaction> &txs)
+void TTopicOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs)
 {
     for (auto& [_, operations] : Operations_) {
         operations.BuildTopicTxs(txs);

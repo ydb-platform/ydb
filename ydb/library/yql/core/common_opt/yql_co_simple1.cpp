@@ -1973,7 +1973,7 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
     YQL_ENSURE(inputRowType->GetKind() == ETypeAnnotationKind::Struct);
 
     static const TStringBuf inputTable = "_yql_injoin_input";
-    auto inputTableAtom = ctx.NewAtom(input->Pos(), inputTable);
+    auto inputTableAtom = ctx.NewAtom(input->Pos(), inputTable, TNodeFlags::Default);
 
     size_t startColumnIndex = 0;
     for (;;) {
@@ -1993,7 +1993,7 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
         auto equiJoinArg = ctx.Builder(pos)
             .List()
                 .Add(0, chain[i].Right)
-                .Atom(1, tableName)
+                .Atom(1, tableName, TNodeFlags::Default)
             .Seal()
             .Build();
 
@@ -2002,7 +2002,7 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
         TExprNodeList leftKeys;
         if (chain[i].LeftArgColumns.empty()) {
             leftKeys.push_back(inputTableAtom);
-            leftKeys.push_back(ctx.NewAtom(pos, columnName));
+            leftKeys.push_back(ctx.NewAtom(pos, columnName, TNodeFlags::Default));
         } else {
             for (TStringBuf leftKey : chain[i].LeftArgColumns) {
                 leftKeys.push_back(inputTableAtom);
@@ -2012,15 +2012,15 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
 
         TExprNodeList rightKeys;
         for (const TString& rightKey : chain[i].RightArgColumns) {
-            rightKeys.push_back(ctx.NewAtom(pos, tableName));
+            rightKeys.push_back(ctx.NewAtom(pos, tableName, TNodeFlags::Default));
             rightKeys.push_back(ctx.NewAtom(pos, rightKey));
         }
 
         joinChain = ctx.Builder(pos)
             .List()
-                .Atom(0, chain[i].Negated ? "LeftOnly" : "LeftSemi")
+                .Atom(0, chain[i].Negated ? "LeftOnly" : "LeftSemi", TNodeFlags::Default)
                 .Add(1, joinChain ? joinChain : inputTableAtom)
-                .Atom(2, tableName)
+                .Atom(2, tableName, TNodeFlags::Default)
                 .List(3)
                     .Add(std::move(leftKeys))
                 .Seal()
@@ -2035,7 +2035,7 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
         if (chain[i].LeftArgColumns.empty()) {
             auto rename = ctx.Builder(pos)
                 .List()
-                    .Atom(0, "rename")
+                    .Atom(0, "rename", TNodeFlags::Default)
                     .Atom(1, FullColumnName(inputTable, columnName))
                     .Atom(2, "")
                 .Seal()
@@ -2045,7 +2045,7 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
             addMemberChain = ctx.Builder(chain[i].SqlInPos)
                 .Callable("AddMember")
                     .Add(0, addMemberChain ? addMemberChain : origLambdaArgs->HeadPtr())
-                    .Atom(1, columnName)
+                    .Atom(1, columnName, TNodeFlags::Default)
                     .Add(2, chain[i].Left)
                 .Seal()
                 .Build();
@@ -2055,18 +2055,13 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
     for (const auto& i : inputRowType->Cast<TStructExprType>()->GetItems()) {
         auto rename = ctx.Builder(input->Pos())
             .List()
-                .Atom(0, "rename")
+                .Atom(0, "rename", TNodeFlags::Default)
                 .Atom(1, FullColumnName(inputTable, i->GetName()))
                 .Atom(2, i->GetName())
             .Seal()
             .Build();
         renames.push_back(rename);
     }
-    renames.push_back(ctx.Builder(input->Pos())
-        .List()
-            .Atom(0, "keep_sys")
-        .Seal()
-        .Build());
 
     equiJoinArgs.push_back(joinChain);
     equiJoinArgs.push_back(ctx.NewList(input->Pos(), std::move(renames)));

@@ -57,7 +57,6 @@ struct TJoinOptions {
     TSet<TVector<TStringBuf>> PreferredSortSets;
 
     bool Flatten = false;
-    bool KeepSysColumns = false;
     bool StrictKeys = false;
 };
 

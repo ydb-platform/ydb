@@ -727,8 +727,6 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
             }
         } else if (optionName == "flatten") {
             options.Flatten = true;
-        } else if (optionName == "keep_sys") {
-            options.KeepSysColumns = true;
         } else if (optionName == "strict_keys") {
             options.StrictKeys = true;
         } else if (optionName == "preferred_sort") {

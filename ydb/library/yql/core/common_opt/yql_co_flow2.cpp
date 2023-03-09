@@ -729,7 +729,7 @@ const TTypeAnnotationNode* GetCanaryOutputType(const TStructExprType& outputType
 }
 
 TExprNode::TPtr BuildOutputFlattenMembersArg(const TCoEquiJoinInput& input, const TExprNode::TPtr& inputArg,
-    const TString& canaryName, const TStructExprType& canaryResultTypeWithoutRenames, bool keepSys, TExprContext& ctx)
+    const TString& canaryName, const TStructExprType& canaryResultTypeWithoutRenames, TExprContext& ctx)
 {
     YQL_ENSURE(input.Scope().Ref().IsAtom());
     TStringBuf label = input.Scope().Ref().Content();
@@ -777,9 +777,7 @@ TExprNode::TPtr BuildOutputFlattenMembersArg(const TCoEquiJoinInput& input, cons
 
     TExprNode::TListType membersForCheck;
     auto flatMapInputItems = flatMapInputItem->Cast<TStructExprType>()->GetItems();
-    if (!keepSys) {
-        EraseIf(flatMapInputItems, [](const TItemExprType* item) { return item->GetName().StartsWith("_yql_sys_"); });
-    }
+
     flatMapInputItems.push_back(ctx.MakeType<TItemExprType>(canaryName, ctx.MakeType<TDataExprType>(EDataSlot::Bool)));
     for (auto& item : flatMapInputItems) {
         if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Optional) {
@@ -845,14 +843,10 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         return node;
     }
 
-    bool keepSys = false;
     auto settings = node->ChildPtr(inputsCount + 1);
     for (auto& child : settings->Children()) {
-        if (child->Child(0)->Content() == "flatten") {
+        if (child->Head().IsAtom("flatten")) {
             return node;
-        }
-        if (child->Child(0)->Content() == "keep_sys") {
-            keepSys = true;
         }
     }
 
@@ -892,9 +886,6 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
 
             auto flatMapInputItem = GetSequenceItemType(flatMap.Input(), false);
             auto structItems = flatMapInputItem->Cast<TStructExprType>()->GetItems();
-            if (!keepSys) {
-                EraseIf(structItems, [](const TItemExprType* item) { return item->GetName().StartsWith("_yql_sys_"); });
-            }
 
             TString canaryName = TStringBuilder() << canaryBaseName << i;
             structItems.push_back(ctx.MakeType<TItemExprType>(canaryName, ctx.MakeType<TDataExprType>(EDataSlot::Bool)));
@@ -993,7 +984,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
                 );
             }
 
-            auto flattenMembersArg = BuildOutputFlattenMembersArg(input, afterJoinArg, canaryName, *canaryResultType, keepSys, ctx);
+            auto flattenMembersArg = BuildOutputFlattenMembersArg(input, afterJoinArg, canaryName, *canaryResultType, ctx);
             if (flattenMembersArg) {
                 flattenMembersArgs.push_back(flattenMembersArg);
             }

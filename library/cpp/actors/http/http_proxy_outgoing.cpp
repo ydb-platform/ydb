@@ -11,7 +11,6 @@ public:
     const TActorId Owner;
     const TActorId Poller;
     SocketAddressType Address;
-    TString Host;
     TActorId RequestOwner;
     THttpOutgoingRequestPtr Request;
     THttpIncomingResponsePtr Response;
@@ -19,11 +18,10 @@ public:
     TDuration ConnectionTimeout = CONNECTION_TIMEOUT;
     NActors::TPollerToken::TPtr PollerToken;
 
-    TOutgoingConnectionActor(const TActorId& owner, const TString& host, const TActorId& poller)
+    TOutgoingConnectionActor(const TActorId& owner, const TActorId& poller)
         : TBase(&TSelf::StateWaiting)
         , Owner(owner)
         , Poller(poller)
-        , Host(host)
     {
     }
 
@@ -240,11 +238,11 @@ protected:
     void HandleWaiting(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
         LastActivity = ctx.Now();
         Request = std::move(event->Get()->Request);
-        Host = Request->Host;
-        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "resolving " << Host);
+        TSocketImpl::SetHost(TString(Request->Host));
+        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "resolving " << TSocketImpl::Host);
         Request->Timer.Reset();
         RequestOwner = event->Sender;
-        ctx.Send(Owner, new TEvHttpProxy::TEvResolveHostRequest(Host));
+        ctx.Send(Owner, new TEvHttpProxy::TEvResolveHostRequest(TSocketImpl::Host));
         if (event->Get()->Timeout) {
             ConnectionTimeout = event->Get()->Timeout;
         }
@@ -322,11 +320,11 @@ protected:
     }
 };
 
-NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, const TString& host, bool secure, const TActorId& poller) {
+NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure, const TActorId& poller) {
     if (secure) {
-        return new TOutgoingConnectionActor<TSecureSocketImpl>(owner, host, poller);
+        return new TOutgoingConnectionActor<TSecureSocketImpl>(owner, poller);
     } else {
-        return new TOutgoingConnectionActor<TPlainSocketImpl>(owner, host, poller);
+        return new TOutgoingConnectionActor<TPlainSocketImpl>(owner, poller);
     }
 }
 

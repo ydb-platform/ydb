@@ -14,8 +14,8 @@ public:
         return listeningSocket;
     }
 
-    IActor* AddOutgoingConnection(const TString& address, bool secure, const NActors::TActorContext& ctx) {
-        IActor* connectionSocket = CreateOutgoingConnectionActor(ctx.SelfID, address, secure, Poller);
+    IActor* AddOutgoingConnection(bool secure, const NActors::TActorContext& ctx) {
+        IActor* connectionSocket = CreateOutgoingConnectionActor(ctx.SelfID, secure, Poller);
         TActorId connectionId = ctx.Register(connectionSocket);
         Connections.emplace(connectionId);
         return connectionSocket;
@@ -97,9 +97,8 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {
-        TStringBuf host(event->Get()->Request->Host);
         bool secure(event->Get()->Request->Secure);
-        NActors::IActor* actor = AddOutgoingConnection(TString(host), secure, ctx);
+        NActors::IActor* actor = AddOutgoingConnection(secure, ctx);
         ctx.Send(event->Forward(actor->SelfId()));
     }
 

@@ -7,6 +7,7 @@ namespace NHttp {
 
 struct TPlainSocketImpl : virtual public THttpConfig {
     TIntrusivePtr<TSocketDescriptor> Socket;
+    TString Host;
 
     TPlainSocketImpl() = default;
 
@@ -75,6 +76,10 @@ struct TPlainSocketImpl : virtual public THttpConfig {
 
     ssize_t Recv(void* data, size_t size, bool&, bool&) {
         return Socket->Socket.Recv(data, size);
+    }
+
+    void SetHost(const TString& host) {
+        Host = host;
     }
 };
 
@@ -171,6 +176,9 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         BIO_set_nbio(Bio.Get(), 1);
         Ctx = CreateClientContext();
         Ssl = ConstructSsl(Ctx.Get(), Bio.Get());
+        if (!Host.Empty()) {
+            SSL_set_tlsext_host_name(Ssl.Get(), Host.c_str());
+        }
         SSL_set_connect_state(Ssl.Get());
     }
 

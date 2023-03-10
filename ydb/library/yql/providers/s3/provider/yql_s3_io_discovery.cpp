@@ -167,29 +167,40 @@ private:
                 FromString<bool>(generatedPathsPack.IsText().Literal().Value()),
                 directories);
 
-            const auto& req = requests[dirIndex];
-            auto it = pendingRequests.find(req);
-            YQL_ENSURE(it != pendingRequests.end());
-            YQL_ENSURE(it->second.HasValue());
-
-            const auto& listResult = it->second.GetValue();
-            if (listResult.index() == 1) {
-                const auto& issues = std::get<TIssues>(listResult);
-                YQL_CLOG(INFO, ProviderS3) << "Discovery " << req.S3Request.Url << req.S3Request.Pattern << " error " << issues.ToString();
-                std::for_each(issues.begin(), issues.end(), std::bind(&TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
-                return TStatus::Error;
-            }
-
-            const auto& listEntries = std::get<NS3Lister::TListEntries>(listResult);
+            YQL_ENSURE(dirIndex + directories.size() <= requests.size());
             NS3Details::TPathList listedPaths;
-            for (auto& entry : listEntries.Objects) {
-                listedPaths.emplace_back(entry.Path, entry.Size, false);
-            }
-            for (auto& path : listEntries.Directories) {
-                listedPaths.emplace_back(path.Path, 0, true);
+            for (size_t i = 0; i < directories.size(); ++i) {
+                const auto& req = requests[dirIndex + i];
+
+                auto it = pendingRequests.find(req);
+                YQL_ENSURE(it != pendingRequests.end());
+                YQL_ENSURE(it->second.HasValue());
+
+                const auto& listResult = it->second.GetValue();
+                if (listResult.index() == 1) {
+                    const auto& issues = std::get<TIssues>(listResult);
+                    YQL_CLOG(INFO, ProviderS3)
+                        << "Discovery " << req.S3Request.Url << req.S3Request.Pattern
+                        << " error " << issues.ToString();
+                    std::for_each(
+                        issues.begin(),
+                        issues.end(),
+                        std::bind(
+                            &TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
+                    return TStatus::Error;
+                }
+
+                const auto& listEntries = std::get<NS3Lister::TListEntries>(listResult);
+
+                for (auto& entry : listEntries.Objects) {
+                    listedPaths.emplace_back(entry.Path, entry.Size, false);
+                }
+                for (auto& path : listEntries.Directories) {
+                    listedPaths.emplace_back(path.Path, 0, true);
+                }
             }
 
-            dirIndex++;
+            dirIndex += directories.size();
             if (listedPaths.empty()) {
                 continue;
             }
@@ -578,22 +589,26 @@ private:
             NS3Details::TPathList directories;
             NS3Details::UnpackPathsList(path.Data().Literal().Value(), FromString<bool>(path.IsText().Literal().Value()), directories);
 
-            Y_ENSURE(directories.size() == 1);
+            YQL_CLOG(DEBUG, ProviderS3) << "directories size: " << directories.size();
+            for (auto & dir: directories) {
+                YQL_CLOG(DEBUG, ProviderS3)
+                    << "directory: path{" << dir.Path << "} size {" << dir.Size << "}";
 
-            auto req = TListRequest{.S3Request{
-                .Url = url,
-                .Token = tokenStr,
-                .Pattern = NS3::NormalizePath(
-                    TStringBuilder() << directories[0].Path << "/" << effectiveFilePattern),
-                .PatternType = NS3Lister::ES3PatternType::Wildcard,
-                .Prefix = directories[0].Path}};
-            RequestsByNode_[source.Raw()].push_back(req);
+                auto req = TListRequest{.S3Request{
+                    .Url = url,
+                    .Token = tokenStr,
+                    .Pattern = NS3::NormalizePath(
+                        TStringBuilder() << dir.Path << "/" << effectiveFilePattern),
+                    .PatternType = NS3Lister::ES3PatternType::Wildcard,
+                    .Prefix = dir.Path}};
 
-            auto future = ListingStrategy_->List(
-                req.S3Request, ES3ListingOptions::UnPartitionedDataset);
+                auto future = ListingStrategy_->List(
+                    req.S3Request, ES3ListingOptions::UnPartitionedDataset);
 
-            PendingRequests_[req] = future;
-            futures.push_back(std::move(future));
+                RequestsByNode_[source.Raw()].push_back(req);
+                PendingRequests_[req] = future;
+                futures.push_back(std::move(future));
+            }
         }
 
         return true;

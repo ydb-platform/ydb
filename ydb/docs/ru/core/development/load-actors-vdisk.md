@@ -6,19 +6,44 @@
 
 ## Параметры актора {#options}
 
-Параметр | Описание
---- | ---
-VDiskId | Полный идентификатор VDisk, на который будет подаваться нагрузка. Должен иметь корректное поле Generation.
-GroupInfo | Описание группы, в которую входит нагружаемый VDisk (в корректном поколении).
-TabletId | Номер таблетки, от имени которой будет генерироваться нагрузка.
-Channel | Номер канала внутри таблетки, который будет указан в командах записи блобов и сборки мусора.
-DurationSeconds | Полная длительность теста в секундах, по достижению которой нагрузка автоматически прекращается.
-WriteIntervals | Описание параметров вероятностного распределения временных интервалов между записями.
-WriteSizes | Описание параметров вероятностного распределения размеров записываемых блобов.
-InFlightPutsMax | Максимальное количество одновременно выполняемых TEvVPut-запросов; если не указан, то число запросов не ограничивается.
-InFlightPutBytesMax | Максимальное количество байт в одновременно выполняемых TEvVPut-запросах.
-PutHandleClass | Приоритет подаваемой нагрузки.
-BarrierAdvanceIntervals | Описание параметров вероятностного распределения интервалов между передвижением барьера сборки мусора и шага записи.
-StepDistance | Расстояние между текущим записываемым шагом и собираемым. Чем больше эта величина, тем больше данных хранится.
+```proto
+message TVDiskLoad {
+    optional uint64 Tag = 1;
 
-## Примеры {#examples}
+    // full VDisk identifier
+    optional NKikimrBlobStorage.TVDiskID VDiskId = 2;
+
+    reserved 3; // obsolete field
+    reserved 4; // obsolete field
+    optional NKikimrBlobStorage.TGroupInfo GroupInfo = 16;
+
+    // tablet id, channel and generation used in blob ids and barriers
+    optional uint64 TabletId = 5;
+    optional uint32 Channel = 6;
+    optional uint32 Generation = 7;
+
+    // duration of the test in seconds
+    optional uint32 DurationSeconds = 8;
+
+    // a distribution of intervals between adjacent writes
+    repeated TIntervalInfo WriteIntervals = 9;
+
+    // a distribution of write block sizes (expressed in bytes of BlobSize; i.e. PartSize bytes are actually written)
+    repeated TSizeInfo WriteSizes = 10;
+
+    // maximum number of unconfirmed parallel writes
+    optional uint32 InFlightPutsMax = 11;
+
+    // soft maximum of total in flight put bytes
+    optional uint64 InFlightPutBytesMax = 12;
+
+    // put handle class
+    optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 13;
+
+    // a distribution of intervals between barrier advances
+    repeated TIntervalInfo BarrierAdvanceIntervals = 14;
+
+    // minimum distance kept between current Step of written blobs and CollectStep of barriers
+    optional uint32 StepDistance = 15;
+}
+```

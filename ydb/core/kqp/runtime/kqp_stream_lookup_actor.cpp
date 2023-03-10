@@ -88,6 +88,8 @@ public:
 
     void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats , bool last) override {
         if (last) {
+            stats->SetErrorsCount(ErrorsCount);
+
             NYql::NDqProto::TDqTableStats* tableStats = nullptr;
             for (auto& table : *stats->MutableTables()) {
                 if (table.GetTablePath() == TablePath) {
@@ -292,6 +294,7 @@ private:
                 break;
             case Ydb::StatusIds::OVERLOADED:
             case Ydb::StatusIds::INTERNAL_ERROR: {
+                ++ErrorsCount;
                 NKikimrTxDataShard::TReadContinuationToken continuationToken;
                 bool parseResult = continuationToken.ParseFromString(record.GetContinuationToken());
                 YQL_ENSURE(parseResult, "Failed to parse continuation token");
@@ -299,6 +302,7 @@ private:
                 return RetryTableRead(read, continuationToken);
             }
             default: {
+                ++ErrorsCount;
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
                 return RuntimeError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED, issues);
@@ -324,6 +328,8 @@ private:
         const auto& tabletId = ev->Get()->TabletId;
         auto shardIt = ReadsPerShard.find(tabletId);
         YQL_ENSURE(shardIt != ReadsPerShard.end());
+
+        ++ErrorsCount;
 
         for (auto* read : shardIt->second.Reads) {
             if (read->State == EReadState::Running) {
@@ -641,6 +647,8 @@ private:
     // stats
     ui64 ReadRowsCount = 0;
     ui64 ReadBytesCount = 0;
+
+    ui32 ErrorsCount = 0;
 
     TIntrusivePtr<TKqpCounters> Counters;
 };

@@ -871,17 +871,21 @@ public:
             case Ydb::StatusIds::SUCCESS:
                 break;
             case Ydb::StatusIds::OVERLOADED: {
+                ++ErrorsCount;
                 return RetryRead(id, false);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
+                ++ErrorsCount;
                 return RetryRead(id);
             }
             case Ydb::StatusIds::NOT_FOUND: {
+                ++ErrorsCount;
                 auto shard = Reads[id].Shard;
                 ResetRead(id);
                 return ResolveShard(shard);
             }
             default: {
+                ++ErrorsCount;
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
                 return RuntimeError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED, issues);
@@ -917,6 +921,8 @@ public:
 
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         auto& msg = *ev->Get();
+
+        ++ErrorsCount;
 
         TVector<ui32> reads;
         reads.swap(ReadIdByTabletId[msg.TabletId]);
@@ -1191,6 +1197,8 @@ public:
 
     void FillExtraStats(NDqProto::TDqTaskStats* stats, bool last) override {
         if (last) {
+            stats->SetErrorsCount(ErrorsCount);
+
             NDqProto::TDqTableStats* tableStats = nullptr;
             for (size_t i = 0; i < stats->TablesSize(); ++i) {
                 auto* table = stats->MutableTables(i);
@@ -1307,6 +1315,8 @@ private:
 
     bool ScanStarted = false;
     size_t BufSize = 0;
+
+    ui32 ErrorsCount = 0;
 
     const TActorId ComputeActorId;
     const ui64 InputIndex;

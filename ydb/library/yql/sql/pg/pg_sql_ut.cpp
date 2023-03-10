@@ -30,13 +30,14 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
     settings.ClusterMapping[cluster] = service;
     settings.ClusterMapping["hahn"] = NYql::YtProviderName;
     settings.ClusterMapping["mon"] = NYql::SolomonProviderName;
+    settings.ClusterMapping[""] = NYql::KikimrProviderName;
     settings.MaxErrors = maxErrors;
     settings.Mode = mode;
     settings.Arena = &arena;
     settings.AnsiLexer = ansiLexer;
     settings.SyntaxVersion = 1;
-    auto q = TStringBuilder() << "--!syntax_pg\n" << query;
-    auto res = SqlToYql(q, settings);
+    settings.PgParser = true;
+    auto res = SqlToYql(query, settings);
     if (debug == EDebugOutput::ToCerr) {
         Err2Str(res, debug);
     }
@@ -69,5 +70,110 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         )";
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableStmt_Basic) {
+        auto res = PgSqlToYql("CREATE TABLE t (a int, b text)");
+        UNIT_ASSERT(res.Root);
+
+        TString program = R"(
+        (
+            (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '()) '('notnull '()))))
+            (let world (CommitAll! world))
+            (return world)
+        )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableStmt_NotNull) {
+        auto res = PgSqlToYql("CREATE TABLE t (a int NOT NULL, b text)");
+        UNIT_ASSERT(res.Root);
+
+        TString program = R"(
+        (
+            (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '()) '('notnull '('a)))))
+            (let world (CommitAll! world))
+            (return world)
+        )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableStmt_JustPK) {
+        auto res = PgSqlToYql("CREATE TABLE t (a int PRIMARY KEY, b text)");
+        UNIT_ASSERT(res.Root);
+
+        TString program = R"(
+        (
+            (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a)))))
+            (let world (CommitAll! world))
+            (return world)
+        )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableStmt_PKAndNotNull) {
+        auto res = PgSqlToYql("CREATE TABLE t (a int PRIMARY KEY NOT NULL, b text)");
+        UNIT_ASSERT(res.Root);
+
+        TString program = R"(
+        (
+            (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a)))))
+            (let world (CommitAll! world))
+            (return world)
+        )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableStmt_PKAndOtherNotNull) {
+        auto res = PgSqlToYql("CREATE TABLE t (a int PRIMARY KEY, b text NOT NULL)");
+        UNIT_ASSERT(res.Root);
+
+        TString program = R"(
+        (
+            (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a 'b)))))
+            (let world (CommitAll! world))
+            (return world)
+        )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableStmt_TableLevelPK) {
+        auto res = PgSqlToYql("CREATE TABLE t (a int, b text NOT NULL, PRIMARY KEY (a, b))");
+        UNIT_ASSERT(res.Root);
+
+        TString program = R"(
+        (
+            (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a 'b)) '('notnull '('b 'a)))))
+            (let world (CommitAll! world))
+            (return world)
+        )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableStmt_RepeatingColumnNames) {
+        auto res = PgSqlToYql("CREATE TABLE t (a int, a text)");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT(issue.GetMessage().find("duplicate") != TString::npos);
     }
 }

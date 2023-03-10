@@ -6,6 +6,14 @@
 
 namespace NYql::NPg {
 
+// copied from pg_class.h
+enum class ERelPersistence : char
+{
+    Permanent = 'p',
+    Unlogged = 'u',
+    Temp = 't',
+};
+
 enum class EOperKind {
     Binary,
     LeftUnary,

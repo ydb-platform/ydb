@@ -1013,6 +1013,13 @@ private:
         ThrowNotSupported(__func__);
     }
 
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* result, ui32 width) override {
+        Y_UNUSED(result);
+        Y_UNUSED(width);
+        ThrowNotSupported(__func__);
+        return NUdf::EFetchStatus::Finish;
+    }
+
 public:
     TString DebugString() const {
         return TypeName<TDerived>();

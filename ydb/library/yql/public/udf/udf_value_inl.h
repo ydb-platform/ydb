@@ -276,6 +276,13 @@ inline bool TBoxedValueAccessor::IsSortedDict(IBoxedValue& value) {
 }
 #endif
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
+inline EFetchStatus TBoxedValueAccessor::WideFetch(IBoxedValue& value, TUnboxedValue* result, ui32 width) {
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 30)));
+    return value.WideFetch(result, width);
+}
+#endif
+
 //////////////////////////////////////////////////////////////////////////////
 // TUnboxedValue
 //////////////////////////////////////////////////////////////////////////////
@@ -598,6 +605,13 @@ inline void TUnboxedValuePod::Load(const TStringRef& state) {
 inline bool TUnboxedValuePod::IsSortedDict() const {
     UDF_VERIFY(IsBoxed(), "Value is not boxed");
     return TBoxedValueAccessor::IsSortedDict(*Raw.Boxed.Value);
+}
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
+inline EFetchStatus TUnboxedValuePod::WideFetch(TUnboxedValue* result, ui32 width) const {
+    UDF_VERIFY(IsBoxed(), "Value is not a wide stream");
+    return TBoxedValueAccessor::WideFetch(*Raw.Boxed.Value, result, width);
 }
 #endif
 

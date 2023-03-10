@@ -99,6 +99,7 @@ namespace NActors {
         const TDuration MuteDuration = TDuration::Seconds(15);
         TMonotonic Deadline;
         TActorId HandshakeBroker;
+        std::optional<TBrokerLeaseHolder> BrokerLeaseHolder;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -141,27 +142,16 @@ namespace NActors {
         void Run() override {
             UpdatePrefix();
 
-            bool isBrokerEnabled = !Socket && Common->OutgoingHandshakeInflightLimit;
-            bool isBrokerActive = false;
-
-            if (isBrokerEnabled) {
-                if (Send(HandshakeBroker, new TEvHandshakeBrokerTake())) {
-                    isBrokerActive = true;
-                    try {
-                        WaitForSpecificEvent<TEvHandshakeBrokerPermit>("HandshakeBrokerPermit");
-                    } catch (const TExPoison&) {
-                        Y_FAIL("unhandled TExPoison");
-                    }
-                }
+            if (!Socket && Common->OutgoingHandshakeInflightLimit) {
+                // Create holder, which sends request to broker and automatically frees the place when destroyed
+                BrokerLeaseHolder.emplace(SelfActorId, HandshakeBroker);
             }
 
-            auto freeHandshakeBroker = [&]() {
-                if (isBrokerActive) {
-                    Send(HandshakeBroker, new TEvHandshakeBrokerFree());
-                }
-            };
-
             try {
+                if (BrokerLeaseHolder && BrokerLeaseHolder->IsLeaseRequested()) {
+                    WaitForSpecificEvent<TEvHandshakeBrokerPermit>("HandshakeBrokerPermit");
+                }
+
                 // set up overall handshake process timer
                 TDuration timeout = Common->Settings.Handshake;
                 if (timeout == TDuration::Zero()) {
@@ -207,16 +197,16 @@ namespace NActors {
                         *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params)));
                 }
             } catch (const TDtorException&) {
-                throw; // we can't use actor system when handling this exception
+                if (BrokerLeaseHolder) {
+                    BrokerLeaseHolder->ForgetLease();
+                }
+                throw;
             } catch (const TExPoison&) {
-                freeHandshakeBroker();
                 return; // just stop execution
             } catch (...) {
-                freeHandshakeBroker();
                 throw;
             }
 
-            freeHandshakeBroker();
             Socket.Reset();
         }
 

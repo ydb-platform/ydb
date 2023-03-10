@@ -5,36 +5,83 @@
 #include <deque>
 
 namespace NActors {
-    class THandshakeBroker : public TActor<THandshakeBroker> {
-    private:
-        std::deque<TActorId> Waiting;
-        ui32 Capacity;
-
-        void Handle(TEvHandshakeBrokerTake::TPtr &ev) {
-            if (Capacity > 0) {
-                Capacity -= 1;
-                Send(ev->Sender, new TEvHandshakeBrokerPermit());
-            } else {
-                Waiting.push_back(ev->Sender);
+    class TBrokerLeaseHolder {
+    public:
+        TBrokerLeaseHolder(TActorId waiterId, TActorId brokerId)
+            : WaiterId(waiterId)
+            , BrokerId(brokerId) {
+            if (TActivationContext::Send(new IEventHandleFat(BrokerId, WaiterId, new TEvHandshakeBrokerTake()))) {
+                LeaseRequested = true;
             }
         }
 
-        void Handle(TEvHandshakeBrokerFree::TPtr& ev) {
-            Y_UNUSED(ev);
-            if (Capacity == 0 && !Waiting.empty()) {
-                Send(Waiting.back(), new TEvHandshakeBrokerPermit());
-                Waiting.pop_back();
+        ~TBrokerLeaseHolder() {
+            if (LeaseRequested) {
+                TActivationContext::Send(new IEventHandleFat(BrokerId, WaiterId, new TEvHandshakeBrokerFree()));
+            }
+        }
+
+        bool IsLeaseRequested() {
+            return LeaseRequested;
+        }
+
+        void ForgetLease() {
+            // only call when TDtorException was caught
+            LeaseRequested = false;
+        }
+
+    private:
+        TActorId WaiterId;
+        TActorId BrokerId;
+        bool LeaseRequested = false;
+    };
+
+    class THandshakeBroker : public TActor<THandshakeBroker> {
+    private:
+        void PermitNext() {
+            if (Capacity == 0 && !Waiters.empty()) {
+                const TActorId waiter = Waiters.front();
+                Waiters.pop_front();
+                WaiterLookup.erase(waiter);
+
+                Send(waiter, new TEvHandshakeBrokerPermit());
+                PermittedLeases.insert(waiter);
             } else {
                 Capacity += 1;
             }
         }
 
-        void PassAway() override {
-            while (!Waiting.empty()) {
-                Send(Waiting.back(), new TEvHandshakeBrokerPermit());
-                Waiting.pop_back();
+    private:
+        using TWaiters = std::list<TActorId>;
+        TWaiters Waiters;
+        std::unordered_map<TActorId, TWaiters::iterator> WaiterLookup;
+        std::unordered_set<TActorId> PermittedLeases;
+
+        ui32 Capacity;
+
+        void Handle(TEvHandshakeBrokerTake::TPtr &ev) {
+            const TActorId sender = ev->Sender;
+            if (Capacity > 0) {
+                Capacity -= 1;
+                PermittedLeases.insert(sender);
+                Send(sender, new TEvHandshakeBrokerPermit());
+            } else {
+                const auto [it, inserted] = WaiterLookup.try_emplace(sender,
+                        Waiters.insert(Waiters.end(), sender));
+                Y_VERIFY(inserted);
             }
-            TActor::PassAway();
+        }
+
+        void Handle(TEvHandshakeBrokerFree::TPtr& ev) {
+            const TActorId sender = ev->Sender;
+            if (!PermittedLeases.erase(sender)) {
+                // Lease was not permitted yet, remove sender from Waiters queue
+                const auto it = WaiterLookup.find(sender);
+                Y_VERIFY(it != WaiterLookup.end());
+                Waiters.erase(it->second);
+                WaiterLookup.erase(it);
+            }
+            PermitNext();
         }
 
     public:
@@ -48,10 +95,12 @@ namespace NActors {
 
         STFUNC(StateFunc) {
             Y_UNUSED(ctx);
-            switch(ev->GetTypeRewrite()) {
+            switch (ev->GetTypeRewrite()) {
                 hFunc(TEvHandshakeBrokerTake, Handle);
                 hFunc(TEvHandshakeBrokerFree, Handle);
-                cFunc(TEvents::TSystem::Poison, PassAway);
+
+            default:
+                Y_FAIL("unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
             }
         }
 

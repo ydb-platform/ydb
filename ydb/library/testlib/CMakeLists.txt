@@ -7,3 +7,4 @@
 
 
 add_subdirectory(service_mocks)
+add_subdirectory(ut)

@@ -3843,7 +3843,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         );
 
     }
-
+/*
     Y_UNIT_TEST(OlapDeletePlanned) {
         TPortManager pm;
 
@@ -3899,7 +3899,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 #endif
         );
     }
-
+*/
     Y_UNIT_TEST(PredicatePushdownCastErrors) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

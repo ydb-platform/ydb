@@ -85,6 +85,7 @@ namespace NActors {
             return static_cast<TEv*>(this);
         }
 
+        using THandle = TEv;
         using TPtr = TAutoPtr<TEv>;
     };
 }

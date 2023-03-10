@@ -1,7 +1,5 @@
 Версия | Дата выпуска | Скачать
 :--- | :--- | :---
-v.2.2.0 | 03.03.23 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.2.0/linux/amd64/ydb)
-v.2.1.1 | 30.12.22 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.1.1/linux/amd64/ydb)
 v.2.1.0 | 18.11.22 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.1.0/linux/amd64/ydb)
 v.2.0.0 | 20.09.22 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.0.0/linux/amd64/ydb)
 v.1.9.2 | 30.06.22 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.9.2/linux/amd64/ydb)

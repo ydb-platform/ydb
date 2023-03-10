@@ -514,16 +514,6 @@ namespace NActors {
         dest->SetRawX2(src.RawX2());
     }
 
-
-
-
-
-
-
-
-
-
-
     template<ui32 EventSpace>
     struct TLightEventSpaceFactories {
     public:
@@ -699,38 +689,11 @@ namespace NActors {
         }
 
     public:
-        // TLockFreeStack<TEvent*> Stack;
-        // std::atomic<i32> StackSize;
-        // //std::deque<TEvent*> Stack;
-
-        // static constexpr i32 MAX_STACK_SIZE = 10;
-
         TEvent* New() {
-            // TEvent* result;
-            // if (Stack.Dequeue(&result)) {
-            //     --StackSize;
-            //     return result;
-            // }
-            // /*if (!Stack.empty()) {
-            //     TEvent* result = Stack.back();
-            //     Stack.pop_back();
-            //     return result;
-            // }*/
             return new TEvent();
         }
 
         void Delete(TEvent* event) {
-            // if (StackSize < MAX_STACK_SIZE) {
-            //     Stack.Enqueue(event);
-            //     ++StackSize;
-            // } else {
-            //     delete event;
-            // }
-            // /*if (Stack.size() < MAX_STACK_SIZE) {
-            //     event->Record.Clear();
-            //     Stack.push_back(event);
-            //     return;
-            // }*/
             delete event;
         }
 

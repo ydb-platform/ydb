@@ -28,6 +28,8 @@ private:
         EvResume = EventSpaceBegin(TEvents::ES_PRIVATE)
     };
 
+    struct TExPoison {};
+
 public:
     TStorageStatsCoroCalculatorImpl(
         const TControllerSystemViewsState& systemViewsState,
@@ -42,16 +44,24 @@ public:
     {
     }
 
-    void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) override {
+    void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
         switch (ev->GetTypeRewrite()) {
             case TEvents::TSystem::Poison:
-                throw TStopCoroutineException();
+                throw TExPoison();
         }
 
         Y_FAIL("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
     }
 
     void Run() override {
+        try {
+            RunImpl();
+        } catch (const TExPoison&) {
+            return;
+        }
+    }
+
+    void RunImpl() {
         std::vector<NKikimrSysView::TStorageStatsEntry> storageStats;
 
         using TEntityKey = std::tuple<TString, TString>; // PDiskFilter, ErasureSpecies
@@ -214,7 +224,7 @@ public:
 private:
     void Yield() {
         Send(new IEventHandleFat(EvResume, 0, SelfActorId, {}, nullptr, 0));
-        WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; });
+        WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; }, &TStorageStatsCoroCalculatorImpl::ProcessUnexpectedEvent);
     }
 
 private:

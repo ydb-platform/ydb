@@ -31,7 +31,7 @@ public:
             auto ev = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(pair.first, TInstant::Max(), NKikimrBlobStorage::FastRead,
                     TEvBlobStorage::TEvVGet::EFlags::None, {}, {lastBlobId});
             GetActorContext().Send(pair.second, ev.release());
-            auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvVGetResult>();
+            auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvVGetResult>(&TDiscoverFaultToleranceTest::ProcessUnexpectedEvent);
             const auto& record = resp->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
             UNIT_ASSERT(record.ResultSize() >= 1);
@@ -43,7 +43,7 @@ public:
 
         // put blocks
         SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvBlock(1, numGenerations - 1, TInstant::Max()));
-        auto response = WaitForSpecificEvent<TEvBlobStorage::TEvBlockResult>();
+        auto response = WaitForSpecificEvent<TEvBlobStorage::TEvBlockResult>(&TDiscoverFaultToleranceTest::ProcessUnexpectedEvent);
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);
 
         TBlobStorageGroupInfo::TVDiskIds lastBlobSubgroup;
@@ -70,7 +70,7 @@ public:
             SetFailedDisks(failedDisks);
             SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvDiscover(tabletId, 0, false, false,
                 TInstant::Max(), 0, true));
-            auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvDiscoverResult>();
+            auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvDiscoverResult>(&TDiscoverFaultToleranceTest::ProcessUnexpectedEvent);
 
             const NKikimrProto::EReplyStatus status = resp->Get()->Status;
 
@@ -110,7 +110,7 @@ public:
                     disks, false);
 
             SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvDiscover(tabletId, 0, true, true, TInstant::Max(), 0, true));
-            auto response = WaitForSpecificEvent<TEvBlobStorage::TEvDiscoverResult>();
+            auto response = WaitForSpecificEvent<TEvBlobStorage::TEvDiscoverResult>(&TDiscoverFaultToleranceTest::ProcessUnexpectedEvent);
 
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Id.TabletID(), tabletId);

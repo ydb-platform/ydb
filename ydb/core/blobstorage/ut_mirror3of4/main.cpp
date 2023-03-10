@@ -115,7 +115,7 @@ public:
             Send(Edge, new TEvTestFinished(exception));
         }
 
-        void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> /*ev*/) override {
+        void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> /*ev*/) {
             UNIT_ASSERT(false);
         }
 
@@ -148,7 +148,7 @@ public:
             }
             auto vdisks = GetVDiskSet();
             while (!vdisks.empty()) {
-                auto ev = WaitForSpecificEvent<TEvProxyQueueState>();
+                auto ev = WaitForSpecificEvent<TEvProxyQueueState>(&TCoro::ProcessUnexpectedEvent);
                 auto& msg = *ev->Get();
                 UNIT_ASSERT(msg.IsConnected);
                 const bool erased = vdisks.erase(msg.VDiskId);
@@ -163,7 +163,7 @@ public:
                     Send(Info->GetActorId(Info->GetOrderNumber(vdiskId)), new TEvBlobStorage::TEvVStatus(vdiskId));
                 }
                 for (size_t num = vdisks.size(); num; --num) {
-                    auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVStatusResult>();
+                    auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVStatusResult>(&TCoro::ProcessUnexpectedEvent);
                     auto& record = ev->Get()->Record;
                     if (record.GetStatus() == NKikimrProto::OK && record.GetReplicated()) {
                         const bool erased = vdisks.erase(VDiskIDFromVDiskID(record.GetVDiskID()));
@@ -178,7 +178,7 @@ public:
 
         void Sleep(TDuration timeout) {
             Schedule(timeout, new TEvents::TEvWakeup);
-            WaitForSpecificEvent<TEvents::TEvWakeup>();
+            WaitForSpecificEvent<TEvents::TEvWakeup>(&TCoro::ProcessUnexpectedEvent);
         }
 
         NKikimrProto::EReplyStatus Put(const TVDiskID& vdiskId, const TLogoBlobID& blobId, const TString& data) {
@@ -186,7 +186,7 @@ public:
             std::memcpy(dataWithHeadroom.UnsafeGetDataMut(), data.data(), data.size());
             Send(GetBackpressureFor(Info->GetOrderNumber(vdiskId)), new TEvBlobStorage::TEvVPut(blobId, TRope(dataWithHeadroom), vdiskId,
                 false, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog));
-            auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVPutResult>();
+            auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVPutResult>(&TCoro::ProcessUnexpectedEvent);
             auto& record = ev->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(vdiskId, VDiskIDFromVDiskID(record.GetVDiskID()));
             return record.GetStatus();
@@ -221,7 +221,7 @@ public:
 
         TGetResult Get(const TVDiskID& vdiskId, std::unique_ptr<TEvBlobStorage::TEvVGet>&& query) {
             Send(GetBackpressureFor(Info->GetOrderNumber(vdiskId)), query.release());
-            auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVGetResult>();
+            auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVGetResult>(&TCoro::ProcessUnexpectedEvent);
             auto& record = ev->Get()->Record;
             TGetResult res;
             for (const auto& item : record.GetResult()) {

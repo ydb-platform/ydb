@@ -70,7 +70,7 @@ public:
             = TEvBlobStorage::TEvPut::TacticDefault) {
         SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max(),
                     NKikimrBlobStorage::TabletLog, tactic));
-        auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvPutResult>();
+        auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvPutResult>(&TFaultToleranceTestBase::ProcessUnexpectedEvent);
         CTEST << (TStringBuilder() << "PutResult: " << resp->Get()->ToString() << Endl);
         if (resp->Get()->Status == NKikimrProto::OK && Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3of4) {
             auto layout = GetActualPartLayout(id);
@@ -105,7 +105,7 @@ public:
     NKikimrProto::EReplyStatus PutToVDisk(ui32 vdiskOrderNum, const TLogoBlobID& id, const TString& part) {
         Send(Info->GetActorId(vdiskOrderNum), new TEvBlobStorage::TEvVPut(id, TRope(part), Info->GetVDiskId(vdiskOrderNum),
             false, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog));
-        auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVPutResult>();
+        auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVPutResult>(&TFaultToleranceTestBase::ProcessUnexpectedEvent);
         return ev->Get()->Record.GetStatus();
     }
 
@@ -123,7 +123,7 @@ public:
         // collect answers
         TSubgroupPartLayout layout;
         for (ui32 i = 0; i < Info->Type.BlobSubgroupSize(); ++i) {
-            auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVGetResult>();
+            auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVGetResult>(&TFaultToleranceTestBase::ProcessUnexpectedEvent);
             const TVDiskID& vdiskId = VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID());
 
             //google::protobuf::TextFormat::Printer p;
@@ -161,7 +161,7 @@ public:
             NKikimrBlobStorage::FastRead, mustRestoreFirst, !data);
         query->PhantomCheck = isRepl;
         SendToBSProxy(GetActorContext(), Info->GroupID, query.release());
-        auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvGetResult>();
+        auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvGetResult>(&TFaultToleranceTestBase::ProcessUnexpectedEvent);
         TEvBlobStorage::TEvGetResult *msg = resp->Get();
         UNIT_ASSERT_VALUES_EQUAL(msg->ResponseSz, 1);
         const TEvBlobStorage::TEvGetResult::TResponse& item = msg->Responses[0];
@@ -185,7 +185,7 @@ public:
             }
         }
         while (responsesPending--) {
-            auto resp = WaitForSpecificEvent<TEvVMockCtlResponse>();
+            auto resp = WaitForSpecificEvent<TEvVMockCtlResponse>(&TFaultToleranceTestBase::ProcessUnexpectedEvent);
             // Cerr << (TStringBuilder() << "]] SpecEventDelete(wipe=" << wipe << "): " << resp->Get()->ToString() << Endl);
         }
     }
@@ -202,11 +202,11 @@ public:
             ++responsesPending;
         }
         while (responsesPending--) {
-            WaitForSpecificEvent<TEvVMockCtlResponse>();
+            WaitForSpecificEvent<TEvVMockCtlResponse>(&TFaultToleranceTestBase::ProcessUnexpectedEvent);
         }
     }
 
-    void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) override {
+    void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
         Y_FAIL("unexpected event received: Type# %08" PRIx32, ev->GetTypeRewrite());
     }
 };

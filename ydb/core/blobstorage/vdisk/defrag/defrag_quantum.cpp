@@ -24,6 +24,8 @@ namespace NKikimr {
             EvResume = EventSpaceBegin(TEvents::ES_PRIVATE)
         };
 
+        struct TExPoison {};
+
     public:
         TDefragQuantum(const std::shared_ptr<TDefragCtx>& dctx, const TVDiskID& selfVDiskId,
                 std::optional<TChunksToDefrag> chunksToDefrag)
@@ -33,16 +35,24 @@ namespace NKikimr {
             , ChunksToDefrag(std::move(chunksToDefrag))
         {}
 
-        void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) override {
+        void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvents::TSystem::Poison:
-                    throw TStopCoroutineException();
+                    throw TExPoison();
             }
 
             Y_FAIL("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
         }
 
         void Run() override {
+            try {
+                RunImpl();
+            } catch (const TExPoison&) {
+                return;
+            }
+        }
+
+        void RunImpl() {
             TEvDefragQuantumResult::TStat stat{.Eof = true};
 
             if (ChunksToDefrag) {
@@ -74,8 +84,8 @@ namespace NKikimr {
                     findRecords.GetRecordsToRewrite()));
                 THolder<TEvDefragRewritten::THandle> ev;
                 try {
-                    ev = WaitForSpecificEvent<TEvDefragRewritten>();
-                } catch (const TStopCoroutineException&) {
+                    ev = WaitForSpecificEvent<TEvDefragRewritten>(&TDefragQuantum::ProcessUnexpectedEvent);
+                } catch (const TExPoison&) {
                     Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, rewriterActorId, {}, nullptr, 0));
                     throw;
                 }
@@ -93,28 +103,28 @@ namespace NKikimr {
 
         THullDsSnap GetSnapshot() {
             Send(DCtx->SkeletonId, new TEvTakeHullSnapshot(false));
-            return std::move(WaitForSpecificEvent<TEvTakeHullSnapshotResult>()->Get()->Snap);
+            return std::move(WaitForSpecificEvent<TEvTakeHullSnapshotResult>(&TDefragQuantum::ProcessUnexpectedEvent)->Get()->Snap);
         }
 
         void Yield() {
             Send(new IEventHandleFat(EvResume, 0, SelfActorId, {}, nullptr, 0));
-            WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; });
+            WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; }, &TDefragQuantum::ProcessUnexpectedEvent);
         }
 
         TDefragChunks LockChunks(const TChunksToDefrag& chunks) {
             Send(DCtx->HugeKeeperId, new TEvHugeLockChunks(chunks.Chunks));
-            auto res = WaitForSpecificEvent<TEvHugeLockChunksResult>();
+            auto res = WaitForSpecificEvent<TEvHugeLockChunksResult>(&TDefragQuantum::ProcessUnexpectedEvent);
             return res->Get()->LockedChunks;
         }
 
         void Compact() {
             Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
-            WaitForSpecificEvent<TEvCompactVDiskResult>();
+            WaitForSpecificEvent<TEvCompactVDiskResult>(&TDefragQuantum::ProcessUnexpectedEvent);
         }
 
         NHuge::THeapStat GetHugeStat() {
             Send(DCtx->HugeKeeperId, new TEvHugeStat());
-            return std::move(WaitForSpecificEvent<TEvHugeStatResult>()->Get()->Stat);
+            return std::move(WaitForSpecificEvent<TEvHugeStatResult>(&TDefragQuantum::ProcessUnexpectedEvent)->Get()->Stat);
         }
     };
 

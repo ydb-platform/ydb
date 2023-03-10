@@ -104,8 +104,6 @@ namespace NActors {
                 Y_VERIFY(!PendingEvent);
                 Run();
             }
-        } catch (const TStopCoroutineException&) {
-            // do nothing, just exit
         } catch (const TDtorException& /*ex*/) {
             if (!AllowUnhandledDtor) {
                 Y_FAIL("unhandled TDtorException");

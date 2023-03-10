@@ -76,7 +76,7 @@ public:
                     GetActorContext().Send(services[i], event.release());
                 }
                 for (ui32 i = 0; i < vdisks.size(); ++i) {
-                    auto event = WaitForSpecificEvent<TEvBlobStorage::TEvVGetResult>();
+                    auto event = WaitForSpecificEvent<TEvBlobStorage::TEvVGetResult>(&TRangeFaultToleranceTest::ProcessUnexpectedEvent);
                     // Cerr << (TStringBuilder() << "]] Get: " << event->Get()->ToString() << Endl);
                     if (event->Get()->Record.GetStatus() == NKikimrProto::OK) {
                         for (const auto& item : event->Get()->Record.GetResult()) {
@@ -118,7 +118,7 @@ public:
                     TLogoBlobID(tabletId, generation, Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie),
                     false, TInstant::Max());
             SendToBSProxy(GetActorContext(), Info->GroupID, query.release());
-            auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvRangeResult>();
+            auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvRangeResult>(&TRangeFaultToleranceTest::ProcessUnexpectedEvent);
             CTEST << resp->Get()->ToString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(resp->Get()->Status, expectedStatus);
             if (expectedStatus == NKikimrProto::OK) {

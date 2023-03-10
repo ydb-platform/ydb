@@ -456,7 +456,7 @@ public:
         ++*DoneCounter;
     }
 
-    void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) override {
+    void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
         Y_FAIL("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
     }
 
@@ -468,7 +468,7 @@ public:
         GetActorSystem()->Schedule(TDuration::MicroSeconds(TAppData::RandomProvider->Uniform(10, 100)),
             new IEventHandleFat(ProxyId, SelfActorId, q.release()));
         ++*Counter;
-        auto ev = WaitForSpecificEvent<TResultFor<TEvent>>();
+        auto ev = WaitForSpecificEvent<TResultFor<TEvent>>(&TActivityActorImpl::ProcessUnexpectedEvent);
         LOG_DEBUG_S(GetActorContext(), NActorsServices::TEST, Prefix << " received "
             << TypeName<TResultFor<TEvent>>() << "# " << ev->Get()->Print(false));
         return ev;
@@ -523,7 +523,8 @@ public:
                 ++*Counter;
                 readQueue.pop_front();
                 ++readsInFlight;
-            } else if (auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvGetResult>(nextSendTimestamp)) {
+            } else if (auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvGetResult>(&TActivityActorImpl::ProcessUnexpectedEvent,
+                    nextSendTimestamp)) {
                 LOG_DEBUG_S(GetActorContext(), NActorsServices::TEST, Prefix << " received TEvGetResult# " << ev->Get()->Print(false));
                 Y_VERIFY(ev->Get()->Status == NKikimrProto::OK);
                 for (ui32 i = 0; i < ev->Get()->ResponseSz; ++i) {
@@ -565,7 +566,8 @@ public:
                 ++*Counter;
                 writesInFlight.emplace(id, std::move(buffer));
                 --numWritesRemain;
-            } else if (auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvPutResult>(nextSendTimestamp)) {
+            } else if (auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvPutResult>(&TActivityActorImpl::ProcessUnexpectedEvent,
+                    nextSendTimestamp)) {
                 LOG_DEBUG_S(GetActorContext(), NActorsServices::TEST, Prefix << " received TEvPutResult# " << ev->Get()->Print(false)
                     << " writesInFlight.size# " << writesInFlight.size());
                 Y_VERIFY_S(ev->Get()->Status == NKikimrProto::OK, "TEvPutResult# " << ev->Get()->Print(false));

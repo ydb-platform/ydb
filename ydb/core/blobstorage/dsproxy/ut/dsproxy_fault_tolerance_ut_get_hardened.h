@@ -61,7 +61,7 @@ public:
                     ++responsesPending;
                 }
                 while (responsesPending--) {
-                    WaitForSpecificEvent<TEvVMockCtlResponse>();
+                    WaitForSpecificEvent<TEvVMockCtlResponse>(&TGetHardenedFaultToleranceTest::ProcessUnexpectedEvent);
                 }
 
                 // check whether the group fits the fail model

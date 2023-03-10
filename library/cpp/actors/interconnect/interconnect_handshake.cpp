@@ -19,6 +19,7 @@ namespace NActors {
        , public TInterconnectLoggingBase
     {
         struct TExHandshakeFailed : yexception {};
+        struct TExPoison {};
 
         static constexpr TDuration ResolveTimeout = TDuration::Seconds(1);
 
@@ -146,7 +147,11 @@ namespace NActors {
             if (isBrokerEnabled) {
                 if (Send(HandshakeBroker, new TEvHandshakeBrokerTake())) {
                     isBrokerActive = true;
-                    WaitForSpecificEvent<TEvHandshakeBrokerPermit>("HandshakeBrokerPermit");
+                    try {
+                        WaitForSpecificEvent<TEvHandshakeBrokerPermit>("HandshakeBrokerPermit");
+                    } catch (const TExPoison&) {
+                        Y_FAIL("unhandled TExPoison");
+                    }
                 }
             }
 
@@ -203,6 +208,9 @@ namespace NActors {
                 }
             } catch (const TDtorException&) {
                 throw; // we can't use actor system when handling this exception
+            } catch (const TExPoison&) {
+                freeHandshakeBroker();
+                return; // just stop execution
             } catch (...) {
                 freeHandshakeBroker();
                 throw;
@@ -249,7 +257,7 @@ namespace NActors {
             }
         }
 
-        void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) override {
+        void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
             switch (const ui32 type = ev->GetTypeRewrite()) {
                 case TEvents::TSystem::Wakeup:
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_TRANSIENT, Sprintf("Handshake timed out, State# %s", State.data()), true);
@@ -264,7 +272,7 @@ namespace NActors {
                    break;
 
                 case TEvents::TSystem::Poison:
-                   throw TStopCoroutineException();
+                   throw TExPoison();
 
                 default:
                     Y_FAIL("unexpected event 0x%08" PRIx32, type);
@@ -840,13 +848,13 @@ namespace NActors {
         template <typename TEvent>
         THolder<typename TEvent::THandle> WaitForSpecificEvent(TString state, TMonotonic deadline = TMonotonic::Max()) {
             State = std::move(state);
-            return TActorCoroImpl::WaitForSpecificEvent<TEvent>(deadline);
+            return TActorCoroImpl::WaitForSpecificEvent<TEvent>(&THandshakeActor::ProcessUnexpectedEvent, deadline);
         }
 
         template <typename T1, typename T2, typename... TEvents>
         THolder<IEventHandle> WaitForSpecificEvent(TString state, TMonotonic deadline = TMonotonic::Max()) {
             State = std::move(state);
-            return TActorCoroImpl::WaitForSpecificEvent<T1, T2, TEvents...>(deadline);
+            return TActorCoroImpl::WaitForSpecificEvent<T1, T2, TEvents...>(&THandshakeActor::ProcessUnexpectedEvent, deadline);
         }
 
         template <typename TEvent>

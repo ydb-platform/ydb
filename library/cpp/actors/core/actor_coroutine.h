@@ -42,7 +42,6 @@ namespace NActors {
 
     protected:
         struct TDtorException : yexception {};
-        struct TStopCoroutineException {};
 
     public:
         TActorCoroImpl(size_t stackSize, bool allowUnhandledDtor = false);
@@ -54,46 +53,50 @@ namespace NActors {
 
         virtual void BeforeResume() {}
 
-        // Handle all events that are not expected in wait loops.
-        virtual void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) = 0;
-
         // Release execution ownership and wait for some event to arrive.
         THolder<IEventHandle> WaitForEvent(TMonotonic deadline = TMonotonic::Max());
 
         // Wait for specific event set by filter functor. Function returns first event that matches filter. On any other
-        // kind of event ProcessUnexpectedEvent() is called.
+        // kind of event processUnexpectedEvent() is called.
         //
         // Example: WaitForSpecificEvent([](IEventHandle& ev) { return ev.Cookie == 42; });
-        template <typename TFunc>
-        THolder<IEventHandle> WaitForSpecificEvent(TFunc&& filter, TMonotonic deadline = TMonotonic::Max()) {
+        template <typename TFunc, typename TCallback, typename = std::enable_if_t<std::is_invocable_v<TCallback, TAutoPtr<IEventHandle>>>>
+        THolder<IEventHandle> WaitForSpecificEvent(TFunc&& filter, TCallback processUnexpectedEvent, TMonotonic deadline = TMonotonic::Max()) {
             for (;;) {
                 if (THolder<IEventHandle> event = WaitForEvent(deadline); !event) {
                     return nullptr;
                 } else if (filter(*event)) {
                     return event;
                 } else {
-                    ProcessUnexpectedEvent(event);
+                    processUnexpectedEvent(event);
                 }
             }
         }
 
+        template <typename TFunc, typename TDerived, typename = std::enable_if_t<std::is_base_of_v<TActorCoroImpl, TDerived>>>
+        THolder<IEventHandle> WaitForSpecificEvent(TFunc&& filter, void (TDerived::*processUnexpectedEvent)(TAutoPtr<IEventHandle>),
+                TMonotonic deadline = TMonotonic::Max()) {
+            auto callback = [&](TAutoPtr<IEventHandle> ev) { (static_cast<TDerived&>(*this).*processUnexpectedEvent)(ev); };
+            return WaitForSpecificEvent(std::forward<TFunc>(filter), callback, deadline);
+        }
+
         // Wait for specific event or set of events. Function returns first event that matches enlisted type. On any other
-        // kind of event ProcessUnexpectedEvent() is called.
+        // kind of event processUnexpectedEvent() is called.
         //
         // Example: WaitForSpecificEvent<TEvReadResult, TEvFinished>();
-        template <typename TFirstEvent, typename TSecondEvent, typename... TOtherEvents>
-        THolder<IEventHandle> WaitForSpecificEvent(TMonotonic deadline = TMonotonic::Max()) {
+        template <typename TFirstEvent, typename TSecondEvent, typename... TOtherEvents, typename TCallback>
+        THolder<IEventHandle> WaitForSpecificEvent(TCallback&& callback, TMonotonic deadline = TMonotonic::Max()) {
             TIsOneOf<TFirstEvent, TSecondEvent, TOtherEvents...> filter;
-            return WaitForSpecificEvent(filter, deadline);
+            return WaitForSpecificEvent(filter, std::forward<TCallback>(callback), deadline);
         }
 
         // Wait for single specific event.
-        template <typename TEventType>
-        THolder<typename TEventType::THandle> WaitForSpecificEvent(TMonotonic deadline = TMonotonic::Max()) {
+        template <typename TEventType, typename TCallback>
+        THolder<typename TEventType::THandle> WaitForSpecificEvent(TCallback&& callback, TMonotonic deadline = TMonotonic::Max()) {
             auto filter = [](IEventHandle& ev) {
                 return ev.GetTypeRewrite() == TEventType::EventType;
             };
-            THolder<IEventHandle> event = WaitForSpecificEvent(filter, deadline);
+            THolder<IEventHandle> event = WaitForSpecificEvent(filter, std::forward<TCallback>(callback), deadline);
             return THolder<typename TEventType::THandle>(static_cast<typename TEventType::THandle*>(event ? event.Release() : nullptr));
         }
 

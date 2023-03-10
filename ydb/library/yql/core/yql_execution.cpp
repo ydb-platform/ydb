@@ -131,6 +131,8 @@ public:
             }
 
             YQL_CLOG(INFO, CoreExecution) << "Completed async execution for node #" << item.Node->UniqueId();
+            auto asyncIt = AsyncNodes.find(item.Node);
+            YQL_ENSURE(asyncIt != AsyncNodes.end());
             TExprNode::TPtr callableOutput;
             auto status = item.DataProvider->GetCallableExecutionTransformer().ApplyAsyncChanges(item.Node, callableOutput, ctx);
             Y_VERIFY(callableOutput);
@@ -157,6 +159,8 @@ public:
             {
                 FinishNode(item.DataProvider->GetName(), *item.Node, *callableOutput);
             }
+
+            AsyncNodes.erase(asyncIt);
         }
 
         if (!ReplaceNewNodes(output, ctx)) {
@@ -216,6 +220,7 @@ public:
         TrackableNodes.clear();
         CollectingNodes.clear();
         ProvidersCache.clear();
+        AsyncNodes.clear();
     }
 
     TStatus ExecuteNode(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExprContext& ctx, ui32 depth) {
@@ -460,6 +465,7 @@ public:
         Y_UNUSED(ctx);
         YQL_CLOG(INFO, CoreExecution) << "Register async execution for node #" << node->UniqueId();
         auto future = dataProvider->GetCallableExecutionTransformer().GetAsyncFuture(*node);
+        AsyncNodes[node.Get()] = node;
         SubscribeAsyncFuture(node, dataProvider, future);
     }
 
@@ -696,6 +702,7 @@ private:
     TExprNode::TListType FreshPendingNodes;
 
     bool DeterministicMode;
+    TNodeOnNodeOwnedMap AsyncNodes;
 };
 
 IGraphTransformer::TStatus ValidateExecution(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& types, TNodeSet& visited);

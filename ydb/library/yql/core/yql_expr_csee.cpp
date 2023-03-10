@@ -500,7 +500,8 @@ namespace {
     TExprNode::TPtr VisitNode(TExprNode& node, TExprNode* currentLambda, ui16 level,
         std::unordered_multimap<ui64, TExprNode*>& uniqueNodes,
         std::unordered_multimap<ui64, TExprNode*>& incompleteNodes,
-        TNodeMap<TExprNode*>& renames, const TColumnOrderStorage& coStore) {
+        TNodeMap<TExprNode*>& renames, const TColumnOrderStorage& coStore,
+        const TNodeSet& reachable) {
 
         if (node.Type() == TExprNode::Argument) {
             return nullptr;
@@ -515,13 +516,13 @@ namespace {
 
         if (node.Type() == TExprNode::Lambda) {
             for (ui32 i = 1U; i < node.ChildrenSize(); ++i) {
-                if (auto newNode = VisitNode(*node.Child(i), &node, level + 1U, uniqueNodes, incompleteNodes, renames, coStore)) {
+                if (auto newNode = VisitNode(*node.Child(i), &node, level + 1U, uniqueNodes, incompleteNodes, renames, coStore, reachable)) {
                     node.ChildRef(i) = std::move(newNode);
                 }
             }
         } else {
             for (ui32 i = 0; i < node.ChildrenSize(); ++i) {
-                if (auto newNode = VisitNode(*node.Child(i), currentLambda, level, uniqueNodes, incompleteNodes, renames, coStore)) {
+                if (auto newNode = VisitNode(*node.Child(i), currentLambda, level, uniqueNodes, incompleteNodes, renames, coStore, reachable)) {
                     node.ChildRef(i) = std::move(newNode);
                 }
             }
@@ -535,6 +536,11 @@ namespace {
             while (pair.second != iter) {
                 // search for duplicates
                 if (iter->second->Dead()) {
+                    iter = nodesSet.erase(iter);
+                    continue;
+                }
+
+                if (!reachable.contains(iter->second)) {
                     iter = nodesSet.erase(iter);
                     continue;
                 }
@@ -583,10 +589,16 @@ IGraphTransformer::TStatus EliminateCommonSubExpressions(const TExprNode::TPtr& 
 {
     YQL_PROFILE_SCOPE(DEBUG, forSubGraph ? "EliminateCommonSubExpressionsForSubGraph" : "EliminateCommonSubExpressions");
     output = input;
+    TNodeSet reachable;
+    VisitExpr(*output, [&](const TExprNode& node) {
+        reachable.emplace(&node);
+        return true;
+    });
+
     TNodeMap<TExprNode*> renames;
     //Cerr << "INPUT\n" << output->Dump() << "\n";
     std::unordered_multimap<ui64, TExprNode*> incompleteNodes;
-    const auto newNode = VisitNode(*output, nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore);
+    const auto newNode = VisitNode(*output, nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore, reachable);
     YQL_ENSURE(forSubGraph || !newNode);
     //Cerr << "OUTPUT\n" << output->Dump() << "\n";
     return IGraphTransformer::TStatus::Ok;

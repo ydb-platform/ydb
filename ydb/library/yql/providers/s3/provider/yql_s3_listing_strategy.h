@@ -52,27 +52,4 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
     ui64 minDesiredDirectoriesOfFilesPerQuery,
     bool allowLocalFiles);
 
-class IS3BatchListingStrategy {
-public:
-    using TPatternFactory =
-        std::function<TString(const NS3Lister::TListingRequest& baseRequest, const TString& prefix)>;
-    using TPtr = std::shared_ptr<IS3BatchListingStrategy>;
-
-    virtual NThreading::TFuture<NS3Lister::TListResult> List(
-        const NS3Lister::TListingRequest& baseRequest,
-        const std::vector<TString>& paths,
-        TPatternFactory prefixFactory,
-        ES3ListingOptions options) = 0;
-    virtual ~IS3BatchListingStrategy() = default;
-};
-
-IS3BatchListingStrategy::TPtr MakeS3BatchListingStrategy(
-    const IHTTPGateway::TPtr& httpGateway,
-    const IS3ListerFactory::TPtr& listerFactory,
-    ui64 maxFilesPerQueryFiles,
-    ui64 maxFilesPerQueryDirectory,
-    ui64 minDesiredDirectoriesOfFilesPerQuery,
-    bool allowLocalFiles);
-
-
 } // namespace NYql

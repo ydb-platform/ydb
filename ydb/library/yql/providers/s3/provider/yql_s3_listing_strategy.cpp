@@ -557,63 +557,6 @@ public:
               }) { }
 };
 
-class TSimpleS3BatchListingStrategy : public IS3BatchListingStrategy {
-public:
-    TSimpleS3BatchListingStrategy(
-        IS3ListerFactory::TPtr listerFactory,
-        IHTTPGateway::TPtr httpGateway,
-        size_t limit,
-        size_t minParallelism,
-        bool allowLocalFiles)
-        : ListerFactory(std::move(listerFactory))
-        , HttpGateway(std::move(httpGateway))
-        , Limit(limit)
-        , MinParallelism(minParallelism)
-        , AllowLocalFiles(allowLocalFiles) { }
-
-    NThreading::TFuture<NS3Lister::TListResult> List(
-        const NS3Lister::TListingRequest& baseRequest,
-        const std::vector<TString>& paths,
-        TPatternFactory patternFactory,
-        ES3ListingOptions options) override {
-        Y_ENSURE(
-            options == ES3ListingOptions::UnPartitionedDataset,
-            "This strategy only works for un partitioned datasets");
-
-        auto strategy = TCollectingS3ListingStrategy(
-            Limit,
-            [this, paths, patternFactory](
-                const NS3Lister::TListingRequest& listingRequest,
-                ES3ListingOptions options) {
-                auto listerPtr = std::make_shared<TBFSDirectoryResolverIterator>(
-                    listingRequest,
-                    [patternFactory](
-                        const NS3Lister::TListingRequest& defaultParams,
-                        const TString& pathPrefix) {
-                        NS3Lister::TListingRequest request(defaultParams);
-                        request.Prefix = pathPrefix;
-                        request.Pattern = patternFactory(defaultParams, pathPrefix);
-                        return request;
-                    },
-                    options,
-                    std::deque<TString>(paths.begin(), paths.end()),
-                    TDirectoryS3ListingStrategy{
-                        ListerFactory, HttpGateway, Limit, AllowLocalFiles},
-                    MinParallelism,
-                    Limit);
-                return MakeFuture(std::static_pointer_cast<NS3Lister::IS3Lister>(listerPtr));
-            });
-
-        return strategy.List(baseRequest, options);
-    };
-
-private:
-    IS3ListerFactory::TPtr ListerFactory;
-    const IHTTPGateway::TPtr HttpGateway;
-    const size_t Limit;
-    const size_t MinParallelism;
-    const bool AllowLocalFiles;
-};
 
 class TS3ParallelLimitedListerFactory : public IS3ListerFactory {
 public:
@@ -705,20 +648,5 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                 })});
 }
 
-IS3BatchListingStrategy::TPtr MakeS3BatchListingStrategy(
-    const IHTTPGateway::TPtr& httpGateway,
-    const IS3ListerFactory::TPtr& listerFactory,
-    ui64 maxFilesPerQueryFiles,
-    ui64 maxFilesPerQueryDirectory,
-    ui64 minDesiredDirectoriesOfFilesPerQuery,
-    bool allowLocalFiles) {
-    auto maxSize = std::max(maxFilesPerQueryFiles, maxFilesPerQueryDirectory);
-    return std::make_shared<TSimpleS3BatchListingStrategy>(
-        listerFactory,
-        httpGateway,
-        maxSize,
-        minDesiredDirectoriesOfFilesPerQuery,
-        allowLocalFiles);
-}
 
 } // namespace NYql

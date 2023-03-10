@@ -7,9 +7,12 @@ on:
   
 jobs:
   build:
+    strategy:
+      matrix:
+        arch: [ X64, ARM64 ]
 
-    runs-on: self-hosted
-
+    runs-on: [ self-hosted, "${{matrix.arch}}" ]
+    
     steps:
     - name: Checkout
       uses: actions/checkout@v3

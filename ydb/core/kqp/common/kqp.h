@@ -257,13 +257,13 @@ struct TEvKqp {
     struct TEvQueryRequest : public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
     public:
         TEvQueryRequest(
-            const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& ctx,
-            const TString& sessionId,
-            TActorId actorId,
-            TString&& yqlText,
-            TString&& queryId,
             NKikimrKqp::EQueryAction queryAction,
             NKikimrKqp::EQueryType queryType,
+            TActorId requestActorId,
+            const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& ctx,
+            const TString& sessionId,
+            TString&& yqlText,
+            TString&& queryId,
             const ::Ydb::Table::TransactionControl* txControl,
             const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>* ydbParameters,
             const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
@@ -374,7 +374,7 @@ struct TEvKqp {
         }
 
         TActorId GetRequestActorId() const {
-            return ActorIdFromProto(Record.GetRequestActorId());
+            return RequestCtx ? RequestActorId : ActorIdFromProto(Record.GetRequestActorId());
         }
 
         const TString& GetTraceId() const {
@@ -496,6 +496,7 @@ struct TEvKqp {
         mutable TString TraceId;
         mutable TString RequestType;
         mutable TIntrusiveConstPtr<NACLib::TUserToken> Token_;
+        TActorId RequestActorId;
         TString Database;
         TString SessionId;
         TString YqlText;

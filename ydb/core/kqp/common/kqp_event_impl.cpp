@@ -6,13 +6,13 @@
 namespace NKikimr::NKqp {
 
 TEvKqp::TEvQueryRequest::TEvQueryRequest(
-    const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& ctx,
-    const TString& sessionId,
-    TActorId actorId,
-    TString&& yqlText,
-    TString&& queryId,
     NKikimrKqp::EQueryAction queryAction,
     NKikimrKqp::EQueryType queryType,
+    TActorId requestActorId,
+    const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& ctx,
+    const TString& sessionId,
+    TString&& yqlText,
+    TString&& queryId,
     const ::Ydb::Table::TransactionControl* txControl,
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>* ydbParameters,
     const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
@@ -20,6 +20,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Operations::OperationParams* operationParams,
     bool keepSession)
     : RequestCtx(ctx)
+    , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
     , SessionId(sessionId)
     , YqlText(std::move(yqlText))
@@ -37,7 +38,6 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
         OperationTimeout = GetDuration(OperationParams->operation_timeout());
         CancelAfter = GetDuration(OperationParams->cancel_after());
     }
-    ActorIdToProto(actorId, Record.MutableCancelationActor());
 }
 
 void TEvKqp::TEvQueryRequest::PrepareRemote() const {
@@ -47,6 +47,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         }
 
         Record.MutableRequest()->SetDatabase(Database);
+        ActorIdToProto(RequestActorId, Record.MutableCancelationActor());
 
         if (auto traceId = RequestCtx->GetTraceId()) {
             Record.SetTraceId(traceId.GetRef());

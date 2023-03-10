@@ -128,13 +128,13 @@ public:
         }
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
-            Request_,
-            req->session_id(),
-            SelfId(),
-            std::move(yqlText),
-            std::move(queryId),
             queryAction,
             queryType,
+            SelfId(),
+            Request_,
+            req->session_id(),
+            std::move(yqlText),
+            std::move(queryId),
             &req->tx_control(),
             &req->parameters(),
             req->collect_stats(),

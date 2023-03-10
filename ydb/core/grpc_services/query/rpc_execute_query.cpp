@@ -94,7 +94,6 @@ private:
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvents::TEvWakeup, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
-                HFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
                 default:
@@ -167,12 +166,11 @@ private:
         }
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
-        ExecuterActorId_ = ActorIdFromProto(ev->Get()->Record.GetExecuterActorId());
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "ExecuterActorId: " << ExecuterActorId_);
-    }
-
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+        if (!ExecuterActorId_) {
+            ExecuterActorId_ = ev->Sender;
+        }
+
         Ydb::Query::ExecuteQueryResponsePart response;
         response.set_status(Ydb::StatusIds::SUCCESS);
         response.set_result_set_index(0);

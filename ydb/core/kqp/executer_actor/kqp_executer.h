@@ -61,9 +61,6 @@ struct TEvKqpExecuter {
     struct TEvStreamProfile : public TEventPB<TEvStreamProfile, NKikimrKqp::TEvExecuterStreamProfile,
         TKqpExecuterEvents::EvStreamProfile> {};
 
-    struct TEvExecuterProgress : public TEventPB<TEvExecuterProgress, NKikimrKqp::TEvExecuterProgress,
-        TKqpExecuterEvents::EvProgress> {};
-
     struct TEvTableResolveStatus : public TEventLocal<TEvTableResolveStatus,
         TKqpExecuterEvents::EvTableResolveStatus>
     {

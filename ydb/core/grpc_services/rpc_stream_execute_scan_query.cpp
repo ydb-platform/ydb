@@ -201,7 +201,6 @@ private:
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
             default: {
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                     << "Unexpected event received in TStreamExecuteScanQueryRPC::StateWork: " << ev->GetTypeRewrite());
@@ -344,6 +343,10 @@ private:
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+        if (!ExecuterActorId_) {
+            ExecuterActorId_ = ev->Sender;
+        }
+
         Ydb::Table::ExecuteScanQueryPartialResponse response;
         response.set_status(StatusIds::SUCCESS);
         response.mutable_result()->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
@@ -387,11 +390,6 @@ private:
         auto profile = std::make_unique<NYql::NDqProto::TDqExecutionStats>();
         profile->Swap(ev->Get()->Record.MutableProfile());
         ExecutionProfiles_.emplace_back(std::move(profile));
-    }
-
-    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
-        ExecuterActorId_ = ActorIdFromProto(ev->Get()->Record.GetExecuterActorId());
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " ExecuterActorId: " << ExecuterActorId_);
     }
 
 private:

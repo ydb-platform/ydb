@@ -314,12 +314,6 @@ protected:
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
-
-        LOG_D("Report self actorId " << this->SelfId() << " to " << Target);
-        auto progressEv = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
-        ActorIdToProto(this->SelfId(), progressEv->Record.MutableExecuterActorId());
-        this->Send(Target, progressEv.Release());
-
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {
                 LOG_D("Executing physical tx, type: " << (ui32) tx.Body->GetType() << ", stages: " << tx.Body->StagesSize());

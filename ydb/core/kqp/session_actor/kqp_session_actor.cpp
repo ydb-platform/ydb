@@ -1375,12 +1375,6 @@ public:
         TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
     }
 
-    void HandleExecute(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        YQL_ENSURE(QueryState);
-        // note: RequestActorId may be TActorId{};
-        TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
-    }
-
     void HandleExecute(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
         TlsActivationContext->Send(ev->Forward(ExecuterId));
     }
@@ -2034,7 +2028,6 @@ public:
                 hFunc(TEvKqpExecuter::TEvStreamData, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
 
-                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleExecute);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, Handle);
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, HandleExecute);
 
@@ -2064,7 +2057,6 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvQueryRequest, HandleCleanup);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleCleanup);
-                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop);
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCleanup);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);

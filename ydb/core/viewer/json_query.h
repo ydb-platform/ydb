@@ -53,7 +53,6 @@ public:
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, HandleReply);
 
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
 
@@ -242,10 +241,6 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev) {
-        Y_UNUSED(ev);
-    }
-
-    void HandleReply(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         Y_UNUSED(ev);
     }
 

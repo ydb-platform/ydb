@@ -178,6 +178,7 @@ public:
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+        ExecuterActorId = ev->Sender;
         auto& record = ev->Get()->Record;
 
         if (!HasMeta) {
@@ -213,12 +214,6 @@ public:
     void Handle(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ctx);
         Executions.push_back(std::move(*ev->Get()->Record.MutableProfile()));
-    }
-
-    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
-        ExecuterActorId = ActorIdFromProto(ev->Get()->Record.GetExecuterActorId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received executer progress for scan query, id: " << ExecuterActorId);
     }
 
     void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
@@ -257,7 +252,6 @@ public:
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
             HFunc(TResponse, HandleResponse);
 
         default:
@@ -403,20 +397,13 @@ public:
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ctx);
+        ExecuterActorId = ev->Sender;
         TlsActivationContext->Send(ev->Forward(TargetActorId));
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamDataAck::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ctx);
         TlsActivationContext->Send(ev->Forward(ExecuterActorId));
-    }
-
-    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
-        ExecuterActorId = ActorIdFromProto(ev->Get()->Record.GetExecuterActorId());
-        ActorIdToProto(SelfId(), ev->Get()->Record.MutableExecuterActorId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received executer progress for scan query, id: " << ExecuterActorId);
-        TlsActivationContext->Send(ev->Forward(TargetActorId));
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev, const TActorContext& ctx) {
@@ -461,7 +448,6 @@ public:
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
             HFunc(TResponse, HandleResponse);
 
         default:

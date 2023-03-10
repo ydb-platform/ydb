@@ -50,16 +50,10 @@ public:
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
         hFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
         hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
         hFunc(NKqp::TEvKqp::TEvFetchScriptResultsRequest, Handle);
     )
-
-    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        ExecuterActorId = ActorIdFromProto(ev->Get()->Record.GetExecuterActorId());
-        LOG_D("ExecuterActorId: " << ExecuterActorId);
-    }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
@@ -154,8 +148,6 @@ private:
 
 private:
     const NKikimrKqp::TEvQueryRequest Request;
-
-    NActors::TActorId ExecuterActorId;
 
     // Result
     NYql::TIssues Issues;

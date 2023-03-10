@@ -53,7 +53,9 @@
             "Base": "TS3SourceSettingsBase",
             "Match": {"Type": "Callable", "Name": "S3SourceSettings"},
             "Children": [
-                {"Index": 2, "Name": "SizeLimit", "Type": "TCoAtom", "Optional": true}
+                {"Index": 2, "Name": "SizeLimit", "Type": "TExprBase", "Optional": true},
+                {"Index": 3, "Name": "PathPattern", "Type": "TExprBase", "Optional": true},
+                {"Index": 4, "Name": "PathPatternVariant", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

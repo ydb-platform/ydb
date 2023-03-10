@@ -221,38 +221,42 @@ public:
                 auto readSettings = s3ReadObject.Object().Settings().Cast().Ptr();
 
                 int sizeLimitIndex = -1;
-                for (size_t childInd = 0; childInd < readSettings->ChildrenSize(); ++childInd) {
-                    if (readSettings->Child(childInd)->Head().Content() == "readmaxbytes") {
+                int pathPatternIndex = -1;
+                int pathPatternVariantIndex = -1;
+                for (size_t childInd = 0; childInd < readSettings->ChildrenSize();
+                     ++childInd) {
+                    auto keyName = readSettings->Child(childInd)->Head().Content();
+                    if (sizeLimitIndex == -1 && keyName == "readmaxbytes") {
                         sizeLimitIndex = childInd;
-                        break;
+                    } else if (pathPatternIndex == -1 && keyName == "pathpattern") {
+                        pathPatternIndex = childInd;
+                    } else if (pathPatternVariantIndex == -1 && keyName == "pathpatternvariant") {
+                        pathPatternVariantIndex = childInd;
                     }
                 }
 
-                if (sizeLimitIndex != -1) {
-                    return Build<TDqSourceWrap>(ctx, read->Pos())
+                auto emptyNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
+                return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3SourceSettings>()
                         .Paths(s3ReadObject.Object().Paths())
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                             .Build()
-                        .SizeLimit(readSettings->Child(sizeLimitIndex)->TailPtr())
+                        .SizeLimit(
+                            sizeLimitIndex != -1 ? readSettings->Child(sizeLimitIndex)->TailPtr()
+                                                 : emptyNode)
+                        .PathPattern(
+                            pathPatternIndex != -1
+                                ? readSettings->Child(pathPatternIndex)->TailPtr()
+                                : emptyNode)
+                        .PathPatternVariant(
+                            pathPatternVariantIndex != -1 ? readSettings->Child(pathPatternVariantIndex)->TailPtr()
+                                               : emptyNode)
                         .Build()
                     .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                     .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
                     .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
                     .Done().Ptr();
-                }
-                return Build<TDqSourceWrap>(ctx, read->Pos())
-                .Input<TS3SourceSettings>()
-                    .Paths(s3ReadObject.Object().Paths())
-                    .Token<TCoSecureParam>()
-                        .Name().Build(token)
-                        .Build()
-                    .Build()
-                .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
-                .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
-                .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
-                .Done().Ptr();
             }
         }
         return read;
@@ -294,14 +298,31 @@ public:
                 if (const auto maySettings = parseSettings.Settings()) {
                     const auto& settings = maySettings.Cast();
                     for (auto i = 0U; i < settings.Ref().ChildrenSize(); ++i) {
-                        srcDesc.MutableSettings()->insert({ TString(settings.Ref().Child(i)->Head().Content()), TString(settings.Ref().Child(i)->Tail().IsAtom() ? settings.Ref().Child(i)->Tail().Content() : settings.Ref().Child(i)->Tail().Head().Content()) });
+                        srcDesc.MutableSettings()->insert(
+                            {TString(settings.Ref().Child(i)->Head().Content()),
+                             TString(
+                                 settings.Ref().Child(i)->Tail().IsAtom()
+                                     ? settings.Ref().Child(i)->Tail().Content()
+                                     : settings.Ref().Child(i)->Tail().Head().Content())});
                     }
                 }
             } else if (const auto maySourceSettings = source.Settings().Maybe<TS3SourceSettings>()){
                 const auto sourceSettings = maySourceSettings.Cast();
-                auto sizeLimit = sourceSettings.SizeLimit();
+                auto sizeLimit = sourceSettings.SizeLimit().Maybe<TCoAtom>();
                 if (sizeLimit.IsValid()) {
-                    srcDesc.MutableSettings()->insert({"sizeLimit", sizeLimit.Cast().StringValue()});
+                    srcDesc.MutableSettings()->insert(
+                        {"sizeLimit", sizeLimit.Cast().StringValue()});
+                }
+                auto pathPattern = sourceSettings.PathPattern().Maybe<TCoAtom>();
+                if (pathPattern.IsValid()) {
+                    srcDesc.MutableSettings()->insert(
+                        {"pathpattern", pathPattern.Cast().StringValue()});
+                }
+                auto pathPatternVariant =
+                    sourceSettings.PathPatternVariant().Maybe<TCoAtom>();
+                if (pathPatternVariant.IsValid()) {
+                    srcDesc.MutableSettings()->insert(
+                        {"pathpatternvariant", pathPatternVariant.Cast().StringValue()});
                 }
             }
 

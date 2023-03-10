@@ -67,6 +67,8 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
         TAtomic& ItemsProcessed;
         bool Finish;
 
+        struct TPoisonPillException {};
+
     public:
         TCoroActor(TManualEvent& doneEvent, TAtomic& itemsProcessed)
             : TActorCoroImpl(1 << 20)
@@ -97,6 +99,8 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
         void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> event) override {
             if (event->GetTypeRewrite() == Enough) {
                 Finish = true;
+            } else if (event->GetTypeRewrite() == TEvents::TSystem::Poison) {
+                throw TPoisonPillException();
             }
         }
     };

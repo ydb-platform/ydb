@@ -37,6 +37,7 @@ namespace NKikimr {
         TRopeArena Arena;
 
         struct TExDie {};
+        struct TPoisonPillException {};
 
         struct TBlobOnDisk {
             TLogoBlobID Id;

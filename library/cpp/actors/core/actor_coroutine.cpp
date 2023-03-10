@@ -17,9 +17,8 @@ namespace NActors {
         return size;
     }
 
-    TActorCoroImpl::TActorCoroImpl(size_t stackSize, bool allowUnhandledPoisonPill, bool allowUnhandledDtor)
+    TActorCoroImpl::TActorCoroImpl(size_t stackSize, bool allowUnhandledDtor)
         : Stack(AlignStackSize(stackSize))
-        , AllowUnhandledPoisonPill(allowUnhandledPoisonPill)
         , AllowUnhandledDtor(allowUnhandledDtor)
         , FiberClosure{this, TArrayRef(Stack.Begin(), Stack.End())}
         , FiberContext(FiberClosure)
@@ -41,10 +40,11 @@ namespace NActors {
         return GetActorContext().ExecutorThread.Send(ev);
     }
 
-    THolder<IEventHandle> TActorCoroImpl::WaitForEvent(TInstant deadline) {
-        const ui64 cookie = ++WaitCookie;
-        if (deadline != TInstant::Max()) {
-            TActivationContext::Schedule(deadline, new IEventHandleFat(TEvents::TSystem::CoroTimeout, 0, SelfActorId, {}, 0, cookie));
+    THolder<IEventHandle> TActorCoroImpl::WaitForEvent(TMonotonic deadline) {
+        IEventHandleFat *timeoutEv = nullptr;
+        if (deadline != TMonotonic::Max()) {
+            TActivationContext::Schedule(deadline, timeoutEv = new IEventHandleFat(TEvents::TSystem::CoroTimeout, 0,
+                SelfActorId, {}, nullptr, 0));
         }
 
         // ensure we have no unprocessed event and return back to actor system to receive one
@@ -54,14 +54,8 @@ namespace NActors {
         // obtain pending event and ensure we've got one
         while (THolder<IEventHandle> event = std::exchange(PendingEvent, {})) {
             if (event->GetTypeRewrite() != TEvents::TSystem::CoroTimeout) {
-                // special handling for poison pill -- we throw exception
-                if (event->GetTypeRewrite() == TEvents::TEvPoisonPill::EventType) {
-                    throw TPoisonPillException();
-                }
-
-                // otherwise just return received event
                 return event;
-            } else if (event->Cookie == cookie) {
+            } else if (event.Get() == timeoutEv) {
                 return nullptr; // it is not a race -- we've got timeout exactly for our current wait
             } else {
                 ReturnToActorSystem(); // drop this event and wait for the next one
@@ -110,10 +104,8 @@ namespace NActors {
                 Y_VERIFY(!PendingEvent);
                 Run();
             }
-        } catch (const TPoisonPillException& /*ex*/) {
-            if (!AllowUnhandledPoisonPill) {
-                Y_FAIL("unhandled TPoisonPillException");
-            }
+        } catch (const TStopCoroutineException&) {
+            // do nothing, just exit
         } catch (const TDtorException& /*ex*/) {
             if (!AllowUnhandledDtor) {
                 Y_FAIL("unhandled TDtorException");

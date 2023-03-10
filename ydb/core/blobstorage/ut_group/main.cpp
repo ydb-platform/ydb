@@ -511,9 +511,9 @@ public:
         // issue gets from the read queue
         ui32 readsInFlight = 0;
         const ui32 maxReadsInFlight = 3;
-        TInstant nextSendTimestamp;
+        TMonotonic nextSendTimestamp;
         while (readsInFlight || !readQueue.empty()) {
-            const TInstant now = TActorCoroImpl::Now();
+            const TMonotonic now = TActorCoroImpl::Monotonic();
             if (readQueue.size() && now >= nextSendTimestamp && readsInFlight < maxReadsInFlight) {
                 auto ev = std::make_unique<TEvBlobStorage::TEvGet>(readQueue.front(), 0, 0, TInstant::Max(),
                     NKikimrBlobStorage::EGetHandleClass::FastRead, true, false);
@@ -554,7 +554,7 @@ public:
         ui32 numWritesRemain = TAppData::RandomProvider->Uniform(100, 201);
         ui32 step = 1;
         while (writesInFlight.size() || numWritesRemain) {
-            const TInstant now = TActorCoroImpl::Now();
+            const TMonotonic now = TActorCoroImpl::Monotonic();
             if (numWritesRemain && now >= nextSendTimestamp && writesInFlight.size() < maxWritesInFlight) {
                 TString buffer = GenerateRandomBuffer(Cache);
                 const TLogoBlobID id(TabletId, generation, step++, 0, buffer.size(), 0);

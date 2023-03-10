@@ -34,7 +34,7 @@ public:
         const TBlobStorageController::THostRecordMap& hostRecordMap,
         ui32 groupReserveMin,
         ui32 groupReservePart)
-        : TActorCoroImpl(/* stackSize */ 640 * 1024, /* allowUnhandledPoisonPill */ true, /* allowUnhandledDtor */ true) // 640 KiB should be enough for anything!
+        : TActorCoroImpl(/* stackSize */ 640_KB, /* allowUnhandledDtor */ true) // 640 KiB should be enough for anything!
         , SystemViewsState(systemViewsState)
         , HostRecordMap(hostRecordMap)
         , GroupReserveMin(groupReserveMin)
@@ -43,6 +43,11 @@ public:
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) override {
+        switch (ev->GetTypeRewrite()) {
+            case TEvents::TSystem::Poison:
+                throw TStopCoroutineException();
+        }
+
         Y_FAIL("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
     }
 

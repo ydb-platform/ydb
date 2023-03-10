@@ -7,6 +7,8 @@ namespace NKikimr {
 namespace NOperationId {
 
 Y_UNIT_TEST_SUITE(OperationIdTest) {
+    const TString PreparedQueryId = "9d629c27-2c3036b3-4b180476-64435bca";
+
     Y_UNIT_TEST(ConvertKindOnly) {
         Ydb::TOperationId proto;
         proto.SetKind(Ydb::TOperationId::OPERATION_DDL);
@@ -17,6 +19,35 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
         UNIT_ASSERT_EQUAL(newProto.DataSize(), 0);
     }
 
+    Y_UNIT_TEST(PreparedQueryIdCompatibleFormatter) {
+        Ydb::TOperationId opId;
+        opId.SetKind(Ydb::TOperationId::PREPARED_QUERY_ID);
+        AddOptionalValue(opId, "id", PreparedQueryId);
+        auto result = ProtoToString(opId);
+        UNIT_ASSERT_VALUES_EQUAL(FormatPreparedQueryIdCompat(PreparedQueryId), result);
+    }
+#if 0
+    Y_UNIT_TEST(PreparedQueryIdCompatibleFormatterPerf) {
+        ui64 x = 0;
+        for (int i = 0; i < 10000000; i++) {
+            auto result = FormatPreparedQueryIdCompat(PreparedQueryId);
+            x += result.size();
+        }
+        Cerr << x << Endl;
+    }
+
+    Y_UNIT_TEST(PreparedQueryIdOldFormatterPerf) {
+        ui64 x = 0;
+        for (int i = 0; i < 10000000; i++) {
+            Ydb::TOperationId opId;
+            opId.SetKind(Ydb::TOperationId::PREPARED_QUERY_ID);
+            AddOptionalValue(opId, "id", PreparedQueryId);
+            auto result = ProtoToString(opId);
+            x += result.size();
+        }
+        Cerr << x << Endl;
+    }
+#endif
     Y_UNIT_TEST(ConvertKindAndValues) {
         Ydb::TOperationId proto;
         proto.SetKind(Ydb::TOperationId::OPERATION_DDL);

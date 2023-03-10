@@ -186,10 +186,8 @@ public:
                 }
                 if (!kqpResponse.GetPreparedQuery().empty()) {
                     auto& queryMeta = *queryResult->mutable_query_meta();
-                    Ydb::TOperationId opId;
-                    opId.SetKind(TOperationId::PREPARED_QUERY_ID);
-                    AddOptionalValue(opId, "id", kqpResponse.GetPreparedQuery());
-                    queryMeta.set_id(ProtoToString(opId));
+
+                    queryMeta.set_id(FormatPreparedQueryIdCompat(kqpResponse.GetPreparedQuery()));
 
                     const auto& queryParameters = kqpResponse.GetQueryParameters();
                     for (const auto& queryParameter: queryParameters) {

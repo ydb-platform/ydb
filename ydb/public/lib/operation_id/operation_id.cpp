@@ -13,6 +13,11 @@ namespace NOperationId {
 
 using namespace NUri;
 
+TString FormatPreparedQueryIdCompat(const TString& in) {
+    static const TString prefix = "ydb://preparedqueryid/4?id=";
+    return prefix + in;
+}
+
 TString ProtoToString(const Ydb::TOperationId& proto) {
     using namespace ::google::protobuf;
     const Reflection& reflection = *proto.GetReflection();

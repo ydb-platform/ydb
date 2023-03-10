@@ -91,13 +91,8 @@ public:
             const auto& issueMessage = kqpResponse.GetQueryIssues();
             const auto& queryParameters = kqpResponse.GetQueryParameters();
 
-            Ydb::TOperationId opId;
-            opId.SetKind(TOperationId::PREPARED_QUERY_ID);
-
-            AddOptionalValue(opId, "id", queryId);
-
             Ydb::Table::PrepareQueryResult queryResult;
-            queryResult.set_query_id(ProtoToString(opId));
+            queryResult.set_query_id(FormatPreparedQueryIdCompat(queryId));
             for (const auto& queryParameter: queryParameters) {
                 Ydb::Type parameterType;
                 try {

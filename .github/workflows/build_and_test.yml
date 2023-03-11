@@ -10,6 +10,7 @@ jobs:
     strategy:
       matrix:
         arch: [ X64, ARM64 ]
+      fail-fast: false
 
     runs-on: [ self-hosted, "${{matrix.arch}}" ]
     

@@ -96,8 +96,17 @@ TString TShardingBase::DebugString() const {
     return "Columns: " + JoinSeq(", ", GetShardingColumns());
 }
 
+std::vector<ui32> TShardingBase::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    std::vector<ui64> hashes = MakeHashes(batch);
+    std::vector<ui32> result;
+    result.reserve(hashes.size());
+    for (auto&& i : hashes) {
+        result.emplace_back(i % ShardsCount);
+    }
+    return result;
+}
 
-std::vector<ui32> THashSharding::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+std::vector<ui64> THashSharding::MakeHashes(const std::shared_ptr<arrow::RecordBatch>& batch) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(ShardingColumns.size());
 
@@ -109,7 +118,7 @@ std::vector<ui32> THashSharding::MakeSharding(const std::shared_ptr<arrow::Recor
         columns.emplace_back(array);
     }
 
-    std::vector<ui32> out(batch->num_rows());
+    std::vector<ui64> out(batch->num_rows());
 
     TStreamStringHashCalcer hashCalcer(Seed);
 
@@ -118,17 +127,17 @@ std::vector<ui32> THashSharding::MakeSharding(const std::shared_ptr<arrow::Recor
         for (auto& column : columns) {
             AppendField(column, row, hashCalcer);
         }
-        out[row] = hashCalcer.Finish() % ShardsCount;
+        out[row] = hashCalcer.Finish();
     }
 
     return out;
 }
 
-ui32 THashSharding::CalcShardId(const NKikimr::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const {
+ui64 THashSharding::CalcHash(const NKikimr::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const {
     TStreamStringHashCalcer hashCalcer(Seed);
     hashCalcer.Start();
     readerInfo.BuildStringForHash(value, hashCalcer);
-    return hashCalcer.Finish() % ShardsCount;
+    return hashCalcer.Finish();
 }
 
 std::vector<ui32> TLogsSharding::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
@@ -138,6 +147,28 @@ std::vector<ui32> TLogsSharding::MakeSharding(const std::shared_ptr<arrow::Recor
 
     auto tsArray = batch->GetColumnByName(ShardingColumns[0]);
     if (!tsArray || tsArray->type_id() != arrow::Type::TIMESTAMP) {
+        return {};
+    }
+
+    const std::vector<ui64> hashes = MakeHashes(batch);
+    if (hashes.empty()) {
+        return {};
+    }
+
+    auto tsColumn = std::static_pointer_cast<arrow::TimestampArray>(tsArray);
+    std::vector<ui32> out;
+    out.reserve(batch->num_rows());
+
+    TStreamStringHashCalcer hashCalcer(0);
+    for (int row = 0; row < batch->num_rows(); ++row) {
+        out.emplace_back(ShardNo(tsColumn->Value(row), hashes[row]));
+    }
+
+    return out;
+}
+
+std::vector<ui64> TLogsSharding::MakeHashes(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    if (ShardingColumns.size() < 2) {
         return {};
     }
 
@@ -152,8 +183,7 @@ std::vector<ui32> TLogsSharding::MakeSharding(const std::shared_ptr<arrow::Recor
         extraColumns.emplace_back(array);
     }
 
-    auto tsColumn = std::static_pointer_cast<arrow::TimestampArray>(tsArray);
-    std::vector<ui32> out;
+    std::vector<ui64> out;
     out.reserve(batch->num_rows());
 
     TStreamStringHashCalcer hashCalcer(0);
@@ -162,15 +192,13 @@ std::vector<ui32> TLogsSharding::MakeSharding(const std::shared_ptr<arrow::Recor
         for (auto& column : extraColumns) {
             AppendField(column, row, hashCalcer);
         }
-
-        const ui32 shardNo = ShardNo(tsColumn->Value(row), hashCalcer.Finish());
-        out.emplace_back(shardNo);
+        out.emplace_back(hashCalcer.Finish());
     }
 
     return out;
 }
 
-ui32 TLogsSharding::CalcShardId(const NKikimr::NUdf::TUnboxedValue& /*value*/, const TUnboxedValueReader& /*readerInfo*/) const {
+ui64 TLogsSharding::CalcHash(const NKikimr::NUdf::TUnboxedValue& /*value*/, const TUnboxedValueReader& /*readerInfo*/) const {
     YQL_ENSURE(false);
     return 0;
 }

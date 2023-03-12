@@ -1119,6 +1119,34 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(ReadAfterWrite) {
+        auto settings = TKikimrSettings();
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO KeyValue (Key, Value) VALUES (3u, "Three")
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+        AssertSuccessResult(result);
+
+        auto tx = result.GetTransaction();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        result = session.ExecuteDataQuery(R"(
+            SELECT Amount FROM Test WHERE Group = 1 ORDER BY Amount DESC;
+        )", TTxControl::Tx(*tx).CommitTx(), execSettings).ExtractValueSync();
+        AssertSuccessResult(result);
+
+        CompareYson(R"([[[3500u]];[[300u]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        // Commit cannot be merged with physical tx for read-write transactions
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+    }
+
     Y_UNIT_TEST(PrunePartitionsByLiteral) {
         TKikimrSettings settings;
         TKikimrRunner kikimr(settings);

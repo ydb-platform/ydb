@@ -1128,8 +1128,14 @@ public:
         if (QueryState->Commit && Config->FeatureFlags.GetEnableKqpImmediateEffects() && phyQuery.GetHasUncommittedChangesRead()) {
             // every phy tx should acquire LockTxId, so commit is sent separately at the end
             commit = QueryState->CurrentTx >= phyQuery.TransactionsSize();
-        } else if (QueryState->Commit) {
-            commit = QueryState->CurrentTx >= phyQuery.TransactionsSize() - 1;
+        } else if (QueryState->Commit && QueryState->CurrentTx >= phyQuery.TransactionsSize() - 1) {
+            if (!tx) {
+                // no physical transactions left, perform commit
+                commit = true;
+            } else {
+                // we can merge commit with last tx only for read-only transactions
+                commit = txCtx.DeferredEffects.Empty();
+            }
         }
 
         if (tx || commit) {

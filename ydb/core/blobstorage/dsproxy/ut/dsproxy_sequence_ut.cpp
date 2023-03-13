@@ -62,6 +62,20 @@ struct TGetQuery {
             QueryCookie = query.GetCookie();
         }
     }
+
+    void SetFrom(const TEvBlobStorage::TEvVGet &vget, const NKikimrCapnProto::TExtremeQuery::Reader &query) {
+        Y_UNUSED(vget);
+        LogoBlobId = LogoBlobIDFromLogoBlobID(query.GetId());
+        if (query.HasShift()) {
+            Shift = (ui32)query.GetShift();
+        }
+        if (query.HasSize()) {
+            Size = (ui32)query.GetSize();
+        }
+        if (query.HasCookie()) {
+            QueryCookie = query.GetCookie();
+        }
+    }
 };
 
 struct TGetRangeQuery {
@@ -78,6 +92,14 @@ struct TGetRangeQuery {
     {}
 
     void SetFrom(const TEvBlobStorage::TEvVGet &vget, const ::NKikimrBlobStorage::TRangeQuery &query) {
+        FromId = LogoBlobIDFromLogoBlobID(query.GetFrom());
+        ToId = LogoBlobIDFromLogoBlobID(query.GetTo());
+        IndexOnly = vget.Record.HasIndexOnly() ? vget.Record.GetIndexOnly() : false;
+        MaxResults = query.HasMaxResults() ? query.GetMaxResults() : 0;
+        QueryCookie = query.HasCookie() ? query.GetCookie() : 0;
+    }
+
+    void SetFrom(const TEvBlobStorage::TEvVGet &vget, const NKikimrCapnProto::TRangeQuery::Reader &query) {
         FromId = LogoBlobIDFromLogoBlobID(query.GetFrom());
         ToId = LogoBlobIDFromLogoBlobID(query.GetTo());
         IndexOnly = vget.Record.HasIndexOnly() ? vget.Record.GetIndexOnly() : false;

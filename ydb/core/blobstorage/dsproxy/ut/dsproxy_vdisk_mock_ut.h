@@ -112,7 +112,7 @@ public:
         // TODO: Check for overlapping / out of order queries
         size_t size = request.ExtremeQueriesSize();
         for (unsigned i = 0; i < size; i++) {
-            const NKikimrBlobStorage::TExtremeQuery &query = request.GetExtremeQueries(i);
+            const auto &query = request.GetExtremeQueries(i);
             Y_VERIFY(request.HasVDiskID());
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(query.GetId());
             ui64 partId = id.PartId();

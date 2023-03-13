@@ -111,8 +111,7 @@ namespace NKikimr {
     //////////////////////////////////////////////////////////////////////////////////////
     // Check query correctness
     //////////////////////////////////////////////////////////////////////////////////////
-    template <typename TevVGetMsg>
-    bool CheckVGetQuery(const TevVGetMsg &record) {
+    bool CheckVGetQuery(const NKikimrBlobStorage::TEvVGet &record) {
         bool hasRange = record.HasRangeQuery();
         bool hasExtreme = (record.ExtremeQueriesSize() > 0);
 
@@ -126,6 +125,40 @@ namespace NKikimr {
                 return false; // can't have both range and extreme
 
             const NKikimrBlobStorage::TRangeQuery &query = record.GetRangeQuery();
+            if (!query.HasFrom() || !query.HasTo())
+                return false;
+
+            if (query.HasMaxResults() && query.GetMaxResults() == 0)
+                return false;
+
+            return true;
+        }
+
+        if (hasExtreme) {
+            // check extreme queries
+            if (record.ExtremeQueriesSize() == 0)
+                return false; // we need to have one
+
+            return true;
+        }
+
+        return false;
+    }
+
+    bool CheckVGetQuery(const NKikimrCapnProto::TEvVGet::Builder &record) {
+        bool hasRange = record.HasRangeQuery();
+        bool hasExtreme = (record.ExtremeQueriesSize() > 0);
+
+        // only one field must be non empty
+        if (int(hasRange) + int(hasExtreme) != 1)
+            return false;
+
+        if (hasRange) {
+            // check range query
+            if (record.ExtremeQueriesSize() > 0)
+                return false; // can't have both range and extreme
+
+            const auto &query = record.GetRangeQuery();
             if (!query.HasFrom() || !query.HasTo())
                 return false;
 

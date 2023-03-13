@@ -46,8 +46,8 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
             if (isEmptyMeta) {
                 ev = std::make_unique<TEvBlobStorage::TEvVGet>();
             } else {
-                NKikimrBlobStorage::TEvVGet protoQuery;
-                static_cast<TEvBlobStorage::TEvVGet*>(ev.get())->Record = protoQuery;
+                NKikimrCapnProto::TEvVGet::Builder protoQuery;
+                static_cast<TEvBlobStorage::TEvVGet*>(ev.get())->Record = std::move(protoQuery);
             }
         } else if (isEmptyMeta) {
             static_cast<TEvBlobStorage::TEvVGet*>(ev.get())->StripPayload();

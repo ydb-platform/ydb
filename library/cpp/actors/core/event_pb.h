@@ -8,6 +8,7 @@
 #include <util/generic/deque.h>
 #include <util/system/context.h>
 #include <util/system/filemap.h>
+#include <ydb/core/blobstorage/vdisk/common/capnp/protos.h>
 #include <array>
 
 namespace NActors {
@@ -502,6 +503,10 @@ namespace NActors {
     };
 
     inline TActorId ActorIdFromProto(const NActorsProto::TActorId& actorId) {
+        return TActorId(actorId.GetRawX1(), actorId.GetRawX2());
+    }
+
+    inline TActorId ActorIdFromProto(NKikimrCapnProto::TActorId::Reader actorId) {
         return TActorId(actorId.GetRawX1(), actorId.GetRawX2());
     }
 

@@ -382,6 +382,16 @@ namespace NKikimr {
             , ActorId(ActorIdFromProto(msgQoS.GetSenderActorId()))
         {}
 
+        TVMsgContext(ui32 recByteSize, NKikimrCapnProto::TMsgQoS::Reader msgQoS)
+                : ClientId(NBackpressure::TQueueClientId(msgQoS))
+                , RecByteSize(recByteSize)
+                , MsgId(msgQoS.GetMsgId())
+                , Cost(msgQoS.GetCost())
+                , ExtQueueId(static_cast<NKikimrBlobStorage::EVDiskQueueId>(msgQoS.GetExtQueueId()))
+                , IntQueueId(static_cast<NKikimrBlobStorage::EVDiskInternalQueueId>(msgQoS.GetIntQueueId()))
+                , ActorId(ActorIdFromProto(msgQoS.GetSenderActorId()))
+        {}
+
         void Output(IOutputStream &str) const {
             str << "{ClientId# " << ClientId
                 << " RecByteSize# " << RecByteSize
@@ -524,7 +534,8 @@ namespace NKikimr {
             if (queryRecord) {
                 Y_VERIFY(queryRecord->HasMsgQoS());
                 auto *resultQoS = TBase::Record.MutableMsgQoS();
-                resultQoS->Swap(queryRecord->MutableMsgQoS());
+                // TODO(stetsyuk): implement Swap method
+                // resultQoS->Swap(queryRecord->GetMsgQoS());
                 resultQoS->ClearDeadlineSeconds();
                 resultQoS->ClearSendMeCostSettings();
             } else {
@@ -534,7 +545,7 @@ namespace NKikimr {
 
         TEvVResultBaseWithQoSPB(TInstant now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
                                 const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel,
-                                ui32 recByteSize, const TActorIDPtr &skeletonFrontIDPtr)
+                                ui32, const TActorIDPtr &skeletonFrontIDPtr)
                 : TBase(now, counterPtr, histoPtr, channel)
                 , MsgCtx(TVMsgContext())
                 , SkeletonFrontIDPtr(skeletonFrontIDPtr)
@@ -761,16 +772,16 @@ namespace NKikimr {
                 str << " DeadlineSeconds# " << qos.GetDeadlineSeconds();
             }
             if (qos.HasMsgId()) {
-                str << " MsgId# " << qos.GetMsgId().;
+                str << " MsgId# " << qos.GetMsgId().GetMsgId();
             }
             if (qos.HasCost()) {
                 str << " Cost# " << qos.GetCost();
             }
             if (qos.HasExtQueueId()) {
-                str << " ExtQueueId# " << qos.GetExtQueueId();
+                str << " ExtQueueId# " << static_cast<size_t>(qos.GetExtQueueId());
             }
             if (qos.HasIntQueueId()) {
-                str << " IntQueueId# " << qos.GetIntQueueId();
+                str << " IntQueueId# " << static_cast<size_t>(qos.GetIntQueueId());
             }
             if (qos.HasCostSettings()) {
                 str << " CostSettings# {";
@@ -803,7 +814,7 @@ namespace NKikimr {
                 str << " Window# {";
                 const auto &window = qos.GetWindow();
                 if (window.HasStatus()) {
-                    str << " Status# " << window.GetStatus();
+                    str << " Status# " << static_cast<size_t>(window.GetStatus());
                 }
                 if (window.HasActualWindowSize()) {
                     str << " ActualWindowSize# " << window.GetActualWindowSize();
@@ -812,10 +823,10 @@ namespace NKikimr {
                     str << " MaxWindowSize# " << window.GetMaxWindowSize();
                 }
                 if (window.HasExpectedMsgId()) {
-                    str << " ExpectedMsgId# " << window.GetExpectedMsgId();
+                    str << " ExpectedMsgId# " << window.GetExpectedMsgId().GetMsgId();
                 }
                 if (window.HasFailedMsgId()) {
-                    str << " FailedMsgId# " << window.GetFailedMsgId();
+                    str << " FailedMsgId# " << window.GetFailedMsgId().GetMsgId();
                 }
                 str << "}";
             }
@@ -1419,10 +1430,10 @@ namespace NKikimr {
         TEvVGetResult() = default;
 
         TEvVGetResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
-                      ui32 recByteSize, NKikimrBlobStorage::TEvVGet *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
-                      const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                      TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
-                : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, skeletonFrontIDPtr)
+                  ui32 recByteSize, NKikimrBlobStorage::TEvVGet *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
+                  const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
+                  TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
+              : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, queryRecord, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -1440,13 +1451,17 @@ namespace NKikimr {
         }
 
         TEvVGetResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
-                ui32 recByteSize, const TActorIDPtr &skeletonFrontIDPtr,
-                const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, skeletonFrontIDPtr)
+                      ui32 recByteSize, NKikimrCapnProto::TEvVGet::Reader *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
+                      const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
+                      TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
+                : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, queryRecord, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
+            if (queryRecord && queryRecord->HasTimestamps()) {
+                // TODO(stetsyuk): implement CopyFrom method
+                // Record.MutableTimestamps()->CopyFrom(queryRecord->GetTimestamps());
+            }
 
             // copy cookie if it was set in initial query
             if (cookie)
@@ -1456,6 +1471,7 @@ namespace NKikimr {
                 Record.SetIncarnationGuid(incarnationGuid);
             }
         }
+
 
         void MarkRangeOverflow() {
             Record.SetIsRangeOverflow(true);

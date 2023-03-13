@@ -319,6 +319,7 @@ namespace NKikimrCapnProto {
             Builder* operator->() { return this; }
             Builder& operator*() { return *this; }
 
+
             void SetDeadlineSeconds(const uint32_t& value) { return setDeadlineSeconds(value); }
             void SetCost(const uint64_t& value) { return setCost(value); }
             void SetSendMeCostSettings(const bool& value) { return setSendMeCostSettings(value); }
@@ -589,6 +590,10 @@ namespace NKikimrCapnProto {
             }
 
             int ByteSize() const {
+                return builder.totalSize().wordCount * 8;
+            }
+
+            long ByteSizeLong() const {
                 return builder.totalSize().wordCount * 8;
             }
 

@@ -2153,6 +2153,45 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         return node;
     };
+
+    map[TCoUnordered::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (!optCtx.IsSingleUsage(node->Head())) {
+            return node;
+        }
+
+        if (node->Head().IsCallable({"Merge", "OrderedExtend"})) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            auto children = node->Head().ChildrenList();
+            std::transform(children.begin(), children.end(), children.begin(), [&](TExprNode::TPtr& child) { return ctx.ChangeChild(*node, 0U, std::move(child)); });
+            return ctx.NewCallable(node->Head().Pos(), "Extend", std::move(children));
+        }
+
+        if (node->Head().IsCallable() && node->Head().Content().starts_with("Ordered")) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            auto children = node->Head().ChildrenList();
+            children.front() = ctx.ChangeChild(*node, 0U, std::move(children.front()));
+            return ctx.NewCallable(node->Head().Pos(), node->Head().Content().substr(7U), std::move(children));
+        }
+
+        if (node->Head().IsCallable("Mux")) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            auto children = node->Head().ChildrenList();
+            std::transform(children.begin(), children.end(), children.begin(), [&](TExprNode::TPtr& child) { return ctx.ChangeChild(*node, 0U, std::move(child)); });
+            return ctx.ChangeChildren(node->Head(), std::move(children));
+        }
+
+        if (node->Head().IsCallable("TopSort")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.RenameNode(node->Head(), "Top");
+        }
+
+        if (node->Head().IsCallable({"Sort", "AssumeSorted"})) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " absorbs " << node->Head().Content();
+            return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
+        }
+
+        return node;
+    };
 }
 
 }

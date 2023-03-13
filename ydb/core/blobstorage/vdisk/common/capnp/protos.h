@@ -82,6 +82,13 @@ namespace NKikimrCapnProto {
             Builder* operator->() { return this; }
             Builder& operator*() { return *this; }
 
+            void CopyFrom(const Builder& other) {
+                SetSentByDSProxyUs(other.GetSentByDSProxyUs());
+                SetReceivedByVDiskUs(other.GetReceivedByVDiskUs());
+                SetSentByVDiskUs(other.GetSentByVDiskUs());
+                SetReceivedByDSProxyUs(other.GetReceivedByDSProxyUs());
+            }
+
             void SetSentByDSProxyUs(const uint64_t& value) { return setSentByDSProxyUs(value); }
             void SetReceivedByVDiskUs(const uint64_t& value) { return setReceivedByVDiskUs(value); }
             void SetSentByVDiskUs(const uint64_t& value) { return setSentByVDiskUs(value); }

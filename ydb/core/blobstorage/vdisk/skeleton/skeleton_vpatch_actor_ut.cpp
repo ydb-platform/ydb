@@ -268,7 +268,7 @@ namespace NKikimr {
             UNIT_ASSERT(evVGetRange->Record.HasCookie());
             UNIT_ASSERT(evVGetRange->Record.HasIndexOnly() && evVGetRange->Record.GetIndexOnly());
             std::unique_ptr<TEvBlobStorage::TEvVGetResult> evVGetRangeResult = std::make_unique<TEvBlobStorage::TEvVGetResult>(
-                    vGetStatus, testData.VDiskIds[nodeId], testData.Now, evVGetRange->GetCachedByteSize(),
+                    vGetStatus, testData.VDiskIds[nodeId], testData.Now, evVGetRange->GetCachedByteSize(), &evVGetRange->Record,
                     nullptr, nullptr, nullptr, evVGetRange->Record.GetCookie(), handle->GetChannel(), 0);
 
             evVGetRangeResult->AddResult(NKikimrProto::OK, TLogoBlobID(testData.OriginalBlobId, 0));
@@ -438,7 +438,7 @@ namespace NKikimr {
             UNIT_ASSERT(!evVGet->Record.HasIndexOnly() || !evVGet->Record.GetIndexOnly());
 
             std::unique_ptr<TEvBlobStorage::TEvVGetResult> evVGetResult = std::make_unique<TEvBlobStorage::TEvVGetResult>(
-                    vGetStatus, testData.VDiskIds[nodeId], testData.Now, evVGet->GetCachedByteSize(),
+                    vGetStatus, testData.VDiskIds[nodeId], testData.Now, evVGet->GetCachedByteSize(), &evVGet->Record,
                     nullptr, nullptr, nullptr, evVGet->Record.GetCookie(), vGetHandle->GetChannel(), 0);
             evVGetResult->AddResult(NKikimrProto::OK, blob.BlobId, 0, blob.Buffer.data(), blob.Buffer.size());
 

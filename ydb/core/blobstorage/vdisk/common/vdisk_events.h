@@ -1459,8 +1459,12 @@ namespace NKikimr {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (queryRecord && queryRecord->HasTimestamps()) {
-                // TODO(stetsyuk): implement CopyFrom method
-                // Record.MutableTimestamps()->CopyFrom(queryRecord->GetTimestamps());
+                auto *timestamps = Record.MutableTimestamps();
+                auto other = queryRecord->GetTimestamps();
+                timestamps->SetSentByDSProxyUs(other.GetSentByDSProxyUs());
+                timestamps->SetReceivedByVDiskUs(other.GetReceivedByVDiskUs());
+                timestamps->SetSentByVDiskUs(other.GetSentByVDiskUs());
+                timestamps->SetReceivedByDSProxyUs(other.GetReceivedByDSProxyUs());
             }
 
             // copy cookie if it was set in initial query

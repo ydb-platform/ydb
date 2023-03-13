@@ -179,7 +179,7 @@ public:
 
         auto response = std::make_unique<TEvBlobStorage::TEvVGetResult>(NKikimrProto::OK,
             VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(),
-            nullptr, nullptr, nullptr, cookie, 0U, 0U);
+            &record, nullptr, nullptr, nullptr, cookie, 0U, 0U);
 
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);

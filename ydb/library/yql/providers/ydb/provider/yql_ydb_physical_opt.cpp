@@ -25,10 +25,22 @@ public:
         , State_(state)
     {
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TYdbPhysicalOptProposalTransformer::name)
+        AddHandler(0, &TCoLeft::Match,      HNDL(TrimReadWorld));
         AddHandler(0, &TCoTake::Match,      HNDL(Take));
         AddHandler(0, &TCoNarrowMap::Match, HNDL(ReadZeroColumns));
-        AddHandler(0, &TDqStage::Match, HNDL(SourceZeroColumns));
+        AddHandler(0, &TDqStage::Match,     HNDL(SourceZeroColumns));
 #undef HNDL
+    }
+
+    TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
+        Y_UNUSED(ctx);
+
+        const auto& maybeRead = node.Cast<TCoLeft>().Input().Maybe<TYdbReadTable>();
+        if (!maybeRead) {
+            return node;
+        }
+
+        return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
     TMaybeNode<TExprBase> Take(TExprBase node, TExprContext& ctx) const {
@@ -146,4 +158,3 @@ THolder<IGraphTransformer> CreateYdbPhysicalOptProposalTransformer(TYdbState::TP
 }
 
 } // namespace NYql
-

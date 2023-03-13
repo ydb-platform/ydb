@@ -165,7 +165,6 @@ public:
         , State_(state)
     {
 #define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TS3LogicalOptProposalTransformer::name)
-        AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(TryPrunePaths));
         AddHandler(0, &TDqSourceWrap::Match, HNDL(ApplyPrunedPath));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSource));
@@ -280,15 +279,6 @@ public:
             YQL_CLOG(INFO, ProviderS3) << "Will read from S3 " << count << " files with total size " << totalSize << " bytes";
         }
         return TStatus::Ok;
-    }
-
-    TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
-        const auto& maybeRead = node.Cast<TCoLeft>().Input().Maybe<TS3ReadObject>();
-        if (!maybeRead) {
-            return node;
-        }
-
-        return TExprBase(ctx.NewWorld(node.Pos()));
     }
 
     TMaybeNode<TExprBase> ApplyPrunedPath(TExprBase node, TExprContext& ctx) const {

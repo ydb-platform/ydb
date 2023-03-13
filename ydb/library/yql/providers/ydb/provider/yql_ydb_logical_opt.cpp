@@ -24,19 +24,9 @@ public:
         , State_(state)
     {
 #define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TYdbLogicalOptProposalTransformer::name)
-        AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
 #undef HNDL
-    }
-
-    TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
-        const auto& maybeRead = node.Cast<TCoLeft>().Input().Maybe<TYdbReadTable>();
-        if (!maybeRead) {
-            return node;
-        }
-
-        return TExprBase(ctx.NewWorld(node.Pos()));
     }
 
     TMaybeNode<TExprBase> ExtractMembers(TExprBase node, TExprContext& ctx) const {

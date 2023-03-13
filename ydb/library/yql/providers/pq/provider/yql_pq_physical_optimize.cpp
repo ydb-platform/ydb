@@ -26,10 +26,22 @@ public:
         , State_(std::move(state))
     {
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TPqPhysicalOptProposalTransformer::name)
+        AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TPqWriteTopic::Match, HNDL(PqWriteTopic));
 #undef HNDL
 
         SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
+    }
+
+    TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
+        Y_UNUSED(ctx);
+
+        const auto& maybeRead = node.Cast<TCoLeft>().Input().Maybe<TPqReadTopic>();
+        if (!maybeRead) {
+            return node;
+        }
+
+        return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
     NNodes::TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {

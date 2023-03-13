@@ -102,8 +102,20 @@ public:
         , State_(std::move(state))
     {
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TS3PhysicalOptProposalTransformer::name)
+        AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TS3WriteObject::Match, HNDL(S3WriteObject));
 #undef HNDL
+    }
+
+    TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
+        Y_UNUSED(ctx);
+
+        const auto& maybeRead = node.Cast<TCoLeft>().Input().Maybe<TS3ReadObject>();
+        if (!maybeRead) {
+            return node;
+        }
+
+        return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
     TMaybeNode<TExprBase> S3WriteObject(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {

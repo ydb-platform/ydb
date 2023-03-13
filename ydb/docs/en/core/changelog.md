@@ -1,5 +1,26 @@
 # Changelog
 
+## 07.03.2023 {#07-03-2023}
+
+### {{ ydb-short-name }} 22.5 {#ydb-22-5}
+
+To update to version **22.5**, select the [Downloads](downloads/index.md) section.
+
+**What's new:**
+
+* Added [changefeed configuration settings](yql/reference/syntax/alter_table#changefeed-options) to transfer additional info about changes to topic.
+* Added support of [rename for tables](concepts/datamodel/table.md#rename) with TTL setting enabled.
+* Added [retention period setting](concepts/cdc#retention-period) for cdc-log.
+
+**BugFixes & Improvements:**
+
+* Fixed: Error inserting 0 rows via BulkUpsert.
+* Fixed: Error when importing Date/DateTime columns from CSV.
+* Fixed: Error importing data from CSV with line breaks in values.
+* Fixed: Error importing data from CSV with empty values.
+* Improved Query Processing performance (WorkerActor was replaced with SessionActor).
+* DataShard compaction now starts immediately after split or merge operations.
+
 ## 10.12.2022 {#10-12-2022}
 
 **What's new in version 22.4**

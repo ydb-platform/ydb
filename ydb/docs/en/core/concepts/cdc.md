@@ -129,6 +129,8 @@ Records whose retention time has expired are deleted, regardless of whether they
 
 Deleting records before they are processed by the client will cause [offset](topic.md#offset) skips, which means that the offsets of the last record read from the partition and the earliest available record will differ by more than one.
 
+To configure the record retention period, specify the parameter [RETENTION_PERIOD](../yql/reference/syntax/alter_table.md#changefeed-options) when creating a changefeed.
+
 ## Creating and deleting a changefeed {#ddl}
 
 You can add a changefeed to an existing table or delete it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md#changefeed) directives of the YQL `ALTER TABLE` statement. When deleting a table, the changefeed added to it is also deleted.

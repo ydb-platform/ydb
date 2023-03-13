@@ -1449,6 +1449,66 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 4);
     }
 
+    Y_UNIT_TEST(JoinIdxLookupWithPredicate) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `Left` (
+                Key Uint64,
+                Value1 Uint64,
+                Value2 String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync());
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `Right` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync());
+
+        AssertSuccessResult(session.ExecuteDataQuery(R"(
+            REPLACE INTO `Left` (Key, Value1, Value2) VALUES
+                (1, 6, "Value1"),
+                (2, 2, "Value1"),
+                (3, 3, "Value2"),
+                (4, 4, "Value2"),
+                (5, 5, "Value3"),
+                (6, 6, "Value1");
+
+            REPLACE INTO `Right` (Key, Value) VALUES
+                (1, "One"),
+                (2, "Two"),
+                (3, "Three"),
+                (4, "Four"),
+                (5, "Five"),
+                (6, "Six");
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
+
+        auto result = session.ExecuteDataQuery(R"(
+            $input = (
+                SELECT Key, Value1
+                FROM `Left` WHERE Value2 == "Value1"
+            );
+
+            SELECT t1.Key AS Key, t2.Value AS Value
+            FROM $input AS t1
+            INNER JOIN `Right` AS t2
+            ON t1.Value1 = t2.Key AND t1.Key = t2.Key
+            ORDER BY Key, Value;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[2u];["Two"]];
+            [[6u];["Six"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(LeftSemiJoin) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

@@ -115,15 +115,19 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Filter-Limit",
+                        "Node Type": "Filter-Limit-Filter",
                         "Operators": [
                             {
                                 "Name": "Filter",
-                                "Predicate": "item.i == item.i And Exist(item.i)"
+                                "Predicate": "Exist(item.i)"
                             },
                             {
                                 "Limit": "1",
                                 "Name": "Limit"
+                            },
+                            {
+                                "Name": "Filter",
+                                "Predicate": "item.i == item.i"
                             }
                         ],
                         "PlanNodeId": 6

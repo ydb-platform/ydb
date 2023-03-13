@@ -71,12 +71,44 @@ TExprBase ConvertToTuples(const TSet<TString>& columns, const TCoArgument& struc
         .Done();
 }
 
-TExprBase DeduplicateByMembers(const TExprBase& expr, const TSet<TString>& members, TExprContext& ctx,
-    TPositionHandle pos)
+TExprBase DeduplicateByMembers(const TExprBase& expr,  const TMaybeNode<TCoLambda>& filter, const TSet<TString>& members,
+    TExprContext& ctx, TPositionHandle pos)
 {
-    auto structArg = Build<TCoArgument>(ctx, pos)
-            .Name("struct")
+    TMaybeNode<TCoLambda> lambda;
+    if (filter.IsValid()) {
+        lambda = Build<TCoLambda>(ctx, pos)
+            .Args({"tuple"})
+            .Body<TCoTake>()
+                .Input<TCoFilter>()
+                    .Input<TCoNth>()
+                        .Tuple("tuple")
+                        .Index().Value("1").Build()
+                        .Build()
+                    .Lambda(filter.Cast())
+                    .Build()
+                .Count<TCoUint64>()
+                    .Literal().Value("1").Build()
+                    .Build()
+                .Build()
             .Done();
+    } else {
+        lambda = Build<TCoLambda>(ctx, pos)
+            .Args({"tuple"})
+            .Body<TCoTake>()
+                .Input<TCoNth>()
+                    .Tuple("tuple")
+                    .Index().Value("1").Build()
+                    .Build()
+                .Count<TCoUint64>()
+                    .Literal().Value("1").Build()
+                    .Build()
+                .Build()
+            .Done();
+    }
+
+    auto structArg = Build<TCoArgument>(ctx, pos)
+        .Name("struct")
+        .Done();
 
     return Build<TCoPartitionByKey>(ctx, pos)
             .Input(expr)
@@ -92,18 +124,7 @@ TExprBase DeduplicateByMembers(const TExprBase& expr, const TSet<TString>& membe
                 .Args({"stream"})
                 .Body<TCoFlatMap>()
                     .Input("stream")
-                    .Lambda()
-                        .Args({"tuple"})
-                        .Body<TCoTake>()
-                            .Input<TCoNth>()
-                                .Tuple("tuple")
-                                .Index().Value("1").Build()
-                                .Build()
-                            .Count<TCoUint64>()
-                                .Literal().Value("1").Build()
-                                .Build()
-                            .Build()
-                        .Build()
+                    .Lambda(lambda.Cast())
                     .Build()
                 .Build()
             .Done();
@@ -480,7 +501,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             .Done()
         : join.LeftInput();
 
-    auto leftDataDeduplicated = DeduplicateByMembers(leftData, deduplicateLeftColumns, ctx, join.Pos());
+    TMaybeNode<TCoLambda> filter;
 
     if (!equalLeftKeys.empty()) {
         auto row = Build<TCoArgument>(ctx, join.Pos())
@@ -507,22 +528,20 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             }
         }
 
-        leftDataDeduplicated = Build<TCoFilter>(ctx, join.Pos())
-            .Input(leftDataDeduplicated)
-            .Lambda()
-                .Args({row})
-                .Body<TCoCoalesce>()
-                    .Predicate<TCoAnd>()
-                        .Add(conditions)
-                        .Build()
-                    .Value<TCoBool>()
-                        .Literal().Build("false")
-                        .Build()
+        filter = Build<TCoLambda>(ctx, join.Pos())
+            .Args({row})
+            .Body<TCoCoalesce>()
+                .Predicate<TCoAnd>()
+                    .Add(conditions)
+                    .Build()
+                .Value<TCoBool>()
+                    .Literal().Build("false")
                     .Build()
                 .Build()
             .Done();
     }
 
+    auto leftDataDeduplicated = DeduplicateByMembers(leftData, filter, deduplicateLeftColumns, ctx, join.Pos());
     auto keysToLookup = Build<TCoMap>(ctx, join.Pos())
         .Input(leftDataDeduplicated)
         .Lambda()

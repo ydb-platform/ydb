@@ -15,7 +15,7 @@ target_link_libraries(core-blobstorage-ut_blobstorage-ut_replication PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   blobstorage-ut_blobstorage-lib
 )

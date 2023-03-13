@@ -18,7 +18,7 @@ target_link_libraries(ydb-library-yql-udfs-common-stat-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   common-stat-static
   library-yql-minikql

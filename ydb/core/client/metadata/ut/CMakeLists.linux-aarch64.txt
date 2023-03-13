@@ -18,7 +18,7 @@ target_link_libraries(ydb-core-client-metadata-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-client-metadata
   udf-service-stub

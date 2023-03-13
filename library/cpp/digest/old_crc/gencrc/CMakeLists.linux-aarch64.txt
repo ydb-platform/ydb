@@ -12,7 +12,7 @@ target_link_libraries(gencrc PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
 )
 target_link_options(gencrc PRIVATE
   -ldl

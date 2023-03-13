@@ -15,7 +15,7 @@ target_link_libraries(benchmark PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   testing-benchmark-main
   library-cpp-json
   library-yql-minikql

@@ -26,7 +26,7 @@ target_link_libraries(ydb-core-persqueue-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   ydb-core-persqueue
   library-cpp-getopt

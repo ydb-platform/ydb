@@ -18,7 +18,7 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_populator PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-tx-scheme_board
   cpp-testing-unittest

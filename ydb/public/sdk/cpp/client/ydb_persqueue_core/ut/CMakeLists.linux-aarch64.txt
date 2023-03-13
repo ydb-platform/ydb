@@ -20,7 +20,7 @@ target_link_libraries(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   cpp-client-ydb_persqueue_core
   cpp-testing-gmock_in_unittest

@@ -15,7 +15,7 @@ target_link_libraries(presort PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   library-cpp-presort
   library-yql-minikql
   yql-minikql-computation

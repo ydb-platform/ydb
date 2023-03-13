@@ -15,7 +15,7 @@ target_link_libraries(ydb-core-blobstorage-vdisk-common-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   blobstorage-vdisk-common
   library-cpp-getopt

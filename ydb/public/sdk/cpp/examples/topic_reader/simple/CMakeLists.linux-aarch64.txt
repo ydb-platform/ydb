@@ -12,7 +12,7 @@ target_link_libraries(simple_persqueue_reader PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-client-ydb_topic
   library-cpp-getopt
 )

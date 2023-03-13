@@ -15,7 +15,7 @@ target_link_libraries(ydb-library-persqueue-topic_parser-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   library-persqueue-topic_parser
   library-cpp-getopt

@@ -15,7 +15,7 @@ target_link_libraries(ydb-library-http_proxy-authorization-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   library-http_proxy-authorization
   library-http_proxy-error

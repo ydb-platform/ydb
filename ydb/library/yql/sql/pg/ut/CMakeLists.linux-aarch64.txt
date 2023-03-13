@@ -15,7 +15,7 @@ target_link_libraries(ydb-library-yql-sql-pg-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   yql-sql-pg
   udf-service-exception_policy

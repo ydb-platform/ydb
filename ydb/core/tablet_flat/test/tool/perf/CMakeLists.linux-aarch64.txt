@@ -12,7 +12,7 @@ target_link_libraries(table-perf PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   test-libs-table
   library-cpp-charset
   library-cpp-getopt

@@ -13,7 +13,7 @@ target_link_libraries(validation PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   contrib-libs-protoc
   api-protos-annotations
 )

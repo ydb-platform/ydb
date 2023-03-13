@@ -12,7 +12,7 @@ target_link_libraries(perf PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-jemalloc
   udf-service-exception_policy
   library-yql-sql
   yql-sql-v1

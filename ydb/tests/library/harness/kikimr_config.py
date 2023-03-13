@@ -392,7 +392,11 @@ class KikimrConfigGenerator(object):
         audit_file_path = os.path.join(cwd, 'audit.txt')
         with open(audit_file_path, "w") as audit_file:
             audit_file.write('')
-        self.yaml_config['audit_config'] = {'audit_file_path': audit_file_path}
+        self.yaml_config['audit_config'] = dict(
+            file_backend=dict(
+                file_path=audit_file_path,
+            )
+        )
 
     @property
     def metering_file_path(self):

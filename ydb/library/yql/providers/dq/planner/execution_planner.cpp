@@ -530,9 +530,6 @@ namespace NYql::NDqs {
         YQL_ENSURE(datasource);
         const auto stageSettings = TDqStageSettings::Parse(stage);
         auto tasksPerStage = settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-        if (stageSettings.IsExternalFunction) {
-            tasksPerStage = Min(tasksPerStage, stageSettings.MaxTransformConcurrency());
-        }
         const size_t maxPartitions = stageSettings.SinglePartition ? 1ULL : tasksPerStage;
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {

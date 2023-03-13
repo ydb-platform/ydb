@@ -21,20 +21,6 @@ TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
             settings.LogicalId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
         } else if (name == SinglePartitionSettingName) {
             settings.SinglePartition = true;
-        } else if (name == IsExternalSetting) {
-            settings.IsExternalFunction = true;
-        } else if (name == TransformNameSetting) {
-            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-            settings.TransformName = tuple.Value().Cast<TCoAtom>().Value();
-        } else if (name == TransformTypeSetting) {
-            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-            if (const auto type = tuple.Value().Cast<TCoAtom>().Value(); type == "YANDEX-CLOUD") {
-                settings.TransformType = "YandexCloudFunction";
-            } else {
-                YQL_ENSURE(false, "Unknown transform type: " << type);
-            }
-        } else if (name == TransformConcurrencySetting) {
-            settings.TransformConcurrency = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());
         }
     }
 
@@ -79,10 +65,6 @@ NNodes::TCoNameValueTupleList TDqStageSettings::BuildNode(TExprContext& ctx, TPo
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(settings)
         .Done();
-}
-
-ui32 TDqStageSettings::MaxTransformConcurrency() const {
-    return TransformConcurrency > 0 ? TransformConcurrency : TDqSettings::TDefault::CloudFunctionConcurrency;
 }
 
 TCoAtom BuildAtom(TStringBuf value, TPositionHandle pos, TExprContext& ctx) {

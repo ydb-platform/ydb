@@ -12,21 +12,10 @@ struct TDqStageSettings {
     static constexpr TStringBuf LogicalIdSettingName = "_logical_id";
     static constexpr TStringBuf IdSettingName = "_id";
     static constexpr TStringBuf SinglePartitionSettingName = "_single_partition";
-    static constexpr TStringBuf IsExternalSetting = "is_external_function";
-    static constexpr TStringBuf TransformNameSetting = "transform_name";
-    static constexpr TStringBuf TransformTypeSetting = "transform_type";
-    static constexpr TStringBuf TransformConcurrencySetting = "concurrency";
 
     ui64 LogicalId = 0;
     TString Id;
     bool SinglePartition = false;
-
-    bool IsExternalFunction = false;
-    TString TransformType;
-    TString TransformName;
-    ui32 TransformConcurrency = 0;
-
-    static TDqStageSettings Parse(const NNodes::TDqStageBase& node);
 
     static TDqStageSettings New(const NNodes::TDqStageBase& node);
 
@@ -35,9 +24,9 @@ struct TDqStageSettings {
         s.Id = CreateGuidAsString();
         return s;
     }
-    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 
-    ui32 MaxTransformConcurrency() const;
+    static TDqStageSettings Parse(const NNodes::TDqStageBase& node);
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 
 NNodes::TCoAtom BuildAtom(TStringBuf value, TPositionHandle pos, TExprContext& ctx);

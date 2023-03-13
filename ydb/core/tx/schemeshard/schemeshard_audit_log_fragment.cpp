@@ -480,14 +480,82 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     return result;
 }
 
+TString ExtractNewOwner(const NKikimrSchemeOp::TModifyScheme& tx) {
+    bool hasNewOwner = tx.HasModifyACL() && tx.GetModifyACL().HasNewOwner();
+    if (hasNewOwner) {
+        return tx.GetModifyACL().GetNewOwner();
+    }
+    return {};
+}
+
+struct TChange {
+    TVector<TString> Add;
+    TVector<TString> Remove;
+};
+
+TChange ExtractACLChange(const NKikimrSchemeOp::TModifyScheme& tx) {
+    bool hasACL = tx.HasModifyACL() && tx.GetModifyACL().HasDiffACL();
+    if (hasACL) {
+        TChange result;
+
+        NACLib::TDiffACL diff(tx.GetModifyACL().GetDiffACL());
+        for (const auto& i : diff.GetDiffACE()) {
+            auto diffType = static_cast<NACLib::EDiffType>(i.GetDiffType());
+            const NACLibProto::TACE& ace = i.GetACE();
+            switch (diffType) {
+                case NACLib::EDiffType::Add:
+                    result.Add.push_back(NACLib::TACL::ToString(ace));
+                    break;
+                case NACLib::EDiffType::Remove:
+                    result.Remove.push_back(NACLib::TACL::ToString(ace));
+                    break;
+            }
+        }
+
+        return result;
+    }
+    return {};
+}
+
+TChange ExtractUserAttrChange(const NKikimrSchemeOp::TModifyScheme& tx) {
+    bool hasUserAttrs = tx.HasAlterUserAttributes() && (tx.GetAlterUserAttributes().UserAttributesSize() > 0);
+    if (hasUserAttrs) {
+        TChange result;
+        auto str = TStringBuilder();
+
+        for (const auto& i : tx.GetAlterUserAttributes().GetUserAttributes()) {
+            const auto& key = i.GetKey();
+            const auto& value = i.GetValue();
+            if (value.empty()) {
+                result.Remove.push_back(key);
+            } else {
+                str.clear();
+                str << key << ": " << "value";
+                result.Add.push_back(str);
+            }
+        }
+
+        return result;
+    }
+    return {};
+}
+
+
 } // anonymous namespace
 
 namespace NKikimr::NSchemeShard {
 
 TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx) {
+    auto [aclAdd, aclRemove] = ExtractACLChange(tx);
+    auto [userAttrsAdd, userAttrsRemove] = ExtractUserAttrChange(tx);
     return {
         .Operation = DefineUserOperationName(tx.GetOperationType()),
         .Paths = ExtractChangingPaths(tx),
+        .NewOwner = ExtractNewOwner(tx),
+        .ACLAdd = aclAdd,
+        .ACLRemove = aclRemove,
+        .UserAttrsAdd = userAttrsAdd,
+        .UserAttrsRemove = userAttrsRemove,
     };
 }
 

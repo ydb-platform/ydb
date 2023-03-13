@@ -249,6 +249,7 @@ public:
 
     // Implementation of IBlobInUseTracker
     void SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) override;
+    bool BlobInUse(const NOlap::TUnifiedBlobId& blobId) const override;
 
 private:
     TGenStep FindNewGCBarrier();

@@ -169,21 +169,25 @@ void TColumnShard::Handle(TEvColumnShard::TEvReadBlobRanges::TPtr& ev, const TAc
     } else if (isFallback) {
         Y_VERIFY(evictedBlobId->IsValid());
 
-        ui32 status = NKikimrProto::EReplyStatus::ERROR;
-
         NKikimrTxColumnShard::TEvictMetadata meta;
         auto evicted = BlobManager->GetEvicted(*evictedBlobId, meta);
 
+        if (!evicted.Blob.IsValid()) {
+            evicted = BlobManager->GetDropped(*evictedBlobId, meta);
+        }
+
         if (!evicted.Blob.IsValid() || !evicted.ExternBlob.IsValid()) {
-            auto result = MakeErrorResponse(msg, TabletID(), status);
+            LOG_S_NOTICE("No data for blobId " << evictedBlobId->ToStringNew() << " at tablet " << TabletID());
+            auto result = MakeErrorResponse(msg, TabletID(), NKikimrProto::EReplyStatus::NODATA);
             ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
+            return;
         }
 
         TString tierName = meta.GetTierName();
-        Y_VERIFY(!tierName.empty());
+        Y_VERIFY_S(!tierName.empty(), evicted.ToString());
 
         if (!GetExportedBlob(ctx, ev->Sender, ev->Cookie, tierName, std::move(evicted), std::move(msg.BlobRanges))) {
-            auto result = MakeErrorResponse(msg, TabletID(), status);
+            auto result = MakeErrorResponse(msg, TabletID(), NKikimrProto::EReplyStatus::ERROR);
             ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
         }
     }

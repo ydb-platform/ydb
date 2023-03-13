@@ -15,6 +15,7 @@ public:
     // until all the references are released.
     // NOTE: this ref counts are in-memory only, so the blobs can be deleted if tablet restarts
     virtual void SetBlobInUse(const NOlap::TUnifiedBlobId& blobId, bool inUse) = 0;
+    virtual bool BlobInUse(const NOlap::TUnifiedBlobId& blobId) const = 0;
 };
 
 using NOlap::TReadMetadata;
@@ -59,6 +60,9 @@ public:
                 } else {
                     it->second--;
                 }
+                for (auto& rec : portion.Records) {
+                    blobTracker.SetBlobInUse(rec.BlobRange.BlobId, false);
+                }
             }
 
             for (const auto& committedBlob : readMeta->CommittedBlobs) {
@@ -97,6 +101,9 @@ private:
         for (const auto& portion : readMeta->SelectInfo->Portions) {
             const ui64 portionId = portion.Records[0].Portion;
             PortionUseCount[portionId]++;
+            for (auto& rec : portion.Records) {
+                blobTracker.SetBlobInUse(rec.BlobRange.BlobId, true);
+            }
         }
 
         for (const auto& committedBlob : readMeta->CommittedBlobs) {

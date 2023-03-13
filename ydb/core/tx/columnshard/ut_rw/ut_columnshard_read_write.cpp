@@ -2250,16 +2250,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
     }
 
-    // Private events of different actors reuse the same ES_PRIVATE range
-    // So in order to capture the right private event we need to check its type via dynamic_cast
-    template <class TPrivateEvent>
-    TPrivateEvent* TryGetPrivateEvent(TAutoPtr<IEventHandle> &ev) {
-        if (ev->GetTypeRewrite() != TPrivateEvent::EventType) {
-            return nullptr;
-        }
-        return dynamic_cast<TPrivateEvent*>(ev->StaticCastAsLocal<IEventBase>());
-    }
-
     void TestCompactionGC(bool enableSmallBlobs) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);

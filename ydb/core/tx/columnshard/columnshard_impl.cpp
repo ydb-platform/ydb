@@ -1077,6 +1077,12 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::T
 
     for (const auto& ev : evictedBlobs) {
         auto& blobId = ev.Blob;
+        if (BlobManager->BlobInUse(blobId)) {
+            LOG_S_DEBUG("Blob '" << blobId.ToStringNew() << "' in use at tablet " << TabletID());
+            strBlobsDelayed += "'" + blobId.ToStringNew() + "' ";
+            continue;
+        }
+
         TEvictMetadata meta;
         auto evict = BlobManager->GetDropped(blobId, meta);
 

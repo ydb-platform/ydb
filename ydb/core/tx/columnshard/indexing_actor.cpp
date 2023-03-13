@@ -110,7 +110,7 @@ private:
         Y_VERIFY(blobRange.Size);
         NBlobCache::TReadBlobRangeOptions readOpts {
             .CacheAfterRead = false,
-            .Fallback = false,
+            .ForceFallback = false,
             .IsBackgroud = true,
             .WithDeadline = false
         };

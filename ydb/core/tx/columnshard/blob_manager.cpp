@@ -674,6 +674,10 @@ void TBlobManager::PerformDelayedDeletes(IBlobManagerDb& db) {
     SmallBlobsToDelete.clear();
 }
 
+bool TBlobManager::BlobInUse(const NOlap::TUnifiedBlobId& blobId) const {
+    return BlobsUseCount.count(blobId);
+}
+
 void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
     if (inUse) {
         BlobsUseCount[blobId]++;

@@ -347,6 +347,13 @@ struct TEvictedBlob {
     bool IsExternal() const {
         return ExternBlob.IsValid();
     }
+
+    TString ToString() const {
+        return TStringBuilder() << "state: " << (ui32)State
+            << " blob: " << Blob.ToStringNew()
+            << " extern: " << ExternBlob.ToStringNew()
+            << " cached: " << CachedBlob.ToStringNew();
+    }
 };
 
 }

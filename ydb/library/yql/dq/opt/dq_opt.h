@@ -17,6 +17,8 @@ struct TDqStageSettings {
     TString Id;
     bool SinglePartition = false;
 
+    TDqStageSettings& SetSinglePartition(bool value = true) { SinglePartition = value; return *this; }
+
     static TDqStageSettings New(const NNodes::TDqStageBase& node);
 
     static TDqStageSettings New() {

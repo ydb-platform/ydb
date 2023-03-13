@@ -493,6 +493,10 @@ private:
                 YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
             }
 
+            if (stage.GetIsSinglePartition()) {
+                YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
+            }
+
             BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, AppData()->EnableKqpSpilling);
         }
 

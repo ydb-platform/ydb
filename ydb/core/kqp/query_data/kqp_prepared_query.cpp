@@ -16,7 +16,7 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-bool CalcIsPureTx(const NKqpProto::TKqpPhyTx* tx) {
+bool CalcIsLiteralTx(const NKqpProto::TKqpPhyTx* tx) {
     if (tx->GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
         return false;
     }
@@ -54,7 +54,7 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
     const NKqpProto::TKqpPhyTx* proto, const std::shared_ptr<TPreparedQueryAllocHolder>& alloc)
     : PreparedQuery(pq)
     , Proto(proto)
-    , PureTx(CalcIsPureTx(proto))
+    , LiteralTx(CalcIsLiteralTx(proto))
     , Alloc(alloc)
 {
     TxResultsMeta.resize(Proto->GetResults().size());
@@ -90,8 +90,8 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
     }
 }
 
-bool TKqpPhyTxHolder::IsPureTx() const {
-    return PureTx;
+bool TKqpPhyTxHolder::IsLiteralTx() const {
+    return LiteralTx;
 }
 
 const NKikimr::NKqp::TStagePredictor& TKqpPhyTxHolder::GetCalculationPredictor(const size_t stageIdx) const {

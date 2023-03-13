@@ -158,14 +158,14 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         NJson::ReadJsonTree(stats.query_plan(), &plan, true);
 
         auto stages = FindPlanStages(plan);
-        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), EnableSourceRead ? 1 : 2);
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
             totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
         }
-        
-        UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(totalTasks, EnableSourceRead ? 1 : 2);
     }
 
     Y_UNIT_TEST_TWIN(RangeLimitRead, EnableSourceRead) {

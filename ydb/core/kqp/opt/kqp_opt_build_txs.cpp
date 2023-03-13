@@ -14,6 +14,7 @@
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
+using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 using TStatus = IGraphTransformer::TStatus;
@@ -200,20 +201,29 @@ private:
 //                    return {};
 //                }
 
-                TMaybeNode<TDqPhyStage> collectStage;
-                // TODO: This is a temporary workaround.
-                // If result stage has single UnionAll input, we don't have to build a separate stage
+                bool needsCollectStage = true;
+
+                // TODO: This is a temporary workaround until we have a proper constraints support.
+                // If result stage has single UnionAll/Merge input, we don't have to build a separate stage
                 // for results collection as it's already in single partition.
                 // Proper check should use partitioning information for results stage via opt constraints.
-                if (resultStage.Inputs().Size() == 1 && resultStage.Inputs().Item(0).Maybe<TDqCnUnionAll>()) {
-                    collectStage = resultStage;
-                } else if (resultStage.Inputs().Size() == 1 && resultStage.Inputs().Item(0).Maybe<TDqCnMerge>()) {
-                    collectStage = resultStage;
-                } else if (resultStage.Inputs().Size() == 1 && resultStage.Inputs().Item(0).Maybe<TDqPhyPrecompute>()) {
-                    collectStage = resultStage;
-                } else if (resultStage.Inputs().Empty() && IsKqpPureLambda(resultStage.Program())) {
-                    collectStage = resultStage;
-                } else {
+                if (resultStage.Inputs().Size() == 1) {
+                    if (resultStage.Inputs().Item(0).Maybe<TDqCnUnionAll>() ||
+                        resultStage.Inputs().Item(0).Maybe<TDqCnMerge>())
+                    {
+                        needsCollectStage = false;
+                    }
+                }
+
+                // If results stage is marked as single_partition, no collect stage needed.
+                // Once we have partitioning constraint we should check it instead of stage setting.
+                auto settings = TDqStageSettings::Parse(resultStage);
+                if (settings.SinglePartition) {
+                    needsCollectStage = false;
+                }
+
+                TDqPhyStage collectStage = resultStage;
+                if (needsCollectStage) {
                     collectStage = Build<TDqPhyStage>(ctx, results.Pos())
                         .Inputs()
                             .Add(resultConnection)
@@ -225,13 +235,12 @@ private:
                         .Settings(NDq::TDqStageSettings::New().BuildNode(ctx, results.Pos()))
                         .Done();
                     resultIndex = 0;
-                    stages.emplace_back(collectStage.Cast());
+                    stages.emplace_back(collectStage);
                 }
 
-                YQL_ENSURE(collectStage);
                 auto newResult = Build<TDqCnResult>(ctx, results.Pos())
                     .Output()
-                        .Stage(collectStage.Cast())
+                        .Stage(collectStage)
                         .Index().Build(ToString(resultIndex))
                         .Build()
                     .ColumnHints(result.ColumnHints())

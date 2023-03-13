@@ -37,12 +37,12 @@ public:
             const auto& tx = queryConstPtr->GetPhyTx(CurrentTxIndex);
             bool prepared = PrepareParameters(tx);
 
-            if (tx->IsPureTx() && prepared) {
+            if (tx->IsLiteralTx() && prepared) {
                 IKqpGateway::TExecPhysicalRequest request(TxAlloc);
                 request.Transactions.emplace_back(tx, TransformCtx->QueryCtx->QueryData);
                 request.NeedTxId = false;
 
-                ExecuteFuture = Gateway->ExecutePure(std::move(request), TransformCtx->QueryCtx->QueryData);
+                ExecuteFuture = Gateway->ExecuteLiteral(std::move(request), TransformCtx->QueryCtx->QueryData);
 
                 Promise = NewPromise();
                 ExecuteFuture.Apply([promise = Promise](const TFuture<IKqpGateway::TExecPhysicalResult> future) mutable {

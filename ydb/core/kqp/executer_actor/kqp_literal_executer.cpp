@@ -79,9 +79,9 @@ public:
         LOG_D("Begin literal execution. Operation timeout: " << Request.Timeout << ", cancelAfter: " << Request.CancelAfter);
     }
 
-    std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecutePure() {
+    std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral() {
         try {
-            ExecutePureImpl();
+            ExecuteLiteralImpl();
         } catch (const TMemoryLimitExceededException&) {
             LOG_W("TKqpLiteralExecuter, memory limit exceeded.");
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
@@ -95,7 +95,7 @@ public:
         return std::move(ResponseEv);
     }
 
-    void ExecutePureImpl() {
+    void ExecuteLiteralImpl() {
         NWilson::TSpan prepareTasksSpan(TWilsonKqp::LiteralExecuterPrepareTasks, LiteralExecuterSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
         if (Stats) {
             Stats->StartTs = TInstant::Now();
@@ -402,13 +402,13 @@ private:
 
 } // anonymous namespace
 
-std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecutePure(
+std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner)
 {
     std::unique_ptr<TKqpLiteralExecuter> executer = std::make_unique<TKqpLiteralExecuter>(
         std::move(request), counters, owner);
 
-    return executer->ExecutePure();
+    return executer->ExecuteLiteral();
 }
 
 } // namespace NKqp

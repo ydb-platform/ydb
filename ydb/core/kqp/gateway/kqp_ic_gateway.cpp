@@ -462,7 +462,7 @@ private:
 };
 
 
-class TKqpExecPureRequestHandler: public TActorBootstrapped<TKqpExecPureRequestHandler> {
+class TKqpExecLiteralRequestHandler: public TActorBootstrapped<TKqpExecLiteralRequestHandler> {
 public:
     using TResult = IKqpGateway::TExecPhysicalResult;
 
@@ -470,7 +470,7 @@ public:
         return NKikimrServices::TActivity::KQP_EXEC_PHYSICAL_REQUEST_HANDLER;
     }
 
-    TKqpExecPureRequestHandler(IKqpGateway::TExecPhysicalRequest&& request,
+    TKqpExecLiteralRequestHandler(IKqpGateway::TExecPhysicalRequest&& request,
         TKqpRequestCounters::TPtr counters, TPromise<TResult> promise, TQueryData::TPtr params)
         : Request(std::move(request))
         , Parameters(params)
@@ -479,7 +479,7 @@ public:
     {}
 
     void Bootstrap() {
-        auto result = ::NKikimr::NKqp::ExecutePure(std::move(Request), Counters, SelfId());
+        auto result = ::NKikimr::NKqp::ExecuteLiteral(std::move(Request), Counters, SelfId());
         ProcessPureExecution(result);
         Become(&TThis::DieState);
         Send(SelfId(), new TEvents::TEvPoisonPill());
@@ -1796,12 +1796,12 @@ public:
         }
     }
 
-    TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request, TQueryData::TPtr params) override {
+    TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
 
-        auto containOnlyPureStages = [](const auto& request) {
+        auto containOnlyLiteralStages = [](const auto& request) {
             for (const auto& tx : request.Transactions) {
                 if (tx.Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
                     return false;
@@ -1817,9 +1817,9 @@ public:
             return true;
         };
 
-        YQL_ENSURE(containOnlyPureStages(request));
+        YQL_ENSURE(containOnlyLiteralStages(request));
         auto promise = NewPromise<TExecPhysicalResult>();
-        IActor* requestHandler = new TKqpExecPureRequestHandler(std::move(request), Counters, promise, params);
+        IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params);
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }

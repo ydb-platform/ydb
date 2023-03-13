@@ -11,32 +11,19 @@
                 "Plans": [
                     {
                         "Node Type": "ResultSet_1",
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 7,
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "Node Type": "Collect",
-                                "PlanNodeId": 8,
-                                "Plans": [
+                                "CTE Name": "tx_result_binding_1_0",
+                                "Node Type": "ConstantExpr",
+                                "Operators": [
                                     {
-                                        "Node Type": "UnionAll",
-                                        "PlanNodeId": 7,
-                                        "PlanNodeType": "Connection",
-                                        "Plans": [
-                                            {
-                                                "CTE Name": "tx_result_binding_1_0",
-                                                "Node Type": "ConstantExpr",
-                                                "Operators": [
-                                                    {
-                                                        "Iterator": "[{column0: %kqp%tx_result_binding_0_0.Min0,column1: %kqp%tx_result_binding_0_0.Max0}]",
-                                                        "Name": "Iterator"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 6
-                                            }
-                                        ]
+                                        "Iterator": "[{column0: %kqp%tx_result_binding_0_0.Min0,column1: %kqp%tx_result_binding_0_0.Max0}]",
+                                        "Name": "Iterator"
                                     }
-                                ]
+                                ],
+                                "PlanNodeId": 6
                             }
                         ]
                     },

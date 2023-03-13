@@ -692,7 +692,10 @@ private:
         }
 
         stageProto.SetProgramAst(KqpExprToPrettyString(stage.Program(), ctx));
-        stageProto.SetStageGuid(NDq::TDqStageSettings::Parse(stage).Id);
+
+        auto stageSettings = NDq::TDqStageSettings::Parse(stage);
+        stageProto.SetStageGuid(stageSettings.Id);
+        stageProto.SetIsSinglePartition(stageSettings.SinglePartition);
     }
 
     void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx) {

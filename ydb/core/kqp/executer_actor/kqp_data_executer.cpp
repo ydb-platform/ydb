@@ -1671,6 +1671,10 @@ private:
                     BuildDatashardTasks(stageInfo);
                 }
 
+                if (stage.GetIsSinglePartition()) {
+                    YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
+                }
+
                 BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, /* enableSpilling */ false);
             }
 

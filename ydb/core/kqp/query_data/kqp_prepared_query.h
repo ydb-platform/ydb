@@ -34,7 +34,7 @@ struct TPhyTxResultMetadata {
 class TKqpPhyTxHolder {
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
     const NKqpProto::TKqpPhyTx* Proto;
-    bool PureTx = false;
+    bool LiteralTx = false;
     TVector<TPhyTxResultMetadata> TxResultsMeta;
     std::shared_ptr<TPreparedQueryAllocHolder> Alloc;
     std::vector<TStagePredictor> Predictors;
@@ -92,7 +92,7 @@ public:
     TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPreparedQuery>& pq, const NKqpProto::TKqpPhyTx* proto,
         const std::shared_ptr<TPreparedQueryAllocHolder>& alloc);
 
-    bool IsPureTx() const;
+    bool IsLiteralTx() const;
 };
 
 class TPreparedQueryHolder {

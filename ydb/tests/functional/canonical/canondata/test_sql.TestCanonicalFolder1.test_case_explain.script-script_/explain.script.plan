@@ -128,31 +128,18 @@
             "Plan": {
                 "Plans": [
                     {
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 7,
                         "Plans": [
                             {
-                                "PlanNodeId": 8,
-                                "Plans": [
+                                "PlanNodeId": 6,
+                                "Operators": [
                                     {
-                                        "PlanNodeId": 7,
-                                        "Plans": [
-                                            {
-                                                "PlanNodeId": 6,
-                                                "Operators": [
-                                                    {
-                                                        "Iterator": "%kqp%tx_result_binding_0_0",
-                                                        "Name": "Iterator"
-                                                    }
-                                                ],
-                                                "Node Type": "ConstantExpr",
-                                                "CTE Name": "tx_result_binding_1_0"
-                                            }
-                                        ],
-                                        "Node Type": "UnionAll",
-                                        "PlanNodeType": "Connection"
+                                        "Iterator": "%kqp%tx_result_binding_0_0",
+                                        "Name": "Iterator"
                                     }
                                 ],
-                                "Node Type": "Collect"
+                                "Node Type": "ConstantExpr",
+                                "CTE Name": "tx_result_binding_1_0"
                             }
                         ],
                         "Node Type": "ResultSet_1",
@@ -307,31 +294,18 @@
             "Plan": {
                 "Plans": [
                     {
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 7,
                         "Plans": [
                             {
-                                "PlanNodeId": 8,
-                                "Plans": [
+                                "PlanNodeId": 6,
+                                "Operators": [
                                     {
-                                        "PlanNodeId": 7,
-                                        "Plans": [
-                                            {
-                                                "PlanNodeId": 6,
-                                                "Operators": [
-                                                    {
-                                                        "Iterator": "%kqp%tx_result_binding_0_0",
-                                                        "Name": "Iterator"
-                                                    }
-                                                ],
-                                                "Node Type": "ConstantExpr",
-                                                "CTE Name": "tx_result_binding_1_0"
-                                            }
-                                        ],
-                                        "Node Type": "UnionAll",
-                                        "PlanNodeType": "Connection"
+                                        "Iterator": "%kqp%tx_result_binding_0_0",
+                                        "Name": "Iterator"
                                     }
                                 ],
-                                "Node Type": "Collect"
+                                "Node Type": "ConstantExpr",
+                                "CTE Name": "tx_result_binding_1_0"
                             }
                         ],
                         "Node Type": "ResultSet_1",

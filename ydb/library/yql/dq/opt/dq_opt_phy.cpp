@@ -748,7 +748,9 @@ TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
                 .List(flatmap.Input())
                 .Build()
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, flatmap.Input().Pos()))
+        .Settings(TDqStageSettings::New()
+            .SetSinglePartition()
+            .BuildNode(ctx, flatmap.Input().Pos()))
         .Done();
 
     auto inputConnection = Build<TDqCnUnionAll>(ctx, flatmap.Pos())
@@ -2017,7 +2019,9 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
                 .Input(node)
                 .Build()
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Settings(TDqStageSettings::New()
+            .SetSinglePartition()
+            .BuildNode(ctx, node.Pos()))
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())

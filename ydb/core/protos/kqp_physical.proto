@@ -299,6 +299,7 @@ message TKqpPhyStage {
     bool IsEffectsStage = 7;
     string StageGuid = 8;
     repeated TKqpSource Sources = 9;
+    bool IsSinglePartition = 10;
 }
 
 message TKqpPhyResult {

@@ -949,7 +949,7 @@ public:
     }
 
 
-    IKqpGateway::TExecPhysicalRequest PreparePureRequest(TKqpQueryState *queryState) {
+    IKqpGateway::TExecPhysicalRequest PrepareLiteralRequest(TKqpQueryState *queryState) {
         auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
         request.NeedTxId = false;
         return request;
@@ -996,12 +996,12 @@ public:
         return request;
     }
 
-    IKqpGateway::TExecPhysicalRequest PrepareRequest(const TKqpPhyTxHolder::TConstPtr& tx, bool pure,
+    IKqpGateway::TExecPhysicalRequest PrepareRequest(const TKqpPhyTxHolder::TConstPtr& tx, bool literal,
         TKqpQueryState *queryState)
     {
-        if (pure) {
+        if (literal) {
             YQL_ENSURE(tx);
-            return PreparePureRequest(QueryState.get());
+            return PrepareLiteralRequest(QueryState.get());
         }
 
         if (!tx) {
@@ -1010,7 +1010,6 @@ public:
 
         switch (tx->GetType()) {
             case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-                // TODO: Compute is always pure, should not depend on number of stages.
                 return PreparePhysicalRequest(QueryState.get(), queryState->TxCtx->TxAlloc);
             case NKqpProto::TKqpPhyTx::TYPE_DATA:
                 return PreparePhysicalRequest(QueryState.get(), queryState->TxCtx->TxAlloc);
@@ -1151,10 +1150,22 @@ public:
     bool ExecutePhyTx(const NKqpProto::TKqpPhyQuery* query, const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
         auto& txCtx = *QueryState->TxCtx;
 
-        bool pure = tx && tx->IsPureTx();
-        auto request = PrepareRequest(tx, pure, QueryState.get());
+        bool literal = tx && tx->IsLiteralTx();
 
-        LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " pure: " << pure << " commit: " << commit
+        if (commit) {
+            if (txCtx.TxHasEffects() || txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasOperations()) {
+                // Cannot perform commit in literal execution
+                literal = false;
+            } else if (!tx) {
+                // Commit is no-op
+                ReplySuccess();
+                return true;
+            }
+        }
+
+        auto request = PrepareRequest(tx, literal, QueryState.get());
+
+        LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " literal: " << literal << " commit: " << commit
                 << " txCtx.DeferredEffects.size(): " << txCtx.DeferredEffects.Size());
 
         if (!CheckTopicOperations()) {
@@ -1178,19 +1189,14 @@ public:
             txCtx.HasImmediateEffects = txCtx.HasImmediateEffects || tx->GetHasEffects();
         } else {
             YQL_ENSURE(commit);
-
-            if (!txCtx.TxHasEffects() && !txCtx.Locks.HasLocks() && !txCtx.TopicOperations.HasOperations()) {
-                ReplySuccess();
-                return true;
-            }
         }
 
-        if (pure) {
+        if (literal) {
             if (QueryState) {
                 request.Orbit = std::move(QueryState->Orbit);
             }
             request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
-            auto response = ExecutePure(std::move(request), RequestCounters, SelfId());
+            auto response = ExecuteLiteral(std::move(request), RequestCounters, SelfId());
             ++QueryState->CurrentTx;
             ProcessExecuterResult(response.get());
             return true;

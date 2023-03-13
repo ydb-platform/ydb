@@ -236,6 +236,11 @@ namespace NYql::NDqs {
         for (const auto& stage : stages) {
             auto& stageInfo = TasksGraph.GetStageInfo(stage);
             YQL_ENSURE(!stageInfo.Tasks.empty());
+
+            auto stageSettings = NDq::TDqStageSettings::Parse(stage);
+            if (stageSettings.SinglePartition) {
+                YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
+            }
         }
 
         TMaybeNode<TDqPhyStage> finalStage;

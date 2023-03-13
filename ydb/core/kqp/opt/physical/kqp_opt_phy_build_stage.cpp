@@ -16,6 +16,28 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+
+bool IsSingleKey(const TKqlKeyRange& range, const TKikimrTableMetadata& tableMeta) {
+    if (range.From().ArgCount() != tableMeta.KeyColumnNames.size()) {
+        return false;
+    }
+
+    if (range.To().ArgCount() != tableMeta.KeyColumnNames.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < tableMeta.KeyColumnNames.size(); ++i) {
+        if (range.From().Arg(i).Raw() != range.To().Arg(i).Raw()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+} // namespace
+
 TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, TExprContext& ctx) {
     TMaybeNode<TDqConnection> precomputeInput;
 
@@ -33,7 +55,9 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
                         .Build()
                     .Build()
                 .Build()
-            .Settings().Build()
+            .Settings(TDqStageSettings::New()
+                .SetSinglePartition()
+                .BuildNode(ctx, input.Pos()))
             .Done();
 
         precomputeInput = Build<TDqCnValue>(ctx, input.Pos())
@@ -72,7 +96,7 @@ NYql::NNodes::TExprBase ExpandSkipNullMembersForReadTableSource(NYql::NNodes::TE
     auto source = stage.Inputs().Item(*tableSourceIndex).Cast<TDqSource>();
     auto readRangesSource = source.Settings().Cast<TKqpReadRangesSourceSettings>();
     auto settings = TKqpReadTableSettings::Parse(readRangesSource.Settings());
-    
+
     if (settings.SkipNullKeys.empty()) {
         return node;
     }
@@ -168,6 +192,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
     }
 
     bool literalRanges = fromIsLiteral && toIsLiteral;
+    bool singleKey = IsSingleKey(read.Range(), *tableDesc.Metadata);
 
     TVector<TExprBase> inputs;
     TVector<TCoArgument> programArgs;
@@ -186,7 +211,9 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
                         .Build()
                     .Build()
                 .Build()
-            .Settings().Build()
+            .Settings(TDqStageSettings::New()
+                .SetSinglePartition()
+                .BuildNode(ctx, read.Pos()))
             .Done();
 
         auto precompute = Build<TDqPhyPrecompute>(ctx, read.Pos())
@@ -272,7 +299,9 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
             .Args(programArgs)
             .Body(phyRead.Cast())
             .Build()
-        .Settings().Build()
+        .Settings(TDqStageSettings::New()
+            .SetSinglePartition(singleKey && useSource)
+            .BuildNode(ctx, read.Pos()))
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, read.Pos())
@@ -323,8 +352,9 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
                             .Build()
                         .Build()
                     .Build()
-                .Settings()
-                    .Build()
+                .Settings(TDqStageSettings::New()
+                    .SetSinglePartition()
+                    .BuildNode(ctx, read.Pos()))
                 .Done();
         } else {
             auto connections = FindDqConnections(node);
@@ -593,7 +623,9 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
                             .List(lookup.LookupKeys())
                             .Build()
                         .Build()
-                    .Settings(TDqStageSettings().BuildNode(ctx, lookup.Pos()))
+                    .Settings(TDqStageSettings::New()
+                        .SetSinglePartition()
+                        .BuildNode(ctx, lookup.Pos()))
                     .Build()
                 .Index().Build("0")
             .Build()

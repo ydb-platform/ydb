@@ -12,7 +12,7 @@ class TAccessPreparationActor: public NActors::TActorBootstrapped<TAccessPrepara
 private:
     std::vector<TAccess> Objects;
     NModifications::IAlterPreparationController<TAccess>::TPtr Controller;
-    NModifications::IOperationsManager::TModificationContext Context;
+    NModifications::IOperationsManager::TInternalModificationContext Context;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     void StartChecker();
 protected:
@@ -29,7 +29,7 @@ public:
 
     TAccessPreparationActor(std::vector<TAccess>&& objects,
         NModifications::IAlterPreparationController<TAccess>::TPtr controller,
-        const NModifications::IOperationsManager::TModificationContext& context);
+        const NModifications::IOperationsManager::TInternalModificationContext& context);
 };
 
 }

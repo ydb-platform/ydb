@@ -1515,7 +1515,7 @@ public:
     protected:
         virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const TSettings& settings,
-            const NMetadata::NModifications::IOperationsManager::TModificationContext& context) = 0;
+            const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) = 0;
         ui32 GetNodeId() const {
             return Owner.NodeId;
         }
@@ -1544,7 +1544,7 @@ public:
                 if (!cBehaviour->GetOperationsManager()) {
                     return MakeFuture(ResultFromError<TGenericResult>("type has not manager for operations"));
                 }
-                NMetadata::NModifications::IOperationsManager::TModificationContext context;
+                NMetadata::NModifications::IOperationsManager::TExternalModificationContext context;
                 if (GetUserToken()) {
                     context.SetUserToken(*GetUserToken());
                 }
@@ -1571,7 +1571,7 @@ public:
     protected:
         virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const NYql::TCreateObjectSettings& settings,
-            const NMetadata::NModifications::IOperationsManager::TModificationContext& context) override
+            const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override
         {
             return manager->GetOperationsManager()->CreateObject(settings, TBase::GetNodeId(), manager, context);
         }
@@ -1585,7 +1585,7 @@ public:
     protected:
         virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const NYql::TAlterObjectSettings& settings,
-            const NMetadata::NModifications::IOperationsManager::TModificationContext& context) override {
+            const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override {
             return manager->GetOperationsManager()->AlterObject(settings, TBase::GetNodeId(), manager, context);
         }
     public:
@@ -1598,7 +1598,7 @@ public:
     protected:
         virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const NYql::TDropObjectSettings& settings,
-            const NMetadata::NModifications::IOperationsManager::TModificationContext& context) override {
+            const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override {
             return manager->GetOperationsManager()->DropObject(settings, TBase::GetNodeId(), manager, context);
         }
     public:

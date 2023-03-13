@@ -55,7 +55,7 @@ protected:
     typename TProcessingController<TObject>::TPtr InternalController;
     IAlterController::TPtr ExternalController;
     typename IObjectOperationsManager<TObject>::TPtr Manager;
-    const IOperationsManager::TModificationContext Context;
+    const IOperationsManager::TInternalModificationContext Context;
     std::vector<NInternal::TTableRecord> Patches;
     NInternal::TTableRecords RestoreObjectIds;
     const NACLib::TUserToken UserToken = NACLib::TSystemUsers::Metadata();
@@ -67,7 +67,7 @@ public:
     TModificationActorImpl(NInternal::TTableRecord&& patch,
         IAlterController::TPtr controller,
         typename IObjectOperationsManager<TObject>::TPtr manager,
-        const IOperationsManager::TModificationContext& context)
+        const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
         , Context(context) {
@@ -76,7 +76,7 @@ public:
 
     TModificationActorImpl(const NInternal::TTableRecord& patch, IAlterController::TPtr controller,
         typename IObjectOperationsManager<TObject>::TPtr manager,
-        const IOperationsManager::TModificationContext& context)
+        const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
         , Context(context) {
@@ -85,7 +85,7 @@ public:
 
     TModificationActorImpl(std::vector<NInternal::TTableRecord>&& patches, IAlterController::TPtr controller,
         typename IObjectOperationsManager<TObject>::TPtr manager,
-        const IOperationsManager::TModificationContext& context)
+        const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
         , Context(context)
@@ -95,7 +95,7 @@ public:
 
     TModificationActorImpl(const std::vector<NInternal::TTableRecord>& patches, IAlterController::TPtr controller,
         typename IObjectOperationsManager<TObject>::TPtr manager,
-        const IOperationsManager::TModificationContext& context)
+        const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
         , Context(context)

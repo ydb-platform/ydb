@@ -31,10 +31,10 @@ void TTierPreparationActor::StartChecker() {
                 return;
             }
         }
-        if (!Secrets->CheckSecretAccess(tier.GetAccessKey(), Context.GetUserToken())) {
+        if (!Secrets->CheckSecretAccess(tier.GetAccessKey(), Context.GetExternalData().GetUserToken())) {
             Controller->OnPreparationProblem("no access for secret: " + tier.GetAccessKey().DebugString());
             return;
-        } else if (!Secrets->CheckSecretAccess(tier.GetSecretKey(), Context.GetUserToken())) {
+        } else if (!Secrets->CheckSecretAccess(tier.GetSecretKey(), Context.GetExternalData().GetUserToken())) {
             Controller->OnPreparationProblem("no access for secret: " + tier.GetSecretKey().DebugString());
             return;
         }
@@ -80,7 +80,7 @@ void TTierPreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberDat
         }
         {
             SSFetcher = std::make_shared<TFetcherCheckUserTieringPermissions>();
-            SSFetcher->SetUserToken(Context.GetUserToken());
+            SSFetcher->SetUserToken(Context.GetExternalData().GetUserToken());
             SSFetcher->SetActivityType(Context.GetActivityType());
             SSFetcher->MutableTieringRuleIds() = tieringIds;
             Register(new TSSFetchingActor(SSFetcher, std::make_shared<TSSFetchingController>(SelfId()), TDuration::Seconds(10)));
@@ -101,7 +101,7 @@ void TTierPreparationActor::Bootstrap() {
 
 TTierPreparationActor::TTierPreparationActor(std::vector<TTierConfig>&& objects,
     NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr controller,
-    const NMetadata::NModifications::IOperationsManager::TModificationContext& context)
+    const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context)
     : Objects(std::move(objects))
     , Controller(controller)
     , Context(context)

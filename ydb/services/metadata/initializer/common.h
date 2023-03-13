@@ -6,11 +6,19 @@ namespace NKikimr::NMetadata::NInitializer {
 
 class TACLModifierConstructor;
 
+class IModifierExternalController {
+public:
+    using TPtr = std::shared_ptr<IModifierExternalController>;
+    virtual ~IModifierExternalController() = default;
+    virtual void OnModificationFinished(const TString& modificationId) = 0;
+    virtual void OnModificationFailed(const TString& errorMessage, const TString& modificationId) = 0;
+};
+
 class ITableModifier {
 private:
     YDB_READONLY_DEF(TString, ModificationId);
 protected:
-    virtual bool DoExecute(const TActorId& resultCallbackId, const NRequest::TConfig& config) const = 0;
+    virtual bool DoExecute(IModifierExternalController::TPtr externalController, const NRequest::TConfig& config) const = 0;
 public:
     using TPtr = std::shared_ptr<ITableModifier>;
     virtual ~ITableModifier() = default;
@@ -21,8 +29,8 @@ public:
 
     }
 
-    bool Execute(const TActorId& resultCallbackId, const NRequest::TConfig& config) const {
-        return DoExecute(resultCallbackId, config);
+    bool Execute(IModifierExternalController::TPtr externalController, const NRequest::TConfig& config) const {
+        return DoExecute(externalController, config);
     }
 };
 
@@ -32,9 +40,29 @@ private:
     using TBase = ITableModifier;
     YDB_READONLY_DEF(typename TDialogPolicy::TRequest, Request);
 protected:
-    virtual bool DoExecute(const TActorId& resultCallbackId, const NRequest::TConfig& config) const override {
-        TActivationContext::ActorSystem()->Register(new NRequest::TYDBRequest<TDialogPolicy>(Request,
-            NACLib::TSystemUsers::Metadata(), resultCallbackId, config));
+    class TAdapterController: public NRequest::IExternalController<TDialogPolicy> {
+    private:
+        IModifierExternalController::TPtr ExternalController;
+        const TString ModificationId;
+    public:
+        TAdapterController(IModifierExternalController::TPtr externalController, const TString& modificationId)
+            : ExternalController(externalController)
+            , ModificationId(modificationId)
+        {
+
+        }
+
+        virtual void OnRequestResult(typename TDialogPolicy::TResponse&& /*result*/) override {
+            ExternalController->OnModificationFinished(ModificationId);
+        }
+        virtual void OnRequestFailed(const TString& errorMessage) override {
+            ExternalController->OnModificationFailed(errorMessage, ModificationId);
+        }
+    };
+
+    virtual bool DoExecute(IModifierExternalController::TPtr externalController, const NRequest::TConfig& config) const override {
+        TActivationContext::ActorSystem()->Register(new NRequest::TYDBControllerRequest<TDialogPolicy>(Request,
+            NACLib::TSystemUsers::Metadata(), std::make_shared<TAdapterController>(externalController, GetModificationId()), config));
         return true;
     }
 public:

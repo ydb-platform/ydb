@@ -6,13 +6,13 @@ namespace NKikimr::NColumnShard::NTiers {
 
 void TTieringRulesManager::DoPrepareObjectsBeforeModification(std::vector<TTieringRule>&& objects,
     NMetadata::NModifications::IAlterPreparationController<TTieringRule>::TPtr controller,
-    const NMetadata::NModifications::IOperationsManager::TModificationContext& context) const {
+    const TInternalModificationContext& context) const {
     TActivationContext::Register(new TRulePreparationActor(std::move(objects), controller, context));
 }
 
 NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuildPatchFromSettings(
     const NYql::TObjectSettingsImpl& settings,
-    const NMetadata::NModifications::IOperationsManager::TModificationContext& /*context*/) const {
+    TInternalModificationContext& /*context*/) const {
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTieringRule::TDecoder::TieringRuleId, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     {

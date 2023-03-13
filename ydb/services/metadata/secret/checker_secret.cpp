@@ -40,7 +40,7 @@ void TSecretPreparationActor::Bootstrap() {
 
 TSecretPreparationActor::TSecretPreparationActor(std::vector<TSecret>&& objects,
     NModifications::IAlterPreparationController<TSecret>::TPtr controller,
-    const NModifications::IOperationsManager::TModificationContext& context)
+    const NModifications::IOperationsManager::TInternalModificationContext& context)
     : Objects(std::move(objects))
     , Controller(controller)
     , Context(context)

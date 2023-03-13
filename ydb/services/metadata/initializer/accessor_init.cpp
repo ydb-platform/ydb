@@ -20,6 +20,23 @@ void TDSAccessorInitialized::Handle(TEvInitializerPreparationStart::TPtr& /*ev*/
     InitializationBehaviour->Prepare(InternalController);
 }
 
+class TModifierController: public NMetadata::NInitializer::IModifierExternalController {
+private:
+    const TActorIdentity OwnerId;
+public:
+    TModifierController(const TActorIdentity& ownerId)
+        : OwnerId(ownerId)
+    {
+
+    }
+    virtual void OnModificationFinished(const TString& /*modificationId*/) override {
+        OwnerId.Send(OwnerId, new NModifications::TEvModificationFinished());
+    }
+    virtual void OnModificationFailed(const TString& errorMessage, const TString& /*modificationId*/) override {
+        OwnerId.Send(OwnerId, new NModifications::TEvModificationProblem(errorMessage));
+    }
+};
+
 void TDSAccessorInitialized::Handle(TEvInitializerPreparationFinished::TPtr& ev) {
     auto modifiers = ev->Get()->GetModifiers();
     for (auto&& i : modifiers) {
@@ -31,7 +48,7 @@ void TDSAccessorInitialized::Handle(TEvInitializerPreparationFinished::TPtr& ev)
     }
     if (Modifiers.size()) {
         ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "modifiers count: " << Modifiers.size();
-        Modifiers.front()->Execute(SelfId(), Config);
+        Modifiers.front()->Execute(std::make_shared<TModifierController>(SelfId()), Config);
     } else {
         ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "initialization finished";
         ExternalController->OnInitializationFinished(ComponentId);
@@ -46,7 +63,7 @@ void TDSAccessorInitialized::Handle(TEvInitializerPreparationProblem::TPtr& ev) 
 void TDSAccessorInitialized::DoNextModifier() {
     Modifiers.pop_front();
     if (Modifiers.size()) {
-        Modifiers.front()->Execute(SelfId(), Config);
+        Modifiers.front()->Execute(std::make_shared<TModifierController>(SelfId()), Config);
     } else {
         ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "initialization finished";
         ExternalController->OnInitializationFinished(ComponentId);
@@ -58,8 +75,11 @@ void TDSAccessorInitialized::Handle(NRequest::TEvRequestFinished::TPtr& /*ev*/) 
     Y_VERIFY(Modifiers.size());
     if (NProvider::TServiceOperator::IsEnabled() && InitializationSnapshot) {
         TDBInitialization dbInit(ComponentId, Modifiers.front()->GetModificationId());
+        NModifications::IOperationsManager::TExternalModificationContext extContext;
+        extContext.SetUserToken(NACLib::TSystemUsers::Metadata());
         auto alterCommand = std::make_shared<NModifications::TCreateCommand<TDBInitialization>>(
-            dbInit.SerializeToRecord(), TDBInitialization::GetBehaviour(), InternalController, NModifications::IOperationsManager::TModificationContext());
+            dbInit.SerializeToRecord(), TDBInitialization::GetBehaviour(), InternalController,
+            NModifications::IOperationsManager::TInternalModificationContext(extContext));
         Sender<NProvider::TEvObjectsOperation>(alterCommand)
             .SendTo(NProvider::MakeServiceId(SelfId().NodeId()));
     } else {

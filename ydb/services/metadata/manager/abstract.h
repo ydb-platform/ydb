@@ -21,6 +21,19 @@ private:
     using TFeatures = std::map<TString, TString>;
     YDB_READONLY_DEF(TFeatures, Features);
 public:
+    template <class T>
+    std::optional<T> GetFeature(const TString& featureId, const std::optional<T> noExistsValue = {}) const {
+        T result;
+        auto it = Features.find(featureId);
+        if (it == Features.end()) {
+            return noExistsValue;
+        } else if (TryFromString(it->second, result)) {
+            return result;
+        } else {
+            return {};
+        }
+    }
+
     template <class TKiObject>
     bool DeserializeFromKi(const TKiObject& data) {
         ObjectId = data.ObjectId();
@@ -39,17 +52,9 @@ public:
     }
 };
 
-struct TCreateObjectSettings: public TObjectSettingsImpl {
-public:
-};
-
-struct TAlterObjectSettings: public TObjectSettingsImpl {
-public:
-};
-
-struct TDropObjectSettings: public TObjectSettingsImpl {
-public:
-};
+using TCreateObjectSettings = TObjectSettingsImpl;
+using TAlterObjectSettings = TObjectSettingsImpl;
+using TDropObjectSettings = TObjectSettingsImpl;
 
 }
 
@@ -140,33 +145,40 @@ public:
         Drop
     };
 
-    class TModificationContext {
+    class TExternalModificationContext {
     private:
         YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
+    public:
+        TExternalModificationContext() = default;
+    };
+
+    class TInternalModificationContext {
+    private:
+        YDB_READONLY_DEF(TExternalModificationContext, ExternalData);
         YDB_ACCESSOR(EActivityType, ActivityType, EActivityType::Undefined);
     public:
-        TModificationContext() = default;
+        TInternalModificationContext(const TExternalModificationContext& externalData)
+            : ExternalData(externalData)
+        {
+
+        }
     };
 private:
     YDB_ACCESSOR_DEF(std::optional<TTableSchema>, ActualSchema);
 protected:
-    virtual NThreading::TFuture<TObjectOperatorResult> DoCreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TModificationContext& context) const = 0;
-    virtual NThreading::TFuture<TObjectOperatorResult> DoAlterObject(const NYql::TAlterObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TModificationContext& context) const = 0;
-    virtual NThreading::TFuture<TObjectOperatorResult> DoDropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TModificationContext& context) const = 0;
+    virtual NThreading::TFuture<TObjectOperatorResult> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
+        IClassBehaviour::TPtr manager, TInternalModificationContext& context) const = 0;
 public:
     virtual ~IOperationsManager() = default;
 
     NThreading::TFuture<TObjectOperatorResult> CreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TModificationContext& context) const;
+        IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
     NThreading::TFuture<TObjectOperatorResult> AlterObject(const NYql::TAlterObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TModificationContext& context) const;
+        IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
     NThreading::TFuture<TObjectOperatorResult> DropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TModificationContext& context) const;
+        IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
     const TTableSchema& GetSchema() const {
         Y_VERIFY(!!ActualSchema);
@@ -178,21 +190,21 @@ template <class TObject>
 class IObjectOperationsManager: public IOperationsManager {
 protected:
     virtual TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-        const TModificationContext& context) const = 0;
+        TInternalModificationContext& context) const = 0;
     virtual void DoPrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
         typename IAlterPreparationController<TObject>::TPtr controller,
-        const IOperationsManager::TModificationContext& context) const = 0;
+        const TInternalModificationContext& context) const = 0;
 public:
     using TPtr = std::shared_ptr<IObjectOperationsManager<TObject>>;
 
     TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-        const IOperationsManager::TModificationContext& context) const {
+        IOperationsManager::TInternalModificationContext& context) const {
         return DoBuildPatchFromSettings(settings, context);
     }
 
     void PrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
         typename NModifications::IAlterPreparationController<TObject>::TPtr controller,
-        const IOperationsManager::TModificationContext& context) const {
+        const TInternalModificationContext& context) const {
         return DoPrepareObjectsBeforeModification(std::move(patchedObjects), controller, context);
     }
 };
@@ -203,7 +215,7 @@ private:
     YDB_ACCESSOR_DEF(IClassBehaviour::TPtr, Behaviour);
     YDB_READONLY_DEF(IAlterController::TPtr, Controller);
 protected:
-    mutable IOperationsManager::TModificationContext Context;
+    IOperationsManager::TInternalModificationContext Context;
     virtual void DoExecute() const = 0;
 public:
     using TPtr = std::shared_ptr<IAlterCommand>;
@@ -216,14 +228,14 @@ public:
         return result;
     }
 
-    const IOperationsManager::TModificationContext& GetContext() const {
+    const IOperationsManager::TInternalModificationContext& GetContext() const {
         return Context;
     }
 
     IAlterCommand(const std::vector<NInternal::TTableRecord>& records,
         IClassBehaviour::TPtr behaviour,
         NModifications::IAlterController::TPtr controller,
-        const IOperationsManager::TModificationContext& context)
+        const IOperationsManager::TInternalModificationContext& context)
         : Records(records)
         , Behaviour(behaviour)
         , Controller(controller)
@@ -234,7 +246,7 @@ public:
     IAlterCommand(const NInternal::TTableRecord& record,
         IClassBehaviour::TPtr behaviour,
         NModifications::IAlterController::TPtr controller,
-        const IOperationsManager::TModificationContext& context)
+        const IOperationsManager::TInternalModificationContext& context)
         : Behaviour(behaviour)
         , Controller(controller)
         , Context(context) {

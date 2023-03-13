@@ -24,8 +24,19 @@ public:
     static constexpr ui32 EvResult = EvResultExt;
 };
 
+template <class TDialogPolicy>
+class IExternalController {
+public:
+    using TPtr = std::shared_ptr<IExternalController>;
+    virtual ~IExternalController() = default;
+    virtual void OnRequestResult(typename TDialogPolicy::TResponse&& result) = 0;
+    virtual void OnRequestFailed(const TString& errorMessage) = 0;
+};
+
 using TDialogCreateTable = TDialogPolicyImpl<Ydb::Table::CreateTableRequest, Ydb::Table::CreateTableResponse,
     EEvents::EvCreateTableRequest, EEvents::EvCreateTableInternalResponse, EEvents::EvCreateTableResponse>;
+using TDialogDropTable = TDialogPolicyImpl<Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse,
+    EEvents::EvDropTableRequest, EEvents::EvDropTableInternalResponse, EEvents::EvDropTableResponse>;
 using TDialogModifyPermissions = TDialogPolicyImpl<Ydb::Scheme::ModifyPermissionsRequest, Ydb::Scheme::ModifyPermissionsResponse,
     EEvents::EvModifyPermissionsRequest, EEvents::EvModifyPermissionsInternalResponse, EEvents::EvModifyPermissionsResponse>;
 using TDialogSelect = TDialogPolicyImpl<Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse,
@@ -48,6 +59,10 @@ class TEvRequestResult: public NActors::TEventLocal<TEvRequestResult<TDialogPoli
 private:
     YDB_READONLY_DEF(typename TDialogPolicy::TResponse, Result);
 public:
+    typename TDialogPolicy::TResponse&& DetachResult() {
+        return std::move(Result);
+    }
+
     TEvRequestResult(typename TDialogPolicy::TResponse&& result)
         : Result(std::move(result)) {
 
@@ -87,6 +102,15 @@ public:
     static bool IsSuccess(const Ydb::Table::CreateTableResponse& r) {
         return r.operation().status() == Ydb::StatusIds::SUCCESS ||
             r.operation().status() == Ydb::StatusIds::ALREADY_EXISTS;
+    }
+};
+
+template <>
+class TOperatorChecker<Ydb::Table::DropTableResponse> {
+public:
+    static bool IsSuccess(const Ydb::Table::DropTableResponse& r) {
+        return r.operation().status() == Ydb::StatusIds::SUCCESS ||
+            r.operation().status() == Ydb::StatusIds::NOT_FOUND;
     }
 };
 
@@ -219,9 +243,40 @@ protected:
     }
 public:
 
-    TYDBCallbackRequest(const TRequest& request, const NACLib::TUserToken& uToken, const NActors::TActorId actorCallbackId)
+    TYDBCallbackRequest(const TRequest& request, const NACLib::TUserToken& uToken, const NActors::TActorId actorCallbackId, const TConfig& config = Default<TConfig>())
         : TBase(request, uToken)
-        , CallbackActorId(actorCallbackId) {
+        , CallbackActorId(actorCallbackId)
+        , Config(config)
+    {
+
+    }
+};
+
+template <class TDialogPolicy>
+class TYDBControllerRequest: public TYDBOneRequest<TDialogPolicy> {
+private:
+    using IExternalController = IExternalController<TDialogPolicy>;
+    using TBase = TYDBOneRequest<TDialogPolicy>;
+    using TRequest = typename TDialogPolicy::TRequest;
+    using TResponse = typename TDialogPolicy::TResponse;
+    typename IExternalController::TPtr ExternalController;
+    const TConfig Config;
+    ui32 Retry = 0;
+protected:
+    virtual void OnInternalResultError(const TString& errorMessage) override {
+        ExternalController->OnRequestFailed(errorMessage);
+        TBase::PassAway();
+    }
+    virtual void OnInternalResultSuccess(TResponse&& response) override {
+        ExternalController->OnRequestResult(std::move(response));
+    }
+public:
+
+    TYDBControllerRequest(const TRequest& request, const NACLib::TUserToken& uToken, typename IExternalController::TPtr externalController, const TConfig& config)
+        : TBase(request, uToken)
+        , ExternalController(externalController)
+        , Config(config)
+    {
 
     }
 };
@@ -241,7 +296,7 @@ private:
         Y_VERIFY(sessionId);
         std::optional<typename TDialogPolicy::TRequest> nextRequest = OnSessionId(sessionId);
         Y_VERIFY(nextRequest);
-        TBase::Register(new TYDBCallbackRequest<TDialogPolicy>(*nextRequest, UserToken, TBase::SelfId()));
+        TBase::Register(new TYDBCallbackRequest<TDialogPolicy>(*nextRequest, UserToken, TBase::SelfId(), Config));
     }
 protected:
     const TConfig Config;
@@ -281,11 +336,77 @@ public:
     }
 
     void Handle(typename TEvRequestStart::TPtr& /*ev*/) {
-        TBase::Register(new TYDBCallbackRequest<TDialogCreateSession>(TDialogCreateSession::TRequest(), UserToken, TBase::SelfId()));
+        TBase::Register(new TYDBCallbackRequest<TDialogCreateSession>(TDialogCreateSession::TRequest(), UserToken, TBase::SelfId(), Config));
     }
 
     void Bootstrap() {
         TBase::Become(&TSessionedActorImpl::StateMain);
+        TBase::template Sender<TEvRequestStart>().SendTo(TBase::SelfId());
+    }
+};
+
+template <class TDialogPolicy>
+class TSessionedActorCallback: public NActors::TActorBootstrapped<TSessionedActorCallback<TDialogPolicy>> {
+public:
+    using IExternalController = IExternalController<TDialogPolicy>;
+private:
+    
+    static_assert(!std::is_same<TDialogPolicy, TDialogCreateSession>());
+    using TBase = NActors::TActorBootstrapped<TSessionedActorCallback<TDialogPolicy>>;
+
+    void Handle(TEvRequestResult<TDialogCreateSession>::TPtr& ev) {
+        Ydb::Table::CreateSessionResponse currentFullReply = ev->Get()->GetResult();
+        Ydb::Table::CreateSessionResult session;
+        currentFullReply.operation().result().UnpackTo(&session);
+        const TString sessionId = session.session_id();
+        Y_VERIFY(sessionId);
+        InitSessionId(BaseRequest, sessionId);
+        TBase::Register(new TYDBControllerRequest<TDialogPolicy>(BaseRequest, UserToken, ExternalController, Config));
+    }
+protected:
+    typename TDialogPolicy::TRequest BaseRequest;
+    const TConfig Config;
+    const NACLib::TUserToken UserToken;
+    typename IExternalController::TPtr ExternalController;
+    virtual void InitSessionId(typename TDialogPolicy::TRequest& request, const TString& sessionId) {
+        request.set_session_id(sessionId);
+    }
+public:
+    STATEFN(StateMain) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvRequestResult<TDialogCreateSession>, Handle);
+            hFunc(TEvRequestFailed, Handle);
+            hFunc(TEvRequestStart, Handle);
+            hFunc(TEvRequestResult<TDialogPolicy>, Handle);
+            default:
+                break;
+        }
+    }
+
+    TSessionedActorCallback(const typename TDialogPolicy::TRequest& request, const TConfig& config, const NACLib::TUserToken& uToken, typename IExternalController::TPtr externalController)
+        : BaseRequest(request)
+        , Config(config)
+        , UserToken(uToken)
+        , ExternalController(externalController)
+    {
+
+    }
+
+    void Handle(typename TEvRequestResult<TDialogPolicy>::TPtr& ev) {
+        ExternalController->OnRequestResult(ev->Get()->DetachResult());
+        TBase::PassAway();
+    }
+
+    void Handle(typename TEvRequestFailed::TPtr& ev) {
+        ExternalController->OnRequestFailed(ev->Get()->GetErrorMessage());
+    }
+
+    void Handle(typename TEvRequestStart::TPtr& /*ev*/) {
+        TBase::Register(new TYDBCallbackRequest<TDialogCreateSession>(TDialogCreateSession::TRequest(), UserToken, TBase::SelfId()));
+    }
+
+    void Bootstrap() {
+        TBase::Become(&TSessionedActorCallback::StateMain);
         TBase::template Sender<TEvRequestStart>().SendTo(TBase::SelfId());
     }
 };

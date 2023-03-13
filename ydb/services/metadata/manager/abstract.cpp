@@ -34,25 +34,37 @@ NKikimr::NMetadata::NModifications::TTableSchema& TTableSchema::AddColumn(const 
     return *this;
 }
 
-NThreading::TFuture<NKikimr::NMetadata::NModifications::TObjectOperatorResult> IOperationsManager::DropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId, IClassBehaviour::TPtr manager, const TModificationContext& context) const {
+NThreading::TFuture<NKikimr::NMetadata::NModifications::TObjectOperatorResult> IOperationsManager::DropObject(const NYql::TDropObjectSettings& settings,
+    const ui32 nodeId, IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const
+{
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return NThreading::MakeFuture<TObjectOperatorResult>("metadata provider service is disabled");
     }
-    return DoDropObject(settings, nodeId, manager, context);
+    TInternalModificationContext internalContext(context);
+    internalContext.SetActivityType(EActivityType::Drop);
+    return DoModify(settings, nodeId, manager, internalContext);
 }
 
-NThreading::TFuture<NKikimr::NMetadata::NModifications::TObjectOperatorResult> IOperationsManager::AlterObject(const NYql::TAlterObjectSettings& settings, const ui32 nodeId, IClassBehaviour::TPtr manager, const TModificationContext& context) const {
+NThreading::TFuture<NKikimr::NMetadata::NModifications::TObjectOperatorResult> IOperationsManager::AlterObject(const NYql::TAlterObjectSettings& settings,
+    const ui32 nodeId, IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const
+{
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return NThreading::MakeFuture<TObjectOperatorResult>("metadata provider service is disabled");
     }
-    return DoAlterObject(settings, nodeId, manager, context);
+    TInternalModificationContext internalContext(context);
+    internalContext.SetActivityType(EActivityType::Alter);
+    return DoModify(settings, nodeId, manager, internalContext);
 }
 
-NThreading::TFuture<NKikimr::NMetadata::NModifications::TObjectOperatorResult> IOperationsManager::CreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId, IClassBehaviour::TPtr manager, const TModificationContext& context) const {
+NThreading::TFuture<NKikimr::NMetadata::NModifications::TObjectOperatorResult> IOperationsManager::CreateObject(const NYql::TCreateObjectSettings& settings,
+    const ui32 nodeId, IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const
+{
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return NThreading::MakeFuture<TObjectOperatorResult>("metadata provider service is disabled");
     }
-    return DoCreateObject(settings, nodeId, manager, context);
+    TInternalModificationContext internalContext(context);
+    internalContext.SetActivityType(EActivityType::Create);
+    return DoModify(settings, nodeId, manager, internalContext);
 }
 
 }

@@ -15,6 +15,11 @@ enum EEvents {
     EvCreateTableRequest = EventSpaceBegin(TKikimrEvents::ES_INTERNAL_REQUEST),
     EvCreateTableInternalResponse,
     EvCreateTableResponse,
+
+    EvDropTableRequest,
+    EvDropTableInternalResponse,
+    EvDropTableResponse,
+
     EvSelectRequest,
     EvSelectInternalResponse,
     EvSelectResponse,

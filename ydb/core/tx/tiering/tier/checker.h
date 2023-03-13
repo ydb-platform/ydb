@@ -16,7 +16,7 @@ class TTierPreparationActor: public NActors::TActorBootstrapped<TTierPreparation
 private:
     std::vector<TTierConfig> Objects;
     NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr Controller;
-    NMetadata::NModifications::IOperationsManager::TModificationContext Context;
+    NMetadata::NModifications::IOperationsManager::TInternalModificationContext Context;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     std::shared_ptr<TConfigsSnapshot> Tierings;
     std::shared_ptr<TFetcherCheckUserTieringPermissions> SSFetcher;
@@ -38,7 +38,7 @@ public:
 
     TTierPreparationActor(std::vector<TTierConfig>&& objects,
         NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr controller,
-        const NMetadata::NModifications::IOperationsManager::TModificationContext& context);
+        const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context);
 };
 
 }

@@ -24,6 +24,7 @@ protected:
 public:
     virtual ~IClassBehaviour() = default;
     TString GetStorageTablePath() const;
+    TString GetStorageTableDirectory() const;
     TString GetStorageHistoryTablePath() const;
     std::shared_ptr<NInitializer::IInitializationBehaviour> GetInitializer() const;
     virtual std::shared_ptr<NModifications::IOperationsManager> GetOperationsManager() const = 0;

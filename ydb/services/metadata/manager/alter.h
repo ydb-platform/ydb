@@ -16,7 +16,7 @@ private:
 protected:
     virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
         TBase::Register(new TUpdateObjectsActor<TObject>(std::move(records), TBase::UserToken,
-            TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetUserToken()));
+            TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetExternalData().GetUserToken()));
         return true;
     }
 
@@ -34,7 +34,8 @@ private:
 protected:
     virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
         TBase::Register(new TInsertObjectsActor<TObject>(std::move(records), TBase::UserToken,
-            TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetUserToken()));
+            TBase::InternalController, TBase::SessionId, TBase::TransactionId,
+            TBase::Context.GetExternalData().GetUserToken()));
         return true;
     }
 
@@ -79,7 +80,7 @@ public:
 
     virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
         TBase::Register(new TDeleteObjectsActor<TObject>(std::move(records), TBase::UserToken,
-            TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetUserToken()));
+            TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetExternalData().GetUserToken()));
         return true;
     }
 
@@ -96,7 +97,6 @@ private:
 protected:
     virtual void DoExecute() const override {
         typename IObjectOperationsManager<TObject>::TPtr manager = TBase::GetOperationsManagerFor<TObject>();
-        Context.SetActivityType(IOperationsManager::EActivityType::Create);
         TActivationContext::AsActorContext().Register(new TCreateActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
     }
 public:
@@ -110,7 +110,6 @@ private:
 protected:
     virtual void DoExecute() const override {
         typename IObjectOperationsManager<TObject>::TPtr manager = TBase::GetOperationsManagerFor<TObject>();
-        Context.SetActivityType(IOperationsManager::EActivityType::Alter);
         TActivationContext::AsActorContext().Register(new TAlterActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
     }
 public:
@@ -124,7 +123,6 @@ private:
 protected:
     virtual void DoExecute() const override {
         typename IObjectOperationsManager<TObject>::TPtr manager = TBase::GetOperationsManagerFor<TObject>();
-        Context.SetActivityType(IOperationsManager::EActivityType::Drop);
         TActivationContext::AsActorContext().Register(new TDropActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
     }
 public:

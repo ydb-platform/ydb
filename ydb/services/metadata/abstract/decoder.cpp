@@ -32,6 +32,28 @@ bool TDecoderBase::Read(const i32 columnIdx, TString& result, const Ydb::Value& 
     return true;
 }
 
+bool TDecoderBase::Read(const i32 columnIdx, ui64& result, const Ydb::Value& r) const {
+    if (columnIdx >= (i32)r.items().size() || columnIdx < 0) {
+        return false;
+    }
+    if (r.items()[columnIdx].has_uint64_value()) {
+        result = r.items()[columnIdx].uint64_value();
+        return true;
+    }
+    return false;
+}
+
+bool TDecoderBase::Read(const i32 columnIdx, ui32& result, const Ydb::Value& r) const {
+    if (columnIdx >= (i32)r.items().size() || columnIdx < 0) {
+        return false;
+    }
+    if (r.items()[columnIdx].has_uint32_value()) {
+        result = r.items()[columnIdx].uint32_value();
+        return true;
+    }
+    return false;
+}
+
 bool TDecoderBase::Read(const i32 columnIdx, TDuration& result, const Ydb::Value& r) const {
     if (columnIdx >= (i32)r.items().size() || columnIdx < 0) {
         return false;

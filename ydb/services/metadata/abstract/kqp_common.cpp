@@ -6,6 +6,10 @@
 
 namespace NKikimr::NMetadata {
 
+TString IClassBehaviour::GetStorageTableDirectory() const {
+    return TFsPath(GetStorageTablePath()).Fix().Parent().GetPath();
+}
+
 TString IClassBehaviour::GetStorageTablePath() const {
     return "/" + AppData()->TenantName + "/" + NMetadata::NProvider::TServiceOperator::GetPath() + "/" + GetInternalStorageTablePath();
 }

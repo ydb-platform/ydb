@@ -44,17 +44,18 @@ class TEventsWaiter {
 private:
     std::deque<TWaitEvent> Events;
 public:
-    void Add(TAutoPtr<IEventBase> ev, const TActorId& sender) {
+    bool Add(TAutoPtr<IEventBase> ev, const TActorId& sender) {
         if (Events.size() > 10000) {
             ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "too many events for deferred sending (maybe service cannot start)";
-            return;
+            return false;
         }
         Events.emplace_back(ev, sender);
+        return true;
     }
 
     template <class T>
-    void Add(TEventHandleFat<T>& ev) {
-        Add(ev.ReleaseBase(), ev.Sender);
+    bool Add(TEventHandleFat<T>& ev) {
+        return Add(ev.ReleaseBase(), ev.Sender);
     }
 
     bool ResendOne(const TActorIdentity& receiver) {
@@ -83,6 +84,53 @@ public:
         for (auto&& i : source) {
             Events.emplace_back(std::move(i));
         }
+    }
+};
+
+template <class TTag = TString>
+class TTaggedEventsWaiter {
+private:
+    std::map<TString, TEventsWaiter> TaggedEvents;
+    ui32 EventsCount = 0;
+public:
+    bool Add(TAutoPtr<IEventBase> ev, const TActorId& sender, const TString& tag) {
+        if (EventsCount > 10000) {
+            ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "too many events for deferred sending (maybe service cannot start)";
+            return false;
+        }
+        TaggedEvents[tag].Add(ev, sender);
+        ++EventsCount;
+        return true;
+    }
+
+    template <class T>
+    bool Add(TEventHandleFat<T>& ev, const TString& tag) {
+        return Add(ev.ReleaseBase(), ev.Sender, tag);
+    }
+
+    bool ResendOne(const TActorIdentity& receiver, const TString& tag) {
+        auto it = TaggedEvents.find(tag);
+        if (it == TaggedEvents.end()) {
+            return false;
+        }
+        if (it->second.ResendOne(receiver)) {
+            --EventsCount;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    void ResendAll(const TActorIdentity& receiver) {
+        for (auto&& i : TaggedEvents) {
+            i.second.ResendAll(receiver);
+        }
+        TaggedEvents.clear();
+        EventsCount = 0;
+    }
+
+    bool IsEmpty() const {
+        return EventsCount == 0;
     }
 };
 

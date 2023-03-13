@@ -39,7 +39,7 @@ void TAccessPreparationActor::Bootstrap() {
 
 TAccessPreparationActor::TAccessPreparationActor(std::vector<TAccess>&& objects,
     NModifications::IAlterPreparationController<TAccess>::TPtr controller,
-    const NModifications::IOperationsManager::TModificationContext& context)
+    const NModifications::IOperationsManager::TInternalModificationContext& context)
     : Objects(std::move(objects))
     , Controller(controller)
     , Context(context)

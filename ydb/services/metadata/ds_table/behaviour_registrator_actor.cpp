@@ -17,11 +17,11 @@ public:
     virtual void OnInitializationFinished(const TString& id) const override {
         ActorId.Send(ActorId, new NInitializer::TEvInitializationFinished(id));
     }
-    virtual void OnDescriptionFailed(const TString& errorMessage, const TString& requestId) const override {
+    virtual void OnDescriptionFailed(const TString& errorMessage, const TString& requestId) override {
         ActorId.Send(ActorId, new TEvTableDescriptionFailed(errorMessage, requestId));
     }
-    virtual void OnDescriptionSuccess(THashMap<ui32, TSysTables::TTableColumnInfo>&& result, const TString& requestId) const override {
-        ActorId.Send(ActorId, new TEvTableDescriptionSuccess(std::move(result), requestId));
+    virtual void OnDescriptionSuccess(TTableInfo&& result, const TString& requestId) override {
+        ActorId.Send(ActorId, new TEvTableDescriptionSuccess(std::move(result->Columns), requestId));
     }
 };
 

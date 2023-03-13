@@ -11,14 +11,14 @@ namespace NKikimr::NMetadata::NInitializer {
 class TManager: public NModifications::TGenericOperationsManager<TDBInitialization> {
 private:
     using TBase = NModifications::TGenericOperationsManager<TDBInitialization>;
-    using TModificationContext = TBase::TModificationContext;
+    using TInternalModificationContext = TBase::TInternalModificationContext;
 protected:
     virtual void DoPrepareObjectsBeforeModification(std::vector<TDBInitialization>&& objects,
         NModifications::IAlterPreparationController<TDBInitialization>::TPtr controller,
-        const TModificationContext& /*context*/) const override;
+        const TInternalModificationContext& context) const override;
 
     virtual NModifications::TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& /*settings*/,
-        const TModificationContext& /*context*/) const override;
+        TInternalModificationContext& context) const override;
 
 public:
 };

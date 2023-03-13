@@ -16,7 +16,7 @@ class TRulePreparationActor: public NActors::TActorBootstrapped<TRulePreparation
 private:
     std::vector<TTieringRule> Objects;
     NMetadata::NModifications::IAlterPreparationController<TTieringRule>::TPtr Controller;
-    NMetadata::NModifications::IOperationsManager::TModificationContext Context;
+    NMetadata::NModifications::IOperationsManager::TInternalModificationContext Context;
     std::shared_ptr<TConfigsSnapshot> Tierings;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     std::shared_ptr<TFetcherCheckUserTieringPermissions> SSFetcher;
@@ -38,7 +38,7 @@ public:
 
     TRulePreparationActor(std::vector<TTieringRule>&& objects,
         NMetadata::NModifications::IAlterPreparationController<TTieringRule>::TPtr controller,
-        const NMetadata::NModifications::IOperationsManager::TModificationContext& context);
+        const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context);
 };
 
 }

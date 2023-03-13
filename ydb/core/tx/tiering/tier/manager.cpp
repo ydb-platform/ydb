@@ -6,7 +6,7 @@ namespace NKikimr::NColumnShard::NTiers {
 
 NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFromSettings(
     const NYql::TObjectSettingsImpl& settings,
-    const NMetadata::NModifications::IOperationsManager::TModificationContext& context) const
+    TInternalModificationContext& context) const
 {
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
@@ -18,8 +18,8 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
                 return "incorrect proto format";
             } else if (proto.HasObjectStorage()) {
                 TString defaultUserId;
-                if (context.GetUserToken()) {
-                    defaultUserId = context.GetUserToken()->GetUserSID();
+                if (context.GetExternalData().GetUserToken()) {
+                    defaultUserId = context.GetExternalData().GetUserToken()->GetUserSID();
                 }
 
                 if (proto.GetObjectStorage().HasSecretableAccessKey()) {
@@ -62,7 +62,7 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
 
 void TTiersManager::DoPrepareObjectsBeforeModification(std::vector<TTierConfig>&& patchedObjects,
     NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr controller,
-    const NMetadata::NModifications::IOperationsManager::TModificationContext& context) const
+    const TInternalModificationContext& context) const
 {
     TActivationContext::Register(new TTierPreparationActor(std::move(patchedObjects), controller, context));
 }

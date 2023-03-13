@@ -164,7 +164,7 @@ public:
 
     // Unimplemented methods
     void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
-        Y_FAIL("Unimplemented for local rpc");
+        ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
     }
 
     void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&&) override {

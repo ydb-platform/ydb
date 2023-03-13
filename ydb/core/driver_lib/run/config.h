@@ -68,6 +68,7 @@ union TBasicKikimrServicesMask {
         bool EnableHttpProxy:1;
         bool EnableMetadataProvider:1;
         bool EnableReplicationService:1;
+        bool EnableBackgroundTasks:1;
     };
 
     ui64 Raw;

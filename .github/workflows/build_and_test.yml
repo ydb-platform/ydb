@@ -31,10 +31,10 @@ jobs:
     - name: Test
       shell: bash
       run: |
-        rm -rf /mnt/d/tmp/*
         cd ../build/ydb
+        rm -rf $(pwd)/../../tmp/*
         # Our test util provides output with coloring, so remove it using sed before sending to grep
-        TMPDIR=/mnt/d/tmp ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure | \
+        TMPDIR=$(pwd)/../../tmp ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure | \
           sed -e 's/\x1b\[[0-9;]*m//g' | \
           tee testrun.log | \
           grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of'

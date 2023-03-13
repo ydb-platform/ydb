@@ -26,12 +26,52 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
         auto result = ProtoToString(opId);
         UNIT_ASSERT_VALUES_EQUAL(FormatPreparedQueryIdCompat(PreparedQueryId), result);
     }
+
+    Y_UNIT_TEST(PreparedQueryIdDecode) {
+        const auto queryId = FormatPreparedQueryIdCompat(PreparedQueryId);
+        TString decodedString;
+        bool decoded = DecodePreparedQueryIdCompat(queryId, decodedString);
+        UNIT_ASSERT(decoded);
+        UNIT_ASSERT_VALUES_EQUAL(PreparedQueryId, decodedString);
+    }
+
+    Y_UNIT_TEST(PreparedQueryIdDecodeRawString) {
+        TString decodedString;
+        bool decoded = DecodePreparedQueryIdCompat(PreparedQueryId, decodedString);
+        UNIT_ASSERT(!decoded);
+        UNIT_ASSERT(decodedString.empty());
+    }
+
+    Y_UNIT_TEST(PreparedQueryIdDecodeInvalidString) {
+        TString decodedString;
+        UNIT_ASSERT_EXCEPTION(
+            DecodePreparedQueryIdCompat(TString("ydb://preparedqueryid/4?id="), decodedString), yexception);
+        UNIT_ASSERT(decodedString.empty());
+    }
+
+    Y_UNIT_TEST(FormatPrefixShorter) {
+        UNIT_ASSERT(TString("ydb://preparedqueryid/4?id=").size() < PreparedQueryId.size());
+    }
+
 #if 0
     Y_UNIT_TEST(PreparedQueryIdCompatibleFormatterPerf) {
         ui64 x = 0;
         for (int i = 0; i < 10000000; i++) {
             auto result = FormatPreparedQueryIdCompat(PreparedQueryId);
             x += result.size();
+        }
+        Cerr << x << Endl;
+    }
+
+    Y_UNIT_TEST(PreparedQueryIdDecodePerf) {
+        ui64 x = 0;
+        for (int i = 0; i < 10000000; i++) {
+            const auto queryId = FormatPreparedQueryIdCompat(PreparedQueryId);
+            TString decodedString;
+            bool decoded = DecodePreparedQueryIdCompat(queryId, decodedString);
+            UNIT_ASSERT(decoded);
+            UNIT_ASSERT_VALUES_EQUAL(PreparedQueryId, decodedString);
+            x += decodedString.size();
         }
         Cerr << x << Endl;
     }

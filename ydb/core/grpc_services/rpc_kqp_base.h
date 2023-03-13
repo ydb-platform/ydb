@@ -29,13 +29,14 @@ inline TString DecodePreparedQueryId(const TString& in) {
         throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
             << "got empty preparedQueryId message";
     }
-    NOperationId::TOperationId opId(in);
-    const auto& ids = opId.GetValue("id");
-    if (ids.size() != 1) {
-        throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
-            << "expected exactly one preparedQueryId identifier";
+    TString decodedStr;
+    bool decoded = NOperationId::DecodePreparedQueryIdCompat(in, decodedStr);
+    if (decoded) {
+        return decodedStr;
+    } else {
+        // Do not wrap query id GUID in to operation in the next stable
+        return in;
     }
-    return *ids[0];
 }
 
 inline TString GetTransactionModeName(const Ydb::Table::TransactionSettings& settings) {

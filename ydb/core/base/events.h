@@ -159,6 +159,7 @@ struct TKikimrEvents : TEvents {
         ES_TEST_LOAD,
         ES_GRPC_CANCELATION,
         ES_DISCOVERY,
+        ES_EXT_INDEX,
     };
 };
 

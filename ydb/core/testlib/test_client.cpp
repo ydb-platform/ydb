@@ -94,6 +94,9 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/bg_tasks/ds_table/executor.h>
 #include <ydb/services/bg_tasks/service.h>
+#include <ydb/services/ext_index/common/config.h>
+#include <ydb/services/ext_index/common/service.h>
+#include <ydb/services/ext_index/service/executor.h>
 #include <ydb/library/folder_service/mock/mock_folder_service.h>
 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
@@ -723,6 +726,11 @@ namespace Tests {
             auto* actor = NBackgroundTasks::CreateService(NBackgroundTasks::TConfig());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NBackgroundTasks::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid);
+        }
+        if (Settings->IsEnableExternalIndex()) {
+            auto* actor = NCSIndex::CreateService(NCSIndex::TConfig());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NCSIndex::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 

@@ -212,6 +212,8 @@ namespace Tests {
     private:
         YDB_FLAG_ACCESSOR(EnableMetadataProvider, true);
         YDB_FLAG_ACCESSOR(EnableBackgroundTasks, false);
+        YDB_FLAG_ACCESSOR(EnableExternalIndex, false);
+        
     };
 
     class TServer : public TThrRefBase, TMoveOnly {

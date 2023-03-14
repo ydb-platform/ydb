@@ -14,6 +14,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/services/ext_index/common/service.h>
 
 #include <library/cpp/actors/wilson/wilson_profile_span.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
@@ -467,6 +468,13 @@ protected:
 
         ui64 tableId = entry.TableId.PathId.LocalPathId;
 
+        if (NCSIndex::TServiceOperator::IsEnabled()) {
+            TBase::Send(NCSIndex::MakeServiceId(TBase::SelfId().NodeId()),
+                new NCSIndex::TEvAddData(GetDeserializedBatch(), Path, std::make_shared<NCSIndex::TNaiveDataUpsertController>(TBase::SelfId())));
+        } else {
+            IndexReady = true;
+        }
+
         if (sharding.HasRandomSharding()) {
             ui64 shard = sharding.GetColumnShards(0);
             SendWriteRequest(shard, tableId, DedupId, GetSerializedData());
@@ -537,6 +545,7 @@ private:
             hFunc(TEvColumnShard::TEvWriteResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            hFunc(NCSIndex::TEvAddDataResult, Handle);
         }
     }
 
@@ -614,6 +623,7 @@ private:
         Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvLongTxService::TEvAttachColumnShardWritesResult, Handle);
+            hFunc(NCSIndex::TEvAddDataResult, Handle);
         }
     }
 
@@ -629,8 +639,27 @@ private:
             }
             return ReplyError(msg->Record.GetStatus());
         }
+        if (IndexReady) {
+            ReplySuccess();
+        } else {
+            ColumnShardReady = true;
+        }
+    }
 
-        ReplySuccess();
+    void Handle(NCSIndex::TEvAddDataResult::TPtr& ev) {
+        const auto* msg = ev->Get();
+        if (msg->GetErrorMessage()) {
+            NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "NCSIndex::TEvAddDataResult");
+            RaiseIssue(NYql::TIssue(msg->GetErrorMessage()));
+            return ReplyError(Ydb::StatusIds::GENERIC_ERROR, msg->GetErrorMessage());
+        } else {
+            if (ColumnShardReady) {
+                ReplySuccess();
+            } else {
+                IndexReady = true;
+            }
+        }
+
     }
 
 private:
@@ -665,6 +694,8 @@ private:
     THashSet<ui64> ShardsToRetry;
     NWilson::TProfileSpan ActorSpan;
     TActorId TimeoutTimerActorId;
+    bool ColumnShardReady = false;
+    bool IndexReady = false;
 };
 
 

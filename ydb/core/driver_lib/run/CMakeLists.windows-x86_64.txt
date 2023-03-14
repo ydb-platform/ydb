@@ -130,6 +130,8 @@ target_link_libraries(run PUBLIC
   ydb-services-metadata
   services-bg_tasks-ds_table
   ydb-services-bg_tasks
+  services-ext_index-service
+  services-ext_index-metadata
   ydb-services-monitoring
   ydb-services-persqueue_cluster_discovery
   ydb-services-persqueue_v1

@@ -56,6 +56,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   api-protos
   public-lib-operation_id
   cpp-client-resources
+  services-ext_index-common
 )
 target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/audit_log.cpp

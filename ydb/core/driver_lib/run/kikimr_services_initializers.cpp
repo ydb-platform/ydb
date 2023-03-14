@@ -159,6 +159,8 @@
 
 #include <ydb/services/bg_tasks/ds_table/executor.h>
 #include <ydb/services/bg_tasks/service.h>
+#include <ydb/services/ext_index/common/config.h>
+#include <ydb/services/ext_index/service/executor.h>
 
 #include <library/cpp/actors/protos/services_common.pb.h>
 
@@ -2297,9 +2299,26 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
     }
 }
 
+TExternalIndexInitializer::TExternalIndexInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TExternalIndexInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NCSIndex::TConfig serviceConfig;
+    if (Config.HasExternalIndexConfig()) {
+        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetExternalIndexConfig()));
+    }
+
+    if (serviceConfig.IsEnabled()) {
+        auto service = NCSIndex::CreateService(serviceConfig);
+        setup->LocalServices.push_back(std::make_pair(
+            NCSIndex::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
 TMetadataProviderInitializer::TMetadataProviderInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig)
-{
+    : IKikimrServicesInitializer(runConfig) {
 }
 
 void TMetadataProviderInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {

@@ -360,6 +360,8 @@ enum EServiceKikimr {
     // Discovery
     DISCOVERY = 1800;
     DISCOVERY_CACHE = 1801;
+
+    EXT_INDEX = 1900;
 };
 
 message TActivity {

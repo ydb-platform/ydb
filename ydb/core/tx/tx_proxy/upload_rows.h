@@ -16,10 +16,13 @@ enum class EUploadRowsMode {
     WriteToTableShadow,
 };
 
+using TUploadTypes = TVector<std::pair<TString, Ydb::Type>>;
+using TUploadRows = TVector<std::pair<TSerializedCellVec, TString>>;
+
 IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  const TString& table,
-                                 std::shared_ptr<TVector<std::pair<TString, Ydb::Type> > > types,
-                                 std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString> > > rows,
+                                 std::shared_ptr<TUploadTypes> types,
+                                 std::shared_ptr<TUploadRows> rows,
                                  EUploadRowsMode mode = EUploadRowsMode::Normal,
                                  bool writeToPrivateTable = false);
 } // namespace NTxProxy

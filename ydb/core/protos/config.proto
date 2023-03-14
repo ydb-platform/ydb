@@ -601,6 +601,12 @@ message TInternalRequestConfig {
     optional uint32 RetryPeriodFinishSeconds = 2 [default = 30];
 }
 
+message TExternalIndexConfig {
+    optional bool Enabled = 1 [default = true];
+    optional TInternalRequestConfig RequestConfig = 2;
+    optional string InternalTablePath = 3;
+}
+
 message TMetadataProviderConfig {
     optional bool Enabled = 1 [default = true];
     optional uint32 RefreshPeriodSeconds = 2 [default = 10];
@@ -1787,6 +1793,7 @@ message TAppConfig {
     optional TBackgroundTasksConfig BackgroundTasksConfig = 60;
     optional TAuditConfig AuditConfig = 61;
     optional TClientCertificateAuthorization ClientCertificateAuthorization = 62;
+    optional TExternalIndexConfig ExternalIndexConfig = 63;
 
     optional NYq.NConfig.TConfig YandexQueryConfig = 50; // TODO: remove after migration to FederatedQueryConfig
 

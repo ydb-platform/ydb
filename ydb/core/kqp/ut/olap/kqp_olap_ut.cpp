@@ -1150,7 +1150,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`level`, `uid`, `resource_id`) != (Int32("0"), "uid_3000001", "10011"))",
             R"(`level` = 0 OR `level` = 2 OR `level` = 1)",
             R"(`level` = 0 OR (`level` = 2 AND `uid` = "uid_3000002"))",
+            R"(`level` = 0 OR NOT(`level` = 2 AND `uid` = "uid_3000002"))",
             R"(`level` = 0 AND (`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
+            R"(`level` = 0 AND NOT(`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
             R"(`level` = 0 OR `uid` = "uid_3000003")",
             R"(`level` = 0 AND `uid` = "uid_3000003")",
             R"(`level` = 0 AND `uid` = "uid_3000000")",
@@ -1178,6 +1180,25 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` >= CAST("2" As Uint32))",
             R"(`level` = NULL)",
             R"(`level` > NULL)",
+            R"(LENGTH(`uid`) > 0 OR `resource_id` = "10001")",
+            R"((LENGTH(`uid`) > 0 AND `resource_id` = "10001") OR `resource_id` = "10002")",
+            R"((LENGTH(`uid`) > 0 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
+            // Not strict function in the beginning causes to disable pushdown
+            R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
+            // We can handle this case in future
+            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
+        };
+
+        std::vector<TString> testDataPartialPush = {
+            R"(LENGTH(`uid`) > 0 AND `resource_id` = "10001")",
+            R"(`resource_id` = "10001" AND `level` > 1 AND LENGTH(`uid`) > 0)",
+            R"(`resource_id` >= "10001" AND LENGTH(`uid`) > 0 AND `level` >= 1 AND `level` < 3)",
+            R"(LENGTH(`uid`) > 0 AND (`resource_id` >= "10001" OR `level`>= 1 AND `level` <= 3))",
+            R"(NOT(`resource_id` = "10001" OR `level` >= 1) AND LENGTH(`uid`) > 0)",
+            R"(NOT(`resource_id` = "10001" AND `level` != 1) AND LENGTH(`uid`) > 0)",
+            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level`)",
+            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level` AND `level` > 1)",
         };
 
         auto buildQuery = [](const TString& predicate, bool pushEnabled) {
@@ -1247,6 +1268,74 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
                           TStringBuilder() << "Predicate pushed down. Query: " << pushQuery);
         }
+
+        for (const auto& predicate: testDataPartialPush) {
+            auto normalQuery = buildQuery(predicate, false);
+            auto pushQuery = buildQuery(predicate, true);
+
+            Cerr << "--- Run normal query ---\n";
+            Cerr << normalQuery << Endl;
+            auto it = tableClient.StreamExecuteScanQuery(normalQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto goodResult = CollectStreamResult(it);
+
+            Cerr << "--- Run pushed down query ---\n";
+            Cerr << pushQuery << Endl;
+            it = tableClient.StreamExecuteScanQuery(pushQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto pushResult = CollectStreamResult(it);
+
+            if (logQueries) {
+                Cerr << "Query: " << normalQuery << Endl;
+                Cerr << "Expected: " << goodResult.ResultSetYson << Endl;
+                Cerr << "Received: " << pushResult.ResultSetYson << Endl;
+            }
+
+            CompareYson(goodResult.ResultSetYson, pushResult.ResultSetYson);
+
+            it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto result = CollectStreamResult(it);
+            auto ast = result.QueryStats->Getquery_ast();
+
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                          TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
+            UNIT_ASSERT_C(ast.find("NarrowMap") != std::string::npos,
+                          TStringBuilder() << "NarrowMap was removed. Query: " << pushQuery);
+        }
+    }
+
+    Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        EnableDebugLogging(kikimr);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto query = R"(
+            PRAGMA Kikimr.OptEnablePredicateExtract = "false";
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
+                `resource_id` = "10001" AND Unwrap(`level`/1) = `level` AND `level` > 1;
+        )";
+
+        auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto result = CollectStreamResult(it);
+        auto ast = result.QueryStats->Getquery_ast();
+        UNIT_ASSERT_C(ast.find(R"("eq" '"resource_id")") != std::string::npos,
+                          TStringBuilder() << "Predicate not pushed down. Query: " << query);
+        UNIT_ASSERT_C(ast.find(R"("gt" '"level")") == std::string::npos,
+                          TStringBuilder() << "Predicate pushed down. Query: " << query);
+        UNIT_ASSERT_C(ast.find("NarrowMap") != std::string::npos,
+                          TStringBuilder() << "NarrowMap was removed. Query: " << query);
     }
 
     Y_UNIT_TEST(AggregationCountPushdown) {
@@ -2653,7 +2742,36 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetExpectedReadNodeType("Aggregate-TableFullScan");
         q14.FillExpectedAggregationGroupByPlanOptions();
 
-        TestClickBench({ q7, q9, q12, q14 });
+        TAggregationTestCase q22;
+        q22.SetQuery(R"(
+                SELECT
+                    SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, COUNT(DISTINCT UserID)
+                FROM `/Root/benchTable`
+                WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase <> ''
+                GROUP BY SearchPhrase
+                ORDER BY c DESC
+                LIMIT 10;
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .SetExpectedReadNodeType("Aggregate-Filter-TableFullScan");
+        q22.FillExpectedAggregationGroupByPlanOptions();
+
+        TAggregationTestCase q39;
+        q39.SetQuery(R"(
+                SELECT TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst, COUNT(*) AS PageViews
+                FROM `/Root/benchTable`
+                WHERE CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND IsRefresh == 0
+                GROUP BY
+                    TraficSourceID, SearchEngineID, AdvEngineID, IF (SearchEngineID = 0 AND AdvEngineID = 0, Referer, '') AS Src,
+                    URL AS Dst
+                ORDER BY PageViews DESC
+                LIMIT 10;
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .SetExpectedReadNodeType("Aggregate-Filter-TableFullScan");
+        q39.FillExpectedAggregationGroupByPlanOptions();
+
+        TestClickBench({ q7, q9, q12, q14, q22, q39 });
     }
 
     Y_UNIT_TEST(StatsSysView) {

@@ -75,7 +75,7 @@
                                                                                     },
                                                                                     {
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "Apply And Not And item.SearchPhrase != \"\""
+                                                                                        "Predicate": "Apply And Not"
                                                                                     },
                                                                                     {
                                                                                         "Name": "TableFullScan",
@@ -94,6 +94,41 @@
                                                                                         ],
                                                                                         "SsaProgram": {
                                                                                             "Command": [
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 106
+                                                                                                        },
+                                                                                                        "Constant": {
+                                                                                                            "Text": ""
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 107
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 40
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 106
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "Id": 2
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Filter": {
+                                                                                                        "Predicate": {
+                                                                                                            "Id": 107
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
                                                                                                 {
                                                                                                     "Projection": {
                                                                                                         "Columns": [
@@ -166,7 +201,7 @@
                                                                                                     },
                                                                                                     {
                                                                                                         "Name": "Filter",
-                                                                                                        "Predicate": "Apply And Not And item.SearchPhrase != \"\""
+                                                                                                        "Predicate": "Apply And Not"
                                                                                                     },
                                                                                                     {
                                                                                                         "Name": "TableFullScan",
@@ -185,6 +220,41 @@
                                                                                                         ],
                                                                                                         "SsaProgram": {
                                                                                                             "Command": [
+                                                                                                                {
+                                                                                                                    "Assign": {
+                                                                                                                        "Column": {
+                                                                                                                            "Id": 106
+                                                                                                                        },
+                                                                                                                        "Constant": {
+                                                                                                                            "Text": ""
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Assign": {
+                                                                                                                        "Column": {
+                                                                                                                            "Id": 107
+                                                                                                                        },
+                                                                                                                        "Function": {
+                                                                                                                            "Arguments": [
+                                                                                                                                {
+                                                                                                                                    "Id": 40
+                                                                                                                                },
+                                                                                                                                {
+                                                                                                                                    "Id": 106
+                                                                                                                                }
+                                                                                                                            ],
+                                                                                                                            "Id": 2
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Filter": {
+                                                                                                                        "Predicate": {
+                                                                                                                            "Id": 107
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                },
                                                                                                                 {
                                                                                                                     "Projection": {
                                                                                                                         "Columns": [

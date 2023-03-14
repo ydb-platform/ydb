@@ -40,17 +40,8 @@ struct TPredicateNode {
 
     ~TPredicateNode() {}
 
-    bool IsValid() const {
-        bool res = true;
-        if (Op != EBoolOp::Undefined) {
-            res &= !Children.empty();
-            for (auto& child : Children) {
-                res &= child.IsValid();
-            }
-        }
-
-        return res && ExprNode.IsValid();
-    }
+    bool IsValid() const;
+    void SetPredicates(const std::vector<TPredicateNode>& predicates, NYql::TExprContext& ctx, NYql::TPositionHandle pos);
 
     NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> ExprNode;
     std::vector<TPredicateNode> Children;

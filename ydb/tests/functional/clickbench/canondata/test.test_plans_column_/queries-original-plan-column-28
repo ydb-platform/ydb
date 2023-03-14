@@ -56,16 +56,12 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-Filter-TableFullScan",
+                                                                "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
                                                                     {
                                                                         "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0),_yql_agg_2: MIN(item.Referer)}",
                                                                         "GroupBy": "item.key",
                                                                         "Name": "Aggregate"
-                                                                    },
-                                                                    {
-                                                                        "Name": "Filter",
-                                                                        "Predicate": "item.Referer != \"\""
                                                                     },
                                                                     {
                                                                         "Name": "TableFullScan",
@@ -81,6 +77,41 @@
                                                                         ],
                                                                         "SsaProgram": {
                                                                             "Command": [
+                                                                                {
+                                                                                    "Assign": {
+                                                                                        "Column": {
+                                                                                            "Id": 106
+                                                                                        },
+                                                                                        "Constant": {
+                                                                                            "Text": ""
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                {
+                                                                                    "Assign": {
+                                                                                        "Column": {
+                                                                                            "Id": 107
+                                                                                        },
+                                                                                        "Function": {
+                                                                                            "Arguments": [
+                                                                                                {
+                                                                                                    "Id": 15
+                                                                                                },
+                                                                                                {
+                                                                                                    "Id": 106
+                                                                                                }
+                                                                                            ],
+                                                                                            "Id": 2
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                {
+                                                                                    "Filter": {
+                                                                                        "Predicate": {
+                                                                                            "Id": 107
+                                                                                        }
+                                                                                    }
+                                                                                },
                                                                                 {
                                                                                     "Projection": {
                                                                                         "Columns": [

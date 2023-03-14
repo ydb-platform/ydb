@@ -337,11 +337,6 @@ bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg
         return false;
     }
 
-    if (coalesce.Value().Cast<TCoBool>().Literal().Value() != "false") {
-        // Maybe we don't need this check
-        return false;
-    }
-
     if (auto maybeCompare = coalesce.Predicate().Maybe<TCoCompare>()) {
         return CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody);
     } else if (auto maybeFlatmap = coalesce.Predicate().Maybe<TCoFlatMap>()) {
@@ -377,6 +372,41 @@ void CollectPredicatesForBinaryBoolOperators(const TExprBase& opNode, TPredicate
 }
 
 } // anonymous namespace end
+
+bool TPredicateNode::IsValid() const {
+    bool res = true;
+    if (Op != EBoolOp::Undefined) {
+        res &= !Children.empty();
+        for (auto& child : Children) {
+            res &= child.IsValid();
+        }
+    }
+
+    return res && ExprNode.IsValid();
+}
+
+void TPredicateNode::SetPredicates(const std::vector<TPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos) {
+    auto predicatesSize = predicates.size();
+    if (predicatesSize == 0) {
+        return;
+    } else if (predicatesSize == 1) {
+        *this = predicates[0];
+    } else {
+        Op = EBoolOp::And;
+        Children = predicates;
+        CanBePushed = true;
+
+        TVector<TExprBase> exprNodes;
+        exprNodes.reserve(predicatesSize);
+        for (auto& pred : predicates) {
+            exprNodes.emplace_back(pred.ExprNode.Cast());
+            CanBePushed &= pred.CanBePushed;
+        }
+        ExprNode = Build<TCoAnd>(ctx, pos)
+            .Add(exprNodes)
+            .Done();
+    }
+}
 
 void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
     if (predicate.Maybe<TCoCoalesce>()) {

@@ -3,6 +3,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -15,39 +16,6 @@ static TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
 
 bool IsFalseLiteral(TExprBase node) {
     return node.Maybe<TCoBool>() && !FromString<bool>(node.Cast<TCoBool>().Literal().Value());
-}
-
-bool ValidateIfArgument(const TCoOptionalIf& optionalIf, const TExprNode* rawLambdaArg) {
-    // Check it is SELECT * or SELECT `field1`, `field2`...
-    if (optionalIf.Value().Raw() == rawLambdaArg) {
-        return true;
-    }
-
-    // Ok, maybe it is SELECT `field1`, `field2` ?
-    auto maybeAsStruct = optionalIf.Value().Maybe<TCoAsStruct>();
-    if (!maybeAsStruct) {
-        return false;
-    }
-
-    for (auto arg : maybeAsStruct.Cast()) {
-        // Check that second tuple element is Member(lambda arg)
-        auto tuple = arg.Maybe<TExprList>().Cast();
-        if (tuple.Size() != 2) {
-            return false;
-        }
-
-        auto maybeMember = tuple.Item(1).Maybe<TCoMember>();
-        if (!maybeMember) {
-            return false;
-        }
-
-        auto member = maybeMember.Cast();
-        if (member.Struct().Raw() != rawLambdaArg) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 TVector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn)
@@ -417,6 +385,40 @@ TMaybeNode<TExprBase> PredicatePushdown(const TExprBase& predicate, TExprContext
         .Done();
 }
 
+void SplitForPartialPushdown(const TPredicateNode& predicateTree, TPredicateNode& predicatesToPush, TPredicateNode& remainingPredicates,
+    TExprContext& ctx, TPositionHandle pos)
+{
+    if (predicateTree.CanBePushed) {
+        predicatesToPush = predicateTree;
+        remainingPredicates.ExprNode = Build<TCoBool>(ctx, pos).Literal().Build("true").Done();
+        return;
+    }
+
+    if (predicateTree.Op != EBoolOp::And) {
+        // We can partially pushdown predicates from AND operator only.
+        // For OR operator we would need to have several read operators which is not acceptable.
+        // TODO: Add support for NOT(op1 OR op2), because it expands to (!op1 AND !op2).
+        remainingPredicates = predicateTree;
+        return;
+    }
+
+    bool isFoundNotStrictOp = false;
+    std::vector<TPredicateNode> pushable;
+    std::vector<TPredicateNode> remaining;
+    for (auto& predicate : predicateTree.Children) {
+        if (predicate.CanBePushed && !isFoundNotStrictOp) {
+            pushable.emplace_back(predicate);
+        } else {
+            if (!IsStrict(predicate.ExprNode.Cast().Ptr())) {
+                isFoundNotStrictOp = true;
+            }
+            remaining.emplace_back(predicate);
+        }
+    }
+    predicatesToPush.SetPredicates(pushable, ctx, pos);
+    remainingPredicates.SetPredicates(remaining, ctx, pos);
+}
+
 } // anonymous namespace end
 
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
@@ -450,19 +452,14 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     auto optionalIf = maybeOptionalIf.Cast();
-    if (!ValidateIfArgument(optionalIf, lambdaArg)) {
-        return node;
-    }
-
     TPredicateNode predicateTree(optionalIf.Predicate());
     CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg, read.Process().Body());
+    YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
 
     TPredicateNode predicatesToPush;
     TPredicateNode remainingPredicates;
-    if (predicateTree.CanBePushed) {
-        predicatesToPush = predicateTree;
-        remainingPredicates.ExprNode = Build<TCoBool>(ctx, node.Pos()).Literal().Build("true").Done();
-    } else {
+    SplitForPartialPushdown(predicateTree, predicatesToPush, remainingPredicates, ctx, node.Pos());
+    if (!predicatesToPush.IsValid()) {
         return node;
     }
 
@@ -516,7 +513,10 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         .Lambda<TCoLambda>()
             .Args({"new_arg"})
             .Body<TCoOptionalIf>()
-                .Predicate(remainingPredicates.ExprNode.Cast())
+                .Predicate<TExprApplier>()
+                    .Apply(remainingPredicates.ExprNode.Cast())
+                    .With(lambda.Args().Arg(0), "new_arg")
+                    .Build()
                 .Value<TExprApplier>()
                     .Apply(optionalIf.Value())
                     .With(lambda.Args().Arg(0), "new_arg")

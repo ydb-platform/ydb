@@ -84,7 +84,7 @@
                                                                                     },
                                                                                     {
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "item.CounterID == 62 And item.EventDate >= \"15887\" And item.EventDate <= \"15917\" And item.IsRefresh == 0"
+                                                                                        "Predicate": "item.EventDate >= \"15887\" And item.EventDate <= \"15917\""
                                                                                     },
                                                                                     {
                                                                                         "Name": "TableFullScan",
@@ -108,19 +108,94 @@
                                                                                         "SsaProgram": {
                                                                                             "Command": [
                                                                                                 {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 106
+                                                                                                        },
+                                                                                                        "Constant": {
+                                                                                                            "Int32": 62
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 107
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 7
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 106
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "Id": 1
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 108
+                                                                                                        },
+                                                                                                        "Constant": {
+                                                                                                            "Int32": 0
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 109
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 16
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 108
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "Id": 1
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 110
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 107
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 109
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "Id": 11
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Filter": {
+                                                                                                        "Predicate": {
+                                                                                                            "Id": 110
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
                                                                                                     "Projection": {
                                                                                                         "Columns": [
                                                                                                             {
                                                                                                                 "Id": 41
                                                                                                             },
                                                                                                             {
-                                                                                                                "Id": 7
-                                                                                                            },
-                                                                                                            {
                                                                                                                 "Id": 6
-                                                                                                            },
-                                                                                                            {
-                                                                                                                "Id": 16
                                                                                                             },
                                                                                                             {
                                                                                                                 "Id": 15

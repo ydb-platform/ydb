@@ -50,11 +50,13 @@ SIMPLE_UDF(TRandString, char*(ui32)) {
 }
 
 SIMPLE_MODULE(TTestUdfsModule, TTestFilter, TTestFilterTerminate, TRandString);
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
     auto funcRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
     funcRegistry->AddModule("", "TestUdfs", new TTestUdfsModule());
+    funcRegistry->AddModule("", "Re2", CreateRe2Module());
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }

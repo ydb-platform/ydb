@@ -55,33 +55,13 @@ void TIndexUpsertActor::Bootstrap() {
             return;
         }
         pkColumns.emplace_back(Data->GetColumnByName(i));
-        switch (f->type()->id()) {
-            case arrow::Type::INT64:
-                types->emplace_back(i, NMetadata::NInternal::TYDBType::Primitive(Ydb::Type::INT64));
-                break;
-            case arrow::Type::INT32:
-                types->emplace_back(i, NMetadata::NInternal::TYDBType::Primitive(Ydb::Type::INT32));
-                break;
-            case arrow::Type::STRING:
-                types->emplace_back(i, NMetadata::NInternal::TYDBType::Primitive(Ydb::Type::UTF8));
-                break;
-            case arrow::Type::BINARY:
-                types->emplace_back(i, NMetadata::NInternal::TYDBType::Primitive(Ydb::Type::STRING));
-                break;
-            case arrow::Type::UINT64:
-                types->emplace_back(i, NMetadata::NInternal::TYDBType::Primitive(Ydb::Type::UINT64));
-                break;
-            case arrow::Type::UINT32:
-                types->emplace_back(i, NMetadata::NInternal::TYDBType::Primitive(Ydb::Type::UINT32));
-                break;
-            case arrow::Type::TIMESTAMP:
-                types->emplace_back(i, NMetadata::NInternal::TYDBType::Primitive(Ydb::Type::TIMESTAMP));
-                break;
-            default:
-                ExternalController->OnIndexUpsertionFailed("incorrect type for pk column");
-                PassAway();
-                return;
+        auto ydbType = NMetadata::NInternal::TYDBType::ConvertArrowToYDB(f->type()->id());
+        if (!ydbType) {
+            ExternalController->OnIndexUpsertionFailed("incorrect arrow type for ydb field");
+            PassAway();
+            return;
         }
+        types->emplace_back(i, NMetadata::NInternal::TYDBType::Primitive(*ydbType));
     }
 
     const std::vector<ui64> hashes = IndexInfo.GetExtractor()->ExtractIndex(Data);

@@ -173,6 +173,35 @@ Ydb::Type TYDBType::Primitive(const Ydb::Type::PrimitiveTypeId type) {
     return result;
 }
 
+std::optional<Ydb::Type::PrimitiveTypeId> TYDBType::ConvertArrowToYDB(const arrow::Type::type type) {
+    switch (type) {
+        case arrow::Type::INT64:
+            return Ydb::Type::INT64;
+        case arrow::Type::INT32:
+            return Ydb::Type::INT32;
+        case arrow::Type::INT16:
+            return Ydb::Type::INT16;
+        case arrow::Type::INT8:
+            return Ydb::Type::INT8;
+        case arrow::Type::STRING:
+            return Ydb::Type::UTF8;
+        case arrow::Type::BINARY:
+            return Ydb::Type::STRING;
+        case arrow::Type::UINT64:
+            return Ydb::Type::UINT64;
+        case arrow::Type::UINT32:
+            return Ydb::Type::UINT32;
+        case arrow::Type::UINT16:
+            return Ydb::Type::UINT16;
+        case arrow::Type::UINT8:
+            return Ydb::Type::UINT8;
+        case arrow::Type::TIMESTAMP:
+            return Ydb::Type::TIMESTAMP;
+        default:
+            return {};
+    }
+}
+
 std::optional<Ydb::Type::PrimitiveTypeId> TYDBType::ConvertYQLToYDB(const NScheme::TTypeId type) {
     switch (type) {
         case NScheme::NTypeIds::Int8:

@@ -4,6 +4,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <util/generic/vector.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
 
 namespace NKikimr::NMetadata::NInternal {
 
@@ -21,6 +22,7 @@ public:
     static Ydb::Type Primitive(const Ydb::Type::PrimitiveTypeId type);
     static std::optional<NScheme::TTypeId> ConvertYDBToYQL(const Ydb::Type::PrimitiveTypeId type);
     static std::optional<Ydb::Type::PrimitiveTypeId> ConvertYQLToYDB(const NScheme::TTypeId type);
+    static std::optional<Ydb::Type::PrimitiveTypeId> ConvertArrowToYDB(const arrow::Type::type type);
 
     static std::optional<TVector<std::pair<TString, NScheme::TTypeInfo>>> ConvertYDBToYQL(const std::vector<std::pair<TString, Ydb::Type>>& input);
 };

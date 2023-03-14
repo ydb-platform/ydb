@@ -9,6 +9,7 @@ namespace NActors {
         EvTestSmall,
         EvTestLarge,
         EvTestResponse,
+        EvTestStartPolling,
     };
 
     struct TEvTest : TEventPB<TEvTest, NInterconnectTest::TEvTest, EvTest> {
@@ -44,6 +45,10 @@ namespace NActors {
         TEvTestResponse(ui64 confirmedSequenceNumber) {
             Record.SetConfirmedSequenceNumber(confirmedSequenceNumber);
         }
+    };
+
+    struct TEvTestStartPolling : TEventPB<TEvTestStartPolling, NInterconnectTest::TEvTestStartPolling, EvTestStartPolling> {
+        TEvTestStartPolling() = default;
     };
 
 }

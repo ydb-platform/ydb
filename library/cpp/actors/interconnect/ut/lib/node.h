@@ -19,7 +19,7 @@ public:
     TNode(ui32 nodeId, ui32 numNodes, const THashMap<ui32, ui16>& nodeToPort, const TString& address,
           NMonitoring::TDynamicCounterPtr counters, TDuration deadPeerTimeout,
           TChannelsConfig channelsSettings = TChannelsConfig(),
-          ui32 numDynamicNodes = 0, ui32 numThreads = 1) {
+          ui32 numDynamicNodes = 0, ui32 numThreads = 1, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 1;
@@ -62,29 +62,31 @@ public:
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(),
             TMailboxType::ReadAsFilled, 0));
 
-        const TActorId loggerActorId(0, "logger");
-        constexpr ui32 LoggerComponentId = 410; // NKikimrServices::LOGGER
+        const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");
 
-        auto loggerSettings = MakeIntrusive<NLog::TSettings>(
-            loggerActorId,
-            (NLog::EComponent)LoggerComponentId,
-            NLog::PRI_INFO,
-            NLog::PRI_DEBUG,
-            0U);
+        if (!loggerSettings) {
+            constexpr ui32 LoggerComponentId = 410; // NKikimrServices::LOGGER
+            loggerSettings = MakeIntrusive<NLog::TSettings>(
+                loggerActorId,
+                (NLog::EComponent)LoggerComponentId,
+                NLog::PRI_INFO,
+                NLog::PRI_DEBUG,
+                0U);
 
-        loggerSettings->Append(
-            NActorsServices::EServiceCommon_MIN,
-            NActorsServices::EServiceCommon_MAX,
-            NActorsServices::EServiceCommon_Name
-        );
+            loggerSettings->Append(
+                NActorsServices::EServiceCommon_MIN,
+                NActorsServices::EServiceCommon_MAX,
+                NActorsServices::EServiceCommon_Name
+            );
 
-        constexpr ui32 WilsonComponentId = 430; // NKikimrServices::WILSON
-        static const TString WilsonComponentName = "WILSON";
+            constexpr ui32 WilsonComponentId = 430; // NKikimrServices::WILSON
+            static const TString WilsonComponentName = "WILSON";
 
-        loggerSettings->Append(
-            (NLog::EComponent)WilsonComponentId,
-            (NLog::EComponent)WilsonComponentId + 1,
-            [](NLog::EComponent) -> const TString & { return WilsonComponentName; });
+            loggerSettings->Append(
+                (NLog::EComponent)WilsonComponentId,
+                (NLog::EComponent)WilsonComponentId + 1,
+                [](NLog::EComponent) -> const TString & { return WilsonComponentName; });
+        }
 
         // register nameserver table
         auto names = MakeIntrusive<TTableNameserverSetup>();

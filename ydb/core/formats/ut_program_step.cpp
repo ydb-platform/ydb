@@ -56,6 +56,38 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, EOperati
     return batch->num_rows();
 }
 
+std::vector<bool> LikeTest(const std::vector<std::string>& data,
+                           EOperation op, const std::string& pattern, bool ignoreCase = false)
+{
+    auto schema = std::make_shared<arrow::Schema>(std::vector{
+                                                std::make_shared<arrow::Field>("x", arrow::utf8())});
+    arrow::StringBuilder sb;
+    sb.AppendValues(data).ok();
+    auto batch = arrow::RecordBatch::Make(schema, data.size(), {*sb.Finish()});
+    UNIT_ASSERT(batch->ValidateFull().ok());
+
+    auto step = std::make_shared<TProgramStep>();
+    step->Assignes = {
+        TAssign("res", op, {"x"}, std::make_shared<arrow::compute::MatchSubstringOptions>(pattern, ignoreCase))
+    };
+    step->Projection = {"res"};
+    auto status = ApplyProgram(batch, TProgram({step}), GetCustomExecContext());
+    if (!status.ok()) {
+        Cerr << status.ToString() << "\n";
+    }
+    UNIT_ASSERT(status.ok());
+    UNIT_ASSERT(batch->ValidateFull().ok());
+    UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+
+    auto& resColumn = static_cast<const arrow::BooleanArray&>(*batch->GetColumnByName("res"));
+    std::vector<bool> vec;
+    for (int i = 0; i < resColumn.length(); ++i) {
+        UNIT_ASSERT(!resColumn.IsNull(i)); // TODO
+        vec.push_back(resColumn.Value(i));
+    }
+    return vec;
+}
+
 enum class ETest {
     DEFAULT,
     EMPTY,
@@ -359,6 +391,33 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         auto x = BoolVecToArray({true, false, false});
         auto z = arrow::compute::CallFunction("invert", {x});
         UNIT_ASSERT(FilterTestUnary({x, z->make_array()}, EOperation::Invert, EOperation::Equal) == 3);
+    }
+
+    Y_UNIT_TEST(StartsWith) {
+        std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::StartsWith, "aa");
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
+    Y_UNIT_TEST(EndsWith) {
+        std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::EndsWith, "aa");
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
+    Y_UNIT_TEST(MatchSubstring) {
+        std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::MatchSubstring, "aa");
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
     }
 
     Y_UNIT_TEST(ScalarTest) {

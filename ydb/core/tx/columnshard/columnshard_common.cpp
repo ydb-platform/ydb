@@ -46,6 +46,7 @@ TString FromCells(const TConstArrayRef<TCell>& cells, const TVector<std::pair<TS
 struct TContext {
     const IColumnResolver& ColumnResolver;
     mutable THashMap<ui32, TString> Sources;
+    mutable THashMap<TString, std::shared_ptr<arrow::Scalar>> Constants;
 
     explicit TContext(const IColumnResolver& columnResolver)
         : ColumnResolver(columnResolver)
@@ -89,6 +90,19 @@ TAssign MakeFunction(const TContext& info, const std::string& name,
         return castOpts;
     };
 
+    auto mkLikeOptions = [&]() {
+        if (arguments.size() != 2 || !info.Constants.count(arguments[1])) {
+            return std::shared_ptr<arrow::compute::MatchSubstringOptions>();
+        }
+        auto patternScalar = info.Constants[arguments[1]];
+        if (!arrow::is_base_binary_like(patternScalar->type->id())) {
+            return std::shared_ptr<arrow::compute::MatchSubstringOptions>();
+        }
+        arguments.resize(1);
+        auto& pattern = static_cast<arrow::BaseBinaryScalar&>(*patternScalar).value;
+        return std::make_shared<arrow::compute::MatchSubstringOptions>(pattern->ToString()); // TODO: case-insensitive
+    };
+
     switch (func.GetId()) {
         case TId::FUNC_CMP_EQUAL:
             return TAssign(name, EOperation::Equal, std::move(arguments));
@@ -106,14 +120,30 @@ TAssign MakeFunction(const TContext& info, const std::string& name,
             return TAssign(name, EOperation::IsNull, std::move(arguments));
         case TId::FUNC_STR_LENGTH:
             return TAssign(name, EOperation::BinaryLength, std::move(arguments));
-        case TId::FUNC_STR_MATCH:
-            return TAssign(name, EOperation::MatchSubstring, std::move(arguments));
-        case TId::FUNC_STR_MATCH_LIKE:
-            return TAssign(name, EOperation::MatchLike, std::move(arguments));
-        case TId::FUNC_STR_STARTS_WITH:
-            return TAssign(name, EOperation::StartsWith, std::move(arguments));
-        case TId::FUNC_STR_ENDS_WITH:
-            return TAssign(name, EOperation::EndsWith, std::move(arguments));
+        case TId::FUNC_STR_MATCH: {
+            if (auto opts = mkLikeOptions()) {
+                return TAssign(name, EOperation::MatchSubstring, std::move(arguments), opts);
+            }
+            break;
+        }
+        case TId::FUNC_STR_MATCH_LIKE: {
+            if (auto opts = mkLikeOptions()) {
+                return TAssign(name, EOperation::MatchLike, std::move(arguments), opts);
+            }
+            break;
+        }
+        case TId::FUNC_STR_STARTS_WITH: {
+            if (auto opts = mkLikeOptions()) {
+                return TAssign(name, EOperation::StartsWith, std::move(arguments), opts);
+            }
+            break;
+        }
+        case TId::FUNC_STR_ENDS_WITH: {
+            if (auto opts = mkLikeOptions()) {
+                return TAssign(name, EOperation::EndsWith, std::move(arguments), opts);
+            }
+            break;
+        }
         case TId::FUNC_BINARY_NOT:
             return TAssign(name, EOperation::Invert, std::move(arguments));
         case TId::FUNC_BINARY_AND:
@@ -283,6 +313,7 @@ bool ExtractAssign(const TContext& info, NSsa::TProgramStep& step, const NKikimr
             if (!cnst.IsConstant()) {
                 return false;
             }
+            info.Constants[columnName] = cnst.GetConstant();
             step.Assignes.emplace_back(std::move(cnst));
             break;
         }

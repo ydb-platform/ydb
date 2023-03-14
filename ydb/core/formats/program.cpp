@@ -192,10 +192,6 @@ EOperation ValidateOperation(EOperation op, ui32 argsSize) {
         case EOperation::LessEqual:
         case EOperation::Greater:
         case EOperation::GreaterEqual:
-        case EOperation::MatchSubstring:
-        case EOperation::MatchLike:
-        case EOperation::StartsWith:
-        case EOperation::EndsWith:
         case EOperation::And:
         case EOperation::Or:
         case EOperation::Xor:
@@ -237,6 +233,10 @@ EOperation ValidateOperation(EOperation op, ui32 argsSize) {
         case EOperation::Invert:
         case EOperation::Abs:
         case EOperation::Negate:
+        case EOperation::StartsWith:
+        case EOperation::EndsWith:
+        case EOperation::MatchSubstring:
+        case EOperation::MatchLike:
             if (argsSize == 1) {
                 return op;
             }

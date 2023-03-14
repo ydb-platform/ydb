@@ -96,7 +96,7 @@ void TTargetBase::Progress(ui64 schemeShardId, const TActorId& proxy, const TAct
     case EDstState::Removing:
         if (!DstRemover) {
             DstRemover = ctx.Register(CreateDstRemover(ctx.SelfID, schemeShardId, proxy,
-                ReplicationId, TargetId, DstPathId));
+                ReplicationId, TargetId, Kind, DstPathId));
         }
         break;
     case EDstState::Error:

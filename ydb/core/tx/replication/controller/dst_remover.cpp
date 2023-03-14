@@ -38,8 +38,13 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     void DropDst() {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
-        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
         tx.MutableDrop()->SetId(DstPathId.LocalPathId);
+
+        switch (Kind) {
+        case TReplication::ETargetKind::Table:
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+            break;
+        }
 
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
         Become(&TThis::StateDropDst);
@@ -135,12 +140,14 @@ public:
             const TActorId& proxy,
             ui64 rid,
             ui64 tid,
+            TReplication::ETargetKind kind,
             const TPathId& dstPathId)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
         , ReplicationId(rid)
         , TargetId(tid)
+        , Kind(kind)
         , DstPathId(dstPathId)
         , LogPrefix("DstRemover", ReplicationId, TargetId)
     {
@@ -168,6 +175,7 @@ private:
     const TActorId YdbProxy;
     const ui64 ReplicationId;
     const ui64 TargetId;
+    const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
     const TActorLogPrefix LogPrefix;
 
@@ -177,9 +185,9 @@ private:
 }; // TDstRemover
 
 IActor* CreateDstRemover(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
-        ui64 rid, ui64 tid, const TPathId& dstPathId)
+        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId)
 {
-    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, dstPathId);
+    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId);
 }
 
 }

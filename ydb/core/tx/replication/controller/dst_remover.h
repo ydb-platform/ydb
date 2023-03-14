@@ -7,6 +7,6 @@
 namespace NKikimr::NReplication::NController {
 
 IActor* CreateDstRemover(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
-    ui64 rid, ui64 tid, const TPathId& dstPathId);
+    ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId);
 
 }

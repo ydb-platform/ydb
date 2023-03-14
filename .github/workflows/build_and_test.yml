@@ -33,9 +33,11 @@ jobs:
       run: |
         cd ../build/ydb
         rm -rf $(pwd)/../../tmp/*
-        # Our test util provides output with coloring, so remove it using sed before sending to grep
-        TMPDIR=$(pwd)/../../tmp ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
-          --output-junit ctest_report.xml | \
+        rm -rf $(pwd)/../../test_reports/*
+        # Sed removes coloring from the output
+        TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$(pwd)/../../test_reports/" Y_UNITTEST_OUTPUT="xml:$(pwd)/../../test_reports/" \
+          ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
+                --output-junit $(pwd)/../../test_reports/ctest_report.xml | \
           sed -e 's/\x1b\[[0-9;]*m//g' | \
           tee testrun.log | \
           grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of'

@@ -170,9 +170,10 @@ double TPoolInfo::GetlastSecondPoolConsumed(i16 threadIdx) {
 void TPoolInfo::PullStats(ui64 ts) {
     for (i16 threadIdx = 0; threadIdx < MaxThreadCount; ++threadIdx) {
         TThreadInfo &threadInfo = ThreadInfo[threadIdx];
-        threadInfo.Consumed.Register(ts, Pool->GetThreadConsumedUs(threadIdx));
+        TCpuConsumption cpuConsumption = Pool->GetThreadCpuConsumption(threadIdx);
+        threadInfo.Consumed.Register(ts, cpuConsumption.ConsumedUs);
         LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "consumed", UNROLL_HISTORY(threadInfo.Consumed.History));
-        threadInfo.Booked.Register(ts, Pool->GetThreadBookedUs(threadIdx));
+        threadInfo.Booked.Register(ts, cpuConsumption.BookedUs);
         LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "booked", UNROLL_HISTORY(threadInfo.Booked.History));
     }
 }
@@ -237,7 +238,7 @@ void THarmonizer::PullStats(ui64 ts) {
 }
 
 Y_FORCE_INLINE bool IsStarved(double consumed, double booked) {
-    return Max(consumed, booked) > 0.1 && consumed < booked * 0.7;
+    return consumed < booked * 0.7;
 }
 
 Y_FORCE_INLINE bool IsHoggish(double booked, ui16 currentThreadCount) {

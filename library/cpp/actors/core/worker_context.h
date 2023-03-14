@@ -137,7 +137,8 @@ namespace NActors {
         }
 
         void UpdateThreadTime() {
-            RelaxedStore(&WorkerStats.CpuNs, ThreadCPUTime() * 1000);
+            RelaxedStore(&WorkerStats.SafeElapsedTicks, (ui64)RelaxedLoad(&WorkerStats.ElapsedTicks));
+            RelaxedStore(&WorkerStats.CpuUs, ThreadCPUTime());
         }
 #else
         void GetCurrentStats(TExecutorThreadStats&) const {}

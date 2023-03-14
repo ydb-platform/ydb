@@ -493,24 +493,14 @@ namespace NActors {
         return false;
     }
 
-    double TBasicExecutorPool::GetThreadConsumedUs(i16 threadIdx) {
+    TCpuConsumption TBasicExecutorPool::GetThreadCpuConsumption(i16 threadIdx) {
         if ((ui32)threadIdx >= PoolThreads) {
-            return 0;
+            return {0.0, 0.0};
         }
         TThreadCtx& threadCtx = Threads[threadIdx];
         TExecutorThreadStats stats;
         threadCtx.Thread->GetCurrentStats(stats);
-        return Ts2Us(stats.ElapsedTicks);
-    }
-
-    double TBasicExecutorPool::GetThreadBookedUs(i16 threadIdx) {
-        if ((ui32)threadIdx >= PoolThreads) {
-            return 0;
-        }
-        TThreadCtx& threadCtx = Threads[threadIdx];
-        TExecutorThreadStats stats;
-        threadCtx.Thread->GetCurrentStats(stats);
-        return stats.CpuNs / 1000.0;
+        return {Ts2Us(stats.SafeElapsedTicks), static_cast<double>(stats.CpuUs)};
     }
 
     i16 TBasicExecutorPool::GetBlockingThreadCount() const {

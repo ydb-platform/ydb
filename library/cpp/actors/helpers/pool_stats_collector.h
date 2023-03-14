@@ -217,7 +217,7 @@ private:
             *NonDeliveredEvents = stats.NonDeliveredEvents;
             *DestroyedActors    = stats.PoolDestroyedActors;
             *EmptyMailboxActivation = stats.EmptyMailboxActivation;
-            *CpuMicrosec        = stats.CpuNs / 1000;
+            *CpuMicrosec        = stats.CpuUs;
             *ElapsedMicrosec    = ::NHPTimer::GetSeconds(stats.ElapsedTicks)*1000000;
             *ParkedMicrosec     = ::NHPTimer::GetSeconds(stats.ParkedTicks)*1000000;
             *ActorRegistrations = stats.PoolActorRegistrations;

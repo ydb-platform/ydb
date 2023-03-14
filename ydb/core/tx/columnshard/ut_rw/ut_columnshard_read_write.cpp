@@ -1165,7 +1165,6 @@ static NKikimrSSA::TProgram MakeSelect(TAssignment::EFunction compareId = TAssig
 }
 
 // SELECT level, timestamp FROM t WHERE likeFunc(timestamp, pattern)
-// FUNC_STR_MATCH, FUNC_STR_STARTS_WITH, FUNC_STR_ENDS_WITH
 static NKikimrSSA::TProgram MakeSelectLike(TAssignment::EFunction likeId, const TString& pattern) {
     NKikimrSSA::TProgram ssa;
 
@@ -1467,8 +1466,11 @@ void TestReadWithProgramLike(const TestTableDescription& table = {}) {
     TString pattern = "1";
     std::vector<NKikimrSSA::TProgram> ssas = {
         MakeSelectLike(TAssignment::FUNC_STR_MATCH, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_MATCH_IGNORE_CASE, pattern),
         MakeSelectLike(TAssignment::FUNC_STR_STARTS_WITH, pattern),
-        MakeSelectLike(TAssignment::FUNC_STR_ENDS_WITH, pattern)
+        MakeSelectLike(TAssignment::FUNC_STR_STARTS_WITH_IGNORE_CASE, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_ENDS_WITH, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_ENDS_WITH_IGNORE_CASE, pattern)
     };
 
     ui32 i = 0;
@@ -1509,12 +1511,15 @@ void TestReadWithProgramLike(const TestTableDescription& table = {}) {
 
             switch (i) {
                 case 0:
+                case 1:
                     UNIT_ASSERT(CheckColumns(readData, meta, {"message"}, 19));
                     break;
-                case 1:
+                case 2:
+                case 3:
                     UNIT_ASSERT(CheckColumns(readData, meta, {"message"}, 11));
                     break;
-                case 2:
+                case 4:
+                case 5:
                     UNIT_ASSERT(CheckColumns(readData, meta, {"message"}, 10));
                     break;
                 default:

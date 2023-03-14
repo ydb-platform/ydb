@@ -77,6 +77,9 @@ message TProgram {
             FUNC_STR_MATCH_LIKE = 32;
             FUNC_STR_STARTS_WITH = 33;
             FUNC_STR_ENDS_WITH = 34;
+            FUNC_STR_MATCH_IGNORE_CASE = 35;
+            FUNC_STR_STARTS_WITH_IGNORE_CASE = 36;
+            FUNC_STR_ENDS_WITH_IGNORE_CASE = 37;
         }
 
         message TFunction {

@@ -420,6 +420,33 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         UNIT_ASSERT_VALUES_EQUAL(res[3], false);
     }
 
+    Y_UNIT_TEST(StartsWithIgnoreCase) {
+        std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::StartsWith, "aA", true);
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
+    Y_UNIT_TEST(EndsWithIgnoreCase) {
+        std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::EndsWith, "aA", true);
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
+    Y_UNIT_TEST(MatchSubstringIgnoreCase) {
+        std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::MatchSubstring, "aA", true);
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
     Y_UNIT_TEST(ScalarTest) {
         auto schema = std::make_shared<arrow::Schema>(std::vector{
                                                     std::make_shared<arrow::Field>("x", arrow::int64()),

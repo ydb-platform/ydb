@@ -90,7 +90,7 @@ TAssign MakeFunction(const TContext& info, const std::string& name,
         return castOpts;
     };
 
-    auto mkLikeOptions = [&]() {
+    auto mkLikeOptions = [&](bool ignoreCase) {
         if (arguments.size() != 2 || !info.Constants.count(arguments[1])) {
             return std::shared_ptr<arrow::compute::MatchSubstringOptions>();
         }
@@ -100,7 +100,7 @@ TAssign MakeFunction(const TContext& info, const std::string& name,
         }
         arguments.resize(1);
         auto& pattern = static_cast<arrow::BaseBinaryScalar&>(*patternScalar).value;
-        return std::make_shared<arrow::compute::MatchSubstringOptions>(pattern->ToString()); // TODO: case-insensitive
+        return std::make_shared<arrow::compute::MatchSubstringOptions>(pattern->ToString(), ignoreCase);
     };
 
     switch (func.GetId()) {
@@ -121,25 +121,43 @@ TAssign MakeFunction(const TContext& info, const std::string& name,
         case TId::FUNC_STR_LENGTH:
             return TAssign(name, EOperation::BinaryLength, std::move(arguments));
         case TId::FUNC_STR_MATCH: {
-            if (auto opts = mkLikeOptions()) {
+            if (auto opts = mkLikeOptions(false)) {
                 return TAssign(name, EOperation::MatchSubstring, std::move(arguments), opts);
             }
             break;
         }
         case TId::FUNC_STR_MATCH_LIKE: {
-            if (auto opts = mkLikeOptions()) {
+            if (auto opts = mkLikeOptions(false)) {
                 return TAssign(name, EOperation::MatchLike, std::move(arguments), opts);
             }
             break;
         }
         case TId::FUNC_STR_STARTS_WITH: {
-            if (auto opts = mkLikeOptions()) {
+            if (auto opts = mkLikeOptions(false)) {
                 return TAssign(name, EOperation::StartsWith, std::move(arguments), opts);
             }
             break;
         }
         case TId::FUNC_STR_ENDS_WITH: {
-            if (auto opts = mkLikeOptions()) {
+            if (auto opts = mkLikeOptions(false)) {
+                return TAssign(name, EOperation::EndsWith, std::move(arguments), opts);
+            }
+            break;
+        }
+        case TId::FUNC_STR_MATCH_IGNORE_CASE: {
+            if (auto opts = mkLikeOptions(true)) {
+                return TAssign(name, EOperation::MatchSubstring, std::move(arguments), opts);
+            }
+            break;
+        }
+        case TId::FUNC_STR_STARTS_WITH_IGNORE_CASE: {
+            if (auto opts = mkLikeOptions(true)) {
+                return TAssign(name, EOperation::StartsWith, std::move(arguments), opts);
+            }
+            break;
+        }
+        case TId::FUNC_STR_ENDS_WITH_IGNORE_CASE: {
+            if (auto opts = mkLikeOptions(true)) {
                 return TAssign(name, EOperation::EndsWith, std::move(arguments), opts);
             }
             break;

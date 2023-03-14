@@ -112,7 +112,7 @@ user@host:~$ ydb-dstool --dry-run -e ydbd.endpoint vdisk evict --vdisk-ids ${vdi
 
 ### Handle errors
 
-By convention ```user@host:~$ ydb-dstool``` returns 0 on success, and non-zero on failure. You can check exit status
+By convention ```ydb-dstool``` returns 0 on success, and non-zero on failure. You can check exit status
 as follows:
 
 ```bash
@@ -120,7 +120,7 @@ as follows:
 ~$ if [ $? -eq 0 ]; then echo "success"; else echo "failure"; fi
 ```
 
-```user@host:~$ ydb-dstool``` outputs errors to ```stderr``` so to redirect errors to ```errors.txt``` one could run:
+Since ```ydb-dstool``` outputs errors to ```stderr```, to redirect errors to ```errors.txt``` one could run:
 
 ```bash
 ~$ user@host:~$ ydb-dstool -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id} 2> ~/errors.txt

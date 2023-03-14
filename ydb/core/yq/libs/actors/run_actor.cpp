@@ -702,7 +702,7 @@ private:
         }
     }
 
-    void FillMemoryInfo() {
+    void FillGraphMemoryInfo(NYq::NProto::TGraphParams& graphParams) {
         auto mkqlDefaultLimit = Params.Config.GetResourceManager().GetMkqlInitialMemoryLimit();
         if (mkqlDefaultLimit == 0) {
             mkqlDefaultLimit = 8_GB;
@@ -713,17 +713,15 @@ private:
             s3ReadDefaultInflightLimit = 200_MB;
         }
 
-        for (auto& graphParams : DqGraphParams) {
-            for (NYql::NDqProto::TDqTask& task : *graphParams.MutableTasks()) {
-                if (task.GetInitialTaskMemoryLimit() == 0) {
-                    ui64 limitTotal = mkqlDefaultLimit;
-                    for (auto& input : *task.MutableInputs()) {
-                        if (input.HasSource() && input.GetSource().GetType() == "S3Source") {
-                            limitTotal += s3ReadDefaultInflightLimit;
-                        }
+        for (NYql::NDqProto::TDqTask& task : *graphParams.MutableTasks()) {
+            if (task.GetInitialTaskMemoryLimit() == 0) {
+                ui64 limitTotal = mkqlDefaultLimit;
+                for (auto& input : *task.MutableInputs()) {
+                    if (input.HasSource() && input.GetSource().GetType() == "S3Source") {
+                        limitTotal += s3ReadDefaultInflightLimit;
                     }
-                    task.SetInitialTaskMemoryLimit(limitTotal);
                 }
+                task.SetInitialTaskMemoryLimit(limitTotal);
             }
         }
     }
@@ -1310,6 +1308,8 @@ private:
 
         LOG_D("RunEvalDqGraph");
 
+        FillGraphMemoryInfo(dqGraphParams);
+
         TDqConfiguration::TPtr dqConfiguration = MakeIntrusive<TDqConfiguration>();
         dqConfiguration->Dispatch(dqGraphParams.GetSettings());
         dqConfiguration->FreezeDefaults();
@@ -1798,6 +1798,9 @@ private:
                 SendTransientIssues(issues);
             }
             PrepareGraphs();
+            for (auto& graphParams : DqGraphParams) {
+                FillGraphMemoryInfo(graphParams);
+            }
         } else {
             TString abortMessage = message;
             if (abortMessage == "") {

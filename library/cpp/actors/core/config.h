@@ -131,7 +131,7 @@ namespace NActors {
         std::optional<ui32> GetThreadsOptional(ui32 poolId) const {
             for (const auto& p : Basic) {
                 if (p.PoolId == poolId) {
-                    return p.Threads;
+                    return p.DefaultThreadCount;
                 }
             }
             for (const auto& p : IO) {

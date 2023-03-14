@@ -130,7 +130,7 @@ namespace NActors {
         std::optional<ui32> GetThreadsOptional(const ui32 poolId) const {
             if (Y_LIKELY(Executors)) {
                 if (Y_LIKELY(poolId < ExecutorsCount)) {
-                    return Executors[poolId]->GetThreads();
+                    return Executors[poolId]->GetDefaultThreadCount();
                 } else {
                     return {};
                 }

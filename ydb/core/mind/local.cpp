@@ -280,7 +280,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             TVector<TExecutorThreadStats> statsCopy;
             ctx.ExecutorThread.ActorSystem->GetPoolStats(AppData()->UserPoolId, poolStats, statsCopy);
             if (!statsCopy.empty()) {
-                record.MutableResourceMaximum()->SetCPU((statsCopy.size() - 1) * 1000000);
+                record.MutableResourceMaximum()->SetCPU(poolStats.CurrentThreadCount * 1000000);
             }
         }
         if (!record.GetResourceMaximum().HasMemory()) {

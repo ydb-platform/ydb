@@ -516,8 +516,8 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     }
 
     const auto keyWidth = (inputsWithCount >> 1U) - 1U;
-    const auto inputType = AS_TYPE(TTupleType, AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType());
-    std::vector<ui32> indexes(inputType->GetElementsCount());
+    const auto inputWideComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
+    std::vector<ui32> indexes(inputWideComponents.size());
 
     TKeyTypes keyTypes(keyWidth);
     std::unordered_set<ui32> keyIndexes;
@@ -525,7 +525,7 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
         const auto keyIndex = AS_VALUE(TDataLiteral, callable.GetInput(((i + 1U) << 1U) - offset))->AsValue().Get<ui32>();
         indexes[i] = keyIndex;
         keyIndexes.emplace(keyIndex);
-        keyTypes[i].first = *UnpackOptionalData(inputType->GetElementType(keyIndex), keyTypes[i].second)->GetDataSlot();
+        keyTypes[i].first = *UnpackOptionalData(inputWideComponents[keyIndex], keyTypes[i].second)->GetDataSlot();
     }
 
     size_t payloadPos = keyTypes.size();
@@ -537,9 +537,9 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
         indexes[payloadPos++] = i;
     }
 
-    std::vector<EValueRepresentation> representations(inputType->GetElementsCount());
+    std::vector<EValueRepresentation> representations(inputWideComponents.size());
     for (auto i = 0U; i < representations.size(); ++i)
-        representations[i] = GetValueRepresentation(inputType->GetElementType(indexes[i]));
+        representations[i] = GetValueRepresentation(inputWideComponents[indexes[i]]);
 
     TComputationNodePtrVector directions(keyWidth);
     auto index = 1U - offset;

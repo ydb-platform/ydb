@@ -1878,7 +1878,9 @@ IComputationNode* WrapMapJoinCore(TCallable& callable, const TComputationNodeFac
     for (ui32 i = 0; i < leftKeyColumns.size(); ++i) {
         const auto leftColumnType = leftItemType->IsTuple() ?
             AS_TYPE(TTupleType, leftItemType)->GetElementType(leftKeyColumns[i]):
-            AS_TYPE(TStructType, leftItemType)->GetMemberType(leftKeyColumns[i]);
+            (leftItemType->IsMulti() ?
+                AS_TYPE(TMultiType, leftItemType)->GetElementType(leftKeyColumns[i]):
+                AS_TYPE(TStructType, leftItemType)->GetMemberType(leftKeyColumns[i]));
         const auto rightType = isTupleKey ? AS_TYPE(TTupleType, dictKeyType)->GetElementType(i) : dictKeyType;
         bool isOptional;
         if (UnpackOptional(leftColumnType, isOptional)->IsSameType(*rightType)) {
@@ -1901,6 +1903,11 @@ IComputationNode* WrapMapJoinCore(TCallable& callable, const TComputationNodeFac
         outputRepresentations.reserve(tupleType->GetElementsCount());
         for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i)
             outputRepresentations.emplace_back(GetValueRepresentation(tupleType->GetElementType(i)));
+    } else if (returnItemType->IsMulti()) {
+        const auto multiType = AS_TYPE(TMultiType, returnItemType);
+        outputRepresentations.reserve(multiType->GetElementsCount());
+        for (ui32 i = 0U; i < multiType->GetElementsCount(); ++i)
+            outputRepresentations.emplace_back(GetValueRepresentation(multiType->GetElementType(i)));
     } else if (returnItemType->IsStruct()) {
         const auto structType = AS_TYPE(TStructType, returnItemType);
         outputRepresentations.reserve(structType->GetMembersCount());
@@ -1914,7 +1921,7 @@ IComputationNode* WrapMapJoinCore(TCallable& callable, const TComputationNodeFac
 #define NEW_WRAPPER(KIND, RIGHT_REQ, IS_TUPLE) \
     if (type->IsFlow()) { \
         if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) { \
-            const auto width = AS_TYPE(TTupleType, AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType())->GetItemType())->GetElementsCount(); \
+            const auto width = GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType())); \
             if (boolWithoutRight) \
                 return new TWideMapJoinWrapper<true, RIGHT_REQ, IS_TUPLE>(ctx.Mutables, \
                     std::move(leftKeyConverters), dictType, std::move(outputRepresentations), \

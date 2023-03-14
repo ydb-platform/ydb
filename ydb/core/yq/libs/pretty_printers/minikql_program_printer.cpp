@@ -75,6 +75,10 @@ public:
         Out << "BlockType";
     }
 
+    void Visit(TMultiType&) override {
+        Out << "MultiType";
+    }
+
     // Values
     void Visit(TVoid&) override {
         Out << "void";

@@ -25,16 +25,16 @@ class TTopOrSortBlocksWrapper : public TStatefulWideFlowBlockComputationNode<TTo
     using TBase = TStatefulWideFlowBlockComputationNode<TSelf>;
     using TChunkedArrayIndex = TVector<IArrayBuilder::TArrayDataItem>;
 public:
-    TTopOrSortBlocksWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TTupleType* tupleType, IComputationNode* count,
+    TTopOrSortBlocksWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TArrayRef<TType* const> wideComponents, IComputationNode* count,
         TVector<IComputationNode*>&& directions, TVector<ui32>&& keyIndicies)
-        : TBase(mutables, flow, tupleType->GetElementsCount())
+        : TBase(mutables, flow, wideComponents.size())
         , Flow_(flow)
         , Count_(count)
         , Directions_(std::move(directions))
         , KeyIndicies_(std::move(keyIndicies))
     {
-        for (ui32 i = 0; i < tupleType->GetElementsCount() - 1; ++i) {
-            Columns_.push_back(AS_TYPE(TBlockType, tupleType->GetElementType(i)));
+        for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
+            Columns_.push_back(AS_TYPE(TBlockType, wideComponents[i]));
         }
     }
 
@@ -502,8 +502,8 @@ IComputationNode* WrapTopOrSort(TCallable& callable, const TComputationNodeFacto
     MKQL_ENSURE(inputsWithCount > 2U && !(inputsWithCount % 2U), "Expected more arguments.");
 
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
-    MKQL_ENSURE(tupleType->GetElementsCount() > 0, "Expected at least one column");
+    const auto wideComponents = GetWideComponents(flowType);
+    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
@@ -519,12 +519,12 @@ IComputationNode* WrapTopOrSort(TCallable& callable, const TComputationNodeFacto
     TVector<ui32> keyIndicies;
     for (ui32 i = 2; i < inputsWithCount; i += 2) {
         ui32 keyIndex = AS_VALUE(TDataLiteral, callable.GetInput(i - offset))->AsValue().Get<ui32>();
-        MKQL_ENSURE(keyIndex + 1 < tupleType->GetElementsCount(), "Wrong key index");
+        MKQL_ENSURE(keyIndex + 1 < wideComponents.size(), "Wrong key index");
         keyIndicies.push_back(keyIndex);
         directions.push_back(LocateNode(ctx.NodeLocator, callable, i + 1 - offset));
     }
 
-    return new TTopOrSortBlocksWrapper<Sort, HasCount>(ctx.Mutables, wideFlow, tupleType, count, std::move(directions), std::move(keyIndicies));
+    return new TTopOrSortBlocksWrapper<Sort, HasCount>(ctx.Mutables, wideFlow, wideComponents, count, std::move(directions), std::move(keyIndicies));
 }
 
 } //namespace

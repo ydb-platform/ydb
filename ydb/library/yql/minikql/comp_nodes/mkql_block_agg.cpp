@@ -386,12 +386,12 @@ size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
 
 size_t CalcMaxBlockLenForOutput(TType* out) {
     const auto outputType = AS_TYPE(TFlowType, out);
-    const auto outputTupleType = AS_TYPE(TTupleType, outputType->GetItemType());
-    MKQL_ENSURE(outputTupleType->GetElementsCount() > 0, "Expecting at least one output column");
+    const auto wideComponents = GetWideComponents(outputType);
+    MKQL_ENSURE(wideComponents.size() > 0, "Expecting at least one output column");
 
     size_t maxBlockItemSize = 0;
-    for (ui32 i = 0; i < outputTupleType->GetElementsCount() - 1; ++i) {
-        auto type = AS_TYPE(TBlockType, outputTupleType->GetElementType(i));
+    for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
+        auto type = AS_TYPE(TBlockType, wideComponents[i]);
         MKQL_ENSURE(type->GetShape() != TBlockType::EShape::Scalar, "Expecting block type");
         maxBlockItemSize = std::max(maxBlockItemSize, CalcMaxBlockItemSize(type->GetItemType()));
     }
@@ -1423,7 +1423,8 @@ void FillAggStreams(TRuntimeNode streamsNode, TVector<TVector<ui32>>& streams) {
 IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
+    const auto wideComponents = GetWideComponents(flowType);
+    const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
@@ -1443,7 +1444,8 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
 IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
+    const auto wideComponents = GetWideComponents(flowType);
+    const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
@@ -1488,7 +1490,8 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
 IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
+    const auto wideComponents = GetWideComponents(flowType);
+    const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
@@ -1519,7 +1522,8 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
 IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
+    const auto wideComponents = GetWideComponents(flowType);
+    const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");

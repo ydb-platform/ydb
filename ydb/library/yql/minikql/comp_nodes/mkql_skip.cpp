@@ -346,7 +346,7 @@ IComputationNode* WrapSkip(TCallable& callable, const TComputationNodeFactoryCon
     const auto count = LocateNode(ctx.NodeLocator, callable, 1);
     if (type->IsFlow()) {
         if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow))
-            return new TWideSkipWrapper(ctx.Mutables, wide, count, AS_TYPE(TTupleType, AS_TYPE(TFlowType, type)->GetItemType())->GetElementsCount());
+            return new TWideSkipWrapper(ctx.Mutables, wide, count, GetWideComponentsCount(AS_TYPE(TFlowType, type)));
         else
             return new TSkipFlowWrapper(ctx.Mutables, GetValueRepresentation(type), flow, count);
     } else if (type->IsStream()) {

@@ -628,7 +628,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest) {
                 return pb.NewTuple({pb.Nth(item, 1U)});
             });
 
-            const auto resultType = pb.NewFlowType(pb.NewTupleType({
+            const auto resultType = pb.NewFlowType(pb.NewMultiType({
                 pb.NewDataType(NUdf::TDataType<char*>::Id),
                 pb.NewDataType(NUdf::TDataType<char*>::Id)
             }));
@@ -695,7 +695,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest) {
                 return pb.NewTuple({pb.Nth(item, 1U)});
             });
 
-            const auto resultType = pb.NewFlowType(pb.NewTupleType({
+            const auto resultType = pb.NewFlowType(pb.NewMultiType({
                 pb.NewDataType(NUdf::TDataType<char*>::Id),
                 pb.NewDataType(NUdf::TDataType<char*>::Id)
             }));
@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest) {
                 return pb.NewTuple({pb.Nth(item, 1U)});
             });
 
-            const auto resultType = pb.NewFlowType(pb.NewTupleType({
+            const auto resultType = pb.NewFlowType(pb.NewMultiType({
                 pb.NewDataType(NUdf::TDataType<char*>::Id),
                 pb.NewDataType(NUdf::TDataType<char*>::Id)
             }));
@@ -838,7 +838,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest) {
                 return pb.NewTuple({pb.Nth(item, 1U)});
             });
 
-            const auto resultType = pb.NewFlowType(pb.NewTupleType({
+            const auto resultType = pb.NewFlowType(pb.NewMultiType({
                 pb.NewDataType(NUdf::TDataType<char*>::Id),
                 pb.NewDataType(NUdf::TDataType<char*>::Id)
             }));
@@ -914,7 +914,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest) {
                 return pb.NewTuple({pb.Nth(item, 1U)});
             });
 
-            const auto resultType = pb.NewFlowType(pb.NewTupleType({
+            const auto resultType = pb.NewFlowType(pb.NewMultiType({
                 pb.NewDataType(NUdf::TDataType<char*>::Id),
                 pb.NewDataType(NUdf::TDataType<ui32>::Id)
             }));
@@ -981,7 +981,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest) {
                 return pb.NewTuple({pb.Nth(item, 1U)});
             });
 
-            const auto resultType = pb.NewFlowType(pb.NewTupleType({
+            const auto resultType = pb.NewFlowType(pb.NewMultiType({
                 pb.NewDataType(NUdf::TDataType<char*>::Id),
                 pb.NewDataType(NUdf::TDataType<ui32>::Id)
             }));
@@ -1048,7 +1048,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest) {
                 return pb.NewTuple({pb.Nth(item, 1U)});
             });
 
-            const auto resultType = pb.NewFlowType(pb.NewTupleType({
+            const auto resultType = pb.NewFlowType(pb.NewMultiType({
                 pb.NewDataType(NUdf::TDataType<char*>::Id),
                 pb.NewDataType(NUdf::TDataType<ui32>::Id)
             }));
@@ -1118,7 +1118,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest) {
                 return pb.NewTuple({pb.Nth(item, 1U)});
             });
 
-            const auto resultType = pb.NewFlowType(pb.NewTupleType({
+            const auto resultType = pb.NewFlowType(pb.NewMultiType({
                 pb.NewDataType(NUdf::TDataType<char*>::Id),
                 pb.NewDataType(NUdf::TDataType<ui32>::Id)
             }));

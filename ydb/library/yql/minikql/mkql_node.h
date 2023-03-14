@@ -149,7 +149,8 @@ class TTypeEnvironment;
     XX(EmptyDict, 32 + 2)   \
     XX(Tagged, 48 + 7)      \
     XX(Block, 16 + 13)      \
-    XX(Pg, 16 + 3)
+    XX(Pg, 16 + 3)          \
+    XX(Multi, 16 + 11)
 
 class TType : public TNode {
 public:
@@ -255,6 +256,9 @@ using TEmptyDictType = TSingularType<TType::EKind::EmptyDict>;
 
 template <TType::EKind SingularKind>
 TType* GetTypeOfSingular(const TTypeEnvironment& env);
+
+template <typename TLiteralType>
+TLiteralType* GetEmptyLiteral(const TTypeEnvironment& env);
 
 template <TType::EKind SingularKind>
 class TSingular : public TNode {
@@ -533,6 +537,11 @@ inline TType* GetTypeOfSingular<TType::EKind::EmptyList>(const TTypeEnvironment&
 template <>
 inline TType* GetTypeOfSingular<TType::EKind::EmptyDict>(const TTypeEnvironment& env) {
     return env.GetTypeOfEmptyDict();
+}
+
+template <>
+inline TTupleLiteral* GetEmptyLiteral(const TTypeEnvironment& env) {
+    return env.GetEmptyTuple();
 }
 
 class TDataType : public TType {
@@ -1176,16 +1185,60 @@ private:
     TRuntimeNode Item;
 };
 
-class TTupleType : public TType {
+template<typename TDerived, TType::EKind DerivedKind>
+class TTupleLikeType : public TType {
 friend class TType;
+using TSelf = TTupleLikeType<TDerived, DerivedKind>;
 public:
-    static TTupleType* Create(ui32 elementsCount, TType* const* elements, const TTypeEnvironment& env);
+    static TDerived* Create(ui32 elementsCount, TType* const* elements, const TTypeEnvironment& env) {
+        TType **allocatedElements = nullptr;
+        if (elementsCount) {
+            allocatedElements = static_cast<TType **>(env.AllocateBuffer(elementsCount * sizeof(*allocatedElements)));
+            for (ui32 i = 0; i < elementsCount; ++i) {
+              allocatedElements[i] = elements[i];
+            }
+        }
+
+        return ::new (env.Allocate<TDerived>()) TDerived(elementsCount, allocatedElements, env);
+    }
 
     using TType::IsSameType;
-    bool IsSameType(const TTupleType& typeToCompare) const;
+    bool IsSameType(const TDerived& typeToCompare) const {
+        if (this == &typeToCompare) {
+            return true;
+        }
+
+        if (ElementsCount != typeToCompare.ElementsCount) {
+            return false;
+        }
+
+        for (size_t index = 0; index < ElementsCount; ++index) {
+            if (!Elements[index]->IsSameType(*typeToCompare.Elements[index])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     using TType::IsConvertableTo;
-    bool IsConvertableTo(const TTupleType& typeToCompare, bool ignoreTagged = false) const;
+    bool IsConvertableTo(const TDerived& typeToCompare, bool ignoreTagged = false) const {
+        if (this == &typeToCompare) {
+            return true;
+        }
+
+        if (ElementsCount != typeToCompare.GetElementsCount()) {
+            return false;
+        }
+
+        for (size_t index = 0; index < ElementsCount; ++index) {
+            if (!Elements[index]->IsConvertableTo(*typeToCompare.GetElementType(index), ignoreTagged)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     ui32 GetElementsCount() const {
         return ElementsCount;
@@ -1196,18 +1249,101 @@ public:
         return Elements[index];
     }
 
-private:
-    TTupleType(ui32 elemntsCount, TType** elements, const TTypeEnvironment& env, bool validate = true);
+    TArrayRef<TType* const> GetElements() const {
+        return TArrayRef<TType* const>(Elements, ElementsCount);
+    }
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
-    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
-    void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
+  protected:
+    TTupleLikeType(ui32 elementsCount, TType** elements, const TTypeEnvironment& env)
+        : TType(DerivedKind, env.GetTypeOfType())
+        , ElementsCount(elementsCount)
+        , Elements(elements)
+    {
+    }
+
+private:
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
+        for (ui32 i = 0; i < ElementsCount; ++i) {
+            auto &element = Elements[i];
+            auto elementIt = links.find(element);
+            if (elementIt != links.end()) {
+                TNode* newNode = elementIt->second;
+                Y_VERIFY_DEBUG(element->Equals(*newNode));
+                element = static_cast<TType*>(newNode);
+            }
+        }
+    }
+
+    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
+        bool needClone = false;
+        for (ui32 i = 0; i < ElementsCount; ++i) {
+            if (Elements[i]->GetCookie()) {
+                needClone = true;
+                break;
+            }
+        }
+
+        if (!needClone) {
+            return const_cast<TSelf*>(this);
+        }
+
+        TType** allocatedElements = nullptr;
+        if (ElementsCount) {
+            allocatedElements = static_cast<TType**>(env.AllocateBuffer(ElementsCount * sizeof(*allocatedElements)));
+            for (ui32 i = 0; i < ElementsCount; ++i) {
+                allocatedElements[i] = Elements[i];
+                auto newNode = (TNode *)Elements[i]->GetCookie();
+                if (newNode) {
+                  allocatedElements[i] = static_cast<TType*>(newNode);
+                }
+            }
+        }
+
+        return ::new (env.Allocate<TDerived>()) TDerived(ElementsCount, allocatedElements, env);
+    }
+
+    void DoFreeze(const TTypeEnvironment& env) {
+            Y_UNUSED(env);
+    }
+
+    bool CalculatePresortSupport() override {
+        for (ui32 i = 0; i < ElementsCount; ++i) {
+            if (!Elements[i]->IsPresortSupported()) {
+                return false;
+            }
+        }
+        return true;
+    }
 
 private:
     ui32 ElementsCount;
     TType** Elements;
 };
+
+class TTupleType : public TTupleLikeType<TTupleType, TType::EKind::Tuple> {
+private:
+    friend class TType;
+    using TBase = TTupleLikeType<TTupleType, TType::EKind::Tuple>;
+    friend TBase;
+
+    TTupleType(ui32 elementsCount, TType** elements, const TTypeEnvironment& env)
+        : TBase(elementsCount, elements, env)
+    {
+    }
+};
+
+class TMultiType : public TTupleLikeType<TMultiType, TType::EKind::Multi> {
+private:
+    friend class TType;
+    using TBase = TTupleLikeType<TMultiType, TType::EKind::Multi>;
+    friend TBase;
+
+    TMultiType(ui32 elementsCount, TType** elements, const TTypeEnvironment& env)
+        : TBase(elementsCount, elements, env)
+    {
+    }
+};
+
 
 class TTupleLiteral : public TNode {
     friend class TNode;
@@ -1448,6 +1584,17 @@ enum class EValueRepresentation {
 EValueRepresentation GetValueRepresentation(const TType* type);
 EValueRepresentation GetValueRepresentation(NUdf::TDataTypeId typeId);
 
+TArrayRef<TType* const> GetWideComponents(const TFlowType* type);
+TArrayRef<TType* const> GetWideComponents(const TStreamType* type);
+
+inline ui32 GetWideComponentsCount(const TFlowType* type) {
+    return (ui32)GetWideComponents(type).size();
+}
+
+inline ui32 GetWideComponentsCount(const TStreamType* type) {
+    return (ui32)GetWideComponents(type).size();
+}
+
 template <TType::EKind SingularKind>
 TSingularType<SingularKind>* TSingularType<SingularKind>::Create(TTypeType* type, const TTypeEnvironment& env) {
     return ::new(env.Allocate<TSingularType<SingularKind>>()) TSingularType<SingularKind>(type);
@@ -1512,6 +1659,5 @@ template <TType::EKind SingularKind>
 void TSingular<SingularKind>::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
-
 }
 }

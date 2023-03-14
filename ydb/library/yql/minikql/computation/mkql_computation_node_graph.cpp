@@ -307,6 +307,10 @@ private:
         VisitType<TBlockType>(node);
     }
 
+    void Visit(TMultiType& node) override {
+        VisitType<TMultiType>(node);
+    }
+
     void Visit(TTaggedType& node) override {
         VisitType<TTaggedType>(node);
     }

@@ -3,6 +3,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_runtime_version.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -223,13 +224,15 @@ IComputationNode* WrapDiscard(TCallable& callable, const TComputationNodeFactory
     const auto type = callable.GetType()->GetReturnType();
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     if (type->IsFlow()) {
-        if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow))
-            if (const auto itemType = AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType())->GetItemType(); itemType->IsTuple())
-                return new TDiscardWideFlowWrapper(wide, AS_TYPE(TTupleType, itemType)->GetElementsCount());
-            else
-                return new TDiscardWideFlowWrapper(wide, 0U);
-        else
+        if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
+            auto flowType = AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType());
+            if (RuntimeVersion > 35 && flowType->GetItemType()->IsMulti() || flowType->GetItemType()->IsTuple()) {
+                return new TDiscardWideFlowWrapper(wide, GetWideComponentsCount(flowType));
+            }
+            return new TDiscardWideFlowWrapper(wide, 0U);
+        } else {
             return new TDiscardFlowWrapper(flow);
+        }
     } else if (type->IsStream()) {
         return new TDiscardWrapper(ctx.Mutables, flow);
     }

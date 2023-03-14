@@ -235,6 +235,23 @@ namespace {
                 IsProcessed0 = false;
             }
 
+            void Visit(TMultiType& node) override {
+                if (node.GetCookie() != 0) {
+                    Owner.WriteReference(node);
+                    IsProcessed0 = true;
+                    return;
+                }
+
+                Owner.Write(TypeMarker | (char)TType::EKind::Multi);
+                Owner.WriteVar32(node.GetElementsCount());
+                for (ui32 i = node.GetElementsCount(); i-- > 0;) {
+                    auto elementType = node.GetElementType(i);
+                    Owner.AddChildNode(*elementType);
+                }
+
+                IsProcessed0 = false;
+            }
+
             void Visit(TTaggedType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
@@ -614,6 +631,10 @@ namespace {
 
             void Visit(TBlockType& node) override {
                 Owner.Write(static_cast<ui8>(node.GetShape()));
+                Owner.RegisterReference(node);
+            }
+
+            void Visit(TMultiType& node) override {
                 Owner.RegisterReference(node);
             }
 
@@ -1168,8 +1189,8 @@ namespace {
                 return TryReadCallableType(code);
             case TType::EKind::Any:
                 return 0;
-            case TType::EKind::Tuple:
-                return TryReadTupleType();
+            case TType::EKind::Tuple: // and Multi
+                return TryReadTupleOrMultiType();
             case TType::EKind::Resource:
                 return 0;
             case TType::EKind::Variant:
@@ -1206,7 +1227,7 @@ namespace {
             case TType::EKind::Any:
                 return ReadAnyType();
             case TType::EKind::Tuple:
-                return ReadTupleType();
+                return ReadTupleOrMultiType(code);
             case TType::EKind::Resource:
                 return ReadResourceType();
             case TType::EKind::Variant:
@@ -1273,7 +1294,7 @@ namespace {
             return membersCount;
         }
 
-        ui32 TryReadTupleType() {
+        ui32 TryReadTupleOrMultiType() {
             const ui32 elementsCount = ReadVar32();
             return elementsCount;
         }
@@ -1297,7 +1318,7 @@ namespace {
             return node;
         }
 
-        TNode* ReadTupleType() {
+        TNode* ReadTupleOrMultiType(char code) {
             const ui32 elementsCount = ReadVar32();
             TStackVec<TType*> elements(elementsCount);
             for (ui32 i = 0; i < elementsCount; ++i) {
@@ -1308,7 +1329,18 @@ namespace {
                 elements[i] = elementType;
             }
 
-            auto node = TTupleType::Create(elementsCount, elements.data(), Env);
+            TNode* node = nullptr;
+            switch ((TType::EKind)(code & TypeMask)) {
+                case TType::EKind::Tuple:
+                    node = TTupleType::Create(elementsCount, elements.data(), Env);
+                    break;
+                case TType::EKind::Multi:
+                    node = TMultiType::Create(elementsCount, elements.data(), Env);
+                    break;
+                default:
+                    ThrowCorrupted();
+            }
+
             Nodes.push_back(node);
             return node;
         }

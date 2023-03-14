@@ -1712,7 +1712,7 @@ IComputationNode* WrapFlatMap(TCallable& callable, const TComputationNodeFactory
 
 IComputationNode* WrapNarrowFlatMap(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() > 1U, "Expected at least two args.");
-    const auto width = AS_TYPE(TTupleType, AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType())->GetItemType())->GetElementsCount();
+    const auto width = GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType()));
     MKQL_ENSURE(callable.GetInputsCount() == width + 2U, "Wrong signature.");
 
     const auto last = callable.GetInputsCount() - 1U;

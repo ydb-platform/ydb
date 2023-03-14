@@ -114,7 +114,7 @@ TRuntimeNode MakeFlow(TSetup_& setup) {
     TProgramBuilder& pb = *setup.PgmBuilder;
     TCallableBuilder callableBuilder(*setup.Env, "TestBlockFlow",
                                      pb.NewFlowType(
-                                         pb.NewTupleType({
+                                         pb.NewMultiType({
                                              pb.NewBlockType(pb.NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Many),
                                              pb.NewBlockType(pb.NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Scalar),
                                              pb.NewBlockType(pb.NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Scalar),

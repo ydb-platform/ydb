@@ -509,6 +509,7 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
         case TType::EKind::Flow:
         case TType::EKind::Tagged:
         case TType::EKind::Pg:
+        case TType::EKind::Multi:
             return false;
     }
     return false;

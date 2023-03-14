@@ -357,8 +357,8 @@ IComputationNode* WrapBlockCompress(TCallable& callable, const TComputationNodeF
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args, got " << callable.GetInputsCount());
 
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
-    const ui32 width = tupleType->GetElementsCount();
+    const auto wideComponents = GetWideComponents(flowType);
+    const ui32 width = wideComponents.size();
     MKQL_ENSURE(width > 1, "Expected at least two columns");
 
     const auto indexData = AS_VALUE(TDataLiteral, callable.GetInput(1U));
@@ -369,7 +369,7 @@ IComputationNode* WrapBlockCompress(TCallable& callable, const TComputationNodeF
     bool bitmapIsScalar = false;
     bool allScalars = true;
     for (ui32 i = 0; i < width; ++i) {
-        types.push_back(AS_TYPE(TBlockType, tupleType->GetElementType(i)));
+        types.push_back(AS_TYPE(TBlockType, wideComponents[i]));
         bool isScalar = types.back()->GetShape() == TBlockType::EShape::Scalar;
         if (i == width - 1) {
             MKQL_ENSURE(isScalar, "Expecting scalar block size as last column");

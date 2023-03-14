@@ -548,7 +548,8 @@ IComputationNode* WrapMultiMap(TCallable& callable, const TComputationNodeFactor
 
 IComputationNode* WrapNarrowMultiMap(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() > 2U, "Expected at least three arguments.");
-    const auto width = AS_TYPE(TTupleType, AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType())->GetItemType())->GetElementsCount();
+    auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType()));
+    const auto width = wideComponents.size();
     MKQL_ENSURE(callable.GetInputsCount() > width + 2U, "Wrong signature.");
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0U);
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {

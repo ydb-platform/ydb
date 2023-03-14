@@ -142,8 +142,8 @@ IComputationNode* WrapSkipTake(bool skip, TCallable& callable, const TComputatio
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
 
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
-    MKQL_ENSURE(tupleType->GetElementsCount() > 0, "Expected at least one column");
+    const auto flowWidth = GetWideComponentsCount(flowType);
+    MKQL_ENSURE(flowWidth > 0, "Expected at least one column");
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
@@ -153,9 +153,9 @@ IComputationNode* WrapSkipTake(bool skip, TCallable& callable, const TComputatio
     MKQL_ENSURE(countType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
 
     if (skip) {
-        return new TWideSkipBlocksWrapper(ctx.Mutables, wideFlow, count, tupleType->GetElementsCount());
+        return new TWideSkipBlocksWrapper(ctx.Mutables, wideFlow, count, flowWidth);
     }
-    return new TWideTakeBlocksWrapper(ctx.Mutables, wideFlow, count, tupleType->GetElementsCount());
+    return new TWideTakeBlocksWrapper(ctx.Mutables, wideFlow, count, flowWidth);
 }
 
 } //namespace

@@ -473,12 +473,8 @@ IComputationNode* WrapWideToBlocks(TCallable& callable, const TComputationNodeFa
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
 
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
-    TVector<TType*> items;
-    for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-        items.push_back(tupleType->GetElementType(i));
-    }
-
+    const auto wideComponents = GetWideComponents(flowType);
+    TVector<TType*> items(wideComponents.begin(), wideComponents.end());
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
 
@@ -497,11 +493,11 @@ IComputationNode* WrapWideFromBlocks(TCallable& callable, const TComputationNode
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
 
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
-    MKQL_ENSURE(tupleType->GetElementsCount() > 0, "Expected at least one column");
+    const auto wideComponents = GetWideComponents(flowType);
+    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
     TVector<TType*> items;
-    for (ui32 i = 0; i < tupleType->GetElementsCount() - 1; ++i) {
-        const auto blockType = AS_TYPE(TBlockType, tupleType->GetElementType(i));
+    for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
+        const auto blockType = AS_TYPE(TBlockType, wideComponents[i]);
         items.push_back(blockType->GetItemType());
     }
 
@@ -521,12 +517,12 @@ IComputationNode* WrapBlockExpandChunked(TCallable& callable, const TComputation
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
 
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
+    const auto wideComponents = GetWideComponents(flowType);
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
 
-    return new TBlockExpandChunkedWrapper(ctx.Mutables, wideFlow, tupleType->GetElementsCount());
+    return new TBlockExpandChunkedWrapper(ctx.Mutables, wideFlow, wideComponents.size());
 }
 
 }

@@ -74,7 +74,7 @@ IComputationNode* WrapSourceOf(TCallable& callable, const TComputationNodeFactor
 
 IComputationNode* WrapSource(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(!callable.GetInputsCount(), "Expected no args.");
-    MKQL_ENSURE(!AS_TYPE(TTupleType, AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType())->GetElementsCount(), "Expected zero width of output flow.");
+    MKQL_ENSURE(!GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetType()->GetReturnType())), "Expected zero width of output flow.");
     return new TSourceWrapper;
 }
 

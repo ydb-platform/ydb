@@ -399,7 +399,7 @@ private:
 
 template<bool TakeOrSkip, bool Inclusive>
 IComputationNode* WrapWideWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    const auto width = AS_TYPE(TTupleType, AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType())->GetElementsCount();
+    const auto width = GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
     MKQL_ENSURE(callable.GetInputsCount() == width + 2U, "Expected 3 or more args.");
 
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0U);
@@ -424,7 +424,7 @@ IComputationNode* WrapWideWhile(TCallable& callable, const TComputationNodeFacto
 }
 
 IComputationNode* WrapWideFilter(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    const auto width = AS_TYPE(TTupleType, AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType())->GetElementsCount();
+    const auto width = GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
     MKQL_ENSURE(callable.GetInputsCount() == width + 2U || callable.GetInputsCount() == width + 3U, "Expected 3 or more args.");
 
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0U);

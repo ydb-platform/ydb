@@ -473,49 +473,43 @@ private:
     TParseReadTableRangesResult ParseResult;
 };
 
+std::vector<EValueRepresentation> BuildRepresentations(const TType* type) {
+    std::vector<EValueRepresentation> representations;
+
+    auto wideComponents = type->IsFlow() ?
+        GetWideComponents(AS_TYPE(TFlowType, type)) :
+        AS_TYPE(TTupleType, AS_TYPE(TStreamType, type)->GetItemType())->GetElements();
+
+    representations.reserve(wideComponents.size());
+    for (ui32 i = 0U; i < wideComponents.size(); ++i) {
+        representations.emplace_back(GetValueRepresentation(wideComponents[i]));
+    }
+
+    return representations;
+}
+
 } // namespace
 
 IComputationNode* WrapKqpScanWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpScanComputeContext& computeCtx)
 {
-    std::vector<EValueRepresentation> representations;
-
     auto parseResult = ParseWideReadTableRanges(callable);
     auto rangesNode = LocateNode(ctx.NodeLocator, *parseResult.Ranges);
 
     const auto type = callable.GetType()->GetReturnType();
-    const auto returnItemType = type->IsFlow() ?
-        AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType():
-        AS_TYPE(TStreamType, callable.GetType()->GetReturnType())->GetItemType();
-
-    const auto tupleType = AS_TYPE(TTupleType, returnItemType);
-
-    representations.reserve(tupleType->GetElementsCount());
-    for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i)
-        representations.emplace_back(GetValueRepresentation(tupleType->GetElementType(i)));
-
+    auto representations = BuildRepresentations(type);
     return new TKqpScanWideReadTableRangesWrapper(computeCtx, parseResult, rangesNode, std::move(representations));
 }
 
 IComputationNode* WrapKqpScanWideReadTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpScanComputeContext& computeCtx)
 {
-    std::vector<EValueRepresentation> representations;
-
     auto parseResult = ParseWideReadTable(callable);
     auto fromNode = LocateNode(ctx.NodeLocator, *parseResult.FromTuple);
     auto toNode = LocateNode(ctx.NodeLocator, *parseResult.ToTuple);
 
     const auto type = callable.GetType()->GetReturnType();
-    const auto returnItemType = type->IsFlow() ?
-        AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType():
-        AS_TYPE(TStreamType, callable.GetType()->GetReturnType())->GetItemType();
-
-    const auto tupleType = AS_TYPE(TTupleType, returnItemType);
-
-    representations.reserve(tupleType->GetElementsCount());
-    for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i)
-        representations.emplace_back(GetValueRepresentation(tupleType->GetElementType(i)));
+    auto representations = BuildRepresentations(type);
 
     return new TKqpScanWideReadTableWrapper(computeCtx, parseResult, fromNode, toNode, std::move(representations));
 }
@@ -523,22 +517,11 @@ IComputationNode* WrapKqpScanWideReadTable(TCallable& callable, const TComputati
 IComputationNode* WrapKqpScanBlockReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpScanComputeContext& computeCtx)
 {
-    std::vector<EValueRepresentation> representations;
-
     auto parseResult = ParseWideReadTableRanges(callable);
     auto rangesNode = LocateNode(ctx.NodeLocator, *parseResult.Ranges);
 
     const auto type = callable.GetType()->GetReturnType();
-    const auto returnItemType = type->IsFlow() ?
-        AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType():
-        AS_TYPE(TStreamType, callable.GetType()->GetReturnType())->GetItemType();
-
-    const auto tupleType = AS_TYPE(TTupleType, returnItemType);
-
-    representations.reserve(tupleType->GetElementsCount());
-    for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i)
-        representations.emplace_back(GetValueRepresentation(tupleType->GetElementType(i)));
-
+    auto representations = BuildRepresentations(type);
     return new TKqpScanBlockReadTableRangesWrapper(computeCtx, parseResult, rangesNode, std::move(representations));
 }
 

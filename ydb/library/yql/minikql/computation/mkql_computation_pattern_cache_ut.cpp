@@ -410,7 +410,7 @@ TRuntimeNode CreateMapJoin(TProgramBuilder& pb, size_t vecSize, TCallable* list 
             return pb.NewTuple({pb.Nth(item, 1U)});
     });
 
-    const auto resultType = pb.NewFlowType(pb.NewTupleType({
+    const auto resultType = pb.NewFlowType(pb.NewMultiType({
         pb.NewDataType(NUdf::TDataType<char*>::Id),
         pb.NewDataType(NUdf::TDataType<char*>::Id),
     }));

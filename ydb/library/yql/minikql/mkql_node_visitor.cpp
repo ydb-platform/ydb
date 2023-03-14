@@ -176,6 +176,11 @@ void TThrowingNodeVisitor::Visit(TBlockType& node) {
     ThrowUnexpectedNodeType();
 }
 
+void TThrowingNodeVisitor::Visit(TMultiType& node) {
+    Y_UNUSED(node);
+    ThrowUnexpectedNodeType();
+}
+
 void TThrowingNodeVisitor::ThrowUnexpectedNodeType() {
     THROW yexception() << "Unexpected node type";
 }
@@ -309,6 +314,10 @@ void TEmptyNodeVisitor::Visit(TTaggedType& node) {
 }
 
 void TEmptyNodeVisitor::Visit(TBlockType& node) {
+    Y_UNUSED(node);
+}
+
+void TEmptyNodeVisitor::Visit(TMultiType& node) {
     Y_UNUSED(node);
 }
 
@@ -492,6 +501,13 @@ void TExploringNodeVisitor::Visit(TTaggedType& node) {
 void TExploringNodeVisitor::Visit(TBlockType& node) {
     AddChildNode(&node, *node.GetType());
     AddChildNode(&node, *node.GetItemType());
+}
+
+void TExploringNodeVisitor::Visit(TMultiType& node) {
+    AddChildNode(&node, *node.GetType());
+    for (ui32 i = 0, e = node.GetElementsCount(); i < e; ++i) {
+        AddChildNode(&node, *node.GetElementType(i));
+    }
 }
 
 void TExploringNodeVisitor::AddChildNode(TNode* parent, TNode& child) {

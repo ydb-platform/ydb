@@ -341,7 +341,8 @@ private:
 IComputationNode* WrapWideChopper(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 4U, "Expected at least four args.");
 
-    const auto width = AS_TYPE(TTupleType, AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType())->GetItemType())->GetElementsCount();
+    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType()));
+    const ui32 width = wideComponents.size();
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0U);
     const auto keysSize = (callable.GetInputsCount() - width - 4U) >> 1U;
 

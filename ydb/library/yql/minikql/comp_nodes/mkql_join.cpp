@@ -2058,6 +2058,15 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
             fieldTypes.emplace_back(tupleType->GetElementType(i));
             inputRepresentations.emplace_back(GetValueRepresentation(fieldTypes.back()));
         }
+    } else if (inputRowType->IsMulti()) {
+        const auto tupleType = AS_TYPE(TMultiType, inputRowType);
+        inputRepresentations.reserve(tupleType->GetElementsCount());
+        fieldTypes.reserve(tupleType->GetElementsCount());
+        for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i) {
+            fieldTypes.emplace_back(tupleType->GetElementType(i));
+            inputRepresentations.emplace_back(GetValueRepresentation(fieldTypes.back()));
+        }
+
     } else if (inputRowType->IsStruct()) {
         const auto structType = AS_TYPE(TStructType, inputRowType);
         inputRepresentations.reserve(structType->GetMembersCount());
@@ -2075,6 +2084,11 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
     std::vector<EValueRepresentation> outputRepresentations;
     if (outputRowType->IsTuple()) {
         const auto tupleType = AS_TYPE(TTupleType, outputRowType);
+        outputRepresentations.reserve(tupleType->GetElementsCount());
+        for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i)
+            outputRepresentations.emplace_back(GetValueRepresentation(tupleType->GetElementType(i)));
+    } else if (outputRowType->IsMulti()) {
+        const auto tupleType = AS_TYPE(TMultiType, outputRowType);
         outputRepresentations.reserve(tupleType->GetElementsCount());
         for (ui32 i = 0U; i < tupleType->GetElementsCount(); ++i)
             outputRepresentations.emplace_back(GetValueRepresentation(tupleType->GetElementType(i)));

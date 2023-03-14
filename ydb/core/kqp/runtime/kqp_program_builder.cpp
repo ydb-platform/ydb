@@ -131,7 +131,7 @@ TType* MakeWideFlowType(TProgramBuilder& builder, TStructType* rowType) {
         tupleItems.push_back(rowType->GetMemberType(i));
     }
 
-    return builder.NewFlowType(builder.NewTupleType(tupleItems));
+    return builder.NewFlowType(builder.NewMultiType(tupleItems));
 }
 
 TType* MakeBlockType(TProgramBuilder& builder, TStructType* rowType) {
@@ -175,8 +175,7 @@ TRuntimeNode TKqpProgramBuilder::KqpWideReadTable(const TTableId& tableId, const
 
     MKQL_ENSURE_S(returnType);
     MKQL_ENSURE_S(returnType->IsFlow());
-    const auto itemType = AS_TYPE(TFlowType, returnType)->GetItemType();
-    MKQL_ENSURE_S(itemType->IsTuple());
+    GetWideComponents(AS_TYPE(TFlowType, returnType));
 
     TCallableBuilder builder(Env, __func__, returnType);
     builder.Add(BuildTableIdLiteral(tableId, *this));
@@ -199,8 +198,7 @@ TRuntimeNode TKqpProgramBuilder::KqpWideReadTableRanges(const TTableId& tableId,
     } else {
         MKQL_ENSURE_S(returnType);
         MKQL_ENSURE_S(returnType->IsFlow());
-        const auto itemType = AS_TYPE(TFlowType, returnType)->GetItemType();
-        MKQL_ENSURE_S(itemType->IsTuple());
+        GetWideComponents(AS_TYPE(TFlowType, returnType));
     }
 
     TCallableBuilder builder(Env, __func__, returnType);
@@ -223,8 +221,7 @@ TRuntimeNode TKqpProgramBuilder::KqpBlockReadTableRanges(const TTableId& tableId
     } else {
         MKQL_ENSURE_S(returnType);
         MKQL_ENSURE_S(returnType->IsFlow());
-        const auto itemType = AS_TYPE(TFlowType, returnType)->GetItemType();
-        MKQL_ENSURE_S(itemType->IsTuple());
+        GetWideComponents(AS_TYPE(TFlowType, returnType));
     }
 
     TCallableBuilder builder(Env, __func__, returnType);

@@ -92,7 +92,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
                 return nullptr;
             }
         }
-        return pgmBuilder.NewTupleType(elements);
+        return pgmBuilder.NewMultiType(elements);
     }
 
     case ETypeAnnotationKind::Dict: {
@@ -330,6 +330,7 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
     }
 
     case TType::EKind::Any:
+    case TType::EKind::ReservedKind:
         YQL_ENSURE(false, "Not supported");
         break;
 
@@ -393,9 +394,36 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
         }
     }
 
-    default:
-        YQL_ENSURE(false, "Unknown kind");
+    case TType::EKind::Flow:
+    {
+        auto flowType = static_cast<TFlowType*>(type);
+        auto itemType = ConvertMiniKQLType(position, flowType->GetItemType(), ctx);
+        return ctx.MakeType<TFlowExprType>(itemType);
     }
+
+    case TType::EKind::Pg:
+    {
+        auto pgType = static_cast<TPgType*>(type);
+        return ctx.MakeType<TPgExprType>(pgType->GetTypeId());
+    }
+
+    case TType::EKind::Multi:
+    {
+        TTypeAnnotationNode::TListType elements;
+        auto multiType = static_cast<TMultiType*>(type);
+        for (ui32 index = 0; index < multiType->GetElementsCount(); ++index) {
+            auto elementType = ConvertMiniKQLType(position, multiType->GetElementType(index), ctx);
+            elements.push_back(elementType);
+        }
+
+        auto res = ctx.MakeType<TMultiExprType>(elements);
+        YQL_ENSURE(res->Validate(position, ctx));
+        return res;
+    }
+
+    }
+
+    YQL_ENSURE(false, "Unknown kind");
 }
 
 } // namespace NCommon

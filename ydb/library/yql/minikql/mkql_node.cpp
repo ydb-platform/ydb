@@ -3,6 +3,7 @@
 #include "mkql_node_cast.h"
 #include "mkql_node_visitor.h"
 #include "mkql_node_printer.h"
+#include "mkql_runtime_version.h"
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -213,6 +214,7 @@ TStringBuf TType::GetKindAsStr() const {
     xx(Tagged, TTaggedType) \
     xx(Block, TBlockType) \
     xx(Pg, TPgType) \
+    xx(Multi, TMultiType) \
 
 void TType::Accept(INodeVisitor& visitor) {
     switch (Kind) {
@@ -1903,110 +1905,6 @@ bool TAny::Equals(const TAny& nodeToCompare) const {
     return Item.GetNode()->Equals(*nodeToCompare.Item.GetNode());
 }
 
-TTupleType::TTupleType(ui32 elementsCount, TType** elements, const TTypeEnvironment& env, bool validate)
-    : TType(EKind::Tuple, env.GetTypeOfType())
-    , ElementsCount(elementsCount)
-    , Elements(elements)
-{
-    if (!validate)
-        return;
-}
-
-TTupleType* TTupleType::Create(ui32 elementsCount, TType* const* elements, const TTypeEnvironment& env) {
-    TType** allocatedElements = nullptr;
-    if (elementsCount) {
-        allocatedElements = static_cast<TType**>(env.AllocateBuffer(elementsCount * sizeof(*allocatedElements)));
-        for (ui32 i = 0; i < elementsCount; ++i) {
-            allocatedElements[i] = elements[i];
-        }
-    }
-
-    return ::new(env.Allocate<TTupleType>()) TTupleType(elementsCount, allocatedElements, env);
-}
-
-bool TTupleType::IsSameType(const TTupleType& typeToCompare) const {
-    if (this == &typeToCompare)
-        return true;
-
-    if (ElementsCount != typeToCompare.ElementsCount)
-        return false;
-
-    for (size_t index = 0; index < ElementsCount; ++index) {
-        if (!Elements[index]->IsSameType(*typeToCompare.Elements[index]))
-            return false;
-    }
-
-    return true;
-}
-
-bool TTupleType::IsConvertableTo(const TTupleType& typeToCompare, bool ignoreTagged) const {
-    if (this == &typeToCompare)
-        return true;
-
-    if (ElementsCount != typeToCompare.ElementsCount)
-        return false;
-
-    for (size_t index = 0; index < ElementsCount; ++index) {
-        if (!Elements[index]->IsConvertableTo(*typeToCompare.Elements[index], ignoreTagged))
-            return false;
-    }
-
-    return true;
-}
-
-void TTupleType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
-    for (ui32 i = 0; i < ElementsCount; ++i) {
-        auto& element = Elements[i];
-        auto elementIt = links.find(element);
-        if (elementIt != links.end()) {
-            TNode* newNode = elementIt->second;
-            Y_VERIFY_DEBUG(element->Equals(*newNode));
-            element = static_cast<TType*>(newNode);
-        }
-    }
-}
-
-TNode* TTupleType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
-    bool needClone = false;
-    for (ui32 i = 0; i < ElementsCount; ++i) {
-        if (Elements[i]->GetCookie()) {
-            needClone = true;
-            break;
-        }
-    }
-
-    if (!needClone)
-        return const_cast<TTupleType*>(this);
-
-    TType** allocatedElements = nullptr;
-    if (ElementsCount) {
-        allocatedElements = static_cast<TType**>(env.AllocateBuffer(ElementsCount * sizeof(*allocatedElements)));
-        for (ui32 i = 0; i < ElementsCount; ++i) {
-            allocatedElements[i] = Elements[i];
-            auto newNode = (TNode*)Elements[i]->GetCookie();
-            if (newNode) {
-                allocatedElements[i] = static_cast<TType*>(newNode);
-            }
-        }
-    }
-
-    return ::new(env.Allocate<TTupleType>()) TTupleType(ElementsCount, allocatedElements, env, false);
-}
-
-void TTupleType::DoFreeze(const TTypeEnvironment& env) {
-    Y_UNUSED(env);
-}
-
-bool TTupleType::CalculatePresortSupport() {
-    for (ui32 i = 0; i < ElementsCount; ++i) {
-        if (!Elements[i]->IsPresortSupported()) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 TTupleLiteral::TTupleLiteral(TRuntimeNode* values, TTupleType* type, bool validate)
     : TNode(type)
     , Values(values)
@@ -2371,6 +2269,7 @@ EValueRepresentation GetValueRepresentation(const TType* type) {
         case TType::EKind::Callable:
         case TType::EKind::EmptyList:
         case TType::EKind::EmptyDict:
+        case TType::EKind::Multi:
             return EValueRepresentation::Boxed;
 
         case TType::EKind::Variant:
@@ -2389,6 +2288,18 @@ EValueRepresentation GetValueRepresentation(const TType* type) {
         default:
             Y_FAIL("Unsupported type.");
     }
+}
+
+TArrayRef<TType* const> GetWideComponents(const TFlowType* type) {
+    if (RuntimeVersion > 35) {
+        return AS_TYPE(TMultiType, type->GetItemType())->GetElements();
+    }
+    return AS_TYPE(TTupleType, type->GetItemType())->GetElements();
+}
+
+TArrayRef<TType* const> GetWideComponents(const TStreamType* type) {
+    MKQL_ENSURE(RuntimeVersion > 35, "Wide stream is not supported in runtime version " << RuntimeVersion);
+    return AS_TYPE(TMultiType, type->GetItemType())->GetElements();
 }
 
 }

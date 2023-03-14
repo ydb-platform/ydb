@@ -494,9 +494,14 @@ public:
                     YQL_ENSURE(settings.Columns);
                     YQL_ENSURE(!settings.Columns.Cast().Empty());
 
-                    if (!settings.PrimaryKey) {
+                    const bool isExternalTable = settings.TableType && settings.TableType.Cast() == "externalTable";
+                    if (!isExternalTable && !settings.PrimaryKey) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Primary key is required for ydb tables."));
                         return nullptr;
+                    }
+
+                    if (!settings.PrimaryKey.IsValid()) {
+                        settings.PrimaryKey = Build<TCoAtomList>(ctx, node->Pos()).Done();
                     }
 
                     if (!settings.PartitionBy.IsValid()) {

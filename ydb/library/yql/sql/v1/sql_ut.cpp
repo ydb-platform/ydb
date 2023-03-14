@@ -4706,7 +4706,9 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
     }
+}
 
+Y_UNIT_TEST_SUITE(ExternalDataSource) {
     Y_UNIT_TEST(CreateExternalDataSource) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
@@ -4907,6 +4909,170 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cascade"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(ExternalTable) {
+    Y_UNIT_TEST(CreateExternalTable) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            CREATE EXTERNAL TABLE mytable (
+                a int
+            ) WITH (
+                DATA_SOURCE="/Root/mydatasource",
+                LOCATION="/folder1/*"
+            );
+        )");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('data_source_path (String '"/Root/mydatasource")) '('location (String '"/folder1/*")))) '('tableType 'externalTable)))))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tablescheme"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateExternalTableWithTablePrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            pragma TablePathPrefix='/aba';
+            CREATE EXTERNAL TABLE mytable (
+                a int
+            ) WITH (
+                DATA_SOURCE="mydatasource",
+                LOCATION="/folder1/*"
+            );
+        )");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "/aba/mydatasource");
+                UNIT_ASSERT_STRING_CONTAINS(line, "/aba/mytable");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tablescheme"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateExternalTableObjectStorage) {
+        auto res = SqlToYql(R"(
+            USE plato;
+            CREATE EXTERNAL TABLE mytable (
+                a int,
+                year Int
+            ) WITH (
+                DATA_SOURCE="/Root/mydatasource",
+                LOCATION="/folder1/*",
+                FORMAT="json_as_string",
+                `projection.enabled`="true",
+                `projection.year.type`="integer",
+                `projection.year.min`="2010",
+                `projection.year.max`="2022",
+                `projection.year.interval`="1",
+                `projection.month.type`="integer",
+                `projection.month.min`="1",
+                `projection.month.max`="12",
+                `projection.month.interval`="1",
+                `projection.month.digits`="2",
+                `storage.location.template`="${year}/${month}",
+                PARTITONED_BY = "[year, month]"
+            );
+        )");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(CreateExternalTableWithBadArguments) {
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL TABLE mytable;
+            )" , "<main>:3:45: Error: Unexpected token ';' : syntax error...\n\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL TABLE mytable (
+                    a int
+                );
+            )" , "<main>:4:23: Error: DATA_SOURCE requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL TABLE mytable (
+                    a int
+                ) WITH (
+                    DATA_SOURCE="/Root/mydatasource"
+                );
+            )" , "<main>:6:33: Error: LOCATION requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL TABLE mytable (
+                    a int
+                ) WITH (
+                    LOCATION="/folder1/*"
+                );
+            )" , "<main>:6:30: Error: DATA_SOURCE requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL TABLE mytable (
+                    a int,
+                    PRIMARY KEY(a)
+                ) WITH (
+                    DATA_SOURCE="/Root/mydatasource",
+                    LOCATION="/folder1/*"
+                );
+            )" , "<main>:8:30: Error: PRIMARY KEY is not supported for external table\n");
+    }
+
+    Y_UNIT_TEST(DropExternalTable) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                DROP EXTERNAL TABLE MyExternalTable;
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("tablescheme"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropExternalTableWithTablePrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                pragma TablePathPrefix='/aba';
+                DROP EXTERNAL TABLE MyExternalTable;
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "/aba/MyExternalTable");
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'tablescheme"));
             }
         };
 

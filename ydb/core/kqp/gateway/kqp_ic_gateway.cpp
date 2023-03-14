@@ -1248,7 +1248,7 @@ public:
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
             FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
-            return SendSchemeRequest(ev.Release());
+            return SendSchemeRequest(ev.Release(), true);
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));

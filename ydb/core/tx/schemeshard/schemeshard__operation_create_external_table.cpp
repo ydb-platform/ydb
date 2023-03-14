@@ -377,7 +377,7 @@ public:
         context.OnComplete.ActivateTx(OperationId);
 
         auto& reference = *externalDataSource->ExternalTableReferences.AddReferences();
-        reference.SetPath(externalTableInfo->DataSourcePath);
+        reference.SetPath(dstPath.PathString());
         PathIdFromPathId(externalTable->PathId, reference.MutablePathId());
         context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
         context.SS->IncrementPathDbRefCount(externalTable->PathId);

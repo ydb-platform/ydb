@@ -173,6 +173,11 @@ struct TTableSettings {
     TResetableSetting<TString, void> Tiering;
     TMaybe<TString> PartitionByHashFunction;
 
+    // These parameters are only used for external sources
+    TMaybe<TString> DataSourcePath;
+    TMaybe<TString> Location;
+    TVector<std::pair<TString, TString>> ExternalSourceParameters;
+
     bool IsSet() const;
 };
 
@@ -283,7 +288,8 @@ enum class EKikimrTableKind : ui32 {
 enum class ETableType : ui32 {
     Unknown = 0,
     Table = 1,
-    TableStore = 2
+    TableStore = 2,
+    ExternalTable = 3
 };
 
 ETableType GetTableTypeFromString(const TStringBuf& tableType);

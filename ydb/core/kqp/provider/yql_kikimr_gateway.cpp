@@ -172,7 +172,7 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
 bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
         || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
-        || ReadReplicasSettings || TtlSettings;
+        || ReadReplicasSettings || TtlSettings || DataSourcePath || Location || ExternalSourceParameters;
 }
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
@@ -313,8 +313,12 @@ Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {
 ETableType GetTableTypeFromString(const TStringBuf& tableType) {
     if (tableType == "table") {
         return ETableType::Table;
-    } else if (tableType == "tableStore") {
+    }
+    if (tableType == "tableStore") {
         return ETableType::TableStore;
+    }
+    if (tableType == "externalTable") {
+        return ETableType::ExternalTable;
     }
     return ETableType::Unknown;
 }

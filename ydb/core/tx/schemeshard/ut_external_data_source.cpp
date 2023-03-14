@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
 
         TestDropExternalDataSource(runtime, ++txId, "/MyRoot", "ExternalDataSource",
-                {{NKikimrScheme::StatusSchemeError, "Other entities depend on this data source, please remove them at the beginning: /MyRoot/ExternalDataSource"}});
+                {{NKikimrScheme::StatusSchemeError, "Other entities depend on this data source, please remove them at the beginning: /MyRoot/ExternalTable"}});
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/ExternalDataSource", false, NLs::PathExist);

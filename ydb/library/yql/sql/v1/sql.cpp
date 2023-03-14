@@ -814,13 +814,15 @@ protected:
 
     bool FillFamilySettingsEntry(const TRule_family_settings_entry& settingNode, TFamilyEntry& family);
     bool FillFamilySettings(const TRule_family_settings& settingsNode, TFamilyEntry& family);
-    bool CreateTableSettings(const TRule_with_table_settings& settingsNode, TTableSettings& settings);
+    bool CreateTableSettings(const TRule_with_table_settings& settingsNode, TCreateTableParameters& params);
+    bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings,
+        ETableType tableType, bool alter, bool reset);
     bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings,
         bool alter, bool reset);
-    bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value, TTableSettings& settings,
-        bool alter = false);
+    bool StoreExternalTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings);
+    bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value, TTableSettings& settings, ETableType tableType, bool alter = false);
     bool StoreDataSourceSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
-    bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings);
+    bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings, ETableType tableType);
 
     TNodePtr TypeSimple(const TRule_type_name_simple& node, bool onlyDataAllowed);
     TNodePtr TypeDecimal(const TRule_type_name_decimal& node);
@@ -853,7 +855,9 @@ protected:
     bool ParseObjectFeatures(std::map<TString, TDeferredAtom> & result, const TRule_object_features & features);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom> & result, const TRule_with_table_settings & settings);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
-    bool RoleParameters(const TRule_create_user_option& node, TRoleParameters& result) ;
+    bool RoleParameters(const TRule_create_user_option& node, TRoleParameters& result);
+
+    bool ValidateExternalTable(const TCreateTableParameters& params);
 private:
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);
@@ -2256,10 +2260,47 @@ namespace {
 }
 
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
+        TTableSettings& settings, ETableType tableType, bool alter, bool reset) {
+    switch (tableType) {
+    case ETableType::ExternalTable:
+        return StoreExternalTableSettingsEntry(id, value, settings);
+    case ETableType::Table:
+    case ETableType::TableStore:
+        return StoreTableSettingsEntry(id, value, settings, alter, reset);
+    }
+}
+
+bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings) {
+    if (to_lower(id.Name) == "data_source") {
+        TDeferredAtom dataSource;
+        if (!StoreString(*value, dataSource, Ctx, to_upper(id.Name))) {
+            return false;
+        }
+        TString service = Context().Scoped->CurrService;
+        TDeferredAtom cluster = Context().Scoped->CurrCluster;
+        TNodePtr root = new TAstListNodeImpl(Ctx.Pos());
+        root->Add("String", Ctx.GetPrefixedPath(service, cluster, dataSource));
+        settings.DataSourcePath = root;
+    } else if (to_lower(id.Name) == "location") {
+        if (!StoreString(*value, settings.Location, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+    } else {
+        settings.ExternalSourceParameters.emplace_back(id, nullptr);
+        auto& parameter = settings.ExternalSourceParameters.back();
+        if (!StoreString(*value, parameter.second, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
         TTableSettings& settings, bool alter, bool reset) {
     YQL_ENSURE(value || reset);
     YQL_ENSURE(!reset || reset & alter);
-
     if (to_lower(id.Name) == "compaction_policy") {
         if (reset) {
             Ctx.Error() << to_upper(id.Name) << " reset is not supported";
@@ -2399,23 +2440,23 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
 }
 
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value,
-        TTableSettings& settings, bool alter) {
-    return StoreTableSettingsEntry(id, &value, settings, alter, false);
+        TTableSettings& settings, ETableType tableType, bool alter) {
+    return StoreTableSettingsEntry(id, &value, settings, tableType, alter, false);
 }
 
-bool TSqlTranslation::ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings) {
-    return StoreTableSettingsEntry(id, nullptr, settings, true, true);
+bool TSqlTranslation::ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings, ETableType tableType) {
+    return StoreTableSettingsEntry(id, nullptr, settings, tableType, true, true);
 }
 
-bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& settingsNode, TTableSettings& settings) {
+bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& settingsNode, TCreateTableParameters& params) {
     const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
     if (!StoreTableSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_table_setting_value3(),
-            settings)) {
+            params.TableSettings, params.TableType)) {
         return false;
     }
     for (auto& block : settingsNode.GetBlock4()) {
         const auto& entry = block.GetRule_table_settings_entry2();
-        if (!StoreTableSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_table_setting_value3(), settings)) {
+        if (!StoreTableSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_table_setting_value3(), params.TableSettings, params.TableType)) {
             return false;
         }
     }
@@ -8799,18 +8840,20 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore4: {
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core4().GetRule_create_table_stmt1();
-            const bool isTablestore = rule.GetToken2().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE;
+            const auto& block = rule.GetBlock2();
+            ETableType tableType = ETableType::Table;
+            if (block.HasAlt2() && block.GetAlt2().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE) {
+                tableType = ETableType::TableStore;
+            } else if (block.HasAlt3() && block.GetAlt3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_EXTERNAL) {
+                tableType = ETableType::ExternalTable;
+            }
 
             TTableRef tr;
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), tr)) {
                 return false;
             }
 
-            TCreateTableParameters params;
-            if (isTablestore) {
-                params.TableType = ETableType::TableStore;
-            }
-
+            TCreateTableParameters params{.TableType=tableType};
             if (!CreateTableEntry(rule.GetRule_create_table_entry5(), params)) {
                 return false;
             }
@@ -8827,7 +8870,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (rule.HasBlock9()) {
-                if (isTablestore) {
+                if (tableType == ETableType::TableStore) {
                     Context().Error(GetPos(rule.GetBlock9().GetRule_table_partition_by1().GetToken1()))
                         << "PARTITION BY is not supported for TABLESTORE";
                     return false;
@@ -8840,7 +8883,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (rule.HasBlock10()) {
-                if (!CreateTableSettings(rule.GetBlock10().GetRule_with_table_settings1(), params.TableSettings)) {
+                if (!CreateTableSettings(rule.GetBlock10().GetRule_with_table_settings1(), params)) {
                     return false;
                 }
             }
@@ -8851,13 +8894,25 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
+            if (!ValidateExternalTable(params)) {
+                return false;
+            }
+
             AddStatementToBlocks(blocks, BuildCreateTable(Ctx.Pos(), tr, params, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore5: {
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core5().GetRule_drop_table_stmt1();
-            const bool isTablestore = rule.GetToken2().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE;
+            const auto& block = rule.GetBlock2();
+            ETableType tableType = ETableType::Table;
+            if (block.HasAlt2()) {
+                tableType = ETableType::TableStore;
+            }
+            if (block.HasAlt3()) {
+                tableType = ETableType::ExternalTable;
+            }
+
             if (rule.HasBlock3()) {
                 Context().Error(GetPos(rule.GetToken1())) << "IF EXISTS in " << humanStatementName
                     << " is not supported.";
@@ -8868,7 +8923,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildDropTable(Ctx.Pos(), tr, isTablestore, Ctx.Scoped));
+            AddStatementToBlocks(blocks, BuildDropTable(Ctx.Pos(), tr, tableType, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore6: {
@@ -9661,7 +9716,7 @@ bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_sett
         TAlterTableParameters& params)
 {
     if (!StoreTableSettingsEntry(IdEx(node.GetRule_an_id2(), *this), node.GetRule_table_setting_value3(),
-        params.TableSettings, true)) {
+        params.TableSettings, params.TableType, true)) {
         return false;
     }
     return true;
@@ -9672,13 +9727,13 @@ bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_sett
 {
     const auto& firstEntry = node.GetRule_alter_table_setting_entry3();
     if (!StoreTableSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_table_setting_value3(),
-        params.TableSettings, true)) {
+        params.TableSettings, params.TableType, true)) {
         return false;
     }
     for (auto& block : node.GetBlock4()) {
         const auto& entry = block.GetRule_alter_table_setting_entry2();
         if (!StoreTableSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_table_setting_value3(),
-            params.TableSettings, true)) {
+            params.TableSettings, params.TableType, true)) {
             return false;
         }
     }
@@ -9689,12 +9744,12 @@ bool TSqlQuery::AlterTableResetTableSetting(const TRule_alter_table_reset_table_
         TAlterTableParameters& params)
 {
     const auto& firstEntry = node.GetRule_an_id3();
-    if (!ResetTableSettingsEntry(IdEx(firstEntry, *this), params.TableSettings)) {
+    if (!ResetTableSettingsEntry(IdEx(firstEntry, *this), params.TableSettings, params.TableType)) {
         return false;
     }
     for (auto& block : node.GetBlock4()) {
         const auto& entry = block.GetRule_an_id2();
-        if (!ResetTableSettingsEntry(IdEx(entry, *this), params.TableSettings)) {
+        if (!ResetTableSettingsEntry(IdEx(entry, *this), params.TableSettings, params.TableType)) {
             return false;
         }
     }
@@ -10971,6 +11026,29 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
         Ctx.Error() << "INSTALLATION or LOCATION must be specified";
         return false;
     }
+    return true;
+}
+
+bool TSqlTranslation::ValidateExternalTable(const TCreateTableParameters& params) {
+    if (params.TableType != ETableType::ExternalTable) {
+        return true;
+    }
+
+    if (!params.TableSettings.DataSourcePath) {
+        Ctx.Error() << "DATA_SOURCE requires key";
+        return false;
+    }
+
+    if (!params.TableSettings.Location) {
+        Ctx.Error() << "LOCATION requires key";
+        return false;
+    }
+
+    if (params.PkColumns) {
+        Ctx.Error() << "PRIMARY KEY is not supported for external table";
+        return false;
+    }
+
     return true;
 }
 

@@ -640,7 +640,7 @@ private:
         PosFromToken(msg.GetToken1());
         NewLine();
         Visit(msg.GetToken1());
-        Visit(msg.GetToken2());
+        Visit(msg.GetBlock2());
         Visit(msg.GetRule_simple_table_ref3());
         Visit(msg.GetToken4());
         PushCurrentIndent();

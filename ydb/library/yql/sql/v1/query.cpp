@@ -818,6 +818,15 @@ public:
         if (Params.TableSettings.IsSet()) {
             auto settings = Y();
 
+            if (Params.TableSettings.DataSourcePath) {
+                settings = L(settings, Q(Y(Q("data_source_path"), Params.TableSettings.DataSourcePath)));
+            }
+            if (Params.TableSettings.Location) {
+                settings = L(settings, Q(Y(Q("location"), Params.TableSettings.Location)));
+            }
+            for (const auto& item: Params.TableSettings.ExternalSourceParameters) {
+                settings = L(settings, Q(Y(Q(to_lower(item.first.Name)), item.second)));
+            }
             if (Params.TableSettings.CompactionPolicy) {
                 settings = L(settings, Q(Y(Q("compactionPolicy"), Params.TableSettings.CompactionPolicy)));
             }
@@ -890,9 +899,15 @@ public:
             opts = L(opts, Q(Y(Q("tableSettings"), Q(settings))));
         }
 
-
-        if (Params.TableType == ETableType::TableStore) {
-            opts = L(opts, Q(Y(Q("tableType"), Q("tableStore"))));
+        switch (Params.TableType) {
+            case ETableType::TableStore:
+                opts = L(opts, Q(Y(Q("tableType"), Q("tableStore"))));
+                break;
+            case ETableType::ExternalTable:
+                opts = L(opts, Q(Y(Q("tableType"), Q("externalTable"))));
+                break;
+            case ETableType::Table:
+                break;
         }
 
         Add("block", Q(Y(
@@ -1142,10 +1157,10 @@ TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTablePa
 
 class TDropTableNode final: public TAstListNode {
 public:
-    TDropTableNode(TPosition pos, const TTableRef& tr, bool isTabletore, TScopedStatePtr scoped)
+    TDropTableNode(TPosition pos, const TTableRef& tr, ETableType tableType, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table(tr)
-        , TableType(isTabletore ? ETableType::TableStore : ETableType::Table)
+        , TableType(tableType)
         , Scoped(scoped)
     {
         FakeSource = BuildFakeSource(pos);
@@ -1163,8 +1178,15 @@ public:
 
         opts = L(opts, Q(Y(Q("mode"), Q("drop"))));
 
-        if (TableType == ETableType::TableStore) {
-            opts = L(opts, Q(Y(Q("tableType"), Q("tableStore"))));
+        switch (TableType) {
+            case ETableType::TableStore:
+                opts = L(opts, Q(Y(Q("tableType"), Q("tableStore"))));
+                break;
+            case ETableType::ExternalTable:
+                opts = L(opts, Q(Y(Q("tableType"), Q("externalTable"))));
+                break;
+            case ETableType::Table:
+                break;
         }
 
         Add("block", Q(Y(
@@ -1186,8 +1208,8 @@ private:
     TSourcePtr FakeSource;
 };
 
-TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool isTabletore, TScopedStatePtr scoped) {
-    return new TDropTableNode(pos, tr, isTabletore, scoped);
+TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, ETableType tableType, TScopedStatePtr scoped) {
+    return new TDropTableNode(pos, tr, tableType, scoped);
 }
 
 class TCreateRole final: public TAstListNode {

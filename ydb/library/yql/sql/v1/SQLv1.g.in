@@ -489,7 +489,7 @@ object_features: object_feature | LPAREN object_feature (COMMA object_feature)* 
 
 object_type_ref: an_id_or_type;
 
-create_table_stmt: CREATE (TABLE | TABLESTORE) simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* RPAREN
+create_table_stmt: CREATE (TABLE | TABLESTORE | EXTERNAL TABLE) simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* RPAREN
     table_inherits?
     table_partition_by?
     with_table_settings?
@@ -597,7 +597,7 @@ split_boundaries:
 
 literal_value_list: LPAREN literal_value (COMMA literal_value)* RPAREN;
 
-drop_table_stmt: DROP (TABLE | TABLESTORE) (IF EXISTS)? simple_table_ref;
+drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_table_ref;
 
 create_user_stmt: CREATE USER role_name create_user_option?;
 alter_user_stmt: ALTER USER role_name (WITH? create_user_option | RENAME TO role_name);

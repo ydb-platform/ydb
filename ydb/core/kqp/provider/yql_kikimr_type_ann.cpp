@@ -532,7 +532,7 @@ private:
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
+virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
         TString cluster = TString(create.DataSink().Cluster());
         TString table = TString(create.Table());
         TString tableType = TString(create.TableType());
@@ -696,6 +696,73 @@ private:
             }
         }
 
+        switch (meta->TableType) {
+            case ETableType::Unknown:
+            case ETableType::TableStore:
+            case ETableType::Table: {
+                auto status = FillTableSettings(create, ctx, meta);
+                if (status != TStatus::Ok) {
+                    return status;
+                }
+                break;
+            }
+            case ETableType::ExternalTable: {
+                auto status = FillExternalTableSettings(create, ctx, meta);
+                if (status != TStatus::Ok) {
+                    return status;
+                }
+                break;
+            }
+        };
+
+        if (meta->TableType == ETableType::TableStore && meta->StoreType != EStoreType::Column) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()),
+                    TStringBuilder() << "TABLESTORE recuires STORE = COLUMN setting now"));
+            return TStatus::Error;
+        }
+
+        auto& tableDesc = SessionCtx->Tables().GetTable(cluster, table);
+        if (meta->TableType == ETableType::Table && tableDesc.DoesExist() && !tableDesc.Metadata->IsSameTable(*meta)) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                << "Table name conflict: " << NCommon::FullTableName(cluster, table)
+                << " is used to reference multiple tables."));
+            return TStatus::Error;
+        }
+
+        tableDesc.Metadata = meta;
+        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
+        YQL_ENSURE(tableDesc.Load(ctx, sysColumnsEnabled));
+
+        create.Ptr()->SetTypeAnn(create.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus FillExternalTableSettings(TKiCreateTable create, TExprContext& ctx, TKikimrTableMetadataPtr meta) {
+        for (const auto& setting : create.TableSettings()) {
+            auto name = setting.Name().Value();
+            if (name == "data_source_path") {
+                meta->TableSettings.DataSourcePath = TString(
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                );
+            } else if (name == "location") {
+                meta->TableSettings.Location = TString(
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                );
+            } else {
+                meta->TableSettings.ExternalSourceParameters.emplace_back(name, TString(
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                ));
+            }
+        }
+        if (!meta->TableSettings.DataSourcePath) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()),
+                "DATA_SOURCE parameter is required for external table"));
+            return TStatus::Error;
+        }
+        return TStatus::Ok;
+    }
+
+    TStatus FillTableSettings(TKiCreateTable create, TExprContext& ctx, TKikimrTableMetadataPtr meta) {
         for (const auto& setting : create.TableSettings()) {
             auto name = setting.Name().Value();
             if (name == "compactionPolicy") {
@@ -843,28 +910,10 @@ private:
                 return TStatus::Error;
             }
         }
-
-        if (meta->TableType == ETableType::TableStore && meta->StoreType != EStoreType::Column) {
-            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()),
-                    TStringBuilder() << "TABLESTORE recuires STORE = COLUMN setting now"));
-            return TStatus::Error;
-        }
-
-        auto& tableDesc = SessionCtx->Tables().GetTable(cluster, table);
-        if (meta->TableType == ETableType::Table && tableDesc.DoesExist() && !tableDesc.Metadata->IsSameTable(*meta)) {
-            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
-                << "Table name conflict: " << NCommon::FullTableName(cluster, table)
-                << " is used to reference multiple tables."));
-            return TStatus::Error;
-        }
-
-        tableDesc.Metadata = meta;
-        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
-        YQL_ENSURE(tableDesc.Load(ctx, sysColumnsEnabled));
-
-        create.Ptr()->SetTypeAnn(create.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
+
+
 
     virtual TStatus HandleDropTable(TKiDropTable node, TExprContext& ctx) override {
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);

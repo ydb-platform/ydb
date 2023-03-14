@@ -195,6 +195,48 @@ namespace {
         return out;
     }
 
+    TCreateExternalTableSettings ParseCreateExternalTableSettings(TKiCreateTable create, const TTableSettings& settings) {
+        TCreateExternalTableSettings out;
+        out.ExternalTable = TString(create.Table());
+
+        for (auto item : create.Columns()) {
+            auto columnTuple = item.Cast<TExprList>();
+            auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+            auto typeNode = columnTuple.Item(1);
+
+            auto columnName = TString(nameNode.Value());
+            auto columnType = typeNode.Ref().GetTypeAnn();
+            YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
+
+            auto type = columnType->Cast<TTypeExprType>()->GetType();
+            auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
+            auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
+            auto dataType = actualType->Cast<TDataExprType>();
+
+            TKikimrColumnMetadata columnMeta;
+            columnMeta.Name = columnName;
+            columnMeta.Type = dataType->GetName();
+            columnMeta.NotNull = notNull;
+
+            out.ColumnOrder.push_back(columnName);
+            out.Columns.insert(std::make_pair(columnName, columnMeta));
+        }
+        if (settings.DataSourcePath) {
+            out.DataSourcePath = *settings.DataSourcePath;
+        }
+        if (settings.Location) {
+            out.Location = *settings.Location;
+        }
+        out.SourceTypeParameters = settings.ExternalSourceParameters;
+        return out;
+    }
+
+    TDropExternalTableSettings ParseDropExternalTableSettings(TKiDropTable drop) {
+        return TDropExternalTableSettings{
+            .ExternalTable = TString(drop.Table())
+        };
+    }
+
     TAlterTableStoreSettings ParseAlterTableStoreSettings(TKiAlterTable alter) {
         return TAlterTableStoreSettings{
             .TableStore = TString(alter.Table())
@@ -602,9 +644,14 @@ public:
             auto cluster = TString(maybeCreate.Cast().DataSink().Cluster());
             auto& table = SessionCtx->Tables().GetTable(cluster, TString(maybeCreate.Cast().Table()));
 
-            bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);
+            auto tableTypeItem = table.Metadata->TableType;
+            if (tableTypeItem == ETableType::ExternalTable && !SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                    TStringBuilder() << "External table are disabled. Please contact your system administrator to enable it"));
+                return SyncError();
+            }
 
-            if (!isTableStore && !ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::CreateTable, ctx)) {
+            if ((tableTypeItem == ETableType::Unknown || tableTypeItem == ETableType::Table) && !ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::CreateTable, ctx)) {
                 return SyncError();
             }
 
@@ -613,19 +660,27 @@ public:
                 future = CreateDummySuccess();
             } else {
                 bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
-
-                if (isTableStore) {
-                    if (!isColumn) {
-                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                            TStringBuilder() << "TABLESTORE with not COLUMN store"));
-                        return SyncError();
+                switch (tableTypeItem) {
+                    case ETableType::ExternalTable: {
+                        future = Gateway->CreateExternalTable(cluster,
+                            ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), false);
+                        break;
                     }
-                    future = Gateway->CreateTableStore(cluster,
-                        ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings));
-                } else if (isColumn) {
-                    future = Gateway->CreateColumnTable(table.Metadata, true);
-                } else {
-                    future = Gateway->CreateTable(table.Metadata, true);
+                    case ETableType::TableStore: {
+                        if (!isColumn) {
+                            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                                TStringBuilder() << "TABLESTORE with not COLUMN store"));
+                            return SyncError();
+                        }
+                        future = Gateway->CreateTableStore(cluster,
+                            ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings));
+                        break;
+                    }
+                    case ETableType::Table:
+                    case ETableType::Unknown: {
+                        future = isColumn ? Gateway->CreateColumnTable(table.Metadata, true) : Gateway->CreateTable(table.Metadata, true);
+                        break;
+                    }
                 }
             }
 
@@ -634,7 +689,7 @@ public:
                     Y_UNUSED(res);
                     auto resultNode = ctx.NewWorld(input->Pos());
                     return resultNode;
-                }, isTableStore ? "Executing CREATE TABLESTORE" : "Executing CREATE TABLE");
+                }, GetCreateTableDebugString(tableTypeItem));
         }
 
         if (auto maybeDrop = TMaybeNode<TKiDropTable>(input)) {
@@ -649,39 +704,56 @@ public:
             auto cluster = TString(maybeDrop.Cast().DataSink().Cluster());
             TString tableName = TString(maybeDrop.Cast().Table());
             auto& table = SessionCtx->Tables().GetTable(cluster, tableName);
-            auto tableType = TString(maybeDrop.Cast().TableType());
-            bool isTableStore;
-
-            switch (GetTableTypeFromString(tableType)) {
+            auto tableTypeString = TString(maybeDrop.Cast().TableType());
+            auto tableTypeItem = GetTableTypeFromString(tableTypeString);
+            switch (tableTypeItem) {
                 case ETableType::Table:
                     if (!ApplyDdlOperation(cluster, input->Pos(), tableName, TYdbOperation::DropTable, ctx)) {
                         return SyncError();
                     }
-                    isTableStore = false;
                     break;
                 case ETableType::TableStore:
-                    isTableStore = true;
+                case ETableType::ExternalTable:
                     break;
                 case ETableType::Unknown:
-                default:
-                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported table type " << tableType));
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported table type " << tableTypeString));
                     return SyncError();
             }
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : (
-                isTableStore
-                ? Gateway->DropTableStore(cluster, ParseDropTableStoreSettings(maybeDrop.Cast()))
-                : Gateway->DropTable(table.Metadata->Cluster, table.Metadata->Name)
-            );
+            if (tableTypeItem == ETableType::ExternalTable && !SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                    TStringBuilder() << "External table are disabled. Please contact your system administrator to enable it"));
+                return SyncError();
+            }
 
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+
+            NThreading::TFuture<IKikimrGateway::TGenericResult> future;
+            if (prepareOnly) {
+                future = CreateDummySuccess();
+            } else {
+                switch (tableTypeItem) {
+                    case ETableType::Table:
+                        future = Gateway->DropTable(table.Metadata->Cluster, table.Metadata->Name);
+                        break;
+                    case ETableType::TableStore:
+                        future = Gateway->DropTableStore(cluster, ParseDropTableStoreSettings(maybeDrop.Cast()));
+                        break;
+                    case ETableType::ExternalTable:
+                        future = Gateway->DropExternalTable(cluster, ParseDropExternalTableSettings(maybeDrop.Cast()));
+                        break;
+                    case ETableType::Unknown:
+                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported table type " << tableTypeString));
+                        return SyncError();
+                }
+            }
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
                     Y_UNUSED(res);
                     auto resultNode = ctx.NewWorld(input->Pos());
                     return resultNode;
-                }, isTableStore ? "Executing DROP TABLESTORE" : "Executing DROP TABLE");
+                }, GetDropTableDebugString(tableTypeItem));
 
             input->SetState(TExprNode::EState::ExecutionComplete);
             input->SetResult(ctx.NewWorld(input->Pos()));
@@ -1317,6 +1389,30 @@ private:
         const IKikimrQueryExecutor::TExecuteSettings& settings)>;
     using TExecuteFinalizeFunc = std::function<void(TExprBase node, const IKikimrQueryExecutor::TQueryResult& result,
         TExprContext& ctx)>;
+
+    static TString GetCreateTableDebugString(ETableType tableType) {
+        switch (tableType) {
+            case ETableType::ExternalTable:
+                return "Executing CREATE EXTERNAL TABLE";
+            case ETableType::TableStore:
+                return "Executing CREATE TABLESTORE";
+            case ETableType::Table:
+            case ETableType::Unknown:
+                return "Executing CREATE TABLE";
+        }
+    }
+
+    static TString GetDropTableDebugString(ETableType tableType) {
+        switch (tableType) {
+            case ETableType::ExternalTable:
+                return "Executing DROP EXTERNAL TABLE";
+            case ETableType::TableStore:
+                return "Executing DROP TABLESTORE";
+            case ETableType::Table:
+            case ETableType::Unknown:
+                return "Executing DROP TABLE";
+        }
+    }
 
     std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> PerformExecution(TExprBase node,
         TExprContext& ctx, const TString& cluster, TMaybe<TString> mode,

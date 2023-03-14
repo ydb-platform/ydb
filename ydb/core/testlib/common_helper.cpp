@@ -26,19 +26,25 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess,
     auto expectation = expectSuccess;
     bool resultReady = false;
     bool* rrPtr = &resultReady;
-    std::optional<NYdb::NTable::TDataQueryResult> resultInternal;
-    tClient.CreateSession().Subscribe([&resultInternal, rrPtr, request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
+    tClient.CreateSession().Subscribe([this, result, rrPtr, request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
         auto session = f.GetValueSync().GetSession();
         session.ExecuteDataQuery(request
             , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx())
-            .Subscribe([&resultInternal, rrPtr, expectation, request](NYdb::NTable::TAsyncDataQueryResult f)
+            .Subscribe([this, result, rrPtr, expectation, request](NYdb::NTable::TAsyncDataQueryResult f)
                 {
-                    resultInternal = f.GetValueSync();
                     TStringStream ss;
                     f.GetValueSync().GetIssues().PrintTo(ss, false);
                     Cerr << "REQUEST=" << request << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
                     UNIT_ASSERT(expectation == f.GetValueSync().IsSuccess());
                     *rrPtr = true;
+                    if (result && expectation) {
+                        TStringStream ss;
+                        NYson::TYsonWriter writer(&ss, NYson::EYsonFormat::Text);
+                        for (auto&& i : f.GetValueSync().GetResultSets()) {
+                            PrintResultSet(i, writer);
+                        }
+                        *result = ss.Str();
+                    }
                 });
         });
     const TInstant start = TInstant::Now();
@@ -47,15 +53,6 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess,
     }
     Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << Endl;
     UNIT_ASSERT(resultReady);
-    UNIT_ASSERT(resultInternal);
-    if (result) {
-        TStringStream ss;
-        NYson::TYsonWriter writer(&ss, NYson::EYsonFormat::Text);
-        for (auto&& i : resultInternal->GetResultSets()) {
-            PrintResultSet(i, writer);
-        }
-        *result = ss.Str();
-    }
 }
 
 void THelper::StartSchemaRequest(const TString& request, const bool expectSuccess, const bool waiting) const {

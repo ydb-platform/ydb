@@ -123,6 +123,10 @@ const TVector<TPartitionInfo>& TConsumerDescription::GetPartitions() const {
     return Partitions_;
 }
 
+const TConsumer& TConsumerDescription::GetConsumer() const {
+    return Consumer_;
+}
+
 const TVector<ECodec>& TTopicDescription::GetSupportedCodecs() const {
     return SupportedCodecs_;
 }

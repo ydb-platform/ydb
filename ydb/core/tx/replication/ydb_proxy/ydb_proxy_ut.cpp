@@ -15,6 +15,12 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
     class TEnv {
         static constexpr char DomainName[] = "Root";
 
+        static NKikimrPQ::TPQConfig MakePqConfig() {
+            NKikimrPQ::TPQConfig config;
+            config.SetRequireCredentialsInNewProtocol(false);
+            return config;
+        }
+
         template <typename... Args>
         void Init(Args&&... args) {
             auto grpcPort = PortManager.GetPort();
@@ -44,7 +50,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
     public:
         TEnv(bool init = true)
-            : Settings(Tests::TServerSettings(PortManager.GetPort())
+            : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
                 .SetDomainName(DomainName)
             )
             , Server(Settings)
@@ -507,6 +513,166 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
                 UNIT_ASSERT_EQUAL(schema.GetChangefeedDescriptions().size(), 1);
                 UNIT_ASSERT_EQUAL(schema.GetChangefeedDescriptions().at(0), feed);
             }
+        }
+    }
+
+    Y_UNIT_TEST(CreateTopic) {
+        TEnv env;
+        // invalid retention period
+        {
+            auto settings = NYdb::NTopic::TCreateTopicSettings()
+                .RetentionPeriod(TDuration::Days(365));
+
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        }
+        // ok
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST(AlterTopic) {
+        TEnv env;
+        // fail
+        {
+            auto settings = NYdb::NTopic::TAlterTopicSettings()
+                .SetRetentionPeriod(TDuration::Days(2));
+
+            auto ev = env.Send<TEvYdbProxy::TEvAlterTopicResponse>(
+                new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", settings));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+        // create
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+        // ok
+        {
+            auto settings = NYdb::NTopic::TAlterTopicSettings()
+                .SetRetentionPeriod(TDuration::Days(2));
+
+            auto ev = env.Send<TEvYdbProxy::TEvAlterTopicResponse>(
+                new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", settings));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+        // invalid retention period
+        {
+            auto settings = NYdb::NTopic::TAlterTopicSettings()
+                .SetRetentionPeriod(TDuration::Days(365));
+
+            auto ev = env.Send<TEvYdbProxy::TEvAlterTopicResponse>(
+                new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", settings));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        }
+    }
+
+    Y_UNIT_TEST(DropTopic) {
+        TEnv env;
+        // create
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+        // ok
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvDropTopicResponse>(
+                new TEvYdbProxy::TEvDropTopicRequest("/Root/topic", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+        // fail
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvDropTopicResponse>(
+                new TEvYdbProxy::TEvDropTopicRequest("/Root/topic", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+    }
+
+    Y_UNIT_TEST(DescribeTopic) {
+        TEnv env;
+        // fail
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvDescribeTopicResponse>(
+                new TEvYdbProxy::TEvDescribeTopicRequest("/Root/topic", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+        // create
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+        // ok
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvDescribeTopicResponse>(
+                new TEvYdbProxy::TEvDescribeTopicRequest("/Root/topic", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+
+            const auto& schema = ev->Get()->Result.GetTopicDescription();
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetTotalPartitionsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetRetentionPeriod(), TDuration::Days(1));
+        }
+    }
+
+    Y_UNIT_TEST(DescribeConsumer) {
+        TEnv env;
+        // fail
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvDescribeConsumerResponse>(
+                new TEvYdbProxy::TEvDescribeConsumerRequest("/Root/topic", "consumer", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+        // create
+        {
+            auto settings = NYdb::NTopic::TCreateTopicSettings()
+                .BeginAddConsumer()
+                    .ConsumerName("consumer")
+                .EndAddConsumer();
+
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+        // ok
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvDescribeConsumerResponse>(
+                new TEvYdbProxy::TEvDescribeConsumerRequest("/Root/topic", "consumer", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+        // fail
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvDescribeConsumerResponse>(
+                new TEvYdbProxy::TEvDescribeConsumerRequest("/Root/topic", "consumer2", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
     }
 

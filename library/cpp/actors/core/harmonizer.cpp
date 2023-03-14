@@ -305,30 +305,33 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
     }
     double overbooked = consumed - booked;
     if (isStarvedPresent) {
-      // last_starved_at_consumed_value = сумма по всем пулам consumed;
-      // TODO(cthulhu): использовать как лимит планвно устремлять этот лимит к total,
-      // использовать вместо total
-      if (beingStopped && beingStopped >= overbooked) {
-          // do nothing
-      } else {
-          TStackVec<size_t> reorder;
-          for (size_t i = 0; i < Pools.size(); ++i) {
-              reorder.push_back(i);
-          }
-          for (ui16 poolIdx : PriorityOrder) {
-              TPoolInfo &pool = Pools[poolIdx];
-              i64 threadCount = pool.GetThreadCount();
-              if (threadCount > pool.DefaultThreadCount) {
-                  pool.SetThreadCount(threadCount - 1);
-                  AtomicIncrement(pool.DecreasingThreadsByStarvedState);
-                  overbooked--;
-                  LWPROBE(HarmonizeOperation, poolIdx, pool.Pool->GetName(), "decrease", threadCount - 1, pool.DefaultThreadCount, pool.MaxThreadCount);
-                  if (overbooked < 1) {
-                      break;
-                  }
-              }
-          }
-      }
+        // last_starved_at_consumed_value = сумма по всем пулам consumed;
+        // TODO(cthulhu): использовать как лимит планвно устремлять этот лимит к total,
+        // использовать вместо total
+        if (beingStopped && beingStopped >= overbooked) {
+            // do nothing
+        } else {
+            TStackVec<size_t> reorder;
+            for (size_t i = 0; i < Pools.size(); ++i) {
+                reorder.push_back(i);
+            }
+            for (ui16 poolIdx : PriorityOrder) {
+                TPoolInfo &pool = Pools[poolIdx];
+                i64 threadCount = pool.GetThreadCount();
+                while (threadCount > pool.DefaultThreadCount) {
+                    pool.SetThreadCount(threadCount - 1);
+                    AtomicIncrement(pool.DecreasingThreadsByStarvedState);
+                    overbooked--;
+                    LWPROBE(HarmonizeOperation, poolIdx, pool.Pool->GetName(), "decrease", threadCount - 1, pool.DefaultThreadCount, pool.MaxThreadCount);
+                    if (overbooked < 1) {
+                        break;
+                    }
+                }
+                if (overbooked < 1) {
+                    break;
+                }
+            }
+        }
     } else {
         for (size_t needyPoolIdx : needyPools) {
             TPoolInfo &pool = Pools[needyPoolIdx];

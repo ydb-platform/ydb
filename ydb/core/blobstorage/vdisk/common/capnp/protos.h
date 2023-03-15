@@ -534,23 +534,7 @@ namespace NKikimrCapnProto {
             bool HasSnapshotId() const { return getSnapshotId().size() != 0; }
             const NKikimrCapnProto_::TEvVGet::Reader& GetCapnpBase() const { return *this; }
 
-            bool ParseFromZeroCopyStream(NActors::TRopeStream *input) {
-                NKikimrCapnProtoUtil::TRopeStream stream;
-                stream.underlying = input;
-
-                kj::BufferedInputStreamWrapper buffered(stream);
-
-                messageReader = std::make_unique<capnp::PackedMessageReader>(buffered);
-                static_cast<NKikimrCapnProto_::TEvVGet::Reader&>(*this) = messageReader->getRoot<NKikimrCapnProto_::TEvVGet>();
-                if (hasExtremeQueries()) {
-                    elements.reserve(getExtremeQueries().size());
-                    for (TExtremeQuery::Reader extremeQuery : getExtremeQueries()) {
-                        elements.push_back(extremeQuery);
-                    }
-                }
-                return true;
-            }
-
+            bool ParseFromZeroCopyStream(NActors::TRopeStream *input);
         };
 
         struct Builder : public Reader {

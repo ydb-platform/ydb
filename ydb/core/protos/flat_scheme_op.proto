@@ -380,18 +380,6 @@ message TOlapColumnDescription {
     optional bool NotNull = 7;
 }
 
-message TAlterOlapColumn {
-    // Existing column name to alter
-    optional string Name = 1;
-
-    // TODO: there's currently nothing to alter
-}
-
-message TDropOlapColumn {
-    // Existing column name to drop
-    optional string Name = 1;
-}
-
 enum EColumnTableEngine {
     COLUMN_ENGINE_NONE = 0;
     COLUMN_ENGINE_REPLACING_TIMESERIES = 1;
@@ -428,10 +416,8 @@ message TColumnTableSchema {
 }
 
 message TAlterColumnTableSchema {
-    repeated TOlapColumnDescription AddColumns = 1;
-    repeated TAlterOlapColumn AlterColumns = 2;
-    repeated TDropOlapColumn DropColumns = 3;
-    repeated string AddKeyColumnNames = 4;
+    repeated TOlapColumnDescription Columns = 1;
+    repeated TOlapColumnDescription DropColumns = 6;
     //optional TCompressionOptions DefaultCompression = 5;
 }
 

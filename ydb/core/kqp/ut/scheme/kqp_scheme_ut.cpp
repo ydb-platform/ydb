@@ -3269,6 +3269,38 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+     Y_UNIT_TEST(AddColumnOlapTable) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner kikimr(runnerSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/ColumnTableTest";
+
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL,
+                Value1 String,
+                Value2 Int64 NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(Value1, Value2)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto query2 = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(`ADD COLUMN Value3 Uint64;)";
+        result = session.ExecuteSchemeQuery(query2).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+
+    }
+
     Y_UNIT_TEST(CreateDropColumnTableNegative) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

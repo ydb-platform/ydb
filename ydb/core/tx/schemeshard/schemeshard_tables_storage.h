@@ -63,6 +63,9 @@ public:
         TColumnTableInfo* operator->() {
             return Object.Get();
         }
+        const TColumnTableInfo* operator->() const {
+            return Object.Get();
+        }
         ~TTableCreatedGuard() {
             Y_VERIFY(Owner.Tables.emplace(PathId, Object).second);
             Owner.OnAddObject(PathId, Object);

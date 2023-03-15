@@ -2496,16 +2496,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TPathId pathId(selfId, localPathId);
 
                 auto it = Self->Topics.find(pathId);
-                if (it == Self->Topics.end()) {
-                    continue;
+                if (it != Self->Topics.end()) {
+                    auto& topic = it->second;
+                    topic->Stats.SeqNo = TMessageSeqNo(rowset.GetValue<Schema::PersQueueGroupStats::SeqNoGeneration>(), rowset.GetValue<Schema::PersQueueGroupStats::SeqNoRound>());
+                    topic->Stats.DataSize = rowset.GetValue<Schema::PersQueueGroupStats::DataSize>();
+                    topic->Stats.UsedReserveSize = rowset.GetValue<Schema::PersQueueGroupStats::UsedReserveSize>();
+
+                    Self->ResolveDomainInfo(pathId)->AggrDiskSpaceUsage(topic->Stats, {});
                 }
-
-                auto& topic = it->second;
-                topic->Stats.SeqNo = TMessageSeqNo(rowset.GetValue<Schema::PersQueueGroupStats::SeqNoGeneration>(), rowset.GetValue<Schema::PersQueueGroupStats::SeqNoRound>());
-                topic->Stats.DataSize = rowset.GetValue<Schema::PersQueueGroupStats::DataSize>();
-                topic->Stats.UsedReserveSize = rowset.GetValue<Schema::PersQueueGroupStats::UsedReserveSize>();
-
-                Self->ResolveDomainInfo(pathId)->AggrDiskSpaceUsage(topic->Stats, {});
 
                 if (!rowset.Next()) {
                     return false;

@@ -498,12 +498,26 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         env.TestWaitNotification(runtime, txId);
         Assert(0, 0); // topic is empty
 
+        ui64 balancerId = DescribePath(runtime, "/MyRoot/Topic1").GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
+
         ui32 msgSeqNo = 100;
         WriteToTopic(runtime, topicPath, msgSeqNo, "Message 100");
 
         env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
 
-        Assert(69, 0); //  67 - it is unstable value. it can change if internal message store change
+        Assert(69, 0); //  69 - it is unstable value. it can change if internal message store change
+
+        auto stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        UNIT_ASSERT_EQUAL_C(69, stats->Record.GetDataSize(), "DataSize from ReadBalancer");
+        UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer");
+
+        appData.PQConfig.SetBalancerWakeupIntervalSec(30);
+
+        GracefulRestartTablet(runtime, balancerId, sender);
+
+        stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        UNIT_ASSERT_EQUAL_C(69, stats->Record.GetDataSize(), "DataSize from ReadBalancer after reload");
+        UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer after reload");
     }
 
     Y_UNIT_TEST(PeriodicTopicStatsReload) {
@@ -547,7 +561,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         )");
         env.TestWaitNotification(runtime, txId);
         AssertTopicSize(7, 0);
-
 
         ui64 topic1Id = DescribePath(runtime, "/MyRoot/Topic1").GetPathDescription().GetSelf().GetPathId();
 

@@ -375,11 +375,12 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
     }
 
-    TBuilderProxy(const ui64 tabletId, const TActorId& sender, const ui32 count)
+    TBuilderProxy(const ui64 tabletId, const TActorId& sender, const ui32 count, const ui64 cookie)
     : TabletId(tabletId)
     , Sender(sender)
     , Waiting(count)
     , Result()
+    , Cookie(cookie)
     {}
 
     void Bootstrap(const TActorContext& ctx)
@@ -405,7 +406,7 @@ private:
         for (const auto& p : Result) {
             resp.AddPartResult()->CopyFrom(p);
         }
-        ctx.Send(Sender, res.Release());
+        ctx.Send(Sender, res.Release(), 0, Cookie);
         TThis::Die(ctx);
     }
 
@@ -434,6 +435,7 @@ private:
     TActorId Sender;
     ui32 Waiting;
     TVector<typename T2::TPartResult> Result;
+    ui64 Cookie;
 };
 
 
@@ -441,17 +443,17 @@ TActorId CreateOffsetsProxyActor(const ui64 tabletId, const TActorId& sender, co
 {
     return ctx.Register(new TBuilderProxy<TEvPQ::TEvPartitionOffsetsResponse,
                                           NKikimrPQ::TOffsetsResponse,
-                                          TEvPersQueue::TEvOffsetsResponse>(tabletId, sender, count));
+                                          TEvPersQueue::TEvOffsetsResponse>(tabletId, sender, count, 0));
 }
 
 /******************************************************* StatusProxy *********************************************************/
 
 
-TActorId CreateStatusProxyActor(const ui64 tabletId, const TActorId& sender, const ui32 count, const TActorContext& ctx)
+TActorId CreateStatusProxyActor(const ui64 tabletId, const TActorId& sender, const ui32 count, const ui64 cookie, const TActorContext& ctx)
 {
     return ctx.Register(new TBuilderProxy<TEvPQ::TEvPartitionStatusResponse,
                                           NKikimrPQ::TStatusResponse,
-                                          TEvPersQueue::TEvStatusResponse>(tabletId, sender, count));
+                                          TEvPersQueue::TEvStatusResponse>(tabletId, sender, count, cookie));
 }
 
 /******************************************************* MonitoringProxy *********************************************************/
@@ -1477,7 +1479,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
          cnt += p.second.InitDone;
     }
 
-    TActorId ans = CreateStatusProxyActor(TabletID(), ev->Sender, cnt, ctx);
+    TActorId ans = CreateStatusProxyActor(TabletID(), ev->Sender, cnt, ev->Cookie, ctx);
     for (auto& p : Partitions) {
         if (!p.second.InitDone)
             continue;

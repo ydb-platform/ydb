@@ -6,6 +6,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/core/tx/datashard/datashard.h>

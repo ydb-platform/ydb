@@ -127,6 +127,7 @@ struct TEvPQ {
         EvTxRollback,
         EvPartitionConfigChanged,
         EvSubDomainStatus,
+        EvStatsWakeup,
         EvEnd
     };
 
@@ -784,6 +785,14 @@ struct TEvPQ {
         }
 
         bool SubDomainOutOfSpace() const { return Record.GetSubDomainOutOfSpace(); }
+    };
+
+    struct TEvStatsWakeup : public TEventLocal<TEvStatsWakeup, EvStatsWakeup> {
+        TEvStatsWakeup(ui64 round)
+            : Round(round)
+        {}
+
+        ui64 Round;
     };
 };
 

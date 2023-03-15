@@ -3172,6 +3172,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
                            {LsCheckDiskQuotaExceeded(false, "Topic was created")});
+
+        ui64 balancerId = DescribePath(runtime, "/MyRoot/USER_1/Topic1").GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
+
+        auto stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        UNIT_ASSERT_EQUAL_C(false, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer");
         
         ui32 seqNo = 100;
         WriteToTopic(runtime, "/MyRoot/USER_1/Topic1", ++seqNo, "Message 0");
@@ -3179,6 +3184,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
                            {LsCheckDiskQuotaExceeded(true, "Message 0 was written")});
+
+        stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        UNIT_ASSERT_EQUAL_C(true, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer after write");
 
         TestDropPQGroup(runtime, ++txId, "/MyRoot/USER_1", "Topic1");
         env.TestWaitNotification(runtime, txId);

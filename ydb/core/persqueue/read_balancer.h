@@ -62,9 +62,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
             struct MaxPartsPerTablet : Column<41, NScheme::NTypeIds::Uint32> {};
             struct SchemeShardId : Column<42, NScheme::NTypeIds::Uint64> {};
             struct NextPartitionId : Column<43, NScheme::NTypeIds::Uint64> {};
+            struct SubDomainPathId : Column<44, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<Key>;
-            using TColumns = TableColumns<Key, PathId, Topic, Path, Version, Config, MaxPartsPerTablet, SchemeShardId, NextPartitionId>;
+            using TColumns = TableColumns<Key, PathId, Topic, Path, Version, Config, MaxPartsPerTablet, SchemeShardId, NextPartitionId, SubDomainPathId>;
         };
 
         struct Partitions : Table<33> {
@@ -227,7 +228,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     }
 
     void InitDone(const TActorContext &ctx) {
-        StartFindSubDomainPathId(false);
+        if (SubDomainPathId) {
+            StartWatchingSubDomainPathId();
+        } else {
+            StartFindSubDomainPathId(true);
+        }
 
         StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
 
@@ -498,6 +503,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     std::optional<TPathId> SubDomainPathId;
     std::optional<TPathId> WatchingSubDomainPathId;
 
+    friend struct TTxWriteSubDomainPathId;
     bool SubDomainOutOfSpace = false;
 
 public:

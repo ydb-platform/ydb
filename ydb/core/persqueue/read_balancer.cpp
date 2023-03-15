@@ -49,6 +49,11 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
             Self->SchemeShardId = dataRowset.GetValueOrDefault<Schema::Data::SchemeShardId>(0);
             Self->NextPartitionId = dataRowset.GetValueOrDefault<Schema::Data::NextPartitionId>(0);
 
+            ui64 subDomainPathId = dataRowset.GetValueOrDefault<Schema::Data::SubDomainPathId>(0);
+            if (subDomainPathId) {
+                Self->SubDomainPathId.emplace(Self->SchemeShardId, subDomainPathId);
+            }
+
             TString config = dataRowset.GetValueOrDefault<Schema::Data::Config>("");
             if (!config.empty()) {
                 bool res = Self->TabletConfig.ParseFromString(config);
@@ -139,7 +144,8 @@ bool TPersQueueReadBalancer::TTxWrite::Execute(TTransactionContext& txc, const T
         NIceDb::TUpdate<Schema::Data::MaxPartsPerTablet>(Self->MaxPartsPerTablet),
         NIceDb::TUpdate<Schema::Data::SchemeShardId>(Self->SchemeShardId),
         NIceDb::TUpdate<Schema::Data::NextPartitionId>(Self->NextPartitionId),
-        NIceDb::TUpdate<Schema::Data::Config>(config));
+        NIceDb::TUpdate<Schema::Data::Config>(config),
+        NIceDb::TUpdate<Schema::Data::SubDomainPathId>(Self->SubDomainPathId ? Self->SubDomainPathId->LocalPathId : 0));
     for (auto& p : DeletedPartitions) {
         db.Table<Schema::Partitions>().Key(p).Delete();
     }
@@ -519,6 +525,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     ui32 prevNextPartitionId = NextPartitionId;
     NextPartitionId = record.HasNextPartitionId() ? record.GetNextPartitionId() : 0;
     THashMap<ui32, TPartitionInfo> partitionsInfo;
+    if (record.HasSubDomainPathId()) {
+        SubDomainPathId.emplace(record.GetSchemeShardId(), record.GetSubDomainPathId());
+    }
 
     Consumers.clear();
     for (const auto& rr : TabletConfig.GetReadRules()) {
@@ -605,6 +614,10 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     RebuildStructs();
 
     Execute(new TTxWrite(this, std::move(deletedPartitions), std::move(newPartitions), std::move(newTablets), std::move(newGroups), std::move(reallocatedTablets)), ctx);
+
+    if (WatchingSubDomainPathId && SubDomainPathId && *WatchingSubDomainPathId != *SubDomainPathId) {
+        StartWatchingSubDomainPathId();
+    }
 }
 
 
@@ -832,6 +845,7 @@ TEvPersQueue::TEvPeriodicTopicStats* TPersQueueReadBalancer::GetStatsEvent() {
     rec.SetRound(++StatsReportRound);
     rec.SetDataSize(AggregatedStats.TotalDataSize);
     rec.SetUsedReserveSize(AggregatedStats.TotalUsedReserveSize);
+    rec.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
 
     return ev;
 }
@@ -1342,6 +1356,25 @@ void TPersQueueReadBalancer::StopFindSubDomainPathId() {
     }
 }
 
+
+struct TTxWriteSubDomainPathId : public ITransaction {
+    TPersQueueReadBalancer* const Self;
+
+    TTxWriteSubDomainPathId(TPersQueueReadBalancer* self)
+        : Self(self)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) {
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<TPersQueueReadBalancer::Schema::Data>().Key(1).Update(
+            NIceDb::TUpdate<TPersQueueReadBalancer::Schema::Data::SubDomainPathId>(Self->SubDomainPathId->LocalPathId));
+        return true;
+    }
+
+    void Complete(const TActorContext&) {
+    }
+};
+
 void TPersQueueReadBalancer::StartFindSubDomainPathId(bool delayFirstRequest) {
     if (!FindSubDomainPathIdActor &&
         SchemeShardId != 0 &&
@@ -1365,6 +1398,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPa
             "Discovered subdomain " << msg->LocalPathId << " at RB " << TabletID());
 
         SubDomainPathId.emplace(msg->SchemeShardId, msg->LocalPathId);
+        Execute(new TTxWriteSubDomainPathId(this), ctx);
         StartWatchingSubDomainPathId();
     }
 }

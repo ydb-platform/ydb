@@ -771,6 +771,10 @@ public:
                     }
                 }
 
+                if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {
+                    event->Record.SetSubDomainPathId(subDomainPathId);
+                }
+
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Propose configure PersQueueReadBalancer"
                                 << ", opId: " << OperationId

@@ -500,6 +500,10 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         ui64 balancerId = DescribePath(runtime, "/MyRoot/Topic1").GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
 
+        auto stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        UNIT_ASSERT_EQUAL_C(0, stats->Record.GetDataSize(), "DataSize from ReadBalancer");
+        UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer");
+
         ui32 msgSeqNo = 100;
         WriteToTopic(runtime, topicPath, msgSeqNo, "Message 100");
 
@@ -507,7 +511,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         Assert(69, 0); //  69 - it is unstable value. it can change if internal message store change
 
-        auto stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
         UNIT_ASSERT_EQUAL_C(69, stats->Record.GetDataSize(), "DataSize from ReadBalancer");
         UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer");
 

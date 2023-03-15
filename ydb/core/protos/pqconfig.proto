@@ -390,6 +390,7 @@ message TUpdateBalancerConfig { //for schemeshard use only
     }
 
     repeated TTablet Tablets = 10;
+    optional uint64 SubDomainPathId = 13;
 }
 
 message TDescribe {
@@ -851,6 +852,8 @@ message TEvPeriodicTopicStats {
 
     required uint64 DataSize = 4;
     required uint64 UsedReserveSize = 5;
+
+    optional bool SubDomainOutOfSpace = 6;
 };
 
 message TEvSubDomainStatus {

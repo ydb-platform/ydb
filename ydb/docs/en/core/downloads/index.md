@@ -2,7 +2,7 @@
 
 ## {{ ydb-short-name }} CLI
 
-[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) is a client-side command line interface for YDB databases.
+[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) is a command line utility for working with {{ ydb-short-name }} databases.
 
 {% list tabs %}
 
@@ -26,7 +26,7 @@
 
 ## {{ ydb-short-name }} Server
 
-{{ ydb-short-name }} Server is a server-side [YDB cluster](../concepts/databases.md#cluster) node executable.
+{{ ydb-short-name }} Server is a build for running a [YDB cluster](../concepts/databases.md#cluster) node.
 
 {% list tabs %}
 
@@ -43,3 +43,9 @@
   {% include notitle [docker](_includes/server/source_code.md) %}
 
 {% endlist %}
+
+## {{ ydb-short-name }} DSTool {#ydb-dstool}
+
+{{ ydb-short-name }} DSTool is a command line utility for [managing a {{ ydb-short-name }} cluster's disk subsystem](../maintenance/manual/index.md).
+
+To use the utility, install the [ydb-dstool](https://pypi.org/project/ydb-dstool/) Python package.

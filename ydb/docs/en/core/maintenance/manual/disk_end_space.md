@@ -1,4 +1,4 @@
-# Methods to free up space on physical devices
+# Freeing up space on physical devices
 
 When the disk space is used up, the database may start responding to all queries with an error. To keep the database healthy, we recommend deleting a part of the data or adding block store volumes to extend the cluster.
 
@@ -18,44 +18,44 @@ During data replication, the load on all the group's VDisks increases, and respo
 
 2. Check the status of the group that hosts the VDisk. There should be no VDisks that are unavailable or in the error or replication status in the group.
 
-    You can view the status of the group in the viewer.
+   You can view the status of the group in the viewer.
 
 3. Run the wipe command for the VDisk.
 
-    All data stored on a VDisk will be permanently deleted, whereupon the VDisk will begin restoring the data by reading them from the other VDisks in the group.
+   All data stored on a VDisk will be permanently deleted, whereupon the VDisk will begin restoring the data by reading them from the other VDisks in the group.
 
-    ```bash
-    ydbd admin blobstorage group reconfigure wipe --domain <Domain number> --node <Node ID> --pdisk <pdisk-id> --vslot <Slot number>
-    ```
+   ```bash
+   ydbd admin blobstorage group reconfigure wipe --domain <Domain number> --node <Node ID> --pdisk <pdisk-id> --vslot <Slot number>
+   ```
 
-    You can view the details for the command in the viewer.
+   You can view the details for the command in the viewer.
 
 If the block store volume is running out of space, you can apply defragmentation to the entire block store volume.
 
 1. Check the health of the groups in the cluster. There shouldn't be any problem groups on the same node with the problem block store volume.
 
-2. Log in via SSH to the node hosting this block store volume
+1. Log in via SSH to the node hosting this block store volume
 
-3. Check if you can [restart the process](node_restarting.md#restart_process).
+1. Check if you can [restart the process](node_restarting.md#restart_process).
 
-4. Stop the process
+1. Stop the process
 
-    ```bash
-    sudo systemctl stop ydbd
-    ```
+   ```bash
+   sudo systemctl stop ydbd
+   ```
 
-5. Format the block store volume
+1. Format the block store volume
 
-    ```bash
-    sudo ydbd admin blobstorage disk obliterate <path to the store volume part label>
-    ```
+   ```bash
+   sudo ydbd admin blobstorage disk obliterate <path to the store volume part label>
+   ```
 
 6. Run the process
 
-    ```bash
-    sudo systemctl start ydbd
-    ```
+   ```bash
+   sudo systemctl start ydbd
+   ```
 
 ## Moving individual VDisks from full block store volumes
 
-If defragmentation can't help freeing up space on the block store volume, you can [move](moving_vdisks.md#moving_disk) individual VDisks.
+If defragmentation doesn't help free up space on the block store volume, you can [move](moving_vdisks.md#moving_disk) individual VDisks.

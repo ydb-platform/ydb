@@ -1,42 +1,59 @@
 # Moving VDisks
 
+Sometimes you may need to free up a block store volume to replace equipment. Or a VDisk may be in active use, affecting the performance of other VDisks running on the same PDisk. In cases like this, VDisks need to be moved.
+
 ## Move a VDisk from a block store volume {#moving_vdisk}
 
-To move a VDisk from a block store volume, log in to the node via SSH and run the command:
+Get a list of VDisk IDs using [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
 
 ```bash
-kikimr admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <Storage group ID> GroupGeneration: <Storage group generation> FailRealmIdx: <FailRealm> FailDomainIdx: <FailDomain> VDiskIdx: <Slot number> } }'
+ydb-dstool -e <bs_endpoint> vdisk list --format tsv --columns VDiskId --no-header
 ```
 
-You can find the parameters for the command in the viewer (link).
+To move a VDisk from a block store volume, run the following commands on the cluster node:
+
+```bash
+ydb-dstool -e <bs_endpoint> vdisk evict --vdisk-ids VDISK_ID1 ... VDISK_IDN
+ydbd admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <Storage group ID> GroupGeneration: <Storage group generation> FailRealmIdx: <FailRealm> FailDomainIdx: <FailDomain> VDiskIdx: <Slot number> } }'
+```
+
+* `VDISK_ID1 ... VDISK_IDN`: The list of VDisk IDs like `[GroupId:GroupGeneration:FailRealmIdx:FailDomainIdx:VDiskIdx]`. The IDs are separated by a space.
+* `GroupId`: The ID of the storage group.
+* `GroupGeneration`: Storage group generation.
+* `FailRealmIdx`: Fail realm number.
+* `FailDomainIdx`: Fail domain number.
+* `VDiskIdx`: Slot number.
 
 ## Move VDisks from a broken/missing block store volume {#removal_from_a_broken_device}
 
-If SelfHeal is disabled or fails to move VDisks, you'll have to run this operation manually.
+If SelfHeal is disabled or fails to move VDisks automatically, you'll have to run this operation manually:
 
-1. Make sure that the VDisk has actually failed.
+1. Go to [monitoring](../../maintenance/embedded_monitoring/ydb_monitoring.md) and make sure that the VDisk has actually failed.
+1. Get the appropriate `[NodeId:PDiskId]` using [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
 
-    Write down the node's FQDN, ic-port, VDisk path, and pdisk-id
+   ```bash
+   ydb-dstool -e <bs_endpoint> vdisk list | fgrep VDISK_ID
+   ```
 
-2. Go to any cluster node
+1. Move the VDisk:
 
-3. Move the VDisk
-
-    ```bash
-    kikimr admin bs config invoke --proto 'Command { UpdateDriveStatus { HostKey: { Fqdn: "<host>" IcPort: <ic-port>} Path: "<Path to the storage volume part label>" PDiskId: <pdisk-id> Status: BROKEN } }'
-    ```
+   ```bash
+   ydb-dstool -e <bs_endpoint> pdisk set --status BROKEN --pdisk-ids "[NodeId:PDiskId]"
+   ```
 
 ## Enable the VDisk back after reassignment {#return_a_device_to_work}
 
-1. In Monitoring, make sure that the PDisk is actually operable
+To enable the VDisk back after reassignment:
 
-    Write down the node's FQDN, ic-port, store path, and pdisk-id
+1. Go to [monitoring](../../maintenance/embedded_monitoring/ydb_monitoring.md) and make sure that the VDisk is actually operable.
+1. Get the appropriate `[NodeId:PDiskId]` using [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
 
-2. Go to any cluster node
+   ```bash
+   ydb-dstool -e <bs_endpoint> pdisk list
+   ```
 
-3. Enable the PDisk back
+1. Enable the PDisk back:
 
-    ```bash
-    kikimr admin bs config invoke --proto 'Command { UpdateDriveStatus { HostKey: { Fqdn: "<host>" IcPort: <ic-port>} Path: "<Path to the storage volume part label>" PDiskId: <pdisk-id> Status: ACTIVE } }'
-    ```
-
+   ```bash
+   ydb-dstool -e <bs_endpoint> pdisk set --status ACTIVE --pdisk-ids "[NodeId:PDiskId]"
+   ```

@@ -8,17 +8,17 @@ To make sure that the process is stoppable, follow these steps.
 
 1. Execute the command
 
-    ```bash
-    ydbd cms request restart host {node_id} --user {user} --duration 60 --dry --reason 'some-reason'
-    ```
+   ```bash
+   ydbd cms request restart host {node_id} --user {user} --duration 60 --dry --reason 'some-reason'
+   ```
 
-    If the process is stoppable, you'll see `ALLOW`.
+   If the process is stoppable, you'll see `ALLOW`.
 
 1. Stop the process
 
-    ```bash
-    sudo service ydbd stop
-    ```
+   ```bash
+   sudo service ydbd stop
+   ```
 
 1. Restart the process if needed
 
@@ -38,4 +38,3 @@ Go to the [Hive web-viewer](../embedded_monitoring/hive.md) page.
 Click "View Nodes" to see a list of all nodes.
 
 Before disabling the node, first disable the transfer of tablets through the Active button, then click Drain, and wait for all the tablets to be moved away.
-

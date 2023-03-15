@@ -2,7 +2,7 @@
 
 An actor system is the basis of YDB. Each component of the system is represented by one or more actors.
 Each actor is allocated to a specific ExecutorPool corresponding to the actor's task.
-Changing the configuration will help you more accurately distribute the number of reserved cores for each type of task.
+Changing the configuration lets you more accurately distribute the number of cores reserved for each type of task.
 
 ## Actor system config description
 
@@ -12,7 +12,7 @@ The following task types and their respective pools are currently supported:
 
 * System: Designed to perform fast internal YDB operations.
 * User: Includes the entire user load for handling and executing incoming requests.
-* Batch: Tasks that have no strict time limit for execution, mainly the execution of background operations.
+* Batch: Tasks that have no strict limit on the execution time, mainly running background operations.
 * IO: Responsible for performing any tasks with blocking operations (for example, writing logs to a file).
 * IC: Interconnect, includes all the load associated with communication between nodes.
 

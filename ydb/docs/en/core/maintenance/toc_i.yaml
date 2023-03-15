@@ -7,5 +7,9 @@ items:
   items:
   - name: Embedded UI
     include: { mode: link, path: embedded_monitoring/toc_p.yaml }
-  - name: Maintaining a cluster's disk subsystem
+  - name: Managing a cluster's disk subsystem
     include: { mode: link, path: manual/toc_p.yaml }
+  - name: Changing an actor system's configuration
+    href: manual/change_actorsystem_configs.md
+  - name: Updating configurations via CMS
+    href: manual/cms.md

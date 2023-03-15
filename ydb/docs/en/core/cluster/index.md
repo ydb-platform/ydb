@@ -1,4 +1,4 @@
-# Managing a {{ ydb-short-name }} cluster
+# {{ ydb-short-name }} cluster management overview
 
 This section provides information about deploying, configuring, maintaining, monitoring, and performing diagnostics of multi-node [{{ ydb-short-name }} clusters](../concepts/cluster/index.md).
 

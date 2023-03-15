@@ -5,6 +5,7 @@ While a clusters are running, entire nodes or individual block devices that {{ y
 SelfHeal ensures a cluster's continuous performance and fault tolerance if malfunctioning nodes or devices cannot be repaired quickly.
 
 SelfHeal can:
+
 * Detect faulty system elements.
 * Transfer faulty elements carefully without data loss and disintegration of storage groups.
 
@@ -12,79 +13,19 @@ SelfHeal is enabled by default.
 
 ## Enabling and disabling SelfHeal {#on-off}
 
-{% list tabs %}
+You can enable and disable SelfHeal using [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md).
 
-- Enable SelfHeal
+To enable SelfHeal, run the command:
 
-   1. To enable fault detection, go to `http://localhost:8765/cms#show=config-items-25`.
-   1. Go to any node.
-   1. Create an updated configuration file with the parameter `SentinelConfig { Enable: true }`.
+```bash
+ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
+```
 
-      Sample `config.txt` file:
+To disable SelfHeal, run the command:
 
-      ```text
-      Actions {
-          AddConfigItem {
-              ConfigItem {
-                  Config {
-                      CmsConfig {
-                          SentinelConfig {
-                              Enable: true
-                          }
-                      }
-                  }
-              }
-          }
-      }
-      ```
-
-   1. Run the command:
-
-      ```bash
-      kikimr admin console configs update config.txt
-      ```
-
-   1. To enable data transfer, run the command:
-
-      ```bash
-      kikimr -s <endpoint> admin bs config invoke --proto 'Command{EnableSelfHeal{Enable: true}}'
-      ```
-
-- Disable SelfHeal
-
-   1. To disable fault detection, go to `http://localhost:8765/cms#show=config-items-25`.
-   1. Go to any node.
-   1. Create an updated configuration file with the parameter `SentinelConfig { Enable: false }`.
-
-      Sample `config.txt` file:
-
-      ```text
-      Actions {
-          AddConfigItem {
-              ConfigItem {
-                  Config {
-                      CmsConfig {
-                          SentinelConfig {
-                              Enable: false
-                          }
-                      }
-                  }
-              }
-          }
-      }
-      ```
-
-   1. Run the command:
-
-      ```bash
-      kikimr admin console configs update config.txt
-      ```
-
-   1. To disable data transfer, run the command:
-
-      ```bash
-      kikimr -s <endpoint> admin bs config invoke --proto 'Command{EnableSelfHeal{Enable: false}}'
-      ```
+```bash
+ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
+```
 
 {% endlist %}
 
@@ -126,16 +67,14 @@ You can use the following settings:
 
 ## Working with donor disks {#disks}
 
-To prevent data loss when moving a VDisk, enable donor disks:
+The donor disk is the previous VDisk after the data transfer, which continues to store its data and only responds to read requests from the new VDisk. When data is transfered with donor disks enabled, previous VDisks continue to function until the data is fully moved to the new disks. To prevent data loss when moving a VDisk, enable donor disks:
 
 ```bash
-kikimr admin bs config invoke --proto 'Command { UpdateSettings { EnableDonorMode: true } }'
+ydb-dstool -e <bs_endpoint> cluster set --enable-donor-mode
 ```
 
-To disable donor disks, set `EnableDonorMode` to `false` in the same command:
+To disable donor disks, run the command:
 
 ```bash
-kikimr admin bs config invoke --proto 'Command { UpdateSettings { EnableDonorMode: false } }'
+ydb-dstool -e <bs_endpoint> cluster set --disable-donor-mode
 ```
-
-The donor disk is the previous VDisk after the data transfer, which continues to store its data and only responds to read requests from the new VDisk. When data is transfered with donor disks enabled, previous VDisks continue to function until the data is fully moved to the new disks.

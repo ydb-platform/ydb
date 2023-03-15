@@ -1,14 +1,26 @@
 # Disk load balancing
 
-{{ ydb-short-name }} supports two methods for the disk load distribution:
+{{ ydb-short-name }} supports two methods for disk load balancing:
 
-## Distribute the load evenly across groups
+* [Distribute the load evenly across groups](#reassign-groups).
+* [Distribute VDisks evenly across block store volumes](#cluster-balance).
 
-At the bottom of the [Hive web-viewer](../embedded_monitoring/hive.md#reassign_groups) page there is a button named "Reassign Groups".
+## Distribute the load evenly across groups {#reassign-groups}
 
-## Distribute VDisks evenly across block store volumes
+At the bottom of the [Hive web-viewer](../embedded_monitoring/hive.md#reassign_groups) page, there is a button named "Reassign Groups".
 
-If VDisks aren't evenly distributed across block store volumes, you can [move them](moving_vdisks.md#moving_vdisk) one at a time from overloaded store volumes.
+## Distribute VDisks evenly across block store volumes {#cluster-balance}
+
+As a result of some operations, such as [decommissioning](../../administration/decommissioning.md), VDisks can be distributed across block store volumes unevenly. You can distribute them more evenly in one of the following ways:
+
+* [Move VDisks](moving_vdisks.md#moving_vdisk) one by one from overloaded block store volumes.
+* Use [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md). The command below moves a VDisk from an overloaded block store volume to a less loaded one:
+
+   ```bash
+   ydb-dstool -e <bs_endpoint> cluster balance
+   ```
+
+   The command moves a single VDisk per run.
 
 ## Changing the number of slots for VDisks on PDisks
 
@@ -41,4 +53,3 @@ Command {
 ```bash
 ydbd -s <endpoint> admin bs config invoke --proto-file DefineHostConfig.txt
 ```
-

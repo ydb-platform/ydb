@@ -41,7 +41,7 @@ ydbd admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <ID 
     ydb-dstool -e <bs_endpoint> pdisk set --status BROKEN --pdisk-ids "[NodeId:PDiskId]"
     ```
 
-## Вернуть PDisk после развоза  {#return_a_device_to_work}
+## Вернуть PDisk после развоза {#return_a_device_to_work}
 
 Чтобы вернуть PDisk после развоза:
 

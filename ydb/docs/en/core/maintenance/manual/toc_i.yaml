@@ -1,25 +1,27 @@
 items:
-- name: How to stay within the failure model
-  href: failure_model.md
-- name: Disk load balancing
-  href: balancing_load.md
-- name: Methods to free up space on physical devices
-  href: disk_end_space.md
+- name: "{{ ydb-short-name }} DSTool"
+  items:
+  - name: Overview
+    href: ../../administration/ydb-dstool-overview.md
+  - name: Installation
+    href: ../../administration/ydb-dstool-setup.md
 - name: Cluster extension
   href: cluster_expansion.md
 - name: Adding storage groups
   href: adding_storage_groups.md
 - name: Safe restart and shutdown of nodes
   href: node_restarting.md
-- name: Working with SelfHeal
-  href: selfheal.md
 - name: Enabling/disabling Scrubbing
   href: scrubbing.md
+- name: Working with SelfHeal
+  href: selfheal.md
+- name: Decommissioning a cluster part
+  href: ../../administration/decommissioning.md
 - name: Moving VDisks
   href: moving_vdisks.md
-- name: Updating configurations via CMS
-  href: cms.md
-- name: Updating configuration of the actor system
-  href: change_actorsystem_configs.md
-- name: Decomission of a part of the cluster
-  href: ../../administration/decommissioning.md
+- name: Staying within the failure model
+  href: failure_model.md
+- name: Disk load balancing
+  href: balancing_load.md
+- name: Freeing up space on physical devices
+  href: disk_end_space.md

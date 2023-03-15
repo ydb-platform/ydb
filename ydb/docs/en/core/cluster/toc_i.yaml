@@ -3,7 +3,7 @@ items:
   include: { mode: link, path: ../deploy/toc_p.yaml }
 - name: Access management
   href: access.md
-- name: Maintaining a cluster's disk subsystem
+- name: Managing a cluster's disk subsystem
   include: { mode: link, path: ../maintenance/manual/toc_p.yaml }
 - name: Embedded UI
   include: { mode: link, path: ../maintenance/embedded_monitoring/toc_p.yaml }
@@ -17,5 +17,9 @@ items:
       href: ../administration/monitoring.md
     - name: Grafana dashboards
       href: ../administration/grafana-dashboards.md
-- name: YDB updating
+- name: Updating YDB
   href: ../administration/upgrade.md
+- name: Changing an actor system's configuration
+  href: ../maintenance/manual/change_actorsystem_configs.md
+- name: Updating configurations via CMS
+  href: ../maintenance/manual/cms.md

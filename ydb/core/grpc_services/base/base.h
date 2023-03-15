@@ -393,6 +393,8 @@ public:
     virtual const TMaybe<TString> GetRequestType() const = 0;
     // Implementation must be thread safe
     virtual void SetClientLostAction(std::function<void()>&& cb) = 0;
+    // Allocation is thread safe. https://protobuf.dev/reference/cpp/arenas/#thread-safety
+    virtual google::protobuf::Arena* GetArena() = 0;
 };
 
 // Request context
@@ -405,7 +407,6 @@ class IRequestCtx
 
 public:
     virtual google::protobuf::Message* GetRequestMut() = 0;
-    virtual google::protobuf::Arena* GetArena() = 0;
 
     virtual void SetRuHeader(ui64 ru) = 0;
     virtual void AddServerHint(const TString& hint) = 0;

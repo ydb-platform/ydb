@@ -196,8 +196,6 @@ private:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         auto& response = ev->Get()->Record.GetRef();
 
-        Transactions->Dec();
-
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " data request status: Success");
             TransactionsBytesWritten->Add(response.GetResponse().GetQueryStats().ByteSize());

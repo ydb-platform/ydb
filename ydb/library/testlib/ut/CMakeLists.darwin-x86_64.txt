@@ -31,4 +31,18 @@ add_test(
   COMMAND
   ydb-library-testlib-ut
 )
+set_property(
+  TEST
+  ydb-library-testlib-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_property(
+  TEST
+  ydb-library-testlib-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
 vcs_info(ydb-library-testlib-ut)

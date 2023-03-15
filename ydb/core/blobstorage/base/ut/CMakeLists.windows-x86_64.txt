@@ -32,4 +32,18 @@ add_test(
   COMMAND
   ydb-core-blobstorage-base-ut
 )
+set_property(
+  TEST
+  ydb-core-blobstorage-base-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_property(
+  TEST
+  ydb-core-blobstorage-base-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
 vcs_info(ydb-core-blobstorage-base-ut)

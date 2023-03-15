@@ -774,7 +774,9 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
         fields.UseAuth ? Config.Authorizer : TRequestAuthorizer());
     if (fields.Index) {
         fields.Index->Register(page);
-        fields.Index->SortPages();
+        if (fields.SortPages) {
+            fields.Index->SortPages();
+        }
     } else {
         Register(page.Get());
     }

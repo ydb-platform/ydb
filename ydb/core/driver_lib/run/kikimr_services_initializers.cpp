@@ -958,7 +958,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             if (const auto& mon = appData->Mon) {
                 icCommon->RegisterMonPage = [mon](const TString& path, const TString& title, TActorSystem *actorSystem, const TActorId& actorId) {
                     NMonitoring::TIndexMonPage *page = mon->RegisterIndexPage("actors", "Actors")->RegisterIndexPage("interconnect", "Interconnect");
-                    mon->RegisterActorPage(page, path, title, false, actorSystem, actorId);
+                    mon->RegisterActorPage(page, path, title, false, actorSystem, actorId, /*useAuth=*/true, /*sortPages=*/false);
                 };
                 setup->LocalServices.emplace_back(NInterconnect::MakeInterconnectMonActorId(NodeId), TActorSetupCmd(
                     NInterconnect::CreateInterconnectMonActor(icCommon), TMailboxType::ReadAsFilled, systemPoolId));

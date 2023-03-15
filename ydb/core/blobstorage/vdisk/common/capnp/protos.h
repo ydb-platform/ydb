@@ -7,6 +7,8 @@
 #include <vector>
 #include <optional>
 #include "tevvget.capnp.h"
+#include <library/cpp/actors/core/event_pb.h>
+
 
 namespace NKikimrCapnProto {
     using namespace NKikimrCapnProto_;

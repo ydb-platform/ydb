@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 import json
 from json import encoder
 import yatest.common

@@ -13,7 +13,7 @@ from hamcrest import (
     raises,
 )
 
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.library.harness.util import LogLevels
 
 

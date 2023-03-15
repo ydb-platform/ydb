@@ -3,7 +3,7 @@
 import logging
 import time
 
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 import random
 import string
 

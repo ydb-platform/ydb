@@ -10,7 +10,7 @@ from hamcrest import assert_that, contains_inanyorder, not_none
 from tornado import gen
 from tornado.ioloop import IOLoop
 
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
 

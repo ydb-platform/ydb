@@ -5,8 +5,7 @@ import asyncio
 
 import pytest
 
-import ydb
-import ydb.aio
+from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.library.common.types import Erasure, from_bytes
 from ydb.tests.library.harness.util import LogLevels
 

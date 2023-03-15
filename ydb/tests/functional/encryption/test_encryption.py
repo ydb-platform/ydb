@@ -5,7 +5,7 @@ import random
 import time
 import threading
 import yatest.common
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory

@@ -3,7 +3,7 @@ import logging
 from hamcrest import assert_that, raises
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 

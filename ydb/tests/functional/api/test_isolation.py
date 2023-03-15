@@ -2,7 +2,7 @@
 from hamcrest import assert_that, equal_to, raises, contains_string
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class TestTransactionIsolation(object):

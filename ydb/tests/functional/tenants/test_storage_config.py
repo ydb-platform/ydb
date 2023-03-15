@@ -14,7 +14,7 @@ from ydb.tests.library.common.protobuf_ss import CreateTableRequest
 
 import ydb.tests.library.matchers.scheme_ops as scheme_operations
 from ydb.tests.library.common.types import PType
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 

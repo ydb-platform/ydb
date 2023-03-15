@@ -7,7 +7,7 @@ from concurrent import futures
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.common.types import TabletTypes
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 # call this as soon as possible to patch grpc event_handler implementation with additional calls
 ydb.interceptor.monkey_patch_event_handler()
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 def test_dynumber():

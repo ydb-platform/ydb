@@ -3,7 +3,7 @@ import logging
 import six
 import asyncio
 
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 

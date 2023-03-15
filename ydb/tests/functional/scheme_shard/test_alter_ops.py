@@ -10,7 +10,7 @@ from ydb.tests.library.common.protobuf_ss import TPartitionConfig, SchemeDescrib
 from ydb.tests.library.common.types import PType
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.matchers.response_matchers import ProtobufWithStatusMatcher
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class TestSchemeShardAlterTest(object):

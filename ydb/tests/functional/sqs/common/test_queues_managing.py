@@ -9,7 +9,7 @@ from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
 from ydb.tests.library.sqs.test_base import to_bytes, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
-from ydb import issues as ydb_issues
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class QueuesManagingTest(KikimrSqsTestBase):
@@ -159,7 +159,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
         assert_that(
             describe_queue_path,
             raises(
-                ydb_issues.SchemeError
+                ydb.issues.SchemeError
             )
         )
 

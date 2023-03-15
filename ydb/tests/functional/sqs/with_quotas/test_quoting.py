@@ -10,7 +10,7 @@ from ydb.tests.library.sqs.requests_client import SqsSendMessageParams
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
-from ydb import issues as ydb_issues
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class TestSqsQuotingWithKesus(KikimrSqsTestBase):
@@ -46,7 +46,7 @@ class TestSqsQuotingWithKesus(KikimrSqsTestBase):
         assert_that(
             describe_queue_path,
             raises(
-                ydb_issues.SchemeError
+                ydb.issues.SchemeError
             )
         )
 
@@ -83,7 +83,7 @@ class TestSqsQuotingWithLocalRateLimiter(KikimrSqsTestBase):
         assert_that(
             call_describe,
             raises(
-                ydb_issues.SchemeError
+                ydb.issues.SchemeError
             )
         )
 

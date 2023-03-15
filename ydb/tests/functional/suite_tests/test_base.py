@@ -17,7 +17,7 @@ import ydb.tests.library.common.yatest_common as yatest_common
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)

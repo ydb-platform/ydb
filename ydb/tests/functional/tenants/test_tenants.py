@@ -8,7 +8,7 @@ import pytest
 
 from hamcrest import assert_that, greater_than, is_, not_, none
 
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
 

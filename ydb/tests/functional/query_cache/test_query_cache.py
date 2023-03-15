@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator

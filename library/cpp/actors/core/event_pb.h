@@ -8,7 +8,7 @@
 #include <util/generic/deque.h>
 #include <util/system/context.h>
 #include <util/system/filemap.h>
-//#include <ydb/core/blobstorage/vdisk/common/capnp/protos.h>
+#include <ydb/core/blobstorage/vdisk/common/capnp/protos.h>
 #include <array>
 
 namespace NKikimrCapnProto {

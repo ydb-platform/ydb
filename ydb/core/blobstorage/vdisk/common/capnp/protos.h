@@ -6,30 +6,9 @@
 #include <string>
 #include <vector>
 #include <optional>
-#include <library/cpp/actors/core/event_pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
-
 #include "tevvget.capnp.h"
-
-namespace NKikimrCapnProtoUtil {
-    struct TRopeStream : public kj::InputStream {
-        NActors::TRopeStream *underlying;
-
-        virtual size_t tryRead(void* dst, size_t minBytes, size_t) override {
-            size_t bytesRead = 0;
-            while (bytesRead < minBytes) {
-                const void* buf;
-                int size;
-                if (!underlying->Next(&buf, &size)) {
-                    break;
-                }
-                memcpy((char*)dst + bytesRead, buf, size);
-                bytesRead += size;
-            }
-            return bytesRead;
-        }
-    };
-};
+#include "util.h"
 
 namespace NKikimrCapnProto {
     using namespace NKikimrCapnProto_;

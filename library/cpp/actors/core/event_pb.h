@@ -502,8 +502,8 @@ namespace NActors {
         }
     };
 
-    template <typename TActorId>
-    inline TActorId ActorIdFromProto(const TActorId& actorId) {
+    template <typename TActorIdType>
+    inline TActorId ActorIdFromProto(const TActorIdType& actorId) {
         return TActorId(actorId.GetRawX1(), actorId.GetRawX2());
     }
 

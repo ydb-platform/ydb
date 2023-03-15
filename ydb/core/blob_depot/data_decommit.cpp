@@ -96,7 +96,7 @@ namespace NKikimr::NBlobDepot {
                             TCoroTx::RestartTx();
                         }
                         const TValue *value = Self->Data->FindKey(key);
-                        const bool doGet = (!value && key.GetBlobId() < Self->Data->LastAssimilatedBlobId) // value not yet assimilated
+                        const bool doGet = (!value && Self->Data->LastAssimilatedBlobId < key.GetBlobId()) // value not yet assimilated
                             || (value && value->GoingToAssimilate && item.GetMustRestoreFirst()); // value has no local data yet
                         if (doGet) {
                             InvokeOtherActor(*this, &TThis::IssueGet, key.GetBlobId(), item.GetMustRestoreFirst());
@@ -111,7 +111,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             TCoroTx::FinishTx();
-            CheckIfDone();
+            InvokeOtherActor(*this, &TThis::CheckIfDone);
         }
 
         void ScanRangeAndIssueGets(TKey from, TKey to, TScanFlags flags) {

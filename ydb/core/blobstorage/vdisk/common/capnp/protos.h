@@ -8,7 +8,6 @@
 #include <optional>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include "tevvget.capnp.h"
-#include "util.h"
 
 namespace NKikimrCapnProto {
     using namespace NKikimrCapnProto_;

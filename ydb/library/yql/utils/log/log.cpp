@@ -22,21 +22,6 @@ static int g_LoggerInitialized = 0;
 
 namespace {
 
-void WriteLocalTime(IOutputStream* out) {
-    struct timeval now;
-    gettimeofday(&now, nullptr);
-
-    struct tm tm;
-    time_t seconds = static_cast<time_t>(now.tv_sec);
-    localtime_r(&seconds, &tm);
-
-    char buf[sizeof("2016-01-02 03:04:05.006")];
-    int n = strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S.", &tm);
-    snprintf(buf + n, sizeof(buf) - n, "%03" PRIu32, static_cast<ui32>(now.tv_usec) / 1000);
-
-    out->Write(buf, sizeof(buf) - 1);
-}
-
 class TLimitedLogBackend final : public TLogBackend {
 public:
     TLimitedLogBackend(TAutoPtr<TLogBackend> b, TAtomic& flag, ui64 limit) noexcept
@@ -181,6 +166,21 @@ private:
 
 namespace NYql {
 namespace NLog {
+
+void WriteLocalTime(IOutputStream* out) {
+    struct timeval now;
+    gettimeofday(&now, nullptr);
+
+    struct tm tm;
+    time_t seconds = static_cast<time_t>(now.tv_sec);
+    localtime_r(&seconds, &tm);
+
+    char buf[sizeof("2016-01-02 03:04:05.006")];
+    int n = strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S.", &tm);
+    snprintf(buf + n, sizeof(buf) - n, "%03" PRIu32, static_cast<ui32>(now.tv_usec) / 1000);
+
+    out->Write(buf, sizeof(buf) - 1);
+}
 
 /**
  * TYqlLogElement

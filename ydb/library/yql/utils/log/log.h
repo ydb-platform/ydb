@@ -95,6 +95,8 @@ namespace NLog {
 using TComponentLevels =
         std::array<ELevel, EComponentHelpers::ToInt(EComponent::MaxValue)>;
 
+void WriteLocalTime(IOutputStream* out);
+
 /**
  * @brief Component based logger frontend.
  */

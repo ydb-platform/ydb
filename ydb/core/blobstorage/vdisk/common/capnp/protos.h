@@ -6,7 +6,6 @@
 #include <string>
 #include <vector>
 #include <optional>
-#include <ydb/core/protos/blobstorage.pb.h>
 #include "tevvget.capnp.h"
 
 namespace NKikimrCapnProto {
@@ -187,7 +186,7 @@ namespace NKikimrCapnProto {
             void SetExpectedMsgId(const TMessageId::Reader& value) { return setExpectedMsgId(value.GetCapnpBase()); }
             void SetFailedMsgId(const TMessageId::Reader& value) { return setFailedMsgId(value.GetCapnpBase()); }
             void SetStatus(const EStatus& value) { return setStatus(static_cast<NKikimrCapnProto_::EStatus>(static_cast<size_t>(value) + 1)); }
-            void SetStatus(const NKikimrBlobStorage::TWindowFeedback_EStatus& value) { return setStatus(static_cast<NKikimrCapnProto_::EStatus>(static_cast<size_t>(value) + 1)); }
+            void SetStatus(size_t value) { return setStatus(static_cast<NKikimrCapnProto_::EStatus>(value + 1)); }
             TMessageId::Builder MutableExpectedMsgId() { return getExpectedMsgId(); }
             TMessageId::Builder MutableFailedMsgId() { return getFailedMsgId(); }
             const NKikimrCapnProto_::TWindowFeedback::Builder& GetCapnpBase() const { return *this; }
@@ -319,7 +318,7 @@ namespace NKikimrCapnProto {
             void SetSenderActorId(const TActorId::Reader& value) { return setSenderActorId(value.GetCapnpBase()); }
             void SetExtQueueId(const EVDiskQueueId& value) { return setExtQueueId(static_cast<NKikimrCapnProto_::EVDiskQueueId>(static_cast<size_t>(value) + 1)); }
             void SetIntQueueId(const EVDiskInternalQueueId& value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(static_cast<size_t>(value) + 1)); }
-            void SetIntQueueId(const NKikimrBlobStorage::EVDiskInternalQueueId& value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(static_cast<size_t>(value) + 1)); }
+            void SetIntQueueId(size_t value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(value + 1)); }
             TMessageId::Builder MutableMsgId() { return getMsgId(); }
             TVDiskCostSettings::Builder MutableCostSettings() { return getCostSettings(); }
             TWindowFeedback::Builder MutableWindow() { return getWindow(); }

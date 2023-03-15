@@ -200,6 +200,16 @@ public:
         return false;
     }
 
+    static bool NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
+        switch (expectedType.GetTypeId()) {
+            case NScheme::NTypeIds::JsonDocument:
+                return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
+            default:
+                break;
+        }
+        return false;
+    }
+
     TArrowToYdbConverter(const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter)
         : YdbSchema(ydbSchema)
         , RowWriter(rowWriter)

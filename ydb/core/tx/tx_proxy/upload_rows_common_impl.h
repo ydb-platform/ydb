@@ -280,14 +280,17 @@ private:
     static bool SameDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
         bool res = (type1 == type2);
         if (!res && allowConvert) {
-            res = NArrow::GetArrowType(type1)->id() == NArrow::GetArrowType(type2)->id();
+            res = (NArrow::GetArrowType(type1)->id() == NArrow::GetArrowType(type2)->id());
         }
         return res;
     }
 
     static bool SameOrConvertableDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
-        bool ok = SameDstType(type1, type2, allowConvert);
-        return ok || NArrow::TArrowToYdbConverter::NeedInplaceConversion(type1, type2);
+        bool ok = SameDstType(type1, type2, allowConvert) || NArrow::TArrowToYdbConverter::NeedInplaceConversion(type1, type2);
+        if (!ok && allowConvert) {
+            ok = NArrow::TArrowToYdbConverter::NeedConversion(type1, type2);
+        }
+        return ok;
     }
 
     bool BuildSchema(const NActors::TActorContext& ctx, TString& errorMessage, bool makeYqbSchema) {

@@ -244,6 +244,16 @@ public:
         }
         _exit(127);
     }
+    
+    NDqProto::TBillingStatsResponse GetBillingStats() {
+        NDqProto::TBillingStatsResponse resp;
+        auto* stats = Runner->GetBillingStats();
+        for (auto& input : stats->Inputs) {
+            auto* i = resp.AddInputs();
+            i->SetRowsConsumed(input->RowsConsumed);
+        }
+        return resp;
+    }
 
     NDqProto::TGetStatsResponse GetStats(ui64 taskId) {
         const auto stats = Runner->GetStats();
@@ -583,6 +593,12 @@ public:
                 Y_ENSURE(header.GetVersion() >= 3);
                 Y_ENSURE(taskId == Runner->GetTaskId());
                 GetStats(taskId).Save(&output);
+                break;
+            }
+            case NDqProto::TCommandHeader::GET_BILLING_STATS: {
+                Y_ENSURE(header.GetVersion() >= 3);
+                Y_ENSURE(taskId == Runner->GetTaskId());
+                GetBillingStats().Save(&output);
                 break;
             }
             case NDqProto::TCommandHeader::GET_STATS_INPUT: {

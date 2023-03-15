@@ -1939,7 +1939,8 @@ public:
                     auto ingressBytes = sourceInfo.AsyncInput->GetIngressBytes();
                     ingressBytesMap.emplace(inputIndex, ingressBytes);
                     Ingress[sourceInfo.Type] = Ingress.Value(sourceInfo.Type, 0) + ingressBytes;
-                    source->FillExtraStats(protoTask, last);
+                    // TODO: support async CA
+                    source->FillExtraStats(protoTask, last, TaskRunner ? TaskRunner->GetBillingStats() : nullptr);
                 }
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) GetProfileStats(), ingressBytesMap);
@@ -1993,7 +1994,8 @@ public:
                 }
 
                 if (auto* transform = transformInfo.AsyncInput) {
-                    transform->FillExtraStats(protoTask, last);
+                    // TODO: support async CA
+                    transform->FillExtraStats(protoTask, last, TaskRunner ? TaskRunner->GetBillingStats() : 0);
                 }
             }
 

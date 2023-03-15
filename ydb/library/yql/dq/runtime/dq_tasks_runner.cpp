@@ -139,21 +139,21 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 #define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory)
+    TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory, TDqBillingStats::TInputStats* stats)
 {
     switch (inputDesc.GetTypeCase()) {
         case NYql::NDqProto::TTaskInput::kSource:
             Y_VERIFY(inputs.size() == 1);
             [[fallthrough]];
         case NYql::NDqProto::TTaskInput::kUnionAll:
-            return CreateInputUnionValue(std::move(inputs), holderFactory);
+            return CreateInputUnionValue(std::move(inputs), holderFactory, stats);
         case NYql::NDqProto::TTaskInput::kMerge: {
             const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
             TVector<TSortColumnInfo> sortColsInfo;
             GetColumnsInfo(type, protoSortCols, sortColsInfo);
             YQL_ENSURE(!sortColsInfo.empty());
 
-            return CreateInputMergeValue(std::move(inputs), std::move(sortColsInfo), holderFactory);
+            return CreateInputMergeValue(std::move(inputs), std::move(sortColsInfo), holderFactory, stats);
         }
         default:
             YQL_ENSURE(false, "Unknown input type: " << (ui32) inputDesc.GetTypeCase());
@@ -264,6 +264,10 @@ public:
             AllocatedHolder.reset();
             SelfAlloc->Release();
         }
+    }
+
+    const TDqBillingStats* GetBillingStats() const override {
+        return &BillingStats;
     }
 
     ui64 GetTaskId() const override {
@@ -515,6 +519,7 @@ public:
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
+            auto& inputStats = BillingStats.AddInputs();
 
             TVector<IDqInput::TPtr> inputs{Reserve(std::max<ui64>(inputDesc.ChannelsSize(), 1))}; // 1 is for "source" type of input.
             TInputTransformInfo* transform = nullptr;
@@ -572,14 +577,14 @@ public:
 
             auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, true);
             if (transform) {
-                transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory);
+                transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, nullptr);
                 inputs.clear();
                 inputs.emplace_back(transform->TransformOutput);
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                    CreateInputUnionValue(std::move(inputs), holderFactory));
+                    CreateInputUnionValue(std::move(inputs), holderFactory, &inputStats));
             } else {
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                    DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory));
+                    DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory, &inputStats));
             }
         }
 
@@ -978,6 +983,7 @@ private:
     bool CollectBasicStats = false;
     bool CollectProfileStats = false;
     std::unique_ptr<TDqTaskRunnerStats> Stats;
+    TDqBillingStats BillingStats;
     TDuration RunComputeTime;
 
 private:

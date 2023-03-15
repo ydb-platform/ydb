@@ -86,7 +86,7 @@ public:
         return NKikimrServices::TActivity::KQP_STREAM_LOOKUP_ACTOR;
     }
 
-    void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats , bool last) override {
+    void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats , bool last, const NYql::NDq::TDqBillingStats*) override {
         if (last) {
             stats->SetErrorsCount(ErrorsCount);
 

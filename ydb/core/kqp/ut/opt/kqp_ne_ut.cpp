@@ -2881,9 +2881,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(DeleteWithInputMultiConsumptionLimit) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

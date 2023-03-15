@@ -5,6 +5,7 @@
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
 #include <ydb/library/yql/dq/runtime/dq_compute.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
+#include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
@@ -319,6 +320,7 @@ public:
 
     virtual void UpdateStats() = 0;
     virtual const TDqTaskRunnerStats* GetStats() const = 0;
+    virtual const TDqBillingStats* GetBillingStats() const = 0;
 
     [[nodiscard]]
     virtual TString Save() const = 0;

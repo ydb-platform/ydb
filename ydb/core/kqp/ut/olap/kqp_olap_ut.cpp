@@ -1171,6 +1171,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(CAST("2" As Int32) >= `level`)",
             R"(`timestamp` >= CAST(3000001u AS Timestamp))",
             R"((`timestamp`, `level`) >= (CAST(3000001u AS Timestamp), 3))",
+            R"(`uid` LIKE "%30000%")",
+            R"(`uid` LIKE "uid%")",
+            R"(`uid` LIKE "%001")",
+            R"(`uid` LIKE "uid%001")",
         };
 
         std::vector<TString> testDataNoPush = {
@@ -1211,6 +1215,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
 
             qBuilder << R"(PRAGMA Kikimr.OptEnablePredicateExtract = "false";)" << Endl;
+            qBuilder << R"(PRAGMA AnsiLike;)" << Endl;
             qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
             qBuilder << predicate;
             qBuilder << " ORDER BY `timestamp`";

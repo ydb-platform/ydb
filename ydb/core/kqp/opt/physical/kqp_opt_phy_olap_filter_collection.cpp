@@ -15,25 +15,23 @@ namespace {
 bool IsSupportedPredicate(const TCoCompare& predicate) {
     if (predicate.Maybe<TCoCmpEqual>()) {
         return true;
-    }
-
-    if (predicate.Maybe<TCoCmpLess>()) {
+    } else if (predicate.Maybe<TCoCmpLess>()) {
         return true;
-    }
-
-    if (predicate.Maybe<TCoCmpGreater>()) {
+    } else if (predicate.Maybe<TCoCmpGreater>()) {
         return true;
-    }
-
-    if (predicate.Maybe<TCoCmpNotEqual>()) {
+    } else if (predicate.Maybe<TCoCmpNotEqual>()) {
         return true;
-    }
-
-    if (predicate.Maybe<TCoCmpGreaterOrEqual>()) {
+    } else if (predicate.Maybe<TCoCmpGreaterOrEqual>()) {
         return true;
-    }
-
-    if (predicate.Maybe<TCoCmpLessOrEqual>()) {
+    } else if (predicate.Maybe<TCoCmpLessOrEqual>()) {
+        return true;
+    } else if (predicate.Maybe<TCoCmpLessOrEqual>()) {
+        return true;
+    } else if (predicate.Maybe<TCoCmpStringContains>()) {
+        return true;
+    } else if (predicate.Maybe<TCoCmpStartsWith>()) {
+        return true;
+    } else if (predicate.Maybe<TCoCmpEndsWith>()) {
         return true;
     }
 

@@ -136,6 +136,12 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
         compareOperator = "gt";
     } else if (predicate.Maybe<TCoCmpGreaterOrEqual>() && !forceStrictComparison) {
         compareOperator = "gte";
+    } else if (predicate.Maybe<TCoCmpStringContains>()) {
+        compareOperator = "string_contains";
+    } else if (predicate.Maybe<TCoCmpStartsWith>()) {
+        compareOperator = "starts_with";
+    } else if (predicate.Maybe<TCoCmpEndsWith>()) {
+        compareOperator = "ends_with";
     }
 
     YQL_ENSURE(!compareOperator.empty(), "Unsupported comparison node: " << predicate.Ptr()->Content());

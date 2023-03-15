@@ -35,7 +35,7 @@
                                                     {
                                                         "Limit": "10",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": "$35.c"
+                                                        "TopSortBy": "$23.c"
                                                     },
                                                     {
                                                         "Name": "Aggregate"
@@ -52,16 +52,12 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-Filter-TableFullScan",
+                                                                "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
                                                                     {
                                                                         "Aggregation": "{_yql_agg_0: MIN(item.URL),_yql_agg_1: Inc(state._yql_agg_1)}",
                                                                         "GroupBy": "item.SearchPhrase",
                                                                         "Name": "Aggregate"
-                                                                    },
-                                                                    {
-                                                                        "Name": "Filter",
-                                                                        "Predicate": "Apply"
                                                                     },
                                                                     {
                                                                         "Name": "TableFullScan",
@@ -84,7 +80,7 @@
                                                                                             "Id": 106
                                                                                         },
                                                                                         "Constant": {
-                                                                                            "Text": ""
+                                                                                            "Text": "google"
                                                                                         }
                                                                                     }
                                                                                 },
@@ -96,10 +92,38 @@
                                                                                         "Function": {
                                                                                             "Arguments": [
                                                                                                 {
-                                                                                                    "Id": 40
+                                                                                                    "Id": 14
                                                                                                 },
                                                                                                 {
                                                                                                     "Id": 106
+                                                                                                }
+                                                                                            ],
+                                                                                            "Id": 9
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                {
+                                                                                    "Assign": {
+                                                                                        "Column": {
+                                                                                            "Id": 108
+                                                                                        },
+                                                                                        "Constant": {
+                                                                                            "Text": ""
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                {
+                                                                                    "Assign": {
+                                                                                        "Column": {
+                                                                                            "Id": 109
+                                                                                        },
+                                                                                        "Function": {
+                                                                                            "Arguments": [
+                                                                                                {
+                                                                                                    "Id": 40
+                                                                                                },
+                                                                                                {
+                                                                                                    "Id": 108
                                                                                                 }
                                                                                             ],
                                                                                             "Id": 2
@@ -107,9 +131,27 @@
                                                                                     }
                                                                                 },
                                                                                 {
+                                                                                    "Assign": {
+                                                                                        "Column": {
+                                                                                            "Id": 110
+                                                                                        },
+                                                                                        "Function": {
+                                                                                            "Arguments": [
+                                                                                                {
+                                                                                                    "Id": 107
+                                                                                                },
+                                                                                                {
+                                                                                                    "Id": 109
+                                                                                                }
+                                                                                            ],
+                                                                                            "Id": 11
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                {
                                                                                     "Filter": {
                                                                                         "Predicate": {
-                                                                                            "Id": 107
+                                                                                            "Id": 110
                                                                                         }
                                                                                     }
                                                                                 },

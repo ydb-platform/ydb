@@ -295,6 +295,12 @@ TProgram::TAssignment* CompileComparison(const TKqpOlapFilterCompare& comparison
         function = TProgram::TAssignment::FUNC_CMP_GREATER;
     } else if (comparison.Operator() == "gte") {
         function = TProgram::TAssignment::FUNC_CMP_GREATER_EQUAL;
+    } else if (comparison.Operator() == "string_contains") {
+        function = TProgram::TAssignment::FUNC_STR_MATCH;
+    } else if (comparison.Operator() == "starts_with") {
+        function = TProgram::TAssignment::FUNC_STR_STARTS_WITH;
+    } else if (comparison.Operator() == "ends_with") {
+        function = TProgram::TAssignment::FUNC_STR_ENDS_WITH;
     }
 
     cmpFunc->SetId(function);

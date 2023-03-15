@@ -30,15 +30,11 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Limit-Filter-TableFullScan",
+                                                "Node Type": "Limit-TableFullScan",
                                                 "Operators": [
                                                     {
                                                         "Limit": "10",
                                                         "Name": "Limit"
-                                                    },
-                                                    {
-                                                        "Name": "Filter",
-                                                        "Predicate": "Apply"
                                                     },
                                                     {
                                                         "Name": "TableFullScan",
@@ -149,6 +145,7 @@
                                                             "WindowName",
                                                             "WithHash"
                                                         ],
+                                                        "ReadLimit": "10",
                                                         "ReadRanges": [
                                                             "EventTime (-\u221e, +\u221e)",
                                                             "CounterID (-\u221e, +\u221e)",
@@ -158,6 +155,41 @@
                                                         ],
                                                         "SsaProgram": {
                                                             "Command": [
+                                                                {
+                                                                    "Assign": {
+                                                                        "Column": {
+                                                                            "Id": 106
+                                                                        },
+                                                                        "Constant": {
+                                                                            "Text": "google"
+                                                                        }
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "Assign": {
+                                                                        "Column": {
+                                                                            "Id": 107
+                                                                        },
+                                                                        "Function": {
+                                                                            "Arguments": [
+                                                                                {
+                                                                                    "Id": 14
+                                                                                },
+                                                                                {
+                                                                                    "Id": 106
+                                                                                }
+                                                                            ],
+                                                                            "Id": 9
+                                                                        }
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "Filter": {
+                                                                        "Predicate": {
+                                                                            "Id": 107
+                                                                        }
+                                                                    }
+                                                                },
                                                                 {
                                                                     "Projection": {
                                                                         "Columns": [
@@ -613,6 +645,7 @@
                                 "WindowName",
                                 "WithHash"
                             ],
+                            "limit": "10",
                             "scan_by": [
                                 "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",

@@ -21,13 +21,15 @@ def run_cli(argv):
     )
 
 
-def get_queries(filename):
+def get_queries(filename, isColumnStore):
     path = os.path.join(yatest.common.source_path("ydb/tests/functional/clickbench"), filename)
     with open(path, "r") as r:
         data = r.read()
     for query in data.split('\n'):
         if not query:
             continue
+        if isColumnStore:
+            query = "PRAGMA AnsiLike;\n" + query
 
         yield query
 
@@ -107,7 +109,10 @@ def test_run_benchmark(store):
 
     # just validating that benchmark can be executed successfully on this data.
     out_fpath = os.path.join(yatest.common.output_path(), 'click_bench.{}.results'.format(store))
-    ret = run_cli(["workload", "clickbench", "run", "--output", out_fpath, "--table", path])
+    querySettings = ""
+    if store == "column":
+        querySettings = "PRAGMA AnsiLike;"
+    ret = run_cli(["workload", "clickbench", "run", "--output", out_fpath, "--table", path, "--query-settings", querySettings])
     assert_that(ret.exit_code, is_(0))
 
 
@@ -135,7 +140,7 @@ def test_run_determentistic(store):
     driver.wait(5)
 
     final_results = {}
-    for query_id, query in enumerate(get_queries("data/queries-deterministic.sql")):
+    for query_id, query in enumerate(get_queries("data/queries-deterministic.sql", store == "column")):
         results_to_canonize = execute_scan_query(driver, query, "`/local/clickbench/determentistic/{}/hits`".format(store))
         key = "queries-deterministic-results-%s" % str(query_id)
         final_results[key] = save_canonical_data(results_to_canonize, key)
@@ -160,7 +165,7 @@ def test_plans(store):
 
     final_results = {}
 
-    for query_id, query in enumerate(get_queries("data/queries-original.sql")):
+    for query_id, query in enumerate(get_queries("data/queries-original.sql", store == "column")):
         plan = explain_scan_query(driver, query, "`/local/clickbench/plans/{}/hits`".format(store))
         key = "queries-original-plan-{}-{}".format(store, str(query_id))
         final_results[key] = save_canonical_data(plan, key)

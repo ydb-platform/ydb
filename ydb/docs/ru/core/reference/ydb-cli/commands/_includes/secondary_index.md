@@ -105,3 +105,29 @@
 ```bash
 {{ ydb-cli }} -p db1 table index drop episodes --index-name idx_aired
 ```
+
+## Переименование вторичного индекса {#rename}
+
+Переименование вторичного индекса выполняется командой `table index rename`:
+
+```bash
+{{ ydb-cli }} [connection options] table index rename <table> --index-name STR --to STR
+```
+
+Если индекс с новым именем существует, то команда вернет ошибку.
+Чтобы заменить существующий индекс выполните команду переименования с опцией `--replace`. В результате выполнения такой команды существующий индекс будет заменён новым атомарно.
+
+```bash
+{{ ydb-cli }} [connection options] table index rename <table> --index-name STR --to STR --replace
+```
+
+
+**Пример**
+
+{% include [example_db1.md](../../_includes/example_db1.md) %}
+
+Переименование индекса `idx_aired` с таблицы episodes, построенного в примере создания индекса выше:
+
+```bash
+{{ ydb-cli }} -p db1 table index rename episodes --index-name idx_aired --to idx_aired_renamed
+```

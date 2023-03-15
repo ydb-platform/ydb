@@ -46,6 +46,17 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 Также добавить или удалить вторичный индекс можно с помощью команды [table index](https://ydb.tech/ru/docs/reference/ydb-cli/commands/secondary_index) {{ ydb-short-name }} CLI.
 
+## Переименование вторичного индекса {#rename-secondary-index}
+
+```RENAME INDEX``` — переименовывает индекс с указанным именем
+
+Если индекс с новым именем существует, будет возвращена ошибка. Возможность транзакционной подмены индекса под нагрузкой поддерживается специализированными методами в [CLI](https://ydb.tech/ru/docs/reference/ydb-cli/commands/secondary_index#rename) и SDK.
+
+Пример преименования индекса:
+```sql
+ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
+```
+
 {% endif %}
 
 {% if feature_changefeed %}

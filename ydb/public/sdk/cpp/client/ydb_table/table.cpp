@@ -245,6 +245,12 @@ static TInstant ProtobufTimestampToTInstant(const NProtoBuf::Timestamp& timestam
     return TInstant::MicroSeconds(lastModificationUs);
 }
 
+static void SerializeTo(const TRenameIndex& rename, Ydb::Table::RenameIndexItem& proto) {
+    proto.set_source_name(rename.SourceName_);
+    proto.set_destination_name(rename.DestinationName_);
+    proto.set_replace_destination(rename.ReplaceDestination_);
+}
+
 class TTableDescription::TImpl {
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -3519,6 +3525,10 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
 
     for (const auto& name : settings.DropIndexes_) {
         request.add_drop_indexes(name);
+    }
+
+    for (const auto& rename : settings.RenameIndexes_) {
+        SerializeTo(rename, *request.add_rename_indexes());
     }
 
     for (const auto& addChangefeed : settings.AddChangefeeds_) {

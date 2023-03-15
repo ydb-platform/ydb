@@ -42,6 +42,7 @@ TCommandIndex::TCommandIndex()
 {
     AddCommand(std::make_unique<TCommandIndexAdd>());
     AddCommand(std::make_unique<TCommandIndexDrop>());
+    AddCommand(std::make_unique<TCommandIndexRename>());
 }
 
 TCommandAttribute::TCommandAttribute()
@@ -1006,6 +1007,45 @@ int TCommandIndexDrop::Run(TConfig& config) {
 
     return EXIT_SUCCESS;
 }
+
+TCommandIndexRename::TCommandIndexRename()
+    : TYdbCommand("rename", {}, "Rename index for specified table")
+{}
+
+void TCommandIndexRename::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption("index-name", "Name of index to rename.").Required()
+        .RequiredArgument("NAME").StoreResult(&IndexName);
+
+    config.Opts->AddLongOption("to", "New index name").Required()
+        .RequiredArgument("NAME").StoreResult(&NewIndexName);
+
+    config.Opts->AddLongOption("replace", "Allow to replace existing index. In case if there already exists an index with the same name that current index is renamed to, the existing one will be deleted.")
+        .StoreTrue(&Replace);
+
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<table path>", "Path to a table");
+}
+
+void TCommandIndexRename::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParsePath(config, 0);
+}
+
+int TCommandIndexRename::Run(TConfig& config) {
+    NTable::TTableClient client(CreateDriver(config));
+
+    auto settings = NTable::TAlterTableSettings()
+        .AppendRenameIndexes({IndexName, NewIndexName, Replace});
+    auto session = client.GetSession().GetValueSync();
+    ThrowOnError(session);
+    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
+    ThrowOnError(result);
+
+    return EXIT_SUCCESS;
+}
+
 
 TCommandAttributeAdd::TCommandAttributeAdd()
     : TYdbCommand("add", {}, "Add attributes to the specified table")

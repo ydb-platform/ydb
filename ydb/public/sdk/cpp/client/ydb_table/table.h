@@ -172,6 +172,12 @@ private:
     ui64 SizeBytes = 0;
 };
 
+struct TRenameIndex {
+    TString SourceName_;
+    TString DestinationName_;
+    bool ReplaceDestination_ = false;
+};
+
 bool operator==(const TIndexDescription& lhs, const TIndexDescription& rhs);
 bool operator!=(const TIndexDescription& lhs, const TIndexDescription& rhs);
 
@@ -1407,6 +1413,7 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
 
     FLUENT_SETTING_VECTOR(TIndexDescription, AddIndexes);
     FLUENT_SETTING_VECTOR(TString, DropIndexes);
+    FLUENT_SETTING_VECTOR(TRenameIndex, RenameIndexes);
 
     FLUENT_SETTING_VECTOR(TChangefeedDescription, AddChangefeeds);
     FLUENT_SETTING_VECTOR(TString, DropChangefeeds);

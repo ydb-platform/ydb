@@ -195,6 +195,18 @@ private:
     TString IndexName;
 };
 
+class TCommandIndexRename : public TYdbCommand, public TCommandWithPath {
+public:
+    TCommandIndexRename();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+private:
+    TString IndexName;
+    TString NewIndexName;
+    bool Replace = false;
+};
+
 class TCommandAttributeAdd : public TYdbCommand, public TCommandWithPath {
 public:
     TCommandAttributeAdd();

@@ -7,6 +7,7 @@
 #include <util/system/unaligned_mem.h>
 #include <util/generic/ptr.h>
 #include <util/generic/maybe.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NBinaryJson {
 
@@ -53,7 +54,8 @@ private:
     template <typename T>
     T ReadPOD(ui32 offset) const {
         static_assert(std::is_pod_v<T>, "Type must be POD");
-        Y_ENSURE(offset <= Buffer.Size() && offset + sizeof(T) <= Buffer.Size(), "Not enough space in buffer to read value");
+        Y_ENSURE(offset + sizeof(T) <= Buffer.Size(),
+            TStringBuilder() << "Not enough space in buffer to read value (" << offset << " + " << sizeof(T) << " > " << Buffer.Size() << ")");
         return ReadUnaligned<T>(Buffer.Data() + offset);
     }
 

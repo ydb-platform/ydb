@@ -549,15 +549,24 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
 
 }
 
-TMaybe<TBinaryJson> SerializeToBinaryJson(const TStringBuf json) {
+TMaybe<TBinaryJson> SerializeToBinaryJsonImpl(const TStringBuf json) {
     TMemoryInput input(json.data(), json.size());
     TBinaryJsonCallbacks callbacks(/* throwException */ false);
     if (!ReadJson(&input, &callbacks)) {
         return Nothing();
     }
-
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
     return std::move(serializer).Serialize();
+
+}
+
+TMaybe<TBinaryJson> SerializeToBinaryJson(const TStringBuf json) {
+    if (json.size() == 0) {
+        return SerializeToBinaryJsonImpl("{}");
+    } else {
+        return SerializeToBinaryJsonImpl(json);
+    }
+
 }
 
 TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {

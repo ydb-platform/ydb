@@ -1,43 +1,29 @@
 # MemoryLoad
 
-Tests the performance of memory allocators. Allocates memory blocks of the specified size at certain intervals.
+Allocates memory blocks of the specified size at certain intervals. After the load is removed, the allocated memory is released. Using this actor, you can test the logic, e.g., whether a certain trigger is fired when the [RSS]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Resident_set_size){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Resident_set_size){% endif %} limit is reached.
 
-{% include notitle [addition](../_includes/addition.md) %}
+{% note info %}
 
-## Actor specification {#proto}
+This ad-hoc actor is used for testing specific functionality. This is not a load actor. It is designed to check whether something works properly.
 
-```proto
-message TMemoryLoad {
-    optional uint64 Tag = 1;
-    optional uint32 DurationSeconds = 2;
-    optional uint64 BlockSize = 3;
-    optional uint64 IntervalUs = 4;
-}
-```
-<!--
-## Параметры актора {#options}
+{% endnote %}
 
-Параметр | Описание
+## Actor parameters {#options}
+
+| Parameter | Description |
 --- | ---
-`Tag` | Тип: `uint64`.
-`DurationSeconds` | Тип: `uint32`.
-`BlockSize` | Тип: `uint64`.
-`IntervalUs` | Тип: `uint64`.
--->
+| `DurationSeconds` | Load duration in seconds. |
+| `BlockSize` | Allocated block size in bytes. |
+| `IntervalUs` | Interval between block allocations in microseconds. |
 
 ## Examples {#examples}
 
-{% list tabs %}
+The following actor allocates blocks of `1048576` bytes every `9000000` microseconds during `3600` seconds and takes up 32 GB while running:
 
-- CLI
-
-   ```proto
-   NodeId: 1
-   Event: { MemoryLoad: {
-       DurationSeconds: 120
-       BlockSize: 4096
-       IntervalUs: 1000
-   }}
-   ```
-
-{% endlist %}
+```proto
+MemoryLoad: {
+    DurationSeconds: 3600
+    BlockSize: 1048576
+    IntervalUs: 9000000
+}
+```

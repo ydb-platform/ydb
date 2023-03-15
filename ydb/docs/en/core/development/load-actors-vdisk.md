@@ -4,7 +4,7 @@ Generates a write-only load on the VDisk. Simulates a Distributed Storage Proxy.
 
 {% include notitle [addition](../_includes/addition.md) %}
 
-## Actor specification {#proto}
+## Actor parameters {#options}
 
 ```proto
 message TVDiskLoad {

@@ -17,6 +17,8 @@ With load actors, you can test both the entire system and its individual compone
 
 For example, you can generate a [load on Distributed Storage](load-actors-storage.md) without using tablet and Query Processor layers. This lets you test different system layers separately and find bottlenecks in an efficient way. By combining a variety of actor types, you can run different types of load.
 
+{% include [release-candidate](../_includes/trunk.md) %}
+
 ## Actor types {#load-actor-type}
 
 | Type | Description |
@@ -28,24 +30,24 @@ For example, you can generate a [load on Distributed Storage](load-actors-storag
 | [PDiskWriteLoad](load-actors-pdisk-write.md) | Tests the performance of writes to the PDisk. |
 | [PDiskReadLoad](load-actors-pdisk-read.md) | Tests the performance of reads from the PDisk. |
 | [PDiskLogLoad](load-actors-pdisk-log.md) | Tests if cuts from the middle of the PDisk log are correct. |
-| [MemoryLoad](load-actors-memory.md) | Tests the performance of memory allocators. |
-| [Stop](load-actors-stop.md) | Using this actor, you can stop either all or only the specified actors. |
+| [MemoryLoad](load-actors-memory.md) | Allocates memory, useful when testing the logic. |
+| [Stop](load-actors-stop.md) | Stops either all or only the specified actors. |
 
-## Running a load {load-actor-start}
+## Running a load {#load-actor-start}
 
-You can run a load using the following methods:
+You can run load using the following tools:
 
-* Cluster Embedded UI, lets you create, based on a specification, and start a load actor either on the current node or all tenant nodes at once.
-* The `ydbd` utility, lets you send the actor specification to any cluster node indicating the nodes to create and run an actor on.
+* Cluster Embedded UI: Allows you to create, based on a configuration, and start a load actor either on the current node or all tenant nodes at once.
+* The `ydbd` utility: Allows you to send the actor configuration to any cluster node specifying the nodes to create and run the actor on.
 
-The use case described below shows how to create and run the KqpLoad actor. The actor accesses the `/slice/db` database as a key-value store using 64 threads with a 30-second load. Before the test, the actor creates the necessary tables and deletes them once the test is completed. When being created, the actor is assigned an automatically generated tag. The same tag will be assigned to the test result.
+The use case described below shows how to create and run the KqpLoad actor. The actor accesses the `/slice/db` database as a key-value store using 64 threads with a 30-second load. Before the test, the actor creates the necessary tables and deletes them once the test is completed. When being created, the actor is automatically assigned a tag. The same tag will be assigned to the test result.
 
 {% list tabs %}
 
 - Embedded UI
 
    1. Open the page for managing load actors on the desired node (for example, `http://<address>:8765/actors/load`, where `address` is the address of the cluster node to run the load on).
-   1. Paste the actor specification into the input/output field:
+   1. Paste the actor configuration into the input/output field:
 
       ```proto
       KqpLoad: {
@@ -82,7 +84,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
 
 - CLI
 
-   1. Create a file with an actor specification:
+   1. Create an actor configuration file:
 
       ```proto
       NodeId: 1
@@ -118,7 +120,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
          ...
          ```
 
-      * `Event`: Actor specification.
+      * `Event`: Actor configuration.
 
    1. Start the actor:
 
@@ -127,7 +129,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
       ```
 
       * `endpoint`: Node gRPC endpoint (for example, `grpc://<address>:<port>`, where `address` is the node address and `port` is the node gRPC port).
-      * `proto_file`: Path to the actor's specification file.
+      * `proto_file`: Path to the actor configuration file.
 
 {% endlist %}
 

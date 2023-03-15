@@ -4,7 +4,7 @@ Loads a key-value tablet.
 
 {% include notitle [addition](../_includes/addition.md) %}
 
-## Actor specification {#proto}
+## Actor configuration {#options}
 
 ```proto
 message TKeyValueLoad {

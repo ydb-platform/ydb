@@ -1,0 +1,19 @@
+package NActorsExample;
+
+message TEvReplicaInfo {
+	optional string Key = 1;
+	repeated string Payload = 2;
+};
+
+message TEvReplicaPublishAck {
+	optional string Key = 1;
+};
+
+message TEvReplicaPublish {
+	optional string Key = 1;
+	optional string Payload = 2;
+};
+
+message TEvReplicaLookup {
+	optional string Key = 1;
+};

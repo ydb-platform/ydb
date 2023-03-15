@@ -1,0 +1,11 @@
+RECURSE(
+    actors
+    common
+    compressors
+    expr_nodes
+    path_generator
+    proto
+    provider
+    range_helpers
+    serializations
+)

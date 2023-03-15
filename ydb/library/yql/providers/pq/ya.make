@@ -1,0 +1,10 @@
+RECURSE(
+    async_io
+    cm_client
+    common
+    expr_nodes
+    gateway
+    proto
+    provider
+    task_meta
+)

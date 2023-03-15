@@ -9,6 +9,7 @@
 add_subdirectory(core)
 add_subdirectory(dnscachelib)
 add_subdirectory(dnsresolver)
+add_subdirectory(examples)
 add_subdirectory(helpers)
 add_subdirectory(http)
 add_subdirectory(interconnect)

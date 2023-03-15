@@ -1,0 +1,170 @@
+====================BSL-1.0====================
+    Distributed under the Boost Software License, Version 1.0. (See accompanying
+    file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+    Distributed under the Boost Software License, Version 1.0. (See accompanying 
+    file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+ Distributed under the Boost Software License, Version 1.0. (See accompanying 
+ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification and distribution is subject to the Boost Software
+// License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Use, modification and distribution is subject to the Boost Software 
+// License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+Distributed under the Boost Software License, Version 1.0. (See accompanying
+file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+Distributed under the Boost Software License, Version 1.0. (See accompanying 
+file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2000-2003 Brian McNamara and Yannis Smaragdakis
+    Copyright (c) 2001-2007 Joel de Guzman
+    Copyright (c) 2015 John Fletcher
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2001-2007 Joel de Guzman
+    Copyright (c) 2014      John Fletcher
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2001-2007 Joel de Guzman
+    Copyright (c) 2015 Kohei Takahashi
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2001-2010 Joel de Guzman
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2001-2010 Joel de Guzman
+    Copyright (c) 2004 Daniel Wallin
+    Copyright (c) 2010 Thomas Heller
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2001-2010 Joel de Guzman
+    Copyright (c) 2010      Eric Niebler
+    Copyright (c) 2014-2015 John Fletcher
+    Copyright (c) 2016      Kohei Takahashi
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2004 Angus Leeming
+    Copyright (c) 2004 Joel de Guzman
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2004 Angus Leeming
+    Copyright (c) 2006 Daniel Wallin
+    Copyright (c) 2005 Dan Marsden
+    Copyright (c) 2007 Joel de Guzman
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2005-2007 Dan Marsden
+    Copyright (c) 2005-2010 Joel de Guzman
+    Copyright (c) 2010 Thomas Heller
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2005-2008 Hartmut Kaiser
+    Copyright (c) 2005-2010 Joel de Guzman
+    Copyright (c) 2010 Thomas Heller
+    Copyright (c) 2021 Beojan Stanislaus
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2005-2008 Hartmut Kaiser
+    Copyright (c) 2005-2010 Joel de Guzman
+    Copyright (c) 2014-2015 John Fletcher
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2005-2010 Joel de Guzman
+    Copyright (c) 2010 Thomas Heller
+    Copyright (c) 2014 John Fletcher
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2005-2010 Joel de Guzman
+    Copyright (c) 2010 Thomas Heller
+    Copyright (c) 2018 Kohei Takahashi
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2005-2010 Joel de Guzman
+    Copyright (c) 2010-2011 Thomas Heller
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2005-2010 Joel de Guzman
+    Copyright (c) 2011 Thomas Heller
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2005-2010 Joel de Guzman
+    Copyright (c) 2015 John Fletcher
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2005-2011 Joel de Guzman
+    Copyright (c) 2011 Thomas Heller
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2006 Daniel Wallin
+    Copyright (c) 2005 Dan Marsden
+    Copyright (c) 2007 Joel de Guzman
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2011 Hartmut Kaiser
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2011 Steven Watanabe
+
+
+====================COPYRIGHT====================
+// Copyright 2005 Daniel Wallin.
+// Copyright 2005 Joel de Guzman.
+// Copyright 2005 Dan Marsden.
+// Copyright 2008 Hartmut Kaiser.
+// Copyright 2015 John Fletcher.
+
+
+====================COPYRIGHT====================
+// Copyright 2005 Daniel Wallin. 
+// Copyright 2005 Joel de Guzman.
+// Copyright 2005 Dan Marsden. 
+
+
+====================COPYRIGHT====================
+// Modeled after range_ex, Copyright 2004 Eric Niebler
+
+
+====================COPYRIGHT====================
+Copyright (c) 2005-2010 Joel de Guzman
+Copyright (c) 2010-2013 Thomas Heller
+Copyright (c) 2014-2015 John Fletcher
+Copyright (c) 2016 Kohei Takahashi

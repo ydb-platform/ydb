@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(cpp-actors-prof)
 target_link_libraries(cpp-actors-prof PUBLIC

@@ -1,0 +1,15 @@
+PROTO_LIBRARY()
+
+IF (OPENSOURCE)
+    EXCLUDE_TAGS(GO_PROTO)
+ELSE()
+    INCLUDE_TAGS(GO_PROTO)
+ENDIF()
+
+GRPC()
+
+SRCS(
+    token_accessor_pb.proto
+)
+
+END()

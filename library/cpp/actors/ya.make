@@ -1,0 +1,15 @@
+RECURSE(
+    log_backend
+    core
+    dnsresolver
+    examples
+    interconnect
+    memory_log
+    helpers
+    prof
+    protos
+    util
+    wilson
+    testlib
+    http
+)

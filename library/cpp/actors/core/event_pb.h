@@ -10,9 +10,6 @@
 #include <util/system/filemap.h>
 #include <array>
 
-namespace NKikimrCapnProto {
-    struct TActorId::Reader;
-};
 
 namespace NActors {
 
@@ -505,11 +502,8 @@ namespace NActors {
         }
     };
 
-    inline TActorId ActorIdFromProto(const NActorsProto::TActorId& actorId) {
-        return TActorId(actorId.GetRawX1(), actorId.GetRawX2());
-    }
-
-    inline TActorId ActorIdFromProto(NKikimrCapnProto::TActorId::Reader actorId) {
+    template <typename TActorId>
+    inline TActorId ActorIdFromProto(const TActorId& actorId) {
         return TActorId(actorId.GetRawX1(), actorId.GetRawX2());
     }
 

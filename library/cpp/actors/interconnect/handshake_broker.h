@@ -1,6 +1,8 @@
 #pragma once
 
 #include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/interconnect/events_local.h>
 
 #include <deque>
 

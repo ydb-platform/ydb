@@ -135,67 +135,18 @@ namespace NActors {
             }
         }
 
+        ~THandshakeActor() {
+            // BrokerLeaseHolder sends messages in destuctor, so it must be deleted before other actor's components
+            BrokerLeaseHolder.reset();
+        }
+
         void UpdatePrefix() {
             SetPrefix(Sprintf("Handshake %s [node %" PRIu32 "]", SelfActorId.ToString().data(), PeerNodeId));
         }
 
         void Run() override {
-            UpdatePrefix();
-
-            if (!Socket && Common->OutgoingHandshakeInflightLimit) {
-                // Create holder, which sends request to broker and automatically frees the place when destroyed
-                BrokerLeaseHolder.emplace(SelfActorId, HandshakeBroker);
-            }
-
             try {
-                if (BrokerLeaseHolder && BrokerLeaseHolder->IsLeaseRequested()) {
-                    WaitForSpecificEvent<TEvHandshakeBrokerPermit>("HandshakeBrokerPermit");
-                }
-
-                // set up overall handshake process timer
-                TDuration timeout = Common->Settings.Handshake;
-                if (timeout == TDuration::Zero()) {
-                    timeout = DEFAULT_HANDSHAKE_TIMEOUT;
-                }
-                timeout += ResolveTimeout * 2;
-
-                if (Socket) {
-                    // Incoming handshakes have shorter timeout than outgoing
-                    timeout *= 0.9;
-                }
-
-                Deadline = TActivationContext::Monotonic() + timeout;
-                Schedule(Deadline, new TEvents::TEvWakeup);
-
-                try {
-                    if (Socket) {
-                        PerformIncomingHandshake();
-                    } else {
-                        PerformOutgoingHandshake();
-                    }
-
-                    // establish encrypted channel, or, in case when encryption is disabled, check if it matches settings
-                    if (ProgramInfo) {
-                        if (Params.Encryption) {
-                            EstablishSecureConnection();
-                        } else if (Common->Settings.EncryptionMode == EEncryptionMode::REQUIRED && !Params.AuthOnly) {
-                            Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Peer doesn't support encryption, which is required");
-                        }
-                    }
-                } catch (const TExHandshakeFailed&) {
-                    ProgramInfo.Clear();
-                }
-
-                if (ProgramInfo) {
-                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH04", NLog::PRI_INFO, "handshake succeeded");
-                    Y_VERIFY(NextPacketFromPeer);
-                    if (PollerToken) {
-                        Y_VERIFY(PollerToken->RefCount() == 1);
-                        PollerToken.Reset(); // ensure we are going to destroy poller token here as we will re-register the socket within other actor
-                    }
-                    SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(Socket), PeerVirtualId, SelfVirtualId,
-                        *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params)));
-                }
+                RunImpl();
             } catch (const TDtorException&) {
                 if (BrokerLeaseHolder) {
                     BrokerLeaseHolder->ForgetLease();
@@ -206,8 +157,67 @@ namespace NActors {
             } catch (...) {
                 throw;
             }
+        }
+
+        void RunImpl() {
+            UpdatePrefix();
+
+            if (!Socket && Common->OutgoingHandshakeInflightLimit) {
+                // Create holder, which sends request to broker and automatically frees the place when destroyed
+                BrokerLeaseHolder.emplace(SelfActorId, HandshakeBroker);
+            }
+
+            if (BrokerLeaseHolder && BrokerLeaseHolder->IsLeaseRequested()) {
+                WaitForSpecificEvent<TEvHandshakeBrokerPermit>("HandshakeBrokerPermit");
+            }
+
+            // set up overall handshake process timer
+            TDuration timeout = Common->Settings.Handshake;
+            if (timeout == TDuration::Zero()) {
+                timeout = DEFAULT_HANDSHAKE_TIMEOUT;
+            }
+            timeout += ResolveTimeout * 2;
+
+            if (Socket) {
+                // Incoming handshakes have shorter timeout than outgoing
+                timeout *= 0.9;
+            }
+
+            Deadline = TActivationContext::Monotonic() + timeout;
+            Schedule(Deadline, new TEvents::TEvWakeup);
+
+            try {
+                if (Socket) {
+                    PerformIncomingHandshake();
+                } else {
+                    PerformOutgoingHandshake();
+                }
+
+                // establish encrypted channel, or, in case when encryption is disabled, check if it matches settings
+                if (ProgramInfo) {
+                    if (Params.Encryption) {
+                        EstablishSecureConnection();
+                    } else if (Common->Settings.EncryptionMode == EEncryptionMode::REQUIRED && !Params.AuthOnly) {
+                        Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Peer doesn't support encryption, which is required");
+                    }
+                }
+            } catch (const TExHandshakeFailed&) {
+                ProgramInfo.Clear();
+            }
+
+            if (ProgramInfo) {
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH04", NLog::PRI_INFO, "handshake succeeded");
+                Y_VERIFY(NextPacketFromPeer);
+                if (PollerToken) {
+                    Y_VERIFY(PollerToken->RefCount() == 1);
+                    PollerToken.Reset(); // ensure we are going to destroy poller token here as we will re-register the socket within other actor
+                }
+                SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(Socket), PeerVirtualId, SelfVirtualId,
+                    *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params)));
+            }
 
             Socket.Reset();
+            BrokerLeaseHolder.reset();
         }
 
         void EstablishSecureConnection() {

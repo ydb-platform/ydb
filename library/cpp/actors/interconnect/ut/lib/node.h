@@ -6,6 +6,7 @@
 #include <library/cpp/actors/core/mailbox.h>
 #include <library/cpp/actors/dnsresolver/dnsresolver.h>
 
+#include <library/cpp/actors/interconnect/handshake_broker.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect_proxy_wrapper.h>
@@ -19,7 +20,8 @@ public:
     TNode(ui32 nodeId, ui32 numNodes, const THashMap<ui32, ui16>& nodeToPort, const TString& address,
           NMonitoring::TDynamicCounterPtr counters, TDuration deadPeerTimeout,
           TChannelsConfig channelsSettings = TChannelsConfig(),
-          ui32 numDynamicNodes = 0, ui32 numThreads = 1, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr) {
+          ui32 numDynamicNodes = 0, ui32 numThreads = 1,
+          TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 1;
@@ -43,6 +45,7 @@ public:
         common->Settings.SendBufferDieLimitInMB = 512;
         common->Settings.TotalInflightAmountOfData = 512 * 1024;
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
+        common->OutgoingHandshakeInflightLimit = 10;
 
         setup.Interconnect.ProxyActors.resize(numNodes + 1 - numDynamicNodes);
         setup.Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, interconnectPoolId);
@@ -106,6 +109,14 @@ public:
         setup.LocalServices.emplace_back(loggerActorId, TActorSetupCmd(new TLoggerActor(loggerSettings,
             CreateStderrBackend(), counters->GetSubgroup("subsystem", "logger")),
             TMailboxType::ReadAsFilled, interconnectPoolId));
+
+
+        if (common->OutgoingHandshakeInflightLimit) {
+            // create handshake broker actor
+            setup.LocalServices.emplace_back(MakeHandshakeBrokerOutId(), TActorSetupCmd(
+                    CreateHandshakeBroker(*common->OutgoingHandshakeInflightLimit),
+                    TMailboxType::ReadAsFilled, interconnectPoolId));
+        }
 
         auto sp = MakeHolder<TActorSystemSetup>(std::move(setup));
         ActorSystem.Reset(new TActorSystem(sp, nullptr, loggerSettings));

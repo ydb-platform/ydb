@@ -10,7 +10,7 @@ import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
-import "ydb/public/api/protos/yq.proto";
+import "ydb/public/api/protos/draft/fq.proto";
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
@@ -80,18 +80,18 @@ message GetTaskResult {
         repeated bytes dq_graph = 6; // deprecated: use dq_graph_compressed
         // text, connection and binding are empty if dq_graph is not empty
         string text = 7;
-        repeated YandexQuery.Connection connection = 8;
-        repeated YandexQuery.Binding binding = 9;
+        repeated FederatedQuery.Connection connection = 8;
+        repeated FederatedQuery.Binding binding = 9;
 
         string user_token = 10; // IAM token for debug
         repeated SignedIdentity service_accounts = 11;
         string user_id = 12;
-        YandexQuery.QueryContent.QueryType query_type = 13;
+        FederatedQuery.QueryContent.QueryType query_type = 13;
         string scope = 14;
-        YandexQuery.ExecuteMode execute_mode = 15;
-        YandexQuery.StateLoadMode state_load_mode = 16;
-        YandexQuery.QueryMeta.ComputeStatus status = 17;
-        repeated YandexQuery.ResultSetMeta result_set_meta = 18;
+        FederatedQuery.ExecuteMode execute_mode = 15;
+        FederatedQuery.StateLoadMode state_load_mode = 16;
+        FederatedQuery.QueryMeta.ComputeStatus status = 17;
+        repeated FederatedQuery.ResultSetMeta result_set_meta = 18;
         repeated TopicConsumer created_topic_consumers = 19;
         int32 dq_graph_index = 20;
         map<string, string> sensor_labels = 21;
@@ -99,17 +99,17 @@ message GetTaskResult {
         bool automatic = 22;
         string query_name = 23;
         google.protobuf.Timestamp deadline = 24;
-        YandexQuery.StreamingDisposition disposition = 25;
+        FederatedQuery.StreamingDisposition disposition = 25;
         uint64 result_limit = 26;
 
-        YandexQuery.Limits limits = 27;
+        FederatedQuery.Limits limits = 27;
         google.protobuf.Duration execution_limit = 29;
         google.protobuf.Timestamp request_started_at = 30;
         repeated CompressedData dq_graph_compressed = 31;
         uint32 restart_count = 32;
 
         TaskResources resources = 33;
-        YandexQuery.QueryContent.QuerySyntax query_syntax = 34;
+        FederatedQuery.QueryContent.QuerySyntax query_syntax = 34;
     }
     repeated Task tasks = 1;
 }
@@ -123,11 +123,11 @@ message PingTaskRequest {
     SignedIdentity query_id = 2;
     SignedIdentity job_id = 3;
     SignedIdentity result_id = 4;
-    YandexQuery.QueryMeta.ComputeStatus status = 5;
+    FederatedQuery.QueryMeta.ComputeStatus status = 5;
     repeated Ydb.Issue.IssueMessage issues = 6;
     uint32 result_set_count = 7;
     string statistics = 8;
-    repeated YandexQuery.ResultSetMeta result_set_meta = 9;
+    repeated FederatedQuery.ResultSetMeta result_set_meta = 9;
     string executer_info = 10;
     repeated bytes dq_graph = 11; // deprecated: use dq_graph_compressed
     string ast = 12; // deprecated: use ast_compressed
@@ -136,8 +136,8 @@ message PingTaskRequest {
     Ydb.Operations.OperationParams operation_params = 15;
     repeated Ydb.Issue.IssueMessage transient_issues = 16;
     repeated TopicConsumer created_topic_consumers = 17;
-    YandexQuery.StateLoadMode state_load_mode = 18;
-    YandexQuery.StreamingDisposition disposition = 19;
+    FederatedQuery.StateLoadMode state_load_mode = 18;
+    FederatedQuery.StreamingDisposition disposition = 19;
     int32 dq_graph_index = 20;
     NYql.NDqProto.StatusIds.StatusCode status_code = 21;
     repeated CompressedData dq_graph_compressed = 23;
@@ -153,7 +153,7 @@ message PingTaskRequest {
 }
 
 message PingTaskResult {
-    YandexQuery.QueryAction action = 1;
+    FederatedQuery.QueryAction action = 1;
     google.protobuf.Timestamp expired_at = 2;
 }
 

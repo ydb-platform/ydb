@@ -91,7 +91,7 @@ class TTestDataStreamsConnectionActor : public NActors::TActorBootstrapped<TTest
 
 public:
     TTestDataStreamsConnectionActor(
-        const YandexQuery::DataStreams& ds,
+        const FederatedQuery::DataStreams& ds,
         const NYq::NConfig::TCommonConfig& commonConfig,
         const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
         const TActorId& sender,
@@ -244,11 +244,11 @@ private:
 
     void ReplyOk() {
         Counters->Ok->Inc();
-        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(YandexQuery::TestConnectionResult{}), 0, Cookie);
+        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), 0, Cookie);
         DestroyActor();
     }
 
-    static NYql::TPqClusterConfig CreateClusterConfig(const TString& sessionName, const NYq::NConfig::TCommonConfig& commonConfig, const TString& token, const NYq::TSigner::TPtr& signer, const YandexQuery::DataStreams& ds) {
+    static NYql::TPqClusterConfig CreateClusterConfig(const TString& sessionName, const NYq::NConfig::TCommonConfig& commonConfig, const TString& token, const NYq::TSigner::TPtr& signer, const FederatedQuery::DataStreams& ds) {
         const auto& auth = ds.auth();
         const TString signedAccountId = signer && auth.has_service_account() ? signer->SignAccountId(auth.service_account().id()) : TString{};
         return NYq::CreatePqClusterConfig(sessionName, commonConfig.GetUseBearerForYdb(), token, signedAccountId, ds);
@@ -269,7 +269,7 @@ private:
 };
 
 NActors::IActor* CreateTestDataStreamsConnectionActor(
-        const YandexQuery::DataStreams& ds,
+        const FederatedQuery::DataStreams& ds,
         const NYq::NConfig::TCommonConfig& commonConfig,
         const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
         const TActorId& sender,

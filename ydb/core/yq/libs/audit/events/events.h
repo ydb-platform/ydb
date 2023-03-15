@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
 
@@ -72,102 +72,102 @@ public:
     struct TAuditReport;
 
     // CreateBinding
-    using CreateBindingAuditReport = TAuditReport<YandexQuery::CreateBindingRequest, YandexQuery::Binding>;
+    using CreateBindingAuditReport = TAuditReport<FederatedQuery::CreateBindingRequest, FederatedQuery::Binding>;
 
     template<>
-    struct TAuditReport<YandexQuery::CreateBindingRequest, YandexQuery::Binding>
+    struct TAuditReport<FederatedQuery::CreateBindingRequest, FederatedQuery::Binding>
         : NActors::TEventLocal<CreateBindingAuditReport, EvCreateBindingReport>
-        , TAuditReportBase<YandexQuery::CreateBindingRequest, YandexQuery::Binding> {
+        , TAuditReportBase<FederatedQuery::CreateBindingRequest, FederatedQuery::Binding> {
             using TAuditReportBase::TAuditReportBase;
         };
 
     // ModifyBinding
-    using ModifyBindingAuditReport = TAuditReport<YandexQuery::ModifyBindingRequest, YandexQuery::Binding>;
+    using ModifyBindingAuditReport = TAuditReport<FederatedQuery::ModifyBindingRequest, FederatedQuery::Binding>;
 
     template<>
-    struct TAuditReport<YandexQuery::ModifyBindingRequest, YandexQuery::Binding>
+    struct TAuditReport<FederatedQuery::ModifyBindingRequest, FederatedQuery::Binding>
         : NActors::TEventLocal<ModifyBindingAuditReport, EvModifyBindingReport>
-        , TAuditReportBase<YandexQuery::ModifyBindingRequest, YandexQuery::Binding> {
+        , TAuditReportBase<FederatedQuery::ModifyBindingRequest, FederatedQuery::Binding> {
             using TAuditReportBase::TAuditReportBase;
         };
 
     // DeleteBinding
-    using DeleteBindingAuditReport = TAuditReport<YandexQuery::DeleteBindingRequest, YandexQuery::Binding>;
+    using DeleteBindingAuditReport = TAuditReport<FederatedQuery::DeleteBindingRequest, FederatedQuery::Binding>;
 
     template<>
-    struct TAuditReport<YandexQuery::DeleteBindingRequest, YandexQuery::Binding>
+    struct TAuditReport<FederatedQuery::DeleteBindingRequest, FederatedQuery::Binding>
         : NActors::TEventLocal<DeleteBindingAuditReport, EvDeleteBindingReport>
-        , TAuditReportBase<YandexQuery::DeleteBindingRequest, YandexQuery::Binding> {
+        , TAuditReportBase<FederatedQuery::DeleteBindingRequest, FederatedQuery::Binding> {
             using TAuditReportBase::TAuditReportBase;
         };
 
     // CreateConnection
-    using CreateConnectionAuditReport = TAuditReport<YandexQuery::CreateConnectionRequest, YandexQuery::Connection>;
+    using CreateConnectionAuditReport = TAuditReport<FederatedQuery::CreateConnectionRequest, FederatedQuery::Connection>;
 
     template<>
-    struct TAuditReport<YandexQuery::CreateConnectionRequest, YandexQuery::Connection>
+    struct TAuditReport<FederatedQuery::CreateConnectionRequest, FederatedQuery::Connection>
         : NActors::TEventLocal<CreateConnectionAuditReport, EvCreateConnectionReport>
-        , TAuditReportBase<YandexQuery::CreateConnectionRequest, YandexQuery::Connection> {
+        , TAuditReportBase<FederatedQuery::CreateConnectionRequest, FederatedQuery::Connection> {
             using TAuditReportBase::TAuditReportBase;
         };
 
     // ModifyConnection
-    using ModifyConnectionAuditReport = TAuditReport<YandexQuery::ModifyConnectionRequest, YandexQuery::Connection>;
+    using ModifyConnectionAuditReport = TAuditReport<FederatedQuery::ModifyConnectionRequest, FederatedQuery::Connection>;
 
     template<>
-    struct TAuditReport<YandexQuery::ModifyConnectionRequest, YandexQuery::Connection>
+    struct TAuditReport<FederatedQuery::ModifyConnectionRequest, FederatedQuery::Connection>
         : NActors::TEventLocal<ModifyConnectionAuditReport, EvModifyConnectionReport>
-        , TAuditReportBase<YandexQuery::ModifyConnectionRequest, YandexQuery::Connection> {
+        , TAuditReportBase<FederatedQuery::ModifyConnectionRequest, FederatedQuery::Connection> {
             using TAuditReportBase::TAuditReportBase;
         };
 
     // DeleteConnection
-    using DeleteConnectionAuditReport = TAuditReport<YandexQuery::DeleteConnectionRequest, YandexQuery::Connection>;
+    using DeleteConnectionAuditReport = TAuditReport<FederatedQuery::DeleteConnectionRequest, FederatedQuery::Connection>;
 
     template<>
-    struct TAuditReport<YandexQuery::DeleteConnectionRequest, YandexQuery::Connection>
+    struct TAuditReport<FederatedQuery::DeleteConnectionRequest, FederatedQuery::Connection>
         : NActors::TEventLocal<DeleteConnectionAuditReport, EvDeleteConnectionReport>
-        , TAuditReportBase<YandexQuery::DeleteConnectionRequest, YandexQuery::Connection> {
+        , TAuditReportBase<FederatedQuery::DeleteConnectionRequest, FederatedQuery::Connection> {
             using TAuditReportBase::TAuditReportBase;
         };
 
     // CreateQuery
-    using CreateQueryAuditReport = TAuditReport<YandexQuery::CreateQueryRequest, YandexQuery::Query>;
+    using CreateQueryAuditReport = TAuditReport<FederatedQuery::CreateQueryRequest, FederatedQuery::Query>;
 
     template<>
-    struct TAuditReport<YandexQuery::CreateQueryRequest, YandexQuery::Query>
+    struct TAuditReport<FederatedQuery::CreateQueryRequest, FederatedQuery::Query>
         : NActors::TEventLocal<CreateQueryAuditReport, EvCreateQueryReport>
-        , TAuditReportBase<YandexQuery::CreateQueryRequest, YandexQuery::Query> {
+        , TAuditReportBase<FederatedQuery::CreateQueryRequest, FederatedQuery::Query> {
             using TAuditReportBase::TAuditReportBase;
         };
 
     // ControlQuery
-    using ControlQueryAuditReport = TAuditReport<YandexQuery::ControlQueryRequest, YandexQuery::Query>;
+    using ControlQueryAuditReport = TAuditReport<FederatedQuery::ControlQueryRequest, FederatedQuery::Query>;
 
     template<>
-    struct TAuditReport<YandexQuery::ControlQueryRequest, YandexQuery::Query>
+    struct TAuditReport<FederatedQuery::ControlQueryRequest, FederatedQuery::Query>
         : NActors::TEventLocal<ControlQueryAuditReport, EvControlQueryReport>
-        , TAuditReportBase<YandexQuery::ControlQueryRequest, YandexQuery::Query> {
+        , TAuditReportBase<FederatedQuery::ControlQueryRequest, FederatedQuery::Query> {
             using TAuditReportBase::TAuditReportBase;
         };
 
     // ModifyQuery
-    using ModifyQueryAuditReport = TAuditReport<YandexQuery::ModifyQueryRequest, YandexQuery::Query>;
+    using ModifyQueryAuditReport = TAuditReport<FederatedQuery::ModifyQueryRequest, FederatedQuery::Query>;
 
     template<>
-    struct TAuditReport<YandexQuery::ModifyQueryRequest, YandexQuery::Query>
+    struct TAuditReport<FederatedQuery::ModifyQueryRequest, FederatedQuery::Query>
         : NActors::TEventLocal<ModifyQueryAuditReport, EvModifyQueryReport>
-        , TAuditReportBase<YandexQuery::ModifyQueryRequest, YandexQuery::Query> {
+        , TAuditReportBase<FederatedQuery::ModifyQueryRequest, FederatedQuery::Query> {
             using TAuditReportBase::TAuditReportBase;
         };
 
     // DeleteQuery
-    using DeleteQueryAuditReport = TAuditReport<YandexQuery::DeleteQueryRequest, YandexQuery::Query>;
+    using DeleteQueryAuditReport = TAuditReport<FederatedQuery::DeleteQueryRequest, FederatedQuery::Query>;
 
     template<>
-    struct TAuditReport<YandexQuery::DeleteQueryRequest, YandexQuery::Query>
+    struct TAuditReport<FederatedQuery::DeleteQueryRequest, FederatedQuery::Query>
         : NActors::TEventLocal<DeleteQueryAuditReport, EvDeleteQueryReport>
-        , TAuditReportBase<YandexQuery::DeleteQueryRequest, YandexQuery::Query> {
+        , TAuditReportBase<FederatedQuery::DeleteQueryRequest, FederatedQuery::Query> {
             using TAuditReportBase::TAuditReportBase;
         };
 

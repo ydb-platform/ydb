@@ -32,9 +32,9 @@ public:
     double RetryRate = 0.0;
 };
 
-bool IsTerminalStatus(YandexQuery::QueryMeta::ComputeStatus status);
+bool IsTerminalStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 
-bool IsAbortedStatus(YandexQuery::QueryMeta::ComputeStatus status);
+bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 
 TDuration GetDuration(const TString& value, const TDuration& defaultValue);
 

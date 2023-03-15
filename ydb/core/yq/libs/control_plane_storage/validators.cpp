@@ -1,7 +1,7 @@
 #include "validators.h"
 #include "ydb_control_plane_storage_impl.h"
 
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
@@ -9,7 +9,7 @@
 namespace NYq {
 
 TValidationQuery CreateUniqueNameValidator(const TString& tableName,
-                                           YandexQuery::Acl::Visibility visibility,
+                                           FederatedQuery::Acl::Visibility visibility,
                                            const TString& scope,
                                            const TString& name,
                                            const TString& user,
@@ -25,7 +25,7 @@ TValidationQuery CreateUniqueNameValidator(const TString& tableName,
         "FROM `" + tableName + "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" NAME_COLUMN_NAME "` = $name AND `" VISIBILITY_COLUMN_NAME "` = $visibility"
     );
 
-    if (visibility != YandexQuery::Acl::SCOPE) {
+    if (visibility != FederatedQuery::Acl::SCOPE) {
         queryBuilder.AddString("user", user);
         queryBuilder.AddText(" AND `" USER_COLUMN_NAME "` = $user");
     }
@@ -54,7 +54,7 @@ TValidationQuery CreateUniqueNameValidator(const TString& tableName,
 
 TValidationQuery CreateModifyUniqueNameValidator(const TString& tableName,
                                                  const TString& idColumnName,
-                                                 YandexQuery::Acl::Visibility visibility,
+                                                 FederatedQuery::Acl::Visibility visibility,
                                                  const TString& scope,
                                                  const TString& name,
                                                  const TString& user,
@@ -73,7 +73,7 @@ TValidationQuery CreateModifyUniqueNameValidator(const TString& tableName,
         "FROM `" + tableName + "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" NAME_COLUMN_NAME "` = $name AND `" VISIBILITY_COLUMN_NAME "` = $visibility"
     );
 
-    if (visibility != YandexQuery::Acl::SCOPE) {
+    if (visibility != FederatedQuery::Acl::SCOPE) {
         queryBuilder.AddString("user", user);
         queryBuilder.AddText(" AND `" USER_COLUMN_NAME "` = $user");
     }
@@ -90,7 +90,7 @@ TValidationQuery CreateModifyUniqueNameValidator(const TString& tableName,
                 ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
             }
 
-            YandexQuery::Acl::Visibility oldVisibility = static_cast<YandexQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(YandexQuery::Acl::VISIBILITY_UNSPECIFIED));
+            FederatedQuery::Acl::Visibility oldVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
             TString oldName = parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().GetOrElse("");
 
             if (oldVisibility == visibility && oldName == name) {
@@ -216,7 +216,7 @@ static TValidationQuery CreateAccessValidatorImpl(const TString& tableName,
         }
 
         TString queryUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().GetOrElse("");
-        YandexQuery::Acl::Visibility visibility = static_cast<YandexQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(YandexQuery::Acl::VISIBILITY_UNSPECIFIED));
+        FederatedQuery::Acl::Visibility visibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
         bool hasAccess = HasAccessImpl(permissions, visibility, queryUser, user, privatePermission, publicPermission);
         if (!hasAccess) {
             ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << error;
@@ -295,7 +295,7 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
                                                  const TString& error,
                                                  TPermissions permissions,
                                                  const TString& user,
-                                                 YandexQuery::Acl::Visibility bindingVisibility,
+                                                 FederatedQuery::Acl::Visibility bindingVisibility,
                                                  const TString& tablePathPrefix) {
     TSqlQueryBuilder queryBuilder(tablePathPrefix);
     queryBuilder.AddString("scope", scope);
@@ -316,10 +316,10 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
             ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << error;
         }
 
-        YandexQuery::Acl::Visibility connectionVisibility = static_cast<YandexQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(YandexQuery::Acl::VISIBILITY_UNSPECIFIED));
+        FederatedQuery::Acl::Visibility connectionVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
         TString connectionUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().GetOrElse("");
 
-        if (bindingVisibility == YandexQuery::Acl::SCOPE && connectionVisibility == YandexQuery::Acl::PRIVATE) {
+        if (bindingVisibility == FederatedQuery::Acl::SCOPE && connectionVisibility == FederatedQuery::Acl::PRIVATE) {
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility";
         }
 
@@ -341,7 +341,7 @@ TValidationQuery CreateConnectionOverrideBindingValidator(const TString& scope,
     TSqlQueryBuilder queryBuilder(tablePathPrefix);
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("connection_name", connectionName);
-    queryBuilder.AddInt64("scope_visibility", YandexQuery::Acl::SCOPE);
+    queryBuilder.AddInt64("scope_visibility", FederatedQuery::Acl::SCOPE);
     queryBuilder.AddText(
         "$connection_id = SELECT `" CONNECTION_ID_COLUMN_NAME "`\n"
         "FROM `" CONNECTIONS_TABLE_NAME "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" NAME_COLUMN_NAME "` = $connection_name AND `" VISIBILITY_COLUMN_NAME "` = $scope_visibility;\n"
@@ -362,7 +362,7 @@ TValidationQuery CreateConnectionOverrideBindingValidator(const TString& scope,
 
         TString bindingUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().GetOrElse("");
         TString bindingName = parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().GetOrElse("");
-        YandexQuery::Acl::Visibility bindingVisibility = static_cast<YandexQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(YandexQuery::Acl::VISIBILITY_UNSPECIFIED));
+        FederatedQuery::Acl::Visibility bindingVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
 
         if (HasViewAccess(permissions, bindingVisibility, bindingUser, user)) {
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection named " << connectionName << " overrides connection from binding " << bindingName << ". Please rename this connection";
@@ -382,7 +382,7 @@ TValidationQuery CreateBindingConnectionValidator(const TString& scope,
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("connection_id", connectionId);
     queryBuilder.AddString("user", user);
-    queryBuilder.AddInt64("private_visibility", YandexQuery::Acl::PRIVATE);
+    queryBuilder.AddInt64("private_visibility", FederatedQuery::Acl::PRIVATE);
     queryBuilder.AddText(
         "$name = SELECT `" NAME_COLUMN_NAME "`\n"
         "FROM `" CONNECTIONS_TABLE_NAME "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;\n"
@@ -442,7 +442,7 @@ TValidationQuery CreateTtlValidator(const TString& tableName,
     return {query.Sql, query.Params, validator};
 }
 
-TValidationQuery CreateQueryComputeStatusValidator(const std::vector<YandexQuery::QueryMeta::ComputeStatus>& computeStatuses,
+TValidationQuery CreateQueryComputeStatusValidator(const std::vector<FederatedQuery::QueryMeta::ComputeStatus>& computeStatuses,
                                                    const TString& scope,
                                                    const TString& id,
                                                    const TString& error,
@@ -467,12 +467,12 @@ TValidationQuery CreateQueryComputeStatusValidator(const std::vector<YandexQuery
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
-        YandexQuery::Query query;
+        FederatedQuery::Query query;
         if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
         }
 
-        const YandexQuery::QueryMeta::ComputeStatus status = query.meta().status();
+        const FederatedQuery::QueryMeta::ComputeStatus status = query.meta().status();
         if (!IsIn(computeStatuses, status)) {
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
         }

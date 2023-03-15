@@ -399,7 +399,7 @@ NJson::TJsonValue FormatColumnPrettyValue(
 
 } // namespace
 
-TString FormatSchema(const YandexQuery::Schema& schema)
+TString FormatSchema(const FederatedQuery::Schema& schema)
 {
     NYql::TExprContext ctx;
     TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>> typedColumns;

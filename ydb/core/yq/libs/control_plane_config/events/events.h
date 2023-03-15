@@ -3,7 +3,7 @@
 #include <ydb/core/yq/libs/events/event_subspace.h>
 #include <ydb/core/yq/libs/quota_manager/events/events.h>
 
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/events.h>

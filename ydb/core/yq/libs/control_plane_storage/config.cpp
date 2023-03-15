@@ -5,16 +5,16 @@ namespace NYq {
 
 namespace {
 
-YandexQuery::ConnectionSetting::ConnectionCase GetConnectionType(const TString& typeStr) {
-    YandexQuery::ConnectionSetting::ConnectionType type = YandexQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED;
-    YandexQuery::ConnectionSetting::ConnectionType_Parse(typeStr, &type);
-    return static_cast<YandexQuery::ConnectionSetting::ConnectionCase>(type);
+FederatedQuery::ConnectionSetting::ConnectionCase GetConnectionType(const TString& typeStr) {
+    FederatedQuery::ConnectionSetting::ConnectionType type = FederatedQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED;
+    FederatedQuery::ConnectionSetting::ConnectionType_Parse(typeStr, &type);
+    return static_cast<FederatedQuery::ConnectionSetting::ConnectionCase>(type);
 }
 
-YandexQuery::BindingSetting::BindingCase GetBindingType(const TString& typeStr) {
-    YandexQuery::BindingSetting::BindingType type = YandexQuery::BindingSetting::BINDING_TYPE_UNSPECIFIED;
-    YandexQuery::BindingSetting::BindingType_Parse(typeStr, &type);
-    return static_cast<YandexQuery::BindingSetting::BindingCase>(type);
+FederatedQuery::BindingSetting::BindingCase GetBindingType(const TString& typeStr) {
+    FederatedQuery::BindingSetting::BindingType type = FederatedQuery::BindingSetting::BINDING_TYPE_UNSPECIFIED;
+    FederatedQuery::BindingSetting::BindingType_Parse(typeStr, &type);
+    return static_cast<FederatedQuery::BindingSetting::BindingCase>(type);
 }
 
 }

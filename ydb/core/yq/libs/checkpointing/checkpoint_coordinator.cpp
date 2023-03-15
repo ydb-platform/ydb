@@ -33,8 +33,8 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
                                                const TCheckpointCoordinatorConfig& settings,
                                                const ::NMonitoring::TDynamicCounterPtr& counters,
                                                const NProto::TGraphParams& graphParams,
-                                               const YandexQuery::StateLoadMode& stateLoadMode,
-                                               const YandexQuery::StreamingDisposition& streamingDisposition,
+                                               const FederatedQuery::StateLoadMode& stateLoadMode,
+                                               const FederatedQuery::StreamingDisposition& streamingDisposition,
                                                // vvv TaskController temporary params vvv
                                                const TString& traceId,
                                                const NActors::TActorId& executerId,
@@ -67,7 +67,7 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 void TCheckpointCoordinator::Handle(NYql::NDqs::TEvReadyState::TPtr& ev) {
     NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnReadyState(ev);
 
-    CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << YandexQuery::StateLoadMode_Name(StateLoadMode));
+    CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
 
     const auto& tasks = ev->Get()->Record.GetTask();
     const auto& actorIds = ev->Get()->Record.GetActorId();
@@ -137,10 +137,10 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinator(CoordinatorId.Generation, CoordinatorId.GraphId));
     }
 
-    const bool needCheckpointMetadata = StateLoadMode == YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT || StreamingDisposition.has_from_last_checkpoint();
+    const bool needCheckpointMetadata = StateLoadMode == FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT || StreamingDisposition.has_from_last_checkpoint();
     if (needCheckpointMetadata) {
-        const bool loadGraphDescription = StateLoadMode == YandexQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint(); // Continue mode
-        CC_LOG_I("Send TEvGetCheckpointsMetadataRequest; state load mode: " << YandexQuery::StateLoadMode_Name(StateLoadMode) << "; load graph: " << loadGraphDescription);
+        const bool loadGraphDescription = StateLoadMode == FederatedQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint(); // Continue mode
+        CC_LOG_I("Send TEvGetCheckpointsMetadataRequest; state load mode: " << FederatedQuery::StateLoadMode_Name(StateLoadMode) << "; load graph: " << loadGraphDescription);
         Send(StorageProxy,
             new TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest(
                 CoordinatorId.GraphId,
@@ -148,14 +148,14 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
                 1,
                 loadGraphDescription),
             IEventHandle::FlagTrackDelivery);
-    } else if (StateLoadMode == YandexQuery::StateLoadMode::EMPTY) {
+    } else if (StateLoadMode == FederatedQuery::StateLoadMode::EMPTY) {
         ++*Metrics.StartedFromEmptyCheckpoint;
         CheckpointIdGenerator = std::make_unique<TCheckpointIdGenerator>(CoordinatorId);
         InitingZeroCheckpoint = true;
         InitCheckpoint();
         ScheduleNextCheckpoint();
     } else {
-        OnInternalError(TStringBuilder() << "Unexpected state load mode (" << YandexQuery::StateLoadMode_Name(StateLoadMode) << ") and streaming disposition " << StreamingDisposition);
+        OnInternalError(TStringBuilder() << "Unexpected state load mode (" << FederatedQuery::StateLoadMode_Name(StateLoadMode) << ") and streaming disposition " << StreamingDisposition);
     }
 }
 
@@ -191,7 +191,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
     if (!checkpoints.empty()) {
         const auto& checkpoint = checkpoints.at(0);
         CheckpointIdGenerator = std::make_unique<TCheckpointIdGenerator>(CoordinatorId, checkpoint.CheckpointId);
-        const bool needRestoreOffsets = StateLoadMode == YandexQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint();
+        const bool needRestoreOffsets = StateLoadMode == FederatedQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint();
         if (needRestoreOffsets) {
             TryToRestoreOffsetsFromForeignCheckpoint(checkpoint);
         } else {
@@ -602,8 +602,8 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     const TCheckpointCoordinatorConfig& settings,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
-    const YandexQuery::StateLoadMode& stateLoadMode /* = YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT */,
-    const YandexQuery::StreamingDisposition& streamingDisposition /* = {} */,
+    const FederatedQuery::StateLoadMode& stateLoadMode /* = FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT */,
+    const FederatedQuery::StreamingDisposition& streamingDisposition /* = {} */,
     // vvv TaskController temporary params vvv
     const TString& traceId,
     const NActors::TActorId& executerId,

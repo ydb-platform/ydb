@@ -9,8 +9,8 @@ struct TTask {
     TString Scope;
     TString QueryId;
     ui32 RetryCount;
-    YandexQuery::Query Query;
-    YandexQuery::Internal::QueryInternal Internal;
+    FederatedQuery::Query Query;
+    FederatedQuery::Internal::QueryInternal Internal;
     ui64 Generation = 0;
     TInstant Deadline;
 };

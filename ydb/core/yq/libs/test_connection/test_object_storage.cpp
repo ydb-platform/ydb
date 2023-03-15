@@ -68,7 +68,7 @@ class TTestObjectStorageConnectionActor : public NActors::TActorBootstrapped<TTe
 
 public:
     TTestObjectStorageConnectionActor(
-        const YandexQuery::ObjectStorageConnection& os,
+        const FederatedQuery::ObjectStorageConnection& os,
         const NYq::NConfig::TCommonConfig& commonConfig,
         const TActorId& sender,
         ui64 cookie,
@@ -208,13 +208,13 @@ private:
     void ReplyOk(const TString& requestId) {
         TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Access is valid for object storage connection, request id: [" << requestId << "]");
         Counters->Ok->Inc();
-        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(YandexQuery::TestConnectionResult{}), 0, Cookie);
+        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), 0, Cookie);
         DestroyActor();
     }
 };
 
 NActors::IActor* CreateTestObjectStorageConnectionActor(
-        const YandexQuery::ObjectStorageConnection& os,
+        const FederatedQuery::ObjectStorageConnection& os,
         const NYq::NConfig::TCommonConfig& commonConfig,
         const TActorId& sender,
         ui64 cookie,

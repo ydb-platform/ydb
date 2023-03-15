@@ -50,28 +50,28 @@ TString ParsePeer(TString peerName) {
     return res;
 }
 
-std::string MapConnectionType(const YandexQuery::ConnectionSetting::ConnectionCase& connectionCase) {
+std::string MapConnectionType(const FederatedQuery::ConnectionSetting::ConnectionCase& connectionCase) {
     switch (connectionCase) {
-    case YandexQuery::ConnectionSetting::ConnectionCase::kYdbDatabase:
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kYdbDatabase:
         return "YdbDatabase";
-    case YandexQuery::ConnectionSetting::ConnectionCase::kClickhouseCluster:
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kClickhouseCluster:
         return "ClickhouseCluster";
-    case YandexQuery::ConnectionSetting::ConnectionCase::kDataStreams:
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kDataStreams:
         return "DataStreams";
-    case YandexQuery::ConnectionSetting::ConnectionCase::kObjectStorage:
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kObjectStorage:
         return "ObjectStorage";
-    case YandexQuery::ConnectionSetting::ConnectionCase::kMonitoring:
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kMonitoring:
         return "Monitoring";
     default:
         Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
     }
 }
 
-std::string MapBindingType(const YandexQuery::BindingSetting::BindingCase& bindingCase) {
+std::string MapBindingType(const FederatedQuery::BindingSetting::BindingCase& bindingCase) {
     switch (bindingCase) {
-    case YandexQuery::BindingSetting::BindingSetting::kDataStreams:
+    case FederatedQuery::BindingSetting::BindingSetting::kDataStreams:
         return "YdbDataStreams";
-    case YandexQuery::BindingSetting::BindingSetting::kObjectStorage:
+    case FederatedQuery::BindingSetting::BindingSetting::kObjectStorage:
         return "ObjectStorage";
     default:
         Y_ENSURE(false, "Invalid connection case " << i32(bindingCase));
@@ -435,29 +435,29 @@ private:
     void Handle(TEvAuditService::CreateBindingAuditReport::TPtr& ev) {
         auto& auditReport = *ev.Get()->Get();
 
-        auto prepareEventDetails = [](const TAuditDetails<YandexQuery::Binding>& details) {
+        auto prepareEventDetails = [](const TAuditDetails<FederatedQuery::Binding>& details) {
             yandex::cloud::events::yq::CreateBinding::EventDetails eventDetails;
             if (details.After) {
                 const auto& after = *details.After;
                 eventDetails.set_binding_id(after.meta().id());
                 eventDetails.set_name(after.content().name());
-                eventDetails.set_visibility(YandexQuery::Acl::Visibility_Name(after.content().acl().visibility()));
+                eventDetails.set_visibility(FederatedQuery::Acl::Visibility_Name(after.content().acl().visibility()));
                 eventDetails.set_connection_id(after.content().connection_id());
                 eventDetails.set_type(MapBindingType(after.content().setting().binding_case()));
             }
             return eventDetails;
         };
 
-        auto prepareRequestParameters = [](const YandexQuery::CreateBindingRequest& request) {
+        auto prepareRequestParameters = [](const FederatedQuery::CreateBindingRequest& request) {
             yandex::cloud::events::yq::CreateBinding::RequestParameters requestParameters;
             requestParameters.set_name(request.content().name());
-            requestParameters.set_visibility(YandexQuery::Acl::Visibility_Name(request.content().acl().visibility()));
+            requestParameters.set_visibility(FederatedQuery::Acl::Visibility_Name(request.content().acl().visibility()));
             requestParameters.set_connection_id(request.content().connection_id());
             requestParameters.set_type(MapBindingType(request.content().setting().binding_case()));
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::CreateBinding, YandexQuery::CreateBindingRequest, YandexQuery::Binding>(
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::CreateBinding, FederatedQuery::CreateBindingRequest, FederatedQuery::Binding>(
             Session,
             AuditServiceSensors,
             prepareEventDetails,
@@ -475,30 +475,30 @@ private:
     void Handle(TEvAuditService::ModifyBindingAuditReport::TPtr& ev) {
         auto& auditReport = *ev.Get()->Get();
 
-        auto prepareEventDetails = [](const TAuditDetails<YandexQuery::Binding>& details) {
+        auto prepareEventDetails = [](const TAuditDetails<FederatedQuery::Binding>& details) {
             yandex::cloud::events::yq::UpdateBinding::EventDetails eventDetails;
             if (details.After) {
                 const auto& after = *details.After;
                 eventDetails.set_binding_id(after.meta().id());
                 eventDetails.set_name(after.content().name());
-                eventDetails.set_visibility(YandexQuery::Acl::Visibility_Name(after.content().acl().visibility()));
+                eventDetails.set_visibility(FederatedQuery::Acl::Visibility_Name(after.content().acl().visibility()));
                 eventDetails.set_connection_id(after.content().connection_id());
                 eventDetails.set_type(MapBindingType(after.content().setting().binding_case()));
             }
             return eventDetails;
         };
 
-        auto prepareRequestParameters = [](const YandexQuery::ModifyBindingRequest& request) {
+        auto prepareRequestParameters = [](const FederatedQuery::ModifyBindingRequest& request) {
             yandex::cloud::events::yq::UpdateBinding::RequestParameters requestParameters;
             requestParameters.set_binding_id(request.binding_id());
             requestParameters.set_name(request.content().name());
-            requestParameters.set_visibility(YandexQuery::Acl::Visibility_Name(request.content().acl().visibility()));
+            requestParameters.set_visibility(FederatedQuery::Acl::Visibility_Name(request.content().acl().visibility()));
             requestParameters.set_connection_id(request.content().connection_id());
             requestParameters.set_type(MapBindingType(request.content().setting().binding_case()));
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateBinding, YandexQuery::ModifyBindingRequest, YandexQuery::Binding>(
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateBinding, FederatedQuery::ModifyBindingRequest, FederatedQuery::Binding>(
             Session,
             AuditServiceSensors,
             prepareEventDetails,
@@ -516,26 +516,26 @@ private:
     void Handle(TEvAuditService::DeleteBindingAuditReport::TPtr& ev) {
         auto& auditReport = *ev.Get()->Get();
 
-        auto prepareEventDetails = [](const TAuditDetails<YandexQuery::Binding>& details) {
+        auto prepareEventDetails = [](const TAuditDetails<FederatedQuery::Binding>& details) {
             yandex::cloud::events::yq::DeleteBinding::EventDetails eventDetails;
             if (details.Before) {
                 const auto& before = *details.Before;
                 eventDetails.set_binding_id(before.meta().id());
                 eventDetails.set_name(before.content().name());
-                eventDetails.set_visibility(YandexQuery::Acl::Visibility_Name(before.content().acl().visibility()));
+                eventDetails.set_visibility(FederatedQuery::Acl::Visibility_Name(before.content().acl().visibility()));
                 eventDetails.set_connection_id(before.content().connection_id());
                 eventDetails.set_type(MapBindingType(before.content().setting().binding_case()));
             }
             return eventDetails;
         };
 
-        auto prepareRequestParameters = [](const YandexQuery::DeleteBindingRequest& request) {
+        auto prepareRequestParameters = [](const FederatedQuery::DeleteBindingRequest& request) {
             yandex::cloud::events::yq::DeleteBinding::RequestParameters requestParameters;
             requestParameters.set_binding_id(request.binding_id());
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteBinding, YandexQuery::DeleteBindingRequest, YandexQuery::Binding>(
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteBinding, FederatedQuery::DeleteBindingRequest, FederatedQuery::Binding>(
             Session,
             AuditServiceSensors,
             prepareEventDetails,
@@ -553,27 +553,27 @@ private:
     void Handle(TEvAuditService::CreateConnectionAuditReport::TPtr& ev) {
         auto& auditReport = *ev.Get()->Get();
 
-        auto prepareEventDetails = [](const TAuditDetails<YandexQuery::Connection>& details) {
+        auto prepareEventDetails = [](const TAuditDetails<FederatedQuery::Connection>& details) {
             yandex::cloud::events::yq::CreateConnection::EventDetails eventDetails;
             if (details.After) {
                 const auto& after = *details.After;
                 eventDetails.set_connection_id(after.meta().id());
                 eventDetails.set_name(after.content().name());
-                eventDetails.set_visibility(YandexQuery::Acl::Visibility_Name(after.content().acl().visibility()));
+                eventDetails.set_visibility(FederatedQuery::Acl::Visibility_Name(after.content().acl().visibility()));
                 eventDetails.set_type(MapConnectionType(after.content().setting().connection_case()));
             }
             return eventDetails;
         };
 
-        auto prepareRequestParameters = [](const YandexQuery::CreateConnectionRequest& request) {
+        auto prepareRequestParameters = [](const FederatedQuery::CreateConnectionRequest& request) {
             yandex::cloud::events::yq::CreateConnection::RequestParameters requestParameters;
             requestParameters.set_name(request.content().name());
-            requestParameters.set_visibility(YandexQuery::Acl::Visibility_Name(request.content().acl().visibility()));
+            requestParameters.set_visibility(FederatedQuery::Acl::Visibility_Name(request.content().acl().visibility()));
             requestParameters.set_type(MapConnectionType(request.content().setting().connection_case()));
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::CreateConnection, YandexQuery::CreateConnectionRequest, YandexQuery::Connection>(
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::CreateConnection, FederatedQuery::CreateConnectionRequest, FederatedQuery::Connection>(
             Session,
             AuditServiceSensors,
             prepareEventDetails,
@@ -591,28 +591,28 @@ private:
     void Handle(TEvAuditService::ModifyConnectionAuditReport::TPtr& ev) {
         auto& auditReport = *ev.Get()->Get();
 
-        auto prepareEventDetails = [](const TAuditDetails<YandexQuery::Connection>& details) {
+        auto prepareEventDetails = [](const TAuditDetails<FederatedQuery::Connection>& details) {
             yandex::cloud::events::yq::UpdateConnection::EventDetails eventDetails;
             if (details.After) {
                 const auto& after = *details.After;
                 eventDetails.set_connection_id(after.meta().id());
                 eventDetails.set_name(after.content().name());
-                eventDetails.set_visibility(YandexQuery::Acl::Visibility_Name(after.content().acl().visibility()));
+                eventDetails.set_visibility(FederatedQuery::Acl::Visibility_Name(after.content().acl().visibility()));
                 eventDetails.set_type(MapConnectionType(after.content().setting().connection_case()));
             }
             return eventDetails;
         };
 
-        auto prepareRequestParameters = [](const YandexQuery::ModifyConnectionRequest& request) {
+        auto prepareRequestParameters = [](const FederatedQuery::ModifyConnectionRequest& request) {
             yandex::cloud::events::yq::UpdateConnection::RequestParameters requestParameters;
             requestParameters.set_connection_id(request.connection_id());
             requestParameters.set_name(request.content().name());
-            requestParameters.set_visibility(YandexQuery::Acl::Visibility_Name(request.content().acl().visibility()));
+            requestParameters.set_visibility(FederatedQuery::Acl::Visibility_Name(request.content().acl().visibility()));
             requestParameters.set_type(MapConnectionType(request.content().setting().connection_case()));
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateConnection, YandexQuery::ModifyConnectionRequest, YandexQuery::Connection>(
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateConnection, FederatedQuery::ModifyConnectionRequest, FederatedQuery::Connection>(
             Session,
             AuditServiceSensors,
             prepareEventDetails,
@@ -630,25 +630,25 @@ private:
     void Handle(TEvAuditService::DeleteConnectionAuditReport::TPtr& ev) {
         auto& auditReport = *ev.Get()->Get();
 
-        auto prepareEventDetails = [](const TAuditDetails<YandexQuery::Connection>& details) {
+        auto prepareEventDetails = [](const TAuditDetails<FederatedQuery::Connection>& details) {
             yandex::cloud::events::yq::DeleteConnection::EventDetails eventDetails;
             if (details.Before) {
                 const auto& before = *details.Before;
                 eventDetails.set_connection_id(before.meta().id());
                 eventDetails.set_name(before.content().name());
-                eventDetails.set_visibility(YandexQuery::Acl::Visibility_Name(before.content().acl().visibility()));
+                eventDetails.set_visibility(FederatedQuery::Acl::Visibility_Name(before.content().acl().visibility()));
                 eventDetails.set_type(MapConnectionType(before.content().setting().connection_case()));
             }
             return eventDetails;
         };
 
-        auto prepareRequestParameters = [](const YandexQuery::DeleteConnectionRequest& request) {
+        auto prepareRequestParameters = [](const FederatedQuery::DeleteConnectionRequest& request) {
             yandex::cloud::events::yq::DeleteConnection::RequestParameters requestParameters;
             requestParameters.set_connection_id(request.connection_id());
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteConnection, YandexQuery::DeleteConnectionRequest, YandexQuery::Connection>(
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteConnection, FederatedQuery::DeleteConnectionRequest, FederatedQuery::Connection>(
             Session,
             AuditServiceSensors,
             prepareEventDetails,
@@ -666,32 +666,32 @@ private:
     void Handle(TEvAuditService::CreateQueryAuditReport::TPtr& ev) {
         auto& auditReport = *ev.Get()->Get();
 
-        auto prepareEventDetails = [](const TAuditDetails<YandexQuery::Query>& details) {
+        auto prepareEventDetails = [](const TAuditDetails<FederatedQuery::Query>& details) {
             yandex::cloud::events::yq::CreateQuery::EventDetails eventDetails;
             if (details.After) {
                 const auto& after = *details.After;
                 eventDetails.set_query_id(after.meta().common().id());
                 eventDetails.set_name(after.content().name());
-                eventDetails.set_visibility(YandexQuery::Acl::Visibility_Name(after.content().acl().visibility()));
-                eventDetails.set_type(YandexQuery::QueryContent::QueryType_Name(after.content().type()));
-                eventDetails.set_execute_mode(YandexQuery::ExecuteMode_Name(after.meta().execute_mode()));
-                eventDetails.set_compute_status(YandexQuery::QueryMeta::ComputeStatus_Name(after.meta().status()));
+                eventDetails.set_visibility(FederatedQuery::Acl::Visibility_Name(after.content().acl().visibility()));
+                eventDetails.set_type(FederatedQuery::QueryContent::QueryType_Name(after.content().type()));
+                eventDetails.set_execute_mode(FederatedQuery::ExecuteMode_Name(after.meta().execute_mode()));
+                eventDetails.set_compute_status(FederatedQuery::QueryMeta::ComputeStatus_Name(after.meta().status()));
                 eventDetails.set_text_length(after.content().text().length());
             }
             return eventDetails;
         };
 
-        auto prepareRequestParameters = [](const YandexQuery::CreateQueryRequest& request) {
+        auto prepareRequestParameters = [](const FederatedQuery::CreateQueryRequest& request) {
             yandex::cloud::events::yq::CreateQuery::RequestParameters requestParameters;
             requestParameters.set_name(request.content().name());
-            requestParameters.set_visibility(YandexQuery::Acl::Visibility_Name(request.content().acl().visibility()));
-            requestParameters.set_type(YandexQuery::QueryContent::QueryType_Name(request.content().type()));
-            requestParameters.set_execute_mode(YandexQuery::ExecuteMode_Name(request.execute_mode()));
+            requestParameters.set_visibility(FederatedQuery::Acl::Visibility_Name(request.content().acl().visibility()));
+            requestParameters.set_type(FederatedQuery::QueryContent::QueryType_Name(request.content().type()));
+            requestParameters.set_execute_mode(FederatedQuery::ExecuteMode_Name(request.execute_mode()));
             requestParameters.set_text_length(request.content().text().length());
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::CreateQuery, YandexQuery::CreateQueryRequest, YandexQuery::Query>(
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::CreateQuery, FederatedQuery::CreateQueryRequest, FederatedQuery::Query>(
             Session,
             AuditServiceSensors,
             prepareEventDetails,
@@ -709,29 +709,29 @@ private:
     void Handle(TEvAuditService::ControlQueryAuditReport::TPtr& ev) {
         auto& auditReport = *ev.Get()->Get();
 
-        auto prepareEventDetails = [](const TAuditDetails<YandexQuery::Query>& details) {
+        auto prepareEventDetails = [](const TAuditDetails<FederatedQuery::Query>& details) {
             yandex::cloud::events::yq::ControlQuery::EventDetails eventDetails;
             if (details.Before) {
                 const auto& before = *details.Before;
                 eventDetails.set_query_id(before.meta().common().id());
                 eventDetails.set_name(before.content().name());
-                eventDetails.set_visibility(YandexQuery::Acl::Visibility_Name(before.content().acl().visibility()));
-                eventDetails.set_type(YandexQuery::QueryContent::QueryType_Name(before.content().type()));
-                eventDetails.set_execute_mode(YandexQuery::ExecuteMode_Name(before.meta().execute_mode()));
-                eventDetails.set_compute_status(YandexQuery::QueryMeta::ComputeStatus_Name(before.meta().status()));
+                eventDetails.set_visibility(FederatedQuery::Acl::Visibility_Name(before.content().acl().visibility()));
+                eventDetails.set_type(FederatedQuery::QueryContent::QueryType_Name(before.content().type()));
+                eventDetails.set_execute_mode(FederatedQuery::ExecuteMode_Name(before.meta().execute_mode()));
+                eventDetails.set_compute_status(FederatedQuery::QueryMeta::ComputeStatus_Name(before.meta().status()));
                 eventDetails.set_text_length(before.content().text().length());
             }
             return eventDetails;
         };
 
-        auto prepareRequestParameters = [](const YandexQuery::ControlQueryRequest& request) {
+        auto prepareRequestParameters = [](const FederatedQuery::ControlQueryRequest& request) {
             yandex::cloud::events::yq::ControlQuery::RequestParameters requestParameters;
             requestParameters.set_query_id(request.query_id());
-            requestParameters.set_action(YandexQuery::QueryAction_Name(request.action()));
+            requestParameters.set_action(FederatedQuery::QueryAction_Name(request.action()));
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::ControlQuery, YandexQuery::ControlQueryRequest, YandexQuery::Query>(
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::ControlQuery, FederatedQuery::ControlQueryRequest, FederatedQuery::Query>(
             Session,
             AuditServiceSensors,
             prepareEventDetails,
@@ -749,34 +749,34 @@ private:
     void Handle(TEvAuditService::ModifyQueryAuditReport::TPtr& ev) {
         auto& auditReport = *ev.Get()->Get();
 
-        auto prepareEventDetails = [](const TAuditDetails<YandexQuery::Query>& details) {
+        auto prepareEventDetails = [](const TAuditDetails<FederatedQuery::Query>& details) {
             yandex::cloud::events::yq::UpdateQuery::EventDetails eventDetails;
             if (details.After) {
                 const auto& after = *details.After;
                 eventDetails.set_query_id(after.meta().common().id());
                 eventDetails.set_name(after.content().name());
-                eventDetails.set_visibility(YandexQuery::Acl::Visibility_Name(after.content().acl().visibility()));
-                eventDetails.set_type(YandexQuery::QueryContent::QueryType_Name(after.content().type()));
-                eventDetails.set_execute_mode(YandexQuery::ExecuteMode_Name(after.meta().execute_mode()));
-                eventDetails.set_compute_status(YandexQuery::QueryMeta::ComputeStatus_Name(after.meta().status()));
+                eventDetails.set_visibility(FederatedQuery::Acl::Visibility_Name(after.content().acl().visibility()));
+                eventDetails.set_type(FederatedQuery::QueryContent::QueryType_Name(after.content().type()));
+                eventDetails.set_execute_mode(FederatedQuery::ExecuteMode_Name(after.meta().execute_mode()));
+                eventDetails.set_compute_status(FederatedQuery::QueryMeta::ComputeStatus_Name(after.meta().status()));
                 eventDetails.set_text_length(after.content().text().length());
             }
             return eventDetails;
         };
 
-        auto prepareRequestParameters = [](const YandexQuery::ModifyQueryRequest& request) {
+        auto prepareRequestParameters = [](const FederatedQuery::ModifyQueryRequest& request) {
             yandex::cloud::events::yq::UpdateQuery::RequestParameters requestParameters;
             requestParameters.set_query_id(request.query_id());
             requestParameters.set_name(request.content().name());
-            requestParameters.set_visibility(YandexQuery::Acl::Visibility_Name(request.content().acl().visibility()));
-            requestParameters.set_type(YandexQuery::QueryContent::QueryType_Name(request.content().type()));
-            requestParameters.set_execute_mode(YandexQuery::ExecuteMode_Name(request.execute_mode()));
-            requestParameters.set_state_load_mode(YandexQuery::StateLoadMode_Name(request.state_load_mode()));
+            requestParameters.set_visibility(FederatedQuery::Acl::Visibility_Name(request.content().acl().visibility()));
+            requestParameters.set_type(FederatedQuery::QueryContent::QueryType_Name(request.content().type()));
+            requestParameters.set_execute_mode(FederatedQuery::ExecuteMode_Name(request.execute_mode()));
+            requestParameters.set_state_load_mode(FederatedQuery::StateLoadMode_Name(request.state_load_mode()));
             requestParameters.set_text_length(request.content().text().length());
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateQuery, YandexQuery::ModifyQueryRequest, YandexQuery::Query>(
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateQuery, FederatedQuery::ModifyQueryRequest, FederatedQuery::Query>(
             Session,
             AuditServiceSensors,
             prepareEventDetails,
@@ -794,28 +794,28 @@ private:
     void Handle(TEvAuditService::DeleteQueryAuditReport::TPtr& ev) {
         auto& auditReport = *ev.Get()->Get();
 
-        auto prepareEventDetails = [](const TAuditDetails<YandexQuery::Query>& details) {
+        auto prepareEventDetails = [](const TAuditDetails<FederatedQuery::Query>& details) {
             yandex::cloud::events::yq::DeleteQuery::EventDetails eventDetails;
             if (details.Before) {
                 const auto& before = *details.Before;
                 eventDetails.set_query_id(before.meta().common().id());
                 eventDetails.set_name(before.content().name());
-                eventDetails.set_visibility(YandexQuery::Acl::Visibility_Name(before.content().acl().visibility()));
-                eventDetails.set_type(YandexQuery::QueryContent::QueryType_Name(before.content().type()));
-                eventDetails.set_execute_mode(YandexQuery::ExecuteMode_Name(before.meta().execute_mode()));
-                eventDetails.set_compute_status(YandexQuery::QueryMeta::ComputeStatus_Name(before.meta().status()));
+                eventDetails.set_visibility(FederatedQuery::Acl::Visibility_Name(before.content().acl().visibility()));
+                eventDetails.set_type(FederatedQuery::QueryContent::QueryType_Name(before.content().type()));
+                eventDetails.set_execute_mode(FederatedQuery::ExecuteMode_Name(before.meta().execute_mode()));
+                eventDetails.set_compute_status(FederatedQuery::QueryMeta::ComputeStatus_Name(before.meta().status()));
                 eventDetails.set_text_length(before.content().text().length());
             }
             return eventDetails;
         };
 
-        auto prepareRequestParameters = [](const YandexQuery::DeleteQueryRequest& request) {
+        auto prepareRequestParameters = [](const FederatedQuery::DeleteQueryRequest& request) {
             yandex::cloud::events::yq::DeleteQuery::RequestParameters requestParameters;
             requestParameters.set_query_id(request.query_id());
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteQuery, YandexQuery::DeleteQueryRequest, YandexQuery::Query>(
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteQuery, FederatedQuery::DeleteQueryRequest, FederatedQuery::Query>(
             Session,
             AuditServiceSensors,
             prepareEventDetails,

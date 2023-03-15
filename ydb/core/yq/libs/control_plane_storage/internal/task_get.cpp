@@ -21,37 +21,37 @@ struct TTaskInternal {
     TString TablePathPrefix;
     TString Owner;
     TString HostName;
-    TMaybe<YandexQuery::Job> Job;
+    TMaybe<FederatedQuery::Job> Job;
     TInstant Deadline;
     TString TenantName;
     TString NewTenantName;
 };
 
-    TString GetServiceAccountId(const YandexQuery::IamAuth& auth) {
+    TString GetServiceAccountId(const FederatedQuery::IamAuth& auth) {
         return auth.has_service_account()
                 ? auth.service_account().id()
                 : TString{};
     }
 
-    TString ExtractServiceAccountId(const YandexQuery::Connection& c) {
+    TString ExtractServiceAccountId(const FederatedQuery::Connection& c) {
         switch (c.content().setting().connection_case()) {
-        case YandexQuery::ConnectionSetting::kYdbDatabase: {
+        case FederatedQuery::ConnectionSetting::kYdbDatabase: {
             return GetServiceAccountId(c.content().setting().ydb_database().auth());
         }
-        case YandexQuery::ConnectionSetting::kDataStreams: {
+        case FederatedQuery::ConnectionSetting::kDataStreams: {
             return GetServiceAccountId(c.content().setting().data_streams().auth());
         }
-        case YandexQuery::ConnectionSetting::kObjectStorage: {
+        case FederatedQuery::ConnectionSetting::kObjectStorage: {
             return GetServiceAccountId(c.content().setting().object_storage().auth());
         }
-        case YandexQuery::ConnectionSetting::kMonitoring: {
+        case FederatedQuery::ConnectionSetting::kMonitoring: {
             return GetServiceAccountId(c.content().setting().monitoring().auth());
         }
-        case YandexQuery::ConnectionSetting::kClickhouseCluster: {
+        case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
             return GetServiceAccountId(c.content().setting().clickhouse_cluster().auth());
         }
         // Do not replace with default. Adding a new connection should cause a compilation error
-        case YandexQuery::ConnectionSetting::CONNECTION_NOT_SET:
+        case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         break;
         }
         return {};
@@ -205,7 +205,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
             abortIssueMsg.set_message("Query was aborted by system due to high failure rate");
             abortIssueMsg.set_severity(NYql::TSeverityIds::S_ERROR);
             *task.Query.add_issue() = abortIssueMsg;
-            task.Query.mutable_meta()->set_status(YandexQuery::QueryMeta::ABORTING_BY_SYSTEM);
+            task.Query.mutable_meta()->set_status(FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM);
         }
 
         if (tenantInfo->TenantState.Value(taskInternal.TenantName, TenantState::Active) != TenantState::Active) {
@@ -238,7 +238,7 @@ TDuration ExtractLimit(const TTask& task) {
     auto userExecutionLimit = TDuration::Zero();
 
     switch (limits.timeout_case()) {
-        case YandexQuery::Limits::TimeoutCase::kExecutionDeadline: {
+        case FederatedQuery::Limits::TimeoutCase::kExecutionDeadline: {
             auto now = TInstant::Now();
             auto deadline = NProtoInterop::CastFromProto(limits.execution_deadline());
             if (!deadline) {
@@ -251,7 +251,7 @@ TDuration ExtractLimit(const TTask& task) {
             }
             break;
         }
-        case YandexQuery::Limits::TimeoutCase::kExecutionTimeout: {
+        case FederatedQuery::Limits::TimeoutCase::kExecutionTimeout: {
             userExecutionLimit = NProtoInterop::CastFromProto(limits.execution_timeout());
             break;
         }
@@ -438,10 +438,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
         for (const auto& task : tasks) {
             const auto& queryType = task.Query.content().type();
-            if (queryType != YandexQuery::QueryContent::ANALYTICS && queryType != YandexQuery::QueryContent::STREAMING) { //TODO: fix
+            if (queryType != FederatedQuery::QueryContent::ANALYTICS && queryType != FederatedQuery::QueryContent::STREAMING) { //TODO: fix
                 ythrow yexception()
                     << "query type "
-                    << YandexQuery::QueryContent::QueryType_Name(queryType)
+                    << FederatedQuery::QueryContent::QueryType_Name(queryType)
                     << " unsupported";
             }
 
@@ -452,7 +452,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             newTask->set_state_load_mode(task.Internal.state_load_mode());
             auto* queryId = newTask->mutable_query_id();
             queryId->set_value(task.Query.meta().common().id());
-            newTask->set_streaming(queryType == YandexQuery::QueryContent::STREAMING);
+            newTask->set_streaming(queryType == FederatedQuery::QueryContent::STREAMING);
             newTask->set_text(task.Query.content().text());
             *newTask->mutable_connection() = task.Internal.connection();
             *newTask->mutable_binding() = task.Internal.binding();

@@ -9,7 +9,7 @@
 #include <ydb/core/yq/libs/signer/signer.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -54,7 +54,7 @@ NActors::IActor* CreateTestConnectionActor(
         const ::NMonitoring::TDynamicCounterPtr& counters);
 
 NActors::IActor* CreateTestDataStreamsConnectionActor(
-        const YandexQuery::DataStreams& ds,
+        const FederatedQuery::DataStreams& ds,
         const NYq::NConfig::TCommonConfig& commonConfig,
         const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
         const NActors::TActorId& sender,
@@ -70,7 +70,7 @@ NActors::IActor* CreateTestDataStreamsConnectionActor(
         const TTestConnectionRequestCountersPtr& counters);
 
 NActors::IActor* CreateTestObjectStorageConnectionActor(
-        const YandexQuery::ObjectStorageConnection& os,
+        const FederatedQuery::ObjectStorageConnection& os,
         const NYq::NConfig::TCommonConfig& commonConfig,
         const NActors::TActorId& sender,
         ui64 cookie,
@@ -83,7 +83,7 @@ NActors::IActor* CreateTestObjectStorageConnectionActor(
         const TTestConnectionRequestCountersPtr& counters);
 
 NActors::IActor* CreateTestMonitoringConnectionActor(
-        const YandexQuery::Monitoring& monitoring,
+        const FederatedQuery::Monitoring& monitoring,
         const NActors::TActorId& sender,
         ui64 cookie,
         const TString& endpoint,

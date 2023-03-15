@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
@@ -11,6 +11,6 @@
 namespace NYq {
 
 void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet, bool typeNameAsString = false, bool prettyValueFormat = false);
-TString FormatSchema(const YandexQuery::Schema& schema);
+TString FormatSchema(const FederatedQuery::Schema& schema);
 
 } // namespace NYq

@@ -18,7 +18,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
 #include <ydb/library/db_pool/db_pool.h>
@@ -57,14 +57,14 @@ inline static void PrepareAccessConditionImpl(TSqlQueryBuilder& builder, TPermis
         // any row
     } else if (permissions.Check(publicPermission)) {
         builder.AddString("user", user);
-        builder.AddInt64("visibility_scope", YandexQuery::Acl::SCOPE);
+        builder.AddInt64("visibility_scope", FederatedQuery::Acl::SCOPE);
         builder.AddText(" AND (`" VISIBILITY_COLUMN_NAME "` = $visibility_scope OR `" USER_COLUMN_NAME "` = $user)");
     } else if (permissions.Check(privatePermission)) {
-        builder.AddInt64("visibility_private", YandexQuery::Acl::PRIVATE);
+        builder.AddInt64("visibility_private", FederatedQuery::Acl::PRIVATE);
         builder.AddText(" AND (`" VISIBILITY_COLUMN_NAME "` = $visibility_private)");
     } else {
         builder.AddString("user", user);
-        builder.AddInt64("visibility_private", YandexQuery::Acl::PRIVATE);
+        builder.AddInt64("visibility_private", FederatedQuery::Acl::PRIVATE);
         builder.AddText(" AND (`" VISIBILITY_COLUMN_NAME "` = $visibility_private AND `" USER_COLUMN_NAME "` = $user)");
     }
 }
@@ -77,19 +77,19 @@ inline static void PrepareManageAccessCondition(TSqlQueryBuilder& builder, TPerm
     PrepareAccessConditionImpl(builder, permissions, user, TPermissions::MANAGE_PRIVATE, TPermissions::MANAGE_PUBLIC);
 }
 
-inline static bool HasAccessImpl(TPermissions permissions, YandexQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user, TPermissions::TPermission privatePermission, TPermissions::TPermission publicPermission) {
+inline static bool HasAccessImpl(TPermissions permissions, FederatedQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user, TPermissions::TPermission privatePermission, TPermissions::TPermission publicPermission) {
     return (permissions.Check(publicPermission) && permissions.Check(privatePermission))
-        || (permissions.Check(publicPermission) && (entityVisibility == YandexQuery::Acl::SCOPE || entityUser == user))
-        || (permissions.Check(privatePermission) && entityVisibility == YandexQuery::Acl::PRIVATE)
-        || (entityVisibility == YandexQuery::Acl::PRIVATE && entityUser == user);
+        || (permissions.Check(publicPermission) && (entityVisibility == FederatedQuery::Acl::SCOPE || entityUser == user))
+        || (permissions.Check(privatePermission) && entityVisibility == FederatedQuery::Acl::PRIVATE)
+        || (entityVisibility == FederatedQuery::Acl::PRIVATE && entityUser == user);
 }
 
 
-inline static bool HasViewAccess(TPermissions permissions, YandexQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user) {
+inline static bool HasViewAccess(TPermissions permissions, FederatedQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user) {
     return HasAccessImpl(permissions, entityVisibility, entityUser, user, TPermissions::VIEW_PRIVATE, TPermissions::VIEW_PUBLIC);
 }
 
-inline static bool HasManageAccess(TPermissions permissions, YandexQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user) {
+inline static bool HasManageAccess(TPermissions permissions, FederatedQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user) {
     return HasAccessImpl(permissions, entityVisibility, entityUser, user, TPermissions::MANAGE_PRIVATE, TPermissions::MANAGE_PUBLIC);
 }
 
@@ -186,7 +186,7 @@ THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultS
         const TString name = entity.content().name();
         if (auto it = entities.find(name); it != entities.end()) {
             const auto visibility = entity.content().acl().visibility();
-            if (visibility == YandexQuery::Acl::PRIVATE) {
+            if (visibility == FederatedQuery::Acl::PRIVATE) {
                 entities[name] = std::move(entity);
             }
         } else {
@@ -336,8 +336,8 @@ protected:
         return s.size() > maxLength ? (s.substr(0, maxLength - 3) + "...") : s;
     }
 
-    static YandexQuery::CommonMeta CreateCommonMeta(const TString& id, const TString& user, const TInstant& startTime, int64_t revision) {
-        YandexQuery::CommonMeta common;
+    static FederatedQuery::CommonMeta CreateCommonMeta(const TString& id, const TString& user, const TInstant& startTime, int64_t revision) {
+        FederatedQuery::CommonMeta common;
         common.set_id(id);
         common.set_created_by(user);
         common.set_modified_by(user);

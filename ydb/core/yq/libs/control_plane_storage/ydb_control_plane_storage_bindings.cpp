@@ -25,7 +25,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
-    const YandexQuery::CreateBindingRequest& request = event.Request;
+    const FederatedQuery::CreateBindingRequest& request = event.Request;
     const TString bindingId = GetEntityIdAsString(Config->IdsPrefix, EEntityType::BINDING);
     int byteSize = request.ByteSize();
     const TString connectionId = request.content().connection_id();
@@ -37,7 +37,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
         << request.DebugString());
 
     NYql::TIssues issues = ValidateBinding(ev);
-    if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
+    if (request.content().acl().visibility() == FederatedQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a binding with these parameters. Please receive a permission yq.resources.managePublic"));
     }
     if (issues) {
@@ -52,15 +52,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
         return;
     }
 
-    YandexQuery::Binding binding;
-    YandexQuery::BindingContent& content = *binding.mutable_content();
+    FederatedQuery::Binding binding;
+    FederatedQuery::BindingContent& content = *binding.mutable_content();
     content = request.content();
     *binding.mutable_meta() = CreateCommonMeta(bindingId, user, startTime, InitialRevision);
 
-    YandexQuery::Internal::BindingInternal bindingInternal;
+    FederatedQuery::Internal::BindingInternal bindingInternal;
     bindingInternal.set_cloud_id(cloudId);
 
-    std::shared_ptr<std::pair<YandexQuery::CreateBindingResult, TAuditDetails<YandexQuery::Binding>>> response = std::make_shared<std::pair<YandexQuery::CreateBindingResult, TAuditDetails<YandexQuery::Binding>>>();
+    std::shared_ptr<std::pair<FederatedQuery::CreateBindingResult, TAuditDetails<FederatedQuery::Binding>>> response = std::make_shared<std::pair<FederatedQuery::CreateBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
     response->first.set_binding_id(bindingId);
     response->second.After.ConstructInPlace().CopyFrom(binding);
     response->second.CloudId = cloudId;
@@ -128,7 +128,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus result = Write(query.Sql, query.Params, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendResponse<TEvControlPlaneStorage::TEvCreateBindingResponse, YandexQuery::CreateBindingResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvCreateBindingResponse, FederatedQuery::CreateBindingResult>(
         MakeLogPrefix(scope, user, bindingId) + "CreateBindingRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -154,7 +154,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_BINDINGS, RTC_LIST_BINDINGS);
     requestCounters.IncInFly();
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::ListBindingsRequest& request = event.Request;
+    const FederatedQuery::ListBindingsRequest& request = event.Request;
     const TString user = event.User;
     const TString pageToken = request.page_token();
     const int byteSize = event.Request.ByteSize();
@@ -212,7 +212,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
             filters.push_back("`" USER_COLUMN_NAME "` = $user");
         }
 
-        if (request.filter().visibility() != YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
+        if (request.filter().visibility() != FederatedQuery::Acl::VISIBILITY_UNSPECIFIED) {
             queryBuilder.AddInt64("visibility", request.filter().visibility());
             filters.push_back("`" VISIBILITY_COLUMN_NAME "` = $visibility");
         }
@@ -239,28 +239,28 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
-        YandexQuery::ListBindingsResult result;
+        FederatedQuery::ListBindingsResult result;
         TResultSetParser parser(resultSets->front());
         while (parser.TryNextRow()) {
-            YandexQuery::Binding binding;
+            FederatedQuery::Binding binding;
             if (!binding.ParseFromString(*parser.ColumnParser(BINDING_COLUMN_NAME).GetOptionalString())) {
                 ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for binding. Please contact internal support";
             }
-            YandexQuery::BriefBinding& briefBinding = *result.add_binding();
+            FederatedQuery::BriefBinding& briefBinding = *result.add_binding();
             briefBinding.set_name(binding.content().name());
             briefBinding.set_connection_id(binding.content().connection_id());
             *briefBinding.mutable_meta() = binding.meta();
             switch (binding.content().setting().binding_case()) {
-            case YandexQuery::BindingSetting::kDataStreams: {
-                briefBinding.set_type(YandexQuery::BindingSetting::DATA_STREAMS);
+            case FederatedQuery::BindingSetting::kDataStreams: {
+                briefBinding.set_type(FederatedQuery::BindingSetting::DATA_STREAMS);
                 break;
             }
-            case YandexQuery::BindingSetting::kObjectStorage: {
-                briefBinding.set_type(YandexQuery::BindingSetting::OBJECT_STORAGE);
+            case FederatedQuery::BindingSetting::kObjectStorage: {
+                briefBinding.set_type(FederatedQuery::BindingSetting::OBJECT_STORAGE);
                 break;
             }
             // Do not replace with default. Adding a new binding should cause a compilation error
-            case YandexQuery::BindingSetting::BINDING_NOT_SET:
+            case FederatedQuery::BindingSetting::BINDING_NOT_SET:
             break;
             }
             briefBinding.set_visibility(binding.content().acl().visibility());
@@ -273,7 +273,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
         return result;
     };
 
-    auto success = SendResponse<TEvControlPlaneStorage::TEvListBindingsResponse, YandexQuery::ListBindingsResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvListBindingsResponse, FederatedQuery::ListBindingsResult>(
         MakeLogPrefix(scope, user) + "ListBindingsRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -299,7 +299,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBin
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_BINDING, RTC_DESCRIBE_BINDING);
     requestCounters.IncInFly();
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::DescribeBindingRequest& request = event.Request;
+    const FederatedQuery::DescribeBindingRequest& request = event.Request;
     const TString bindingId = request.binding_id();
     const TString user = event.User;
     const TString token = event.Token;
@@ -348,7 +348,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBin
             ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the id binding or your access rights";
         }
 
-        YandexQuery::DescribeBindingResult result;
+        FederatedQuery::DescribeBindingResult result;
         if (!result.mutable_binding()->ParseFromString(*parser.ColumnParser(BINDING_COLUMN_NAME).GetOptionalString())) {
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for binding. Please contact internal support";
         }
@@ -360,7 +360,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBin
         return result;
     };
 
-    auto success = SendResponse<TEvControlPlaneStorage::TEvDescribeBindingResponse, YandexQuery::DescribeBindingResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvDescribeBindingResponse, FederatedQuery::DescribeBindingResult>(
         MakeLogPrefix(scope, user, bindingId) + "DescribeBindingRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -386,7 +386,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_MODIFY_BINDING, RTC_MODIFY_BINDING);
     requestCounters.IncInFly();
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::ModifyBindingRequest& request = event.Request;
+    const FederatedQuery::ModifyBindingRequest& request = event.Request;
     const TString bindingId = request.binding_id();
     const TString user = event.User;
     const TString token = event.Token;
@@ -429,13 +429,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
     );
 
-    std::shared_ptr<std::pair<YandexQuery::ModifyBindingResult, TAuditDetails<YandexQuery::Binding>>> response = std::make_shared<std::pair<YandexQuery::ModifyBindingResult, TAuditDetails<YandexQuery::Binding>>>();
+    std::shared_ptr<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>> response = std::make_shared<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
     auto prepareParams = [=, config=Config](const TVector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
-        YandexQuery::Binding binding;
+        FederatedQuery::Binding binding;
         {
             TResultSetParser parser(resultSets.front());
             if (!parser.TryNextRow()) {
@@ -447,18 +447,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             }
         }
 
-        YandexQuery::Acl::Visibility connectionVisibility = YandexQuery::Acl::VISIBILITY_UNSPECIFIED;
+        FederatedQuery::Acl::Visibility connectionVisibility = FederatedQuery::Acl::VISIBILITY_UNSPECIFIED;
         {
             TResultSetParser parser(resultSets.back());
             if (!parser.TryNextRow()) {
                 ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the connectin id or your access rights";
             }
 
-            connectionVisibility = static_cast<YandexQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(YandexQuery::Acl::VISIBILITY_UNSPECIFIED));
+            connectionVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
         }
 
-        const YandexQuery::Acl::Visibility requestBindingVisibility = request.content().acl().visibility();
-        if (requestBindingVisibility == YandexQuery::Acl::SCOPE && connectionVisibility == YandexQuery::Acl::PRIVATE) {
+        const FederatedQuery::Acl::Visibility requestBindingVisibility = request.content().acl().visibility();
+        if (requestBindingVisibility == FederatedQuery::Acl::SCOPE && connectionVisibility == FederatedQuery::Acl::PRIVATE) {
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility";
         }
 
@@ -480,7 +480,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding type cannot be changed. Please specify the same binding type";
         }
 
-        if (binding.content().acl().visibility() == YandexQuery::Acl::SCOPE && requestBindingVisibility == YandexQuery::Acl::PRIVATE) {
+        if (binding.content().acl().visibility() == FederatedQuery::Acl::SCOPE && requestBindingVisibility == FederatedQuery::Acl::PRIVATE) {
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new binding with visibility PRIVATE";
         }
 
@@ -490,7 +490,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
 
         content = request.content();
 
-        YandexQuery::Internal::BindingInternal bindingInternal;
+        FederatedQuery::Internal::BindingInternal bindingInternal;
         response->second.After.ConstructInPlace().CopyFrom(binding);
         response->second.CloudId = bindingInternal.cloud_id();
 
@@ -557,7 +557,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendResponse<TEvControlPlaneStorage::TEvModifyBindingResponse, YandexQuery::ModifyBindingResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvModifyBindingResponse, FederatedQuery::ModifyBindingResult>(
         MakeLogPrefix(scope, user, bindingId) + "ModifyBindingRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -583,7 +583,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_BINDING, RTC_DELETE_BINDING);
     requestCounters.IncInFly();
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::DeleteBindingRequest& request = event.Request;
+    const FederatedQuery::DeleteBindingRequest& request = event.Request;
     const TString user = event.User;
     const TString token = event.Token;
     const TString bindingId = request.binding_id();
@@ -615,7 +615,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
         return;
     }
 
-    std::shared_ptr<std::pair<YandexQuery::DeleteBindingResult, TAuditDetails<YandexQuery::Binding>>> response = std::make_shared<std::pair<YandexQuery::DeleteBindingResult, TAuditDetails<YandexQuery::Binding>>>();
+    std::shared_ptr<std::pair<FederatedQuery::DeleteBindingResult, TAuditDetails<FederatedQuery::Binding>>> response = std::make_shared<std::pair<FederatedQuery::DeleteBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DeleteBinding");
     queryBuilder.AddString("scope", scope);
@@ -668,7 +668,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = Write(query.Sql, query.Params, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendResponse<TEvControlPlaneStorage::TEvDeleteBindingResponse, YandexQuery::DeleteBindingResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvDeleteBindingResponse, FederatedQuery::DeleteBindingResult>(
         MakeLogPrefix(scope, user, bindingId) + "DeleteBindingRequest",
         NActors::TActivationContext::ActorSystem(),
         result,

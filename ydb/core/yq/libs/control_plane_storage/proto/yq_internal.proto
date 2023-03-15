@@ -1,15 +1,15 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-package YandexQuery.Internal;
+package FederatedQuery.Internal;
 option java_package = "com.yandex.query.internal";
 option java_outer_classname = "YandexQueryInternalProtos";
 
 import "ydb/library/yql/providers/dq/api/protos/service.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-import "ydb/public/api/protos/yq.proto";
 import "ydb/core/yq/libs/protos/fq_private.proto";
+import "ydb/public/api/protos/draft/fq.proto";
 
 import "google/protobuf/duration.proto";
 
@@ -22,9 +22,9 @@ message QueryInternal {
     repeated NYql.NDqProto.TDqTask task = 2; // deprecated and should not be used, will be removed in future
     repeated Yql.DqsProto.TAttr settings = 3;
     repeated Consumer consumer = 4;
-    repeated YandexQuery.Connection connection = 5;
-    repeated YandexQuery.Binding binding = 6;
-    YandexQuery.QueryAction action = 7;
+    repeated FederatedQuery.Connection connection = 5;
+    repeated FederatedQuery.Binding binding = 6;
+    FederatedQuery.QueryAction action = 7;
     string ast = 8; // deprecated and should not be used, will be removed in future
     ExecuteMode execute_mode = 9;
     StateLoadMode state_load_mode = 10;

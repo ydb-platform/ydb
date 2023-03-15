@@ -49,13 +49,13 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
         TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
         ::NMonitoring::TDynamicCounterPtr Counters;
 
-        ERequestTypeScope ToType(YandexQuery::ConnectionSetting::ConnectionCase connectionCase) {
+        ERequestTypeScope ToType(FederatedQuery::ConnectionSetting::ConnectionCase connectionCase) {
             switch (connectionCase) {
-            case YandexQuery::ConnectionSetting::kDataStreams:
+            case FederatedQuery::ConnectionSetting::kDataStreams:
                 return RTS_TEST_DATA_STREAMS_CONNECTION;
-            case YandexQuery::ConnectionSetting::kObjectStorage:
+            case FederatedQuery::ConnectionSetting::kObjectStorage:
                 return RTS_TEST_OBJECT_STORAGE_CONNECTION;
-            case YandexQuery::ConnectionSetting::kMonitoring:
+            case FederatedQuery::ConnectionSetting::kMonitoring:
                 return RTS_TEST_MONITORING_CONNECTION;
             default:
                 return RTS_TEST_UNSUPPORTED_CONNECTION;
@@ -67,7 +67,7 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
             : Counters(counters)
         {}
 
-        TTestConnectionRequestCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, YandexQuery::ConnectionSetting::ConnectionCase connectionCase) {
+        TTestConnectionRequestCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, FederatedQuery::ConnectionSetting::ConnectionCase connectionCase) {
             ERequestTypeScope type = ToType(connectionCase);
             TMetricsScope key{cloudId, scope};
             auto it = ScopeCounters.find(key);
@@ -161,7 +161,7 @@ public:
         const TString& scope = ev->Get()->Scope;
         const TString& user = ev->Get()->User;
         const TString& token = ev->Get()->Token;
-        YandexQuery::TestConnectionRequest request = std::move(ev->Get()->Request);
+        FederatedQuery::TestConnectionRequest request = std::move(ev->Get()->Request);
         TTestConnectionRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, request.setting().connection_case());
         if (issues) {
             requestCounters->Error->Inc();
@@ -172,7 +172,7 @@ public:
 
         TC_LOG_T("TestConnectionRequest: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << request.DebugString());
         switch (request.setting().connection_case()) {
-            case YandexQuery::ConnectionSetting::kDataStreams: {
+            case FederatedQuery::ConnectionSetting::kDataStreams: {
                 Register(CreateTestDataStreamsConnectionActor(
                                 *request.mutable_setting()->mutable_data_streams(),
                                 CommonConfig, DbResolver, ev->Sender,
@@ -182,7 +182,7 @@ public:
                                 Signer, requestCounters));
                 break;
             }
-            case YandexQuery::ConnectionSetting::kObjectStorage: {
+            case FederatedQuery::ConnectionSetting::kObjectStorage: {
                 Register(CreateTestObjectStorageConnectionActor(
                                 *request.mutable_setting()->mutable_object_storage(),
                                 CommonConfig, ev->Sender,
@@ -191,7 +191,7 @@ public:
                                 Signer, requestCounters));
                 break;
             }
-            case YandexQuery::ConnectionSetting::kMonitoring: {
+            case FederatedQuery::ConnectionSetting::kMonitoring: {
                 TString monitoringEndpoint = CommonConfig.GetMonitoringEndpoint();
                 Register(CreateTestMonitoringConnectionActor(
                                 *request.mutable_setting()->mutable_monitoring(),

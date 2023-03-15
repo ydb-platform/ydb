@@ -12,7 +12,7 @@
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/quota_manager/quota_manager.h>
 
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <util/digest/multi.h>
@@ -71,7 +71,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
                     [=](TQuotaCountExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
                         TResultSetParser parser(resultSets.front());
                         if (parser.TryNextRow()) {
-                            YandexQuery::Internal::QueryInternal internal;
+                            FederatedQuery::Internal::QueryInternal internal;
                             ParseProto(executer, internal, parser, INTERNAL_COLUMN_NAME);
                             executer.State[internal.cloud_id()] += count;
                         }

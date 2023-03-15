@@ -511,14 +511,14 @@ public:
     }
 };
 
-class TCreateQueryRequestActor : public TRequestActor<YandexQuery::CreateQueryRequest,
+class TCreateQueryRequestActor : public TRequestActor<FederatedQuery::CreateQueryRequest,
                                                       TEvControlPlaneStorage::TEvCreateQueryRequest,
                                                       TEvControlPlaneStorage::TEvCreateQueryResponse,
                                                       TEvControlPlaneProxy::TEvCreateQueryResponse>
 {
     bool QuoterResourceCreated = false;
 public:
-    using TBaseRequestActor = TRequestActor<YandexQuery::CreateQueryRequest,
+    using TBaseRequestActor = TRequestActor<FederatedQuery::CreateQueryRequest,
                                             TEvControlPlaneStorage::TEvCreateQueryRequest,
                                             TEvControlPlaneStorage::TEvCreateQueryResponse,
                                             TEvControlPlaneProxy::TEvCreateQueryResponse>;
@@ -837,7 +837,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::CreateQueryRequest request = ev->Get()->Request;
+        FederatedQuery::CreateQueryRequest request = ev->Get()->Request;
         CPP_LOG_T("CreateQueryRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -890,7 +890,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvListQueriesRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::ListQueriesRequest request = ev->Get()->Request;
+        FederatedQuery::ListQueriesRequest request = ev->Get()->Request;
         CPP_LOG_T("ListQueriesRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -931,7 +931,7 @@ private:
             | TPermissions::TPermission::VIEW_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::ListQueriesRequest,
+        Register(new TRequestActor<FederatedQuery::ListQueriesRequest,
                                    TEvControlPlaneStorage::TEvListQueriesRequest,
                                    TEvControlPlaneStorage::TEvListQueriesResponse,
                                    TEvControlPlaneProxy::TEvListQueriesResponse>
@@ -945,7 +945,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvDescribeQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::DescribeQueryRequest request = ev->Get()->Request;
+        FederatedQuery::DescribeQueryRequest request = ev->Get()->Request;
         CPP_LOG_T("DescribeQueryRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -989,7 +989,7 @@ private:
             | TPermissions::VIEW_QUERY_TEXT
         };
 
-        Register(new TRequestActor<YandexQuery::DescribeQueryRequest,
+        Register(new TRequestActor<FederatedQuery::DescribeQueryRequest,
                                    TEvControlPlaneStorage::TEvDescribeQueryRequest,
                                    TEvControlPlaneStorage::TEvDescribeQueryResponse,
                                    TEvControlPlaneProxy::TEvDescribeQueryResponse>
@@ -1003,7 +1003,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvGetQueryStatusRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::GetQueryStatusRequest request = ev->Get()->Request;
+        FederatedQuery::GetQueryStatusRequest request = ev->Get()->Request;
         CPP_LOG_T("GetStatusRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1045,7 +1045,7 @@ private:
             | TPermissions::TPermission::VIEW_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::GetQueryStatusRequest,
+        Register(new TRequestActor<FederatedQuery::GetQueryStatusRequest,
                                    TEvControlPlaneStorage::TEvGetQueryStatusRequest,
                                    TEvControlPlaneStorage::TEvGetQueryStatusResponse,
                                    TEvControlPlaneProxy::TEvGetQueryStatusResponse>
@@ -1059,7 +1059,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvModifyQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::ModifyQueryRequest request = ev->Get()->Request;
+        FederatedQuery::ModifyQueryRequest request = ev->Get()->Request;
         CPP_LOG_T("ModifyQueryRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1104,7 +1104,7 @@ private:
             | TPermissions::TPermission::MANAGE_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::ModifyQueryRequest,
+        Register(new TRequestActor<FederatedQuery::ModifyQueryRequest,
                                    TEvControlPlaneStorage::TEvModifyQueryRequest,
                                    TEvControlPlaneStorage::TEvModifyQueryResponse,
                                    TEvControlPlaneProxy::TEvModifyQueryResponse>
@@ -1118,7 +1118,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvDeleteQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::DeleteQueryRequest request = ev->Get()->Request;
+        FederatedQuery::DeleteQueryRequest request = ev->Get()->Request;
         CPP_LOG_T("DeleteQueryRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1160,7 +1160,7 @@ private:
             | TPermissions::TPermission::MANAGE_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::DeleteQueryRequest,
+        Register(new TRequestActor<FederatedQuery::DeleteQueryRequest,
                                    TEvControlPlaneStorage::TEvDeleteQueryRequest,
                                    TEvControlPlaneStorage::TEvDeleteQueryResponse,
                                    TEvControlPlaneProxy::TEvDeleteQueryResponse>
@@ -1174,7 +1174,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvControlQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::ControlQueryRequest request = ev->Get()->Request;
+        FederatedQuery::ControlQueryRequest request = ev->Get()->Request;
         CPP_LOG_T("ControlQueryRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1216,7 +1216,7 @@ private:
             | TPermissions::TPermission::MANAGE_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::ControlQueryRequest,
+        Register(new TRequestActor<FederatedQuery::ControlQueryRequest,
                                    TEvControlPlaneStorage::TEvControlQueryRequest,
                                    TEvControlPlaneStorage::TEvControlQueryResponse,
                                    TEvControlPlaneProxy::TEvControlQueryResponse>
@@ -1230,7 +1230,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvGetResultDataRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::GetResultDataRequest request = ev->Get()->Request;
+        FederatedQuery::GetResultDataRequest request = ev->Get()->Request;
         CPP_LOG_T("GetResultDataRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1275,7 +1275,7 @@ private:
             | TPermissions::TPermission::VIEW_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::GetResultDataRequest,
+        Register(new TRequestActor<FederatedQuery::GetResultDataRequest,
                                    TEvControlPlaneStorage::TEvGetResultDataRequest,
                                    TEvControlPlaneStorage::TEvGetResultDataResponse,
                                    TEvControlPlaneProxy::TEvGetResultDataResponse>
@@ -1289,7 +1289,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvListJobsRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::ListJobsRequest request = ev->Get()->Request;
+        FederatedQuery::ListJobsRequest request = ev->Get()->Request;
         CPP_LOG_T("ListJobsRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1331,7 +1331,7 @@ private:
             | TPermissions::TPermission::VIEW_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::ListJobsRequest,
+        Register(new TRequestActor<FederatedQuery::ListJobsRequest,
                                    TEvControlPlaneStorage::TEvListJobsRequest,
                                    TEvControlPlaneStorage::TEvListJobsResponse,
                                    TEvControlPlaneProxy::TEvListJobsResponse>
@@ -1345,7 +1345,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvDescribeJobRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::DescribeJobRequest request = ev->Get()->Request;
+        FederatedQuery::DescribeJobRequest request = ev->Get()->Request;
         CPP_LOG_T("DescribeJobRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1389,7 +1389,7 @@ private:
             | TPermissions::VIEW_QUERY_TEXT
         };
 
-        Register(new TRequestActor<YandexQuery::DescribeJobRequest,
+        Register(new TRequestActor<FederatedQuery::DescribeJobRequest,
                                    TEvControlPlaneStorage::TEvDescribeJobRequest,
                                    TEvControlPlaneStorage::TEvDescribeJobResponse,
                                    TEvControlPlaneProxy::TEvDescribeJobResponse>
@@ -1403,7 +1403,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::CreateConnectionRequest request = ev->Get()->Request;
+        FederatedQuery::CreateConnectionRequest request = ev->Get()->Request;
         CPP_LOG_T("CreateConnectionRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1448,7 +1448,7 @@ private:
             TPermissions::TPermission::MANAGE_PUBLIC
         };
 
-        Register(new TRequestActor<YandexQuery::CreateConnectionRequest,
+        Register(new TRequestActor<FederatedQuery::CreateConnectionRequest,
                                    TEvControlPlaneStorage::TEvCreateConnectionRequest,
                                    TEvControlPlaneStorage::TEvCreateConnectionResponse,
                                    TEvControlPlaneProxy::TEvCreateConnectionResponse>
@@ -1461,7 +1461,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvListConnectionsRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::ListConnectionsRequest request = ev->Get()->Request;
+        FederatedQuery::ListConnectionsRequest request = ev->Get()->Request;
         CPP_LOG_T("ListConnectionsRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1502,7 +1502,7 @@ private:
             | TPermissions::TPermission::VIEW_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::ListConnectionsRequest,
+        Register(new TRequestActor<FederatedQuery::ListConnectionsRequest,
                                    TEvControlPlaneStorage::TEvListConnectionsRequest,
                                    TEvControlPlaneStorage::TEvListConnectionsResponse,
                                    TEvControlPlaneProxy::TEvListConnectionsResponse>
@@ -1516,7 +1516,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvDescribeConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::DescribeConnectionRequest request = ev->Get()->Request;
+        FederatedQuery::DescribeConnectionRequest request = ev->Get()->Request;
         CPP_LOG_T("DescribeConnectionRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1558,7 +1558,7 @@ private:
             | TPermissions::TPermission::VIEW_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::DescribeConnectionRequest,
+        Register(new TRequestActor<FederatedQuery::DescribeConnectionRequest,
                                    TEvControlPlaneStorage::TEvDescribeConnectionRequest,
                                    TEvControlPlaneStorage::TEvDescribeConnectionResponse,
                                    TEvControlPlaneProxy::TEvDescribeConnectionResponse>
@@ -1572,7 +1572,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::ModifyConnectionRequest request = ev->Get()->Request;
+        FederatedQuery::ModifyConnectionRequest request = ev->Get()->Request;
         CPP_LOG_T("ModifyConnectionRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1619,7 +1619,7 @@ private:
             | TPermissions::TPermission::MANAGE_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::ModifyConnectionRequest,
+        Register(new TRequestActor<FederatedQuery::ModifyConnectionRequest,
                                    TEvControlPlaneStorage::TEvModifyConnectionRequest,
                                    TEvControlPlaneStorage::TEvModifyConnectionResponse,
                                    TEvControlPlaneProxy::TEvModifyConnectionResponse>
@@ -1633,7 +1633,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::DeleteConnectionRequest request = ev->Get()->Request;
+        FederatedQuery::DeleteConnectionRequest request = ev->Get()->Request;
         CPP_LOG_T("DeleteConnectionRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1675,7 +1675,7 @@ private:
             | TPermissions::TPermission::MANAGE_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::DeleteConnectionRequest,
+        Register(new TRequestActor<FederatedQuery::DeleteConnectionRequest,
                                    TEvControlPlaneStorage::TEvDeleteConnectionRequest,
                                    TEvControlPlaneStorage::TEvDeleteConnectionResponse,
                                    TEvControlPlaneProxy::TEvDeleteConnectionResponse>
@@ -1689,7 +1689,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvTestConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::TestConnectionRequest request = ev->Get()->Request;
+        FederatedQuery::TestConnectionRequest request = ev->Get()->Request;
         CPP_LOG_T("TestConnectionRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1730,7 +1730,7 @@ private:
             return;
         }
 
-        Register(new TRequestActor<YandexQuery::TestConnectionRequest,
+        Register(new TRequestActor<FederatedQuery::TestConnectionRequest,
                                    TEvTestConnection::TEvTestConnectionRequest,
                                    TEvTestConnection::TEvTestConnectionResponse,
                                    TEvControlPlaneProxy::TEvTestConnectionResponse>
@@ -1743,7 +1743,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::CreateBindingRequest request = ev->Get()->Request;
+        FederatedQuery::CreateBindingRequest request = ev->Get()->Request;
         CPP_LOG_T("CreateBindingRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1783,7 +1783,7 @@ private:
             TPermissions::TPermission::MANAGE_PUBLIC
         };
 
-        Register(new TRequestActor<YandexQuery::CreateBindingRequest,
+        Register(new TRequestActor<FederatedQuery::CreateBindingRequest,
                                    TEvControlPlaneStorage::TEvCreateBindingRequest,
                                    TEvControlPlaneStorage::TEvCreateBindingResponse,
                                    TEvControlPlaneProxy::TEvCreateBindingResponse>
@@ -1796,7 +1796,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvListBindingsRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::ListBindingsRequest request = ev->Get()->Request;
+        FederatedQuery::ListBindingsRequest request = ev->Get()->Request;
         CPP_LOG_T("ListBindingsRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1837,7 +1837,7 @@ private:
             | TPermissions::TPermission::VIEW_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::ListBindingsRequest,
+        Register(new TRequestActor<FederatedQuery::ListBindingsRequest,
                                    TEvControlPlaneStorage::TEvListBindingsRequest,
                                    TEvControlPlaneStorage::TEvListBindingsResponse,
                                    TEvControlPlaneProxy::TEvListBindingsResponse>
@@ -1851,7 +1851,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvDescribeBindingRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::DescribeBindingRequest request = ev->Get()->Request;
+        FederatedQuery::DescribeBindingRequest request = ev->Get()->Request;
         CPP_LOG_T("DescribeBindingRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1893,7 +1893,7 @@ private:
             | TPermissions::TPermission::VIEW_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::DescribeBindingRequest,
+        Register(new TRequestActor<FederatedQuery::DescribeBindingRequest,
                                    TEvControlPlaneStorage::TEvDescribeBindingRequest,
                                    TEvControlPlaneStorage::TEvDescribeBindingResponse,
                                    TEvControlPlaneProxy::TEvDescribeBindingResponse>
@@ -1907,7 +1907,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::ModifyBindingRequest request = ev->Get()->Request;
+        FederatedQuery::ModifyBindingRequest request = ev->Get()->Request;
         CPP_LOG_T("ModifyBindingRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -1949,7 +1949,7 @@ private:
             | TPermissions::TPermission::MANAGE_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::ModifyBindingRequest,
+        Register(new TRequestActor<FederatedQuery::ModifyBindingRequest,
                                    TEvControlPlaneStorage::TEvModifyBindingRequest,
                                    TEvControlPlaneStorage::TEvModifyBindingResponse,
                                    TEvControlPlaneProxy::TEvModifyBindingResponse>
@@ -1963,7 +1963,7 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
-        YandexQuery::DeleteBindingRequest request = ev->Get()->Request;
+        FederatedQuery::DeleteBindingRequest request = ev->Get()->Request;
         CPP_LOG_T("DeleteBindingRequest: " << request.DebugString());
         const TString cloudId = ev->Get()->CloudId;
         const TString folderId = ev->Get()->FolderId;
@@ -2005,7 +2005,7 @@ private:
             | TPermissions::TPermission::MANAGE_PRIVATE
         };
 
-        Register(new TRequestActor<YandexQuery::DeleteBindingRequest,
+        Register(new TRequestActor<FederatedQuery::DeleteBindingRequest,
                                    TEvControlPlaneStorage::TEvDeleteBindingRequest,
                                    TEvControlPlaneStorage::TEvDeleteBindingResponse,
                                    TEvControlPlaneProxy::TEvDeleteBindingResponse>

@@ -13,7 +13,7 @@ using namespace NYql;
 
 namespace {
 
-void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const YandexQuery::Binding& binding, const THashMap<TString, YandexQuery::Connection>& connections) {
+void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const FederatedQuery::Binding& binding, const THashMap<TString, FederatedQuery::Connection>& connections) {
     TString clusterType;
     TString path;
     TString format;
@@ -23,7 +23,7 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
     NSc::TValue projection;
     NSc::TValue partitionedBy;
     switch (binding.content().setting().binding_case()) {
-    case YandexQuery::BindingSetting::kDataStreams: {
+    case FederatedQuery::BindingSetting::kDataStreams: {
         clusterType = PqProviderName;
         auto yds = binding.content().setting().data_streams();
         path = yds.stream_name();
@@ -33,7 +33,7 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
         formatSettings = {yds.format_setting().begin(), yds.format_setting().end()};
         break;
     }
-    case YandexQuery::BindingSetting::kObjectStorage: {
+    case FederatedQuery::BindingSetting::kObjectStorage: {
         clusterType = S3ProviderName;
         const auto s3 = binding.content().setting().object_storage();
         if (s3.subset().empty()) {
@@ -53,7 +53,7 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
         break;
     }
 
-    case YandexQuery::BindingSetting::BINDING_NOT_SET: {
+    case FederatedQuery::BindingSetting::BINDING_NOT_SET: {
         throw yexception() << "BINDING_NOT_SET case for binding " << binding.meta().id() << ", name " << binding.content().name();
     }
     // Do not add default. Adding a new binding should cause a compilation error
@@ -90,7 +90,7 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
 
 } //namespace
 
-void AddTableBindingsFromBindings(const TVector<YandexQuery::Binding>& bindings, const THashMap<TString, YandexQuery::Connection>& connections, NSQLTranslation::TTranslationSettings& sqlSettings) {
+void AddTableBindingsFromBindings(const TVector<FederatedQuery::Binding>& bindings, const THashMap<TString, FederatedQuery::Connection>& connections, NSQLTranslation::TTranslationSettings& sqlSettings) {
     for (const auto& binding : bindings) {
         FillBinding(sqlSettings, binding, connections);
     }

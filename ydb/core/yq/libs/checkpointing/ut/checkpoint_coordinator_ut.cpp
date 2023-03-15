@@ -100,7 +100,7 @@ struct TTestBootstrap : public TTestActorRuntime {
             Settings,
             Counters,
             NProto::TGraphParams(),
-            YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
+            FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
             {},
             //
             "my-graph-id",

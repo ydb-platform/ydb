@@ -4,7 +4,7 @@
 
 #include <ydb/core/yq/libs/config/protos/common.pb.h>
 #include <ydb/core/yq/libs/config/protos/control_plane_storage.pb.h>
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
@@ -21,8 +21,8 @@ struct TControlPlaneStorageConfig {
     TDuration AnalyticsRetryCounterUpdateTime;
     TDuration StreamingRetryCounterUpdateTime;
     TDuration TaskLeaseTtl;
-    TSet<YandexQuery::ConnectionSetting::ConnectionCase> AvailableConnections;
-    TSet<YandexQuery::BindingSetting::BindingCase> AvailableBindings;
+    TSet<FederatedQuery::ConnectionSetting::ConnectionCase> AvailableConnections;
+    TSet<FederatedQuery::BindingSetting::BindingCase> AvailableBindings;
     THashMap<ui64, TRetryPolicyItem> RetryPolicies;
     TRetryPolicyItem TaskLeaseRetryPolicy;
     TDuration QuotaTtl;

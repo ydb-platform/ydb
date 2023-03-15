@@ -131,7 +131,7 @@ public:
         const TString& sql,
         const TString& sessionId,
         const NSQLTranslation::TTranslationSettings& sqlSettings,
-        YandexQuery::ExecuteMode executeMode
+        FederatedQuery::ExecuteMode executeMode
     )
         : RunActorId(runActorId)
         , FunctionRegistry(functionRegistry)
@@ -162,7 +162,7 @@ public:
                 return;
             }
 
-            if (ExecuteMode == YandexQuery::ExecuteMode::PARSE) {
+            if (ExecuteMode == FederatedQuery::ExecuteMode::PARSE) {
                 SendStatusAndDie(TProgram::TStatus::Ok);
                 return;
             }
@@ -175,7 +175,7 @@ public:
                 return;
             }
 
-            if (ExecuteMode == YandexQuery::ExecuteMode::COMPILE) {
+            if (ExecuteMode == FederatedQuery::ExecuteMode::COMPILE) {
                 SendStatusAndDie(TProgram::TStatus::Ok);
                 return;
             }
@@ -186,13 +186,13 @@ public:
         // next phases can be async: optimize, validate, run
         TProgram::TFutureStatus futureStatus;
         switch (ExecuteMode) {
-        case YandexQuery::ExecuteMode::EXPLAIN:
+        case FederatedQuery::ExecuteMode::EXPLAIN:
             futureStatus = Program->OptimizeAsync("");
             break;
-        case YandexQuery::ExecuteMode::VALIDATE:
+        case FederatedQuery::ExecuteMode::VALIDATE:
             futureStatus = Program->ValidateAsync("");
             break;
-        case YandexQuery::ExecuteMode::RUN:
+        case FederatedQuery::ExecuteMode::RUN:
             futureStatus = Program->RunAsync("");
             break;
         default:
@@ -257,7 +257,7 @@ private:
     const TString Sql;
     const TString SessionId;
     const NSQLTranslation::TTranslationSettings SqlSettings;
-    const YandexQuery::ExecuteMode ExecuteMode;
+    const FederatedQuery::ExecuteMode ExecuteMode;
     bool Compiled = false;
 };
 
@@ -282,7 +282,7 @@ public:
         , Params(std::move(params))
         , CreatedAt(Params.CreatedAt)
         , QueryCounters(queryCounters)
-        , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.Config.GetCheckpointCoordinator().GetEnabled())
+        , EnableCheckpointCoordinator(Params.QueryType == FederatedQuery::QueryContent::STREAMING && Params.Config.GetCheckpointCoordinator().GetEnabled())
         , MaxTasksPerStage(Params.Config.GetCommon().GetMaxTasksPerStage() ? Params.Config.GetCommon().GetMaxTasksPerStage() : 500)
         , MaxTasksPerOperation(Params.Config.GetCommon().GetMaxTasksPerOperation() ? Params.Config.GetCommon().GetMaxTasksPerOperation() : 40)
         , Compressor(Params.Config.GetCommon().GetQueryArtifactsCompressionMethod(), Params.Config.GetCommon().GetQueryArtifactsCompressionMinSize())
@@ -293,7 +293,7 @@ public:
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
 
     void Bootstrap() {
-        LOG_D("Start run actor. Compute state: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        LOG_D("Start run actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
 
         FillConnections();
 
@@ -433,13 +433,13 @@ private:
         if (!EvalInfos.empty()) {
             for (auto& pair : EvalInfos) {
                 auto& info = pair.second;
-                Send(info.ControlId, new NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, YandexQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus)));
+                Send(info.ControlId, new NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, FederatedQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus)));
             }
         }
 
         if (ControlId) {
             LOG_D("Cancel running query");
-            Send(ControlId, new NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, YandexQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus)));
+            Send(ControlId, new NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, FederatedQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus)));
         } else {
             QueryResponseArrived = true;
         }
@@ -452,7 +452,7 @@ private:
     }
 
     void AbortByExecutionTimeout() {
-        Abort("Execution time limit exceeded", YandexQuery::QueryMeta::ABORTED_BY_SYSTEM);
+        Abort("Execution time limit exceeded", FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM);
     }
 
     bool TimeLimitExceeded() {
@@ -536,27 +536,27 @@ private:
         }
 
         switch (Params.Status) {
-        case YandexQuery::QueryMeta::ABORTING_BY_USER:
-        case YandexQuery::QueryMeta::ABORTING_BY_SYSTEM:
-        case YandexQuery::QueryMeta::FAILING:
-        case YandexQuery::QueryMeta::COMPLETING:
+        case FederatedQuery::QueryMeta::ABORTING_BY_USER:
+        case FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM:
+        case FederatedQuery::QueryMeta::FAILING:
+        case FederatedQuery::QueryMeta::COMPLETING:
             FinalizingStatusIsWritten = true;
             Finish(GetFinalStatusFromFinalizingStatus(Params.Status));
             break;
-        case YandexQuery::QueryMeta::STARTING:
+        case FederatedQuery::QueryMeta::STARTING:
             QueryStateUpdateRequest.mutable_resources()->set_rate_limiter(
                 Params.Config.GetRateLimiter().GetEnabled() ? Fq::Private::TaskResources::PREPARE : Fq::Private::TaskResources::NOT_NEEDED);
             QueryStateUpdateRequest.mutable_resources()->set_compilation(Fq::Private::TaskResources::PREPARE);
             // know nothing about read rules yet
-            Params.Status = YandexQuery::QueryMeta::RUNNING; // ???
-            QueryStateUpdateRequest.set_status(YandexQuery::QueryMeta::RUNNING);
+            Params.Status = FederatedQuery::QueryMeta::RUNNING; // ???
+            QueryStateUpdateRequest.set_status(FederatedQuery::QueryMeta::RUNNING);
             // DO NOT break here
-        case YandexQuery::QueryMeta::RESUMING:
-        case YandexQuery::QueryMeta::RUNNING:
+        case FederatedQuery::QueryMeta::RESUMING:
+        case FederatedQuery::QueryMeta::RUNNING:
             ProcessQuery();
             break;
         default:
-            Abort("Fail to start query from unexpected status " + YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status), YandexQuery::QueryMeta::FAILED);
+            Abort("Fail to start query from unexpected status " + FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status), FederatedQuery::QueryMeta::FAILED);
             break;
         }
     }
@@ -573,7 +573,7 @@ private:
         }
 
         if (!Finishing) {
-            Abort("Internal Error", YandexQuery::QueryMeta::FAILED);
+            Abort("Internal Error", FederatedQuery::QueryMeta::FAILED);
             return;
         }
 
@@ -588,8 +588,8 @@ private:
         }
 
         // If target status was successful, change it to failed because we are in internal error handler.
-        if (QueryStateUpdateRequest.status() == YandexQuery::QueryMeta::COMPLETED || QueryStateUpdateRequest.status() == YandexQuery::QueryMeta::PAUSED) {
-            QueryStateUpdateRequest.set_status(YandexQuery::QueryMeta::FAILED);
+        if (QueryStateUpdateRequest.status() == FederatedQuery::QueryMeta::COMPLETED || QueryStateUpdateRequest.status() == FederatedQuery::QueryMeta::PAUSED) {
+            QueryStateUpdateRequest.set_status(FederatedQuery::QueryMeta::FAILED);
             QueryStateUpdateRequest.set_status_code(NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
@@ -598,20 +598,20 @@ private:
 
     void Handle(TEvents::TEvQueryActionResult::TPtr& ev) {
         Action = ev->Get()->Action;
-        LOG_D("New query action received: " << YandexQuery::QueryAction_Name(Action));
+        LOG_D("New query action received: " << FederatedQuery::QueryAction_Name(Action));
         switch (Action) {
-        case YandexQuery::ABORT:
-        case YandexQuery::ABORT_GRACEFULLY: // not fully implemented
+        case FederatedQuery::ABORT:
+        case FederatedQuery::ABORT_GRACEFULLY: // not fully implemented
             // ignore issues in case of controlled abort
-            Finish(YandexQuery::QueryMeta::ABORTED_BY_USER);
+            Finish(FederatedQuery::QueryMeta::ABORTED_BY_USER);
             break;
-        case YandexQuery::PAUSE: // not implemented
-        case YandexQuery::PAUSE_GRACEFULLY: // not implemented
-        case YandexQuery::RESUME: // not implemented
-            Abort(TStringBuilder() << "Unsupported query action: " << YandexQuery::QueryAction_Name(Action), YandexQuery::QueryMeta::FAILED);
+        case FederatedQuery::PAUSE: // not implemented
+        case FederatedQuery::PAUSE_GRACEFULLY: // not implemented
+        case FederatedQuery::RESUME: // not implemented
+            Abort(TStringBuilder() << "Unsupported query action: " << FederatedQuery::QueryAction_Name(Action), FederatedQuery::QueryMeta::FAILED);
             break;
         default:
-            Abort(TStringBuilder() << "Unknown query action: " << YandexQuery::QueryAction_Name(Action), YandexQuery::QueryMeta::FAILED);
+            Abort(TStringBuilder() << "Unknown query action: " << FederatedQuery::QueryAction_Name(Action), FederatedQuery::QueryMeta::FAILED);
             break;
         }
     }
@@ -784,7 +784,7 @@ private:
     bool AbortOnExceedingDqGraphsLimits() {
         TString errorMsg = CheckLimitsOfDqGraphs();
         if (errorMsg) {
-            Abort(errorMsg, YandexQuery::QueryMeta::FAILED, Program->Issues());
+            Abort(errorMsg, FederatedQuery::QueryMeta::FAILED, Program->Issues());
             return true;
         }
         return false;
@@ -937,7 +937,7 @@ private:
 
     void SetLoadFromCheckpointMode() {
         Fq::Private::PingTaskRequest request;
-        request.set_state_load_mode(YandexQuery::FROM_LAST_CHECKPOINT);
+        request.set_state_load_mode(FederatedQuery::FROM_LAST_CHECKPOINT);
         request.mutable_disposition()->mutable_from_last_checkpoint();
 
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SetLoadFromCheckpointModeCookie);
@@ -1063,7 +1063,7 @@ private:
         }
 
         if (Finishing && !result.issues_size()) { // Race between abort and successful finishing. Override with success and provide results to user.
-            FinalQueryStatus = YandexQuery::QueryMeta::COMPLETED;
+            FinalQueryStatus = FederatedQuery::QueryMeta::COMPLETED;
             Issues.Clear();
         }
 
@@ -1200,7 +1200,7 @@ private:
         if (ev->Get()->Issues) {
             AddIssueWithSubIssues("Problems with read rules creation", ev->Get()->Issues);
             LOG_D(Issues.ToOneLineString());
-            Finish(YandexQuery::QueryMeta::FAILED);
+            Finish(FederatedQuery::QueryMeta::FAILED);
         } else {
             QueryStateUpdateRequest.mutable_resources()->set_topic_consumers_state(Fq::Private::TaskResources::READY);
             ProcessQuery();
@@ -1271,7 +1271,7 @@ private:
         if (!ev->Get()->Status.IsSuccess()) {
             AddIssueWithSubIssues("Problems with rate limiter resource creation", ev->Get()->Status.GetIssues());
             LOG_D(Issues.ToOneLineString());
-            Finish(YandexQuery::QueryMeta::FAILED);
+            Finish(FederatedQuery::QueryMeta::FAILED);
         } else {
             Params.Resources.set_rate_limiter_path(ev->Get()->Result.rate_limiter());
             QueryStateUpdateRequest.mutable_resources()->set_rate_limiter_path(ev->Get()->Result.rate_limiter());
@@ -1460,14 +1460,14 @@ private:
         apply("WatermarksIdlePartitions", "true");
 
         switch (Params.QueryType) {
-        case YandexQuery::QueryContent::STREAMING: {
+        case FederatedQuery::QueryContent::STREAMING: {
             // - turn on check that query has one graph.
             apply("_OneGraphPerQuery", "1");
             apply("_TableTimeout", "0");
             apply("_LiteralTimeout", "0");
             break;
         }
-        case YandexQuery::QueryContent::ANALYTICS: {
+        case FederatedQuery::QueryContent::ANALYTICS: {
             apply("AnalyticsHopping", "1");
             const TString queryTimeoutMs = ToString(TDuration::Days(7).MilliSeconds());
             apply("_TableTimeout", queryTimeoutMs);
@@ -1493,84 +1493,84 @@ private:
         }
     }
 
-    YandexQuery::QueryMeta::ComputeStatus GetFinishStatus(bool isOk) const {
+    FederatedQuery::QueryMeta::ComputeStatus GetFinishStatus(bool isOk) const {
         if (isOk) {
-            return YandexQuery::QueryMeta::COMPLETED;
+            return FederatedQuery::QueryMeta::COMPLETED;
         }
 
         switch (Action) {
-        case YandexQuery::PAUSE:
-        case YandexQuery::PAUSE_GRACEFULLY:
-        case YandexQuery::ABORT:
-        case YandexQuery::ABORT_GRACEFULLY:
-            return YandexQuery::QueryMeta::ABORTED_BY_USER;
-        case YandexQuery::RESUME:
-            return YandexQuery::QueryMeta::ABORTED_BY_SYSTEM;
-        case YandexQuery::QUERY_ACTION_UNSPECIFIED:
-        case YandexQuery::QueryAction_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case YandexQuery::QueryAction_INT_MAX_SENTINEL_DO_NOT_USE_:
-            return YandexQuery::QueryMeta::FAILED;
+        case FederatedQuery::PAUSE:
+        case FederatedQuery::PAUSE_GRACEFULLY:
+        case FederatedQuery::ABORT:
+        case FederatedQuery::ABORT_GRACEFULLY:
+            return FederatedQuery::QueryMeta::ABORTED_BY_USER;
+        case FederatedQuery::RESUME:
+            return FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM;
+        case FederatedQuery::QUERY_ACTION_UNSPECIFIED:
+        case FederatedQuery::QueryAction_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case FederatedQuery::QueryAction_INT_MAX_SENTINEL_DO_NOT_USE_:
+            return FederatedQuery::QueryMeta::FAILED;
         }
     }
 
-    YandexQuery::QueryMeta::ComputeStatus GetFinalizingStatus() { // Status before final. "*ING" one.
+    FederatedQuery::QueryMeta::ComputeStatus GetFinalizingStatus() { // Status before final. "*ING" one.
         switch (FinalQueryStatus) {
-        case YandexQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case YandexQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
-        case YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED:
-        case YandexQuery::QueryMeta::STARTING:
-        case YandexQuery::QueryMeta::ABORTING_BY_USER:
-        case YandexQuery::QueryMeta::ABORTING_BY_SYSTEM:
-        case YandexQuery::QueryMeta::RESUMING:
-        case YandexQuery::QueryMeta::RUNNING:
-        case YandexQuery::QueryMeta::COMPLETING:
-        case YandexQuery::QueryMeta::FAILING:
-        case YandexQuery::QueryMeta::PAUSING: {
+        case FederatedQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case FederatedQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
+        case FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED:
+        case FederatedQuery::QueryMeta::STARTING:
+        case FederatedQuery::QueryMeta::ABORTING_BY_USER:
+        case FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM:
+        case FederatedQuery::QueryMeta::RESUMING:
+        case FederatedQuery::QueryMeta::RUNNING:
+        case FederatedQuery::QueryMeta::COMPLETING:
+        case FederatedQuery::QueryMeta::FAILING:
+        case FederatedQuery::QueryMeta::PAUSING: {
             TStringBuilder msg;
-            msg << "\"" << YandexQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus) << "\" is not a final status for query";
+            msg << "\"" << FederatedQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus) << "\" is not a final status for query";
             Issues.AddIssue(msg);
             throw yexception() << msg;
         }
 
-        case YandexQuery::QueryMeta::ABORTED_BY_USER:
-            return YandexQuery::QueryMeta::ABORTING_BY_USER;
-        case YandexQuery::QueryMeta::ABORTED_BY_SYSTEM:
-            return YandexQuery::QueryMeta::ABORTING_BY_SYSTEM;
-        case YandexQuery::QueryMeta::COMPLETED:
-            return YandexQuery::QueryMeta::COMPLETING;
-        case YandexQuery::QueryMeta::FAILED:
-            return YandexQuery::QueryMeta::FAILING;
-        case YandexQuery::QueryMeta::PAUSED:
-            return YandexQuery::QueryMeta::PAUSING;
+        case FederatedQuery::QueryMeta::ABORTED_BY_USER:
+            return FederatedQuery::QueryMeta::ABORTING_BY_USER;
+        case FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM:
+            return FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM;
+        case FederatedQuery::QueryMeta::COMPLETED:
+            return FederatedQuery::QueryMeta::COMPLETING;
+        case FederatedQuery::QueryMeta::FAILED:
+            return FederatedQuery::QueryMeta::FAILING;
+        case FederatedQuery::QueryMeta::PAUSED:
+            return FederatedQuery::QueryMeta::PAUSING;
         }
     }
 
-    static YandexQuery::QueryMeta::ComputeStatus GetFinalStatusFromFinalizingStatus(YandexQuery::QueryMeta::ComputeStatus status) {
+    static FederatedQuery::QueryMeta::ComputeStatus GetFinalStatusFromFinalizingStatus(FederatedQuery::QueryMeta::ComputeStatus status) {
         switch (status) {
-        case YandexQuery::QueryMeta::ABORTING_BY_USER:
-            return YandexQuery::QueryMeta::ABORTED_BY_USER;
-        case YandexQuery::QueryMeta::ABORTING_BY_SYSTEM:
-            return YandexQuery::QueryMeta::ABORTED_BY_SYSTEM;
-        case YandexQuery::QueryMeta::COMPLETING:
-            return YandexQuery::QueryMeta::COMPLETED;
-        case YandexQuery::QueryMeta::FAILING:
-            return YandexQuery::QueryMeta::FAILED;
+        case FederatedQuery::QueryMeta::ABORTING_BY_USER:
+            return FederatedQuery::QueryMeta::ABORTED_BY_USER;
+        case FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM:
+            return FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM;
+        case FederatedQuery::QueryMeta::COMPLETING:
+            return FederatedQuery::QueryMeta::COMPLETED;
+        case FederatedQuery::QueryMeta::FAILING:
+            return FederatedQuery::QueryMeta::FAILED;
         default:
-            return YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED;
+            return FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED;
         }
     }
 
     void WriteFinalizingStatus() {
-        const YandexQuery::QueryMeta::ComputeStatus finalizingStatus = GetFinalizingStatus();
+        const FederatedQuery::QueryMeta::ComputeStatus finalizingStatus = GetFinalizingStatus();
         Params.Status = finalizingStatus;
-        LOG_D("Write finalizing status: " << YandexQuery::QueryMeta::ComputeStatus_Name(finalizingStatus));
+        LOG_D("Write finalizing status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(finalizingStatus));
         Fq::Private::PingTaskRequest request;
         request.set_status(finalizingStatus);
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SaveFinalizingStatusCookie);
     }
 
-    void Finish(YandexQuery::QueryMeta::ComputeStatus status) {
-        LOG_D("Is about to finish query with status " << YandexQuery::QueryMeta::ComputeStatus_Name(status));
+    void Finish(FederatedQuery::QueryMeta::ComputeStatus status) {
+        LOG_D("Is about to finish query with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status));
         Finishing = true;
         FinalQueryStatus = status;
 
@@ -1630,7 +1630,7 @@ private:
         */
         if (!QueryStateUpdateRequest.issues_size() && IsAbortedStatus(QueryStateUpdateRequest.status())) {
             auto& issue = *QueryStateUpdateRequest.add_issues();
-            issue.set_message(YandexQuery::QueryMeta::ComputeStatus_Name(QueryStateUpdateRequest.status()));
+            issue.set_message(FederatedQuery::QueryMeta::ComputeStatus_Name(QueryStateUpdateRequest.status()));
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
         }
 
@@ -1639,7 +1639,7 @@ private:
         PassAway();
     }
 
-    void Abort(const TString& message, YandexQuery::QueryMeta::ComputeStatus status, const NYql::TIssues& issues = {}) {
+    void Abort(const TString& message, FederatedQuery::QueryMeta::ComputeStatus status, const NYql::TIssues& issues = {}) {
         AddIssueWithSubIssues(message, issues);
         Finish(status);
     }
@@ -1734,7 +1734,7 @@ private:
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
-        sqlSettings.PgParser = (Params.QuerySyntax == YandexQuery::QueryContent::PG);
+        sqlSettings.PgParser = (Params.QuerySyntax == FederatedQuery::QueryContent::PG);
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes" });
         try {
@@ -1806,7 +1806,7 @@ private:
             if (abortMessage == "") {
                 abortMessage = TStringBuilder() << "Run query failed: " << ToString(status);
             }
-            Abort(abortMessage, YandexQuery::QueryMeta::FAILED, issues);
+            Abort(abortMessage, FederatedQuery::QueryMeta::FAILED, issues);
         }
     }
 
@@ -1855,11 +1855,11 @@ private:
             html << "<tr><td>Owner</td><td>"        << Params.Owner                                                << "</td></tr>";
             html << "<tr><td>Result ID</td><td>"    << Params.ResultId                                             << "</td></tr>";
             html << "<tr><td>Prev Rev</td><td>"     << Params.PreviousQueryRevision                                << "</td></tr>";
-            html << "<tr><td>Query Type</td><td>"   << YandexQuery::QueryContent::QueryType_Name(Params.QueryType) << "</td></tr>";
-            html << "<tr><td>Exec Mode</td><td>"    << YandexQuery::ExecuteMode_Name(Params.ExecuteMode)           << "</td></tr>";
-            html << "<tr><td>St Load Mode</td><td>" << YandexQuery::StateLoadMode_Name(Params.StateLoadMode)       << "</td></tr>";
+            html << "<tr><td>Query Type</td><td>"   << FederatedQuery::QueryContent::QueryType_Name(Params.QueryType) << "</td></tr>";
+            html << "<tr><td>Exec Mode</td><td>"    << FederatedQuery::ExecuteMode_Name(Params.ExecuteMode)           << "</td></tr>";
+            html << "<tr><td>St Load Mode</td><td>" << FederatedQuery::StateLoadMode_Name(Params.StateLoadMode)       << "</td></tr>";
             html << "<tr><td>Disposition</td><td>"  << Params.StreamingDisposition                                 << "</td></tr>";
-            html << "<tr><td>Status</td><td>"       << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status)   << "</td></tr>";
+            html << "<tr><td>Status</td><td>"       << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)   << "</td></tr>";
         html << "</tbody></table>";
 
         if (Params.Connections.size()) {
@@ -1875,19 +1875,19 @@ private:
                 html << "<td>" << connection.content().name() << "</td>";
                 html << "<td>";
                 switch (connection.content().setting().connection_case()) {
-                case YandexQuery::ConnectionSetting::kYdbDatabase:
+                case FederatedQuery::ConnectionSetting::kYdbDatabase:
                     html << "YDB";
                     break;
-                case YandexQuery::ConnectionSetting::kClickhouseCluster:
+                case FederatedQuery::ConnectionSetting::kClickhouseCluster:
                     html << "CLICKHOUSE";
                     break;
-                case YandexQuery::ConnectionSetting::kObjectStorage:
+                case FederatedQuery::ConnectionSetting::kObjectStorage:
                     html << "OBJECT STORAGE";
                     break;
-                case YandexQuery::ConnectionSetting::kDataStreams:
+                case FederatedQuery::ConnectionSetting::kDataStreams:
                     html << "DATA STREAMS";
                     break;
-                case YandexQuery::ConnectionSetting::kMonitoring:
+                case FederatedQuery::ConnectionSetting::kMonitoring:
                     html << "MONITORING";
                     break;
                 default:
@@ -1916,10 +1916,10 @@ private:
                 html << "<td>" << binding.content().name() << "</td>";
                 html << "<td>";
                 switch (binding.content().setting().binding_case()) {
-                case YandexQuery::BindingSetting::kDataStreams:
+                case FederatedQuery::BindingSetting::kDataStreams:
                     html << "DATA STREAMS";
                     break;
-                case YandexQuery::BindingSetting::kObjectStorage:
+                case FederatedQuery::BindingSetting::kObjectStorage:
                     html << "OBJECT STORAGE";
                     break;
                 default:
@@ -1966,12 +1966,12 @@ private:
             << " Connections: " << Params.Connections.size()
             << " Bindings: " << Params.Bindings.size()
             << " AccountIdSignatures: " << Params.AccountIdSignatures.size()
-            << " QueryType: " << YandexQuery::QueryContent::QueryType_Name(Params.QueryType)
-            << " ExecuteMode: " << YandexQuery::ExecuteMode_Name(Params.ExecuteMode)
+            << " QueryType: " << FederatedQuery::QueryContent::QueryType_Name(Params.QueryType)
+            << " ExecuteMode: " << FederatedQuery::ExecuteMode_Name(Params.ExecuteMode)
             << " ResultId: " << Params.ResultId
-            << " StateLoadMode: " << YandexQuery::StateLoadMode_Name(Params.StateLoadMode)
+            << " StateLoadMode: " << FederatedQuery::StateLoadMode_Name(Params.StateLoadMode)
             << " StreamingDisposition: " << Params.StreamingDisposition
-            << " Status: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status)
+            << " Status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)
             << " DqGraphs: " << Params.DqGraphs.size()
             << " DqGraphIndex: " << Params.DqGraphIndex
             << " Resource.TopicConsumers: " << Params.Resources.topic_consumers().size()
@@ -1982,7 +1982,7 @@ private:
     TActorId FetcherId;
     TActorId ProgramRunnerId;
     TRunActorParams Params;
-    THashMap<TString, YandexQuery::Connection> YqConnections;
+    THashMap<TString, FederatedQuery::Connection> YqConnections;
 
     TProgramPtr Program;
     TIssues Issues;
@@ -1991,7 +1991,7 @@ private:
     TInstant Deadline;
     TActorId Pinger;
     TInstant CreatedAt;
-    YandexQuery::QueryAction Action = YandexQuery::QueryAction::QUERY_ACTION_UNSPECIFIED;
+    FederatedQuery::QueryAction Action = FederatedQuery::QueryAction::QUERY_ACTION_UNSPECIFIED;
     TMap<NActors::TActorId, TEvaluationGraphInfo> EvalInfos;
     std::vector<NYq::NProto::TGraphParams> DqGraphParams;
     std::vector<i32> DqGrapResultIndices;
@@ -2023,7 +2023,7 @@ private:
     bool ConsumersAreDeleted = false;
     bool FinalizingStatusIsWritten = false;
     bool QueryResponseArrived = false;
-    YandexQuery::QueryMeta::ComputeStatus FinalQueryStatus = YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED; // Status that will be assigned to query after it finishes.
+    FederatedQuery::QueryMeta::ComputeStatus FinalQueryStatus = FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED; // Status that will be assigned to query after it finishes.
 
     // Cookies for pings
     enum : ui64 {

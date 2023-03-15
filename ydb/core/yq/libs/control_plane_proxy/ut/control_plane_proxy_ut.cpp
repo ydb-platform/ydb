@@ -112,7 +112,7 @@ struct TTestBootstrap {
     void SendCreateQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff", bool processCreateRateLimiterResource = true)
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::CreateQueryRequest proto;
+        FederatedQuery::CreateQueryRequest proto;
         proto.mutable_content()->set_name("my_query_name");
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateQueryRequest>("", proto, user, "", permissions);
@@ -144,7 +144,7 @@ struct TTestBootstrap {
     void SendListQueriesRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::ListQueriesRequest proto;
+        FederatedQuery::ListQueriesRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvListQueriesRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -154,7 +154,7 @@ struct TTestBootstrap {
     void SendDescribeQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::DescribeQueryRequest proto;
+        FederatedQuery::DescribeQueryRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeQueryRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -164,7 +164,7 @@ struct TTestBootstrap {
     void SendGetQueryStatusRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::GetQueryStatusRequest proto;
+        FederatedQuery::GetQueryStatusRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvGetQueryStatusRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -174,7 +174,7 @@ struct TTestBootstrap {
     void SendModifyQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::ModifyQueryRequest proto;
+        FederatedQuery::ModifyQueryRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyQueryRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -184,7 +184,7 @@ struct TTestBootstrap {
     void SendDeleteQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::DeleteQueryRequest proto;
+        FederatedQuery::DeleteQueryRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteQueryRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -194,7 +194,7 @@ struct TTestBootstrap {
     void SendControlQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::ControlQueryRequest proto;
+        FederatedQuery::ControlQueryRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvControlQueryRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -204,7 +204,7 @@ struct TTestBootstrap {
     void SendGetResultDataRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::GetResultDataRequest proto;
+        FederatedQuery::GetResultDataRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvGetResultDataRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -214,7 +214,7 @@ struct TTestBootstrap {
     void SendListJobsRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::ListJobsRequest proto;
+        FederatedQuery::ListJobsRequest proto;
         proto.set_query_id("my_query_id");
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvListJobsRequest>("", proto, user, "", permissions);
@@ -225,7 +225,7 @@ struct TTestBootstrap {
     void SendDescribeJobRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::DescribeJobRequest proto;
+        FederatedQuery::DescribeJobRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeJobRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -235,7 +235,7 @@ struct TTestBootstrap {
     void SendCreateConnectionRequest(const TVector<TString>& permissions = {}, const TString& serviceAccountId = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::CreateConnectionRequest proto;
+        FederatedQuery::CreateConnectionRequest proto;
         if (serviceAccountId) {
             proto.mutable_content()
                 ->mutable_setting()
@@ -253,7 +253,7 @@ struct TTestBootstrap {
     void SendListConnectionsRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::ListConnectionsRequest proto;
+        FederatedQuery::ListConnectionsRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvListConnectionsRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -263,7 +263,7 @@ struct TTestBootstrap {
     void SendDescribeConnectionRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::DescribeConnectionRequest proto;
+        FederatedQuery::DescribeConnectionRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeConnectionRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -273,7 +273,7 @@ struct TTestBootstrap {
     void SendModifyConnectionRequest(const TVector<TString>& permissions = {}, const TString& serviceAccountId = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::ModifyConnectionRequest proto;
+        FederatedQuery::ModifyConnectionRequest proto;
         if (serviceAccountId) {
             proto.mutable_content()
                 ->mutable_setting()
@@ -291,7 +291,7 @@ struct TTestBootstrap {
     void SendDeleteConnectionRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::DeleteConnectionRequest proto;
+        FederatedQuery::DeleteConnectionRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteConnectionRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -301,7 +301,7 @@ struct TTestBootstrap {
     void SendTestConnectionRequest(const TVector<TString>& permissions = {}, const TString& serviceAccountId = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::TestConnectionRequest proto;
+        FederatedQuery::TestConnectionRequest proto;
         if (serviceAccountId) {
             proto.mutable_setting()
                 ->mutable_ydb_database()
@@ -318,7 +318,7 @@ struct TTestBootstrap {
     void SendCreateBindingRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::CreateBindingRequest proto;
+        FederatedQuery::CreateBindingRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateBindingRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -328,7 +328,7 @@ struct TTestBootstrap {
     void SendListBindingsRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::ListBindingsRequest proto;
+        FederatedQuery::ListBindingsRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvListBindingsRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -338,7 +338,7 @@ struct TTestBootstrap {
     void SendDescribeBindingRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::DescribeBindingRequest proto;
+        FederatedQuery::DescribeBindingRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeBindingRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -348,7 +348,7 @@ struct TTestBootstrap {
     void SendModifyBindingRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::ModifyBindingRequest proto;
+        FederatedQuery::ModifyBindingRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyBindingRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
@@ -358,7 +358,7 @@ struct TTestBootstrap {
     void SendDeleteBindingRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
-        YandexQuery::DeleteBindingRequest proto;
+        FederatedQuery::DeleteBindingRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteBindingRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));

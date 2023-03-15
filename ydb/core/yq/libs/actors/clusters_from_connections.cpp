@@ -17,20 +17,20 @@ namespace {
 
 template <typename TClusterConfig>
 void FillClusterAuth(TClusterConfig& clusterCfg,
-        const YandexQuery::IamAuth& auth, const TString& authToken,
+        const FederatedQuery::IamAuth& auth, const TString& authToken,
         const THashMap<TString, TString>& accountIdSignatures) {
     switch (auth.identity_case()) {
-    case YandexQuery::IamAuth::kNone:
+    case FederatedQuery::IamAuth::kNone:
         break;
-    case YandexQuery::IamAuth::kCurrentIam:
+    case FederatedQuery::IamAuth::kCurrentIam:
         clusterCfg.SetToken(authToken);
         break;
-    case YandexQuery::IamAuth::kServiceAccount:
+    case FederatedQuery::IamAuth::kServiceAccount:
         clusterCfg.SetServiceAccountId(auth.service_account().id());
         clusterCfg.SetServiceAccountIdSignature(accountIdSignatures.at(auth.service_account().id()));
         break;
     // Do not replace with default. Adding a new auth item should cause a compilation error
-    case YandexQuery::IamAuth::IDENTITY_NOT_SET:
+    case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
         break;
     }
 }
@@ -38,7 +38,7 @@ void FillClusterAuth(TClusterConfig& clusterCfg,
 void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
         const TString& name, bool useBearerForYdb,
         const TString& authToken, const THashMap<TString, TString>& accountIdSignatures,
-        const YandexQuery::DataStreams& ds) {
+        const FederatedQuery::DataStreams& ds) {
     clusterConfig.SetName(name);
     if (ds.endpoint()) {
         clusterConfig.SetEndpoint(ds.endpoint());
@@ -55,7 +55,7 @@ void FillS3ClusterConfig(NYql::TS3ClusterConfig& clusterConfig,
         const TString& name, const TString& authToken,
         const TString& objectStorageEndpoint,
         const THashMap<TString, TString>& accountIdSignatures,
-        const YandexQuery::ObjectStorageConnection& s3) {
+        const FederatedQuery::ObjectStorageConnection& s3) {
     clusterConfig.SetName(name);
     TString objectStorageUrl;
 
@@ -76,7 +76,7 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     const TString& authToken,
     const TString& endpoint,
     const THashMap<TString, TString>& accountIdSignatures,
-    const YandexQuery::Monitoring& monitoring) {
+    const FederatedQuery::Monitoring& monitoring) {
     clusterConfig.SetName(name);
 
     clusterConfig.SetCluster(endpoint);
@@ -90,7 +90,7 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
 
 NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name,
         bool useBearerForYdb, const TString& authToken,
-        const TString& accountSignature, const YandexQuery::DataStreams& ds) {
+        const TString& accountSignature, const FederatedQuery::DataStreams& ds) {
     NYql::TPqClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     if (ds.auth().has_service_account()) {
@@ -102,7 +102,7 @@ NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name,
 
 NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name,
         const TString& authToken, const TString& objectStorageEndpoint,
-        const TString& accountSignature, const YandexQuery::ObjectStorageConnection& s3) {
+        const TString& accountSignature, const FederatedQuery::ObjectStorageConnection& s3) {
     NYql::TS3ClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     accountIdSignatures[s3.auth().service_account().id()] = accountSignature;
@@ -114,7 +114,7 @@ NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name,
         const TString& authToken,
         const TString& endpoint,
         const TString& accountSignature,
-        const YandexQuery::Monitoring& monitoring) {
+        const FederatedQuery::Monitoring& monitoring) {
     NYql::TSolomonClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     accountIdSignatures[monitoring.auth().service_account().id()] = accountSignature;
@@ -123,7 +123,7 @@ NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name,
 }
 
 void AddClustersFromConnections(
-    const THashMap<TString, YandexQuery::Connection>& connections,
+    const THashMap<TString, FederatedQuery::Connection>& connections,
     bool useBearerForYdb,
     const TString& objectStorageEndpoint,
     const TString& monitoringEndpoint,
@@ -135,7 +135,7 @@ void AddClustersFromConnections(
     for (const auto&[_, conn] : connections) {
         auto connectionName = conn.content().name();
         switch (conn.content().setting().connection_case()) {
-        case YandexQuery::ConnectionSetting::kYdbDatabase: {
+        case FederatedQuery::ConnectionSetting::kYdbDatabase: {
             const auto& db = conn.content().setting().ydb_database();
             auto* clusterCfg = gatewaysConfig.MutableYdb()->AddClusterMapping();
             clusterCfg->SetName(connectionName);
@@ -150,7 +150,7 @@ void AddClustersFromConnections(
             clusters.emplace(connectionName, YdbProviderName);
             break;
         }
-        case YandexQuery::ConnectionSetting::kClickhouseCluster: {
+        case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
             const auto& ch = conn.content().setting().clickhouse_cluster();
             auto* clusterCfg = gatewaysConfig.MutableClickHouse()->AddClusterMapping();
             clusterCfg->SetName(connectionName);
@@ -163,21 +163,21 @@ void AddClustersFromConnections(
             clusters.emplace(connectionName, ClickHouseProviderName);
             break;
         }
-        case YandexQuery::ConnectionSetting::kObjectStorage: {
+        case FederatedQuery::ConnectionSetting::kObjectStorage: {
             const auto& s3 = conn.content().setting().object_storage();
             auto* clusterCfg = gatewaysConfig.MutableS3()->AddClusterMapping();
             FillS3ClusterConfig(*clusterCfg, connectionName, authToken, objectStorageEndpoint, accountIdSignatures, s3);
             clusters.emplace(connectionName, S3ProviderName);
             break;
         }
-        case YandexQuery::ConnectionSetting::kDataStreams: {
+        case FederatedQuery::ConnectionSetting::kDataStreams: {
             const auto& ds = conn.content().setting().data_streams();
             auto* clusterCfg = gatewaysConfig.MutablePq()->AddClusterMapping();
             FillPqClusterConfig(*clusterCfg, connectionName, useBearerForYdb, authToken, accountIdSignatures, ds);
             clusters.emplace(connectionName, PqProviderName);
             break;
         }
-        case YandexQuery::ConnectionSetting::kMonitoring: {
+        case FederatedQuery::ConnectionSetting::kMonitoring: {
             const auto& monitoring = conn.content().setting().monitoring();
             auto* clusterCfg = gatewaysConfig.MutableSolomon()->AddClusterMapping();
             FillSolomonClusterConfig(*clusterCfg, connectionName, authToken, monitoringEndpoint, accountIdSignatures, monitoring);
@@ -186,7 +186,7 @@ void AddClustersFromConnections(
         }
 
         // Do not replace with default. Adding a new connection should cause a compilation error
-        case YandexQuery::ConnectionSetting::CONNECTION_NOT_SET:
+        case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
             break;
         }
     }

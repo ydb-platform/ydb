@@ -151,12 +151,12 @@ struct TEvents {
     };
 
     struct TEvQueryActionResult : NActors::TEventLocal<TEvQueryActionResult, TEventIds::EvQueryActionResult> {
-        explicit TEvQueryActionResult(YandexQuery::QueryAction action)
+        explicit TEvQueryActionResult(FederatedQuery::QueryAction action)
             : Action(action)
         {
         }
 
-        YandexQuery::QueryAction Action;
+        FederatedQuery::QueryAction Action;
     };
 
     struct TEvForwardPingRequest : NActors::TEventLocal<TEvForwardPingRequest, TEventIds::EvForwardPingRequest> {
@@ -170,13 +170,13 @@ struct TEvents {
     };
 
     struct TEvForwardPingResponse : NActors::TEventLocal<TEvForwardPingResponse, TEventIds::EvForwardPingResponse> {
-        TEvForwardPingResponse(bool success, YandexQuery::QueryAction action)
+        TEvForwardPingResponse(bool success, FederatedQuery::QueryAction action)
             : Success(success)
             , Action(action)
         { }
 
         bool Success;
-        YandexQuery::QueryAction Action;
+        FederatedQuery::QueryAction Action;
     };
 
     struct TEvGraphParams : public NActors::TEventLocal<TEvGraphParams, TEventIds::EvGraphParams> {

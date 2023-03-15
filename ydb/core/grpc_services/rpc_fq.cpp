@@ -22,13 +22,13 @@ namespace NGRpcService {
 using namespace Ydb;
 using NPerms = NKikimr::TEvTicketParser::TEvAuthorizeTicket;
 
-template <typename RpcRequestType, typename EvRequestType, typename EvResponseType, typename CastRequest, typename CastResult>
+template <typename RpcRequestType, typename EvRequestType, typename EvResponseType>
 class TFederatedQueryRequestRPC : public TRpcOperationRequestActor<
-    TFederatedQueryRequestRPC<RpcRequestType,EvRequestType,EvResponseType, CastRequest, CastResult>, RpcRequestType> {
+    TFederatedQueryRequestRPC<RpcRequestType,EvRequestType,EvResponseType>, RpcRequestType> {
 
 public:
     using TBase = TRpcOperationRequestActor<
-        TFederatedQueryRequestRPC<RpcRequestType,EvRequestType,EvResponseType,CastRequest,CastResult>,
+        TFederatedQueryRequestRPC<RpcRequestType,EvRequestType,EvResponseType>,
         RpcRequestType>;
     using TBase::Become;
     using TBase::Send;
@@ -68,16 +68,19 @@ public:
         }
         Token = *authToken;
 
-        TString ydbProject = Request_->GetPeerMetaValues("x-ydb-fq-project").GetOrElse("");
+        TString scope = Request_->GetPeerMetaValues("x-ydb-fq-project").GetOrElse("");
+        if (scope.empty()) {
+            scope = Request_->GetPeerMetaValues("x-yq-scope").GetOrElse(""); // TODO: remove YQ-1055
+        }
 
-        if (!ydbProject.StartsWith("yandexcloud://")) {
-            ReplyWithStatus("x-ydb-fq-project should start with yandexcloud:// but got " + ydbProject, StatusIds::BAD_REQUEST);
+        if (!scope.StartsWith("yandexcloud://")) {
+            ReplyWithStatus("x-ydb-fq-project should start with yandexcloud:// but got " + scope, StatusIds::BAD_REQUEST);
             return;
         }
 
-        const TVector<TString> path = StringSplitter(ydbProject).Split('/').SkipEmpty();
+        const TVector<TString> path = StringSplitter(scope).Split('/').SkipEmpty();
         if (path.size() != 2 && path.size() != 3) {
-            ReplyWithStatus("x-ydb-fq-project format is invalid. Must be yandexcloud://folder_id, but got " + ydbProject, StatusIds::BAD_REQUEST);
+            ReplyWithStatus("x-ydb-fq-project format is invalid. Must be yandexcloud://folder_id, but got " + scope, StatusIds::BAD_REQUEST);
             return;
         }
 
@@ -110,19 +113,9 @@ public:
         }
 
         const auto* req = GetProtoRequest();
-        TProtoStringType protoString;
-        if (!req->SerializeToString(&protoString)) {
-            ReplyWithStatus("Can't serialize proto", StatusIds::BAD_REQUEST);
-            return;
-        }
-        auto castedRequest = CastRequest();
-        if (!castedRequest.ParseFromString(protoString)) {
-            ReplyWithStatus("Can't deserialize proto", StatusIds::BAD_REQUEST);
-            return;
-        }
-        auto ev = MakeHolder<EvRequestType>(FolderId, castedRequest, User, Token, permissions);
+        auto ev = MakeHolder<EvRequestType>(FolderId, *req, User, Token, permissions);
         Send(NYq::ControlPlaneProxyActorId(), ev.Release());
-        Become(&TFederatedQueryRequestRPC<RpcRequestType, EvRequestType, EvResponseType, CastRequest, CastResult>::StateFunc);
+        Become(&TFederatedQueryRequestRPC<RpcRequestType, EvRequestType, EvResponseType>::StateFunc);
     }
 
 protected:
@@ -142,18 +135,7 @@ protected:
             req.RaiseIssues(response.Issues);
             req.ReplyWithYdbStatus(StatusIds::BAD_REQUEST);
         } else {
-            TProtoStringType protoString;
-            if (!response.Result.SerializeToString(&protoString)) {
-                ReplyWithStatus("Can't serialize proto", StatusIds::BAD_REQUEST);
-                return;
-            }
-            auto castedResult = CastResult();
-            if (!castedResult.ParseFromString(protoString)) {
-                ReplyWithStatus("Can't deserialize proto", StatusIds::BAD_REQUEST);
-                return;
-            }
-
-            req.SendResult(castedResult, StatusIds::SUCCESS);
+            req.SendResult(response.Result, StatusIds::SUCCESS);
         }
     }
 
@@ -163,17 +145,7 @@ protected:
             req.RaiseIssues(response.Issues);
             req.ReplyWithYdbStatus(StatusIds::BAD_REQUEST);
         } else {
-            TProtoStringType protoString;
-            if (!response.Result.SerializeToString(&protoString)) {
-                ReplyWithStatus("Can't serialize proto", StatusIds::BAD_REQUEST);
-                return;
-            }
-            auto castedResponse = CastResult();
-            if (!castedResponse.ParseFromString(protoString)) {
-                ReplyWithStatus("Can't deserialize proto", StatusIds::BAD_REQUEST);
-                return;
-            }
-            req.SendResult(castedResponse, StatusIds::SUCCESS);
+            req.SendResult(response.Result, StatusIds::SUCCESS);
         }
 
         NYq::TEvAuditService::TExtraInfo extraInfo{
@@ -186,21 +158,9 @@ protected:
             .RequestId = RequestId,
         };
 
-        const auto* protoReq = GetProtoRequest();
-        TProtoStringType protoString;
-        if (!protoReq->SerializeToString(&protoString)) {
-            ReplyWithStatus("Can't serialize proto", StatusIds::BAD_REQUEST);
-            return;
-        }
-        auto castedProtoRequest = CastRequest();
-        if (!castedProtoRequest.ParseFromString(protoString)) {
-            ReplyWithStatus("Can't deserialize proto", StatusIds::BAD_REQUEST);
-            return;
-        }
-
         Send(NYq::YqAuditServiceActorId(), NYq::TEvAuditService::MakeAuditEvent(
             std::move(extraInfo),
-            castedProtoRequest,
+            *GetProtoRequest(),
             response.Issues,
             response.AuditDetails));
     }
@@ -214,9 +174,7 @@ protected:
 using TFederatedQueryCreateQueryRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::CreateQueryRequest, FederatedQuery::CreateQueryResponse>,
     NYq::TEvControlPlaneProxy::TEvCreateQueryRequest,
-    NYq::TEvControlPlaneProxy::TEvCreateQueryResponse,
-    YandexQuery::CreateQueryRequest,
-    FederatedQuery::CreateQueryResult>;
+    NYq::TEvControlPlaneProxy::TEvCreateQueryResponse>;
 
 void DoFederatedQueryCreateQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryCreateQueryRPC(p.release()));
@@ -225,9 +183,7 @@ void DoFederatedQueryCreateQueryRequest(std::unique_ptr<IRequestOpCtx> p, const 
 using TFederatedQueryListQueriesRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ListQueriesRequest, FederatedQuery::ListQueriesResponse>,
     NYq::TEvControlPlaneProxy::TEvListQueriesRequest,
-    NYq::TEvControlPlaneProxy::TEvListQueriesResponse,
-    YandexQuery::ListQueriesRequest,
-    FederatedQuery::ListQueriesResult>;
+    NYq::TEvControlPlaneProxy::TEvListQueriesResponse>;
 
 void DoFederatedQueryListQueriesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryListQueriesRPC(p.release()));
@@ -236,9 +192,7 @@ void DoFederatedQueryListQueriesRequest(std::unique_ptr<IRequestOpCtx> p, const 
 using TFederatedQueryDescribeQueryRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DescribeQueryRequest, FederatedQuery::DescribeQueryResponse>,
     NYq::TEvControlPlaneProxy::TEvDescribeQueryRequest,
-    NYq::TEvControlPlaneProxy::TEvDescribeQueryResponse,
-    YandexQuery::DescribeQueryRequest,
-    FederatedQuery::DescribeQueryResult>;
+    NYq::TEvControlPlaneProxy::TEvDescribeQueryResponse>;
 
 void DoFederatedQueryDescribeQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDescribeQueryRPC(p.release()));
@@ -247,9 +201,7 @@ void DoFederatedQueryDescribeQueryRequest(std::unique_ptr<IRequestOpCtx> p, cons
 using TFederatedQueryGetQueryStatusRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::GetQueryStatusRequest, FederatedQuery::GetQueryStatusResponse>,
     NYq::TEvControlPlaneProxy::TEvGetQueryStatusRequest,
-    NYq::TEvControlPlaneProxy::TEvGetQueryStatusResponse,
-    YandexQuery::GetQueryStatusRequest,
-    FederatedQuery::GetQueryStatusResult>;
+    NYq::TEvControlPlaneProxy::TEvGetQueryStatusResponse>;
 
 void DoFederatedQueryGetQueryStatusRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryGetQueryStatusRPC(p.release()));
@@ -258,9 +210,7 @@ void DoFederatedQueryGetQueryStatusRequest(std::unique_ptr<IRequestOpCtx> p, con
 using TFederatedQueryModifyQueryRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ModifyQueryRequest, FederatedQuery::ModifyQueryResponse>,
     NYq::TEvControlPlaneProxy::TEvModifyQueryRequest,
-    NYq::TEvControlPlaneProxy::TEvModifyQueryResponse,
-    YandexQuery::ModifyQueryRequest,
-    FederatedQuery::ModifyQueryResult>;
+    NYq::TEvControlPlaneProxy::TEvModifyQueryResponse>;
 
 void DoFederatedQueryModifyQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryModifyQueryRPC(p.release()));
@@ -269,9 +219,7 @@ void DoFederatedQueryModifyQueryRequest(std::unique_ptr<IRequestOpCtx> p, const 
 using TFederatedQueryDeleteQueryRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DeleteQueryRequest, FederatedQuery::DeleteQueryResponse>,
     NYq::TEvControlPlaneProxy::TEvDeleteQueryRequest,
-    NYq::TEvControlPlaneProxy::TEvDeleteQueryResponse,
-    YandexQuery::DeleteQueryRequest,
-    FederatedQuery::DeleteQueryResult>;
+    NYq::TEvControlPlaneProxy::TEvDeleteQueryResponse>;
 
 void DoFederatedQueryDeleteQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDeleteQueryRPC(p.release()));
@@ -280,9 +228,7 @@ void DoFederatedQueryDeleteQueryRequest(std::unique_ptr<IRequestOpCtx> p, const 
 using TFederatedQueryControlQueryRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ControlQueryRequest, FederatedQuery::ControlQueryResponse>,
     NYq::TEvControlPlaneProxy::TEvControlQueryRequest,
-    NYq::TEvControlPlaneProxy::TEvControlQueryResponse,
-    YandexQuery::ControlQueryRequest,
-    FederatedQuery::ControlQueryResult>;
+    NYq::TEvControlPlaneProxy::TEvControlQueryResponse>;
 
 void DoFederatedQueryControlQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryControlQueryRPC(p.release()));
@@ -291,9 +237,7 @@ void DoFederatedQueryControlQueryRequest(std::unique_ptr<IRequestOpCtx> p, const
 using TFederatedQueryGetResultDataRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::GetResultDataRequest, FederatedQuery::GetResultDataResponse>,
     NYq::TEvControlPlaneProxy::TEvGetResultDataRequest,
-    NYq::TEvControlPlaneProxy::TEvGetResultDataResponse,
-    YandexQuery::GetResultDataRequest,
-    FederatedQuery::GetResultDataResult>;
+    NYq::TEvControlPlaneProxy::TEvGetResultDataResponse>;
 
 void DoFederatedQueryGetResultDataRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryGetResultDataRPC(p.release()));
@@ -302,9 +246,7 @@ void DoFederatedQueryGetResultDataRequest(std::unique_ptr<IRequestOpCtx> p, cons
 using TFederatedQueryListJobsRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ListJobsRequest, FederatedQuery::ListJobsResponse>,
     NYq::TEvControlPlaneProxy::TEvListJobsRequest,
-    NYq::TEvControlPlaneProxy::TEvListJobsResponse,
-    YandexQuery::ListJobsRequest,
-    FederatedQuery::ListJobsResult>;
+    NYq::TEvControlPlaneProxy::TEvListJobsResponse>;
 
 void DoFederatedQueryListJobsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryListJobsRPC(p.release()));
@@ -313,9 +255,7 @@ void DoFederatedQueryListJobsRequest(std::unique_ptr<IRequestOpCtx> p, const IFa
 using TFederatedQueryDescribeJobRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DescribeJobRequest, FederatedQuery::DescribeJobResponse>,
     NYq::TEvControlPlaneProxy::TEvDescribeJobRequest,
-    NYq::TEvControlPlaneProxy::TEvDescribeJobResponse,
-    YandexQuery::DescribeJobRequest,
-    FederatedQuery::DescribeJobResult>;
+    NYq::TEvControlPlaneProxy::TEvDescribeJobResponse>;
 
 void DoFederatedQueryDescribeJobRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDescribeJobRPC(p.release()));
@@ -324,9 +264,7 @@ void DoFederatedQueryDescribeJobRequest(std::unique_ptr<IRequestOpCtx> p, const 
 using TFederatedQueryCreateConnectionRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::CreateConnectionRequest, FederatedQuery::CreateConnectionResponse>,
     NYq::TEvControlPlaneProxy::TEvCreateConnectionRequest,
-    NYq::TEvControlPlaneProxy::TEvCreateConnectionResponse,
-    YandexQuery::CreateConnectionRequest,
-    FederatedQuery::CreateConnectionResult>;
+    NYq::TEvControlPlaneProxy::TEvCreateConnectionResponse>;
 
 void DoFederatedQueryCreateConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryCreateConnectionRPC(p.release()));
@@ -335,9 +273,7 @@ void DoFederatedQueryCreateConnectionRequest(std::unique_ptr<IRequestOpCtx> p, c
 using TFederatedQueryListConnectionsRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ListConnectionsRequest, FederatedQuery::ListConnectionsResponse>,
     NYq::TEvControlPlaneProxy::TEvListConnectionsRequest,
-    NYq::TEvControlPlaneProxy::TEvListConnectionsResponse,
-    YandexQuery::ListConnectionsRequest,
-    FederatedQuery::ListConnectionsResult>;
+    NYq::TEvControlPlaneProxy::TEvListConnectionsResponse>;
 
 void DoFederatedQueryListConnectionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryListConnectionsRPC(p.release()));
@@ -346,9 +282,7 @@ void DoFederatedQueryListConnectionsRequest(std::unique_ptr<IRequestOpCtx> p, co
 using TFederatedQueryDescribeConnectionRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DescribeConnectionRequest, FederatedQuery::DescribeConnectionResponse>,
     NYq::TEvControlPlaneProxy::TEvDescribeConnectionRequest,
-    NYq::TEvControlPlaneProxy::TEvDescribeConnectionResponse,
-    YandexQuery::DescribeConnectionRequest,
-    FederatedQuery::DescribeConnectionResult>;
+    NYq::TEvControlPlaneProxy::TEvDescribeConnectionResponse>;
 
 void DoFederatedQueryDescribeConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDescribeConnectionRPC(p.release()));
@@ -357,9 +291,7 @@ void DoFederatedQueryDescribeConnectionRequest(std::unique_ptr<IRequestOpCtx> p,
 using TFederatedQueryModifyConnectionRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ModifyConnectionRequest, FederatedQuery::ModifyConnectionResponse>,
     NYq::TEvControlPlaneProxy::TEvModifyConnectionRequest,
-    NYq::TEvControlPlaneProxy::TEvModifyConnectionResponse,
-    YandexQuery::ModifyConnectionRequest,
-    FederatedQuery::ModifyConnectionResult>;
+    NYq::TEvControlPlaneProxy::TEvModifyConnectionResponse>;
 
 void DoFederatedQueryModifyConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryModifyConnectionRPC(p.release()));
@@ -368,9 +300,7 @@ void DoFederatedQueryModifyConnectionRequest(std::unique_ptr<IRequestOpCtx> p, c
 using TFederatedQueryDeleteConnectionRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DeleteConnectionRequest, FederatedQuery::DeleteConnectionResponse>,
     NYq::TEvControlPlaneProxy::TEvDeleteConnectionRequest,
-    NYq::TEvControlPlaneProxy::TEvDeleteConnectionResponse,
-    YandexQuery::DeleteConnectionRequest,
-    FederatedQuery::DeleteConnectionResult>;
+    NYq::TEvControlPlaneProxy::TEvDeleteConnectionResponse>;
 
 void DoFederatedQueryDeleteConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDeleteConnectionRPC(p.release()));
@@ -379,9 +309,7 @@ void DoFederatedQueryDeleteConnectionRequest(std::unique_ptr<IRequestOpCtx> p, c
 using TFederatedQueryTestConnectionRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::TestConnectionRequest, FederatedQuery::TestConnectionResponse>,
     NYq::TEvControlPlaneProxy::TEvTestConnectionRequest,
-    NYq::TEvControlPlaneProxy::TEvTestConnectionResponse,
-    YandexQuery::TestConnectionRequest,
-    FederatedQuery::TestConnectionResult>;
+    NYq::TEvControlPlaneProxy::TEvTestConnectionResponse>;
 
 void DoFederatedQueryTestConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryTestConnectionRPC(p.release()));
@@ -390,9 +318,7 @@ void DoFederatedQueryTestConnectionRequest(std::unique_ptr<IRequestOpCtx> p, con
 using TFederatedQueryCreateBindingRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::CreateBindingRequest, FederatedQuery::CreateBindingResponse>,
     NYq::TEvControlPlaneProxy::TEvCreateBindingRequest,
-    NYq::TEvControlPlaneProxy::TEvCreateBindingResponse,
-    YandexQuery::CreateBindingRequest,
-    FederatedQuery::CreateBindingResult>;
+    NYq::TEvControlPlaneProxy::TEvCreateBindingResponse>;
 
 void DoFederatedQueryCreateBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryCreateBindingRPC(p.release()));
@@ -401,9 +327,7 @@ void DoFederatedQueryCreateBindingRequest(std::unique_ptr<IRequestOpCtx> p, cons
 using TFederatedQueryListBindingsRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ListBindingsRequest, FederatedQuery::ListBindingsResponse>,
     NYq::TEvControlPlaneProxy::TEvListBindingsRequest,
-    NYq::TEvControlPlaneProxy::TEvListBindingsResponse,
-    YandexQuery::ListBindingsRequest,
-    FederatedQuery::ListBindingsResult>;
+    NYq::TEvControlPlaneProxy::TEvListBindingsResponse>;
 
 void DoFederatedQueryListBindingsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryListBindingsRPC(p.release()));
@@ -412,9 +336,7 @@ void DoFederatedQueryListBindingsRequest(std::unique_ptr<IRequestOpCtx> p, const
 using TFederatedQueryDescribeBindingRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DescribeBindingRequest, FederatedQuery::DescribeBindingResponse>,
     NYq::TEvControlPlaneProxy::TEvDescribeBindingRequest,
-    NYq::TEvControlPlaneProxy::TEvDescribeBindingResponse,
-    YandexQuery::DescribeBindingRequest,
-    FederatedQuery::DescribeBindingResult>;
+    NYq::TEvControlPlaneProxy::TEvDescribeBindingResponse>;
 
 void DoFederatedQueryDescribeBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDescribeBindingRPC(p.release()));
@@ -423,9 +345,7 @@ void DoFederatedQueryDescribeBindingRequest(std::unique_ptr<IRequestOpCtx> p, co
 using TFederatedQueryModifyBindingRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::ModifyBindingRequest, FederatedQuery::ModifyBindingResponse>,
     NYq::TEvControlPlaneProxy::TEvModifyBindingRequest,
-    NYq::TEvControlPlaneProxy::TEvModifyBindingResponse,
-    YandexQuery::ModifyBindingRequest,
-    FederatedQuery::ModifyBindingResult>;
+    NYq::TEvControlPlaneProxy::TEvModifyBindingResponse>;
 
 void DoFederatedQueryModifyBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryModifyBindingRPC(p.release()));
@@ -434,9 +354,7 @@ void DoFederatedQueryModifyBindingRequest(std::unique_ptr<IRequestOpCtx> p, cons
 using TFederatedQueryDeleteBindingRPC = TFederatedQueryRequestRPC<
     TGrpcFqRequestOperationCall<FederatedQuery::DeleteBindingRequest, FederatedQuery::DeleteBindingResponse>,
     NYq::TEvControlPlaneProxy::TEvDeleteBindingRequest,
-    NYq::TEvControlPlaneProxy::TEvDeleteBindingResponse,
-    YandexQuery::DeleteBindingRequest,
-    FederatedQuery::DeleteBindingResult>;
+    NYq::TEvControlPlaneProxy::TEvDeleteBindingResponse>;
 
 void DoFederatedQueryDeleteBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TFederatedQueryDeleteBindingRPC(p.release()));

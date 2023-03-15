@@ -941,7 +941,7 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
             req.mutable_query_id()->set_value("id");
             req.set_scope(scope.ToString());
             req.set_owner_id("some_owner");
-            req.set_status(YandexQuery::QueryMeta::COMPLETED);
+            req.set_status(FederatedQuery::QueryMeta::COMPLETED);
             auto result = client.PingTask(std::move(req)).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);

@@ -105,7 +105,7 @@ public:
                 return;
             }
 
-            YandexQuery::Internal::QueryInternal internal;
+            FederatedQuery::Internal::QueryInternal internal;
             if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                 ReplyWithError(TStringBuilder() << "Error parsing proto message for query internal. Please contact internal support");
                 return;
@@ -113,7 +113,7 @@ public:
             CloudId = internal.cloud_id();
 
             if constexpr (TDerived::IsCreateRequest) {
-                YandexQuery::Query query;
+                FederatedQuery::Query query;
                 if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                     ReplyWithError(TStringBuilder() << "Error parsing proto message for query. Please contact internal support");
                     return;

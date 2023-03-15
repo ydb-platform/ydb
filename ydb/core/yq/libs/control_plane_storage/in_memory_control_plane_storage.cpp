@@ -42,8 +42,8 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
     };
 
     TConfig Config;
-    TMap<TKey, YandexQuery::Query> Queries;
-    TMap<TKey, YandexQuery::Connection> Connections;
+    TMap<TKey, FederatedQuery::Query> Queries;
+    TMap<TKey, FederatedQuery::Connection> Connections;
     TMap<TString, TInstant> IdempotencyKeys; // idempotency_key -> created_at
 
     static constexpr int64_t InitialRevision = 1;
@@ -89,7 +89,7 @@ private:
     {
         CPS_LOG_I("CreateQueryRequest");
 
-        const YandexQuery::CreateQueryRequest& request = ev->Get()->Request;
+        const FederatedQuery::CreateQueryRequest& request = ev->Get()->Request;
         CPS_LOG_D("CreateQueryRequest: " << request.DebugString());
         CleanupIndempotencyKeys();
         auto now = TInstant::Now();
@@ -111,11 +111,11 @@ private:
         const TString user = ev->Get()->User;
         const TString scope = ev->Get()->Scope;
         const TString queryId = CreateGuidAsString();
-        YandexQuery::Query query;
-        YandexQuery::QueryContent& content = *query.mutable_content();
+        FederatedQuery::Query query;
+        FederatedQuery::QueryContent& content = *query.mutable_content();
         content = request.content();
-        YandexQuery::QueryMeta& meta = *query.mutable_meta();
-        YandexQuery::CommonMeta& common = *meta.mutable_common();
+        FederatedQuery::QueryMeta& meta = *query.mutable_meta();
+        FederatedQuery::CommonMeta& common = *meta.mutable_common();
         common.set_id(queryId);
         common.set_created_by(user);
         auto timestamp = NProtoInterop::CastToProto(now);
@@ -129,16 +129,16 @@ private:
         }
 
         CPS_LOG_D("CreateQueryRequest, success: " << request.DebugString() << " query_id: " << queryId);
-        YandexQuery::CreateQueryResult result;
+        FederatedQuery::CreateQueryResult result;
         result.set_query_id(queryId);
-        Send(ev->Sender, new TEvControlPlaneStorage::TEvCreateQueryResponse(result, TAuditDetails<YandexQuery::Query>{}), 0, ev->Cookie);
+        Send(ev->Sender, new TEvControlPlaneStorage::TEvCreateQueryResponse(result, TAuditDetails<FederatedQuery::Query>{}), 0, ev->Cookie);
     }
 
     void Handle(TEvControlPlaneStorage::TEvListQueriesRequest::TPtr& ev)
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvListQueriesRequest::TPtr,
-            YandexQuery::ListQueriesResult,
+            FederatedQuery::ListQueriesResult,
             TEvControlPlaneStorage::TEvListQueriesResponse>(ev, "ListQueriesRequest");
     }
 
@@ -146,7 +146,7 @@ private:
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr,
-            YandexQuery::DescribeQueryResult,
+            FederatedQuery::DescribeQueryResult,
             TEvControlPlaneStorage::TEvDescribeQueryResponse>(ev, "DescribeQueryRequest");
     }
 
@@ -154,34 +154,34 @@ private:
     {
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr,
-            YandexQuery::ModifyQueryResult,
+            FederatedQuery::ModifyQueryResult,
             TEvControlPlaneStorage::TEvModifyQueryResponse,
-            TAuditDetails<YandexQuery::Query>>(ev, "ModifyQueryRequest");
+            TAuditDetails<FederatedQuery::Query>>(ev, "ModifyQueryRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr,
-            YandexQuery::DeleteQueryResult,
+            FederatedQuery::DeleteQueryResult,
             TEvControlPlaneStorage::TEvDeleteQueryResponse,
-            TAuditDetails<YandexQuery::Query>>(ev, "DeleteQueryRequest");
+            TAuditDetails<FederatedQuery::Query>>(ev, "DeleteQueryRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvControlQueryRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvControlQueryRequest::TPtr,
-            YandexQuery::ControlQueryResult,
+            FederatedQuery::ControlQueryResult,
             TEvControlPlaneStorage::TEvControlQueryResponse,
-            TAuditDetails<YandexQuery::Query>>(ev, "ControlQueryRequest");
+            TAuditDetails<FederatedQuery::Query>>(ev, "ControlQueryRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvGetResultDataRequest::TPtr& ev)
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvGetResultDataRequest::TPtr,
-            YandexQuery::GetResultDataResult,
+            FederatedQuery::GetResultDataResult,
             TEvControlPlaneStorage::TEvGetResultDataResponse>(ev, "GetResultDataRequest");
     }
 
@@ -189,7 +189,7 @@ private:
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvListJobsRequest::TPtr,
-            YandexQuery::ListJobsResult,
+            FederatedQuery::ListJobsResult,
             TEvControlPlaneStorage::TEvListJobsResponse>(ev, "ListJobsRequest");
     }
 
@@ -197,16 +197,16 @@ private:
     {
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr,
-            YandexQuery::CreateConnectionResult,
+            FederatedQuery::CreateConnectionResult,
             TEvControlPlaneStorage::TEvCreateConnectionResponse,
-            TAuditDetails<YandexQuery::Connection>>(ev, "CreateConnectionRequest");
+            TAuditDetails<FederatedQuery::Connection>>(ev, "CreateConnectionRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev)
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr,
-            YandexQuery::ListConnectionsResult,
+            FederatedQuery::ListConnectionsResult,
             TEvControlPlaneStorage::TEvListConnectionsResponse>(ev, "ListConnectionsRequest");
     }
 
@@ -214,7 +214,7 @@ private:
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr,
-            YandexQuery::DescribeConnectionResult,
+            FederatedQuery::DescribeConnectionResult,
             TEvControlPlaneStorage::TEvDescribeConnectionResponse>(ev, "DescribeConnectionRequest");
     }
 
@@ -222,34 +222,34 @@ private:
     {
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr,
-            YandexQuery::ModifyConnectionResult,
+            FederatedQuery::ModifyConnectionResult,
             TEvControlPlaneStorage::TEvModifyConnectionResponse,
-            TAuditDetails<YandexQuery::Connection>>(ev, "ModifyConnectionRequest");
+            TAuditDetails<FederatedQuery::Connection>>(ev, "ModifyConnectionRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr,
-            YandexQuery::DeleteConnectionResult,
+            FederatedQuery::DeleteConnectionResult,
             TEvControlPlaneStorage::TEvDeleteConnectionResponse,
-            TAuditDetails<YandexQuery::Connection>>(ev, "DeleteConnectionRequest");
+            TAuditDetails<FederatedQuery::Connection>>(ev, "DeleteConnectionRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr,
-            YandexQuery::CreateBindingResult,
+            FederatedQuery::CreateBindingResult,
             TEvControlPlaneStorage::TEvCreateBindingResponse,
-            TAuditDetails<YandexQuery::Binding>>(ev, "CreateBindingRequest");
+            TAuditDetails<FederatedQuery::Binding>>(ev, "CreateBindingRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvListBindingsRequest::TPtr& ev)
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvListBindingsRequest::TPtr,
-            YandexQuery::ListBindingsResult,
+            FederatedQuery::ListBindingsResult,
             TEvControlPlaneStorage::TEvListBindingsResponse>(ev, "ListBindingsRequest");
     }
 
@@ -257,7 +257,7 @@ private:
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr,
-            YandexQuery::DescribeBindingResult,
+            FederatedQuery::DescribeBindingResult,
             TEvControlPlaneStorage::TEvDescribeBindingResponse>(ev, "DescribeBindingRequest");
     }
 
@@ -265,25 +265,25 @@ private:
     {
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr,
-            YandexQuery::ModifyBindingResult,
+            FederatedQuery::ModifyBindingResult,
             TEvControlPlaneStorage::TEvModifyBindingResponse,
-            TAuditDetails<YandexQuery::Binding>>(ev, "ModifyBindingRequest");
+            TAuditDetails<FederatedQuery::Binding>>(ev, "ModifyBindingRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr,
-            YandexQuery::DeleteBindingResult,
+            FederatedQuery::DeleteBindingResult,
             TEvControlPlaneStorage::TEvDeleteBindingResponse,
-            TAuditDetails<YandexQuery::Binding>>(ev, "DeleteBindingRequest");
+            TAuditDetails<FederatedQuery::Binding>>(ev, "DeleteBindingRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr& ev)
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr,
-            YandexQuery::DescribeJobResult,
+            FederatedQuery::DescribeJobResult,
             TEvControlPlaneStorage::TEvDescribeJobResponse>(ev, "DescribeJobRequest");
     }
 
@@ -346,21 +346,21 @@ private:
     NYql::TIssues ValidateCreateQueryRequest(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev)
     {
         NYql::TIssues issues;
-        const YandexQuery::CreateQueryRequest& request = ev->Get()->Request;
+        const FederatedQuery::CreateQueryRequest& request = ev->Get()->Request;
         const TString user = ev->Get()->User;
         const TString scope = ev->Get()->Scope;
-        const YandexQuery::QueryContent& query = request.content();
+        const FederatedQuery::QueryContent& query = request.content();
 
         TString error;
         if (!request.validate(error)) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, error));
         }
 
-        if (query.type() == YandexQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {
+        if (query.type() == FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "type field is not specified"));
         }
 
-        if (query.acl().visibility() == YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
+        if (query.acl().visibility() == FederatedQuery::Acl::VISIBILITY_UNSPECIFIED) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "acl.visibility field is not specified"));
         }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 namespace NYq {
 
@@ -57,7 +57,7 @@ class TFinalStatusCounters: public virtual TThrRefBase {
 public:
     TFinalStatusCounters(const ::NMonitoring::TDynamicCounterPtr& counters);
 
-    void IncByStatus(YandexQuery::QueryMeta::ComputeStatus finalStatus);
+    void IncByStatus(FederatedQuery::QueryMeta::ComputeStatus finalStatus);
 
     virtual ~TFinalStatusCounters() override;
 };

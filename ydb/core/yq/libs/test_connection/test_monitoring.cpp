@@ -36,7 +36,7 @@ class TTestMonitoringConnectionActor : public NActors::TActorBootstrapped<TTestM
 
 public:
     TTestMonitoringConnectionActor(
-        const YandexQuery::Monitoring& monitoring,
+        const FederatedQuery::Monitoring& monitoring,
         const TActorId& sender,
         ui64 cookie,
         const TString& endpoint,
@@ -144,13 +144,13 @@ public:
 
     void ReplyOk() {
         Counters->Ok->Inc();
-        Send(Sender,  new NYq::TEvTestConnection::TEvTestConnectionResponse(YandexQuery::TestConnectionResult{}), Cookie);
+        Send(Sender,  new NYq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), Cookie);
         DestroyActor(true /* success */);
     }
 };
 
 NActors::IActor* CreateTestMonitoringConnectionActor(
-        const YandexQuery::Monitoring& monitoring,
+        const FederatedQuery::Monitoring& monitoring,
         const TActorId& sender,
         ui64 cookie,
         const TString& endpoint,

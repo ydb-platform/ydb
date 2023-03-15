@@ -52,35 +52,35 @@ TFinalStatusCounters::TFinalStatusCounters(const ::NMonitoring::TDynamicCounterP
     Paused = subgroup->GetCounter("PAUSED", true);
 }
 
-void TFinalStatusCounters::IncByStatus(YandexQuery::QueryMeta::ComputeStatus finalStatus) {
+void TFinalStatusCounters::IncByStatus(FederatedQuery::QueryMeta::ComputeStatus finalStatus) {
     switch (finalStatus) {
-    case YandexQuery::QueryMeta::COMPLETED:
+    case FederatedQuery::QueryMeta::COMPLETED:
         Completed->Inc();
         break;
-    case YandexQuery::QueryMeta::FAILED:
+    case FederatedQuery::QueryMeta::FAILED:
         Failed->Inc();
         break;
-    case YandexQuery::QueryMeta::ABORTED_BY_SYSTEM:
+    case FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM:
         AbortedBySystem->Inc();
         break;
-    case YandexQuery::QueryMeta::ABORTED_BY_USER:
+    case FederatedQuery::QueryMeta::ABORTED_BY_USER:
         AbortedByUser->Inc();
         break;
-    case YandexQuery::QueryMeta::PAUSED:
+    case FederatedQuery::QueryMeta::PAUSED:
         Paused->Inc();
         break;
-    case YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED:
-    case YandexQuery::QueryMeta::STARTING:
-    case YandexQuery::QueryMeta::ABORTING_BY_USER:
-    case YandexQuery::QueryMeta::ABORTING_BY_SYSTEM:
-    case YandexQuery::QueryMeta::RESUMING:
-    case YandexQuery::QueryMeta::RUNNING:
-    case YandexQuery::QueryMeta::COMPLETING:
-    case YandexQuery::QueryMeta::FAILING:
-    case YandexQuery::QueryMeta::PAUSING:
+    case FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED:
+    case FederatedQuery::QueryMeta::STARTING:
+    case FederatedQuery::QueryMeta::ABORTING_BY_USER:
+    case FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM:
+    case FederatedQuery::QueryMeta::RESUMING:
+    case FederatedQuery::QueryMeta::RUNNING:
+    case FederatedQuery::QueryMeta::COMPLETING:
+    case FederatedQuery::QueryMeta::FAILING:
+    case FederatedQuery::QueryMeta::PAUSING:
         break;
     default:
-        Y_ENSURE(true, "Unexpected status: " << YandexQuery::QueryMeta_ComputeStatus_Name(finalStatus));
+        Y_ENSURE(true, "Unexpected status: " << FederatedQuery::QueryMeta_ComputeStatus_Name(finalStatus));
     }
 }
 

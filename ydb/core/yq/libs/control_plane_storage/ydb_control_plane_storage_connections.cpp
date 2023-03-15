@@ -3,7 +3,7 @@
 
 #include <util/string/join.h>
 
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <ydb/core/yq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
@@ -19,7 +19,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_CONNECTION, RTC_CREATE_CONNECTION);
     requestCounters.IncInFly();
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::CreateConnectionRequest& request = event.Request;
+    const FederatedQuery::CreateConnectionRequest& request = event.Request;
     const TString user = event.User;
     const TString token = event.Token;
     const int byteSize = request.ByteSize();
@@ -38,7 +38,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
         << request.DebugString());
 
     NYql::TIssues issues = ValidateConnection(ev);
-    if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
+    if (request.content().acl().visibility() == FederatedQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a connection with these parameters. Please receive a permission yq.resources.managePublic"));
     }
     if (issues) {
@@ -53,15 +53,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
         return;
     }
 
-    YandexQuery::Connection connection;
-    YandexQuery::ConnectionContent& content = *connection.mutable_content();
+    FederatedQuery::Connection connection;
+    FederatedQuery::ConnectionContent& content = *connection.mutable_content();
     content = request.content();
     *connection.mutable_meta() = CreateCommonMeta(connectionId, user, startTime, InitialRevision);
 
-    YandexQuery::Internal::ConnectionInternal connectionInternal;
+    FederatedQuery::Internal::ConnectionInternal connectionInternal;
     connectionInternal.set_cloud_id(cloudId);
 
-    std::shared_ptr<std::pair<YandexQuery::CreateConnectionResult, TAuditDetails<YandexQuery::Connection>>> response = std::make_shared<std::pair<YandexQuery::CreateConnectionResult, TAuditDetails<YandexQuery::Connection>>>();
+    std::shared_ptr<std::pair<FederatedQuery::CreateConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::CreateConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
     response->first.set_connection_id(connectionId);
     response->second.After.ConstructInPlace().CopyFrom(connection);
     response->second.CloudId = cloudId;
@@ -107,7 +107,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     validators.push_back(validatorName);
     validators.push_back(validatorCountConnections);
 
-    if (content.acl().visibility() == YandexQuery::Acl::PRIVATE) {
+    if (content.acl().visibility() == FederatedQuery::Acl::PRIVATE) {
         auto overridBindingValidator = CreateConnectionOverrideBindingValidator(
             scope,
             content.name(),
@@ -122,7 +122,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus result = Write(query.Sql, query.Params, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendResponse<TEvControlPlaneStorage::TEvCreateConnectionResponse, YandexQuery::CreateConnectionResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvCreateConnectionResponse, FederatedQuery::CreateConnectionResult>(
         MakeLogPrefix(scope, user, connectionId) + "CreateConnectionRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -148,7 +148,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_CONNECTIONS, RTC_LIST_CONNECTIONS);
     requestCounters.IncInFly();
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::ListConnectionsRequest& request = event.Request;
+    const FederatedQuery::ListConnectionsRequest& request = event.Request;
 
     const TString user = event.User;
     const TString pageToken = request.page_token();
@@ -202,12 +202,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             filters.push_back("`" USER_COLUMN_NAME "` = $user");
         }
 
-        if (request.filter().connection_type() != YandexQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED) {
+        if (request.filter().connection_type() != FederatedQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED) {
             queryBuilder.AddInt64("connection_type", request.filter().connection_type());
             filters.push_back("`" CONNECTION_TYPE_COLUMN_NAME "` = $connection_type");
         }
 
-        if (request.filter().visibility() != YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
+        if (request.filter().visibility() != FederatedQuery::Acl::VISIBILITY_UNSPECIFIED) {
             queryBuilder.AddInt64("visibility", request.filter().visibility());
             filters.push_back("`" VISIBILITY_COLUMN_NAME "` = $visibility");
         }
@@ -234,7 +234,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
-        YandexQuery::ListConnectionsResult result;
+        FederatedQuery::ListConnectionsResult result;
         TResultSetParser parser(resultSets->front());
         while (parser.TryNextRow()) {
             auto& connection = *result.add_connection();
@@ -255,7 +255,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         return result;
     };
 
-    auto success = SendResponse<TEvControlPlaneStorage::TEvListConnectionsResponse, YandexQuery::ListConnectionsResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvListConnectionsResponse, FederatedQuery::ListConnectionsResult>(
         MakeLogPrefix(scope, user) + "ListConnectionsRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -281,7 +281,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_CONNECTION, RTC_DESCRIBE_CONNECTION);
     requestCounters.IncInFly();
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::DescribeConnectionRequest& request = event.Request;
+    const FederatedQuery::DescribeConnectionRequest& request = event.Request;
     const TString user = event.User;
     const TString connectionId = request.connection_id();
     const TString token = event.Token;
@@ -328,7 +328,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
-        YandexQuery::DescribeConnectionResult result;
+        FederatedQuery::DescribeConnectionResult result;
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
             ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
@@ -351,7 +351,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
         return result;
     };
 
-    auto success = SendResponse<TEvControlPlaneStorage::TEvDescribeConnectionResponse, YandexQuery::DescribeConnectionResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvDescribeConnectionResponse, FederatedQuery::DescribeConnectionResult>(
         MakeLogPrefix(scope, user, connectionId) + "DescribeConnectionRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -385,7 +385,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
-    const YandexQuery::ModifyConnectionRequest& request = event.Request;
+    const FederatedQuery::ModifyConnectionRequest& request = event.Request;
     const TString connectionId = request.connection_id();
     const int64_t previousRevision = request.previous_revision();
     const TString idempotencyKey = request.idempotency_key();
@@ -416,7 +416,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
     );
 
-    std::shared_ptr<std::pair<YandexQuery::ModifyConnectionResult, TAuditDetails<YandexQuery::Connection>>> response = std::make_shared<std::pair<YandexQuery::ModifyConnectionResult, TAuditDetails<YandexQuery::Connection>>>();
+    std::shared_ptr<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
     auto prepareParams = [=, config=Config](const TVector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
@@ -427,7 +427,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
             ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
 
-        YandexQuery::Connection connection;
+        FederatedQuery::Connection connection;
         if (!connection.ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
         }
@@ -445,7 +445,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection type cannot be changed. Please specify the same connection type";
         }
 
-        if (content.acl().visibility() == YandexQuery::Acl::SCOPE && request.content().acl().visibility() == YandexQuery::Acl::PRIVATE) {
+        if (content.acl().visibility() == FederatedQuery::Acl::SCOPE && request.content().acl().visibility() == FederatedQuery::Acl::PRIVATE) {
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new connection with visibility PRIVATE";
         }
 
@@ -461,7 +461,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
             content = request.content();
         }
 
-        YandexQuery::Internal::ConnectionInternal connectionInternal;
+        FederatedQuery::Internal::ConnectionInternal connectionInternal;
         response->second.After.ConstructInPlace().CopyFrom(connection);
         response->second.CloudId = connectionInternal.cloud_id();
 
@@ -528,7 +528,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendResponse<TEvControlPlaneStorage::TEvModifyConnectionResponse, YandexQuery::ModifyConnectionResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvModifyConnectionResponse, FederatedQuery::ModifyConnectionResult>(
         MakeLogPrefix(scope, user, connectionId) + "ModifyConnectionRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -554,7 +554,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_CONNECTION, RTC_DELETE_CONNECTION);
     requestCounters.IncInFly();
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::DeleteConnectionRequest& request = event.Request;
+    const FederatedQuery::DeleteConnectionRequest& request = event.Request;
 
     const TString user = event.User;
     const TString token = event.Token;
@@ -586,7 +586,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
         return;
     }
 
-    std::shared_ptr<std::pair<YandexQuery::DeleteConnectionResult, TAuditDetails<YandexQuery::Connection>>> response = std::make_shared<std::pair<YandexQuery::DeleteConnectionResult, TAuditDetails<YandexQuery::Connection>>>();
+    std::shared_ptr<std::pair<FederatedQuery::DeleteConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::DeleteConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DeleteConnection");
     queryBuilder.AddString("scope", scope);
@@ -647,7 +647,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = Write(query.Sql, query.Params, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendResponse<TEvControlPlaneStorage::TEvDeleteConnectionResponse, YandexQuery::DeleteConnectionResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvDeleteConnectionResponse, FederatedQuery::DeleteConnectionResult>(
         MakeLogPrefix(scope, user, connectionId) + "DeleteConnectionRequest",
         NActors::TActivationContext::ActorSystem(),
         result,

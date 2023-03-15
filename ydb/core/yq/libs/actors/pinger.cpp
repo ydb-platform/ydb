@@ -32,11 +32,11 @@ using namespace NFq;
 
 struct TEvPingResponse : public NActors::TEventLocal<TEvPingResponse, NActors::TEvents::TSystem::CallbackCompletion> {
     TPingTaskResult Result;
-    YandexQuery::QueryAction Action = YandexQuery::QUERY_ACTION_UNSPECIFIED;
+    FederatedQuery::QueryAction Action = FederatedQuery::QUERY_ACTION_UNSPECIFIED;
 
     explicit TEvPingResponse(TPingTaskResult&& result)
         : Result(std::move(result))
-        , Action(Result.IsResultSet() ? Result.GetResult().action() : YandexQuery::QUERY_ACTION_UNSPECIFIED)
+        , Action(Result.IsResultSet() ? Result.GetResult().action() : FederatedQuery::QUERY_ACTION_UNSPECIFIED)
     {
     }
 
@@ -252,7 +252,7 @@ private:
         }
     }
 
-    void SendQueryAction(YandexQuery::QueryAction action) {
+    void SendQueryAction(FederatedQuery::QueryAction action) {
         if (!Finishing) {
             Send(Parent, new TEvents::TEvQueryActionResult(action));
         }
@@ -331,8 +331,8 @@ private:
             LOG_T("Ping response success: " << ev->Get()->Result);
             StartLeaseTime = now;
             auto action = ev->Get()->Result.action();
-            if (action != YandexQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) {
-                LOG_D("Query action: " << YandexQuery::QueryAction_Name(action));
+            if (action != FederatedQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) {
+                LOG_D("Query action: " << FederatedQuery::QueryAction_Name(action));
                 SendQueryAction(action);
             }
 
@@ -356,7 +356,7 @@ private:
                 retryStateForLogging = continueLeaseRequest ? &RetryState : &ForwardRequests.front().RetryState;
             }
             LOG_E("Ping response error: " << errorMessage << ". Retried " << retryStateForLogging->GetRetriesCount() << " times during " << retryStateForLogging->GetRetryTime(now));
-            auto action = ev->Get()->Status.IsSuccess() ? ev->Get()->Result.action() : YandexQuery::QUERY_ACTION_UNSPECIFIED;
+            auto action = ev->Get()->Status.IsSuccess() ? ev->Get()->Result.action() : FederatedQuery::QUERY_ACTION_UNSPECIFIED;
             Send(Parent, new TEvents::TEvForwardPingResponse(false, action), 0, ev->Cookie);
             FatalError = true;
             ForwardRequests.clear();

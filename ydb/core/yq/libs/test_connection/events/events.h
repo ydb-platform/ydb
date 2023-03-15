@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/core/yq/libs/events/event_subspace.h>
 
 #include <ydb/core/yq/libs/control_plane_config/events/events.h>
@@ -26,7 +26,7 @@ struct TEvTestConnection {
 
     struct TEvTestConnectionRequest : NActors::TEventLocal<TEvTestConnectionRequest, EvTestConnectionRequest> {
         explicit TEvTestConnectionRequest(const TString& scope,
-                                          const YandexQuery::TestConnectionRequest& request,
+                                          const FederatedQuery::TestConnectionRequest& request,
                                           const TString& user,
                                           const TString& token,
                                           const TString& cloudId,
@@ -46,7 +46,7 @@ struct TEvTestConnection {
 
         TString CloudId;
         TString Scope;
-        YandexQuery::TestConnectionRequest Request;
+        FederatedQuery::TestConnectionRequest Request;
         TString User;
         TString Token;
         TPermissions Permissions;
@@ -55,7 +55,7 @@ struct TEvTestConnection {
     };
 
     struct TEvTestConnectionResponse : NActors::TEventLocal<TEvTestConnectionResponse, EvTestConnectionResponse> {
-        explicit TEvTestConnectionResponse(const YandexQuery::TestConnectionResult& result)
+        explicit TEvTestConnectionResponse(const FederatedQuery::TestConnectionResult& result)
             : Result(result)
         {
         }
@@ -65,7 +65,7 @@ struct TEvTestConnection {
         {
         }
 
-        YandexQuery::TestConnectionResult Result;
+        FederatedQuery::TestConnectionResult Result;
         NYql::TIssues Issues;
     };
 };

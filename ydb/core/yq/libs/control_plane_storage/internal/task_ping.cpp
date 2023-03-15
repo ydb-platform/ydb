@@ -46,9 +46,9 @@ TPingTaskParams ConstructHardPingTask(
 
     auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem()](const TVector<TResultSet>& resultSets) {
         TString jobId;
-        YandexQuery::Query query;
-        YandexQuery::Internal::QueryInternal internal;
-        YandexQuery::Job job;
+        FederatedQuery::Query query;
+        FederatedQuery::Internal::QueryInternal internal;
+        FederatedQuery::Job job;
         TString owner;
 
         if (resultSets.size() != 3) {
@@ -96,8 +96,8 @@ TPingTaskParams ConstructHardPingTask(
             );
         }
 
-        TMaybe<YandexQuery::QueryMeta::ComputeStatus> queryStatus;
-        if (request.status() != YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED) {
+        TMaybe<FederatedQuery::QueryMeta::ComputeStatus> queryStatus;
+        if (request.status() != FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED) {
             queryStatus = request.status();
         }
         TMaybe<NYql::TIssues> issues;
@@ -138,7 +138,7 @@ TPingTaskParams ConstructHardPingTask(
                 transientIssues->AddIssue(NYql::TIssue(builder));
             } else {
                 // failure query should be processed instantly
-                queryStatus = YandexQuery::QueryMeta::FAILING;
+                queryStatus = FederatedQuery::QueryMeta::FAILING;
                 backoff = TDuration::Zero();
                 if (!issues) {
                     issues.ConstructInPlace();
@@ -250,13 +250,13 @@ TPingTaskParams ConstructHardPingTask(
             *job.mutable_expire_at() = NProtoInterop::CastToProto(expireAt);
         }
 
-        if (query.meta().status() == YandexQuery::QueryMeta::COMPLETED) {
+        if (query.meta().status() == FederatedQuery::QueryMeta::COMPLETED) {
             *query.mutable_meta()->mutable_result_expire_at() = request.deadline();
         }
 
         if (request.state_load_mode()) {
             internal.set_state_load_mode(request.state_load_mode());
-            if (request.state_load_mode() == YandexQuery::FROM_LAST_CHECKPOINT) { // Saved checkpoint
+            if (request.state_load_mode() == FederatedQuery::FROM_LAST_CHECKPOINT) { // Saved checkpoint
                 query.mutable_meta()->set_has_saved_checkpoints(true);
             }
         }
@@ -363,7 +363,7 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         TString updateResultSetsExpire;
-        if (query.meta().status() == YandexQuery::QueryMeta::COMPLETED) {
+        if (query.meta().status() == FederatedQuery::QueryMeta::COMPLETED) {
             writeQueryBuilder.AddTimestamp("result_sets_expire_at", NProtoInterop::CastFromProto(request.deadline()));
             updateResultSetsExpire = "`" RESULT_SETS_EXPIRE_AT_COLUMN_NAME "` = $result_sets_expire_at";
         } else {
@@ -422,7 +422,7 @@ TPingTaskParams ConstructSoftPingTask(
 
     auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
         TString owner;
-        YandexQuery::Internal::QueryInternal internal;
+        FederatedQuery::Internal::QueryInternal internal;
 
         if (resultSets.size() != 2) {
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "RESULT SET SIZE of " << resultSets.size() << " != 2";
@@ -510,7 +510,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     }
 
     if (IsTerminalStatus(request.status())) {
-        LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << cloudId  << "], scope: [" << scope << "], query id: [" << request.query_id() << "], job id: [" << request.job_id() << "], status: " << YandexQuery::QueryMeta::ComputeStatus_Name(request.status()));
+        LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << cloudId  << "], scope: [" << scope << "], query id: [" << request.query_id() << "], job id: [" << request.job_id() << "], status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(request.status()));
     }
 
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?

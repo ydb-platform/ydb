@@ -5,7 +5,7 @@
 #include <ydb/core/yq/libs/config/yq_issue.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <util/generic/fwd.h>
 #include <util/generic/set.h>
@@ -57,19 +57,19 @@ NYql::TIssues ValidateQuery(const T& ev, size_t maxSize)
     auto& request = ev->Get()->Request;
     const auto& content = request.content();
 
-    if (request.execute_mode() == YandexQuery::ExecuteMode::EXECUTE_MODE_UNSPECIFIED) {
+    if (request.execute_mode() == FederatedQuery::ExecuteMode::EXECUTE_MODE_UNSPECIFIED) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "execute_mode field is not specified"));
     }
 
-    if (content.type() == YandexQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {
+    if (content.type() == FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "type field is not specified"));
     }
 
-    if (content.acl().visibility() == YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
+    if (content.acl().visibility() == FederatedQuery::Acl::VISIBILITY_UNSPECIFIED) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "acl.visibility field is not specified"));
     }
 
-    if (content.type() == YandexQuery::QueryContent::STREAMING && !request.has_disposition()) {
+    if (content.type() == FederatedQuery::QueryContent::STREAMING && !request.has_disposition()) {
         request.mutable_disposition()->mutable_fresh();
     }
 
@@ -80,18 +80,18 @@ NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobu
 
 
 NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings = false);
-NYql::TIssues ValidateProjectionColumns(const YandexQuery::Schema& schema, const TVector<TString>& partitionedBy);
-NYql::TIssues ValidateProjection(const YandexQuery::Schema& schema, const TString& projection, const TVector<TString>& partitionedBy);
+NYql::TIssues ValidateProjectionColumns(const FederatedQuery::Schema& schema, const TVector<TString>& partitionedBy);
+NYql::TIssues ValidateProjection(const FederatedQuery::Schema& schema, const TString& projection, const TVector<TString>& partitionedBy);
 
 template<typename T>
-NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<YandexQuery::BindingSetting::BindingCase>& availableBindings)
+NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQuery::BindingSetting::BindingCase>& availableBindings)
 {
     const auto& request = ev->Get()->Request;
     NYql::TIssues issues = ValidateEvent(ev, maxSize);
 
     if (request.has_content()) {
-        const YandexQuery::BindingContent& content = request.content();
-        if (content.acl().visibility() == YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
+        const FederatedQuery::BindingContent& content = request.content();
+        if (content.acl().visibility() == FederatedQuery::Acl::VISIBILITY_UNSPECIFIED) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.acl.visibility field is not specified"));
         }
 
@@ -103,27 +103,27 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<YandexQuer
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.setting field is not specified"));
         }
 
-        const YandexQuery::BindingSetting& setting = content.setting();
+        const FederatedQuery::BindingSetting& setting = content.setting();
         if (!availableBindings.contains(setting.binding_case())) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding of the specified type is disabled"));
         }
 
         switch (setting.binding_case()) {
-        case YandexQuery::BindingSetting::kDataStreams: {
-            const YandexQuery::DataStreamsBinding dataStreams = setting.data_streams();
+        case FederatedQuery::BindingSetting::kDataStreams: {
+            const FederatedQuery::DataStreamsBinding dataStreams = setting.data_streams();
             if (!dataStreams.has_schema()) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
             }
             issues.AddIssues(ValidateDateFormatSetting(dataStreams.format_setting(), true));
             break;
         }
-        case YandexQuery::BindingSetting::BINDING_NOT_SET: {
+        case FederatedQuery::BindingSetting::BINDING_NOT_SET: {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding is not set"));
             break;
         }
             // Do not replace with default. Adding a new binding should cause a compilation error
-        case YandexQuery::BindingSetting::kObjectStorage:
-            const YandexQuery::ObjectStorageBinding objectStorage = setting.object_storage();
+        case FederatedQuery::BindingSetting::kObjectStorage:
+            const FederatedQuery::ObjectStorageBinding objectStorage = setting.object_storage();
             for (const auto& subset: objectStorage.subset()) {
                 issues.AddIssues(ValidateFormatSetting(subset.format(), subset.format_setting()));
                 if (subset.projection_size() || subset.partitioned_by_size()) {
@@ -153,10 +153,10 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<YandexQuer
     return issues;
 }
 
-NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& setting, const TSet<YandexQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire = true);
+NYql::TIssues ValidateConnectionSetting(const FederatedQuery::ConnectionSetting& setting, const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire = true);
 
 template<typename T>
-NYql::TIssues ValidateConnection(const T& ev, size_t maxSize, const TSet<YandexQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire = true)
+NYql::TIssues ValidateConnection(const T& ev, size_t maxSize, const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire = true)
 {
     const auto& request = ev->Get()->Request;
     NYql::TIssues issues = ValidateEvent(ev, maxSize);
@@ -165,8 +165,8 @@ NYql::TIssues ValidateConnection(const T& ev, size_t maxSize, const TSet<YandexQ
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content field is not specified"));
     }
 
-    const YandexQuery::ConnectionContent& content = request.content();
-    if (content.acl().visibility() == YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
+    const FederatedQuery::ConnectionContent& content = request.content();
+    if (content.acl().visibility() == FederatedQuery::Acl::VISIBILITY_UNSPECIFIED) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.acl.visibility field is not specified"));
     }
 
@@ -178,7 +178,7 @@ NYql::TIssues ValidateConnection(const T& ev, size_t maxSize, const TSet<YandexQ
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting field is not specified"));
     }
 
-    const YandexQuery::ConnectionSetting& setting = content.setting();
+    const FederatedQuery::ConnectionSetting& setting = content.setting();
     issues.AddIssues(ValidateConnectionSetting(setting, availableConnections, disableCurrentIam, clickHousePasswordRequire));
     return issues;
 }

@@ -36,15 +36,15 @@ bool TRetryLimiter::UpdateOnRetry(const TInstant& lastSeenAt, const TRetryPolicy
     return shouldRetry;
 }
 
-bool IsTerminalStatus(YandexQuery::QueryMeta::ComputeStatus status)
+bool IsTerminalStatus(FederatedQuery::QueryMeta::ComputeStatus status)
 {
-    return IsIn({ YandexQuery::QueryMeta::ABORTED_BY_USER, YandexQuery::QueryMeta::ABORTED_BY_SYSTEM,
-        YandexQuery::QueryMeta::COMPLETED, YandexQuery::QueryMeta::FAILED }, status);
+    return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM,
+        FederatedQuery::QueryMeta::COMPLETED, FederatedQuery::QueryMeta::FAILED }, status);
 }
 
-bool IsAbortedStatus(YandexQuery::QueryMeta::ComputeStatus status)
+bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status)
 {
-    return IsIn({ YandexQuery::QueryMeta::ABORTED_BY_USER, YandexQuery::QueryMeta::ABORTED_BY_SYSTEM }, status);
+    return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM }, status);
 }
 
 TDuration GetDuration(const TString& value, const TDuration& defaultValue)
@@ -150,7 +150,7 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
 }
 
 bool DoesPingTaskUpdateQueriesTable(const Fq::Private::PingTaskRequest& request) {
-    return request.status() != YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED
+    return request.status() != FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED
         || !request.issues().empty()
         || !request.transient_issues().empty()
         || request.statistics()

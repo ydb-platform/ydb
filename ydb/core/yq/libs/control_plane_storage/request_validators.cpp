@@ -81,20 +81,20 @@ NYql::TIssues ValidateDateProjectionType(const NYdb::TType& columnType, const TS
 
 }
 
-NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& setting, const TSet<YandexQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire) {
+NYql::TIssues ValidateConnectionSetting(const FederatedQuery::ConnectionSetting& setting, const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire) {
     NYql::TIssues issues;
     if (!availableConnections.contains(setting.connection_case())) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "connection of the specified type is disabled"));
     }
 
     switch (setting.connection_case()) {
-    case YandexQuery::ConnectionSetting::kYdbDatabase: {
-        const YandexQuery::YdbDatabase database = setting.ydb_database();
-        if (!database.has_auth() || database.auth().identity_case() == YandexQuery::IamAuth::IDENTITY_NOT_SET) {
+    case FederatedQuery::ConnectionSetting::kYdbDatabase: {
+        const FederatedQuery::YdbDatabase database = setting.ydb_database();
+        if (!database.has_auth() || database.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.ydb_database.auth field is not specified"));
         }
 
-        if (database.auth().identity_case() == YandexQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+        if (database.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
         }
 
@@ -103,13 +103,13 @@ NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& se
         }
         break;
     }
-    case YandexQuery::ConnectionSetting::kClickhouseCluster: {
-        const YandexQuery::ClickHouseCluster ch = setting.clickhouse_cluster();
-        if (!ch.has_auth() || ch.auth().identity_case() == YandexQuery::IamAuth::IDENTITY_NOT_SET) {
+    case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
+        const FederatedQuery::ClickHouseCluster ch = setting.clickhouse_cluster();
+        if (!ch.has_auth() || ch.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.clickhouse_cluster.auth field is not specified"));
         }
 
-        if (ch.auth().identity_case() == YandexQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+        if (ch.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
         }
 
@@ -126,13 +126,13 @@ NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& se
         }
         break;
     }
-    case YandexQuery::ConnectionSetting::kObjectStorage: {
-        const YandexQuery::ObjectStorageConnection objectStorage = setting.object_storage();
-        if (!objectStorage.has_auth() || objectStorage.auth().identity_case() == YandexQuery::IamAuth::IDENTITY_NOT_SET) {
+    case FederatedQuery::ConnectionSetting::kObjectStorage: {
+        const FederatedQuery::ObjectStorageConnection objectStorage = setting.object_storage();
+        if (!objectStorage.has_auth() || objectStorage.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.object_storage.auth field is not specified"));
         }
 
-        if (objectStorage.auth().identity_case() == YandexQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+        if (objectStorage.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
         }
 
@@ -141,13 +141,13 @@ NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& se
         }
         break;
     }
-    case YandexQuery::ConnectionSetting::kDataStreams: {
-        const YandexQuery::DataStreams dataStreams = setting.data_streams();
-        if (!dataStreams.has_auth() || dataStreams.auth().identity_case() == YandexQuery::IamAuth::IDENTITY_NOT_SET) {
+    case FederatedQuery::ConnectionSetting::kDataStreams: {
+        const FederatedQuery::DataStreams dataStreams = setting.data_streams();
+        if (!dataStreams.has_auth() || dataStreams.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.data_streams.auth field is not specified"));
         }
 
-        if (dataStreams.auth().identity_case() == YandexQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+        if (dataStreams.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
         }
 
@@ -156,13 +156,13 @@ NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& se
         }
         break;
     }
-    case YandexQuery::ConnectionSetting::kMonitoring: {
-        const YandexQuery::Monitoring monitoring = setting.monitoring();
-        if (!monitoring.has_auth() || monitoring.auth().identity_case() == YandexQuery::IamAuth::IDENTITY_NOT_SET) {
+    case FederatedQuery::ConnectionSetting::kMonitoring: {
+        const FederatedQuery::Monitoring monitoring = setting.monitoring();
+        if (!monitoring.has_auth() || monitoring.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.monitoring.auth field is not specified"));
         }
 
-        if (monitoring.auth().identity_case() == YandexQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+        if (monitoring.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
         }
 
@@ -175,7 +175,7 @@ NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& se
         }
         break;
     }
-    case YandexQuery::ConnectionSetting::CONNECTION_NOT_SET: {
+    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET: {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "connection is not set"));
         break;
     }
@@ -269,7 +269,7 @@ NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobu
     return issues;
 }
 
-NYql::TIssues ValidateProjectionColumns(const YandexQuery::Schema& schema, const TVector<TString>& partitionedBy) {
+NYql::TIssues ValidateProjectionColumns(const FederatedQuery::Schema& schema, const TVector<TString>& partitionedBy) {
     NYql::TIssues issues;
     TMap<TString, Ydb::Type> types;
     for (const auto& column: schema.column()) {
@@ -287,7 +287,7 @@ NYql::TIssues ValidateProjectionColumns(const YandexQuery::Schema& schema, const
     return issues;
 }
 
-NYql::TIssues ValidateProjection(const YandexQuery::Schema& schema, const TString& projection, const TVector<TString>& partitionedBy) {
+NYql::TIssues ValidateProjection(const FederatedQuery::Schema& schema, const TString& projection, const TVector<TString>& partitionedBy) {
     auto generator =NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy); // an exception is thrown if an error occurs
     TMap<TString, NYql::NPathGenerator::IPathGenerator::EType> projectionColumns;
     for (const auto& column: generator->GetConfig().Rules) {

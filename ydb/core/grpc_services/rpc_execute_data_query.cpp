@@ -165,7 +165,7 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record.GetRef();
         SetCost(record.GetConsumedRu());
         AddServerHintsIfAny(record);
 
@@ -176,11 +176,7 @@ public:
 
             try {
                 if (kqpResponse.GetYdbResults().size()) {
-                    Y_VERIFY_DEBUG(!kqpResponse.GetYdbResults().GetArena() ||
-                        queryResult->mutable_result_sets()->GetArena() == kqpResponse.GetYdbResults().GetArena());
-                    // https://protobuf.dev/reference/cpp/arenas/#swap
-                    // Actualy will be copy in case pf remote execution
-                    queryResult->mutable_result_sets()->Swap(record.MutableResponse()->MutableYdbResults());
+                    queryResult->mutable_result_sets()->CopyFrom(kqpResponse.GetYdbResults());
                 } else {
                     NKqp::ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
                 }

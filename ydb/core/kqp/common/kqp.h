@@ -377,10 +377,6 @@ struct TEvKqp {
             return RequestCtx ? RequestActorId : ActorIdFromProto(Record.GetRequestActorId());
         }
 
-        google::protobuf::Arena* GetArena() {
-            return RequestCtx ? RequestCtx->GetArena() : nullptr;
-        }
-
         const TString& GetTraceId() const {
             if (RequestCtx) {
                 if (!TraceId) {
@@ -579,17 +575,14 @@ struct TEvKqp {
         }
 
         void Realloc(std::shared_ptr<google::protobuf::Arena> arena) {
-            ReallocRef(arena.get());
-            Arena_ = arena;
-        }
-
-        void ReallocRef(google::protobuf::Arena* arena) {
             // Allow realloc only if previous allocation was made using "normal" allocator
             // and no data was writen. It prevents ineffective using of protobuf.
             Y_ASSERT(!Protobuf_->GetArena());
             Y_ASSERT(ByteSize() == 0);
             delete Protobuf_;
-            Protobuf_ = google::protobuf::Arena::CreateMessage<TProto>(arena);
+            Protobuf_ = google::protobuf::Arena::CreateMessage<TProto>(arena.get());
+            // Make sure arena is alive
+            Arena_ = arena;
         }
 
         bool ParseFromString(const TString& data) {

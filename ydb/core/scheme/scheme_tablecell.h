@@ -5,6 +5,7 @@
 #include "scheme_type_order.h"
 #include "scheme_types_defs.h"
 
+#include <util/generic/bitops.h>
 #include <util/generic/hash.h>
 #include <util/system/unaligned_mem.h>
 
@@ -467,6 +468,19 @@ public:
         return Cells;
     }
 
+    static void Serialize(TString& res, const TConstArrayRef<TCell>& cells) {
+        size_t sz = sizeof(ui16);
+        for (auto& c : cells) {
+            sz += sizeof(TValue) + c.Size();
+        }
+
+        if (res.capacity() < sz) {
+            res.reserve(FastClp2(sz + 1) - 1);
+        }
+
+        DoSerialize(res, cells);
+    }
+
     static TString Serialize(const TConstArrayRef<TCell>& cells) {
         if (cells.empty())
             return TString();
@@ -478,15 +492,8 @@ public:
 
         TString res;
         res.reserve(sz);
-        ui16 cnt = cells.size();
-        res.append((const char*)&cnt, sizeof(ui16));
-        for (auto& c : cells) {
-            TValue header;
-            header.Size = c.Size();
-            header.IsNull = c.IsNull();
-            res.append((const char*)&header, sizeof(header));
-            res.append(c.Data(), c.Size());
-        }
+
+        DoSerialize(res, cells);
         return res;
     }
 
@@ -531,6 +538,24 @@ private:
 
         vec.Buf = data;
         return true;
+    }
+
+    // note, that res space should be reserved before this call
+    static void DoSerialize(TString& res, const TConstArrayRef<TCell>& cells) {
+        res.clear();
+
+        if (cells.empty())
+            return;
+
+        ui16 cnt = cells.size();
+        res.append((const char*)&cnt, sizeof(ui16));
+        for (auto& c : cells) {
+            TValue header;
+            header.Size = c.Size();
+            header.IsNull = c.IsNull();
+            res.append((const char*)&header, sizeof(header));
+            res.append(c.Data(), c.Size());
+        }
     }
 
 private:

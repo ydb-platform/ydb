@@ -553,6 +553,17 @@ public:
             } else {
                 Self->IncCounter(COUNTER_READ_ITERATOR_MAX_TIME_REACHED);
             }
+
+            NKikimrTxDataShard::TReadContinuationToken continuationToken;
+            continuationToken.SetFirstUnprocessedQuery(FirstUnprocessedQuery);
+
+            // note that when LastProcessedKey set then
+            // FirstUnprocessedQuery is definitely partially read range
+            if (LastProcessedKey)
+                continuationToken.SetLastProcessedKey(LastProcessedKey);
+
+            bool res = continuationToken.SerializeToString(record.MutableContinuationToken());
+            Y_ASSERT(res);
         } else {
             state.IsFinished = true;
             record.SetFinished(true);
@@ -617,17 +628,6 @@ public:
             record.MutableSnapshot()->SetStep(State.ReadVersion.Step);
             record.MutableSnapshot()->SetTxId(State.ReadVersion.TxId);
         }
-
-        NKikimrTxDataShard::TReadContinuationToken continuationToken;
-        continuationToken.SetFirstUnprocessedQuery(FirstUnprocessedQuery);
-
-        // note that when LastProcessedKey set then
-        // FirstUnprocessedQuery is definitely partially read range
-        if (LastProcessedKey)
-            continuationToken.SetLastProcessedKey(LastProcessedKey);
-
-        bool res = continuationToken.SerializeToString(record.MutableContinuationToken());
-        Y_ASSERT(res);
     }
 
     void UpdateState(TReadIteratorState& state) {
@@ -688,8 +688,7 @@ private:
         Y_UNUSED(ctx);
         while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
             TDbTupleRef rowKey = iter->GetKey();
-
-            LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
+            TSerializedCellVec::Serialize(LastProcessedKey, rowKey.Cells());
 
             TDbTupleRef rowValues = iter->GetValues();
 

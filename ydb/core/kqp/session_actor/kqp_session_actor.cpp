@@ -948,7 +948,6 @@ public:
         return request;
     }
 
-
     IKqpGateway::TExecPhysicalRequest PrepareLiteralRequest(TKqpQueryState *queryState) {
         auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
         request.NeedTxId = false;
@@ -1107,14 +1106,14 @@ public:
         auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx);
         if (!Config->FeatureFlags.GetEnableKqpImmediateEffects()) {
             while (tx && tx->GetHasEffects()) {
-                YQL_ENSURE(txCtx.AddDeferredEffect(tx, CreateKqpValueMap(tx)));
+                bool success = txCtx.AddDeferredEffect(tx, CreateKqpValueMap(tx));
+                YQL_ENSURE(success);
                 LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
                 if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
                     ++QueryState->CurrentTx;
                     tx = QueryState->PreparedQuery->GetPhyTx(QueryState->CurrentTx);
                 } else {
                     tx = nullptr;
-                    break;
                 }
             }
         }
@@ -1123,27 +1122,35 @@ public:
             return;
         }
 
-        bool commit = false;
-        if (QueryState->Commit && Config->FeatureFlags.GetEnableKqpImmediateEffects() && phyQuery.GetHasUncommittedChangesRead()) {
-            // every phy tx should acquire LockTxId, so commit is sent separately at the end
-            commit = QueryState->CurrentTx >= phyQuery.TransactionsSize();
-        } else if (QueryState->Commit && QueryState->CurrentTx >= phyQuery.TransactionsSize() - 1) {
-            if (!tx) {
-                // no physical transactions left, perform commit
-                commit = true;
-            } else {
-                // we can merge commit with last tx only for read-only transactions
-                commit = txCtx.DeferredEffects.Empty();
-            }
-        }
-
+        bool commit = ShouldCommitWithCurrentTx(phyQuery, tx);
         if (tx || commit) {
-            bool replied = ExecutePhyTx(&phyQuery, tx, commit);
-            if (!replied) {
-                ++QueryState->CurrentTx;
-            }
+            ExecutePhyTx(&phyQuery, tx, commit);
         } else {
             ReplySuccess();
+        }
+    }
+
+    bool ShouldCommitWithCurrentTx(const NKqpProto::TKqpPhyQuery& phyQuery, const TKqpPhyTxHolder::TConstPtr& tx) {
+        if (!QueryState->Commit) {
+            return false;
+        }
+
+        if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
+            // commit can only be applied to the last transaction or perform separately at the end
+            return false;
+        }
+
+        if (Config->FeatureFlags.GetEnableKqpImmediateEffects() && phyQuery.GetHasUncommittedChangesRead()) {
+            // every phy tx should acquire LockTxId, so commit is sent separately at the end
+            return QueryState->CurrentTx >= phyQuery.TransactionsSize();
+        }
+
+        if (!tx) {
+            // no physical transactions left, perform commit
+            return true;
+        } else {
+            // we can merge commit with last tx only for read-only transactions
+            return QueryState->TxCtx->DeferredEffects.Empty();
         }
     }
 
@@ -1171,8 +1178,6 @@ public:
         if (!CheckTopicOperations()) {
             return true;
         }
-
-        // TODO Handle timeouts -- request.Timeout, request.CancelAfter
 
         if (tx) {
             switch (tx->GetType()) {
@@ -1244,6 +1249,7 @@ public:
 
         SendToExecuter(std::move(request));
 
+        ++QueryState->CurrentTx;
         return false;
     }
 

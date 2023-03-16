@@ -1423,4 +1423,11 @@ ALLOW .* -> vendor/gitlab.com/nvidia/cloud-native/go-nvlib/pkg/nvpci/mmio
 ALLOW .* -> vendor/gitlab.com/nvidia/cloud-native/go-nvlib/pkg/nvpci/bytes
 ALLOW .* -> vendor/gitlab.com/nvidia/cloud-native/go-nvlib/pkg/pciids
 
+# CONTRIB-2904
+ALLOW .* -> vendor/github.com/NVIDIA/mig-parted/api/spec/v1
+ALLOW .* -> vendor/github.com/NVIDIA/mig-parted/pkg/mig/config
+ALLOW .* -> vendor/github.com/NVIDIA/mig-parted/pkg/mig/mode
+ALLOW .* -> vendor/github.com/NVIDIA/mig-parted/pkg/mig/state
+ALLOW .* -> vendor/github.com/NVIDIA/mig-parted/pkg/types
+
 DENY .* -> vendor/

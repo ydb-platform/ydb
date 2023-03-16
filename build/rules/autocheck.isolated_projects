@@ -82,7 +82,7 @@ plus/city
 quasar/backend
 quasar/quasmodrom
 quasar/infra/tasklets
-tracing
+observability/tracing
 velocity/error-booster
 samsaravteam/chat-bots
 crowdsourcing/bbrules-root

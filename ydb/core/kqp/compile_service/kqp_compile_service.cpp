@@ -360,6 +360,7 @@ private:
 
         bool enableKqpDataQueryStreamLookup = Config.GetEnableKqpDataQueryStreamLookup();
         bool enableKqpScanQueryStreamLookup = Config.GetEnableKqpScanQueryStreamLookup();
+        bool enableKqpScanQueryStreamIdxLookupJoin = Config.GetEnableKqpScanQueryStreamIdxLookupJoin();
 
         bool enableKqpDataQuerySourceRead = Config.GetEnableKqpDataQuerySourceRead();
         bool enableKqpScanQuerySourceRead = Config.GetEnableKqpScanQuerySourceRead();
@@ -372,15 +373,18 @@ private:
 
         if (Config.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
             Config.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
+            Config.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             Config.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
             Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead) {
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                 "Iterator read flags was changed. StreamLookup from " << enableKqpDataQueryStreamLookup <<
                 " to " << Config.GetEnableKqpDataQueryStreamLookup() << " for data queries, from " <<
-                enableKqpScanQueryStreamLookup << " to " << Config.GetEnableKqpScanQueryStreamLookup() << " for scan queries."
-                << " Sources for data queries from " << enableKqpDataQuerySourceRead << " to " << Config.GetEnableKqpDataQuerySourceRead()
-                << "for scan queries from " << enableKqpScanQuerySourceRead << " to " << Config.GetEnableKqpScanQuerySourceRead());
+                enableKqpScanQueryStreamLookup << " to " << Config.GetEnableKqpScanQueryStreamLookup() << ", from "
+                << enableKqpScanQueryStreamIdxLookupJoin << " to " << Config.GetEnableKqpScanQueryStreamIdxLookupJoin()
+                << " scan queries. Sources for data queries from " << enableKqpDataQuerySourceRead << " to "
+                << Config.GetEnableKqpDataQuerySourceRead() << "for scan queries from " << enableKqpScanQuerySourceRead
+                << " to " << Config.GetEnableKqpScanQuerySourceRead());
 
             QueryCache.Clear();
         }

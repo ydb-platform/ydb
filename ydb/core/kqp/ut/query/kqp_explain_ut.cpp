@@ -468,14 +468,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
         node = FindPlanNodeByKv(plan, "Name", "TableFullScan");
         UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
-
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            node = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
-            UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
-        } else {
-            node = FindPlanNodeByKv(plan, "Name", "TablePointLookup");
-            UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
-        }
+        node = FindPlanNodeByKv(plan, "Name", "TablePointLookup");
+        UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
     }
 
     Y_UNIT_TEST(FewEffects) {

@@ -1204,16 +1204,12 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         ui32 index = 0;
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 0);
-            UNIT_ASSERT(stats.query_phases(0).table_access().size() == 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 0);
+        UNIT_ASSERT(stats.query_phases(0).table_access().size() == 0);
 
-            index = 1;
-        }
+        index = 1;
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/EightShard");

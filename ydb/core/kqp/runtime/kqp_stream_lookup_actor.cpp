@@ -20,7 +20,7 @@ namespace NKqp {
 
 namespace {
 
-static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(5);
+static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(10);
 static constexpr ui64 MAX_SHARD_RETRIES = 10;
 
 class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLookupActor>, public NYql::NDq::IDqComputeActorAsyncInput {

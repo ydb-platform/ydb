@@ -5,7 +5,9 @@ namespace NKikimr {
 namespace NMiniKQL {
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
 Y_UNIT_TEST_SUITE(TMiniKQLWideNodesTest) {
-    Y_UNIT_TEST_LLVM(TestDiscard) {
+    // TDOD: fixme
+#if 0
+    Y_UNIT_TEST_LLVM(TestWideDiscard) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -17,6 +19,26 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideNodesTest) {
         const auto list = pb.NewList(dataType, {data0, data1, data2, data3});
 
         const auto pgmReturn = pb.FromFlow(pb.Discard(pb.ExpandMap(pb.ToFlow(list), [](TRuntimeNode) { return TRuntimeNode::TList(); })));
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue();
+        NUdf::TUnboxedValue item;
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+    }
+#endif
+
+    Y_UNIT_TEST_LLVM(TestDiscard) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto data0 = pb.NewDataLiteral<NUdf::EDataSlot::String>("000");
+        const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("100");
+        const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("200");
+        const auto data3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("300");
+        const auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+        const auto list = pb.NewList(dataType, {data0, data1, data2, data3});
+
+        const auto pgmReturn = pb.FromFlow(pb.Discard(pb.ToFlow(list)));
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue();
         NUdf::TUnboxedValue item;

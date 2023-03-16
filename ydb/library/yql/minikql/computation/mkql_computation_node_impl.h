@@ -221,12 +221,14 @@ protected:
     }
 };
 
-template <typename TDerived>
-class TFlowSourceComputationNode: public TStatefulComputationNode<IComputationNode>
+template <typename TDerived, typename IFlowInterface>
+class TFlowSourceBaseComputationNode: public TStatefulComputationNode<IFlowInterface>
 {
+    using TBase = TStatefulComputationNode<IFlowInterface>;
 protected:
-    TFlowSourceComputationNode(TComputationMutables& mutables, EValueRepresentation kind, EValueRepresentation stateKind)
-        : TStatefulComputationNode<IComputationNode>(mutables, stateKind), RepresentationKind(kind)
+    TFlowSourceBaseComputationNode(TComputationMutables& mutables, EValueRepresentation kind, EValueRepresentation stateKind)
+        : TBase(mutables, stateKind)
+        , RepresentationKind(kind)
     {}
 
     TString DebugString() const override {
@@ -246,6 +248,8 @@ protected:
             node->SetOwner(this);
         }
     }
+  
+    const EValueRepresentation RepresentationKind;
 private:
     bool IsTemporaryValue() const final {
         return true;
@@ -259,7 +263,7 @@ private:
         if (this == owner)
             return;
 
-        if (dependencies.emplace(TStatefulComputationNode<IComputationNode>::ValueIndex, TStatefulComputationNode<IComputationNode>::RepresentationKind).second) {
+        if (dependencies.emplace(TBase::ValueIndex, TBase::RepresentationKind).second) {
             std::for_each(this->Dependencies.cbegin(), this->Dependencies.cend(), std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, owner, std::ref(dependencies)));
         }
     }
@@ -267,18 +271,52 @@ private:
     void PrepareStageOne() final {}
     void PrepareStageTwo() final {}
 
+    const IComputationNode* GetSource() const final { return this; }
+
+    mutable std::unordered_set<const IComputationNode*> Sources; // TODO: remove const and mutable.
+};
+
+
+template <typename TDerived>
+class TFlowSourceComputationNode: public TFlowSourceBaseComputationNode<TDerived, IComputationNode>
+{
+    using TBase = TFlowSourceBaseComputationNode<TDerived, IComputationNode>;
+protected:
+    TFlowSourceComputationNode(TComputationMutables& mutables, EValueRepresentation kind, EValueRepresentation stateKind)
+        : TBase(mutables, kind, stateKind)
+    {}
+
+private:
     EValueRepresentation GetRepresentation() const final {
-        return RepresentationKind;
+        return this->RepresentationKind;
     }
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
         return static_cast<const TDerived*>(this)->DoCalculate(this->ValueRef(compCtx), compCtx);
     }
+};
 
-    const IComputationNode* GetSource() const final { return this; }
+template <typename TDerived>
+class TWideFlowSourceComputationNode: public TFlowSourceBaseComputationNode<TDerived, IComputationWideFlowNode>
+{
+    using TBase = TFlowSourceBaseComputationNode<TDerived, IComputationWideFlowNode>;
+protected:
+    TWideFlowSourceComputationNode(TComputationMutables& mutables, EValueRepresentation stateKind)
+        : TBase(mutables, EValueRepresentation::Any, stateKind)
+    {}
 
-    const EValueRepresentation RepresentationKind;
-    mutable std::unordered_set<const IComputationNode*> Sources; // TODO: remove const and mutable.
+private:
+    EValueRepresentation GetRepresentation() const final {
+        THROW yexception() << "Failed to get representation kind.";
+    }
+
+    NUdf::TUnboxedValue GetValue(TComputationContext&) const final {
+        THROW yexception() << "Failed to get value from wide flow node.";
+    }
+
+    EFetchResult FetchValues(TComputationContext& compCtx, NUdf::TUnboxedValue*const* values) const final {
+        return static_cast<const TDerived*>(this)->DoCalculate(this->ValueRef(compCtx), compCtx, values);
+    }
 };
 
 template <typename TDerived, typename IFlowInterface>

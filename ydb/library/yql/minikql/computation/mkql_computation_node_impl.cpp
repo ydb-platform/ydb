@@ -111,8 +111,10 @@ template <class IComputationNodeInterface, bool SerializableState>
 ui32 TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetDependencesCount() const { return Dependencies.size(); }
 
 template class TStatefulComputationNode<IComputationNode, false>;
+template class TStatefulComputationNode<IComputationWideFlowNode, false>;
 template class TStatefulComputationNode<IComputationExternalNode, false>;
 template class TStatefulComputationNode<IComputationNode, true>;
+template class TStatefulComputationNode<IComputationWideFlowNode, true>;
 template class TStatefulComputationNode<IComputationExternalNode, true>;
 
 void TExternalComputationNode::CollectDependentIndexes(const IComputationNode*, TIndexesMap& map) const {

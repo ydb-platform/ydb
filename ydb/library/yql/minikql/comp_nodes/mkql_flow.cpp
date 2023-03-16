@@ -282,7 +282,129 @@ private:
     IComputationNode* const Flow;
 };
 
-}
+class TToWideFlowWrapper : public TWideFlowSourceComputationNode<TToWideFlowWrapper> {
+    typedef TWideFlowSourceComputationNode<TToWideFlowWrapper> TBaseComputation;
+public:
+    TToWideFlowWrapper(TComputationMutables& mutables, IComputationNode* stream, ui32 width)
+        : TBaseComputation(mutables, EValueRepresentation::Any)
+        , Stream(stream)
+        , Width(width)
+    {}
+
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const
+    {
+        auto& s = GetState(state, ctx);
+        auto status = s.StreamValue.WideFetch(s.Values.data(), Width);
+        switch (status) {
+        case NUdf::EFetchStatus::Finish:
+            return EFetchResult::Finish;
+        case NUdf::EFetchStatus::Yield:
+            return EFetchResult::Yield;
+        case NUdf::EFetchStatus::Ok:
+            for (ui32 i = 0; i < Width; ++i) {
+                if (output[i]) {
+                  *output[i] = std::move(s.Values[i]);
+                }
+            }
+            return EFetchResult::One;
+        }
+    }
+
+private:
+    struct TState : public TComputationValue<TState> {
+        NUdf::TUnboxedValue StreamValue;
+        TVector<NUdf::TUnboxedValue> Values;
+
+        TState(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& streamValue, ui32 width)
+            : TComputationValue(memInfo)
+            , StreamValue(std::move(streamValue))
+            , Values(width)
+        {
+        }
+    };
+
+    void RegisterDependencies() const final {
+        this->DependsOn(Stream);
+    }
+
+    TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
+        if (!state.HasValue()) {
+            state = ctx.HolderFactory.Create<TState>(Stream->GetValue(ctx), Width);
+        }
+        return *static_cast<TState*>(state.AsBoxed().Get());
+    }
+
+    IComputationNode* const Stream;
+    const ui32 Width;
+};
+
+class TFromWideFlowWrapper : public TMutableComputationNode<TFromWideFlowWrapper> {
+    typedef TMutableComputationNode<TFromWideFlowWrapper> TBaseComputation;
+public:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    public:
+        using TBase = TComputationValue<TStreamValue>;
+
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, IComputationWideFlowNode* wideFlow, ui32 width, ui32 stubsIndex)
+            : TBase(memInfo)
+            , CompCtx(compCtx)
+            , WideFlow(wideFlow)
+            , Width(width)
+            , StubsIndex(stubsIndex)
+            , ClientBuffer(nullptr)
+        {}
+
+    private:
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* result, ui32 width) override {
+            Y_VERIFY_DEBUG(width == Width);
+            auto valuePtrs = CompCtx.WideFields.data() + StubsIndex;
+            if (result != ClientBuffer) {
+                for (ui32 i = 0; i < width; ++i) {
+                    valuePtrs[i] = result + i;
+                }
+                ClientBuffer = result;
+            }
+
+            EFetchResult status = WideFlow->FetchValues(CompCtx, valuePtrs);
+            switch (status) {
+            case EFetchResult::Finish:
+                return NUdf::EFetchStatus::Finish;
+            case EFetchResult::Yield:
+                return NUdf::EFetchStatus::Yield;
+            case EFetchResult::One:
+                return NUdf::EFetchStatus::Ok;
+            }
+        }
+
+        TComputationContext& CompCtx;
+        IComputationWideFlowNode* const WideFlow;
+        const ui32 Width;
+        const ui32 StubsIndex;
+        NUdf::TUnboxedValue* ClientBuffer;
+    };
+
+    TFromWideFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* wideFlow, ui32 width)
+        : TBaseComputation(mutables)
+        , WideFlow(wideFlow)
+        , Width(width)
+        , StubsIndex(mutables.IncrementWideFieldsIndex(width))
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, WideFlow, Width, StubsIndex);
+    }
+
+private:
+    void RegisterDependencies() const final {
+        this->DependsOn(WideFlow);
+    }
+
+    IComputationWideFlowNode* const WideFlow;
+    const ui32 Width;
+    const ui32 StubsIndex;
+};
+
+} // namespace 
 
 IComputationNode* WrapToFlow(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
@@ -290,6 +412,11 @@ IComputationNode* WrapToFlow(TCallable& callable, const TComputationNodeFactoryC
     const auto outType = AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType();
     const auto kind = GetValueRepresentation(outType);
     if (type->IsStream()) {
+        auto streamType = AS_TYPE(TStreamType, type);
+        if (streamType->GetItemType()->IsMulti()) {
+            ui32 width = GetWideComponentsCount(streamType);
+            return new TToWideFlowWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), width);
+        }
         return new TToFlowWrapper<true>(ctx.Mutables, kind, LocateNode(ctx.NodeLocator, callable, 0));
     } else if (type->IsList()) {
         return new TToFlowWrapper<false>(ctx.Mutables, kind, LocateNode(ctx.NodeLocator, callable, 0));
@@ -306,6 +433,13 @@ IComputationNode* WrapToFlow(TCallable& callable, const TComputationNodeFactoryC
 
 IComputationNode* WrapFromFlow(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
+    const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
+    if (flowType->GetItemType()->IsMulti()) {
+        auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+        MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
+        ui32 width = GetWideComponentsCount(flowType);
+        return new TFromWideFlowWrapper(ctx.Mutables, wideFlow, width);
+    }
     return new TFromFlowWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
 }
 

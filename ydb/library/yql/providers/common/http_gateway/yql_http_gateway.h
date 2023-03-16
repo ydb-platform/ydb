@@ -113,6 +113,8 @@ public:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) = 0;
         
     virtual ui64 GetBuffersSizePerStream() = 0;
+
+    static THeaders MakeYcHeaders(const TString& requestId, const TString& token = "", const TString& contentType = "");
 };
 
 }

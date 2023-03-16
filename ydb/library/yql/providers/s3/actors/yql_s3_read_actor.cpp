@@ -771,8 +771,13 @@ public:
         auto id = index + StartPathIndex;
         const TString requestId = CreateGuidAsString();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
-        Gateway->Download(url, MakeHeaders(Token, requestId), 0U, std::min(size, SizeLimit),
-            std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id, path), {}, RetryPolicy);
+        Gateway->Download(url,
+            IHTTPGateway::MakeYcHeaders(requestId, Token),
+            0U,
+            std::min(size, SizeLimit),
+            std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id, path),
+            {},
+            RetryPolicy);
     }
 
     TObjectPath ReadPathFromCache() {
@@ -953,14 +958,6 @@ private:
         ContainerCache.Clear();
         Send(FileQueueActor, new NActors::TEvents::TEvPoison());
         TActorBootstrapped<TS3ReadActor>::PassAway();
-    }
-
-    static IHTTPGateway::THeaders MakeHeaders(const TString& token, const TString& requestId) {
-        IHTTPGateway::THeaders headers{TString{"X-Request-ID:"} += requestId};
-        if (token) {
-            headers.emplace_back(TString("X-YaCloud-SubjectToken:") += token);
-        }
-        return headers;
     }
 
 private:
@@ -2208,7 +2205,7 @@ public:
         auto stuff = std::make_shared<TRetryStuff>(
             Gateway,
             Url + objectPath.Path,
-            MakeHeaders(Token, requestId),
+            IHTTPGateway::MakeYcHeaders(requestId, Token),
             objectPath.Size,
             TxId,
             requestId,
@@ -2415,14 +2412,6 @@ private:
         ArrowRowContainerCache.Clear();
 
         TActorBootstrapped<TS3StreamReadActor>::PassAway();
-    }
-
-    static IHTTPGateway::THeaders MakeHeaders(const TString& token, const TString& requestId) {
-        IHTTPGateway::THeaders headers{TString{"X-Request-ID:"} += requestId};
-        if (token) {
-            headers.emplace_back(TString("X-YaCloud-SubjectToken:") += token);
-        }
-        return headers;
     }
 
     void MaybePause() {

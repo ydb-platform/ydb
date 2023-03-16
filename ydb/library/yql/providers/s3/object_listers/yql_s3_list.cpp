@@ -273,12 +273,6 @@ public:
 
 private:
     static void SubmitRequestIntoGateway(TListingContext& ctx) {
-        IHTTPGateway::THeaders headers;
-        if (!ctx.ListingRequest.Token.empty()) {
-            headers.emplace_back("X-YaCloud-SubjectToken:" + ctx.ListingRequest.Token);
-        }
-        headers.emplace_back(TString{"X-Request-ID:"} + ctx.RequestId);
-
         TUrlBuilder urlBuilder(ctx.ListingRequest.Url);
         urlBuilder.AddUrlParam("list-type", "2")
             .AddUrlParam("prefix", ctx.ListingRequest.Prefix)
@@ -299,7 +293,7 @@ private:
         auto retryPolicy = ctx.RetryPolicy;
         gateway->Download(
             urlBuilder.Build(),
-            headers,
+            IHTTPGateway::MakeYcHeaders(ctx.RequestId, ctx.ListingRequest.Token),
             0U,
             0U,
             CallbackFactoryMethod(std::move(ctx)),

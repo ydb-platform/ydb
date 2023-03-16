@@ -937,4 +937,24 @@ IHTTPGateway::Make(const THttpGatewayConfig* httpGatewaysCfg, ::NMonitoring::TDy
     return gateway;
 }
 
+IHTTPGateway::THeaders IHTTPGateway::MakeYcHeaders(const TString& requestId, const TString& token, const TString& contentType) {
+
+    IHTTPGateway::THeaders result;
+
+    if (requestId.empty()) {
+        throw yexception() << "RequestId is mandatory";
+    }
+    result.push_back(TString("X-Request-ID:") + requestId);
+
+    if (!token.empty()) {
+        result.push_back(TString("X-YaCloud-SubjectToken:") + token);
+    }
+
+    if (!contentType.empty()) {
+        result.push_back(TString("Content-Type:") + contentType);
+    }
+        
+    return result;
+}
+
 }

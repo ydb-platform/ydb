@@ -150,10 +150,20 @@ public:
             const size_t size = Max<size_t>(Parts->Volume(), 1);
             InFlight += size;
             SentSize += size;
-            Gateway->Upload(Url, MakeHeaders(RequestId), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, size, std::placeholders::_1), true, RetryPolicy);
+            Gateway->Upload(Url,
+                IHTTPGateway::MakeYcHeaders(RequestId, CredProvider->GetAuthInfo()),
+                Parts->Pop(),
+                std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, size, std::placeholders::_1),
+                true,
+                RetryPolicy);
         } else {
             Become(&TS3FileWriteActor::MultipartInitialStateFunc);
-            Gateway->Upload(Url + "?uploads", MakeHeaders(RequestId), 0, std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, RequestId, std::placeholders::_1), false, RetryPolicy);
+            Gateway->Upload(Url + "?uploads",
+                IHTTPGateway::MakeYcHeaders(RequestId, CredProvider->GetAuthInfo()),
+                0,
+                std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, RequestId, std::placeholders::_1),
+                false,
+                RetryPolicy);
         }
     }
 
@@ -354,7 +364,12 @@ private:
             Tags.emplace_back();
             InFlight += size;
             SentSize += size;
-            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeaders(RequestId), std::move(part), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, RequestId, std::placeholders::_1), true, RetryPolicy);
+            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId,
+                IHTTPGateway::MakeYcHeaders(RequestId, CredProvider->GetAuthInfo()),
+                std::move(part),
+                std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, RequestId, std::placeholders::_1),
+                true,
+                RetryPolicy);
         }
     }
 
@@ -367,18 +382,12 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
-        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeaders(RequestId, "application/xml"sv), xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, SentSize, std::placeholders::_1), false, RetryPolicy);
-    }
-
-    IHTTPGateway::THeaders MakeHeaders(const TString& requestId, std::string_view contentType = "") const {
-        auto headers = IHTTPGateway::THeaders{ TString{"X-Request-ID:"} += requestId };
-        if (const auto& token = CredProvider->GetAuthInfo(); !token.empty()) {
-            headers.push_back(TString("X-YaCloud-SubjectToken:") += token);
-        }
-        if (!contentType.empty()) {
-            headers.push_back(TString("Content-Type:") += contentType);
-        }
-        return headers;
+        Gateway->Upload(Url + "?uploadId=" + UploadId,
+            IHTTPGateway::MakeYcHeaders(RequestId, CredProvider->GetAuthInfo(), "application/xml"),
+            xml,
+            std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, SentSize, std::placeholders::_1),
+            false,
+            RetryPolicy);
     }
 
     size_t InFlight = 0ULL;

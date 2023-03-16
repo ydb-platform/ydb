@@ -1,0 +1,10 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NFq.NProto;
+
+import "ydb/core/fq/libs/graph_params/proto/graph_params.proto";
+
+message TCheckpointGraphDescription {
+    TGraphParams Graph = 1;
+}

@@ -2,13 +2,13 @@
 #include "rpc_common.h"
 #include "rpc_deferrable.h"
 
-#include <ydb/core/yq/libs/events/events.h>
-#include <ydb/core/yq/libs/actors/proxy_private.h>
+#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/actors/proxy_private.h>
+#include <ydb/core/fq/libs/protos/fq_private.pb.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 
 #include <ydb/core/grpc_services/base/base.h>
-#include <ydb/core/yq/libs/protos/fq_private.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {

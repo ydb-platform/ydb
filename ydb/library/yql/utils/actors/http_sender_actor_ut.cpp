@@ -1,10 +1,10 @@
 #include "ydb/core/testlib/basics/appdata.h"
 
-#include <ydb/core/yq/libs/actors/logging/log.h>
-#include <ydb/core/yq/libs/ydb/util.h>
-#include <ydb/core/yq/libs/ydb/ydb.h>
+#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/core/fq/libs/ydb/util.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/core/yq/libs/control_plane_proxy/events/events.h>
+#include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/scheduler_basic.h>

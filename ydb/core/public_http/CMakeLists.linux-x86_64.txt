@@ -28,12 +28,12 @@ target_link_libraries(ydb-core-public_http PUBLIC
   cpp-protobuf-json
   library-cpp-resource
   ydb-core-base
-  ydb-core-http_proxy
+  fq-libs-result_formatter
   core-grpc_services-local_rpc
+  ydb-core-http_proxy
   ydb-core-protos
   core-public_http-protos
   core-viewer-json
-  yq-libs-result_formatter
   yql-public-issue
   cpp-client-ydb_types
 )
@@ -57,12 +57,12 @@ target_link_libraries(ydb-core-public_http.global PUBLIC
   cpp-protobuf-json
   library-cpp-resource
   ydb-core-base
-  ydb-core-http_proxy
+  fq-libs-result_formatter
   core-grpc_services-local_rpc
+  ydb-core-http_proxy
   ydb-core-protos
   core-public_http-protos
   core-viewer-json
-  yq-libs-result_formatter
   yql-public-issue
   cpp-client-ydb_types
 )

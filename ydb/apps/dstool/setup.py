@@ -40,7 +40,7 @@ setuptools.setup(
     packages=[
         'library/cpp/actors/protos',
         'ydb/core/protos',
-        'ydb/core/yq/libs/config/protos',
+        'ydb/core/fq/libs/config/protos',
         'ydb/library/folder_service/proto',
         'ydb/library/login/protos',
         'ydb/library/mkql_proto/protos',

@@ -1,0 +1,22 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NFq.NConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+import "ydb/core/fq/libs/config/protos/storage.proto";
+
+////////////////////////////////////////////////////////////
+
+message TLimiter {
+    string CoordinationNodePath = 1;
+}
+
+message TRateLimiterConfig {
+    bool Enabled = 1;
+    bool ControlPlaneEnabled = 2;
+    bool DataPlaneEnabled = 3;
+
+    NFq.NConfig.TYdbStorageConfig Database = 4;
+    repeated TLimiter Limiters = 5;
+}

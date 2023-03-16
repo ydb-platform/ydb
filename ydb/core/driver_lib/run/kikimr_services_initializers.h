@@ -14,7 +14,7 @@
 
 #include <ydb/public/lib/base/msgbus.h>
 
-#include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
+#include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actorsystem.h>

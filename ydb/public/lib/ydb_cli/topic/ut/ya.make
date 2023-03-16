@@ -22,7 +22,7 @@ SRCS(
 PEERDIR(
     library/cpp/histogram/hdr
     library/cpp/threading/local_executor
-    ydb/core/yq/libs/private_client
+    ydb/core/fq/libs/private_client
     ydb/public/sdk/cpp/client/ydb_persqueue_public
     ydb/public/lib/experimental
     ydb/public/lib/ydb_cli/commands

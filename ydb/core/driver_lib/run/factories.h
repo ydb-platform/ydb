@@ -12,7 +12,7 @@
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
-#include <ydb/core/yq/libs/config/protos/audit.pb.h>
+#include <ydb/core/fq/libs/config/protos/audit.pb.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>

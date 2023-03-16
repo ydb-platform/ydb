@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package Fq.Private.V1;
+
+import "ydb/core/fq/libs/protos/fq_private.proto";
+
+service FqPrivateTaskService {
+    // gets new task
+    rpc GetTask(Fq.Private.GetTaskRequest) returns (Fq.Private.GetTaskResponse);
+
+    // pings new task (also can update metadata)
+    rpc PingTask(Fq.Private.PingTaskRequest) returns (Fq.Private.PingTaskResponse);
+
+    // writes rows
+    rpc WriteTaskResult(Fq.Private.WriteTaskResultRequest) returns (Fq.Private.WriteTaskResultResponse);
+
+    // nodes
+    rpc NodesHealthCheck(Fq.Private.NodesHealthCheckRequest) returns (Fq.Private.NodesHealthCheckResponse);
+
+    // rate limiter
+    rpc CreateRateLimiterResource(Fq.Private.CreateRateLimiterResourceRequest) returns (Fq.Private.CreateRateLimiterResourceResponse);
+    rpc DeleteRateLimiterResource(Fq.Private.DeleteRateLimiterResourceRequest) returns (Fq.Private.DeleteRateLimiterResourceResponse);
+}

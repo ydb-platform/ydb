@@ -145,8 +145,8 @@
 
 #include <ydb/core/ymq/actor/serviceid.h>
 
-#include <ydb/core/yq/libs/init/init.h>
-#include <ydb/core/yq/libs/logs/log.h>
+#include <ydb/core/fq/libs/init/init.h>
+#include <ydb/core/fq/libs/logs/log.h>
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>

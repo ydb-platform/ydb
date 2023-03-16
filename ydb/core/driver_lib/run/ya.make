@@ -70,6 +70,8 @@ PEERDIR(
     ydb/core/driver_lib/cli_utils
     ydb/core/driver_lib/version
     ydb/core/formats
+    ydb/core/fq/libs/init
+    ydb/core/fq/libs/logs
     ydb/core/grpc_services
     ydb/core/grpc_services/base
     ydb/core/health_check
@@ -122,8 +124,6 @@ PEERDIR(
     ydb/core/viewer
     ydb/core/ymq/actor
     ydb/core/ymq/http
-    ydb/core/yq/libs/init
-    ydb/core/yq/libs/logs
     ydb/library/folder_service
     ydb/library/folder_service/proto
     ydb/library/pdisk_io

@@ -4,11 +4,11 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/protobuf/json/json2proto.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/service_fq.h>
+#include <ydb/core/protos/services.pb.h>
 #include <ydb/core/public_http/protos/fq.pb.h>
-#include <ydb/core/yq/libs/result_formatter/result_formatter.h>
 
 namespace NKikimr::NPublicHttp {
 

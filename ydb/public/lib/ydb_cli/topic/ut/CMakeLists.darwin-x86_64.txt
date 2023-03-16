@@ -23,7 +23,7 @@ target_link_libraries(ydb-public-lib-ydb_cli-topic-ut PUBLIC
   topic
   cpp-histogram-hdr
   cpp-threading-local_executor
-  yq-libs-private_client
+  fq-libs-private_client
   cpp-client-ydb_persqueue_public
   public-lib-experimental
   clicommands

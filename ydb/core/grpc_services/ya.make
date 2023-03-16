@@ -85,6 +85,9 @@ PEERDIR(
     ydb/core/discovery
     ydb/core/engine
     ydb/core/formats
+    ydb/core/fq/libs/actors
+    ydb/core/fq/libs/control_plane_proxy
+    ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/grpc_services/counters
     ydb/core/grpc_services/local_rpc
     ydb/core/grpc_services/cancelation
@@ -99,9 +102,6 @@ PEERDIR(
     ydb/core/tx/sharding
     ydb/core/tx/long_tx_service/public
     ydb/core/ydb_convert
-    ydb/core/yq/libs/actors
-    ydb/core/yq/libs/control_plane_proxy
-    ydb/core/yq/libs/control_plane_proxy/events
     ydb/library/aclib
     ydb/library/binary_json
     ydb/library/dynumber

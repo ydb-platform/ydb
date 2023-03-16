@@ -31,8 +31,8 @@
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/persqueue_v1/grpc_pq_write.h>
 #include <ydb/services/monitoring/grpc_service.h>
-#include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
-#include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
+#include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/client/metadata/types_metadata.h>
 #include <ydb/core/client/metadata/functions_metadata.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
@@ -86,8 +86,8 @@
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/core/yq/libs/init/init.h>
-#include <ydb/core/yq/libs/mock/yql_mock.h>
+#include <ydb/core/fq/libs/init/init.h>
+#include <ydb/core/fq/libs/mock/yql_mock.h>
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/bg_tasks/ds_table/executor.h>

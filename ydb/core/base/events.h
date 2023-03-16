@@ -5,7 +5,7 @@
 #include <library/cpp/actors/core/event_pb.h>
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 
-#include <ydb/core/yq/libs/events/event_ids.h>
+#include <ydb/core/fq/libs/events/event_ids.h>
 
 namespace NKikimr {
 

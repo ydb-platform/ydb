@@ -40,6 +40,9 @@ PEERDIR(
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
+    ydb/core/fq/libs/init
+    ydb/core/fq/libs/mock
+    ydb/core/fq/libs/shared_resources
     ydb/core/grpc_services
     ydb/core/health_check
     ydb/core/kesus/proxy
@@ -68,9 +71,6 @@ PEERDIR(
     ydb/core/tx/sequenceproxy
     ydb/core/tx/sequenceshard
     ydb/core/tx/time_cast
-    ydb/core/yq/libs/init
-    ydb/core/yq/libs/mock
-    ydb/core/yq/libs/shared_resources
     ydb/library/aclib
     ydb/library/folder_service/mock
     ydb/library/mkql_proto/protos

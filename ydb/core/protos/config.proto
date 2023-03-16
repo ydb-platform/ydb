@@ -26,7 +26,7 @@ import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/key.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/node_limits.proto";
-import "ydb/core/yq/libs/config/protos/fq_config.proto";
+import "ydb/core/fq/libs/config/protos/fq_config.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";

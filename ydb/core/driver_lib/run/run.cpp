@@ -106,7 +106,7 @@
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
 
-#include <ydb/core/yq/libs/init/init.h>
+#include <ydb/core/fq/libs/init/init.h>
 
 #include <library/cpp/logger/global/global.h>
 #include <library/cpp/monlib/messagebus/mon_messagebus.h>

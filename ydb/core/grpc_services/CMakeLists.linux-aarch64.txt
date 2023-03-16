@@ -29,6 +29,9 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   ydb-core-discovery
   ydb-core-engine
   ydb-core-formats
+  fq-libs-actors
+  fq-libs-control_plane_proxy
+  libs-control_plane_proxy-events
   core-grpc_services-counters
   core-grpc_services-local_rpc
   core-grpc_services-cancelation
@@ -43,9 +46,6 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   core-tx-sharding
   tx-long_tx_service-public
   ydb-core-ydb_convert
-  yq-libs-actors
-  yq-libs-control_plane_proxy
-  libs-control_plane_proxy-events
   ydb-library-aclib
   ydb-library-binary_json
   ydb-library-dynumber

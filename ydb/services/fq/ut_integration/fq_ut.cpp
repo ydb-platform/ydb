@@ -3,12 +3,12 @@
 
 #include <ydb/public/lib/fq/fq.h>
 #include <ydb/public/lib/fq/helpers.h>
-#include <ydb/core/yq/libs/db_schema/db_schema.h>
-#include <ydb/core/yq/libs/mock/yql_mock.h>
-#include <ydb/core/yq/libs/private_client/private_client.h>
+#include <ydb/core/fq/libs/db_schema/db_schema.h>
+#include <ydb/core/fq/libs/mock/yql_mock.h>
+#include <ydb/core/fq/libs/private_client/private_client.h>
 
-#include <ydb/core/yq/libs/control_plane_storage/message_builders.h>
-#include <ydb/core/yq/libs/actors/database_resolver.h>
+#include <ydb/core/fq/libs/control_plane_storage/message_builders.h>
+#include <ydb/core/fq/libs/actors/database_resolver.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 

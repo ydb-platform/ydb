@@ -30,8 +30,8 @@ CHECK_DEPENDENT_DIRS(
     tools/rorescompiler
     util
     ydb/apps/ydb
+    ydb/core/fq/libs/protos
     ydb/core/grpc_services/validation
-    ydb/core/yq/libs/protos
     ydb/library
     ydb/public
     ydb/library/yql/public/decimal

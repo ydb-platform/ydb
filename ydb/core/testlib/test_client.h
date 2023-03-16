@@ -24,7 +24,7 @@
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/base/grpc_service_factory.h>
 #include <ydb/core/persqueue/actor_persqueue_client_iface.h>
-#include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
+#include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 #include <ydb/core/http_proxy/auth_factory.h>
 #include <ydb/library/accessor/accessor.h>
 

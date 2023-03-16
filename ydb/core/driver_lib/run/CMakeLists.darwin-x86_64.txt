@@ -55,6 +55,8 @@ target_link_libraries(run PUBLIC
   cli_utils
   version
   ydb-core-formats
+  fq-libs-init
+  fq-libs-logs
   ydb-core-grpc_services
   core-grpc_services-base
   ydb-core-health_check
@@ -107,8 +109,6 @@ target_link_libraries(run PUBLIC
   ydb-core-viewer
   core-ymq-actor
   core-ymq-http
-  yq-libs-init
-  yq-libs-logs
   ydb-library-folder_service
   library-folder_service-proto
   ydb-library-pdisk_io

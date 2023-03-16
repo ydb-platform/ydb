@@ -17,16 +17,13 @@ target_link_libraries(providers-ydb-provider PUBLIC
   library-cpp-random_provider
   library-cpp-time_provider
   cpp-yson-node
-  yq-libs-common
+  fq-libs-common
   library-yql-ast
   library-yql-minikql
   yql-minikql-comp_nodes
   yql-minikql-computation
   providers-common-structured_token
   common-token_accessor-client
-  public-lib-experimental
-  cpp-client-ydb_driver
-  cpp-client-ydb_table
   library-yql-core
   yql-core-type_ann
   yql-dq-expr_nodes
@@ -44,6 +41,9 @@ target_link_libraries(providers-ydb-provider PUBLIC
   providers-result-expr_nodes
   providers-ydb-expr_nodes
   providers-ydb-proto
+  public-lib-experimental
+  cpp-client-ydb_driver
+  cpp-client-ydb_table
 )
 target_sources(providers-ydb-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasink.cpp

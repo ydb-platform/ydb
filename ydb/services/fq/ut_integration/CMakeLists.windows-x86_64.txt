@@ -25,10 +25,10 @@ target_link_libraries(ydb-services-fq-ut_integration PUBLIC
   cpp-grpc-client
   cpp-regex-pcre
   library-cpp-svnversion
+  fq-libs-control_plane_storage
+  fq-libs-db_schema
+  fq-libs-private_client
   core-testlib-default
-  yq-libs-control_plane_storage
-  yq-libs-db_schema
-  yq-libs-private_client
   providers-common-db_id_async_resolver
   common-clickhouse-client
   library-yql-utils

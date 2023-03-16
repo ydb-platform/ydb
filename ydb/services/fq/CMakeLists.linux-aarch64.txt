@@ -15,9 +15,9 @@ target_link_libraries(ydb-services-fq PUBLIC
   yutil
   cpp-grpc-server
   library-cpp-retry
+  fq-libs-grpc
   ydb-core-grpc_services
   core-grpc_services-base
-  yq-libs-grpc
   ydb-library-protobuf_printer
 )
 target_sources(ydb-services-fq PRIVATE

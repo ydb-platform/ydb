@@ -2,7 +2,7 @@
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/grpc/server/grpc_server.h>
-#include <ydb/core/yq/libs/grpc/fq_private_v1.grpc.pb.h>
+#include <ydb/core/fq/libs/grpc/fq_private_v1.grpc.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {

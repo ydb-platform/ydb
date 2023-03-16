@@ -43,20 +43,38 @@ struct TTxMeta {
     TInstant StartTime;
 };
 
-struct TState {
-    THashMap<std::pair<ui64, const TActorId>, TTasksRequest> Requests;
-    THashMultiMap<ui64, const TActorId> SenderIdsByTxId;
-    THashMap<ui64, TTxMeta> Meta;
+struct TRemoveTaskContext {
+    ui64 TotalMemory = 0;
+    ui64 ComputeActorsNumber = 0;
+    bool FinixTx = false;
+};
+
+class TState {
+public:
+    struct TRequestId {
+        ui64 TxId;
+        TActorId Requester;
+    };
+
+    struct TRemoveTaskContext {
+        ui64 TotalMemory = 0;
+        ui64 ComputeActorsNumber = 0;
+        bool FinixTx = false;
+        TActorId Requester;
+    };
+
+    struct ExpiredRequestContext {
+        TRequestId RequestId;
+        bool Exists;
+    };
 
     bool Exists(ui64 txId, const TActorId& requester) const {
+        TReadGuard guard(RWLock);
         return Requests.contains(std::make_pair(txId, requester));
     }
 
-    TTasksRequest* GetRequest(ui64 txId, const TActorId& requester) {
-        return Requests.FindPtr(std::make_pair(txId, requester));
-    }
-
     ui64 GetTxMemory(ui64 txId, NRm::EKqpMemoryPool memoryPool) const {
+        TReadGuard guard(RWLock);
         if (auto* meta = Meta.FindPtr(txId)) {
             return meta->MemoryPool == memoryPool ? meta->TotalMemory : 0;
         }
@@ -64,6 +82,7 @@ struct TState {
     }
 
     void NewRequest(ui64 txId, const TActorId& requester, TTasksRequest&& request, NRm::EKqpMemoryPool memoryPool) {
+        TWriteGuard guard(RWLock);
         auto& meta = Meta[txId];
         meta.TotalMemory += request.TotalMemory;
         meta.TotalComputeActors += request.InFlyTasks.size();
@@ -79,26 +98,9 @@ struct TState {
         YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
     }
 
-    std::tuple<TTaskContext*, TActorId, TTasksRequest*, TTxMeta*> GetTask(ui64 txId, ui64 taskId) {
-        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
-        const auto senders = SenderIdsByTxId.equal_range(txId);
-
-        for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
-            auto requestIt = Requests.find(*senderIt);
-            YQL_ENSURE(requestIt != Requests.end());
-
-            auto taskIt = requestIt->second.InFlyTasks.find(taskId);
-            if (taskIt != requestIt->second.InFlyTasks.end()) {
-                return std::make_tuple(&taskIt->second, senderIt->second, &requestIt->second, Meta.FindPtr(txId));
-            }
-        }
-
-        return std::make_tuple(nullptr, TActorId(), nullptr, nullptr);
-    }
-
-    TMaybe<TTaskContext> RemoveTask(ui64 txId, ui64 taskId, bool success,
-        std::function<void(const TActorId&, const TTasksRequest&, const TTaskContext&, bool)>&& cb)
+    TMaybe<TRemoveTaskContext> RemoveTask(ui64 txId, ui64 taskId, bool success)
     {
+        TWriteGuard guard(RWLock);
         YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
         const auto senders = SenderIdsByTxId.equal_range(txId);
         for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
@@ -120,18 +122,28 @@ struct TState {
                 meta.TotalMemory -= task.Memory;
                 meta.TotalComputeActors--;
 
-                cb(senderIt->second, requestIt->second, task, meta.TotalComputeActors == 0);
-
                 if (requestIt->second.InFlyTasks.empty()) {
+                    auto bounds = ExpiringRequests.equal_range(requestIt->second.Deadline);
+                    for (auto it = bounds.first; it != bounds.second; ) {
+                        if (it->second.TxId == txId && it->second.Requester == senderIt->second) {
+                            auto delIt = it++;
+                            ExpiringRequests.erase(delIt);
+                        } else {
+                            ++it;
+                        }
+                    }
                     Requests.erase(*senderIt);
                     SenderIdsByTxId.erase(senderIt);
                     YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
                 }
+
                 if (meta.TotalComputeActors == 0) {
                     Meta.erase(txId);
                 }
 
-                return std::move(task);
+                return TRemoveTaskContext{
+                    requestIt->second.TotalMemory, requestIt->second.InFlyTasks.size(), meta.TotalComputeActors == 0, senderIt->second
+                };
             }
         }
 
@@ -139,6 +151,7 @@ struct TState {
     }
 
     TMaybe<TTasksRequest> RemoveRequest(ui64 txId, const TActorId& requester) {
+        TWriteGuard guard(RWLock);
         auto key = std::make_pair(txId, requester);
         auto* request = Requests.FindPtr(key);
         if (!request) {
@@ -171,34 +184,85 @@ struct TState {
         return ret;
     }
 
-    bool RemoveTx(ui64 txId, std::function<void(const TTasksRequest&)>&& cb) {
+    std::vector<TTasksRequest> RemoveTx(ui64 txId) {
+        TWriteGuard guard(RWLock);
         Meta.erase(txId);
 
         YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
         const auto senders = SenderIdsByTxId.equal_range(txId);
+        std::vector<TTasksRequest> ret;
         for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
             auto requestIt = Requests.find(*senderIt);
             YQL_ENSURE(requestIt != Requests.end());
 
-            cb(requestIt->second);
+            ret.push_back(std::move(requestIt->second));
             Requests.erase(requestIt);
         }
 
-        auto erased = SenderIdsByTxId.erase(txId);
+        SenderIdsByTxId.erase(txId);
         YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
 
-        return erased > 0;
+        return ret;
     }
 
-    ui64 UsedMemory(NRm::EKqpMemoryPool memoryPool) const {
-        ui64 mem = 0;
-        for (auto& [_, meta] : Meta) {
-            if (meta.MemoryPool == memoryPool) {
-                mem += meta.TotalMemory;
+    void InsertExpiringRequest(TInstant deadline, ui64 txId, TActorId requester) {
+        TWriteGuard guard(RWLock);
+        ExpiringRequests.emplace(deadline, TRequestId{txId, requester});
+    }
+
+    std::vector<ExpiredRequestContext> ClearExpiredRequests() {
+        TWriteGuard guard(RWLock);
+        std::vector<ExpiredRequestContext> ret;
+        auto it = ExpiringRequests.begin();
+        auto now = TAppData::TimeProvider->Now();
+        while (it != ExpiringRequests.end() && it->first < now) {
+            auto reqId = it->second;
+            auto delIt = it++;
+            ExpiringRequests.erase(delIt);
+
+            auto request = RemoveRequest(reqId.TxId, reqId.Requester);
+            ret.push_back({reqId, bool(request)});
+        }
+        return ret;
+    }
+
+    void GetInfo(TStringStream& str) {
+        TReadGuard guard(RWLock);
+        TMap<ui64, TVector<std::pair<const TActorId, const NKqpNode::TTasksRequest*>>> byTx;
+        for (auto& [key, request] : Requests) {
+            byTx[key.first].emplace_back(key.second, &request);
+        }
+        for (auto& [txId, requests] : byTx) {
+            auto& meta = Meta[txId];
+            str << "  TxId: " << txId << Endl;
+            str << "    Memory: " << meta.TotalMemory << Endl;
+            str << "    MemoryPool: " << (ui32) meta.MemoryPool << Endl;
+            str << "    Compute actors: " << meta.TotalComputeActors << Endl;
+            str << "    Start time: " << meta.StartTime << Endl;
+            str << "    Requests:" << Endl;
+            for (auto& [requester, request] : requests) {
+                str << "      Requester: " << requester << Endl;
+                str << "        Deadline: " << request->Deadline << Endl;
+                str << "        Memory: " << request->TotalMemory << Endl;
+                str << "        In-fly tasks:" << Endl;
+                for (auto& [taskId, task] : request->InFlyTasks) {
+                    str << "          Task: " << taskId << Endl;
+                    str << "            Memory: " << task.Memory << Endl;
+                    str << "            Channels: " << task.Channels << Endl;
+                    str << "            Compute actor: " << task.ComputeActorId << Endl;
+                }
             }
         }
-        return mem;
     }
+private:
+
+    TRWMutex RWLock; // Lock for state bucket
+
+    std::multimap<TInstant, TRequestId> ExpiringRequests;
+
+    THashMap<std::pair<ui64, const TActorId>, TTasksRequest> Requests;
+    THashMultiMap<ui64, const TActorId> SenderIdsByTxId;
+    THashMap<ui64, TTxMeta> Meta;
 };
 
 } // namespace NKqpNode

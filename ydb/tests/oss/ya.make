@@ -1,5 +1,5 @@
 RECURSE(
     canonical
-    prepare
+    launch
     ydb_sdk_import
 )

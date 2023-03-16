@@ -22,11 +22,16 @@ YDB function tests can be run via pytest. To launch them, complete the following
     ```
     export build_root=~/ydbwork/build
     ```
-5. Launch the script, which prepares the environment for YDB tests:
+5. Launch the script, which prepares the environment:
     ```
-    source ${source_root}/ydb/tests/oss/prepare/prepare.sh
+    source ${source_root}/ydb/tests/oss/launch/prepare.sh
     ```
-6. The script will put you inside directory with test sources, and you can run them:
+7. Launch tests:
     ```
-    pytest -s
+    python ${source_root}/ydb/tests/oss/launch/launch.py --test-dir ${source_root}/ydb/tests/functional --xml-dir ${source_root}/ydb/tests/functional/test-results/xml
+    ```
+    Note that you can also run a specific suite via `--suite` argument.
+6. The script invoke the tests. After that, you can see test report:
+    ```
+    cat ${source_root}/ydb/tests/functional/test-results/xml/res.xml
     ```

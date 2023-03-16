@@ -1310,6 +1310,11 @@ public:
     }
 
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        // outdated response from dead executer.
+        // it this case we should just ignore the event.
+        if (ExecuterId != ev->Sender)
+            return;
+
         TTimerGuard timer(this);
         ProcessExecuterResult(ev->Get());
     }

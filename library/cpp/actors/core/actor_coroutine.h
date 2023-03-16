@@ -47,7 +47,7 @@ namespace NActors {
         TActorCoroImpl(size_t stackSize, bool allowUnhandledDtor = false);
         // specify stackSize explicitly for each actor; don't forget about overflow control gap
 
-        virtual ~TActorCoroImpl();
+        virtual ~TActorCoroImpl() = default;
 
         virtual void Run() = 0;
 
@@ -144,6 +144,7 @@ namespace NActors {
     private:
         friend class TActorCoro;
         bool ProcessEvent(THolder<IEventHandle> ev);
+        void Destroy();
 
     private:
         /* Resume() function goes to actor coroutine context and continues (or starts) to execute it until actor finishes
@@ -161,6 +162,8 @@ namespace NActors {
             : IActorCallback(static_cast<TReceiveFunc>(&TActorCoro::StateFunc), activityType)
             , Impl(std::move(impl))
         {}
+
+        ~TActorCoro();
 
         TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) override {
             return new IEventHandleFat(TEvents::TSystem::Bootstrap, 0, self, parent, {}, 0);

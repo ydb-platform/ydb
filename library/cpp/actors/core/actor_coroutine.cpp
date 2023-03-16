@@ -28,7 +28,7 @@ namespace NActors {
 #endif
     }
 
-    TActorCoroImpl::~TActorCoroImpl() {
+    void TActorCoroImpl::Destroy() {
         if (!Finished && !NSan::TSanIsOn()) { // only resume when we have bootstrapped and Run() was entered and not yet finished; in other case simply terminate
             Y_VERIFY(!PendingEvent);
             InvokedFromDtor = true;
@@ -126,6 +126,10 @@ namespace NActors {
             // stopped
             throw TDtorException();
         }
+    }
+
+    TActorCoro::~TActorCoro() {
+        Impl->Destroy();
     }
 
     STATEFN(TActorCoro::StateFunc) {

@@ -122,6 +122,10 @@ public:
                 meta.TotalMemory -= task.Memory;
                 meta.TotalComputeActors--;
 
+                auto ret = TRemoveTaskContext{
+                    requestIt->second.TotalMemory, requestIt->second.InFlyTasks.size(), meta.TotalComputeActors == 0, senderIt->second
+                };
+
                 if (requestIt->second.InFlyTasks.empty()) {
                     auto bounds = ExpiringRequests.equal_range(requestIt->second.Deadline);
                     for (auto it = bounds.first; it != bounds.second; ) {
@@ -141,9 +145,7 @@ public:
                     Meta.erase(txId);
                 }
 
-                return TRemoveTaskContext{
-                    requestIt->second.TotalMemory, requestIt->second.InFlyTasks.size(), meta.TotalComputeActors == 0, senderIt->second
-                };
+                return ret;
             }
         }
 

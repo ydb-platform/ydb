@@ -42,7 +42,7 @@ public:
                      %s
                  }
              }
-        )", storeName.c_str(), storeShardsCount, PROTO_SCHEMA));
+        )", storeName.c_str(), storeShardsCount, GetTestTableSchema().data()));
 
         TString shardingColumns = "[\"timestamp\", \"uid\"]";
         if (shardingFunction != "HASH_FUNCTION_CLOUD_LOGS") {

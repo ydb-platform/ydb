@@ -66,7 +66,7 @@ void TIndexUpsertActor::Bootstrap() {
 
     const std::vector<ui64> hashes = IndexInfo.GetExtractor()->ExtractIndex(Data);
     if (hashes.size() != (size_t)Data->num_rows()) {
-        ExternalController->OnIndexUpsertionFailed("inconsistency hashes");
+        ExternalController->OnIndexUpsertionFailed("inconsistency hashes: " + ::ToString(hashes.size()) + " != " + ::ToString(Data->num_rows()));
         PassAway();
         return;
     }

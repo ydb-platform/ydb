@@ -25,6 +25,7 @@ private:
     using TBase = THelperSchemaless;
 
     std::shared_ptr<arrow::Schema> GetArrowSchema();
+    YDB_FLAG_ACCESSOR(WithJsonDocument, false);
 public:
     using TBase::TBase;
 
@@ -42,6 +43,8 @@ public:
         KeyColumnNames: "timestamp"
         Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
     )";
+
+    TString GetTestTableSchema() const;
 
     std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) override;
 };

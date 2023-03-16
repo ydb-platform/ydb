@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    GLOBAL object.cpp
+    object.cpp
     GLOBAL behaviour.cpp
     manager.cpp
     initializer.cpp
@@ -16,9 +16,7 @@ PEERDIR(
     ydb/core/grpc_services/base
     ydb/core/grpc_services
     ydb/services/metadata/request
-    ydb/core/tx/sharding
+    ydb/services/ext_index/metadata/extractor
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

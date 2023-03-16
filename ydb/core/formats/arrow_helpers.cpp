@@ -1112,7 +1112,6 @@ static bool ConvertColumn(std::shared_ptr<arrow::Array>& column, std::shared_ptr
                 auto value = binaryArray.Value(i);
                 const auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(value.data(), value.size()));
                 if (!binaryJson.Defined() || !builder.Append(binaryJson->Data(), binaryJson->Size()).ok()) {
-                    ALS_ERROR(0) << "NOT PARSED JSON: " << TStringBuf(value.data(), value.size());
                     return false;
                 }
             }

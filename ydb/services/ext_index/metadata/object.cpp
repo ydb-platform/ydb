@@ -1,13 +1,10 @@
 #include "object.h"
 #include "behaviour.h"
-#include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 #include <util/folder/path.h>
 
 namespace NKikimr::NMetadata::NCSIndex {
-
-TExtractorCityHash64::TFactory::TRegistrator<TExtractorCityHash64> TExtractorCityHash64::Registrator(TExtractorCityHash64::ClassName);
 
 IClassBehaviour::TPtr TObject::GetBehaviour() {
     return TBehaviour::GetInstance();
@@ -82,11 +79,6 @@ bool TObject::TryProvideTtl(const NKikimrSchemeOp::TColumnTableDescription& csDe
         }
     }
     return true;
-}
-
-std::vector<ui64> TExtractorCityHash64::DoExtractIndex(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-    NSharding::THashSharding hashSharding(0, Fields);
-    return hashSharding.MakeHashes(batch);
 }
 
 }

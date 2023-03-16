@@ -15,6 +15,7 @@ target_link_libraries(services-ext_index-service PUBLIC
   cpp-actors-core
   services-ext_index-metadata
   services-ext_index-common
+  yql-minikql-jsonpath
   api-protos
 )
 target_sources(services-ext_index-service PRIVATE

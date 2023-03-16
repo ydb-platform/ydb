@@ -101,14 +101,16 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBeg
 //
 
 std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() {
-    return std::make_shared<arrow::Schema>(
-        std::vector<std::shared_ptr<arrow::Field>>{
-            arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
-            arrow::field("resource_id", arrow::utf8()),
-            arrow::field("uid", arrow::utf8()),
-            arrow::field("level", arrow::int32()),
-            arrow::field("message", arrow::utf8())
-    });
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.emplace_back(arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)));
+    fields.emplace_back(arrow::field("resource_id", arrow::utf8()));
+    fields.emplace_back(arrow::field("uid", arrow::utf8()));
+    fields.emplace_back(arrow::field("level", arrow::int32()));
+    fields.emplace_back(arrow::field("message", arrow::utf8()));
+    if (GetWithJsonDocument()) {
+        fields.emplace_back(arrow::field("json_payload", arrow::utf8()));
+    }
+    return std::make_shared<arrow::Schema>(fields);
 }
 
 std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
@@ -119,6 +121,12 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     arrow::StringBuilder b3;
     arrow::Int32Builder b4;
     arrow::StringBuilder b5;
+    arrow::StringBuilder b6;
+
+    NJson::TJsonValue jsonInfo;
+    jsonInfo["a"]["b"] = 1;
+    jsonInfo["a"]["c"] = "asds";
+    jsonInfo["b"] = "asd";
 
     for (size_t i = 0; i < rowCount; ++i) {
         std::string uid("uid_" + std::to_string(tsBegin + i));
@@ -128,6 +136,9 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
         Y_VERIFY(b3.Append(uid).ok());
         Y_VERIFY(b4.Append(i % 5).ok());
         Y_VERIFY(b5.Append(message).ok());
+        jsonInfo["a"]["b"] = i;
+        auto jsonStringBase = jsonInfo.GetStringRobust();
+        Y_VERIFY(b6.Append(jsonStringBase.data(), jsonStringBase.size()).ok());
     }
 
     std::shared_ptr<arrow::TimestampArray> a1;
@@ -135,14 +146,38 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     std::shared_ptr<arrow::StringArray> a3;
     std::shared_ptr<arrow::Int32Array> a4;
     std::shared_ptr<arrow::StringArray> a5;
+    std::shared_ptr<arrow::StringArray> a6;
 
     Y_VERIFY(b1.Finish(&a1).ok());
     Y_VERIFY(b2.Finish(&a2).ok());
     Y_VERIFY(b3.Finish(&a3).ok());
     Y_VERIFY(b4.Finish(&a4).ok());
     Y_VERIFY(b5.Finish(&a5).ok());
+    Y_VERIFY(b6.Finish(&a6).ok());
 
-    return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5 });
+    if (GetWithJsonDocument()) {
+        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a6 });
+    } else {
+        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5 });
+    }
+
+}
+
+TString THelper::GetTestTableSchema() const {
+    TStringBuilder sb;
+    sb << R"(Columns{ Name: "timestamp" Type : "Timestamp" NotNull : true })";
+    sb << R"(Columns{ Name: "resource_id" Type : "Utf8" })";
+    sb << R"(Columns{ Name: "uid" Type : "Utf8" })";
+    sb << R"(Columns{ Name: "level" Type : "Int32" })";
+    sb << R"(Columns{ Name: "message" Type : "Utf8" })";
+    if (GetWithJsonDocument()) {
+        sb << R"(Columns{ Name: "json_payload" Type : "JsonDocument" })";
+    }
+    sb << R"(
+        KeyColumnNames: "timestamp"
+        Engine : COLUMN_ENGINE_REPLACING_TIMESERIES
+    )";
+    return sb;
 }
 
 // Clickbench table

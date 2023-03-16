@@ -104,16 +104,16 @@ class TTable {
     ui64 BytesInKeyIntColumns = sizeof(ui64) * NumberOfKeyIntColumns;
     
     // Table data is partitioned in buckets based on key value
-    std::vector<TTableBucket, TMKQLAllocator<TTableBucket>> TableBuckets;
+    std::vector<TTableBucket> TableBuckets;
 
     // Temporary vector for tuples manipulation;
-    std::vector<ui64, TMKQLAllocator<ui64>> TempTuple;
+    std::vector<ui64> TempTuple;
 
     // Hashes for interface - based columns values
-    std::vector<ui64, TMKQLAllocator<ui64>> IColumnsHashes;
+    std::vector<ui64> IColumnsHashes;
 
     // Serialized values for interface-based columns
-    std::vector<std::vector<char, TMKQLAllocator<char>>, TMKQLAllocator<std::vector<char, TMKQLAllocator<char>>>> IColumnsVals;
+    std::vector<std::vector<char>> IColumnsVals;
 
     // Current iterator index for NextTuple iterator
     ui64 CurrIterIndex = 0;

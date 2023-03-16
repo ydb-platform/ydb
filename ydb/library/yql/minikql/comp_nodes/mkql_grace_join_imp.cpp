@@ -146,7 +146,7 @@ void TTable::ResetIterator() {
 }
 
 // Checks if there are more tuples and sets bucketId and tupleId to next valid. 
-inline bool HasMoreTuples(std::vector<TTableBucket, TMKQLAllocator<TTableBucket>> & tableBuckets, ui64 & bucketId, ui64 & tupleId ) {
+inline bool HasMoreTuples(std::vector<TTableBucket> & tableBuckets, ui64 & bucketId, ui64 & tupleId ) {
 
     if (bucketId >= tableBuckets.size()) return false;
 

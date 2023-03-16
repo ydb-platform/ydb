@@ -1113,12 +1113,12 @@ std::shared_ptr<arrow::Array> ArrowDate32AsYqlDate(const std::shared_ptr<arrow::
                 continue;
             }
         } else if (!item) {
-            throw yexception() << "null value for date could not be represented in non-optional type";
+            throw parquet::ParquetException(TStringBuilder() << "null value for date could not be represented in non-optional type");
         }
 
         const i32 v = item.As<i32>();
         if (v < 0 || v > ::NYql::NUdf::MAX_DATE) {
-            throw yexception() << "date in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATE << "]: " << v;
+            throw parquet::ParquetException(TStringBuilder() << "date in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATE << "]: " << v);
         }
         builder.Add(NUdf::TBlockItem(static_cast<ui16>(v)));
     }
@@ -1358,14 +1358,20 @@ public:
         for (int i = 0; i < outputSchema->num_fields(); ++i) {
             const auto& targetField = outputSchema->field(i);
             auto srcFieldIndex = dataSchema->GetFieldIndex(targetField->name());
-            YQL_ENSURE(srcFieldIndex != -1, "Missing field: " << targetField->name());
+            if (srcFieldIndex == -1) {
+                throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name());
+            };
             auto targetType = targetField->type();
             auto originalType = dataSchema->field(srcFieldIndex)->type();
-            YQL_ENSURE(!originalType->layout().has_dictionary, "Unsupported dictionary encoding is used for field: "
-                        << targetField->name() << ", type: " << originalType->ToString());
+            if (originalType->layout().has_dictionary) {
+                throw parquet::ParquetException(TStringBuilder() << "Unsupported dictionary encoding is used for field: "
+                    << targetField->name() << ", type: " << originalType->ToString());
+            }
             columnIndices.push_back(srcFieldIndex);
             auto rowSpecColumnIt = ReadSpec->RowSpec.find(targetField->name());
-            YQL_ENSURE(rowSpecColumnIt != ReadSpec->RowSpec.end(), "Column " << targetField->name() << " not found in row spec");
+            if (rowSpecColumnIt == ReadSpec->RowSpec.end()) {
+                throw parquet::ParquetException(TStringBuilder() << "Column " << targetField->name() << " not found in row spec");
+            }
             columnConverters.emplace_back(BuildColumnConverter(targetField->name(), originalType, targetType, rowSpecColumnIt->second));
         }
     }

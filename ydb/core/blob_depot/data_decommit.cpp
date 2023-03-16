@@ -16,6 +16,8 @@ namespace NKikimr::NBlobDepot {
         THashSet<TLogoBlobID> ResolutionErrors;
         TEvBlobDepot::TEvResolve::TPtr Ev;
 
+        ui32 TxInFlight = 0;
+
         ui32 RangesInFlight = 0;
 
         std::deque<std::tuple<TLogoBlobID, bool>> GetQ;
@@ -27,6 +29,8 @@ namespace NKikimr::NBlobDepot {
         ui32 PutsInFlight = 0;
 
         THashMap<TLogoBlobID, TKey> IdToKey;
+
+        bool Finished = false;
 
     public:
         TResolveDecommitActor(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr ev)
@@ -44,6 +48,7 @@ namespace NKikimr::NBlobDepot {
                 (Sender, Ev->Sender), (Cookie, Ev->Cookie));
 
             Self->Execute(std::make_unique<TCoroTx>(Self, Token, std::bind(&TThis::TxPrepare, this)));
+            ++TxInFlight;
             Become(&TThis::StateFunc);
         }
 
@@ -111,7 +116,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             TCoroTx::FinishTx();
-            InvokeOtherActor(*this, &TThis::CheckIfDone);
+            TActivationContext::Send(new IEventHandleFat(TEvPrivate::EvTxComplete, 0, SelfId(), {}, nullptr, 0));
         }
 
         void ScanRangeAndIssueGets(TKey from, TKey to, TScanFlags flags) {
@@ -218,7 +223,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (r.Status == NKikimrProto::NODATA) {
                     Self->Data->ExecuteTxCommitAssimilatedBlob(NKikimrProto::NODATA, TBlobSeqId(), TData::TKey(r.Id),
                         TEvPrivate::EvTxComplete, SelfId(), 0);
-                    ++PutsInFlight;
+                    ++TxInFlight;
                 } else {
                     // mark this specific key as unresolvable
                     ResolutionErrors.emplace(r.Id);
@@ -281,17 +286,20 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandleTxComplete() {
-            --PutsInFlight;
+            --TxInFlight;
             CheckIfDone();
         }
 
         void CheckIfDone() {
-            if (RangesInFlight + GetsInFlight + GetQ.size() + PutsInFlight == 0) {
+            if (TxInFlight + RangesInFlight + GetsInFlight + GetQ.size() + PutsInFlight == 0) {
                 FinishWithSuccess();
             }
         }
 
         void FinishWithSuccess() {
+            Y_VERIFY(!Finished);
+            Finished = true;
+
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT92, "request succeeded", (Id, Self->GetLogId()), (Sender, Ev->Sender),
                 (Cookie, Ev->Cookie), (ResolutionErrors.size, ResolutionErrors.size()),
                 (DecommitBlobs.size, DecommitBlobs.size()));
@@ -317,11 +325,14 @@ namespace NKikimr::NBlobDepot {
         }
 
         void FinishWithError(NLog::EPriority prio, TString errorReason) {
-           STLOG(prio, BLOB_DEPOT, BDT89, "request failed", (Id, Self->GetLogId()), (Sender, Ev->Sender),
+            Y_VERIFY(!Finished);
+            Finished = true;
+
+            STLOG(prio, BLOB_DEPOT, BDT89, "request failed", (Id, Self->GetLogId()), (Sender, Ev->Sender),
                 (Cookie, Ev->Cookie), (ErrorReason, errorReason));
-           auto [response, record] = TEvBlobDepot::MakeResponseFor(*Ev, NKikimrProto::ERROR, std::move(errorReason));
-           TActivationContext::Send(response.release());
-           PassAway();
+            auto [response, record] = TEvBlobDepot::MakeResponseFor(*Ev, NKikimrProto::ERROR, std::move(errorReason));
+            TActivationContext::Send(response.release());
+            PassAway();
         }
 
         STATEFN(StateFunc) {

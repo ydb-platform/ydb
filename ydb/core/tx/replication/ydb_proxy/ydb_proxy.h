@@ -47,6 +47,8 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(DropTopic),
         EV_REQUEST_RESPONSE(DescribeTopic),
         EV_REQUEST_RESPONSE(DescribeConsumer),
+        EV_REQUEST_RESPONSE(CreateTopicReader),
+        EV_REQUEST_RESPONSE(ReadTopic),
 
         EvEnd,
     };
@@ -73,6 +75,11 @@ struct TEvYdbProxy {
         }
 
         using TBase = TGenericRequest<TDerived, EventType, Args...>;
+    };
+
+    template <typename TDerived, ui32 EventType>
+    struct TGenericRequest<TDerived, EventType, void>: public TEventLocal<TDerived, EventType> {
+        using TBase = TGenericRequest<TDerived, EventType, void>;
     };
 
     template <typename TDerived, ui32 EventType, typename T>
@@ -126,6 +133,8 @@ struct TEvYdbProxy {
     DEFINE_GENERIC_REQUEST_RESPONSE(DropTopic, NYdb::TStatus, TString, NYdb::NTopic::TDropTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeTopic, NYdb::NTopic::TDescribeTopicResult, TString, NYdb::NTopic::TDescribeTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeConsumer, NYdb::NTopic::TDescribeConsumerResult, TString, TString, NYdb::NTopic::TDescribeConsumerSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopicReader, TActorId, NYdb::NTopic::TReadSessionSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, NYdb::NTopic::TReadSessionEvent::TEvent, void);
 
     #undef DEFINE_GENERIC_REQUEST_RESPONSE
     #undef DEFINE_GENERIC_RESPONSE

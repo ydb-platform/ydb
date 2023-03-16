@@ -7,6 +7,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 namespace NKikimr::NReplication {
 
@@ -29,11 +30,11 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
             Server.SetupDefaultProfiles();
             Client.InitRootScheme(DomainName);
 
-            const auto endpoint = "localhost:" + ToString(grpcPort);
-            const auto database = "/" + ToString(DomainName);
+            Endpoint = "localhost:" + ToString(grpcPort);
+            Database = "/" + ToString(DomainName);
 
             YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
-                endpoint, UseDatabase ? database : "", std::forward<Args>(args)...));
+                Endpoint, UseDatabase ? Database : "", std::forward<Args>(args)...));
             Sender = Server.GetRuntime()->AllocateEdgeActor();
         }
 
@@ -46,6 +47,12 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
             auto resp = Server.GetRuntime()->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(Sender);
             UNIT_ASSERT(resp->Get()->Record.GetError().empty());
             UNIT_ASSERT(!resp->Get()->Record.GetToken().empty());
+        }
+
+        template <typename TEvResponse>
+        auto SendImpl(const TActorId& recipient, IEventBase* ev) {
+            Server.GetRuntime()->Send(new IEventHandleFat(recipient, Sender, ev));
+            return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
         }
 
     public:
@@ -105,8 +112,24 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
         template <typename TEvResponse>
         auto Send(IEventBase* ev) {
-            Server.GetRuntime()->Send(new IEventHandleFat(YdbProxy, Sender, ev));
-            return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
+            return SendImpl<TEvResponse>(YdbProxy, ev);
+        }
+
+        template <typename TEvResponse>
+        auto Send(const TActorId& recipient, IEventBase* ev) {
+            return SendImpl<TEvResponse>(recipient, ev);
+        }
+
+        const NYdb::TDriver& GetDriver() const {
+            return Server.GetDriver();
+        }
+
+        const TString& GetEndpoint() const {
+            return Endpoint;
+        }
+
+        const TString& GetDatabase() const {
+            return Database;
         }
 
     private:
@@ -114,6 +137,8 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
         Tests::TServerSettings Settings;
         Tests::TServer Server;
         Tests::TClient Client;
+        TString Endpoint;
+        TString Database;
         TActorId YdbProxy;
         TActorId Sender;
     };
@@ -673,6 +698,84 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+    }
+
+    template <typename Env>
+    TActorId CreateTopicReader(Env& env, const TString& topicPath) {
+        auto settings = NYdb::NTopic::TReadSessionSettings()
+            .ConsumerName("consumer")
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings(topicPath));
+
+        auto ev = env.template Send<TEvYdbProxy::TEvCreateTopicReaderResponse>(
+            new TEvYdbProxy::TEvCreateTopicReaderRequest(settings));
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT(ev->Get()->Result);
+
+        return ev->Get()->Result;
+    }
+
+    template <typename Env>
+    bool WriteTopic(const Env& env, const TString& topicPath, const TString& data) {
+        NYdb::NTopic::TTopicClient client(env.GetDriver(), NYdb::NTopic::TTopicClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint())
+            .Database(env.GetDatabase())
+        );
+
+        auto session = client.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
+            .Path(topicPath)
+            .ProducerId("producer")
+            .MessageGroupId("producer")
+        );
+
+        const auto result = session->Write(data);
+        session->Close();
+
+        return result;
+    }
+
+    template <typename TEvent, typename Env>
+    TEvent ReadTopic(Env& env, const TActorId& reader) {
+        auto ev = env.template Send<TEvYdbProxy::TEvReadTopicResponse>(reader,
+            new TEvYdbProxy::TEvReadTopicRequest());
+        UNIT_ASSERT(ev);
+
+        const auto* event = std::get_if<TEvent>(&ev->Get()->Result);
+        UNIT_ASSERT(event);
+
+        return *event;
+    }
+
+    Y_UNIT_TEST(ReadTopic) {
+        using TReadSessionEvent = NYdb::NTopic::TReadSessionEvent;
+        TEnv env;
+
+        // create topic
+        {
+            auto settings = NYdb::NTopic::TCreateTopicSettings()
+                .BeginAddConsumer()
+                    .ConsumerName("consumer")
+                .EndAddConsumer();
+
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+
+        TActorId reader = CreateTopicReader(env, "/Root/topic");
+
+        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-1"));
+        {
+            ReadTopic<TReadSessionEvent::TStartPartitionSessionEvent>(env, reader).Confirm();
+
+            auto data = ReadTopic<TReadSessionEvent::TDataReceivedEvent>(env, reader);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetMessages().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetMessages().at(0).GetData(), "message-1");
+            data.Commit();
+
+            auto ack = ReadTopic<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(env, reader);
+            UNIT_ASSERT_VALUES_EQUAL(ack.GetCommittedOffset(), 1);
         }
     }
 

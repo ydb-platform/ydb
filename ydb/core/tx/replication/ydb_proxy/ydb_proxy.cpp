@@ -27,9 +27,11 @@ class TBaseProxyActor: public TActor<TDerived> {
     class TRequest;
     using TRequestPtr = std::shared_ptr<TRequest>;
 
+protected:
     struct TEvPrivate {
         enum EEv {
             EvComplete = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+            EvTopicEventReady,
 
             EvEnd,
         };
@@ -45,8 +47,20 @@ class TBaseProxyActor: public TActor<TDerived> {
             }
         };
 
+        struct TEvTopicEventReady: public TEventLocal<TEvTopicEventReady, EvTopicEventReady> {
+            const TActorId Sender;
+            const ui64 Cookie;
+
+            explicit TEvTopicEventReady(const TActorId& sender, ui64 cookie)
+                : Sender(sender)
+                , Cookie(cookie)
+            {
+            }
+        };
+
     }; // TEvPrivate
 
+private:
     class TRequest: public std::enable_shared_from_this<TRequest> {
         friend class TBaseProxyActor<TDerived>;
 
@@ -98,11 +112,6 @@ class TBaseProxyActor: public TActor<TDerived> {
         Requests.erase(ev->Get()->Request);
     }
 
-    void PassAway() override {
-        Requests.clear();
-        IActor::PassAway();
-    }
-
 protected:
     using TActor<TDerived>::TActor;
 
@@ -112,7 +121,12 @@ protected:
         }
     }
 
-    std::weak_ptr<TRequest> MakeRequest(const TActorId& sender, ui64 cookie) {
+    void PassAway() override {
+        Requests.clear();
+        IActor::PassAway();
+    }
+
+    std::weak_ptr<TRequest> MakeRequest(const TActorId& sender, ui64 cookie = 0) {
         auto request = std::make_shared<TRequest>(TlsActivationContext->ActorSystem(), this->SelfId(), sender, cookie);
         Requests.emplace(request);
         return request;
@@ -143,6 +157,51 @@ private:
     THashSet<TRequestPtr, TRequestPtrHash> Requests;
 
 }; // TBaseProxyActor
+
+class TTopicReader: public TBaseProxyActor<TTopicReader> {
+    void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
+        auto request = MakeRequest(SelfId());
+        auto cb = [request, sender = ev->Sender, cookie = ev->Cookie](const NThreading::TFuture<void>&) {
+            if (auto r = request.lock()) {
+                r->Complete(new TEvPrivate::TEvTopicEventReady(sender, cookie));
+            }
+        };
+
+        Session->WaitEvent().Subscribe(std::move(cb));
+    }
+
+    void Handle(TEvPrivate::TEvTopicEventReady::TPtr& ev) {
+        auto event = Session->GetEvent(true);
+        Y_VERIFY(event.Defined());
+        Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(std::move(*event)), 0, ev->Get()->Cookie);
+    }
+
+    void PassAway() override {
+        Session->Close(TDuration::MilliSeconds(100)); // non-blocking if there is no inflight commits
+        TBaseProxyActor<TTopicReader>::PassAway();
+    }
+
+public:
+    explicit TTopicReader(const std::shared_ptr<IReadSession>& session)
+        : TBaseProxyActor(&TThis::StateWork)
+        , Session(session)
+    {
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
+            hFunc(TEvPrivate::TEvTopicEventReady, Handle);
+
+        default:
+            return StateBase(ev, TlsActivationContext->AsActorContext());
+        }
+    }
+
+private:
+    std::shared_ptr<IReadSession> Session;
+
+}; // TTopicReader
 
 class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
     template <typename TEvResponse, typename TClient, typename... Args>
@@ -288,6 +347,13 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         Call<TEvYdbProxy::TEvDescribeConsumerResponse>(ev, &TTopicClient::DescribeConsumer);
     }
 
+    void Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) {
+        auto* client = EnsureClient<TTopicClient>();
+        auto args = std::move(ev->Get()->GetArgs());
+        auto session = std::apply(&TTopicClient::CreateReadSession, std::tuple_cat(std::tie(client), std::move(args)));
+        Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(RegisterWithSameMailbox(new TTopicReader(session))));
+    }
+
     static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database) {
         return TCommonClientSettings()
             .DiscoveryEndpoint(endpoint)
@@ -338,6 +404,7 @@ public:
             hFunc(TEvYdbProxy::TEvDropTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvDescribeConsumerRequest, Handle);
+            hFunc(TEvYdbProxy::TEvCreateTopicReaderRequest, Handle);
 
         default:
             return StateBase(ev, TlsActivationContext->AsActorContext());

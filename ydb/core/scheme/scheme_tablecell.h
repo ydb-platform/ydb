@@ -409,7 +409,7 @@ private:
 // When loading from a buffer the cells will point to the buffer contents
 class TSerializedCellVec {
 public:
-    explicit TSerializedCellVec(TString buf)
+    explicit TSerializedCellVec(const TString& buf)
     {
         Parse(buf);
     }

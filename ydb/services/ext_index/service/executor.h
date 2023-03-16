@@ -16,7 +16,7 @@ private:
     const TString ExecutorId = TGUID::CreateTimebased().AsUuidString();
     const TConfig Config;
     std::set<TString> CurrentTaskIds;
-    NMetadata::NProvider::TEventsWaiter DeferredEventsOnIntialization;
+    NMetadata::NProvider::TEventsWaiter DeferredEventsOnAddData;
     std::shared_ptr<NMetadata::NCSIndex::TSnapshot> IndexesSnapshot;
 
     enum class EActivity {
@@ -25,22 +25,15 @@ private:
         Active
     };
 
-    EActivity ActivityState = EActivity::Created;
-
-    bool CheckActivity();
-
+    
 protected:
-    void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr& ev);
     void Handle(TEvAddData::TPtr& ev);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
             hFunc(TEvAddData, Handle);
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-            default:
-                break;
         }
     }
 

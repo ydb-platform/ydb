@@ -17,7 +17,7 @@ DATA(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/oss/canonical
 )
 
 END()
-

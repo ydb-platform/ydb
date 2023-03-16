@@ -2,9 +2,16 @@
 
 YDB function tests can be run via pytest. To launch them, complete the following steps:
 
+0. Note that to run those tests, you will need Python version 3.10+ and Pytest version 7+.
 1. Build YDB. You can use [this guide](https://github.com/ydb-platform/ydb/blob/main/BUILD.md).
 2. Install `grpc-tools` package. You can use [this guide](https://grpc.io/docs/languages/python/quickstart).
-3. Initialize the following enviroment variables:
+3. Install some more packages:
+    ```
+    pip install PyHamcrest
+    pip install tornado
+    pip install xmltodict
+    ```
+4. Initialize the following enviroment variables:
     - `source_root` should match the root of YDB GitHub repo. If you did not change any of the commands from YDB
     build guide, then you should export the variable via
     ```
@@ -15,15 +22,11 @@ YDB function tests can be run via pytest. To launch them, complete the following
     ```
     export build_root=~/ydbwork/build
     ```
-    - `test_target` should match the suite from functional tests, which you wish to run. For example, you can export this variable via
-    ```
-    export test_target=ydb_cli
-    ```
-4. Launch the script, which prepares the environment for YDB tests:
+5. Launch the script, which prepares the environment for YDB tests:
     ```
     source ${source_root}/ydb/tests/oss/prepare/prepare.sh
     ```
-5. The script will put you inside directory with test sources, and you can run them:
+6. The script will put you inside directory with test sources, and you can run them:
     ```
     pytest -s
     ```

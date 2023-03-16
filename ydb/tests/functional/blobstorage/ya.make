@@ -2,10 +2,10 @@ PY3TEST()
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
-    pdisk_format_info.py
-    replication.py
-    self_heal.py
-    tablet_channel_migration.py
+    test_pdisk_format_info.py
+    test_replication.py
+    test_self_heal.py
+    test_tablet_channel_migration.py
 )
 
 IF (SANITIZER_TYPE)

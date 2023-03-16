@@ -23,6 +23,7 @@ IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
 
     PEERDIR(
         ydb/tests/library
+        ydb/tests/oss/canonical
         ydb/tests/oss/ydb_sdk_import
     )
 

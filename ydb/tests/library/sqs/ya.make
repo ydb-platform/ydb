@@ -15,7 +15,7 @@ IF (NOT PYTHON3)
 ENDIF()
 
 PEERDIR(
-    ydb/public/sdk/python
+    ydb/tests/oss/ydb_sdk_import
     contrib/python/xmltodict
 )
 

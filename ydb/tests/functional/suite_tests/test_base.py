@@ -18,6 +18,7 @@ import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
+from ydb.tests.oss.canonical import set_canondata_root
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -260,6 +261,7 @@ class BaseSuiteRunner(object):
         cls.query_id = itertools.count(start=1)
         cls.files = {}
         cls.plan = False
+        set_canondata_root('ydb/tests/functional/suite_tests/canondata')
 
     @classmethod
     def teardown_class(cls):

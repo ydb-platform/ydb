@@ -2,7 +2,7 @@ PY3TEST()
 
 TEST_SRCS(
     conftest.py
-    test.py
+    test_serverless.py
 )
 
 FORK_TEST_FILES()

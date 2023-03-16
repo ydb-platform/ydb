@@ -20,7 +20,7 @@ from ydb.tests.library.sqs.tables import create_all_tables as create_all_sqs_tab
 from ydb.tests.library.sqs.requests_client import SqsHttpApi
 from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 from concurrent import futures
 
 

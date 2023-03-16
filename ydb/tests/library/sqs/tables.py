@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import ydb
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 from enum import Enum
 

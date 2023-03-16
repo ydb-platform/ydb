@@ -10,6 +10,7 @@ from ydb.tests.library.common.local_db_scheme import get_scheme
 from ydb.tests.library.common.types import TabletTypes
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.kv.helpers import create_tablets_and_wait_for_start
+from ydb.tests.oss.canonical import set_canondata_root
 
 
 def write_canonical_file(tablet, content):
@@ -55,6 +56,7 @@ class TestTabletSchemes(object):
         cls.shard_index = itertools.count(start=1)
         cls.to_prepare = (
             TabletTypes.PERSQUEUE, TabletTypes.KEYVALUEFLAT, TabletTypes.FLAT_DATASHARD, TabletTypes.KESUS)
+        set_canondata_root('ydb/tests/functional/scheme_tests/canondata')
 
     def prepare_tablet(self, tablet_type):
         if tablet_type in self.to_prepare:

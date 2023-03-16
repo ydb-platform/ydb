@@ -739,6 +739,14 @@ const TPath::TChecker& TPath::TChecker::PQReservedStorageLimit(ui64 delta, EStat
         }
     }
 
+    ui64 quotasAvailable = domainInfo->DiskSpaceQuotasAvailable();
+    if (quotasAvailable < delta && AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
+        return Fail(status, TStringBuilder() << "database size limit exceeded"
+            << ", limit: " << domainInfo->GetDiskSpaceQuotas().HardQuota << " bytes"
+            << ", available: " << quotasAvailable << " bytes"
+            << ", delta: " << delta << " bytes");
+    }
+
     return *this;
 }
 

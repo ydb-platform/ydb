@@ -1692,7 +1692,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             return false;
         }
 
-        ui64 totalUsage = DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
+        ui64 totalUsage = TotalDiskSpaceUsage();
         if (totalUsage > quotas.HardQuota) {
             if (!DiskQuotaExceeded) {
                 counters->ChangeDiskSpaceQuotaExceeded(+1);
@@ -1714,6 +1714,20 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         }
 
         return false;
+    }
+
+    ui64 TotalDiskSpaceUsage() {
+        return DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
+    }
+
+    ui64 DiskSpaceQuotasAvailable() {
+        auto quotas = GetDiskSpaceQuotas();
+        if (!quotas) {
+            return Max<ui64>();
+        }
+
+        auto usage = TotalDiskSpaceUsage();
+        return usage < quotas.HardQuota ? quotas.HardQuota - usage : 0;
     }
 
     const TStoragePools& GetStoragePools() const {

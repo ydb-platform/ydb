@@ -5,6 +5,7 @@
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash.h>
+#include <util/generic/intrlist.h>
 
 namespace NKikimr::NTabletFlatExecutor {
 
@@ -40,16 +41,20 @@ namespace NKikimr::NDataShard {
         virtual void OnAbort(ui64 txId) = 0;
     };
 
-    struct TVolatileTxInfo {
+    struct TVolatileTxInfo
+        : public TIntrusiveListItem<TVolatileTxInfo>
+    {
+        ui64 CommitOrder;
         ui64 TxId;
         EVolatileTxState State = EVolatileTxState::Waiting;
+        bool AddCommitted = false;
+        bool CommitOrdered = false;
         TRowVersion Version;
         absl::flat_hash_set<ui64> CommitTxIds;
         absl::flat_hash_set<ui64> Dependencies;
         absl::flat_hash_set<ui64> Dependents;
         absl::flat_hash_set<ui64> Participants;
         std::optional<ui64> ChangeGroup;
-        bool AddCommitted = false;
         absl::flat_hash_set<ui64> BlockedOperations;
         absl::flat_hash_set<ui64> WaitingRemovalOperations;
         TStackVec<IVolatileTxCallback::TPtr, 2> Callbacks;
@@ -177,6 +182,7 @@ namespace NKikimr::NDataShard {
             TConstArrayRef<ui64> dependencies,
             TConstArrayRef<ui64> participants,
             std::optional<ui64> changeGroup,
+            bool commitOrdered,
             TTransactionContext& txc);
 
         bool AttachVolatileTxCallback(
@@ -222,15 +228,20 @@ namespace NKikimr::NDataShard {
         void RunPendingCommitTx();
         void RunPendingAbortTx();
 
+        void RemoveFromCommitOrder(TVolatileTxInfo* info);
+        bool ReadyToDbCommit(TVolatileTxInfo* info) const;
+
     private:
         TDataShard* const Self;
         absl::flat_hash_map<ui64, std::unique_ptr<TVolatileTxInfo>> VolatileTxs; // TxId -> Info
         absl::flat_hash_map<ui64, TVolatileTxInfo*> VolatileTxByCommitTxId; // CommitTxId -> Info
         TVolatileTxByVersion VolatileTxByVersion;
+        TIntrusiveList<TVolatileTxInfo> VolatileTxByCommitOrder;
         std::vector<TWaitingSnapshotEvent> WaitingSnapshotEvents;
         TIntrusivePtr<TTxMap> TxMap;
         std::deque<ui64> PendingCommits;
         std::deque<ui64> PendingAborts;
+        ui64 NextCommitOrder = 1;
         bool PendingCommitTxScheduled = false;
         bool PendingAbortTxScheduled = false;
     };

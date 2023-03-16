@@ -1884,4 +1884,10 @@ message TTxVolatileDetails {
 
     // An optional change group for committing change collector changes
     optional uint64 ChangeGroup = 6;
+
+    // A relative commit order local to the shard
+    optional uint64 CommitOrder = 7;
+
+    // When true all preceding transactions are dependencies
+    optional bool CommitOrdered = 8;
 }

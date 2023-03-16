@@ -328,6 +328,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
             tx->GetDataTx()->GetVolatileDependencies(),
             participants,
             tx->GetDataTx()->GetVolatileChangeGroup(),
+            tx->GetDataTx()->GetVolatileCommitOrdered(),
             txc);
     }
 

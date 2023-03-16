@@ -191,6 +191,7 @@ public:
     TVector<ui64> GetVolatileCommitTxIds() const { return EngineBay.GetVolatileCommitTxIds(); }
     TVector<ui64> GetVolatileDependencies() const { return EngineBay.GetVolatileDependencies(); }
     std::optional<ui64> GetVolatileChangeGroup() const { return EngineBay.GetVolatileChangeGroup(); }
+    bool GetVolatileCommitOrdered() const { return EngineBay.GetVolatileCommitOrdered(); }
 
     TActorId Source() const { return Source_; }
     void SetSource(const TActorId& actorId) { Source_ = actorId; }

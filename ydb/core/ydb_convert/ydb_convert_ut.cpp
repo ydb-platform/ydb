@@ -5,6 +5,8 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/aclib/aclib.h>
+
 namespace NKikimr {
 
 static void TestConvertTypeToYdb(const TString& input, const TString& expected) {
@@ -1043,5 +1045,169 @@ variant_index: 3435973836
     }
 
 } // ConvertYdbValueToMiniKQLValueTest
+
+Y_UNIT_TEST_SUITE(ConvertYdbPermissionNameToACLAttrs) {
+Y_UNIT_TEST(SimpleConvertGood) {
+    using namespace NACLib;
+    auto aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.database.connect");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::ConnectDatabase);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritNone);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.tables.modify");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights(UpdateRow | EraseRow));
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.tables.read");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights(SelectRow | ReadAttributes));
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.generic.list");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::GenericList);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.generic.read");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::GenericRead);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.generic.write");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::GenericWrite);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.generic.use_legacy");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::GenericUseLegacy);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.generic.use");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::GenericUse);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.generic.manage");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::GenericManage);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.generic.full_legacy");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::GenericFullLegacy);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.generic.full");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::GenericFull);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.database.create");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::CreateDatabase);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.database.drop");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::DropDatabase);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.access.grant");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::GrantAccessRights);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.select_row");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::SelectRow);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.update_row");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::UpdateRow);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.erase_row");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::EraseRow);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.read_attributes");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::ReadAttributes);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.write_attributes");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::WriteAttributes);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.create_directory");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::CreateDirectory);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.create_table");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::CreateTable);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.create_queue");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::CreateQueue);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.remove_schema");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::RemoveSchema);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.describe_schema");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::DescribeSchema);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+
+    aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.alter_schema");
+    UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::AlterSchema);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
+}
+
+Y_UNIT_TEST(TestEqualGranularAndDeprecatedAcl) {
+    using namespace NACLib;
+    auto deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.deprecated.select_row");
+    auto granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.select_row");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+
+    deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.deprecated.update_row");
+    granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.update_row");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+
+    deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.deprecated.erase_row");
+    granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.erase_row");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+
+    deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.deprecated.read_attributes");
+    granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.read_attributes");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+
+    deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.write_attributes");
+    granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.write_attributes");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+
+    deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.deprecated.create_directory");
+    granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.create_directory");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+
+    deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.deprecated.create_table");
+    granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.create_table");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+
+    deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.deprecated.create_queue");
+    granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.create_queue");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+
+    deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.deprecated.remove_schema");
+    granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.remove_schema");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+
+    deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.deprecated.describe_schema");
+    granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.describe_schema");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+
+    deprecatedAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.deprecated.alter_schema");
+    granularAclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.granular.alter_schema");
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.AccessMask, granularAclAttr.AccessMask);
+    UNIT_ASSERT_EQUAL(deprecatedAclAttr.InheritanceType, granularAclAttr.InheritanceType);
+}
+
+} // ConvertYdbPermissionNameToACLAttrs
 
 } // namespace NKikimr

@@ -738,6 +738,40 @@ void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
 
 using namespace NACLib;
 
+namespace {
+
+const TString YDB_GRANULAR_SELECT_ROW = "ydb.granular.select_row";
+const TString YDB_GRANULAR_UPDATE_ROW = "ydb.granular.update_row";
+const TString YDB_GRANULAR_ERASE_ROW = "ydb.granular.erase_row";
+const TString YDB_GRANULAR_READ_ATTRIBUTES = "ydb.granular.read_attributes";
+const TString YDB_GRANULAR_WRITE_ATTRIBUTES = "ydb.granular.write_attributes";
+const TString YDB_GRANULAR_CREATE_DIRECTORY = "ydb.granular.create_directory";
+const TString YDB_GRANULAR_CREATE_TABLE = "ydb.granular.create_table";
+const TString YDB_GRANULAR_CREATE_QUEUE = "ydb.granular.create_queue";
+const TString YDB_GRANULAR_REMOVE_SCHEMA = "ydb.granular.remove_schema";
+const TString YDB_GRANULAR_DESCRIBE_SCHEMA = "ydb.granular.describe_schema";
+const TString YDB_GRANULAR_ALTER_SCHEMA = "ydb.granular.alter_schema";
+
+const TString& GetAclName(const TString& name) {
+    static const THashMap<TString, TString> GranularNamesMap_ = {
+        { "ydb.deprecated.select_row", YDB_GRANULAR_SELECT_ROW },
+        { "ydb.deprecated.update_row", YDB_GRANULAR_UPDATE_ROW },
+        { "ydb.deprecated.erase_row", YDB_GRANULAR_ERASE_ROW },
+        { "ydb.deprecated.read_attributes", YDB_GRANULAR_READ_ATTRIBUTES },
+        { "ydb.deprecated.write_attributes", YDB_GRANULAR_WRITE_ATTRIBUTES },
+        { "ydb.deprecated.create_directory", YDB_GRANULAR_CREATE_DIRECTORY },
+        { "ydb.deprecated.create_table", YDB_GRANULAR_CREATE_TABLE },
+        { "ydb.deprecated.create_queue", YDB_GRANULAR_CREATE_QUEUE },
+        { "ydb.deprecated.remove_schema", YDB_GRANULAR_REMOVE_SCHEMA },
+        { "ydb.deprecated.describe_schema", YDB_GRANULAR_DESCRIBE_SCHEMA },
+        { "ydb.deprecated.alter_schema", YDB_GRANULAR_ALTER_SCHEMA }
+    };
+    auto it = GranularNamesMap_.find(name);
+    return it != GranularNamesMap_.cend() ? it->second : name;
+}
+
+} // namespace
+
 const THashMap<TString, TACLAttrs> AccessMap_  = {
     { "ydb.database.connect", TACLAttrs(EAccessRights::ConnectDatabase, EInheritanceType::InheritNone) },
     { "ydb.tables.modify", TACLAttrs(EAccessRights(UpdateRow | EraseRow)) },
@@ -753,17 +787,17 @@ const THashMap<TString, TACLAttrs> AccessMap_  = {
     { "ydb.database.create", EAccessRights::CreateDatabase },
     { "ydb.database.drop", EAccessRights::DropDatabase },
     { "ydb.access.grant", EAccessRights::GrantAccessRights },
-    { "ydb.deprecated.select_row", EAccessRights::SelectRow },
-    { "ydb.deprecated.update_row", EAccessRights::UpdateRow },
-    { "ydb.deprecated.erase_row", EAccessRights::EraseRow },
-    { "ydb.deprecated.read_attributes", EAccessRights::ReadAttributes },
-    { "ydb.deprecated.write_attributes", EAccessRights::WriteAttributes },
-    { "ydb.deprecated.create_directory", EAccessRights::CreateDirectory },
-    { "ydb.deprecated.create_table", EAccessRights::CreateTable },
-    { "ydb.deprecated.create_queue", EAccessRights::CreateQueue },
-    { "ydb.deprecated.remove_schema", EAccessRights::RemoveSchema },
-    { "ydb.deprecated.describe_schema", EAccessRights::DescribeSchema },
-    { "ydb.deprecated.alter_schema", EAccessRights::AlterSchema }
+    { YDB_GRANULAR_SELECT_ROW, EAccessRights::SelectRow },
+    { YDB_GRANULAR_UPDATE_ROW, EAccessRights::UpdateRow },
+    { YDB_GRANULAR_ERASE_ROW, EAccessRights::EraseRow },
+    { YDB_GRANULAR_READ_ATTRIBUTES, EAccessRights::ReadAttributes },
+    { YDB_GRANULAR_WRITE_ATTRIBUTES, EAccessRights::WriteAttributes },
+    { YDB_GRANULAR_CREATE_DIRECTORY, EAccessRights::CreateDirectory },
+    { YDB_GRANULAR_CREATE_TABLE, EAccessRights::CreateTable },
+    { YDB_GRANULAR_CREATE_QUEUE, EAccessRights::CreateQueue },
+    { YDB_GRANULAR_REMOVE_SCHEMA, EAccessRights::RemoveSchema },
+    { YDB_GRANULAR_DESCRIBE_SCHEMA, EAccessRights::DescribeSchema },
+    { YDB_GRANULAR_ALTER_SCHEMA, EAccessRights::AlterSchema }
 
 };
 
@@ -792,7 +826,7 @@ static TVector<std::pair<ui32, TString>> CalcMaskByPower() {
 }
 
 TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name) {
-    auto it = AccessMap_.find(name);
+    auto it = AccessMap_.find(GetAclName(name));
     if (it == AccessMap_.end()) {
         throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
             << "Unknown permission name: " << name;

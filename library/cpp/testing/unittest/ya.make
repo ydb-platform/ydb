@@ -3,6 +3,7 @@ LIBRARY()
 PROVIDES(test_framework)
 
 PEERDIR(
+    contrib/libs/libxml
     library/cpp/colorizer
     library/cpp/dbg_output
     library/cpp/diff
@@ -14,6 +15,7 @@ PEERDIR(
 SRCS(
     gtest.cpp
     checks.cpp
+    junit.cpp
     plugin.cpp
     registar.cpp
     tests_data.cpp

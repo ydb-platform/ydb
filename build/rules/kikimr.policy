@@ -1,3 +1,5 @@
+# Tasklet v2 schema registry
+ALLOW tasklet/registry/common -> kikimr/ci
 # temporary allow to depend (FIXME: gvit)
 ALLOW yabs/sbyt/testing/scenarios/bigstart -> kikimr/ci
 # temporary allow to depend (FIXME: gvit)

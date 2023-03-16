@@ -662,7 +662,7 @@ namespace NKikimr::NBsController {
                 if (slot->Status == NKikimrBlobStorage::EVDiskStatus::READY) {
                     // we can release donor slots without further notice then the VDisk is completely replicated; we
                     // intentionally use GetStatus() here instead of IsReady() to prevent waiting
-                    for (const auto& [donorVSlotId, donorVDiskId] : slot->Donors) {
+                    for (const TVSlotId& donorVSlotId : slot->Donors) {
                         if (!dropDonorEv) {
                             dropDonorEv.reset(new TEvPrivate::TEvDropDonor);
                         }

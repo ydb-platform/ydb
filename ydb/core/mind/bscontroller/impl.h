@@ -97,8 +97,7 @@ public:
         Table::VDiskIdx::Type VDiskIdx = 0;
         Table::Mood::Type Mood;
         TIndirectReferable<TGroupInfo>::TPtr Group; // group to which this VSlot belongs (or nullptr if it doesn't belong to any)
-        std::vector<std::pair<TVSlotId, TVDiskID>> Donors; // a set of alive donors for this disk
-        TVSlotId AcceptorVSlotId;
+        THashSet<TVSlotId> Donors; // a set of alive donors for this disk (which are not being deleted)
         TInstant LastSeenReady;
 
         // volatile state
@@ -214,10 +213,13 @@ public:
         void MakeDonorFor(TVSlotInfo *newSlot) {
             Y_VERIFY(newSlot);
             Y_VERIFY(!IsBeingDeleted());
+            Y_VERIFY(GroupId == newSlot->GroupId);
+            Y_VERIFY(GetShortVDiskId() == newSlot->GetShortVDiskId());
             Mood = TMood::Donor;
             Group = nullptr; // we are not part of this group anymore
-            Donors.emplace_back(VSlotId, GetVDiskId());
-            newSlot->Donors = std::exchange(Donors, {});
+            Donors.insert(VSlotId);
+            Donors.swap(newSlot->Donors);
+            Y_VERIFY(Donors.empty());
         }
 
         TVDiskID GetVDiskId() const {
@@ -1500,6 +1502,17 @@ private:
 
     void ValidateInternalState();
 
+    const TVSlotInfo* FindAcceptor(const TVSlotInfo& donor) {
+        Y_VERIFY(donor.Mood == TMood::Donor);
+        TGroupInfo *group = FindGroup(donor.GroupId);
+        Y_VERIFY(group);
+        const ui32 orderNumber = group->Topology->GetOrderNumber(donor.GetShortVDiskId());
+        const TVSlotInfo *acceptor = group->VDisksInGroup[orderNumber];
+        Y_VERIFY(donor.GroupId == acceptor->GroupId && donor.GroupGeneration < acceptor->GroupGeneration &&
+            donor.GetShortVDiskId() == acceptor->GetShortVDiskId());
+        return acceptor;
+    }
+
     TVSlotInfo* FindVSlot(TVSlotId id) {
         auto it = VSlots.find(id);
         return it != VSlots.end() ? it->second.Get() : nullptr;
@@ -2140,7 +2153,7 @@ public:
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TVSlot *pb, const TVSlotInfo &vslot, const TVSlotFinder& finder);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group);
     static void SerializeDonors(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk *vdisk, const TVSlotInfo& vslot,
-        const TGroupInfo& group);
+        const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
         const TString& storagePoolName, const TMaybe<TKikimrScopeId>& scopeId);
 };

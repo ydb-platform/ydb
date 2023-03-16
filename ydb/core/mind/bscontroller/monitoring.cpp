@@ -1196,7 +1196,7 @@ void TBlobStorageController::RenderGroupDetail(IOutputStream &out, TGroupId grou
                 std::vector<const TVSlotInfo*> donors;
                 for (const TVSlotInfo *slot : group->VDisksInGroup) {
                     RenderVSlotRow(out, *slot);
-                    for (const auto& [vslotId, vdiskId] : slot->Donors) {
+                    for (const TVSlotId& vslotId : slot->Donors) {
                         if (const auto *x = FindVSlot(vslotId)) {
                             donors.push_back(x);
                         }
@@ -1291,17 +1291,16 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
                 }
             }
             TABLED() {
-                if (vslot.AcceptorVSlotId != TVSlotId()) {
-                    if (const auto *x = FindVSlot(vslot.AcceptorVSlotId)) {
-                        out << "<strong>donor for <a href='#" << x->GetVDiskId() << "'>" << vslot.AcceptorVSlotId << "</a></strong>";
-                    } else {
-                        out << "?";
-                    }
+                if (vslot.Mood == TMood::Donor) {
+                    const auto *x = FindAcceptor(vslot);
+                    out << "<strong>donor for <a href='#" << x->GetVDiskId() << "'>" << x->VSlotId << "</a></strong>";
                 } else {
                     bool first = true;
-                    for (const auto& [vslotId, vdiskId] : vslot.Donors) {
+                    for (const TVSlotId& donorVSlotId : vslot.Donors) {
                         out << (std::exchange(first, false) ? "" : "<br/>");
-                        out << "<a href='#" << vdiskId.ToString() << "'>" << vdiskId << "</a> at " << vslotId;
+                        const TVSlotInfo *donor = FindVSlot(donorVSlotId);
+                        const TVDiskID vdiskId = donor->GetVDiskId();
+                        out << "<a href='#" << vdiskId.ToString() << "'>" << vdiskId << "</a> at " << donorVSlotId;
                     }
                 }
             }

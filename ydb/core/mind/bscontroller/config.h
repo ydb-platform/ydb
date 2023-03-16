@@ -205,7 +205,7 @@ namespace NKikimr {
                 return res;
             }
 
-            void DestroyVSlot(const TVSlotId vslotId);
+            void DestroyVSlot(const TVSlotId vslotId, const TVSlotInfo *ensureAcceptorSlot = nullptr);
 
             void CheckConsistency() const;
 

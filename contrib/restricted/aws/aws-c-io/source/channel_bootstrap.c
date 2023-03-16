@@ -12,7 +12,7 @@
 #include <aws/io/socket_channel_handler.h>
 #include <aws/io/tls_channel_handler.h>
 
-#if _MSC_VER
+#ifdef _MSC_VER
 /* non-constant aggregate initializer */
 #    pragma warning(disable : 4204)
 /* allow automatic variable to escape scope

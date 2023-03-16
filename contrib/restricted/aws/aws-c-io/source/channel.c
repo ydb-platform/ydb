@@ -14,7 +14,7 @@
 #include <aws/io/message_pool.h>
 #include <aws/io/statistics.h>
 
-#if _MSC_VER
+#ifdef _MSC_VER
 #    pragma warning(disable : 4204) /* non-constant aggregate initializer */
 #endif
 

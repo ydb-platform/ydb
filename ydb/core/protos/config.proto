@@ -43,6 +43,7 @@ message TActorSystemConfig {
     enum ENodeType {
         STORAGE = 1;
         COMPUTE = 2;
+        HYBRID = 3;
     }
 
     message TExecutor {

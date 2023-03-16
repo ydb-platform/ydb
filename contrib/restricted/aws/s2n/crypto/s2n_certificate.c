@@ -113,21 +113,21 @@ int s2n_cert_chain_and_key_set_cert_chain(struct s2n_cert_chain_and_key *cert_an
     return S2N_SUCCESS;
 }
 
-int s2n_cert_chain_and_key_set_private_key_from_stuffer(struct s2n_cert_chain_and_key *cert_and_key, struct s2n_stuffer *key_in_stuffer, struct s2n_stuffer *key_out_stuffer)
+int s2n_cert_chain_and_key_set_private_key_from_stuffer(struct s2n_cert_chain_and_key *cert_and_key,
+        struct s2n_stuffer *key_in_stuffer, struct s2n_stuffer *key_out_stuffer)
 {
     struct s2n_blob key_blob = { 0 };
 
     POSIX_GUARD(s2n_pkey_zero_init(cert_and_key->private_key));
 
     /* Convert pem to asn1 and asn1 to the private key. Handles both PKCS#1 and PKCS#8 formats */
-    POSIX_GUARD(s2n_stuffer_private_key_from_pem(key_in_stuffer, key_out_stuffer));
+    int type = 0;
+    POSIX_GUARD(s2n_stuffer_private_key_from_pem(key_in_stuffer, key_out_stuffer, &type));
     key_blob.size = s2n_stuffer_data_available(key_out_stuffer);
     key_blob.data = s2n_stuffer_raw_read(key_out_stuffer, key_blob.size);
     POSIX_ENSURE_REF(key_blob.data);
 
-    /* Get key type and create appropriate key context */
-    POSIX_GUARD(s2n_asn1der_to_private_key(cert_and_key->private_key, &key_blob));
-
+    POSIX_GUARD(s2n_asn1der_to_private_key(cert_and_key->private_key, &key_blob, type));
     return S2N_SUCCESS;
 }
 
@@ -721,7 +721,7 @@ static int s2n_utf8_string_from_extension_data(const uint8_t *extension_data, ui
 
     int len = ASN1_STRING_length(asn1_str);
     if (out_data != NULL) {
-        POSIX_ENSURE(*out_len >= len, S2N_ERR_INSUFFICIENT_MEM_SIZE);
+        POSIX_ENSURE((int64_t) *out_len >= (int64_t) len, S2N_ERR_INSUFFICIENT_MEM_SIZE);
         /* ASN1_STRING_data() returns an internal pointer to the data. 
         * Since this is an internal pointer it should not be freed or modified in any way.
         * Ref: https://www.openssl.org/docs/man1.0.2/man3/ASN1_STRING_data.html.
@@ -776,8 +776,9 @@ static int s2n_parse_x509_extension(struct s2n_cert *cert, const uint8_t *oid,
      * X509_get_ext_count returns the number of extensions in the x509 certificate. 
      * Ref: https://www.openssl.org/docs/man1.1.0/man3/X509_get_ext_count.html.
      */
-    int ext_count = X509_get_ext_count(x509_cert);
-    POSIX_ENSURE_GT(ext_count, 0);
+    int ext_count_value = X509_get_ext_count(x509_cert);
+    POSIX_ENSURE_GT(ext_count_value, 0);
+    size_t ext_count = (size_t) ext_count_value;
 
     /* OBJ_txt2obj() converts the input text string into an ASN1_OBJECT structure.
      * If no_name is 0 then long names and short names will be interpreted as well as numerical forms.
@@ -825,7 +826,8 @@ static int s2n_parse_x509_extension(struct s2n_cert *cert, const uint8_t *oid,
             */
             int len = ASN1_STRING_length(asn1_str);
             if (ext_value != NULL) {
-                POSIX_ENSURE(*ext_value_len >= len, S2N_ERR_INSUFFICIENT_MEM_SIZE);
+                POSIX_ENSURE_GTE(len, 0);
+                POSIX_ENSURE(*ext_value_len >= (uint32_t) len, S2N_ERR_INSUFFICIENT_MEM_SIZE);
                 /* ASN1_STRING_data() returns an internal pointer to the data. 
                  * Since this is an internal pointer it should not be freed or modified in any way.
                  * Ref: https://www.openssl.org/docs/man1.0.2/man3/ASN1_STRING_data.html.

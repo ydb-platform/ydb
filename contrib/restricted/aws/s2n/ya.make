@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.3.37)
+VERSION(1.3.38)
 
-ORIGINAL_SOURCE(https://github.com/aws/s2n-tls/archive/v1.3.37.tar.gz)
+ORIGINAL_SOURCE(https://github.com/aws/s2n-tls/archive/v1.3.38.tar.gz)
 
 PEERDIR(
     contrib/libs/openssl
@@ -150,6 +150,7 @@ SRCS(
     tls/extensions/s2n_psk_key_exchange_modes.c
     tls/extensions/s2n_quic_transport_params.c
     tls/extensions/s2n_server_alpn.c
+    tls/extensions/s2n_server_cert_status_request.c
     tls/extensions/s2n_server_cookie.c
     tls/extensions/s2n_server_early_data_indication.c
     tls/extensions/s2n_server_ems.c

@@ -9,7 +9,7 @@
 
 #include <util/generic/ptr.h>
 
-namespace NYq {
+namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -47,4 +47,4 @@ public:
 
 using TStateStoragePtr = TIntrusivePtr<IStateStorage>;
 
-} // namespace NYq
+} // namespace NFq

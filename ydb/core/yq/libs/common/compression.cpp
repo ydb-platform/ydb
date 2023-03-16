@@ -1,7 +1,7 @@
 #include "compression.h"
 #include <library/cpp/blockcodecs/codecs.h>
 
-namespace NYq {
+namespace NFq {
 
 namespace {
     const NBlockCodecs::ICodec* ProvideCodec(const TString& compressionMethod) {
@@ -39,4 +39,4 @@ TString TCompressor::Decompress(const TString& data) const {
     return Codec->Decode(data);
 }
 
-}  // namespace NYq
+}  // namespace NFq

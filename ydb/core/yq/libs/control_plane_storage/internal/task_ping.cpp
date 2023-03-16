@@ -11,7 +11,7 @@
 
 #include <util/system/hostname.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TPingTaskParams {
     TString Query;
@@ -539,4 +539,4 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
         });
 }
 
-} // NYq
+} // NFq

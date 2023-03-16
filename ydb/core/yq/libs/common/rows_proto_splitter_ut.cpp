@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -112,4 +112,4 @@ Y_UNIT_TEST_SUITE(SplitterBasic) {
     }
 }
 
-} // NYq
+} // NFq

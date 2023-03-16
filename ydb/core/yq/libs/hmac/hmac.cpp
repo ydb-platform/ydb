@@ -4,7 +4,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/generic/yexception.h>
 
-namespace NYq {
+namespace NFq {
 TString HmacSha1(const TStringBuf data, const TStringBuf secret) {
     unsigned char md_value[EVP_MAX_MD_SIZE];
     unsigned md_len = 0;

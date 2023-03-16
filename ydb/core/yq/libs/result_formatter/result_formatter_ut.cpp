@@ -2,7 +2,7 @@
 
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-using namespace NYq;
+using namespace NFq;
 
 Y_UNIT_TEST_SUITE(ResultFormatter) {
     Y_UNIT_TEST(Primitive) {

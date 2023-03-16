@@ -45,4 +45,4 @@ void TServiceCounters::SetUptimePublicAndServiceCounter(i64 val) const {
 }
 
 } // namespace NCommon
-} // namespace NYq
+} // namespace NYql

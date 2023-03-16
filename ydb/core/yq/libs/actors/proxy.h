@@ -31,15 +31,15 @@ namespace NKikimr  {
     }
 }
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId MakeYqlAnalyticsHttpProxyId();
 NActors::TActorId MakePendingFetcherId(ui32 nodeId);
 
 NActors::IActor* CreatePendingFetcher(
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const ::NYq::NConfig::TConfig& config,
+    const ::NFq::NConfig::TConfig& config,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
@@ -103,4 +103,4 @@ NActors::IActor* CreateRateLimiterResourceDeleter(
 
 TString MakeInternalError(const TString& text);
 
-} /* NYq */
+} /* NFq */

@@ -9,7 +9,7 @@
 
 #include <library/cpp/string_utils/quote/quote.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NYql;
 
@@ -191,4 +191,4 @@ void AddClustersFromConnections(
         }
     }
 }
-} //NYq
+} //NFq

@@ -3,7 +3,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NYq;
+using namespace NFq;
 
 namespace {
     constexpr TStringBuf SECRET = "AAAA";

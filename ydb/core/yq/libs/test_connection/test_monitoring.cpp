@@ -14,7 +14,7 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-namespace NYq {
+namespace NFq {
 
 LWTRACE_USING(YQ_TEST_CONNECTION_PROVIDER);
 
@@ -30,7 +30,7 @@ class TTestMonitoringConnectionActor : public NActors::TActorBootstrapped<TTestM
     TString Token;
     TTestConnectionRequestCountersPtr Counters;
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
-    NYq::TSigner::TPtr Signer;
+    NFq::TSigner::TPtr Signer;
     NYql::TSolomonClusterConfig ClusterConfig;
     const TInstant StartTime = TInstant::Now();
 
@@ -44,7 +44,7 @@ public:
         const TString& scope,
         const TString& user,
         const TString& token,
-        const NYq::TSigner::TPtr& signer,
+        const NFq::TSigner::TPtr& signer,
         const TTestConnectionRequestCountersPtr& counters)
         : Sender(sender)
         , Cookie(cookie)
@@ -55,7 +55,7 @@ public:
         , Counters(counters)
         , CredentialsFactory(credentialsFactory)
         , Signer(signer)
-        , ClusterConfig(NYq::CreateSolomonClusterConfig({}, token, endpoint, signer ? signer->SignAccountId(monitoring.auth().service_account().id()) : "", monitoring))
+        , ClusterConfig(NFq::CreateSolomonClusterConfig({}, token, endpoint, signer ? signer->SignAccountId(monitoring.auth().service_account().id()) : "", monitoring))
     {
         Counters->InFly->Inc();
     }
@@ -138,13 +138,13 @@ public:
 
     void ReplyError(const TString& message) {
         Counters->Error->Inc();
-        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NYq::TIssuesIds::BAD_REQUEST, "Monitoring: " + message)}), Cookie);
+        Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, "Monitoring: " + message)}), Cookie);
         DestroyActor(false /* success */);
     }
 
     void ReplyOk() {
         Counters->Ok->Inc();
-        Send(Sender,  new NYq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), Cookie);
+        Send(Sender,  new NFq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), Cookie);
         DestroyActor(true /* success */);
     }
 };
@@ -158,7 +158,7 @@ NActors::IActor* CreateTestMonitoringConnectionActor(
         const TString& scope,
         const TString& user,
         const TString& token,
-        const NYq::TSigner::TPtr& signer,
+        const NFq::TSigner::TPtr& signer,
         const TTestConnectionRequestCountersPtr& counters) {
     return new TTestMonitoringConnectionActor(
                     monitoring, sender,
@@ -166,4 +166,4 @@ NActors::IActor* CreateTestMonitoringConnectionActor(
                     scope, user, token, signer, counters);
 }
 
-} // namespace NYq
+} // namespace NFq

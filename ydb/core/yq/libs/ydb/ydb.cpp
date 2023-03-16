@@ -10,7 +10,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NThreading;
 using namespace NYdb;
@@ -344,4 +344,4 @@ TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
     return future;
 }
 
-} // namespace NYq
+} // namespace NFq

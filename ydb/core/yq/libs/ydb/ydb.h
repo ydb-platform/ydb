@@ -8,7 +8,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
-namespace NYq {
+namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -130,4 +130,4 @@ NThreading::TFuture<NYdb::TStatus> CheckGeneration(const TGenerationContextPtr& 
 
 NThreading::TFuture<NYdb::TStatus> RollbackTransaction(const TGenerationContextPtr& context);
 
-} // namespace NYq
+} // namespace NFq

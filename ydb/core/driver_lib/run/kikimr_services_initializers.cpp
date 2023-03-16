@@ -2702,7 +2702,7 @@ void THealthCheckInitializer::InitializeServices(TActorSystemSetup* setup, const
         TActorSetupCmd(NHealthCheck::CreateHealthCheckService(), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-TFederatedQueryInitializer::TFederatedQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources)
+TFederatedQueryInitializer::TFederatedQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NFq::IYqSharedResources::TPtr yqSharedResources)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
     , YqSharedResources(std::move(yqSharedResources))
@@ -2738,7 +2738,7 @@ void TFederatedQueryInitializer::InitializeServices(TActorSystemSetup* setup, co
         NKikimr::NPublicHttp::Initialize(setup->LocalServices, *appData, Config.GetPublicHttpConfig());
     }
 
-    NYq::Init(
+    NFq::Init(
         protoConfig,
         NodeId,
         actorRegistrator,

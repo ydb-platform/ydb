@@ -10,7 +10,7 @@
 #include <ydb/core/yq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
 #include <ydb/core/yq/libs/exceptions/exceptions.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TTopicConsumerLess {
     bool operator()(const Fq::Private::TopicConsumer& c1, const Fq::Private::TopicConsumer& c2) const {

@@ -2,7 +2,7 @@
 
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 
-namespace NYq {
+namespace NFq {
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev)
 {
@@ -126,4 +126,4 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         });
 }
 
-} // NYq
+} // NFq

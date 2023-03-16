@@ -17,7 +17,7 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
-namespace NYq {
+namespace NFq {
 
 LWTRACE_USING(YQ_TEST_CONNECTION_PROVIDER);
 
@@ -95,14 +95,14 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
     };
 
     NConfig::TTestConnectionConfig Config;
-    ::NYq::TControlPlaneStorageConfig ControlPlaneStorageConfig;
+    ::NFq::TControlPlaneStorageConfig ControlPlaneStorageConfig;
     NConfig::TCommonConfig CommonConfig;
-    NYq::TYqSharedResources::TPtr SharedResouces;
+    NFq::TYqSharedResources::TPtr SharedResouces;
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TCounters Counters;
-    NYq::TSigner::TPtr Signer;
+    NFq::TSigner::TPtr Signer;
     TActorId DatabaseResolverActor;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
     NYql::IHTTPGateway::TPtr HttpGateway;
@@ -113,7 +113,7 @@ public:
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
         const NConfig::TCommonConfig& commonConfig,
         const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
-        const NYq::TYqSharedResources::TPtr& sharedResources,
+        const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -130,7 +130,7 @@ public:
         , HttpGateway(httpGateway)
     {
         if (tokenAccessorConfig.GetHmacSecretFile()) {
-            Signer = ::NYq::CreateSignerFromFile(tokenAccessorConfig.GetHmacSecretFile());
+            Signer = ::NFq::CreateSignerFromFile(tokenAccessorConfig.GetHmacSecretFile());
         }
     }
 
@@ -141,8 +141,8 @@ public:
 
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_TEST_CONNECTION_PROVIDER));
 
-        DatabaseResolverActor = Register(NYq::CreateDatabaseResolver(NYq::MakeYqlAnalyticsHttpProxyId(), CredentialsFactory));
-        DbResolver = std::make_shared<NYq::TDatabaseAsyncResolverImpl>(
+        DatabaseResolverActor = Register(NFq::CreateDatabaseResolver(NFq::MakeYqlAnalyticsHttpProxyId(), CredentialsFactory));
+        DbResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                         NActors::TActivationContext::ActorSystem(), DatabaseResolverActor,
                         CommonConfig.GetYdbMvpCloudEndpoint(), CommonConfig.GetMdbGateway(),
                         CommonConfig.GetMdbTransformHost());
@@ -232,7 +232,7 @@ NActors::IActor* CreateTestConnectionActor(
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
         const NConfig::TCommonConfig& commonConfig,
         const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
-        const NYq::TYqSharedResources::TPtr& sharedResources,
+        const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -244,4 +244,4 @@ NActors::IActor* CreateTestConnectionActor(
                     functionRegistry, httpGateway, counters);
 }
 
-} // namespace NYq
+} // namespace NFq

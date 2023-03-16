@@ -10,7 +10,7 @@
 
 #include <memory>
 
-namespace NYq {
+namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewCheckpointStorageService(
     const NConfig::TCheckpointCoordinatorConfig& config,
@@ -18,4 +18,4 @@ std::unique_ptr<NActors::IActor> NewCheckpointStorageService(
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources);
 
-} // namespace NYq
+} // namespace NFq

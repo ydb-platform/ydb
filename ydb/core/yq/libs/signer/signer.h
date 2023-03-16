@@ -3,7 +3,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
-namespace NYq {
+namespace NFq {
 // keep in sync with token accessor logic
 class TSigner : public TThrRefBase {
 public:

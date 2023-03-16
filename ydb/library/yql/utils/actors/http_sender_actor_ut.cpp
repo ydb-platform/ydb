@@ -18,7 +18,7 @@
 
 #include <util/system/env.h>
 
-namespace NYq {
+namespace NYql {
 
 using namespace NActors;
 using namespace NKikimr;
@@ -204,4 +204,4 @@ Y_UNIT_TEST_SUITE(THttpSenderTests) {
 
 
 
-} // namespace NYq
+} // namespace NYql

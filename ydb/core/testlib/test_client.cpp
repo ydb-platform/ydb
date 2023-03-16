@@ -868,7 +868,7 @@ namespace Tests {
         }
 
         if (Settings->EnableYq) {
-            NYq::NConfig::TConfig protoConfig;
+            NFq::NConfig::TConfig protoConfig;
             protoConfig.SetEnabled(true);
 
             protoConfig.MutableQuotasManager()->SetEnabled(true);
@@ -969,8 +969,8 @@ namespace Tests {
 
             const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            YqSharedResources = NYq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
-            NYq::Init(
+            YqSharedResources = NFq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
+            NFq::Init(
                 protoConfig,
                 Runtime->GetNodeId(nodeIdx),
                 actorRegistrator,
@@ -982,7 +982,7 @@ namespace Tests {
                 /*IcPort = */0,
                 {}
                 );
-            NYq::InitTest(Runtime.Get(), port, Settings->GrpcPort, YqSharedResources);
+            NFq::InitTest(Runtime.Get(), port, Settings->GrpcPort, YqSharedResources);
         }
     }
 

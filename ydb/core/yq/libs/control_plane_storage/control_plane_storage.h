@@ -32,7 +32,7 @@
     LOG_YQ_CONTROL_PLANE_STORAGE_AS_TRACE(a, s)
 
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId ControlPlaneStorageServiceActorId(ui32 nodeId = 0);
 
@@ -42,8 +42,8 @@ NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
     const NConfig::TControlPlaneStorageConfig& config,
     const NConfig::TCommonConfig& common,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TString& tenantName);
 
-} // namespace NYq
+} // namespace NFq

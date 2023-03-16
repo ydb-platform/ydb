@@ -5,7 +5,7 @@
 #include <util/generic/maybe.h>
 #include <util/stream/str.h>
 
-namespace NYq {
+namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -90,4 +90,4 @@ struct TCheckpointMetadata {
 
 using TCheckpoints = TVector<TCheckpointMetadata>;
 
-} // namespace NYq
+} // namespace NFq

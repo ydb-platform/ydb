@@ -14,7 +14,7 @@
 
 #include <ydb/core/yq/libs/quota_manager/proto/quota_internal.pb.h>
 
-namespace NYq {
+namespace NFq {
 
 constexpr auto SUBJECT_TYPE_CLOUD = "cloud";
 
@@ -96,7 +96,7 @@ using TQuotaMap = THashMap<TString, TQuotaUsage>;
 struct TEvQuotaService {
     // Event ids.
     enum EEv : ui32 {
-        EvQuotaProxyGetRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::QuotaService),
+        EvQuotaProxyGetRequest = YqEventSubspaceBegin(NFq::TYqEventSubspace::QuotaService),
         EvQuotaProxyGetResponse,
         EvQuotaProxySetRequest,
         EvQuotaProxySetResponse,
@@ -114,7 +114,7 @@ struct TEvQuotaService {
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::QuotaService), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(NFq::TYqEventSubspace::QuotaService), "All events must be in their subspace");
 
     struct TQuotaProxyGetRequest : public NActors::TEventLocal<TQuotaProxyGetRequest, EvQuotaProxyGetRequest> {
         TString User;
@@ -267,4 +267,4 @@ struct TEvQuotaService {
     };
 };
 
-} /* NYq */
+} /* NFq */

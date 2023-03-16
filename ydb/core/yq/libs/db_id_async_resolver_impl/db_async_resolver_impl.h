@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 
-namespace NYq {
+namespace NFq {
 
 class TDatabaseAsyncResolverImpl : public NYql::IDatabaseAsyncResolver {
 public:
@@ -27,4 +27,4 @@ private:
     const TString TraceId;
 };
 
-} // NYq
+} // NFq

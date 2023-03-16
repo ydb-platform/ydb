@@ -2,7 +2,7 @@
 
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-using namespace NYq;
+using namespace NFq;
 
 using TCache = TTtlCache<int,int>;
 

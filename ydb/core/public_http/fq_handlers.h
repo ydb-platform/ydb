@@ -225,7 +225,7 @@ void FqPackToJson(TStringStream& json, const T& httpResult, const TJsonSettings&
 void FqPackToJson(TStringStream& json, const FQHttp::GetResultDataResult& httpResult, const TJsonSettings&) {
     auto resultSet = NYdb::TResultSet(httpResult.result_set());
     NJson::TJsonValue v;
-    NYq::FormatResultSet(v, resultSet, true, true);
+    NFq::FormatResultSet(v, resultSet, true, true);
     // rename key data -> rows
     v["rows"] = v["data"];
     v.EraseValue("data");

@@ -4,7 +4,7 @@ option cc_enable_arenas = true;
 import "ydb/library/yql/providers/dq/api/protos/service.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 
-package NYq.NProto;
+package NFq.NProto;
 
 message TGraphParams {
     string GraphId = 1;

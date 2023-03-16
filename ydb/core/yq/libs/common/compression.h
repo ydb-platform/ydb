@@ -6,7 +6,7 @@ namespace NBlockCodecs {
     struct ICodec;
 }
 
-namespace NYq {
+namespace NFq {
 
 class TCompressor {
 public:
@@ -24,4 +24,4 @@ private:
 };
 
 
-}  // namespace NYq
+}  // namespace NFq

@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <util/string/printf.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NYdb;
 
@@ -301,4 +301,4 @@ TSqlQueryBuilder::TResult TSqlQueryBuilder::Build()
     return {declr, ParamsBuilder.Build()};
 }
 
-} // namespace NYq
+} // namespace NFq

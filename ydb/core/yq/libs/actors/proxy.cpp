@@ -1,6 +1,6 @@
 #include "proxy.h"
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 
@@ -9,4 +9,4 @@ NActors::TActorId MakeYqlAnalyticsHttpProxyId() {
     return NActors::TActorId(0, name);
 }
 
-} // namespace NYq
+} // namespace NFq

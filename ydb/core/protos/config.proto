@@ -1783,7 +1783,7 @@ message TAppConfig {
     optional TMeteringConfig MeteringConfig = 45;
     optional THiveConfig HiveConfig = 46;
     optional TDataShardConfig DataShardConfig = 49;
-    optional NYq.NConfig.TConfig FederatedQueryConfig = 58;
+    optional NFq.NConfig.TConfig FederatedQueryConfig = 58;
     optional TCompactionConfig CompactionConfig = 52;
     optional THttpProxyConfig HttpProxyConfig = 53;
     optional TSchemeShardConfig SchemeShardConfig = 54;
@@ -1796,7 +1796,7 @@ message TAppConfig {
     optional TClientCertificateAuthorization ClientCertificateAuthorization = 62;
     optional TExternalIndexConfig ExternalIndexConfig = 63;
 
-    optional NYq.NConfig.TConfig YandexQueryConfig = 50; // TODO: remove after migration to FederatedQueryConfig
+    optional NFq.NConfig.TConfig YandexQueryConfig = 50; // TODO: remove after migration to FederatedQueryConfig
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

@@ -9,7 +9,7 @@
 #include <ydb/core/yq/libs/config/yq_issue.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 
-namespace NYq {
+namespace NFq {
 
 class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryControlPlaneStorageActor> {
     struct TKey {
@@ -399,4 +399,4 @@ NActors::IActor* CreateInMemoryControlPlaneStorageServiceActor(const NConfig::TC
     return new TInMemoryControlPlaneStorageActor(config);
 }
 
-} // NYq
+} // NFq

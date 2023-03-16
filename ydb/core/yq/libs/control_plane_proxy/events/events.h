@@ -11,12 +11,12 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TEvControlPlaneProxy {
     // Event ids.
     enum EEv : ui32 {
-        EvCreateQueryRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::ControlPlaneProxy),
+        EvCreateQueryRequest = YqEventSubspaceBegin(NFq::TYqEventSubspace::ControlPlaneProxy),
         EvCreateQueryResponse,
         EvListQueriesRequest,
         EvListQueriesResponse,
@@ -61,7 +61,7 @@ struct TEvControlPlaneProxy {
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::ControlPlaneProxy), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(NFq::TYqEventSubspace::ControlPlaneProxy), "All events must be in their subspace");
 
     template<typename ProtoMessage, ui32 EventType>
     struct TControlPlaneRequest : NActors::TEventLocal<TControlPlaneRequest<ProtoMessage, EventType>, EventType> {

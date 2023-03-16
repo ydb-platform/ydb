@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
-namespace NYq {
+namespace NFq {
 
 void AddSystemClusters(NYql::TGatewaysConfig& gatewaysConfig, THashMap<TString, TString>& clusters, const TString& authToken);
 
-} //NYq
+} //NFq

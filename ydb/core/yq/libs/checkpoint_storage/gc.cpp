@@ -7,7 +7,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NThreading;
@@ -179,4 +179,4 @@ std::unique_ptr<NActors::IActor> NewGC(
     return std::unique_ptr<NActors::IActor>(new TActorGC(checkpointStorage, stateStorage));
 }
 
-} // namespace NYq
+} // namespace NFq

@@ -13,7 +13,7 @@
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NYql;
@@ -362,4 +362,4 @@ NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, ISecuredSer
     return new TDatabaseResolver(httpProxy, credentialsFactory);
 }
 
-} /* namespace NYq */
+} /* namespace NFq */

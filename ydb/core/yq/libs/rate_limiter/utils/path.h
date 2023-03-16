@@ -1,9 +1,9 @@
 #pragma once
 #include <util/generic/string.h>
 
-namespace NYq {
+namespace NFq {
 
 TString GetRateLimiterResourcePath(TStringBuf cloud, TStringBuf folder, TStringBuf query);
 TString GetRateLimiterResourcePath(TStringBuf cloud);
 
-} // namespace NYq
+} // namespace NFq

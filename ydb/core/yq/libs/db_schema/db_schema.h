@@ -6,7 +6,7 @@
 #include <util/string/builder.h>
 #include <util/generic/hash_set.h>
 
-namespace NYq {
+namespace NFq {
 
 class TSqlQueryBuilder {
 public:
@@ -131,4 +131,4 @@ private:
     TVector<TString> ColNames;
 };
 
-} // namespace NYq
+} // namespace NFq

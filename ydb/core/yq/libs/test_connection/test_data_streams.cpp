@@ -63,7 +63,7 @@ struct TEvPrivate {
 
 }
 
-namespace NYq {
+namespace NFq {
 
 LWTRACE_USING(YQ_TEST_CONNECTION_PROVIDER);
 
@@ -72,14 +72,14 @@ using namespace NActors;
 class TTestDataStreamsConnectionActor : public NActors::TActorBootstrapped<TTestDataStreamsConnectionActor> {
     inline static const TString SessionName = "test_connection_data_streams";
 
-    NYq::NConfig::TCommonConfig CommonConfig;
+    NFq::NConfig::TCommonConfig CommonConfig;
     TActorId Sender;
     ui64 Cookie;
     TString Scope;
     TString User;
     TString Token;
     TTestConnectionRequestCountersPtr Counters;
-    NYq::TYqSharedResources::TPtr SharedResources;
+    NFq::TYqSharedResources::TPtr SharedResources;
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     ::NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
@@ -92,18 +92,18 @@ class TTestDataStreamsConnectionActor : public NActors::TActorBootstrapped<TTest
 public:
     TTestDataStreamsConnectionActor(
         const FederatedQuery::DataStreams& ds,
-        const NYq::NConfig::TCommonConfig& commonConfig,
+        const NFq::NConfig::TCommonConfig& commonConfig,
         const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
         const TActorId& sender,
         ui64 cookie,
-        const NYq::TYqSharedResources::TPtr& sharedResources,
+        const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const ::NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TString& scope,
         const TString& user,
         const TString& token,
-        const NYq::TSigner::TPtr& signer,
+        const NFq::TSigner::TPtr& signer,
         const TTestConnectionRequestCountersPtr& counters)
         : CommonConfig(commonConfig)
         , Sender(sender)
@@ -152,7 +152,7 @@ private:
                 auto result = future.GetValue();
                 as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvResolveDbResponse(result), 0));
             } catch (...) {
-                as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvResolveDbResponse(NYql::TDbResolverResponse{{}, false, NYql::TIssues{MakeErrorIssue(NYq::TIssuesIds::BAD_REQUEST, CurrentExceptionMessage())}}), 0));
+                as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvResolveDbResponse(NYql::TDbResolverResponse{{}, false, NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, CurrentExceptionMessage())}}), 0));
             }
         });
     }
@@ -234,24 +234,24 @@ private:
 
     void ReplyError(const NYql::TIssues& issues) {
         Counters->Error->Inc();
-        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(issues), 0, Cookie);
+        Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(issues), 0, Cookie);
         DestroyActor(false /* success */);
     }
 
     void ReplyError(const TString& message) {
-        ReplyError(NYql::TIssues{MakeErrorIssue(NYq::TIssuesIds::BAD_REQUEST, "Data Streams: " + message)});
+        ReplyError(NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, "Data Streams: " + message)});
     }
 
     void ReplyOk() {
         Counters->Ok->Inc();
-        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), 0, Cookie);
+        Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), 0, Cookie);
         DestroyActor();
     }
 
-    static NYql::TPqClusterConfig CreateClusterConfig(const TString& sessionName, const NYq::NConfig::TCommonConfig& commonConfig, const TString& token, const NYq::TSigner::TPtr& signer, const FederatedQuery::DataStreams& ds) {
+    static NYql::TPqClusterConfig CreateClusterConfig(const TString& sessionName, const NFq::NConfig::TCommonConfig& commonConfig, const TString& token, const NFq::TSigner::TPtr& signer, const FederatedQuery::DataStreams& ds) {
         const auto& auth = ds.auth();
         const TString signedAccountId = signer && auth.has_service_account() ? signer->SignAccountId(auth.service_account().id()) : TString{};
-        return NYq::CreatePqClusterConfig(sessionName, commonConfig.GetUseBearerForYdb(), token, signedAccountId, ds);
+        return NFq::CreatePqClusterConfig(sessionName, commonConfig.GetUseBearerForYdb(), token, signedAccountId, ds);
     }
 
     NYql::TPqGatewayServices CreateGatewayServices() {
@@ -270,18 +270,18 @@ private:
 
 NActors::IActor* CreateTestDataStreamsConnectionActor(
         const FederatedQuery::DataStreams& ds,
-        const NYq::NConfig::TCommonConfig& commonConfig,
+        const NFq::NConfig::TCommonConfig& commonConfig,
         const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
         const TActorId& sender,
         ui64 cookie,
-        const NYq::TYqSharedResources::TPtr& sharedResources,
+        const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const ::NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TString& scope,
         const TString& user,
         const TString& token,
-        const NYq::TSigner::TPtr& signer,
+        const NFq::TSigner::TPtr& signer,
         const TTestConnectionRequestCountersPtr& counters) {
     return new TTestDataStreamsConnectionActor(
                     ds, commonConfig, dbResolver, sender,
@@ -290,4 +290,4 @@ NActors::IActor* CreateTestDataStreamsConnectionActor(
                     scope, user, token, signer, counters);
 }
 
-} // namespace NYq
+} // namespace NFq

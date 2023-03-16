@@ -3,8 +3,8 @@
 
 #include <util/generic/string.h>
 
-namespace NYq {
+namespace NFq {
 
 TString PrettyPrintGraphParams(const NProto::TGraphParams& graphParams, bool canonical);
 
-} // namespace NYq
+} // namespace NFq

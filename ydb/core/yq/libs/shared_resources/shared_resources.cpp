@@ -17,7 +17,7 @@
 #include <atomic>
 #include <memory>
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -27,7 +27,7 @@ struct TActorSystemPtrMixin {
 
 struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedResources {
     explicit TYqSharedResourcesImpl(
-        const NYq::NConfig::TConfig& config,
+        const NFq::NConfig::TConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters)
         : TYqSharedResources(NYdb::TDriver(GetYdbDriverConfig(config.GetCommon().GetYdbDriverConfig())))
@@ -35,7 +35,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
         CreateDbPoolHolder(PrepareDbPoolConfig(config), credentialsProviderFactory, counters);
     }
 
-    NDbPool::TConfig PrepareDbPoolConfig(const NYq::NConfig::TConfig& config) {
+    NDbPool::TConfig PrepareDbPoolConfig(const NFq::NConfig::TConfig& config) {
         NDbPool::TConfig dbPoolConfig;
         const auto& storageConfig = config.GetDbPool().GetStorage();
         auto maxSessionCount = config.GetDbPool().GetMaxSessionCount();
@@ -59,7 +59,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
         // UserSpaceYdbDriver.Stop(true); // For now it points to the same driver as CoreYdbDriver, so don't call Stop
     }
 
-    NYdb::TDriverConfig GetYdbDriverConfig(const NYq::NConfig::TYdbDriverConfig& config) {
+    NYdb::TDriverConfig GetYdbDriverConfig(const NFq::NConfig::TYdbDriverConfig& config) {
         NYdb::TDriverConfig cfg;
         if (config.GetNetworkThreadsNum()) {
             cfg.SetNetworkThreadsNum(config.GetNetworkThreadsNum());
@@ -86,7 +86,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
 } // namespace
 
 TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
-        const NYq::NConfig::TConfig& config,
+        const NFq::NConfig::TConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters) {
     return MakeIntrusive<TYqSharedResourcesImpl>(config, credentialsProviderFactory, counters);
@@ -102,4 +102,4 @@ TYqSharedResources::TPtr TYqSharedResources::Cast(const IYqSharedResources::TPtr
     return CheckedCast<TYqSharedResources*>(ptr.Get());
 }
 
-} // namespace NYq
+} // namespace NFq

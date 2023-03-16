@@ -2,7 +2,7 @@
 
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
 
-namespace NYq {
+namespace NFq {
 
 class TCheckpointIdGenerator {
 private:
@@ -15,4 +15,4 @@ public:
     TCheckpointId NextId();
 };
 
-} // namespace NYq
+} // namespace NFq

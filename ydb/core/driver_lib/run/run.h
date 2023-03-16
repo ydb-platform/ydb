@@ -33,7 +33,7 @@ protected:
     TIntrusivePtr<NScheme::TTypeRegistry> TypeRegistry;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<TFormatFactory> FormatFactory;
-    NYq::IYqSharedResources::TPtr YqSharedResources;
+    NFq::IYqSharedResources::TPtr YqSharedResources;
 
     TAutoPtr<TMon> Monitoring;
     ::NMonitoring::TDynamicCounterPtr Counters;

@@ -21,7 +21,7 @@
 #include <ydb/core/yq/libs/quota_manager/events/events.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-namespace NYq {
+namespace NFq {
 
 template<typename T>
 struct TAuditDetails {
@@ -111,7 +111,7 @@ inline size_t GetDebugInfoByteSize(const TDebugInfoPtr& infos) {
 struct TEvControlPlaneStorage {
     // Event ids.
     enum EEv : ui32 {
-        EvCreateQueryRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::ControlPlaneStorage),
+        EvCreateQueryRequest = YqEventSubspaceBegin(NFq::TYqEventSubspace::ControlPlaneStorage),
         EvCreateQueryResponse,
         EvListQueriesRequest,
         EvListQueriesResponse,
@@ -169,7 +169,7 @@ struct TEvControlPlaneStorage {
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::ControlPlaneStorage), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(NFq::TYqEventSubspace::ControlPlaneStorage), "All events must be in their subspace");
 
     template<typename ProtoMessage, ui32 EventType>
     struct TControlPlaneRequest : NActors::TEventLocal<TControlPlaneRequest<ProtoMessage, EventType>, EventType> {

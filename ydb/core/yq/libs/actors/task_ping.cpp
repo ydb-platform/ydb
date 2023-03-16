@@ -22,7 +22,7 @@
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivatePingTask - QueryId: " << OperationId  << ", Owner: " << OwnerId  << ", "<< stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NMonitoring;
@@ -91,17 +91,17 @@ private:
     STRICT_STFUNC(
         StateFunc,
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
-        hFunc(NYq::TEvControlPlaneStorage::TEvPingTaskResponse, HandleResponse)
+        hFunc(NFq::TEvControlPlaneStorage::TEvPingTaskResponse, HandleResponse)
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
         hFunc(TEvControlPlaneConfig::TEvGetTenantInfoResponse, Handle);
     )
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> CreateControlPlaneEvent() {
+    std::unique_ptr<NFq::TEvControlPlaneStorage::TEvPingTaskRequest> CreateControlPlaneEvent() {
         auto request = Ev->Record;
-        return std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
+        return std::make_unique<NFq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
     }
 
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvPingTaskResponse::TPtr& ev) {
+    void HandleResponse(NFq::TEvControlPlaneStorage::TEvPingTaskResponse::TPtr& ev) {
         LOG_D("Got CP::PingTaskResponse");
         const auto& issues = ev->Get()->Issues;
         if (issues) {
@@ -121,7 +121,7 @@ private:
         try {
             auto event = CreateControlPlaneEvent();
             event->TenantInfo = ev->Get()->TenantInfo;
-            Send(NYq::ControlPlaneStorageServiceActorId(), event.release());
+            Send(NFq::ControlPlaneStorageServiceActorId(), event.release());
         } catch (const std::exception& err) {
             const auto msg = TStringBuilder() << "PingTask Boostrap Error: " << CurrentExceptionMessage();
             Fail(msg);
@@ -158,4 +158,4 @@ IActor* CreatePingTaskRequestActor(
         std::move(counters));
 }
 
-} /* NYq */
+} /* NFq */

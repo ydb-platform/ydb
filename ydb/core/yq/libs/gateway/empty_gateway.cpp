@@ -6,7 +6,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 
-namespace NYq {
+namespace NFq {
 
 class TEmptyGateway : public NYql::IDqGateway {
 public:
@@ -79,4 +79,4 @@ TIntrusivePtr<NYql::IDqGateway> CreateEmptyGateway(NActors::TActorId runActorId)
     return MakeIntrusive<TEmptyGateway>(runActorId);
 }
 
-} // namespace NYq
+} // namespace NFq

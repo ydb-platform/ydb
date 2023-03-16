@@ -9,7 +9,7 @@
 
 #include <library/cpp/actors/core/actorsystem.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TYqSharedResources : public IYqSharedResources {
     using TPtr = TIntrusivePtr<TYqSharedResources>;
@@ -28,8 +28,8 @@ protected:
 };
 
 TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
-    const NYq::NConfig::TConfig& config,
+    const NFq::NConfig::TConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters);
 
-} // namespace NYq
+} // namespace NFq

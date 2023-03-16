@@ -3,7 +3,7 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <limits>
 
-using namespace NYq;
+using namespace NFq;
 
 Y_UNIT_TEST_SUITE(EntityId) {
     Y_UNIT_TEST(Distinct) {

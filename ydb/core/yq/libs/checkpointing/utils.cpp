@@ -1,6 +1,6 @@
 #include "utils.h"
 
-namespace NYq {
+namespace NFq {
 
 bool IsIngress(const NYql::NDqProto::TDqTask& task) {
     // No inputs at all or the only inputs are sources.
@@ -26,4 +26,4 @@ bool HasState(const NYql::NDqProto::TDqTask& task) {
     return true;
 }
 
-} // namespace NYq
+} // namespace NFq

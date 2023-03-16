@@ -6,7 +6,7 @@
 
 #include <util/generic/string.h>
 
-namespace NYq {
+namespace NFq {
 
 NActors::IActor* MakeUpdateCloudRateLimitActor(
     NActors::TActorId parent,
@@ -17,4 +17,4 @@ NActors::IActor* MakeUpdateCloudRateLimitActor(
     TYdbSdkRetryPolicy::TPtr retryPolicy,
     ui64 cookie);
 
-} // namespace NYq
+} // namespace NFq

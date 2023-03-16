@@ -2,7 +2,7 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TSplittedResultSets {
     TVector<Ydb::ResultSet> ResultSets;
@@ -39,4 +39,4 @@ private:
     bool Success = true;
 };
 
-} //NYq
+} //NFq

@@ -3,7 +3,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
-namespace NYq {
+namespace NFq {
 
 class TRequestScopeCounters: public virtual TThrRefBase {
 public:
@@ -62,4 +62,4 @@ public:
     virtual ~TFinalStatusCounters() override;
 };
 
-} // NYq
+} // NFq

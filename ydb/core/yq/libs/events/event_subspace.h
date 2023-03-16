@@ -2,7 +2,7 @@
 
 #include <library/cpp/actors/core/events.h>
 
-namespace NYq {
+namespace NFq {
 
 constexpr ui32 ES_YQ = 4213; // Must be compatible with the values defined in ydb/core/base/events.h.
 
@@ -37,4 +37,4 @@ struct TYqEventSubspace {
     static_assert(YqEventSubspaceBegin(SubspacesEnd) <= EventSpaceEnd(ES_YQ), "All YQ events must be in YQ event space");
 };
 
-} // namespace NYq
+} // namespace NFq

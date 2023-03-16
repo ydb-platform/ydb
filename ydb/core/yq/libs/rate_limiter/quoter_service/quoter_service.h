@@ -4,11 +4,11 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <library/cpp/actors/core/actor.h>
 
-namespace NYq {
+namespace NFq {
 
 NActors::IActor* CreateQuoterService(
-    const NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NFq::NConfig::TRateLimiterConfig& rateLimiterConfig,
+    const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
 
-} // namespace NYq
+} // namespace NFq

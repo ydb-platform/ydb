@@ -6,11 +6,11 @@
 #include <library/cpp/actors/core/actorid.h>
 #include <library/cpp/actors/core/actor.h>
 
-namespace NYq {
+namespace NFq {
 
 NActors::IActor* CreateRateLimiterControlPlaneService(
     const NConfig::TRateLimiterConfig& rateLimiterConfig,
     const TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
 
-} // namespace NYq
+} // namespace NFq

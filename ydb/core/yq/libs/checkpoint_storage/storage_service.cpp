@@ -2,7 +2,7 @@
 
 #include "storage_proxy.h"
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 
@@ -17,4 +17,4 @@ std::unique_ptr<NActors::IActor> NewCheckpointStorageService(
     return NewStorageProxy(config, commonConfig, credentialsProviderFactory, yqSharedResources);
 }
 
-} // namespace NYq
+} // namespace NFq

@@ -1,7 +1,7 @@
 #include <ydb/core/yq/libs/signer/signer.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NYq;
+using namespace NFq;
 
 Y_UNIT_TEST_SUITE(Signer) {
     Y_UNIT_TEST(Basic) {

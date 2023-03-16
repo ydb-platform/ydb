@@ -2,7 +2,7 @@
 
 #include <ydb/core/yq/libs/control_plane_storage/request_validators.h>
 
-namespace NYq {
+namespace NFq {
 
 template<typename T>
 NYql::TIssues ValidateTestConnection(T& ev, size_t maxSize, const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire = true)
@@ -19,4 +19,4 @@ NYql::TIssues ValidateTestConnection(T& ev, size_t maxSize, const TSet<Federated
     return issues;
 }
 
-} // namespace NYq
+} // namespace NFq

@@ -3,7 +3,7 @@
 #include <util/generic/array_size.h>
 #include <util/string/builder.h>
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -61,4 +61,4 @@ TString GetRateLimiterResourcePath(TStringBuf cloud) {
     return result;
 }
 
-} // namespace NYq
+} // namespace NFq

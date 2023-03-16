@@ -1,7 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-package NYq.NConfig;
+package NFq.NConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/library/yql/providers/s3/proto/retry_config.proto";

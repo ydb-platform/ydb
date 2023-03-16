@@ -2,7 +2,7 @@
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
-namespace NYq {
+namespace NFq {
 
 inline TString GetServiceAccountId(const FederatedQuery::IamAuth& auth) {
     return auth.has_service_account()
@@ -52,4 +52,4 @@ TString ExtractServiceAccountId(const T&) {
     return {};
 }
 
-} // namespace NYq
+} // namespace NFq

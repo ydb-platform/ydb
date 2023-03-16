@@ -12,17 +12,17 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TEvTestConnection {
     // Event ids.
     enum EEv : ui32 {
-        EvTestConnectionRequest = YqEventSubspaceBegin(::NYq::TYqEventSubspace::TestConnection),
+        EvTestConnectionRequest = YqEventSubspaceBegin(::NFq::TYqEventSubspace::TestConnection),
         EvTestConnectionResponse,
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(::NYq::TYqEventSubspace::TestConnection), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(::NFq::TYqEventSubspace::TestConnection), "All events must be in their subspace");
 
     struct TEvTestConnectionRequest : NActors::TEventLocal<TEvTestConnectionRequest, EvTestConnectionRequest> {
         explicit TEvTestConnectionRequest(const TString& scope,

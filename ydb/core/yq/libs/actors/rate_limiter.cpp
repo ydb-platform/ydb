@@ -7,7 +7,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/retry/retry_policy.h>
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -135,4 +135,4 @@ NActors::IActor* CreateRateLimiterResourceDeleter(
     return new TRetryingActor<NFq::TEvInternalService::TEvDeleteRateLimiterResourceRequest, NFq::TEvInternalService::TEvDeleteRateLimiterResourceResponse>(parent, req);
 }
 
-} // namespace NYq
+} // namespace NFq

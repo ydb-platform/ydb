@@ -22,7 +22,7 @@
 #define LOG_W(stream) LOG_WARN_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
 #define LOG_E(stream) LOG_ERROR_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -265,8 +265,8 @@ public:
     static constexpr char ActorName[] = "YQ_RATE_LIMITER_CONTROL_PLANE";
 
     TRateLimiterControlPlaneService(
-        const NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
-        const NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const NFq::NConfig::TRateLimiterConfig& rateLimiterConfig,
+        const NFq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
         : Config(rateLimiterConfig)
         , YqSharedResources(yqSharedResources)
@@ -425,8 +425,8 @@ public:
     }
 
 private:
-    const NYq::NConfig::TRateLimiterConfig Config;
-    const NYq::TYqSharedResources::TPtr YqSharedResources;
+    const NFq::NConfig::TRateLimiterConfig Config;
+    const NFq::TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TYdbConnectionPtr YdbConnection;
 
@@ -444,4 +444,4 @@ NActors::IActor* CreateRateLimiterControlPlaneService(
     return new TRateLimiterControlPlaneService(rateLimiterConfig, yqSharedResources, credentialsProviderFactory);
 }
 
-} // namespace NYq
+} // namespace NFq

@@ -8,8 +8,8 @@
 #include <util/system/types.h>
 
 
-namespace NYq {
+namespace NFq {
 
 NActors::IActor* CreateYqCloudAuditServiceActor(const NConfig::TAuditConfig& config, const NMonitoring::TDynamicCounterPtr& counters);
 
-} // namespace NYq
+} // namespace NFq

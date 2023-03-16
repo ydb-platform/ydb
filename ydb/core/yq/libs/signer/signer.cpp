@@ -5,7 +5,7 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 
-namespace NYq {
+namespace NFq {
 
 TSigner::TSigner(const TString& hmacSecret)
     : HmacSecret(hmacSecret) {

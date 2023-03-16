@@ -9,7 +9,7 @@
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/interconnect/events_local.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TEvCheckpointStorage {
     // Event ids.
@@ -197,4 +197,4 @@ struct TEvCheckpointStorage {
     };
 };
 
-} // namespace NYq
+} // namespace NFq

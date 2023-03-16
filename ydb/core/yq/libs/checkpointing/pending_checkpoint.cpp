@@ -1,6 +1,6 @@
 #include "pending_checkpoint.h"
 
-namespace NYq {
+namespace NFq {
 
 TPendingCheckpoint::TPendingCheckpoint(THashSet<NActors::TActorId> toBeAcknowledged, TPendingCheckpointStats stats)
     : NotYetAcknowledged(std::move(toBeAcknowledged))
@@ -59,4 +59,4 @@ bool TPendingInitCoordinator::CanInjectCheckpoint() const {
     return AllNewCheckpointCoordinatorAcksProcessed() && CheckpointId;
 }
 
-} // namespace NYq
+} // namespace NFq

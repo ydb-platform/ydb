@@ -17,17 +17,17 @@
 
 #include <util/generic/ptr.h>
 
-namespace NYq {
+namespace NFq {
 
 using TActorRegistrator = std::function<void(NActors::TActorId, NActors::IActor*)>;
 
 IYqSharedResources::TPtr CreateYqSharedResources(
-    const NYq::NConfig::TConfig& config,
+    const NFq::NConfig::TConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters);
 
 void Init(
-    const NYq::NConfig::TConfig& config,
+    const NFq::NConfig::TConfig& config,
     ui32 nodeId,
     const TActorRegistrator& actorRegistrator,
     const NKikimr::TAppData* appData,
@@ -39,4 +39,4 @@ void Init(
     const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories
 );
 
-} // NYq
+} // NFq

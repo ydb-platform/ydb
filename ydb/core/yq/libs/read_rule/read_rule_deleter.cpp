@@ -19,7 +19,7 @@
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
 
-namespace NYq {
+namespace NFq {
 namespace {
 
 using namespace NActors;
@@ -287,4 +287,4 @@ NActors::IActor* MakeReadRuleDeleterActor(
     );
 }
 
-} // namespace NYq
+} // namespace NFq

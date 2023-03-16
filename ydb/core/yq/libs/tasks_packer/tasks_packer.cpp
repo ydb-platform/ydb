@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/utils/yql_panic.h>
 
-namespace NYq {
+namespace NFq {
 
 namespace NTasksPacker {
 
@@ -62,4 +62,4 @@ void UnPack(
 
 } // namespace NTasksPacker
 
-} // namespace NYq
+} // namespace NFq

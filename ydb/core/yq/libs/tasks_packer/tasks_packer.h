@@ -5,7 +5,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
 
-namespace NYq {
+namespace NFq {
 
 namespace NTasksPacker {
 
@@ -18,4 +18,4 @@ void UnPack(
 
 } // namespace NTasksPacker
 
-} // namespace NYq
+} // namespace NFq

@@ -526,14 +526,14 @@ public:
 
 class TFederatedQueryInitializer : public IKikimrServicesInitializer {
 public:
-    TFederatedQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources);
+    TFederatedQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NFq::IYqSharedResources::TPtr yqSharedResources);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 
     static void SetIcPort(ui32 icPort);
 private:
     std::shared_ptr<TModuleFactories> Factories;
-    NYq::IYqSharedResources::TPtr YqSharedResources;
+    NFq::IYqSharedResources::TPtr YqSharedResources;
     static ui32 IcPort;
 };
 

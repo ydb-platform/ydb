@@ -2,7 +2,7 @@
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TEvControlPlaneStorageInternal {
     // Private

@@ -9,7 +9,7 @@
 
 #include <util/generic/ptr.h>
 
-namespace NYq {
+namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -81,4 +81,4 @@ public:
 
 using TCheckpointStoragePtr = TIntrusivePtr<ICheckpointStorage>;
 
-} // namespace NYq
+} // namespace NFq

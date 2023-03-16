@@ -25,7 +25,7 @@
 #define LOG_STORAGE_ASYNC_INFO(actorContext, stream) LOG_LOG_S(actorContext, ::NActors::NLog::PRI_INFO, ::NKikimrServices::STREAMS_STORAGE_SERVICE, stream);
 #define LOG_STORAGE_ASYNC_WARN(actorContext, stream) LOG_LOG_S(actorContext, ::NActors::NLog::PRI_WARN, ::NKikimrServices::STREAMS_STORAGE_SERVICE, stream);
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 
@@ -403,4 +403,4 @@ std::unique_ptr<NActors::IActor> NewStorageProxy(
     return std::unique_ptr<NActors::IActor>(new TStorageProxy(config, commonConfig, credentialsProviderFactory, yqSharedResources));
 }
 
-} // namespace NYq
+} // namespace NFq

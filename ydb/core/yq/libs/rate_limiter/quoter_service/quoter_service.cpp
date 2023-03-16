@@ -22,7 +22,7 @@
 #define LOG_W(stream) LOG_WARN_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
 #define LOG_E(stream) LOG_ERROR_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
 
-namespace NYq {
+namespace NFq {
 namespace {
 
 constexpr TDuration CLEANUP_PERIOD = TDuration::Minutes(10);
@@ -86,8 +86,8 @@ class TYqQuoterService : public NActors::TActorBootstrapped<TYqQuoterService> {
 
 public:
     TYqQuoterService(
-        const NYq::NConfig::TRateLimiterConfig& config,
-        const NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const NFq::NConfig::TRateLimiterConfig& config,
+        const NFq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
         : Config(config)
         , YqSharedResources(yqSharedResources)
@@ -305,8 +305,8 @@ public:
     }
 
 private:
-    NYq::NConfig::TRateLimiterConfig Config;
-    const NYq::TYqSharedResources::TPtr YqSharedResources;
+    NFq::NConfig::TRateLimiterConfig Config;
+    const NFq::TYqSharedResources::TPtr YqSharedResources;
     const NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TYdbConnectionPtr YdbConnection;
     ui64 RateLimiterNextRequestCookie = 1;
@@ -318,11 +318,11 @@ private:
 } // namespace
 
 NActors::IActor* CreateQuoterService(
-    const NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NFq::NConfig::TRateLimiterConfig& rateLimiterConfig,
+    const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
 {
     return new TYqQuoterService(rateLimiterConfig, yqSharedResources, credentialsProviderFactory);
 }
 
-} // namespace NYq
+} // namespace NFq

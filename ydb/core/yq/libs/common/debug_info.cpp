@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-namespace NYq {
+namespace NFq {
 
 TString TDebugItem::ToString() const {
     TString result;
@@ -29,4 +29,4 @@ size_t TDebugItem::GetByteSize() const {
             + Error.Size();
 }
 
-} // namespace NYq
+} // namespace NFq

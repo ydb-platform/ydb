@@ -2,8 +2,8 @@
 
 #include <library/cpp/actors/core/actorid.h>
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId YqQuoterServiceActorId();
 
-} // namespace NYq
+} // namespace NFq

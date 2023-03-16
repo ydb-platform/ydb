@@ -1,6 +1,6 @@
 #include "counters.h"
 
-namespace NYq {
+namespace NFq {
 
 TTestConnectionRequestCounters::TTestConnectionRequestCounters(const TString& name)
     : Name(name)
@@ -18,4 +18,4 @@ NMonitoring::IHistogramCollectorPtr TTestConnectionRequestCounters::GetLatencyHi
     return NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
 }
 
-} // NYq
+} // NFq

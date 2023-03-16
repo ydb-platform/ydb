@@ -4,7 +4,7 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-namespace NYq {
+namespace NFq {
 
 NYql::TIssue MakeFatalIssue(TIssuesIds::EIssueCode id, const TString& message);
 

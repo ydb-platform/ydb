@@ -2,7 +2,7 @@
 
 #include <util/string/builder.h>
 
-namespace NYq {
+namespace NFq {
 
 TRowsProtoSplitter::TRowsProtoSplitter(
     const Ydb::ResultSet& resultSet,
@@ -74,4 +74,4 @@ TSplittedResultSets TRowsProtoSplitter::Split() {
     return TSplittedResultSets{std::move(SplittedResultSets), std::move(Issues), Success};
 }
 
-} //NYq
+} //NFq

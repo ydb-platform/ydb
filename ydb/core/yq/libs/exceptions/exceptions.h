@@ -3,7 +3,7 @@
 #include <util/generic/yexception.h>
 #include <ydb/core/yq/libs/config/protos/issue_id.pb.h>
 
-namespace NYq {
+namespace NFq {
 
 // This exception can separate code line and file name from the error message 
 struct TCodeLineException: public yexception {
@@ -24,4 +24,4 @@ struct TCodeLineException: public yexception {
 
 TCodeLineException operator+(const TSourceLocation& sl, TCodeLineException&& t);
 
-} // namespace NYq
+} // namespace NFq

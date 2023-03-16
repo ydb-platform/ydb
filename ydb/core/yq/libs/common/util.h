@@ -7,7 +7,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NYq {
+namespace NFq {
 
 template<std::size_t K, typename T, std::size_t N>
 auto CreateArray(const T(&list)[N]) -> std::array<T, K> {
@@ -22,4 +22,4 @@ TVector<TElement> VectorFromProto(const ::google::protobuf::RepeatedPtrField<TEl
     return { field.begin(), field.end() };
 }
 
-}  // namespace NYq
+}  // namespace NFq

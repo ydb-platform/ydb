@@ -19,13 +19,13 @@
 #define HEALTH_LOG_T(s) \
     LOG_YQ_HEALTH_TRACE(s)
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId HealthActorId();
 
 NActors::IActor* CreateHealthActor(
         const NConfig::THealthConfig& config,
-        const NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const NFq::TYqSharedResources::TPtr& yqSharedResources,
         const ::NMonitoring::TDynamicCounterPtr& counters);
 
-} // namespace NYq
+} // namespace NFq

@@ -12,7 +12,7 @@
 
 #include <google/protobuf/util/time_util.h>
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -24,7 +24,7 @@ protected:
     using TRequestActorBase::ReplyWithError;
 
 public:
-    TRateLimiterRequestActor(typename TRequest::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPool::TPtr dbPool, TYdbConnectionPtr ydbConnection, const std::shared_ptr<::NYq::TControlPlaneStorageConfig>& config)
+    TRateLimiterRequestActor(typename TRequest::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPool::TPtr dbPool, TYdbConnectionPtr ydbConnection, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config)
         : TRequestActorBase(std::move(ev), std::move(requestCounters), std::move(debugInfo), std::move(dbPool), std::move(ydbConnection), config)
         , QueryId(this->Request->Get()->Request.query_id().value())
         , OwnerId(this->Request->Get()->Request.owner_id())
@@ -248,4 +248,4 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteRateL
     HandleRateLimiterImpl<TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest::TPtr, TRateLimiterDeleteRequest, RTC_DELETE_RATE_LIMITER_RESOURCE>(ev);
 }
 
-} // NYq
+} // NFq

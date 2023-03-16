@@ -1,6 +1,6 @@
 #include "request_validators.h"
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -316,4 +316,4 @@ NYql::TIssues ValidateProjection(const FederatedQuery::Schema& schema, const TSt
     return issues;
 }
 
-} // namespace NYq
+} // namespace NFq

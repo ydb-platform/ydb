@@ -7,7 +7,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-namespace NYq {
+namespace NFq {
 namespace {
 
 class TUpdateCloudRateLimitActor : public NActors::TActorBootstrapped<TUpdateCloudRateLimitActor> {
@@ -122,4 +122,4 @@ NActors::IActor* MakeUpdateCloudRateLimitActor(
     );
 }
 
-} // namespace NYq
+} // namespace NFq

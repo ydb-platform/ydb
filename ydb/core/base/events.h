@@ -126,7 +126,7 @@ struct TKikimrEvents : TEvents {
         ES_TX_COLUMNSHARD,
         ES_CROSSREF,
         ES_SCHEME_BOARD_MON,
-        ES_YQL_ANALYTICS_PROXY = NYq::TEventIds::ES_YQL_ANALYTICS_PROXY,
+        ES_YQL_ANALYTICS_PROXY = NFq::TEventIds::ES_YQL_ANALYTICS_PROXY,
         ES_BLOB_CACHE,
         ES_LONG_TX_SERVICE,
         ES_TEST_SHARD,

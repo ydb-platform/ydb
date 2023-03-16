@@ -12,7 +12,7 @@
 
 #include <optional>
 
-namespace NYq {
+namespace NFq {
 
 struct TEvAuditService {
     struct TExtraInfo {
@@ -28,7 +28,7 @@ struct TEvAuditService {
 
     // Event ids.
     enum EEv : ui32 {
-        EvCreateBindingReport = YqEventSubspaceBegin(NYq::TYqEventSubspace::AuditService),
+        EvCreateBindingReport = YqEventSubspaceBegin(NFq::TYqEventSubspace::AuditService),
         EvModifyBindingReport,
         EvDeleteBindingReport,
         EvCreateConnectionReport,
@@ -41,7 +41,7 @@ struct TEvAuditService {
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::AuditService), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(NFq::TYqEventSubspace::AuditService), "All events must be in their subspace");
 
 private:
     template <class TRequest, class TAuditDetailsObj>
@@ -183,4 +183,4 @@ public:
     }
 };
 
-} // namespace NYq
+} // namespace NFq

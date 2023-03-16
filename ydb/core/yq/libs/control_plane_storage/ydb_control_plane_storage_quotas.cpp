@@ -19,7 +19,7 @@
 
 #include <ydb/core/yq/libs/shared_resources/db_exec.h>
 
-namespace NYq {
+namespace NFq {
 
 using TQuotaCountExecuter = TDbExecuter<THashMap<TString, ui32>>;
 
@@ -105,4 +105,4 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaLimitChangeRequ
       record.LimitRequested, record.LimitRequested));
 }
 
-} // NYq
+} // NFq

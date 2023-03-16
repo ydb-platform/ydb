@@ -26,9 +26,9 @@ NActors::TActorId MakeInternalServiceActorId() {
 class TInternalService : public NActors::TActorBootstrapped<TInternalService> {
 public:
     TInternalService(
-        const NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const NFq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
+        const ::NFq::NConfig::TPrivateApiConfig& privateApiConfig,
         const ::NMonitoring::TDynamicCounterPtr& counters)
         : ServiceCounters(counters->GetSubgroup("subsystem", "InternalService"))
         , EventLatency(ServiceCounters->GetSubgroup("subcomponent", "Latency")->GetHistogram("Latency", NMonitoring::ExponentialHistogram(10, 2, 50)))
@@ -144,9 +144,9 @@ private:
 };
 
 NActors::IActor* CreateInternalServiceActor(
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const NYq::NConfig::TPrivateApiConfig& privateApiConfig,
+    const NFq::NConfig::TPrivateApiConfig& privateApiConfig,
     const ::NMonitoring::TDynamicCounterPtr& counters) {
         return new TInternalService(yqSharedResources, credentialsProviderFactory, privateApiConfig, counters);
 }

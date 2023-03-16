@@ -14,7 +14,7 @@
 
 #include <library/cpp/scheme/scheme.h>
 
-namespace NYq {
+namespace NFq {
 
 template<class P>
 NYql::TIssues ValidateEvent(const P& ev, size_t maxSize)
@@ -183,4 +183,4 @@ NYql::TIssues ValidateConnection(const T& ev, size_t maxSize, const TSet<Federat
     return issues;
 }
 
-} // namespace NYq
+} // namespace NFq

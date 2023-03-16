@@ -14,7 +14,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NThreading;
@@ -74,7 +74,7 @@ void InitTest(NActors::TTestActorRuntime* runtime, int httpPort, int grpcPort, c
 {
     yqSharedResources->Init(runtime->GetAnyNodeActorSystem());
 
-    auto httpProxyId = NYq::MakeYqlAnalyticsHttpProxyId();
+    auto httpProxyId = NFq::MakeYqlAnalyticsHttpProxyId();
 
     TActorId mockActorId = runtime->Register(CreateYqlMockActor(grpcPort));
 
@@ -92,4 +92,4 @@ NActors::IActor* CreateYqlMockActor(int grpcPort) {
     return new TYqlMockActor(grpcPort);
 }
 
-} // namespace NYq
+} // namespace NFq

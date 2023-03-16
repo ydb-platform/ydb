@@ -1,7 +1,7 @@
 #include "config.h"
 #include "util.h"
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -55,4 +55,4 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
     }
 }
 
-} // NYq
+} // NFq

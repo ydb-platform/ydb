@@ -2,7 +2,7 @@
 
 #include <util/string/builder.h>
 
-namespace NYq {
+namespace NFq {
 
 TCodeLineException::TCodeLineException(TIssuesIds::EIssueCode code)
     : SourceLocation("", 0)
@@ -34,4 +34,4 @@ TCodeLineException operator+(const TSourceLocation& sl, TCodeLineException&& t) 
     return TCodeLineException(sl, t);
 }
 
-} // namespace NYq
+} // namespace NFq

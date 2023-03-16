@@ -6,7 +6,7 @@
 #include <ydb/core/yq/libs/control_plane_storage/validators.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 
-namespace NYq {
+namespace NFq {
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr& ev)
 {
@@ -685,4 +685,4 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
         });
 }
 
-} // NYq
+} // NFq

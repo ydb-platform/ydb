@@ -1,6 +1,6 @@
 #include "response_tasks.h"
 
-namespace NYq {
+namespace NFq {
 
 void TResponseTasks::AddTaskNonBlocking(const TString& key, const TTask& task) {
     Tasks[key] = task;
@@ -44,4 +44,4 @@ const THashMap<TString, TTask>& TResponseTasks::GetTasksBlocking() {
     }
 }
 
-} //NYq
+} //NFq

@@ -2,7 +2,7 @@
 
 #include <util/digest/multi.h>
 
-namespace NYq {
+namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -22,22 +22,22 @@ size_t TCheckpointIdHash::operator ()(const TCheckpointId& checkpointId)
     return MultiHash(checkpointId.CoordinatorGeneration, checkpointId.SeqNo);
 }
 
-} // namespace NYq
+} // namespace NFq
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template<>
-void Out<NYq::TCoordinatorId>(
+void Out<NFq::TCoordinatorId>(
     IOutputStream& out,
-    const NYq::TCoordinatorId& coordinatorId)
+    const NFq::TCoordinatorId& coordinatorId)
 {
     coordinatorId.PrintTo(out);
 }
 
 template<>
-void Out<NYq::TCheckpointId>(
+void Out<NFq::TCheckpointId>(
     IOutputStream& out,
-    const NYq::TCheckpointId& checkpointId)
+    const NFq::TCheckpointId& checkpointId)
 {
     out << checkpointId.CoordinatorGeneration << ":" << checkpointId.SeqNo;
 }

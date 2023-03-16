@@ -9,7 +9,7 @@
 #include <util/stream/str.h>
 #include <util/string/join.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NThreading;
 using namespace NYdb;
@@ -565,4 +565,4 @@ TStateStoragePtr NewYdbStateStorage(
     return new TStateStorage(config, credentialsProviderFactory, yqSharedResources);
 }
 
-} // namespace NYq
+} // namespace NFq

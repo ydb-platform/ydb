@@ -1,6 +1,6 @@
 #include "run_actor_params.h"
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 
@@ -14,7 +14,7 @@ TRunActorParams::TRunActorParams(
     ui64 nextUniqueId,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-    const ::NYq::NConfig::TConfig& config,
+    const ::NFq::NConfig::TConfig& config,
     const TString& sql,
     const NYdb::NFq::TScope& scope,
     const TString& authToken,
@@ -99,4 +99,4 @@ TRunActorParams::TRunActorParams(
     {
     }
 
-} /* NYq */
+} /* NFq */

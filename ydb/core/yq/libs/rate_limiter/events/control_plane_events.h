@@ -5,7 +5,7 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/events.h>
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId RateLimiterControlPlaneServiceId();
 
@@ -88,4 +88,4 @@ struct TEvRateLimiter {
     };
 };
 
-} // namespace NYq
+} // namespace NFq

@@ -1,7 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-package NYq.NProto;
+package NFq.NProto;
 
 import "ydb/core/yq/libs/graph_params/proto/graph_params.proto";
 

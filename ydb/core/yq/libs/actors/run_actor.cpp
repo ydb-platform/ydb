@@ -81,7 +81,7 @@
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NYql;
@@ -496,7 +496,7 @@ private:
         if (QueryStateUpdateRequest.resources().topic_consumers_state() == Fq::Private::TaskResources::PREPARE) {
             if (!ReadRulesCreatorId) {
                 ReadRulesCreatorId = Register(
-                    ::NYq::MakeReadRuleCreatorActor(
+                    ::NFq::MakeReadRuleCreatorActor(
                         SelfId(),
                         Params.QueryId,
                         Params.YqSharedResources->UserSpaceYdbDriver,
@@ -702,7 +702,7 @@ private:
         }
     }
 
-    void FillGraphMemoryInfo(NYq::NProto::TGraphParams& graphParams) {
+    void FillGraphMemoryInfo(NFq::NProto::TGraphParams& graphParams) {
         auto mkqlDefaultLimit = Params.Config.GetResourceManager().GetMkqlInitialMemoryLimit();
         if (mkqlDefaultLimit == 0) {
             mkqlDefaultLimit = 8_GB;
@@ -1255,7 +1255,7 @@ private:
 
     void RunReadRulesDeletionActor() {
         Register(
-            ::NYq::MakeReadRuleDeleterActor(
+            ::NFq::MakeReadRuleDeleterActor(
                 SelfId(),
                 Params.QueryId,
                 Params.YqSharedResources->UserSpaceYdbDriver,
@@ -1304,7 +1304,7 @@ private:
         return false;
     }
 
-    TEvaluationGraphInfo RunEvalDqGraph(NYq::NProto::TGraphParams& dqGraphParams) {
+    TEvaluationGraphInfo RunEvalDqGraph(NFq::NProto::TGraphParams& dqGraphParams) {
 
         LOG_D("RunEvalDqGraph");
 
@@ -1386,7 +1386,7 @@ private:
 
         if (EnableCheckpointCoordinator) {
             ControlId = Register(MakeCheckpointCoordinator(
-                ::NYq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
+                ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
                 Params.Config.GetCheckpointCoordinator(),
@@ -1646,7 +1646,7 @@ private:
 
     void FillDqGraphParams() {
         for (const auto& s : Params.DqGraphs) {
-            NYq::NProto::TGraphParams dqGraphParams;
+            NFq::NProto::TGraphParams dqGraphParams;
             Y_VERIFY(dqGraphParams.ParseFromString(s));
             DqGraphParams.emplace_back(std::move(dqGraphParams));
         }
@@ -1690,7 +1690,7 @@ private:
             QueryStateUpdateRequest.set_scope(Params.Scope.ToString());
             QueryStateUpdateRequest.mutable_query_id()->set_value(Params.QueryId);
             QueryStateUpdateRequest.set_owner_id(Params.Owner);
-            dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, NYq::CreateEmptyGateway(SelfId()), Params.DqCompFactory, {}, nullptr));
+            dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, NFq::CreateEmptyGateway(SelfId()), Params.DqCompFactory, {}, nullptr));
         }
 
         {
@@ -1993,7 +1993,7 @@ private:
     TInstant CreatedAt;
     FederatedQuery::QueryAction Action = FederatedQuery::QueryAction::QUERY_ACTION_UNSPECIFIED;
     TMap<NActors::TActorId, TEvaluationGraphInfo> EvalInfos;
-    std::vector<NYq::NProto::TGraphParams> DqGraphParams;
+    std::vector<NFq::NProto::TGraphParams> DqGraphParams;
     std::vector<i32> DqGrapResultIndices;
     i32 DqGraphIndex = 0;
     ui32 DqEvalIndex = 0;
@@ -2044,4 +2044,4 @@ IActor* CreateRunActor(
     return new TRunActor(fetcherId, serviceCounters, std::move(params));
 }
 
-} /* NYq */
+} /* NFq */

@@ -1,6 +1,6 @@
 #include "config.h"
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -38,4 +38,4 @@ TControlPlaneProxyConfig::TControlPlaneProxyConfig(const NConfig::TControlPlaneP
 {
 }
 
-} // NYq
+} // NFq

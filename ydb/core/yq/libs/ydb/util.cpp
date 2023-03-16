@@ -2,7 +2,7 @@
 
 #include <util/folder/pathsplit.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NYdb;
 
@@ -19,4 +19,4 @@ TString JoinPath(const TString& basePath, const TString& path) {
     return prefixPathSplit.Reconstruct();
 }
 
-} // namespace NYq
+} // namespace NFq

@@ -45,7 +45,7 @@ public:
                 std::transform(permissions.begin(), permissions.end(), std::back_inserter(Sids),
                    [](const auto& s) -> TString { return s.Permission + "@as"; });
 
-                auto serviceAccountId = NYq::ExtractServiceAccountId(*GetProtoRequest());
+                auto serviceAccountId = NFq::ExtractServiceAccountId(*GetProtoRequest());
                 if (serviceAccountId) {
                     entries.push_back({
                         {{NPerms::Required("iam.serviceAccounts.use")}},

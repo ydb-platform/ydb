@@ -8,7 +8,7 @@
 
 #include <util/datetime/base.h>
 
-namespace NYq {
+namespace NFq {
 
 class TRetryPolicyItem {
 public:
@@ -52,4 +52,4 @@ bool IsValidDateTimeFormatName(const TString& formatName);
 
 bool IsValidTimestampFormatName(const TString& formatName);
 
-} // namespace NYq
+} // namespace NFq

@@ -34,14 +34,14 @@
 #include <util/string/join.h>
 #include <util/system/hostname.h>
 
-namespace NYq {
+namespace NFq {
 
 using TTenantExecuter = TDbExecuter<TTenantInfo::TPtr>;
 using TStateTimeExecuter = TDbExecuter<TInstant>;
 
 class TControlPlaneConfigActor : public NActors::TActorBootstrapped<TControlPlaneConfigActor> {
 
-    ::NYq::TYqSharedResources::TPtr YqSharedResources;
+    ::NFq::TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TYdbConnectionPtr YdbConnection;
     NDbPool::TDbPool::TPtr DbPool;
@@ -53,7 +53,7 @@ class TControlPlaneConfigActor : public NActors::TActorBootstrapped<TControlPlan
     TString TablePathPrefix;
 
 public:
-    TControlPlaneConfigActor(const ::NYq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters)
+    TControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters)
         : YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)
         , Counters(counters)
@@ -255,8 +255,8 @@ TActorId ControlPlaneConfigActorId() {
     return NActors::TActorId(0, name);
 }
 
-NActors::IActor* CreateControlPlaneConfigActor(const ::NYq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters) {
+NActors::IActor* CreateControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters) {
     return new TControlPlaneConfigActor(yqSharedResources, credProviderFactory, config, counters);
 }
 
-}  // namespace NYq
+}  // namespace NFq

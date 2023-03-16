@@ -19,7 +19,7 @@ namespace NKikimr  {
     }
 }
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId MakeYqPrivateProxyId();
 
@@ -74,4 +74,4 @@ NActors::IActor* CreateDeleteRateLimiterResourceRequestActor(
     ::NMonitoring::TDynamicCounterPtr counters
 );
 
-} /* NYq */
+} /* NFq */

@@ -4,7 +4,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TDebugItem {
     TString Query;
@@ -20,4 +20,4 @@ struct TDebugItem {
 using TDebugInfo = TVector<TDebugItem>;
 using TDebugInfoPtr = std::shared_ptr<TDebugInfo>;
 
-} // namespace NYq
+} // namespace NFq

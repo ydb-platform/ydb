@@ -19,10 +19,10 @@
 #define CPC_LOG_T(s) \
     LOG_FQ_CONTROL_PLANE_CONFIG_TRACE(s)
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId ControlPlaneConfigActorId();
 
-NActors::IActor* CreateControlPlaneConfigActor(const ::NYq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters);
+NActors::IActor* CreateControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters);
 
-} // namespace NYq
+} // namespace NFq

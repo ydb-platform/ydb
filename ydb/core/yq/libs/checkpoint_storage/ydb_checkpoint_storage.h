@@ -7,7 +7,7 @@
 #include <ydb/core/yq/libs/config/protos/storage.pb.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 
-namespace NYq {
+namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,4 +17,4 @@ TCheckpointStoragePtr NewYdbCheckpointStorage(
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYqSharedResources::TPtr& yqSharedResources);
 
-} // namespace NYq
+} // namespace NFq

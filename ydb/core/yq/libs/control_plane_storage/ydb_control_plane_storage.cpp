@@ -7,7 +7,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -621,10 +621,10 @@ NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
     const NConfig::TControlPlaneStorageConfig& config,
     const NConfig::TCommonConfig& common,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TString& tenantName) {
     return new TYdbControlPlaneStorageActor(config, common, counters, yqSharedResources, credentialsProviderFactory, tenantName);
 }
 
-} // NYq
+} // NFq

@@ -14,7 +14,7 @@
 
 #include <util/digest/multi.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TQueryResult {
     TVector<Ydb::ResultSet> Sets;
@@ -241,7 +241,7 @@ struct TEvents {
     };
 };
 
-} // namespace NYq
+} // namespace NFq
 
 template<>
 struct THash<NYql::TDatabaseAuth> {

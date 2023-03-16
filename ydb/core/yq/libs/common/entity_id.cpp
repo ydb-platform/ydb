@@ -7,7 +7,7 @@
 #include <util/stream/format.h>
 #include <util/string/ascii.h>
 
-namespace NYq {
+namespace NFq {
 
 // used ascii order: IntToChar[i] < IntToChar[i+1]
 constexpr char IntToChar[] = {
@@ -84,4 +84,4 @@ IEntityIdGenerator::TPtr CreateEntityIdGenerator(const TString& prefix) {
     return MakeIntrusive<TEntityIdGenerator>(prefix);
 }
 
-} // namespace NYq
+} // namespace NFq

@@ -8,7 +8,7 @@
 #include <ydb/core/yq/libs/exceptions/exceptions.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NThreading;
 using namespace NYdb;
@@ -266,4 +266,4 @@ public:
     TState State;
 };
 
-} /* NYq */
+} /* NFq */

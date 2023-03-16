@@ -22,7 +22,7 @@
 #define LOG_T(stream) \
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId MakeQuotaProxyActorId() {
     constexpr TStringBuf name = "FQ_QPROX";
@@ -38,7 +38,7 @@ public:
 
     void Bootstrap() {
         Become(&TQuotaProxyGetRequestActor::StateFunc);
-        Send(NYq::MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaGetRequest(Ev->Get()->SubjectType, Ev->Get()->SubjectId));
+        Send(NFq::MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaGetRequest(Ev->Get()->SubjectType, Ev->Get()->SubjectId));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -60,7 +60,7 @@ public:
 
     void Bootstrap() {
         Become(&TQuotaProxySetRequestActor::StateFunc);
-        Send(NYq::MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaSetRequest(Ev->Get()->SubjectType, Ev->Get()->SubjectId, Ev->Get()->Limits));
+        Send(NFq::MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaSetRequest(Ev->Get()->SubjectType, Ev->Get()->SubjectId, Ev->Get()->Limits));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -124,4 +124,4 @@ NActors::IActor* CreateQuotaProxyActor(
         return new TQuotaProxyService(config, counters);
 }
 
-} /* NYq */
+} /* NFq */

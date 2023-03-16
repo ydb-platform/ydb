@@ -10,7 +10,7 @@
 #include <google/protobuf/message.h>
 #include <google/protobuf/text_format.h>
 
-namespace NYq {
+namespace NFq {
 namespace {
 
 class TMinikqlProgramFieldValuePrinter : public ::google::protobuf::TextFormat::FastFieldValuePrinter {
@@ -64,4 +64,4 @@ TString PrettyPrintGraphParams(const NProto::TGraphParams& sourceGraphParams, bo
     return NKikimr::TProtobufPrinterOutputWrapper(patchedGraphParams, TGraphParamsPrinter(canonical));
 }
 
-} // namespace NYq
+} // namespace NFq

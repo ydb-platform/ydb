@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NYq {
+namespace NFq {
 
 // TODO: tests
 
-} // namespace NYq
+} // namespace NFq

@@ -1,6 +1,6 @@
 #include "control_plane_storage_counters.h"
 
-namespace NYq {
+namespace NFq {
 
 TRequestScopeCounters::TRequestScopeCounters(const TString& name)
     : Name(name) {}
@@ -88,4 +88,4 @@ TFinalStatusCounters::~TFinalStatusCounters() {
     Counters->RemoveSubgroup("subcomponent", "FinalStatus");
 }
 
-} // NYq
+} // NFq

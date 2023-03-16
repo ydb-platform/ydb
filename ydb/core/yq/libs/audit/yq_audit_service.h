@@ -5,8 +5,8 @@
 #include <util/system/types.h>
 
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId YqAuditServiceActorId();
 
-} // namespace NYq
+} // namespace NFq

@@ -32,7 +32,7 @@
 
 */
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId MakeQuotaServiceActorId(ui32 nodeId);
 
@@ -45,4 +45,4 @@ NActors::IActor* CreateQuotaServiceActor(
     std::vector<TQuotaDescription> quotaDesc,
     NActors::TMon* monitoring = nullptr);
 
-} /* NYq */
+} /* NFq */

@@ -18,7 +18,7 @@
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NYql;
@@ -75,19 +75,19 @@ public:
         auto& req = Ev->Record;
         Tenant = req.tenant();
 
-        Send(NYq::ControlPlaneStorageServiceActorId(),
-            new NYq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest(std::move(req)));
+        Send(NFq::ControlPlaneStorageServiceActorId(),
+            new NFq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest(std::move(req)));
     }
 
 private:
     STRICT_STFUNC(
         StateFunc,
         CFunc(NActors::TEvents::TEvPoison::EventType, Die)
-        hFunc(NYq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse, HandleResponse)
+        hFunc(NFq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse, HandleResponse)
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
     )
 
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse::TPtr& ev) {
+    void HandleResponse(NFq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse::TPtr& ev) {
         auto res = MakeHolder<TEvents::TEvNodesHealthCheckResponse>();
         try {
             const auto& issues = ev->Get()->Issues;
@@ -129,4 +129,4 @@ IActor* CreateNodesHealthCheckActor(
         std::move(counters));
 }
 
-} /* NYq */
+} /* NFq */

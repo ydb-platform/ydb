@@ -5,9 +5,9 @@
 
 #include <library/cpp/actors/core/actorsystem.h>
 
-namespace NYq {
+namespace NFq {
 
 NActors::IActor* CreateYqlMockActor(int grpcPort);
 void InitTest(NActors::TTestActorRuntime* runtime, int httpPort, int grpcPort, const IYqSharedResources::TPtr& yqSharedResources);
 
-} // namespace NYq
+} // namespace NFq

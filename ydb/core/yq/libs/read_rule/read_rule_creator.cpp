@@ -23,7 +23,7 @@
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
 
 
-namespace NYq {
+namespace NFq {
 namespace {
 
 using namespace NActors;
@@ -268,7 +268,7 @@ public:
                 }
                 issues.AddIssue(std::move(mainIssue));
             }
-            Send(Owner, MakeHolder<NYq::TEvents::TEvDataStreamsReadRulesCreationResult>(std::move(issues)));
+            Send(Owner, MakeHolder<NFq::TEvents::TEvDataStreamsReadRulesCreationResult>(std::move(issues)));
             PassAway();
         }
     }
@@ -309,4 +309,4 @@ NActors::IActor* MakeReadRuleCreatorActor(
     );
 }
 
-} // namespace NYq
+} // namespace NFq

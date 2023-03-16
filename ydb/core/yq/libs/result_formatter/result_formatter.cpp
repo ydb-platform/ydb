@@ -16,7 +16,7 @@
 
 #include <library/cpp/json/yson/json2yson.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NKikimr::NMiniKQL;
 using NYql::NUdf::TUnboxedValuePod;
@@ -455,4 +455,4 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet,
     }
 }
 
-} // namespace NYq
+} // namespace NFq

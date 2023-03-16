@@ -18,7 +18,7 @@
 #define SCHEMA_LOG_WARN(logRecordStream) LOG_IMPL(WARN, logRecordStream)
 #define SCHEMA_LOG_ERROR(logRecordStream) LOG_IMPL(ERROR, logRecordStream)
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -681,4 +681,4 @@ NActors::IActor* MakeUpdateRateLimiterResourceActor(
     );
 }
 
-} // namespace NYq
+} // namespace NFq

@@ -7,7 +7,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NYql;
 
@@ -96,4 +96,4 @@ void AddTableBindingsFromBindings(const TVector<FederatedQuery::Binding>& bindin
     }
 }
 
-} //NYq
+} //NFq

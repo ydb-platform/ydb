@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-namespace NYq {
+namespace NFq {
 
 class TQuotaServiceFakeActor: public NActors::TActor<TQuotaServiceFakeActor> {
     TQuotaMap Quotas;
@@ -23,4 +23,4 @@ public:
     void Handle(TEvQuotaService::TQuotaGetRequest::TPtr& ev);
 };
 
-} // namespace NYq
+} // namespace NFq

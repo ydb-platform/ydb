@@ -67,7 +67,7 @@
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NYql;
@@ -107,9 +107,9 @@ constexpr auto CLEANUP_PERIOD = TDuration::Seconds(60);
 class TPendingFetcher : public NActors::TActorBootstrapped<TPendingFetcher> {
 public:
     TPendingFetcher(
-        const NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const NFq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const ::NYq::NConfig::TConfig& config,
+        const ::NFq::NConfig::TConfig& config,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -400,9 +400,9 @@ private:
         hFunc(NMon::TEvHttpInfo, Handle)
     );
 
-    NYq::TYqSharedResources::TPtr YqSharedResources;
+    NFq::TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    NYq::NConfig::TConfig Config;
+    NFq::NConfig::TConfig Config;
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -448,9 +448,9 @@ private:
 
 
 NActors::IActor* CreatePendingFetcher(
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const ::NYq::NConfig::TConfig& config,
+    const ::NFq::NConfig::TConfig& config,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
@@ -485,4 +485,4 @@ TActorId MakePendingFetcherId(ui32 nodeId) {
     return NActors::TActorId(nodeId, name);
 }
 
-} /* NYq */
+} /* NFq */

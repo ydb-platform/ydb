@@ -47,7 +47,7 @@ struct TEvPrivate {
 
 }
 
-namespace NYq {
+namespace NFq {
 
 LWTRACE_USING(YQ_TEST_CONNECTION_PROVIDER);
 
@@ -69,7 +69,7 @@ class TTestObjectStorageConnectionActor : public NActors::TActorBootstrapped<TTe
 public:
     TTestObjectStorageConnectionActor(
         const FederatedQuery::ObjectStorageConnection& os,
-        const NYq::NConfig::TCommonConfig& commonConfig,
+        const NFq::NConfig::TCommonConfig& commonConfig,
         const TActorId& sender,
         ui64 cookie,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
@@ -77,7 +77,7 @@ public:
         const TString& scope,
         const TString& user,
         const TString& token,
-        const NYq::TSigner::TPtr& signer,
+        const NFq::TSigner::TPtr& signer,
         const TTestConnectionRequestCountersPtr& counters)
         : Counters(counters)
         , Sender(sender)
@@ -87,7 +87,7 @@ public:
         , Cookie(cookie)
         , Gateway(gateway)
         , CredentialsFactory(credentialsFactory)
-        , ClusterConfig(NYq::CreateS3ClusterConfig({}, token, commonConfig.GetObjectStorageEndpoint(), signer ? signer->SignAccountId(os.auth().service_account().id()) : "", os))
+        , ClusterConfig(NFq::CreateS3ClusterConfig({}, token, commonConfig.GetObjectStorageEndpoint(), signer ? signer->SignAccountId(os.auth().service_account().id()) : "", os))
     {
         Counters->InFly->Inc();
     }
@@ -201,21 +201,21 @@ private:
     void ReplyError(const TString& message) {
         TC_LOG_D(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Invalid access for object storage connection: " << message);
         Counters->Error->Inc();
-        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NYq::TIssuesIds::BAD_REQUEST, "Object Storage: " + message)}), 0, Cookie);
+        Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, "Object Storage: " + message)}), 0, Cookie);
         DestroyActor(false /* success */);
     }
 
     void ReplyOk(const TString& requestId) {
         TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Access is valid for object storage connection, request id: [" << requestId << "]");
         Counters->Ok->Inc();
-        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), 0, Cookie);
+        Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), 0, Cookie);
         DestroyActor();
     }
 };
 
 NActors::IActor* CreateTestObjectStorageConnectionActor(
         const FederatedQuery::ObjectStorageConnection& os,
-        const NYq::NConfig::TCommonConfig& commonConfig,
+        const NFq::NConfig::TCommonConfig& commonConfig,
         const TActorId& sender,
         ui64 cookie,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
@@ -223,7 +223,7 @@ NActors::IActor* CreateTestObjectStorageConnectionActor(
         const TString& scope,
         const TString& user,
         const TString& token,
-        const NYq::TSigner::TPtr& signer,
+        const NFq::TSigner::TPtr& signer,
         const TTestConnectionRequestCountersPtr& counters) {
     return new TTestObjectStorageConnectionActor(
                     os, commonConfig, sender,
@@ -231,4 +231,4 @@ NActors::IActor* CreateTestObjectStorageConnectionActor(
                     scope, user, token, signer, counters);
 }
 
-} // namespace NYq
+} // namespace NFq

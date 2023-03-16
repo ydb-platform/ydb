@@ -99,14 +99,14 @@ TString MaybeRemoveSuffix(const TString& token) {
         : token;
 }
 
-void FillAuthentication(::yandex::cloud::events::Authentication& authentication, const NYq::TEvAuditService::TExtraInfo& info) {
+void FillAuthentication(::yandex::cloud::events::Authentication& authentication, const NFq::TEvAuditService::TExtraInfo& info) {
     authentication.set_authenticated(true);
     authentication.set_subject_id(MaybeRemoveSuffix(info.User));
     authentication.set_subject_type(::yandex::cloud::events::Authentication::FEDERATED_USER_ACCOUNT); // TODO:
 }
 
 void FillAuthorization(::yandex::cloud::events::Authorization& authorization, const NYql::TIssues& issues) {
-    authorization.set_authorized(AllOf(issues, [](const auto& t){ return t.IssueCode != NYq::TIssuesIds::ACCESS_DENIED; }));
+    authorization.set_authorized(AllOf(issues, [](const auto& t){ return t.IssueCode != NFq::TIssuesIds::ACCESS_DENIED; }));
     // for (const auto& permission : ctx.Authorization.Permissions) {
     //     auto* permision = authorization->add_permissions();
     //     permision->set_permission(permission.Permission);
@@ -119,7 +119,7 @@ void FillAuthorization(::yandex::cloud::events::Authorization& authorization, co
 template<typename TRequest>
 void FillRequestMetadata(
     ::yandex::cloud::events::RequestMetadata& metadata,
-    const NYq::TEvAuditService::TExtraInfo& extraInfo,
+    const NFq::TEvAuditService::TExtraInfo& extraInfo,
     const TRequest& request)
 {
     metadata.set_remote_address(ParsePeer(extraInfo.PeerName));
@@ -187,7 +187,7 @@ struct TAuditServiceSensors {
 
 }
 
-namespace NYq {
+namespace NFq {
 
 template<class TEvent, class TRequest, class TAuditDetailsObj>
 class TAuditEventSenderActor : public NActors::TActorBootstrapped<TAuditEventSenderActor<TEvent, TRequest, TAuditDetailsObj>> {
@@ -841,4 +841,4 @@ NActors::IActor* CreateYqCloudAuditServiceActor(const NConfig::TAuditConfig& con
     return new TYqCloudAuditServiceActor(config, counters);
 }
 
-} // namespace NYq
+} // namespace NFq

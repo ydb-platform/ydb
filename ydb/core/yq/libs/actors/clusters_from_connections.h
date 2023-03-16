@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
-namespace NYq {
+namespace NFq {
 
 NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name, bool useBearerForYdb, const TString& authToken, const TString& accountSignature, const FederatedQuery::DataStreams& ds);
 
@@ -20,4 +20,4 @@ void AddClustersFromConnections(const THashMap<TString, FederatedQuery::Connecti
     NYql::TGatewaysConfig& gatewaysConfig,
     THashMap<TString, TString>& clusters);
 
-} //NYq
+} //NFq

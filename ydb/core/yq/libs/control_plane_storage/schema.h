@@ -1,6 +1,6 @@
 #pragma once
 
-namespace NYq {
+namespace NFq {
 
 // tables
 #define QUERIES_TABLE_NAME "queries"
@@ -87,4 +87,4 @@ namespace NYq {
 #define STATE_COLUMN_NAME "state"
 #define STATE_TIME_COLUMN_NAME "state_time"
 
-} // namespace NYq
+} // namespace NFq

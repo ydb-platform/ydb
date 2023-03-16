@@ -10,7 +10,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/set.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TControlPlaneStorageConfig {
     NConfig::TControlPlaneStorageConfig Proto;
@@ -31,4 +31,4 @@ struct TControlPlaneStorageConfig {
     TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NConfig::TCommonConfig& common);
 };
 
-} // NYq
+} // NFq

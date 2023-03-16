@@ -4,7 +4,7 @@
 #include <util/datetime/base.h>
 #include <util/system/spinlock.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TTtlCacheSettings {
     TDuration Ttl = TDuration::Minutes(10);
@@ -115,4 +115,4 @@ private:
     TTtlCacheSettings Config;
 };
 
-} // namespace NYq
+} // namespace NFq

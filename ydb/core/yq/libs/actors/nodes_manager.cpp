@@ -26,7 +26,7 @@
 #define LOG_T(stream) \
     LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NYql;
@@ -39,7 +39,7 @@ public:
     };
 
     TNodesManagerActor(
-        const NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const NFq::TYqSharedResources::TPtr& yqSharedResources,
         const NDqs::TWorkerManagerCounters& workerManagerCounters,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -310,7 +310,7 @@ private:
     TString Tenant;
     ui64 MkqlInitialMemoryLimit;
 
-    NYq::TYqSharedResources::TPtr YqSharedResources;
+    NFq::TYqSharedResources::TPtr YqSharedResources;
 
     const ui32 IcPort; // Interconnect Port
     bool UseDataCenter;
@@ -345,7 +345,7 @@ IActor* CreateNodesManager(
     TIntrusivePtr<IRandomProvider> randomProvider,
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     const NConfig::TPrivateApiConfig& privateApiConfig,
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,
     const TString& dataCenter,
     bool useDataCenter,
@@ -356,4 +356,4 @@ IActor* CreateNodesManager(
         serviceCounters, privateApiConfig, icPort, useDataCenter, dataCenter, tenant, mkqlInitialMemoryLimit);
 }
 
-} // namespace NYq
+} // namespace NFq

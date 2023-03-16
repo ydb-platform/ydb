@@ -1,7 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-package NYq.NConfig;
+package NFq.NConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/yq/libs/config/protos/storage.proto";
@@ -17,6 +17,6 @@ message TRateLimiterConfig {
     bool ControlPlaneEnabled = 2;
     bool DataPlaneEnabled = 3;
 
-    NYq.NConfig.TYdbStorageConfig Database = 4;
+    NFq.NConfig.TYdbStorageConfig Database = 4;
     repeated TLimiter Limiters = 5;
 }

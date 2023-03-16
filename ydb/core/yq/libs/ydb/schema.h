@@ -5,7 +5,7 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/retry/retry_policy.h>
 
-namespace NYq {
+namespace NFq {
 
 using TYdbSdkRetryPolicy = IRetryPolicy<const NYdb::TStatus&>;
 
@@ -77,4 +77,4 @@ NActors::IActor* MakeUpdateRateLimiterResourceActor(
 
 bool IsPathDoesNotExistError(const NYdb::TStatus& status);
 
-} // namespace NYq
+} // namespace NFq

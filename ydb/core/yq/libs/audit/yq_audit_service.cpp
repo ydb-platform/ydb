@@ -3,11 +3,11 @@
 #include <util/system/types.h>
 
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId YqAuditServiceActorId() {
     constexpr TStringBuf name = "YQAUDSVC";
     return NActors::TActorId(0, name);
 }
 
-} // namespace NYq
+} // namespace NFq

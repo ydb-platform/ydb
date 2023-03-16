@@ -1,6 +1,6 @@
 #include "fake_quota_manager.h"
 
-namespace NYq {
+namespace NFq {
 
 void TQuotaServiceFakeActor::Handle(TEvQuotaService::TQuotaGetRequest::TPtr& ev) {
     auto response = MakeHolder<TEvQuotaService::TQuotaGetResponse>();
@@ -10,4 +10,4 @@ void TQuotaServiceFakeActor::Handle(TEvQuotaService::TQuotaGetRequest::TPtr& ev)
     Send(ev->Sender, std::move(response));
 }
 
-} // namespace NYq
+} // namespace NFq

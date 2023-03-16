@@ -1543,7 +1543,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetFederatedQueryConfig().GetEnabled()) {
-        YqSharedResources = NYq::CreateYqSharedResources(
+        YqSharedResources = NFq::CreateYqSharedResources(
             runConfig.AppConfig.GetFederatedQueryConfig(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             Counters->GetSubgroup("counters", "yq"));

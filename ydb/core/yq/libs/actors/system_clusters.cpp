@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <util/generic/hash.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NYql;
 
@@ -118,4 +118,4 @@ void AddSystemClusters(TGatewaysConfig& gatewaysConfig, THashMap<TString, TStrin
     }
 }
 
-} //NYq
+} //NFq

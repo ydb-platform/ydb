@@ -1,7 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-package NYq.NConfig;
+package NFq.NConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/yq/libs/config/protos/storage.proto";
@@ -39,7 +39,7 @@ message TRetryPolicyMapping {
 
 message TControlPlaneStorageConfig {
     bool Enabled = 1;
-    NYq.NConfig.TYdbStorageConfig Storage = 2; // TODO: remove
+    NFq.NConfig.TYdbStorageConfig Storage = 2; // TODO: remove
     string IdempotencyKeysTtl = 3;
     uint64 MaxRequestSize = 4;
     uint64 MaxCountQueries = 5;

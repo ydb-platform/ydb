@@ -9,7 +9,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
 
-namespace NYq {
+namespace NFq {
 namespace {
 
 using namespace NActors;
@@ -17,10 +17,10 @@ using namespace NActors;
 class THealthActor : public NActors::TActorBootstrapped<THealthActor> {
     NConfig::THealthConfig Config;
     NYdb::NDiscovery::TDiscoveryClient Client;
-    NYq::TYqSharedResources::TPtr YqSharedResources;
+    NFq::TYqSharedResources::TPtr YqSharedResources;
 
 public:
-    THealthActor(const NConfig::THealthConfig& config, const NYq::TYqSharedResources::TPtr& yqSharedResources, const ::NMonitoring::TDynamicCounterPtr& )
+    THealthActor(const NConfig::THealthConfig& config, const NFq::TYqSharedResources::TPtr& yqSharedResources, const ::NMonitoring::TDynamicCounterPtr& )
         : Config(config)
         , Client(yqSharedResources->CoreYdbDriver,
             NYdb::TCommonClientSettings()
@@ -82,8 +82,8 @@ TActorId HealthActorId() {
     return NActors::TActorId(0, name);
 }
 
-IActor* CreateHealthActor(const NConfig::THealthConfig& config, const NYq::TYqSharedResources::TPtr& yqSharedResources, const ::NMonitoring::TDynamicCounterPtr& counters) {
+IActor* CreateHealthActor(const NConfig::THealthConfig& config, const NFq::TYqSharedResources::TPtr& yqSharedResources, const ::NMonitoring::TDynamicCounterPtr& counters) {
     return new THealthActor(config, yqSharedResources, counters);
 }
 
-}  // namespace NYq
+}  // namespace NFq

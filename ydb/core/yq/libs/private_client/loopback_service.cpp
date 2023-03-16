@@ -41,28 +41,28 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvInternalService::TEvHealthCheckRequest, Handle)
         hFunc(TEvInternalService::TEvGetTaskRequest, Handle)
-        hFunc(NYq::TEvControlPlaneConfig::TEvGetTenantInfoResponse, Handle)
+        hFunc(NFq::TEvControlPlaneConfig::TEvGetTenantInfoResponse, Handle)
         hFunc(TEvInternalService::TEvPingTaskRequest, Handle)
         hFunc(TEvInternalService::TEvWriteResultRequest, Handle)
         hFunc(TEvInternalService::TEvCreateRateLimiterResourceRequest, Handle)
         hFunc(TEvInternalService::TEvDeleteRateLimiterResourceRequest, Handle)
 
-        hFunc(NYq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Handle)
-        hFunc(NYq::TEvControlPlaneStorage::TEvGetTaskResponse, Handle)
-        hFunc(NYq::TEvControlPlaneStorage::TEvPingTaskResponse, Handle)
-        hFunc(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse, Handle)
-        hFunc(NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse, Handle)
-        hFunc(NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse, Handle)
+        hFunc(NFq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Handle)
+        hFunc(NFq::TEvControlPlaneStorage::TEvGetTaskResponse, Handle)
+        hFunc(NFq::TEvControlPlaneStorage::TEvPingTaskResponse, Handle)
+        hFunc(NFq::TEvControlPlaneStorage::TEvWriteResultDataResponse, Handle)
+        hFunc(NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse, Handle)
+        hFunc(NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse, Handle)
     );
 
     void Handle(TEvInternalService::TEvHealthCheckRequest::TPtr& ev) {
         Cookie++;
         Senders[Cookie] = ev->Sender;
         auto request = ev->Get()->Request;
-        Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest(std::move(request)), 0, Cookie);
+        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest(std::move(request)), 0, Cookie);
     }
 
-    void Handle(NYq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse::TPtr& ev) {
+    void Handle(NFq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse::TPtr& ev) {
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
@@ -81,22 +81,22 @@ private:
         Senders[Cookie] = ev->Sender;
         auto request = ev->Get()->Request;
         GetRequests.emplace(Cookie, std::move(request));
-        Send(NYq::ControlPlaneConfigActorId(), new NYq::TEvControlPlaneConfig::TEvGetTenantInfoRequest(), 0, Cookie);
+        Send(NFq::ControlPlaneConfigActorId(), new NFq::TEvControlPlaneConfig::TEvGetTenantInfoRequest(), 0, Cookie);
     }
 
-    void Handle(NYq::TEvControlPlaneConfig::TEvGetTenantInfoResponse::TPtr& ev) {
+    void Handle(NFq::TEvControlPlaneConfig::TEvGetTenantInfoResponse::TPtr& ev) {
         TenantInfo = ev->Get()->TenantInfo;
         auto it = GetRequests.find(ev->Cookie);
         if (it != GetRequests.end()) {
             auto request = it->second;
             GetRequests.erase(it);
-            auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvGetTaskRequest>(std::move(request));
+            auto event = std::make_unique<NFq::TEvControlPlaneStorage::TEvGetTaskRequest>(std::move(request));
             event->TenantInfo = TenantInfo;
-            Send(NYq::ControlPlaneStorageServiceActorId(), event.release(), 0, ev->Cookie);
+            Send(NFq::ControlPlaneStorageServiceActorId(), event.release(), 0, ev->Cookie);
         }
     }
 
-    void Handle(NYq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) {
+    void Handle(NFq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) {
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
@@ -115,12 +115,12 @@ private:
         Senders[Cookie] = ev->Sender;
         OriginalCookies[Cookie] = ev->Cookie;
         auto request = ev->Get()->Request;
-        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
+        auto event = std::make_unique<NFq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
         event->TenantInfo = TenantInfo;
-        Send(NYq::ControlPlaneStorageServiceActorId(), event.release(), 0, Cookie);
+        Send(NFq::ControlPlaneStorageServiceActorId(), event.release(), 0, Cookie);
     }
 
-    void Handle(NYq::TEvControlPlaneStorage::TEvPingTaskResponse::TPtr& ev) {
+    void Handle(NFq::TEvControlPlaneStorage::TEvPingTaskResponse::TPtr& ev) {
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
@@ -138,10 +138,10 @@ private:
         Cookie++;
         Senders[Cookie] = ev->Sender;
         auto request = ev->Get()->Request;
-        Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0, Cookie);
+        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0, Cookie);
     }
 
-    void Handle(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) {
+    void Handle(NFq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) {
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
@@ -160,10 +160,10 @@ private:
         Senders[Cookie] = ev->Sender;
         OriginalCookies[Cookie] = ev->Cookie;
         auto request = ev->Get()->Request;
-        Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest(std::move(request)), 0, Cookie);
+        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest(std::move(request)), 0, Cookie);
     }
 
-    void Handle(NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse::TPtr& ev) {
+    void Handle(NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse::TPtr& ev) {
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
@@ -182,10 +182,10 @@ private:
         Senders[Cookie] = ev->Sender;
         OriginalCookies[Cookie] = ev->Cookie;
         auto request = ev->Get()->Request;
-        Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest(std::move(request)), 0, Cookie);
+        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest(std::move(request)), 0, Cookie);
     }
 
-    void Handle(NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse::TPtr& ev) {
+    void Handle(NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse::TPtr& ev) {
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
@@ -204,7 +204,7 @@ private:
     THashMap<ui64, NActors::TActorId> Senders;
     THashMap<ui64, ui64> OriginalCookies;
     THashMap<ui64, Fq::Private::GetTaskRequest> GetRequests;
-    NYq::TTenantInfo::TPtr TenantInfo;
+    NFq::TTenantInfo::TPtr TenantInfo;
 };
 
 NActors::IActor* CreateLoopbackServiceActor(

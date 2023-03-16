@@ -43,11 +43,11 @@
 #include <ydb/library/folder_service/events.h>
 
 
-namespace NYq {
+namespace NFq {
 namespace {
 
 using namespace NActors;
-using namespace NYq::NConfig;
+using namespace NFq::NConfig;
 using namespace NKikimr;
 using namespace NThreading;
 using namespace NYdb;
@@ -238,7 +238,7 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
     using TBase::Register;
     using IRetryPolicy = IRetryPolicy<NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr&>;
 
-    ::NYq::TControlPlaneProxyConfig Config;
+    ::NFq::TControlPlaneProxyConfig Config;
     TActorId Sender;
     TRequestCommonCountersPtr Counters;
     TString FolderId;
@@ -253,7 +253,7 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
 
 public:
     TResolveFolderActor(const TRequestCommonCountersPtr& counters,
-                        TActorId sender, const ::NYq::TControlPlaneProxyConfig& config,
+                        TActorId sender, const ::NFq::TControlPlaneProxyConfig& config,
                         const TString& folderId, const TString& token,
                         const std::function<void(const TDuration&, bool, bool)>& probe,
                         TEventRequest event,
@@ -366,7 +366,7 @@ protected:
     using TBase::Become;
     using TBase::Schedule;
 
-    ::NYq::TControlPlaneProxyConfig Config;
+    ::NFq::TControlPlaneProxyConfig Config;
     TRequestProto RequestProto;
     TString Scope;
     TString FolderId;
@@ -387,7 +387,7 @@ protected:
 public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR";
 
-    explicit TRequestActor(const ::NYq::TControlPlaneProxyConfig& config,
+    explicit TRequestActor(const ::NFq::TControlPlaneProxyConfig& config,
                            TActorId sender, ui32 cookie,
                            const TString& scope, const TString& folderId, TRequestProto&& requestProto,
                            TString&& user, TString&& token, const TActorId& serviceId,
@@ -739,7 +739,7 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
     };
 
     TCounters Counters;
-    const ::NYq::TControlPlaneProxyConfig Config;
+    const ::NFq::TControlPlaneProxyConfig Config;
     const bool QuotaManagerEnabled;
 
 public:
@@ -2041,4 +2041,4 @@ IActor* CreateControlPlaneProxyActor(const NConfig::TControlPlaneProxyConfig& co
     return new TControlPlaneProxyActor(config, counters, quotaManagerEnabled);
 }
 
-}  // namespace NYq
+}  // namespace NFq

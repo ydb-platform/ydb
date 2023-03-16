@@ -1,6 +1,6 @@
 #include "events.h"
 
-namespace NYq {
+namespace NFq {
 
 void TQuotaUsage::Merge(const TQuotaUsage& other) {
     if (other.Limit.UpdatedAt > Limit.UpdatedAt) {
@@ -11,4 +11,4 @@ void TQuotaUsage::Merge(const TQuotaUsage& other) {
     }
 }
 
-} /* NYq */
+} /* NFq */

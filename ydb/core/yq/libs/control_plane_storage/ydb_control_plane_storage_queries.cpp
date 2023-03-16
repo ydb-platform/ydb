@@ -44,7 +44,7 @@ FederatedQuery::IamAuth::IdentityCase GetIamAuth(const FederatedQuery::Connectio
 
 }
 
-namespace NYq {
+namespace NFq {
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev)
 {
@@ -1818,4 +1818,4 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
         });
 }
 
-} // NYq
+} // NFq

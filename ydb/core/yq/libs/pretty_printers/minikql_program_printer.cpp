@@ -5,7 +5,7 @@
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -253,4 +253,4 @@ TString PrettyPrintMkqlProgram(const TString& rawProgram, size_t initialIndentCh
     return PrettyPrintMkqlProgram(node, initialIndentChars);
 }
 
-} // namespace NYq
+} // namespace NFq

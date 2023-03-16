@@ -3,7 +3,7 @@
 
 #include <util/generic/ptr.h>
 
-namespace NYq {
+namespace NFq {
 
 struct IYqSharedResources : public TThrRefBase {
     using TPtr = TIntrusivePtr<IYqSharedResources>;
@@ -18,4 +18,4 @@ enum class EDbPoolId {
     MAIN = 0
 };
 
-} // NYq
+} // NFq

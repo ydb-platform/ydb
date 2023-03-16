@@ -19,7 +19,7 @@
 #define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NMonitoring;
@@ -61,7 +61,7 @@ private:
         TString user = ev->Get()->User;
         auto it = Find(PrivateProxyConfig.GetGrantedUsers(), user);
         if (it == PrivateProxyConfig.GetGrantedUsers().end()) {
-            issues.AddIssue(MakeErrorIssue(NYq::TIssuesIds::UNAUTHORIZED, "Authentication error for the user " + user));
+            issues.AddIssue(MakeErrorIssue(NFq::TIssuesIds::UNAUTHORIZED, "Authentication error for the user " + user));
         }
         return issues;
     }
@@ -208,4 +208,4 @@ IActor* CreateYqlAnalyticsPrivateProxy(
     return new TYqlAnalyticsPrivateProxy(privateProxyConfig, timeProvider, randomProvider, counters, tokenAccessorConfig);
 }
 
-} // namespace NYq
+} // namespace NFq

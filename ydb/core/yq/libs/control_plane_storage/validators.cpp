@@ -6,7 +6,7 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 
-namespace NYq {
+namespace NFq {
 
 TValidationQuery CreateUniqueNameValidator(const TString& tableName,
                                            FederatedQuery::Acl::Visibility visibility,
@@ -483,4 +483,4 @@ TValidationQuery CreateQueryComputeStatusValidator(const std::vector<FederatedQu
     return {query.Sql, query.Params, validator};
 }
 
-} // namespace NYq
+} // namespace NFq

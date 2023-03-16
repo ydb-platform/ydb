@@ -17,7 +17,7 @@
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/exceptions/exceptions.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TValidationQuery {
     TString Query;
@@ -182,4 +182,4 @@ TValidationQuery CreateIdempotencyKeyValidator(const TString& scope,
     return {query.Sql, query.Params, validator};
 }
 
-} // namespace NYq
+} // namespace NFq

@@ -38,7 +38,7 @@
 #define LOG_AS_T(actorSystem, stream) \
     LOG_TRACE_S(actorSystem, NKikimrServices::FQ_QUOTA_SERVICE, stream)
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId MakeQuotaServiceActorId(ui32 nodeId) {
     constexpr TStringBuf name = "FQ_QUOTA";
@@ -834,7 +834,7 @@ private:
 
     NConfig::TQuotasManagerConfig Config;
     NConfig::TYdbStorageConfig StorageConfig;
-    ::NYq::TYqSharedResources::TPtr YqSharedResources;
+    ::NFq::TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TYdbConnectionPtr YdbConnection;
     NDbPool::TDbPool::TPtr DbPool;
@@ -860,4 +860,4 @@ NActors::IActor* CreateQuotaServiceActor(
         return new TQuotaManagementService(config, storageConfig, yqSharedResources, credProviderFactory, counters, quotaDesc, monitoring);
 }
 
-} /* NYq */
+} /* NFq */

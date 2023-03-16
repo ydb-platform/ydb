@@ -9,7 +9,7 @@
 
 #include <memory>
 
-namespace NYq {
+namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -18,4 +18,4 @@ std::unique_ptr<NActors::IActor> NewGC(
     const TCheckpointStoragePtr& checkpointStorage,
     const TStateStoragePtr& stateStorage);
 
-} // namespace NYq
+} // namespace NFq

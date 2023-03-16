@@ -9,7 +9,7 @@
 
 #include <library/cpp/protobuf/interop/cast.h>
 
-namespace NYq {
+namespace NFq {
 
 namespace {
 
@@ -512,4 +512,4 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         });
 }
 
-} // NYq
+} // NFq

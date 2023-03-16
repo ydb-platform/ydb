@@ -2,7 +2,7 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/events.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TEventIds {
     enum EEventSpaceYqlProxy {
@@ -58,4 +58,4 @@ struct TEventIds {
 
 };
 
-} // namespace NYq
+} // namespace NFq

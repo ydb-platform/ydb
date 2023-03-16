@@ -23,7 +23,7 @@
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " << stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NMonitoring;
@@ -48,7 +48,7 @@ public:
         , StartTime(TInstant::Now())
     {
         if (TokenAccessorConfig.GetHmacSecretFile()) {
-            Signer = ::NYq::CreateSignerFromFile(TokenAccessorConfig.GetHmacSecretFile());
+            Signer = ::NFq::CreateSignerFromFile(TokenAccessorConfig.GetHmacSecretFile());
         }
     }
 
@@ -93,7 +93,7 @@ public:
     }
 
 private:
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) { // YQ
+    void HandleResponse(NFq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) { // YQ
         LOG_D("Got CP::GetTask Response");
 
         const auto& issues = ev->Get()->Issues;
@@ -130,9 +130,9 @@ private:
 
     void Handle(TEvControlPlaneConfig::TEvGetTenantInfoResponse::TPtr& ev) {
         auto request = Ev->Record;
-        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvGetTaskRequest>(std::move(request));
+        auto event = std::make_unique<NFq::TEvControlPlaneStorage::TEvGetTaskRequest>(std::move(request));
         event->TenantInfo = ev->Get()->TenantInfo;
-        Send(NYq::ControlPlaneStorageServiceActorId(), event.release());
+        Send(NFq::ControlPlaneStorageServiceActorId(), event.release());
     }
 
 private:
@@ -140,7 +140,7 @@ private:
         StateFunc,
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
-        hFunc(NYq::TEvControlPlaneStorage::TEvGetTaskResponse, HandleResponse)
+        hFunc(NFq::TEvControlPlaneStorage::TEvGetTaskResponse, HandleResponse)
         hFunc(TEvControlPlaneConfig::TEvGetTenantInfoResponse, Handle)
     )
 
@@ -153,7 +153,7 @@ private:
     const THistogramPtr RequestedMBytes;
     const TInstant StartTime;
 
-    ::NYq::TSigner::TPtr Signer;
+    ::NFq::TSigner::TPtr Signer;
 
     NYql::TIssues Issues;
     TString OwnerId;
@@ -175,4 +175,4 @@ IActor* CreateGetTaskRequestActor(
         counters);
 }
 
-} /* NYq */
+} /* NFq */

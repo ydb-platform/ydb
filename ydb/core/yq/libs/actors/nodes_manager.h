@@ -14,7 +14,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/random_provider/random_provider.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 
@@ -26,7 +26,7 @@ IActor* CreateNodesManager(
     TIntrusivePtr<IRandomProvider> randomProvider,
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     const NConfig::TPrivateApiConfig& privateApiConfig,
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,
     const TString& dataCenter = "",
     bool useDataCenter = false,

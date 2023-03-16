@@ -13,7 +13,7 @@
 
 #include <util/digest/multi.h>
 
-namespace NYq {
+namespace NFq {
 
 enum TenantState : ui64 {
     Active = 0,
@@ -48,12 +48,12 @@ struct TTenantInfo {
 struct TEvControlPlaneConfig {
     // Event ids.
     enum EEv : ui32 {
-        EvGetTenantInfoRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::ControlPlaneConfig),
+        EvGetTenantInfoRequest = YqEventSubspaceBegin(NFq::TYqEventSubspace::ControlPlaneConfig),
         EvGetTenantInfoResponse,
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::ControlPlaneConfig), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(NFq::TYqEventSubspace::ControlPlaneConfig), "All events must be in their subspace");
 
     struct TEvGetTenantInfoRequest : NActors::TEventLocal<TEvGetTenantInfoRequest, EvGetTenantInfoRequest> {
     };

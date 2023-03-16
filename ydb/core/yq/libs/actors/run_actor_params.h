@@ -18,7 +18,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/random_provider/random_provider.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TRunActorParams { // TODO2 : Change name
     TRunActorParams(
@@ -31,7 +31,7 @@ struct TRunActorParams { // TODO2 : Change name
         ui64 nextUniqueId,
         NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-        const ::NYq::NConfig::TConfig& config,
+        const ::NFq::NConfig::TConfig& config,
         const TString& sql,
         const NYdb::NFq::TScope& scope,
         const TString& authToken,
@@ -82,7 +82,7 @@ struct TRunActorParams { // TODO2 : Change name
     NKikimr::NMiniKQL::TComputationNodeFactory DqCompFactory;
 
     ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
-    const ::NYq::NConfig::TConfig Config;
+    const ::NFq::NConfig::TConfig Config;
     const TString Sql;
     const NYdb::NFq::TScope Scope;
     const TString AuthToken;
@@ -122,4 +122,4 @@ struct TRunActorParams { // TODO2 : Change name
     Fq::Private::TaskResources Resources;
 };
 
-} /* NYq */
+} /* NFq */

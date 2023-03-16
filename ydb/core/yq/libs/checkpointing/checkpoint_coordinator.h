@@ -17,10 +17,10 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
-using namespace NYq::NConfig;
+using namespace NFq::NConfig;
 
 class TCheckpointCoordinator : public NYql::TTaskControllerImpl<TCheckpointCoordinator> {
 public:
@@ -215,4 +215,4 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     const TDuration& aggrPeriod
     );
 
-} // namespace NYq
+} // namespace NFq

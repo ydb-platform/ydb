@@ -26,7 +26,7 @@
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NYql;
@@ -240,7 +240,7 @@ private:
     void ConstructResults(const Ydb::ResultSet& resultSet, ui64 startRowIndex) {
         const size_t baseProtoByteSize = CreateProtoRequestWithoutResultSet(startRowIndex).ByteSizeLong();
 
-        NYq::TRowsProtoSplitter rowsSplitter(resultSet, ProtoMessageLimit, baseProtoByteSize, MaxRowsCountPerChunk);
+        NFq::TRowsProtoSplitter rowsSplitter(resultSet, ProtoMessageLimit, baseProtoByteSize, MaxRowsCountPerChunk);
         const auto splittedResultSets = rowsSplitter.Split();
 
         if (!splittedResultSets.Success) {
@@ -375,4 +375,4 @@ NActors::IActor* CreateResultWriter(
     return new TResultWriter(executerId, resultType, resultId, columns, traceId, deadline, resultBytesLimit);
 }
 
-} // namespace NYq
+} // namespace NFq

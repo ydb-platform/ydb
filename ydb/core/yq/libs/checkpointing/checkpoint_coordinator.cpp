@@ -25,7 +25,7 @@
 #define CC_LOG_E(stream) \
     LOG_STREAMS_CHECKPOINT_COORDINATOR_ERROR("[" << CoordinatorId << "] " << stream)
 
-namespace NYq {
+namespace NFq {
 
 TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
                                                const TActorId& storageProxy,
@@ -634,4 +634,4 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
         );
 }
 
-} // namespace NYq
+} // namespace NFq

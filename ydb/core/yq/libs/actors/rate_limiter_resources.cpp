@@ -25,7 +25,7 @@
 #define D_LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateDeleteRateLimiterResource - QueryId: " << OperationId  << ", Owner: " << OwnerId  << ", "<< stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NMonitoring;
@@ -79,7 +79,7 @@ public:
         RequestedMBytes->Collect(req.ByteSize() / 1024 / 1024);
         try {
             auto event = CreateControlPlaneEvent();
-            Send(NYq::ControlPlaneStorageServiceActorId(), event.release());
+            Send(NFq::ControlPlaneStorageServiceActorId(), event.release());
         } catch (const std::exception& err) {
             const auto msg = TStringBuilder() << "CreateRateLimiterResource Boostrap Error: " << CurrentExceptionMessage();
             Fail(msg);
@@ -90,15 +90,15 @@ private:
     STRICT_STFUNC(
         StateFunc,
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
-        hFunc(NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse, HandleResponse)
+        hFunc(NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse, HandleResponse)
     )
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest> CreateControlPlaneEvent() {
+    std::unique_ptr<NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest> CreateControlPlaneEvent() {
         auto request = Ev->Record;
-        return std::make_unique<NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest>(std::move(request));
+        return std::make_unique<NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest>(std::move(request));
     }
 
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse::TPtr& ev) {
+    void HandleResponse(NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse::TPtr& ev) {
         C_LOG_D("Got CP::CreateRateLimiterResourceResponse");
         const auto& issues = ev->Get()->Issues;
         if (issues) {
@@ -176,7 +176,7 @@ public:
         RequestedMBytes->Collect(req.ByteSize() / 1024 / 1024);
         try {
             auto event = CreateControlPlaneEvent();
-            Send(NYq::ControlPlaneStorageServiceActorId(), event.release());
+            Send(NFq::ControlPlaneStorageServiceActorId(), event.release());
         } catch (const std::exception& err) {
             const auto msg = TStringBuilder() << "DeleteRateLimiterResource Boostrap Error: " << CurrentExceptionMessage();
             Fail(msg);
@@ -187,15 +187,15 @@ private:
     STRICT_STFUNC(
         StateFunc,
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
-        hFunc(NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse, HandleResponse)
+        hFunc(NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse, HandleResponse)
     )
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest> CreateControlPlaneEvent() {
+    std::unique_ptr<NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest> CreateControlPlaneEvent() {
         auto request = Ev->Record;
-        return std::make_unique<NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest>(std::move(request));
+        return std::make_unique<NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest>(std::move(request));
     }
 
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse::TPtr& ev) {
+    void HandleResponse(NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse::TPtr& ev) {
         D_LOG_D("Got CP::DeleteRateLimiterResourceResponse");
         const auto& issues = ev->Get()->Issues;
         if (issues) {
@@ -252,4 +252,4 @@ IActor* CreateDeleteRateLimiterResourceRequestActor(
         std::move(counters));
 }
 
-} /* NYq */
+} /* NFq */

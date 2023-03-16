@@ -6,7 +6,7 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/public/lib/fq/scope.h>
 
-namespace NYq {
+namespace NFq {
 
 using NYdb::NFq::TScope;
 

@@ -4,7 +4,7 @@
 
 #include <util/datetime/base.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TControlPlaneProxyConfig {
     NConfig::TControlPlaneProxyConfig Proto;
@@ -15,4 +15,4 @@ struct TControlPlaneProxyConfig {
     TControlPlaneProxyConfig(const NConfig::TControlPlaneProxyConfig& config);
 };
 
-} // NYq
+} // NFq

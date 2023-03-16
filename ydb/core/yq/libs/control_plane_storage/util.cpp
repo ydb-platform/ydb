@@ -3,7 +3,7 @@
 #include <util/stream/file.h>
 #include <util/string/strip.h>
 
-namespace NYq {
+namespace NFq {
 
 TRetryLimiter::TRetryLimiter(ui64 retryCount, const TInstant& retryCounterUpdatedAt, double retryRate)
     : RetryCount(retryCount), RetryCounterUpdatedAt(retryCounterUpdatedAt), RetryRate(retryRate) {
@@ -221,4 +221,4 @@ bool IsValidTimestampFormatName(const TString& formatName) {
     return IsIn(FormatNames, formatName);
 }
 
-} //namespace NYq
+} //namespace NFq

@@ -2,7 +2,7 @@
 
 #include <library/cpp/actors/core/actorsystem.h>
 
-namespace NYq {
+namespace NFq {
 using namespace NThreading;
 
 TDatabaseAsyncResolverImpl::TDatabaseAsyncResolverImpl(
@@ -43,4 +43,4 @@ TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(
     return promise.GetFuture();
 }
 
-} // NYq
+} // NFq

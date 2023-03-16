@@ -957,9 +957,9 @@ public:
         return *this;
     }
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvWriteResultDataRequest> Build()
+    std::unique_ptr<NFq::TEvControlPlaneStorage::TEvWriteResultDataRequest> Build()
     {
-        auto request = std::make_unique<NYq::TEvControlPlaneStorage::TEvWriteResultDataRequest>();
+        auto request = std::make_unique<NFq::TEvControlPlaneStorage::TEvWriteResultDataRequest>();
         request->Request.mutable_result_id()->set_value(ResultId);
         *request->Request.mutable_result_set() = ResultSet;
         request->Request.set_result_set_id(ResultSetId);
@@ -973,7 +973,7 @@ class TGetTaskBuilder {
     TString Owner;
     TString HostName;
     TString TenantName;
-    NYq::TTenantInfo::TPtr TenantInfo;
+    NFq::TTenantInfo::TPtr TenantInfo;
 
 public:
     TGetTaskBuilder()
@@ -981,7 +981,7 @@ public:
         SetOwner(DefaultOwner());
         SetHostName("localhost");
         SetTenantName("/root/tenant");
-        SetTenantInfo(std::make_shared<NYq::TTenantInfo>());
+        SetTenantInfo(std::make_shared<NFq::TTenantInfo>());
     }
 
     static TString DefaultOwner() {
@@ -1006,15 +1006,15 @@ public:
         return *this;
     }
 
-    TGetTaskBuilder& SetTenantInfo(NYq::TTenantInfo::TPtr tenantInfo)
+    TGetTaskBuilder& SetTenantInfo(NFq::TTenantInfo::TPtr tenantInfo)
     {
         TenantInfo = tenantInfo;
         return *this;
     }
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvGetTaskRequest> Build()
+    std::unique_ptr<NFq::TEvControlPlaneStorage::TEvGetTaskRequest> Build()
     {
-        auto request = std::make_unique<NYq::TEvControlPlaneStorage::TEvGetTaskRequest>();
+        auto request = std::make_unique<NFq::TEvControlPlaneStorage::TEvGetTaskRequest>();
         request->Request.set_tenant(TenantName);
         request->Request.set_owner_id(Owner);
         request->Request.set_host(HostName);
@@ -1042,17 +1042,17 @@ class TPingTaskBuilder {
     TMaybe<TInstant> FinishedAt;
     bool ResignQuery = false;
     NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
-    TVector<NYq::TEvControlPlaneStorage::TTopicConsumer> CreatedTopicConsumers;
+    TVector<NFq::TEvControlPlaneStorage::TTopicConsumer> CreatedTopicConsumers;
     TVector<TString> DqGraphs;
     i32 DqGraphIndex = 0;
-    NYq::TTenantInfo::TPtr TenantInfo;
+    NFq::TTenantInfo::TPtr TenantInfo;
 
 public:
     TPingTaskBuilder()
     {
         SetDeadline(TInstant::Now() + TDuration::Minutes(5));
         SetTenantName("/root/tenant");
-        SetTenantInfo(std::make_shared<NYq::TTenantInfo>());
+        SetTenantInfo(std::make_shared<NFq::TTenantInfo>());
     }
 
     TPingTaskBuilder& SetTenantName(const TString& tenantName)
@@ -1165,7 +1165,7 @@ public:
 
     TPingTaskBuilder& AddCreatedConsumer(const TString& databaseId, const TString& database, const TString& topicPath, const TString& consumerName, const TString& clusterEndpoint, bool useSsl)
     {
-        CreatedTopicConsumers.emplace_back(NYq::TEvControlPlaneStorage::TTopicConsumer{databaseId, database, topicPath, consumerName, clusterEndpoint, useSsl, "", false});
+        CreatedTopicConsumers.emplace_back(NFq::TEvControlPlaneStorage::TTopicConsumer{databaseId, database, topicPath, consumerName, clusterEndpoint, useSsl, "", false});
         return *this;
     }
 
@@ -1181,13 +1181,13 @@ public:
         return *this;
     }
 
-    TPingTaskBuilder& SetTenantInfo(NYq::TTenantInfo::TPtr tenantInfo)
+    TPingTaskBuilder& SetTenantInfo(NFq::TTenantInfo::TPtr tenantInfo)
     {
         TenantInfo = tenantInfo;
         return *this;
     }
 
-std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> Build()
+std::unique_ptr<NFq::TEvControlPlaneStorage::TEvPingTaskRequest> Build()
     {
         Fq::Private::PingTaskRequest request;
         request.set_owner_id(Owner);
@@ -1245,7 +1245,7 @@ std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> Build()
             *request.mutable_finished_at() = NProtoInterop::CastToProto(*FinishedAt);
         }
 
-        auto pingRequest = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
+        auto pingRequest = std::make_unique<NFq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
         pingRequest->TenantInfo = TenantInfo;
         return pingRequest;
     }
@@ -1306,7 +1306,7 @@ public:
         return *this;
     }
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest> Build()
+    std::unique_ptr<NFq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest> Build()
     {
         Fq::Private::NodesHealthCheckRequest request;
         request.set_tenant(TenantName);
@@ -1317,7 +1317,7 @@ public:
         node.set_active_workers(ActiveWorkers);
         node.set_memory_limit(MemoryLimit);
         node.set_memory_allocated(MemoryAllocated);
-        return std::make_unique<NYq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest>(std::move(request));
+        return std::make_unique<NFq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest>(std::move(request));
     }
 };
 
@@ -1374,7 +1374,7 @@ public:
     }
 };
 
-using TCreateRateLimiterResourceBuilder = TRateLimiterResourceBuilderImpl<NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest, Fq::Private::CreateRateLimiterResourceRequest>;
-using TDeleteRateLimiterResourceBuilder = TRateLimiterResourceBuilderImpl<NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest, Fq::Private::DeleteRateLimiterResourceRequest>;
+using TCreateRateLimiterResourceBuilder = TRateLimiterResourceBuilderImpl<NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest, Fq::Private::CreateRateLimiterResourceRequest>;
+using TDeleteRateLimiterResourceBuilder = TRateLimiterResourceBuilderImpl<NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest, Fq::Private::DeleteRateLimiterResourceRequest>;
 
 }

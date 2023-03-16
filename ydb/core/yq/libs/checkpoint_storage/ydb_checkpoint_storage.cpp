@@ -11,7 +11,7 @@
 
 #include <fmt/format.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NThreading;
 using namespace NYdb;
@@ -1194,4 +1194,4 @@ TCheckpointStoragePtr NewYdbCheckpointStorage(
     return new TCheckpointStorage(config, credentialsProviderFactory, entityIdGenerator, yqSharedResources);
 }
 
-} // namespace NYq
+} // namespace NFq

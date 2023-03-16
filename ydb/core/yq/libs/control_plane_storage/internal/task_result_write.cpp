@@ -1,6 +1,6 @@
 #include "utils.h"
 
-namespace NYq {
+namespace NFq {
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev)
 {
@@ -85,4 +85,4 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
         });
 }
 
-} // NYq
+} // NFq

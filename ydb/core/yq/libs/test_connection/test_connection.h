@@ -37,7 +37,7 @@
 #define TC_LOG_AS_T(a, s) \
     LOG_YQ_TEST_CONNECTION_AS_TRACE(a, s)
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId TestConnectionActorId();
 
@@ -46,7 +46,7 @@ NActors::IActor* CreateTestConnectionActor(
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
         const NConfig::TCommonConfig& commonConfig,
         const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
-        const NYq::TYqSharedResources::TPtr& sharedResources,
+        const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -55,23 +55,23 @@ NActors::IActor* CreateTestConnectionActor(
 
 NActors::IActor* CreateTestDataStreamsConnectionActor(
         const FederatedQuery::DataStreams& ds,
-        const NYq::NConfig::TCommonConfig& commonConfig,
+        const NFq::NConfig::TCommonConfig& commonConfig,
         const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
         const NActors::TActorId& sender,
         ui64 cookie,
-        const NYq::TYqSharedResources::TPtr& sharedResources,
+        const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const ::NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TString& scope,
         const TString& user,
         const TString& token,
-        const NYq::TSigner::TPtr& signer,
+        const NFq::TSigner::TPtr& signer,
         const TTestConnectionRequestCountersPtr& counters);
 
 NActors::IActor* CreateTestObjectStorageConnectionActor(
         const FederatedQuery::ObjectStorageConnection& os,
-        const NYq::NConfig::TCommonConfig& commonConfig,
+        const NFq::NConfig::TCommonConfig& commonConfig,
         const NActors::TActorId& sender,
         ui64 cookie,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
@@ -79,7 +79,7 @@ NActors::IActor* CreateTestObjectStorageConnectionActor(
         const TString& scope,
         const TString& user,
         const TString& token,
-        const NYq::TSigner::TPtr& signer,
+        const NFq::TSigner::TPtr& signer,
         const TTestConnectionRequestCountersPtr& counters);
 
 NActors::IActor* CreateTestMonitoringConnectionActor(
@@ -91,7 +91,7 @@ NActors::IActor* CreateTestMonitoringConnectionActor(
         const TString& scope,
         const TString& user,
         const TString& token,
-        const NYq::TSigner::TPtr& signer,
+        const NFq::TSigner::TPtr& signer,
         const TTestConnectionRequestCountersPtr& counters);
 
-} // namespace NYq
+} // namespace NFq

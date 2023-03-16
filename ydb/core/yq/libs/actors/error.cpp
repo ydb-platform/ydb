@@ -2,10 +2,10 @@
 
 #include <util/system/hostname.h>
 
-namespace NYq {
+namespace NFq {
 
 TString MakeInternalError(const TString& text) {
     return TStringBuilder() << "Internal error (" << text << ", host: " << HostName() << ")";
 }
 
-} // namespace NYq
+} // namespace NFq

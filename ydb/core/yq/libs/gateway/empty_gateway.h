@@ -3,8 +3,8 @@
 
 #include <library/cpp/actors/core/actorsystem.h>
 
-namespace NYq {
+namespace NFq {
 
 TIntrusivePtr<NYql::IDqGateway> CreateEmptyGateway(NActors::TActorId runActorId);
 
-} // namespace NYq
+} // namespace NFq

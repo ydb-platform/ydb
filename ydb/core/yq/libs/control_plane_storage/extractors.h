@@ -4,7 +4,7 @@
 
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 
-namespace NYq {
+namespace NFq {
 
 template<typename T, typename A>
 TValidationQuery CreateEntityExtractor(const TString& scope,

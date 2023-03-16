@@ -18,7 +18,7 @@ namespace NFq {
 struct TEvInternalService {
     // Event ids.
     enum EEv : ui32 {
-        EvHealthCheckRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::InternalService),
+        EvHealthCheckRequest = YqEventSubspaceBegin(NFq::TYqEventSubspace::InternalService),
         EvHealthCheckResponse,
         EvGetTaskRequest,
         EvGetTaskResponse,
@@ -33,7 +33,7 @@ struct TEvInternalService {
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::InternalService), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(NFq::TYqEventSubspace::InternalService), "All events must be in their subspace");
 
     template <class TProtoRequest, ui32 TEventType>
     struct TInternalServiceRequestEvent : public NActors::TEventLocal<TInternalServiceRequestEvent<TProtoRequest, TEventType>, TEventType> {

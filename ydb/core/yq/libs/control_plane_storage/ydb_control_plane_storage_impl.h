@@ -42,7 +42,7 @@
 
 #include <type_traits>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NConfig;
@@ -284,11 +284,11 @@ protected:
     TControlPlaneStorageUtils(
         const NConfig::TControlPlaneStorageConfig& config,
         const NConfig::TCommonConfig& common)
-    : Config(std::make_shared<::NYq::TControlPlaneStorageConfig>(config, common))
+    : Config(std::make_shared<::NFq::TControlPlaneStorageConfig>(config, common))
     {
     }
 
-    explicit TControlPlaneStorageUtils(const std::shared_ptr<::NYq::TControlPlaneStorageConfig>& config)
+    explicit TControlPlaneStorageUtils(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config)
     : Config(config)
     {
     }
@@ -301,7 +301,7 @@ protected:
     template<typename T>
     NYql::TIssues ValidateConnection(T& ev, bool clickHousePasswordRequire = true)
     {
-        return ::NYq::ValidateConnection<T>(ev, Config->Proto.GetMaxRequestSize(),
+        return ::NFq::ValidateConnection<T>(ev, Config->Proto.GetMaxRequestSize(),
                                   Config->AvailableConnections, Config->Proto.GetDisableCurrentIam(),
                                   clickHousePasswordRequire);
     }
@@ -309,19 +309,19 @@ protected:
     template<typename T>
      NYql::TIssues ValidateBinding(T& ev)
     {
-        return ::NYq::ValidateBinding<T>(ev, Config->Proto.GetMaxRequestSize(), Config->AvailableBindings);
+        return ::NFq::ValidateBinding<T>(ev, Config->Proto.GetMaxRequestSize(), Config->AvailableBindings);
     }
 
     template<typename T>
     NYql::TIssues ValidateQuery(const T& ev)
     {
-        return ::NYq::ValidateQuery<T>(ev, Config->Proto.GetMaxRequestSize());
+        return ::NFq::ValidateQuery<T>(ev, Config->Proto.GetMaxRequestSize());
     }
 
     template<class P>
     NYql::TIssues ValidateEvent(const P& ev)
     {
-        return ::NYq::ValidateEvent<P>(ev, Config->Proto.GetMaxRequestSize());
+        return ::NFq::ValidateEvent<P>(ev, Config->Proto.GetMaxRequestSize());
     }
 
     static TString MakeLogPrefix(const TString& scope, const TString& user, const TString& id = "") {
@@ -349,7 +349,7 @@ protected:
     }
 
 protected:
-    std::shared_ptr<::NYq::TControlPlaneStorageConfig> Config;
+    std::shared_ptr<::NFq::TControlPlaneStorageConfig> Config;
 
     static constexpr int64_t InitialRevision = 1;
 };
@@ -494,7 +494,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     public:
         ::NMonitoring::TDynamicCounterPtr Counters;
 
-        explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const ::NYq::TControlPlaneStorageConfig& config)
+        explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const ::NFq::TControlPlaneStorageConfig& config)
             : ScopeCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
             , FinalStatusCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
             , Counters(counters)
@@ -554,7 +554,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 
     TCounters Counters;
 
-    ::NYq::TYqSharedResources::TPtr YqSharedResources;
+    ::NFq::TYqSharedResources::TPtr YqSharedResources;
 
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TString TenantName;
@@ -572,7 +572,7 @@ public:
         const NConfig::TControlPlaneStorageConfig& config,
         const NConfig::TCommonConfig& common,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const TString& tenantName)
         : TControlPlaneStorageUtils(config, common)

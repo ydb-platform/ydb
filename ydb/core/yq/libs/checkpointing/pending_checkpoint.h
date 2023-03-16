@@ -3,7 +3,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 
-namespace NYq {
+namespace NFq {
 
 struct TPendingCheckpointStats {
     const TInstant CreatedAt = TInstant::Now();
@@ -72,4 +72,4 @@ public:
     TMaybe<TCheckpointId> CheckpointId;
 };
 
-} // namespace NYq
+} // namespace NFq

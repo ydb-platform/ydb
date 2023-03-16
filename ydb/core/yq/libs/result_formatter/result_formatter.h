@@ -8,9 +8,9 @@
 
 #include <library/cpp/json/json_writer.h>
 
-namespace NYq {
+namespace NFq {
 
 void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet, bool typeNameAsString = false, bool prettyValueFormat = false);
 TString FormatSchema(const FederatedQuery::Schema& schema);
 
-} // namespace NYq
+} // namespace NFq

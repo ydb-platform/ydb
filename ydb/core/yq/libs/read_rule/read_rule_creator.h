@@ -5,7 +5,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 
-namespace NYq {
+namespace NFq {
 
 NActors::IActor* MakeReadRuleCreatorActor(
     NActors::TActorId owner,
@@ -15,4 +15,4 @@ NActors::IActor* MakeReadRuleCreatorActor(
     TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials // For each topic
 );
 
-} // namespace NYq
+} // namespace NFq

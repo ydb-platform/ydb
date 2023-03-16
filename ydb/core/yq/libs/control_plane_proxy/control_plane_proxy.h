@@ -18,10 +18,10 @@
 #define CPP_LOG_T(s) \
     LOG_YQ_CONTROL_PLANE_PROXY_TRACE(s)
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId ControlPlaneProxyActorId();
 
 NActors::IActor* CreateControlPlaneProxyActor(const NConfig::TControlPlaneProxyConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters, bool quotaManagerEnabled);
 
-} // namespace NYq
+} // namespace NFq

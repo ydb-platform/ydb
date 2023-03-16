@@ -5,7 +5,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 
-namespace NYq {
+namespace NFq {
 
 NActors::IActor* MakeReadRuleDeleterActor(
     NActors::TActorId owner,
@@ -16,4 +16,4 @@ NActors::IActor* MakeReadRuleDeleterActor(
     size_t maxRetries = 15
 );
 
-} // namespace NYq
+} // namespace NFq

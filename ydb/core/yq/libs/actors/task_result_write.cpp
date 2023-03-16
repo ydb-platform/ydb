@@ -19,7 +19,7 @@
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ",  " << stream)
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NMonitoring;
@@ -78,8 +78,8 @@ public:
         RequestId = request.request_id();
         LOG_D("Request CP::WriteTaskResult with size: " << request.ByteSize() << " bytes");
         RequestedMBytes->Collect(request.ByteSize() / 1024 / 1024);
-        Send(NYq::ControlPlaneStorageServiceActorId(),
-            new NYq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0, RequestId);
+        Send(NFq::ControlPlaneStorageServiceActorId(),
+            new NFq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0, RequestId);
     }
 
 private:
@@ -87,10 +87,10 @@ private:
         StateFunc,
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
-        hFunc(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse, HandleResponse);
+        hFunc(NFq::TEvControlPlaneStorage::TEvWriteResultDataResponse, HandleResponse);
     )
 
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) {
+    void HandleResponse(NFq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) {
         LOG_D("Got CP::WriteTaskResult Response");
         const auto& issues = ev->Get()->Issues;
         if (issues) {
@@ -134,4 +134,4 @@ IActor* CreateWriteTaskResultRequestActor(
         std::move(counters));
 }
 
-} /* NYq */
+} /* NFq */

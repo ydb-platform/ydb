@@ -28,7 +28,7 @@
 
 #include <util/system/env.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NActors;
 using namespace NKikimr;
@@ -392,10 +392,10 @@ private:
             0
         );
 
-        auto configService = CreateControlPlaneConfigActor(NYq::TYqSharedResources::TPtr{}, NKikimr::TYdbCredentialsProviderFactory(nullptr),
+        auto configService = CreateControlPlaneConfigActor(NFq::TYqSharedResources::TPtr{}, NKikimr::TYdbCredentialsProviderFactory(nullptr),
             NConfig::TControlPlaneStorageConfig{}, MakeIntrusive<::NMonitoring::TDynamicCounters>());
         runtime->AddLocalService(
-            NYq::ControlPlaneConfigActorId(),
+            NFq::ControlPlaneConfigActorId(),
             TActorSetupCmd(configService, TMailboxType::Simple, 0),
             0
         );
@@ -422,7 +422,7 @@ private:
         );
 
         runtime->AddLocalService(
-            NYq::MakeQuotaServiceActorId(runtime->GetNodeId(0)),
+            NFq::MakeQuotaServiceActorId(runtime->GetNodeId(0)),
             TActorSetupCmd(new TQuotaServiceFakeActor(), TMailboxType::Simple, 0),
             0
         );
@@ -4222,4 +4222,4 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
 
 
 
-} // namespace NYq
+} // namespace NFq

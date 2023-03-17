@@ -71,7 +71,13 @@ public:
         TString body,
         TOnResult callback,
         bool put = false,
-        IRetryPolicy</*http response code*/long>::TPtr RetryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()) = 0;
+        IRetryPolicy</*http response code*/long>::TPtr retryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()) = 0;
+
+    virtual void Delete(
+        TString url,
+        THeaders headers,
+        TOnResult callback,
+        IRetryPolicy</*http response code*/long>::TPtr retryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()) = 0;
 
     virtual void Download(
         TString url,
@@ -80,8 +86,7 @@ public:
         std::size_t sizeLimit,
         TOnResult callback,
         TString data = {},
-        IRetryPolicy</*http response code*/long>::TPtr RetryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()
-    ) = 0;
+        IRetryPolicy</*http response code*/long>::TPtr retryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()) = 0;
 
     class TCountedContent : public TContentBase {
     public:

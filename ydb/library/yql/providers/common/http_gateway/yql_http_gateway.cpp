@@ -72,15 +72,20 @@ struct TCurlInitConfig {
     ui64 BufferSize = CURL_MAX_WRITE_SIZE;
 };
 
+// some WinNT macros clash
+#if defined(DELETE)
+#undef DELETE
+#endif
+
 class TEasyCurl {
 public:
     using TPtr = std::shared_ptr<TEasyCurl>;
 
-
     enum class EMethod {
         GET,
         POST,
-        PUT
+        PUT,
+        DELETE
     };
 
     TEasyCurl(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes, TString url, IHTTPGateway::THeaders headers, EMethod method, size_t offset = 0ULL, size_t sizeLimit = 0, size_t bodySize = 0, const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
@@ -111,6 +116,9 @@ public:
                 break;
             case EMethod::PUT:
                 curl_easy_setopt(Handle, CURLOPT_UPLOAD, 1L);
+                break;
+            case EMethod::DELETE:
+                curl_easy_setopt(Handle, CURLOPT_CUSTOMREQUEST, "DELETE");
                 break;
         }
 
@@ -741,6 +749,15 @@ private:
         Wakeup(0U);
     }
 
+    void Delete(TString url, THeaders headers, TOnResult callback, IRetryPolicy<long>::TPtr retryPolicy) final {
+        Rps->Inc();
+
+        const std::unique_lock lock(Sync);
+        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::DELETE, 0, std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        Await.emplace(std::move(easy));
+        Wakeup(0U);
+    }
+
     void Download(
         TString url,
         THeaders headers,
@@ -757,7 +774,7 @@ private:
             return;
         }
         const std::unique_lock lock(Sync);
-        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url),  TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);
     }

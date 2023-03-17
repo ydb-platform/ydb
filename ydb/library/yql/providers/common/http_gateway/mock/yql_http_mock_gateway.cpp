@@ -45,6 +45,8 @@ public:
 
     void Upload(TString, THeaders, TString, TOnResult, bool, IRetryPolicy<long>::TPtr) {}
 
+    void Delete(TString, THeaders, TOnResult, IRetryPolicy<long>::TPtr) {}
+
     void Download(
             TString url,
             THeaders headers,

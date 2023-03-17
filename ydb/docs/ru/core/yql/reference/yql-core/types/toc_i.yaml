@@ -15,3 +15,5 @@ items:
   href: type_string.md
 - name: JSON
   href: json.md
+- name: YSON
+  href: yson.md

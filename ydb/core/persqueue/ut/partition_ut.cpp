@@ -202,6 +202,11 @@ protected:
                                  ui64 begin, ui64 end,
                                  TMaybe<bool> predicate = Nothing());
 
+    void SendSubDomainStatus(bool subDomainOutOfSpace = false);
+    void SendReserveBytes(const ui64 cookie, const ui32 size, const TString& ownerCookie, const ui64 messageNo, bool lastRequest = false);
+    void SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force = true);
+    void SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data);
+
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
 
@@ -458,6 +463,51 @@ void TPartitionFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus statu
     event->Record.SetStatus(status);
     event->Record.SetCookie(1); // SET_OFFSET_COOKIE
 
+    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::SendSubDomainStatus(bool subDomainOutOfSpace)
+{
+    auto event = MakeHolder<TEvPQ::TEvSubDomainStatus>();
+    event->Record.SetSubDomainOutOfSpace(subDomainOutOfSpace);
+
+    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::SendReserveBytes(const ui64 cookie, const ui32 size, const TString& ownerCookie, const ui64 messageNo, bool lastRequest)
+{
+    auto event = MakeHolder<TEvPQ::TEvReserveBytes>(cookie, size, ownerCookie, messageNo, lastRequest);
+    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data)
+{
+    TEvPQ::TEvWrite::TMsg msg;
+    msg.SourceId = "SourceId";
+    msg.SeqNo = messageNo;
+    msg.PartNo = 0;
+    msg.TotalParts = 1;
+    msg.TotalSize = data.size();
+    msg.CreateTimestamp = TMonotonic::Now().Seconds();
+    msg.ReceiveTimestamp = TMonotonic::Now().Seconds();
+    msg.DisableDeduplication = false;
+    msg.Data = data;
+    msg.UncompressedSize = data.size();
+    msg.PartitionKey = "PartitionKey";
+    msg.ExplicitHashKey = "ExplicitHashKey";
+    msg.External = false;
+    msg.IgnoreQuotaDeadline = false;
+
+    TVector<TEvPQ::TEvWrite::TMsg> msgs;
+    msgs.push_back(msg);
+
+    auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), false);
+    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force)
+{
+    auto event = MakeHolder<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force);
     Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1265,6 +1315,104 @@ Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)
                  {0, {.Partition=3, .Consumer="client-1"}}
                  }});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+}
+
+Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
+{
+    Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
+
+    CreatePartition({
+                    .Partition=1,
+                    .Begin=0, .End=10,
+                    //
+                    // partition configuration
+                    //
+                    .Config={.Version=1, .Consumers={{.Consumer="client-1", .Offset=3}}}
+                    },
+                    //
+                    // tablet configuration
+                    //
+                    {.Version=2, .Consumers={{.Consumer="client-1"}}});
+
+    SendSubDomainStatus(true);
+
+    ui64 cookie = 1;
+    ui64 messageNo = 0;
+
+    SendChangeOwner(cookie, "owner1", Ctx->Edge);
+    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(ownerEvent != nullptr);
+    auto ownerCookie = ownerEvent->Response.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+
+    TAutoPtr<IEventHandle> handle;
+    std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
+
+    // First message will be processed because used storage 0 and limit 0. That is, the limit is not exceeded.
+    SendReserveBytes(++cookie, 7, ownerCookie, messageNo++);
+
+    // Second message will not be processed because the limit is exceeded.
+    SendReserveBytes(++cookie, 13, ownerCookie, messageNo++);
+    auto reserveEvent = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+    UNIT_ASSERT(reserveEvent == nullptr);
+
+    // SudDomain quota available - second message will be processed..
+    SendSubDomainStatus(false);
+    reserveEvent = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+    UNIT_ASSERT(reserveEvent != nullptr);
+}
+
+Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
+{
+    Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
+
+    CreatePartition({
+                    .Partition=1,
+                    .Begin=0, .End=10,
+                    //
+                    // partition configuration
+                    //
+                    .Config={.Version=1, .Consumers={{.Consumer="client-1", .Offset=3}}}
+                    },
+                    //
+                    // tablet configuration
+                    //
+                    {.Version=2, .Consumers={{.Consumer="client-1"}}});
+
+    SendSubDomainStatus(true);
+
+    ui64 cookie = 1;
+    ui64 messageNo = 0;
+
+    SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
+    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(ownerEvent != nullptr);
+    auto ownerCookie = ownerEvent->Response.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+
+    TAutoPtr<IEventHandle> handle;
+    std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
+
+    TString data = "data for write";
+
+    // First message will be processed because used storage 0 and limit 0. That is, the limit is not exceeded.
+    SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data);
+    messageNo++;
+
+    SendDiskStatusResponse();
+
+    // Second message will not be processed because the limit is exceeded.
+    SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data);
+    messageNo++;
+
+    SendDiskStatusResponse();
+    auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+    UNIT_ASSERT(event == nullptr);
+
+    // SudDomain quota available - second message will be processed..
+    SendSubDomainStatus(false);
+    SendDiskStatusResponse();
+
+    event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+    UNIT_ASSERT(event != nullptr);
 }
 
 }

@@ -4858,6 +4858,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     ui32 sz = std::accumulate(ev->Get()->Msgs.begin(), ev->Get()->Msgs.end(), 0u, [](ui32 sum, const TEvPQ::TEvWrite::TMsg& msg){
                             return sum + msg.Data.size();
                         });
+
     bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
 
     if (mirroredPartition && !ev->Get()->OwnerCookie.empty()) {
@@ -5731,7 +5732,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     bool haveData = false;
     bool haveCheckDisk = false;
 
-    if (!Requests.empty() && (DiskIsFull || WaitingForSubDomainQuota(ctx))) {
+    if (!Requests.empty() && DiskIsFull) {
         CancelAllWritesOnIdle(ctx);
         AddCheckDiskRequest(request.Get(), Config.GetPartitionConfig().GetNumChannels());
         haveCheckDisk = true;

@@ -25,6 +25,8 @@ NKikimrPQ::TPQTabletConfig MakeConfig(ui64 version,
     config.SetLocalDC(true);
     config.SetYdbDatabasePath("");
 
+    config.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+
     return config;
 }
 

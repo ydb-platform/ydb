@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     kqp_compile_actor.cpp
-    kqp_compile_request.cpp
     kqp_compile_service.cpp
 )
 

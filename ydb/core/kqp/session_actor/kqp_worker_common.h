@@ -1,3 +1,5 @@
+#pragma once
+
 #include "kqp_session_actor.h"
 
 #include <ydb/core/kqp/common/kqp.h>

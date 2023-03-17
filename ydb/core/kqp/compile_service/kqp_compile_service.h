@@ -21,7 +21,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
-    NLWTrace::TOrbit orbit = {}, NWilson::TTraceId = {});
+    ui64 cookie, NLWTrace::TOrbit orbit = {}, NWilson::TTraceId = {});
 
 } // namespace NKqp
 } // namespace NKikimr

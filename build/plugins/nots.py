@@ -95,12 +95,12 @@ def on_ts_test_configure(unit):
     test_runner_handlers = _get_test_runner_handlers()
     test_runner = unit.get("TS_TEST_RUNNER")
 
+    if not test_runner:
+        raise Exception("Test runner is not specified")
+
     if test_runner not in test_runner_handlers:
         raise Exception("Test runner: {} is not available, try to use one of these: {}"
                         .format(test_runner, ", ".join(test_runner_handlers.keys())))
-
-    if not test_runner:
-        raise Exception("Test runner is not specified")
 
     test_files = ytest.get_values_list(unit, "_TS_TEST_SRCS_VALUE")
     if not test_files:
@@ -118,14 +118,16 @@ def on_ts_test_configure(unit):
 
     deps = _create_pm(unit).get_peers_from_package_json()
     test_record = {
+        # TODO: remove TS-ROOT-DIR, TS-OUT-DIR. fake values are for back-compat with ya and test_tool
+        "TS-ROOT-DIR": "fake",
+        "TS-OUT-DIR": "fake",
         "TS-TEST-FOR-PATH": unit.get("TS_TEST_FOR_PATH"),
-        "TS-ROOT-DIR": unit.get("TS_CONFIG_ROOT_DIR"),
-        "TS-OUT-DIR": unit.get("TS_CONFIG_OUT_DIR"),
         "TS-TEST-DATA-DIRS": ytest.serialize_list(data_dirs),
         "TS-TEST-DATA-DIRS-RENAME": unit.get("_TS_TEST_DATA_DIRS_RENAME_VALUE"),
         "CONFIG-PATH": config_path,
     }
 
+    _set_nodejs_root(unit)
     add_ts_test = test_runner_handlers[test_runner]
     add_ts_test(unit, test_runner, test_files, deps, test_record)
 
@@ -138,6 +140,7 @@ def _get_test_runner_handlers():
 
 
 def _add_jest_ts_test(unit, test_runner, test_files, deps, test_record):
+    # TODO: remove these 3 lines. NOTS-PLUGINS-PATH is for back-compat with ya nad test_tool
     nots_plugins_path = os.path.join(unit.get("NOTS_PLUGINS_PATH"), "jest")
     deps.append(nots_plugins_path)
     test_record["NOTS-PLUGINS-PATH"] = nots_plugins_path

@@ -10,11 +10,12 @@ description = 'List groups'
 def add_options(p):
     p.add_argument('--show-vdisk-status', action='store_true', help='Show columns with VDisk status')
     p.add_argument('--show-vdisk-usage', action='store_true', help='Show columns with VDisk usage')
+    p.add_argument('--virtual-groups-only', action='store_true', help='Show only virtual groups')
     table.TableOutput([], col_units=[]).add_options(p)
 
 
 def do(args):
-    base_config_and_storage_pools = common.fetch_base_config_and_storage_pools()
+    base_config_and_storage_pools = common.fetch_base_config_and_storage_pools(virtualGroupsOnly=args.virtual_groups_only)
 
     base_config = base_config_and_storage_pools['BaseConfig']
     group_map = common.build_group_map(base_config)
@@ -43,6 +44,11 @@ def do(args):
         'UsedSize',
         'AvailableSize',
         'TotalSize',
+        'VirtualGroupState',
+        'VirtualGroupName',
+        'BlobDepotId',
+        'ErrorReason',
+        'DecommitStatus',
     ]
     visible_columns = [
         'GroupId',
@@ -66,9 +72,35 @@ def do(args):
     if args.show_vdisk_usage or args.all_columns:
         visible_columns.extend(['Usage', 'UsedSize', 'AvailableSize', 'TotalSize'])
 
+    if args.virtual_groups_only:
+        visible_columns.extend(['VirtualGroupState', 'VirtualGroupName', 'BlobDepotId', 'ErrorReason', 'DecommitStatus'])
+
     table_output = table.TableOutput(all_columns, col_units=col_units, default_visible_columns=visible_columns)
 
     group_stat_map = defaultdict(lambda: defaultdict(int))
+
+    for group_id, group in group_map.items():
+        group_stat = group_stat_map[group_id]
+        group_stat['BoxId:PoolId'] = '[%d:%d]' % (group.BoxId, group.StoragePoolId)
+        group_stat['PoolName'] = sp_name[(group.BoxId, group.StoragePoolId)]
+        group_stat['GroupId'] = group.GroupId
+        group_stat['Generation'] = group.GroupGeneration
+        group_stat['ErasureSpecies'] = group.ErasureSpecies
+        group_stat['ExpectedStatus'] = kikimr_bsconfig.TGroupStatus.E.Name(group.ExpectedStatus)
+        group_stat['OperatingStatus'] = kikimr_bsconfig.TGroupStatus.E.Name(group.OperatingStatus)
+        group_stat['SeenOperational'] = group.SeenOperational
+
+        if group.VirtualGroupInfo:
+            group_stat['VirtualGroupState'] = kikimr_bsconfig.EVirtualGroupState.Name(group.VirtualGroupInfo.State)
+            group_stat['VirtualGroupName'] = group.VirtualGroupInfo.Name
+            group_stat['BlobDepotId'] = group.VirtualGroupInfo.BlobDepotId
+            group_stat['ErrorReason'] = group.VirtualGroupInfo.ErrorReason
+            group_stat['DecommitStatus'] = kikimr_bsconfig.TGroupDecommitStatus.E.Name(group.VirtualGroupInfo.DecommitStatus)
+
+        group_stat['UsedSize'] = 0
+        group_stat['TotalSize'] = 0
+        group_stat['AvailableSize'] = 0
+
     for vslot_id, vslot in vslot_map.items():
         group_id = vslot.GroupId
         if not common.is_dynamic_group(group_id):
@@ -82,14 +114,6 @@ def do(args):
         group = group_map[group_id]
         group_stat = group_stat_map[group_id]
 
-        group_stat['BoxId:PoolId'] = '[%d:%d]' % (group.BoxId, group.StoragePoolId)
-        group_stat['PoolName'] = sp_name[(group.BoxId, group.StoragePoolId)]
-        group_stat['GroupId'] = group.GroupId
-        group_stat['Generation'] = group.GroupGeneration
-        group_stat['ErasureSpecies'] = group.ErasureSpecies
-        group_stat['ExpectedStatus'] = kikimr_bsconfig.TGroupStatus.E.Name(group.ExpectedStatus)
-        group_stat['OperatingStatus'] = kikimr_bsconfig.TGroupStatus.E.Name(group.OperatingStatus)
-        group_stat['SeenOperational'] = group.SeenOperational
         group_stat['UsedSize'] += vslot.VDiskMetrics.AllocatedSize
         group_stat['TotalSize'] += vslot.VDiskMetrics.AllocatedSize
         group_stat['AvailableSize'] += vslot.VDiskMetrics.AvailableSize

@@ -111,6 +111,11 @@ namespace NKikimr {
                 case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
                     return true;
+
+                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    Y_VERIFY_DEBUG(false);
+                    return true;
             }
         }
 

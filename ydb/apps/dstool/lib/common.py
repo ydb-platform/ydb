@@ -297,8 +297,8 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
         assert False, 'ERROR: invalid stream fmt specified: %s' % fmt
 
 
-@query_random_host_with_retry()
-def invoke_grpc(func, *params, host=None):
+@query_random_host_with_retry(explicit_host_param='explicit_host')
+def invoke_grpc(func, *params, explicit_host=None, host=None):
     options = [
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
@@ -398,10 +398,10 @@ def invoke_wipe_request(request):
     return invoke_bsc_request(request)
 
 
-@inmemcache('base_config_and_storage_pools')
-def fetch_base_config_and_storage_pools(retrieveDevices=False):
+@inmemcache('base_config_and_storage_pools', cache_enable_param='cache')
+def fetch_base_config_and_storage_pools(retrieveDevices=False, virtualGroupsOnly=False, cache=True):
     request = kikimr_bsconfig.TConfigRequest(Rollback=True)
-    request.Command.add().QueryBaseConfig.CopyFrom(kikimr_bsconfig.TQueryBaseConfig(RetrieveDevices=retrieveDevices))
+    request.Command.add().QueryBaseConfig.CopyFrom(kikimr_bsconfig.TQueryBaseConfig(RetrieveDevices=retrieveDevices, VirtualGroupsOnly=virtualGroupsOnly))
     request.Command.add().ReadStoragePool.BoxId = (1 << 64) - 1
     response = invoke_bsc_request(request)
     assert not response.Success
@@ -411,8 +411,8 @@ def fetch_base_config_and_storage_pools(retrieveDevices=False):
     return dict(BaseConfig=response.Status[0].BaseConfig, StoragePools=response.Status[1].StoragePool)
 
 
-def fetch_base_config(retrieveDevices=False):
-    return fetch_base_config_and_storage_pools(retrieveDevices)['BaseConfig']
+def fetch_base_config(retrieveDevices=False, virtualGroupsOnly=False, cache=True):
+    return fetch_base_config_and_storage_pools(retrieveDevices, virtualGroupsOnly, cache)['BaseConfig']
 
 
 def fetch_storage_pools():
@@ -766,20 +766,18 @@ def fetch_json_info(entity, nodes=None, enums=1):
 
         def merge(x, y):
             return max([x, y], key=lambda x: x.get('GroupGeneration', 0))
-
     elif entity == 'tabletinfo':
         section, keycols = 'TabletStateInfo', ['TabletId']
+
+        def merge(x, y):
+            return max([x, y], key=lambda x: x.get('Generation', 0))
     elif entity == 'bsgroupinfo':
         section, keycols = 'BSGroupStateInfo', ['GroupID']
 
         def merge(x, y):
-            if x.get('GroupGeneration', 0) > y.get('GroupGeneration', 0):
-                return x
-            if y.get('GroupGeneration', 0) > x.get('GroupGeneration', 0):
-                return y
-            if x.get('VDiskIds', []):
-                return x
-            return y
+            return x if x.get('GroupGeneration', 0) > y.get('GroupGeneration', 0) else \
+                y if y.get('GroupGeneration', 0) > x.get('GroupGeneration', 0) else \
+                x if x.get('VDiskIds', []) else y
     else:
         assert False
     res = {}

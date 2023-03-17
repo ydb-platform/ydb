@@ -428,11 +428,11 @@ void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::
         const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);
         vDisk->SetStoragePoolName(info.Name);
 
-        auto vslotFinder = [this](const TVSlotId& vslotId, auto&& callback) {
+        const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
             if (const TVSlotInfo *vslot = FindVSlot(vslotId)) {
                 callback(*vslot);
             }
-        };
+        }};
 
         SerializeDonors(vDisk, vslot, *group, vslotFinder);
     } else {

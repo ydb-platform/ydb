@@ -23,12 +23,15 @@ PY_SRCS(
 
     dstool_cmd_group_add.py
     dstool_cmd_group_check.py
+    dstool_cmd_group_decommit.py
     dstool_cmd_group_list.py
     dstool_cmd_group_show_blob_info.py
     dstool_cmd_group_show_usage_by_tablets.py
     dstool_cmd_group_state.py
     dstool_cmd_group_take_snapshot.py
+    dstool_cmd_group_virtual_create.py
 
+    dstool_cmd_pool_create_virtual.py
     dstool_cmd_pool_list.py
 
     dstool_cmd_box_list.py

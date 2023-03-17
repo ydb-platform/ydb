@@ -23,6 +23,15 @@ enum EVirtualGroupState {
     WORKING = 2; // operational
 }
 
+message TGroupDecommitStatus {
+    enum E {
+        NONE = 0; // no decomission
+        PENDING = 1; // decommission machinery is starting
+        IN_PROGRESS = 2; // decomission underway
+        DONE = 3; // group decomission complete
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TYPICAL HOST CONFIGURATIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -253,6 +262,7 @@ message TProposeStoragePools {
 
 message TQueryBaseConfig {
     bool RetrieveDevices = 1;
+    bool VirtualGroupsOnly = 2;
 }
 
 message TReadSettings {
@@ -617,6 +627,13 @@ message TBaseConfig {
         repeated TDonorDisk Donors = 11;
         bool Ready = 12; // is disk READY in terms of BSC (stable READY status for some period of time)
     }
+    message TVirtualGroupInfo {
+        EVirtualGroupState State = 1;
+        string Name = 2;
+        uint64 BlobDepotId = 3;
+        string ErrorReason = 4;
+        TGroupDecommitStatus.E DecommitStatus = 5;
+    }
     message TGroup {
         uint32 GroupId = 1;
         uint32 GroupGeneration = 2;
@@ -627,6 +644,7 @@ message TBaseConfig {
         bool SeenOperational = 7;
         TGroupStatus.E OperatingStatus = 8; // group status based on latest VDisk reports only
         TGroupStatus.E ExpectedStatus = 9; // status based not only on operational report, but on PDisk status and plans too
+        TVirtualGroupInfo VirtualGroupInfo = 10;
     }
     message TNode {
         uint32 NodeId = 1;

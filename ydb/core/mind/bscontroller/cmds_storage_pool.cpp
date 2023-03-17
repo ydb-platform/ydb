@@ -473,75 +473,100 @@ namespace NKikimr::NBsController {
             });
         }
 
+        const bool virtualGroupsOnly = cmd.GetVirtualGroupsOnly();
+
+        THashSet<TGroupId> groupFilter;
+        THashSet<TVSlotId> vslotFilter;
+        THashSet<TPDiskId> pdiskFilter;
+
+        if (virtualGroupsOnly) {
+            Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
+                if (groupInfo.VirtualGroupState || groupInfo.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
+                    groupFilter.insert(groupId);
+                }
+            });
+            VSlots.ForEach([&](TVSlotId vslotId, const TVSlotInfo& vslotInfo) {
+                if (vslotInfo.Group && groupFilter.contains(vslotInfo.GroupId)) {
+                    vslotFilter.insert(vslotId);
+                    pdiskFilter.insert(vslotId.ComprisingPDiskId());
+                }
+            });
+        }
+
         PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
-            Serialize(pb->AddPDisk(), pdiskId, pdiskInfo);
+            if (!virtualGroupsOnly || pdiskFilter.contains(pdiskId)) {
+                Serialize(pb->AddPDisk(), pdiskId, pdiskInfo);
+            }
         });
-        auto vslotFinder = [this](const TVSlotId& vslotId, const std::function<void(const TVSlotInfo&)>& callback) {
+        const TVSlotFinder vslotFinder{[this](const TVSlotId& vslotId, auto&& callback) {
             if (const TVSlotInfo *vslot = VSlots.Find(vslotId)) {
                 callback(*vslot);
             }
-        };
-        VSlots.ForEach([pb, &vslotFinder](const TVSlotId& /*vslotId*/, const TVSlotInfo& vslotInfo) {
-            if (vslotInfo.Group) {
+        }};
+        VSlots.ForEach([&](TVSlotId vslotId, const TVSlotInfo& vslotInfo) {
+            if (vslotInfo.Group && (!virtualGroupsOnly || vslotFilter.contains(vslotId))) {
                 Serialize(pb->AddVSlot(), vslotInfo, vslotFinder);
             }
         });
-        Groups.ForEach([pb](TGroupId /*groupId*/, const TGroupInfo& groupInfo) {
-            Serialize(pb->AddGroup(), groupInfo);
+        Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
+            if (!virtualGroupsOnly || groupFilter.contains(groupId)) {
+               Serialize(pb->AddGroup(), groupInfo);
+            }
         });
 
-        // apply static group
-        for (const auto& [pdiskId, pdisk] : StaticPDisks) {
-            if (PDisks.Find(pdiskId)) {
-                continue; // this pdisk was already reported
+        if (!virtualGroupsOnly) {
+            // apply static group
+            for (const auto& [pdiskId, pdisk] : StaticPDisks) {
+                if (PDisks.Find(pdiskId)) {
+                    continue; // this pdisk was already reported
+                }
+                auto *x = pb->AddPDisk();
+                x->SetNodeId(pdisk.NodeId);
+                x->SetPDiskId(pdisk.PDiskId);
+                x->SetPath(pdisk.Path);
+                x->SetType(PDiskTypeToPDiskType(pdisk.Category.Type()));
+                x->SetKind(pdisk.Category.Kind());
+                if (pdisk.PDiskConfig) {
+                    bool success = x->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig);
+                    Y_VERIFY(success);
+                }
+                x->SetGuid(pdisk.Guid);
+                x->SetNumStaticSlots(pdisk.StaticSlotUsage);
+                x->SetDriveStatus(NKikimrBlobStorage::EDriveStatus::ACTIVE);
+                x->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
+                x->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE);
+                if (pdisk.PDiskMetrics) {
+                    x->MutablePDiskMetrics()->CopyFrom(*pdisk.PDiskMetrics);
+                    x->MutablePDiskMetrics()->ClearPDiskId();
+                }
             }
-            auto *x = pb->AddPDisk();
-            x->SetNodeId(pdisk.NodeId);
-            x->SetPDiskId(pdisk.PDiskId);
-            x->SetPath(pdisk.Path);
-            x->SetType(PDiskTypeToPDiskType(pdisk.Category.Type()));
-            x->SetKind(pdisk.Category.Kind());
-            if (pdisk.PDiskConfig) {
-                bool success = x->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig);
-                Y_VERIFY(success);
+            for (const auto& [vslotId, vslot] : StaticVSlots) {
+                auto *x = pb->AddVSlot();
+                vslotId.Serialize(x->MutableVSlotId());
+                x->SetGroupId(vslot.VDiskId.GroupID);
+                x->SetGroupGeneration(vslot.VDiskId.GroupGeneration);
+                x->SetFailRealmIdx(vslot.VDiskId.FailRealm);
+                x->SetFailDomainIdx(vslot.VDiskId.FailDomain);
+                x->SetVDiskIdx(vslot.VDiskId.VDisk);
+                if (vslot.VDiskMetrics) {
+                    x->SetAllocatedSize(vslot.VDiskMetrics->GetAllocatedSize());
+                    x->MutableVDiskMetrics()->CopyFrom(*vslot.VDiskMetrics);
+                    x->MutableVDiskMetrics()->ClearVDiskId();
+                }
+                x->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.VDiskStatus));
             }
-            x->SetGuid(pdisk.Guid);
-            x->SetNumStaticSlots(pdisk.StaticSlotUsage);
-            x->SetDriveStatus(NKikimrBlobStorage::EDriveStatus::ACTIVE);
-            x->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
-            x->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE);
-            if (pdisk.PDiskMetrics) {
-                x->MutablePDiskMetrics()->CopyFrom(*pdisk.PDiskMetrics);
-                x->MutablePDiskMetrics()->ClearPDiskId();
-            }
-        }
-        for (const auto& [vslotId, vslot] : StaticVSlots) {
-            auto *x = pb->AddVSlot();
-            vslotId.Serialize(x->MutableVSlotId());
-            x->SetGroupId(vslot.VDiskId.GroupID);
-            x->SetGroupGeneration(vslot.VDiskId.GroupGeneration);
-            x->SetFailRealmIdx(vslot.VDiskId.FailRealm);
-            x->SetFailDomainIdx(vslot.VDiskId.FailDomain);
-            x->SetVDiskIdx(vslot.VDiskId.VDisk);
-            if (vslot.VDiskMetrics) {
-                x->SetAllocatedSize(vslot.VDiskMetrics->GetAllocatedSize());
-                x->MutableVDiskMetrics()->CopyFrom(*vslot.VDiskMetrics);
-                x->MutableVDiskMetrics()->ClearVDiskId();
-            }
-            x->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.VDiskStatus));
-        }
-
-        if (const auto& ss = AppData()->StaticBlobStorageConfig) {
-            for (const auto& group : ss->GetGroups()) {
-                auto *x = pb->AddGroup();
-                x->SetGroupId(group.GetGroupID());
-                x->SetGroupGeneration(group.GetGroupGeneration());
-                x->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.GetErasureSpecies()));
-                for (const auto& realm : group.GetRings()) {
-                    for (const auto& domain : realm.GetFailDomains()) {
-                        for (const auto& location : domain.GetVDiskLocations()) {
-                            const TVSlotId vslotId(location.GetNodeID(), location.GetPDiskID(), location.GetVDiskSlotID());
-                            vslotId.Serialize(x->AddVSlotId());
+            if (const auto& ss = AppData()->StaticBlobStorageConfig) {
+                for (const auto& group : ss->GetGroups()) {
+                    auto *x = pb->AddGroup();
+                    x->SetGroupId(group.GetGroupID());
+                    x->SetGroupGeneration(group.GetGroupGeneration());
+                    x->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.GetErasureSpecies()));
+                    for (const auto& realm : group.GetRings()) {
+                        for (const auto& domain : realm.GetFailDomains()) {
+                            for (const auto& location : domain.GetVDiskLocations()) {
+                                const TVSlotId vslotId(location.GetNodeID(), location.GetPDiskID(), location.GetVDiskSlotID());
+                                vslotId.Serialize(x->AddVSlotId());
+                            }
                         }
                     }
                 }

@@ -2140,7 +2140,7 @@ public:
     void OnWardenDisconnected(TNodeId nodeId);
     void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo);
 
-    using TVSlotFinder = std::function<void(const TVSlotId&, const std::function<void(const TVSlotInfo&)>&)>;
+    using TVSlotFinder = std::function<void(TVSlotId, const std::function<void(const TVSlotInfo&)>&)>;
 
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);

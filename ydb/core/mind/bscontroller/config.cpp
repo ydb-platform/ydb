@@ -156,11 +156,11 @@ namespace NKikimr::NBsController {
                 if (const TGroupInfo *group = State.Groups.Find(vslotInfo.GroupId); group && mood != TMood::Delete) {
                     item.SetStoragePoolName(State.StoragePools.Get().at(group->StoragePoolId).Name);
 
-                    auto vslotFinder = [this](const TVSlotId& vslotId, auto&& callback) {
+                    const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
                         if (const TVSlotInfo *vslot = State.VSlots.Find(vslotId)) {
                             callback(*vslot);
                         }
-                    };
+                    }};
 
                     SerializeDonors(&item, vslotInfo, *group, vslotFinder);
                 } else {
@@ -912,6 +912,23 @@ namespace NKikimr::NBsController {
             const auto& status = group.Status;
             pb->SetOperatingStatus(status.OperatingStatus);
             pb->SetExpectedStatus(status.ExpectedStatus);
+
+            if (group.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE || group.VirtualGroupState) {
+                auto *vgi = pb->MutableVirtualGroupInfo();
+                if (group.VirtualGroupState) {
+                    vgi->SetState(*group.VirtualGroupState);
+                }
+                if (group.VirtualGroupName) {
+                    vgi->SetName(*group.VirtualGroupName);
+                }
+                if (group.BlobDepotId) {
+                    vgi->SetBlobDepotId(*group.BlobDepotId);
+                }
+                if (group.ErrorReason) {
+                    vgi->SetErrorReason(*group.ErrorReason);
+                }
+                vgi->SetDecommitStatus(group.DecommitStatus);
+            }
         }
 
         void TBlobStorageController::SerializeDonors(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk *vdisk,

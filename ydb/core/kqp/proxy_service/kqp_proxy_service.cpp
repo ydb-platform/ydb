@@ -225,35 +225,48 @@ public:
         PublishResourceUsage();
         AskSelfNodeInfo();
         SendWhiteboardRequest();
-        ScheduleIdleSessionCheck();
+        ScheduleIdleSessionCheck(TDuration::Seconds(2));
     }
 
     TDuration GetSessionIdleDuration() const {
         return TDuration::Seconds(TableServiceConfig.GetSessionIdleDurationSeconds());
     }
 
-    void ScheduleIdleSessionCheck() {
+    void ScheduleIdleSessionCheck(const TDuration& scheduleInterval) {
         if (!ShutdownState) {
-            const TDuration IdleSessionsCheckInterval = TDuration::Seconds(2);
-            Schedule(IdleSessionsCheckInterval, new TEvPrivate::TEvCloseIdleSessions());
+            Schedule(scheduleInterval, new TEvPrivate::TEvCloseIdleSessions());
         }
     }
 
     void Handle(TEvPrivate::TEvCloseIdleSessions::TPtr&) {
-        CheckIdleSessions();
-        ScheduleIdleSessionCheck();
+        bool hasMoreToShutdown = CheckIdleSessions();
+        if (hasMoreToShutdown) {
+            // we already performed several session shutdowns, but there are many sessions to
+            // be shutdowned. so we need to speadup the process.
+            static const TDuration quickIdleCheckInterval = TDuration::MilliSeconds(10);
+            ScheduleIdleSessionCheck(quickIdleCheckInterval);
+        } else {
+            static const TDuration defaultIdleCheckInterval = TDuration::Seconds(2);
+            ScheduleIdleSessionCheck(defaultIdleCheckInterval);
+        }
     }
 
-    void CheckIdleSessions(const ui32 maxSessionsToClose = 10) {
+    bool CheckIdleSessions(const ui32 maxSessionsToClose = 10) {
         ui32 closedIdleSessions = 0;
         const NActors::TMonotonic now = TActivationContext::Monotonic();
         while(true) {
             const TKqpSessionInfo* sessionInfo = LocalSessions->GetIdleSession(now);
-            if (sessionInfo == nullptr || closedIdleSessions > maxSessionsToClose)
-                break;
+            if (sessionInfo == nullptr)
+                return false;
 
+            Counters->ReportSessionActorClosedIdle(sessionInfo->DbCounters);
+            LocalSessions->StopIdleCheck(sessionInfo);
             SendSessionClose(sessionInfo);
             ++closedIdleSessions;
+
+            if (closedIdleSessions > maxSessionsToClose) {
+                return true;
+            }
         }
     }
 
@@ -488,6 +501,9 @@ public:
         }
 
         auto responseEv = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
+        // If we create many sessions per second, it might be ok to check and close
+        // several idle sessions
+        CheckIdleSessions(3);
 
         TProcessResult<TKqpSessionInfo*> result;
         TKqpDbCountersPtr dbCounters;

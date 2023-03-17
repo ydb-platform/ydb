@@ -230,9 +230,11 @@ namespace NKikimr::NStorage {
 
                 PoisonLocalVDisk(value);
                 vdisks << (std::exchange(first, false) ? "" : ", ") << value.GetVDiskId().ToString();
-                if (value.SlayInFlight) {
-                    Send(MakeBlobStoragePDiskID(key.NodeId, key.PDiskId), new NPDisk::TEvSlay(value.GetVDiskId(),
-                                NextLocalPDiskInitOwnerRound(), key.PDiskId, key.VDiskSlotId));
+                if (const auto it = SlayInFlight.find(key); it != SlayInFlight.end()) {
+                    const ui64 round = NextLocalPDiskInitOwnerRound();
+                    Send(MakeBlobStoragePDiskID(key.NodeId, key.PDiskId), new NPDisk::TEvSlay(value.GetVDiskId(), round,
+                        key.PDiskId, key.VDiskSlotId));
+                    it->second = round;
                 } else {
                     StartLocalVDiskActor(value, TDuration::Zero());
                 }
@@ -245,7 +247,7 @@ namespace NKikimr::NStorage {
         } else {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;
-                if (!value.RuntimeData && !value.SlayInFlight) {
+                if (!value.RuntimeData && !SlayInFlight.contains(key)) {
                     StartLocalVDiskActor(value, TDuration::Zero());
                 }
             }

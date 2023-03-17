@@ -1466,6 +1466,7 @@ taxi/outsource
 taxi/pmo
 taxi/protocol-proxy
 taxi/rate-limiter-agent2
+taxi/signalq
 taxi/superweb
 taxi/superweb-qa
 taxi/suptech_robots

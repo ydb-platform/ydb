@@ -196,6 +196,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
         it = outputChannel.InFlight.erase(it);
     }
 
+    outputChannel.PeerState.PrevPeerFreeSpace = outputChannel.PeerState.PeerFreeSpace;
     outputChannel.PeerState.PeerFreeSpace = record.GetFreeSpace();
 
     LOG_T("PeerState, freeSpace: " << outputChannel.PeerState.PeerFreeSpace

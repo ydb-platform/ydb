@@ -16,6 +16,7 @@ public:
         ui64 InFlightBytes = 0;
         ui64 InFlightRows = 0;
         ui32 InFlightCount = 0;
+        i64 PrevPeerFreeSpace = 0;
     };
 
     struct ICallbacks {

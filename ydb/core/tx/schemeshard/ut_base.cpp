@@ -1777,7 +1777,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::IndexKeys({"value1"})});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/Table1/UserDefinedIndexByValue1/indexImplTable", true, true),
                            {NLs::Finished,
-                            NLs::MaxPartitionsCountEqual(5000),
+                            NLs::NoMaxPartitionsCount,
                             NLs::SizeToSplitEqual(2<<30)}); // 2G
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/Table1/UserDefinedIndexByValues"),
                            {NLs::Finished,
@@ -10273,7 +10273,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PathVersionEqual(4),
                             NLs::PartitionCount(1),
                             NLs::MinPartitionsCountEqual(1),
-                            NLs::MaxPartitionsCountEqual(5000)});
+                            NLs::NoMaxPartitionsCount
+                            });
 
 
         TestSplitTable(runtime, ++txId, "/MyRoot/table/indexByValue/indexImplTable", R"(
@@ -10295,7 +10296,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PathVersionEqual(5),
                             NLs::PartitionCount(3),
                             NLs::MinPartitionsCountEqual(1),
-                            NLs::MaxPartitionsCountEqual(5000)});
+                            NLs::NoMaxPartitionsCount
+                            });
 
         // request without token
         TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
@@ -10398,7 +10400,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathExist,
                             NLs::PartitionCount(1),
                             NLs::MinPartitionsCountEqual(1),
-                            NLs::MaxPartitionsCountEqual(5000),
+                            NLs::NoMaxPartitionsCount,
                             NLs::SizeToSplitEqual(100500)});
     }
 

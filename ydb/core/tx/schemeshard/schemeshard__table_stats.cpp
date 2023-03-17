@@ -331,7 +331,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         return false;
     }
-
     if (rec.GetShardState() != NKikimrTxDataShard::Ready) {
         return true;
     }
@@ -423,7 +422,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
                                                      << " cpuUsage " << tabletMetrics.GetCPU()/10000.0);
 
     TStatsId statsId(pathId, datashardId);
-    
+
     switch(TableStatsQueue.Add(statsId, ev.Release())) {
         case READY:
             ExecuteTableStatsBatch(ctx);

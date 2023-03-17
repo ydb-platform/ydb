@@ -414,7 +414,6 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     } else {
         result.MutablePartitioningPolicy()->SetSizeToSplit(2_GB);
         result.MutablePartitioningPolicy()->SetMinPartitionsCount(1);
-        result.MutablePartitioningPolicy()->SetMaxPartitionsCount(5000);
     }
     if (baseTablePartitionConfig.HasPipelineConfig()) {
         result.MutablePipelineConfig()->CopyFrom(baseTablePartitionConfig.GetPipelineConfig());

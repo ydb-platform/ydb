@@ -97,7 +97,11 @@ namespace NLs {
     TCheckFunc FollowerGroups(const TVector<NKikimrHive::TFollowerGroup>& followerGroup = TVector<NKikimrHive::TFollowerGroup>{});
     TCheckFunc SizeToSplitEqual(ui32 size);
     TCheckFunc MinPartitionsCountEqual(ui32 count);
+    void HasMinPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void NoMinPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc MaxPartitionsCountEqual(ui32 count);
+    void HasMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void NoMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitioningByLoadStatus(bool status);
     TCheckFunc ColumnFamiliesCount(ui32 size);
     TCheckFunc ColumnFamiliesHas(ui32 familyId);

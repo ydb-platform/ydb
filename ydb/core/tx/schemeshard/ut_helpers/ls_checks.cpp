@@ -893,10 +893,26 @@ TCheckFunc MinPartitionsCountEqual(ui32 count) {
     };
 }
 
+void HasMinPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT(record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().HasMinPartitionsCount());
+}
+
+void NoMinPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT(!record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().HasMinPartitionsCount());
+}
+
 TCheckFunc MaxPartitionsCountEqual(ui32 count) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().GetMaxPartitionsCount(), count);
     };
+}
+
+void HasMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT(record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().HasMaxPartitionsCount());
+}
+
+void NoMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT(!record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().HasMaxPartitionsCount());
 }
 
 TCheckFunc PartitioningByLoadStatus(bool status) {

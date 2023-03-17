@@ -320,7 +320,9 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
         /// @note not indexed data could contain data out of indexed granules
         Y_VERIFY(!TsGranules.empty());
         auto mergedBatch = MergeNotIndexed(std::move(NotIndexed)); // merged has no dups
-        OutNotIndexed = SliceIntoGranules(mergedBatch, TsGranules, IndexInfo());
+        if (mergedBatch) {
+            OutNotIndexed = SliceIntoGranules(mergedBatch, TsGranules, IndexInfo());
+        }
         NotIndexed.clear();
         ReadyNotIndexed = 0;
     }

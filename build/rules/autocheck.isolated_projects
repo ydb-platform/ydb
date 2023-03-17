@@ -90,4 +90,4 @@ mba/admin/oracle_sql/post_reload_sqls/
 haas/m3/eng-configs
 mba/oebs
 mba/infra/testing
-mba/isolated_projects
+mba/fin/isolated_projects

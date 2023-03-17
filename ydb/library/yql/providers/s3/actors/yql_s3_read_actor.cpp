@@ -1855,7 +1855,11 @@ public:
         if (Issues) {
             RetryStuff->NextRetryDelay = RetryStuff->GetRetryState()->GetNextRetryDelay(HttpResponseCode >= 300 ? HttpResponseCode : 0);
             LOG_CORO_D("TEvReadFinished with Issues (try to retry): " << Issues.ToOneLineString());
-            if (!RetryStuff->NextRetryDelay) {
+            if (RetryStuff->NextRetryDelay) {
+                // inplace retry: report problem to TransientIssues and repeat
+                Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, Issues, NYql::NDqProto::StatusIds::UNSPECIFIED));
+            } else {
+                // can't retry here: fail download
                 RetryStuff->RetryState = nullptr;
                 InputFinished = true;
                 LOG_CORO_W("ReadError: " << Issues.ToOneLineString() << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());

@@ -423,6 +423,7 @@ public:
         QueryState->TopicOperations.FillSchemeCacheNavigate(*navigate,
                                                             std::move(consumer));
         navigate->UserToken = QueryState->UserToken;
+        navigate->Cookie = QueryState->QueryId;
 
         Become(&TKqpSessionActor::TopicOpsState);
         ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
@@ -441,6 +442,11 @@ public:
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto* response = ev->Get();
+        YQL_ENSURE(response->Request);
+        // outdated response from scheme cache.
+        // ignoring that.
+        if (response->Request->Cookie < QueryId)
+            return;
 
         // table versions are not the same. need the query recompilation.
         if (!QueryState->EnsureTableVersions(*response)) {
@@ -1911,6 +1917,11 @@ private:
     }
 
     void HandleTopicOps(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        YQL_ENSURE(ev->Get()->Request);
+        if (ev->Get()->Request->Cookie < QueryId) {
+            return;
+        }
+
         NSchemeCache::TSchemeCacheNavigate* response = ev->Get()->Request.Get();
 
         Ydb::StatusIds_StatusCode status;

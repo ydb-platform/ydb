@@ -83,6 +83,8 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
         navigate->UserToken = UserToken;
     }
 
+    navigate->Cookie = QueryId;
+
     for (const auto& [tableId, _] : TableVersions) {
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.TableId = tableId;

@@ -282,6 +282,7 @@ struct TSchemeCacheNavigate {
     TString DatabaseName;
     ui64 DomainOwnerId = 0;
     ui64 ErrorCount = 0;
+    ui64 Cookie = 0;
     const ui64 Instant; // deprecated, used by pq
 
     TSchemeCacheNavigate()

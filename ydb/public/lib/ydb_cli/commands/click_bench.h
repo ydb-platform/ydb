@@ -34,7 +34,8 @@ protected:
     TVector<TString> QuerySettings;
     TString ExternalQueries;
     TString ExternalQueriesFile;
-
+    TString ExternalQueriesDir;
+    TString ExternalVariablesString;
 public:
     TClickBenchCommandRun();
     void Config(TConfig& config);
@@ -43,7 +44,7 @@ public:
     bool NeedRun(const ui32 queryIdx) const;
     bool RunBench(TConfig& config);
 
-    TString GetQueries(const TString& fullTablePath) const;
+    TVector<TString> GetQueries(const TString& fullTablePath) const;
 
     TString OutFilePath;
     ui32 IterationsCount;

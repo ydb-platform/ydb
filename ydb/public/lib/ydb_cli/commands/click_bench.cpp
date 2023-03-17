@@ -4,6 +4,7 @@
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/folder/pathsplit.h>
+#include <util/folder/path.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/http/simple/http_client.h>
@@ -158,19 +159,78 @@ static NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 qu
 
 }
 
-TString TClickBenchCommandRun::GetQueries(const TString& fullTablePath) const {
+namespace {
 
-    TString queries;
-    if (ExternalQueries) {
-        queries = ExternalQueries;
-    } else if (ExternalQueriesFile) {
-        TFileInput fInput(ExternalQueriesFile);
-        queries = fInput.ReadAll();
-    } else {
-        queries = NResource::Find("click_bench_queries.sql");
+class TExternalVariable {
+private:
+    TString Id;
+    TString Value;
+public:
+    TExternalVariable() = default;
+
+    TExternalVariable(const TString& id, const TString& value)
+        : Id(id)
+        , Value(value) {
+
     }
 
-    SubstGlobal(queries, "{table}", "`" + fullTablePath + "`");
+    const TString& GetId() const {
+        return Id;
+    }
+
+    const TString& GetValue() const {
+        return Value;
+    }
+
+    bool DeserializeFromString(const TString& vStr) {
+        TStringBuf sb(vStr.data(), vStr.size());
+        TStringBuf l, r;
+        if (!sb.TrySplit('=', l, r)) {
+            Cerr << "Incorrect variables format: have to be a=b, but really have: " << sb << Endl;
+            return false;
+        }
+        Id = l;
+        Value = r;
+        return true;
+    }
+};
+
+}
+
+TVector<TString> TClickBenchCommandRun::GetQueries(const TString& fullTablePath) const {
+    TVector<TString> queries;
+    if (ExternalQueries) {
+        queries = StringSplitter(ExternalQueries).Split(';').ToList<TString>();
+    } else if (ExternalQueriesFile) {
+        TFileInput fInput(ExternalQueriesFile);
+        queries = StringSplitter(fInput.ReadAll()).Split(';').ToList<TString>();
+    } else if (ExternalQueriesDir) {
+        TFsPath queriesDir(ExternalQueriesDir);
+        TVector<TString> queriesList;
+        queriesDir.ListNames(queriesList);
+        std::sort(queriesList.begin(), queriesList.end());
+        for (auto&& i : queriesList) {
+            const TString expectedFileName = "q" + ::ToString(queries.size()) + ".sql";
+            Y_VERIFY(i == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [0, N - 1], where N is requests count");
+            TFileInput fInput(ExternalQueriesDir + "/" + expectedFileName);
+            queries.emplace_back(fInput.ReadAll());
+        }
+    } else {
+        queries = StringSplitter(NResource::Find("click_bench_queries.sql")).Split(';').ToList<TString>();
+    }
+    auto strVariables = StringSplitter(ExternalVariablesString).Split(';').SkipEmpty().ToList<TString>();
+    TVector<TExternalVariable> vars;
+    for (auto&& i : strVariables) {
+        TExternalVariable v;
+        Y_VERIFY(v.DeserializeFromString(i));
+        vars.emplace_back(v);
+    }
+    vars.emplace_back("table", "`" + fullTablePath + "`");
+    for (auto&& i : queries) {
+        for (auto&& v : vars) {
+            SubstGlobal(i, "{" + v.GetId() + "}", v.GetValue());
+        }
+    }
     return queries;
 }
 
@@ -189,11 +249,10 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
 
     NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
     const bool collectJsonSensors = !JsonReportFileName.empty();
-    const TString queries = GetQueries(FullTablePath(config.Database, Table));
+    const TVector<TString> qtokens = GetQueries(FullTablePath(config.Database, Table));
     bool allOkay = true;
 
     std::map<ui32, TTestInfo> QueryRuns;
-    const TVector<TString> qtokens = StringSplitter(queries).Split(';').ToList<TString>();
     for (ui32 queryN = 0; queryN < qtokens.size(); ++queryN) {
         if (!NeedRun(queryN)) {
             continue;
@@ -447,6 +506,13 @@ void TClickBenchCommandRun::Config(TConfig& config) {
     config.Opts->AddLongOption("ext-queries-file", "File with external queries. Separated by ';'")
         .DefaultValue("")
         .StoreResult(&ExternalQueriesFile);
+    config.Opts->AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")
+        .DefaultValue("")
+        .StoreResult(&ExternalQueriesDir);
+    TString externalVariables;
+    config.Opts->AddLongOption("ext-query-variables", "v1_id=v1_value;v2_id=v2_value;...; applied for queries {v1_id} -> v1_value")
+        .DefaultValue("")
+        .StoreResult(&ExternalVariablesString);
     config.Opts->AddLongOption("table", "Table to work with")
         .Optional()
         .RequiredArgument("NAME")

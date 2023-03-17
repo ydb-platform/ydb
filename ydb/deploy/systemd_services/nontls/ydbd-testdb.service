@@ -1,0 +1,25 @@
+[Unit]
+Description=YDB testdb dynamic node
+After=network-online.target rc-local.service
+Wants=network-online.target
+StartLimitInterval=10
+StartLimitBurst=15
+
+[Service]
+Restart=always
+RestartSec=1
+User=ydb
+PermissionsStartOnly=true
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=ydbd
+SyslogFacility=daemon
+SyslogLevel=err
+Environment=LD_LIBRARY_PATH=/opt/ydb/lib
+ExecStart=/opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker <ydb1>:2135 --node-broker <ydb2>:2135 --node-broker <ydb3>:2135
+LimitNOFILE=65536
+LimitCORE=0
+LimitMEMLOCK=32212254720
+
+[Install]
+WantedBy=multi-user.target

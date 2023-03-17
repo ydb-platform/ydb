@@ -20,6 +20,11 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/cmake)
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR})
 list(APPEND CMAKE_CTEST_ARGUMENTS "--output-on-failure")
 enable_testing()
+
+# Disable 'empty CUDA_ARCHITECTURES not allowed' warning
+# Can't set it in cuda.cmake because of CMake policy subdirectory stack rules
+cmake_policy(SET CMP0104 OLD)
+
 include(cmake/antlr.cmake)
 include(cmake/archive.cmake)
 include(cmake/bison.cmake)
@@ -45,11 +50,11 @@ else()
   )
 endif()
 
-if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT HAVE_CUDA)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
   include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
   include(CMakeLists.linux-aarch64.txt)
-elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
   include(CMakeLists.darwin-x86_64.txt)
 elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
   include(CMakeLists.windows-x86_64.txt)

@@ -135,11 +135,6 @@ namespace NActors {
             }
         }
 
-        ~THandshakeActor() {
-            // BrokerLeaseHolder sends messages in destuctor, so it must be deleted before other actor's components
-            BrokerLeaseHolder.reset();
-        }
-
         void UpdatePrefix() {
             SetPrefix(Sprintf("Handshake %s [node %" PRIu32 "]", SelfActorId.ToString().data(), PeerNodeId));
         }
@@ -217,7 +212,6 @@ namespace NActors {
             }
 
             Socket.Reset();
-            BrokerLeaseHolder.reset();
         }
 
         void EstablishSecureConnection() {

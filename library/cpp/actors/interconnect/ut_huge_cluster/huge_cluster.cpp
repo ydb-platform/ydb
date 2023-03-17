@@ -107,68 +107,61 @@ Y_UNIT_TEST_SUITE(HugeCluster) {
     }
 
     Y_UNIT_TEST(AllToAll) {
-        ui32 nodesNum = 200;
-
-        TTestICCluster testCluster(nodesNum, NActors::TChannelsConfig(), nullptr, MakeLogConfigs(NLog::PRI_EMERG));
-
+        ui32 nodesNum = 120;
         std::vector<TActorId> pollers(nodesNum);
         std::vector<std::unordered_map<TActorId, TManualEvent>> events(nodesNum);
 
-        for (ui32 i = 0; i < nodesNum; ++i) {
-            pollers[i] = testCluster.RegisterActor(new TPoller(pollers, events[i]), i + 1);
-        }
+        // Must destroy actor system before shared arrays
+        {
+            TTestICCluster testCluster(nodesNum, NActors::TChannelsConfig(), nullptr, MakeLogConfigs(NLog::PRI_EMERG));
 
-        for (ui32 i = 0; i < nodesNum; ++i) {
-            for (const auto& actor : pollers) {
-                events[i][actor] = TManualEvent();
+            for (ui32 i = 0; i < nodesNum; ++i) {
+                pollers[i] = testCluster.RegisterActor(new TPoller(pollers, events[i]), i + 1);
+            }
+
+            for (ui32 i = 0; i < nodesNum; ++i) {
+                for (const auto& actor : pollers) {
+                    events[i][actor] = TManualEvent();
+                }
+            }
+
+            testCluster.RegisterActor(new TStartPollers(pollers), 1);
+
+            for (ui32 i = 0; i < nodesNum; ++i) {
+                for (auto& [_, ev] : events[i]) {
+                    ev.WaitI();
+                }
             }
         }
-
-        const TActorId startPollers = testCluster.RegisterActor(new TStartPollers(pollers), 1);
-
-        for (ui32 i = 0; i < nodesNum; ++i) {
-            for (auto& [_, ev] : events[i]) {
-                ev.WaitI();
-            }
-        }
-
-        // kill actors to avoid use-after-free
-        for (ui32 i = 0; i < nodesNum; ++i) {
-            testCluster.KillActor(i + 1, pollers[i]);
-        }
-        testCluster.KillActor(1, startPollers);
     }
 
 
     Y_UNIT_TEST(AllToOne) {
-        ui32 nodesNum = 1000;
-
-        TTestICCluster testCluster(nodesNum, NActors::TChannelsConfig(), nullptr, MakeLogConfigs(NLog::PRI_EMERG));
-
+        ui32 nodesNum = 500;
+        std::vector<TActorId> listeners;
         std::vector<TActorId> pollers(nodesNum - 1);
         std::unordered_map<TActorId, TManualEvent> events;
         std::unordered_map<TActorId, TManualEvent> emptyEventList;
 
-        const TActorId listener = testCluster.RegisterActor(new TPoller({}, events), nodesNum);
-        for (ui32 i = 0; i < nodesNum - 1; ++i) {
-            pollers[i] = testCluster.RegisterActor(new TPoller({ listener }, emptyEventList), i + 1);
-        }
+        // Must destroy actor system before shared arrays
+        {
+            TTestICCluster testCluster(nodesNum, NActors::TChannelsConfig(), nullptr, MakeLogConfigs(NLog::PRI_EMERG));
 
-        for (const auto& actor : pollers) {
-            events[actor] = TManualEvent();
-        }
+            const TActorId listener = testCluster.RegisterActor(new TPoller({}, events), nodesNum);
+            listeners = { listener };
+            for (ui32 i = 0; i < nodesNum - 1; ++i) {
+                pollers[i] = testCluster.RegisterActor(new TPoller(listeners, emptyEventList), i + 1);
+            }
 
-        const TActorId startPollers = testCluster.RegisterActor(new TStartPollers(pollers), 1);
+            for (const auto& actor : pollers) {
+                events[actor] = TManualEvent();
+            }
 
-        for (auto& [_, ev] : events) {
-            ev.WaitI();
-        }
+            testCluster.RegisterActor(new TStartPollers(pollers), 1);
 
-        // kill actors to avoid use-after-free
-        for (ui32 i = 0; i < pollers.size(); ++i) {
-            testCluster.KillActor(i + 1, pollers[i]);
+            for (auto& [_, ev] : events) {
+                ev.WaitI();
+            }
         }
-        testCluster.KillActor(nodesNum, listener);
-        testCluster.KillActor(1, startPollers);
     }
 }

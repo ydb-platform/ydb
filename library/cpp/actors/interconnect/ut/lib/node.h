@@ -45,7 +45,7 @@ public:
         common->Settings.SendBufferDieLimitInMB = 512;
         common->Settings.TotalInflightAmountOfData = 512 * 1024;
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
-        common->OutgoingHandshakeInflightLimit = 10;
+        common->OutgoingHandshakeInflightLimit = 3;
 
         setup.Interconnect.ProxyActors.resize(numNodes + 1 - numDynamicNodes);
         setup.Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, interconnectPoolId);

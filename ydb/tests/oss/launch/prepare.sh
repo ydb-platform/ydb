@@ -1,6 +1,6 @@
 #!/bin/bash
 
-python ${source_root}/ydb/tests/oss/launch/compile_protos.py --source-root ${source_root}
+python ${source_root}/ydb/tests/oss/launch/compile_protos.py --source-root ${source_root} 2>/dev/null
 
 testresults=${source_root}/ydb/tests/functional/test-results
 

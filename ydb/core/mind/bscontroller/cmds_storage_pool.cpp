@@ -635,6 +635,12 @@ namespace NKikimr::NBsController {
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {
         ui32 groupId = cmd.GetGroupId();
         SanitizingRequests.emplace(groupId);
+        const TGroupInfo *group = Groups.Find(groupId);
+        if (group) {
+            Fit.PoolsAndGroups.emplace(group->StoragePoolId, groupId);
+        } else {
+            throw TExGroupNotFound(groupId);
+        }
     }
 
 } // NKikimr::NBsController

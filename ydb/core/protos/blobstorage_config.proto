@@ -698,6 +698,7 @@ message TConfigResponse {
             kDiskIsNotDonor = 8;
             kAlready = 9;
             kMayGetDegraded = 10;
+            kGroupNotFound = 11;
         }
 
         message TFailParam {

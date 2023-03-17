@@ -13,6 +13,7 @@ from ydb.table import (
     _scan_query_request_factory,
     _wrap_scan_query_response,
     BaseTxContext,
+    _allow_split_transaction,
 )
 from . import _utilities
 from ydb import _apis, _session_impl
@@ -120,8 +121,16 @@ class Session(BaseSession):
             set_read_replicas_settings,
         )
 
-    def transaction(self, tx_mode=None):
-        return TxContext(self._driver, self._state, self, tx_mode)
+    def transaction(
+        self, tx_mode=None, *, allow_split_transactions=_allow_split_transaction
+    ):
+        return TxContext(
+            self._driver,
+            self._state,
+            self,
+            tx_mode,
+            allow_split_transactions=allow_split_transactions,
+        )
 
     async def describe_table(self, path, settings=None):  # pylint: disable=W0236
         return await super().describe_table(path, settings)
@@ -184,6 +193,9 @@ class TxContext(BaseTxContext):
     async def execute(
         self, query, parameters=None, commit_tx=False, settings=None
     ):  # pylint: disable=W0236
+
+        self._check_split()
+
         return await super().execute(query, parameters, commit_tx, settings)
 
     async def commit(self, settings=None):  # pylint: disable=W0236

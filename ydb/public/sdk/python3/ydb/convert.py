@@ -13,6 +13,7 @@ _DecimalNanRepr = 10**35 + 1
 _DecimalInfRepr = 10**35
 _DecimalSignedInfRepr = -(10**35)
 _primitive_type_by_id = {}
+_default_allow_truncated_result = True
 
 
 def _initialize():
@@ -214,9 +215,10 @@ def _dict_to_pb(type_pb, value):
     for key, payload in value.items():
         kv_pair = value_pb.pairs.add()
         kv_pair.key.MergeFrom(_from_native_value(type_pb.dict_type.key, key))
-        kv_pair.payload.MergeFrom(
-            _from_native_value(type_pb.dict_type.payload, payload)
-        )
+        if payload:
+            kv_pair.payload.MergeFrom(
+                _from_native_value(type_pb.dict_type.payload, payload)
+            )
     return value_pb
 
 
@@ -491,10 +493,20 @@ class ResultSets(list):
             if table_client_settings is None
             else table_client_settings._make_result_sets_lazy
         )
+
+        allow_truncated_result = _default_allow_truncated_result
+        if table_client_settings:
+            allow_truncated_result = table_client_settings._allow_truncated_result
+
         result_sets = []
         initializer = (
             _ResultSet.from_message if not make_lazy else _ResultSet.lazy_from_message
         )
         for result_set in result_sets_pb:
-            result_sets.append(initializer(result_set, table_client_settings))
+            result_set = initializer(result_set, table_client_settings)
+            if result_set.truncated and not allow_truncated_result:
+                raise issues.TruncatedResponseError(
+                    "Response for the request was truncated by server"
+                )
+            result_sets.append(result_set)
         super(ResultSets, self).__init__(result_sets)

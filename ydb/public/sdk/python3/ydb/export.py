@@ -3,8 +3,16 @@ import enum
 from . import _apis
 
 from . import settings_impl as s_impl
-from ydb.public.api.protos import ydb_export_pb2
-from ydb.public.api.grpc import ydb_export_v1_pb2_grpc
+
+# Workaround for good IDE and universal for runtime
+# noinspection PyUnreachableCode
+if False:
+    from ._grpc.v4.protos import ydb_export_pb2
+    from ._grpc.v4 import ydb_export_v1_pb2_grpc
+else:
+    from ._grpc.common.protos import ydb_export_pb2
+    from ._grpc.common import ydb_export_v1_pb2_grpc
+
 from . import operation
 
 _ExportToYt = "ExportToYt"

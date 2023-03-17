@@ -4,6 +4,9 @@ PY_SRCS(
     TOP_LEVEL
     ydb/__init__.py
     ydb/_apis.py
+    ydb/_errors.py
+    ydb/_grpc/__init__.py
+    ydb/_grpc/common/__init__.py
     ydb/_session_impl.py
     ydb/_sp_impl.py
     ydb/_tx_ctx_impl.py
@@ -29,6 +32,7 @@ PY_SRCS(
     ydb/default_pem.py
     ydb/driver.py
     ydb/export.py
+    ydb/global_settings.py
     ydb/iam/__init__.py
     ydb/iam/auth.py
     ydb/import_client.py
@@ -38,11 +42,13 @@ PY_SRCS(
     ydb/pool.py
     ydb/resolver.py
     ydb/scheme.py
+    ydb/scheme_test.py
     ydb/scripting.py
     ydb/settings.py
     ydb/sqlalchemy/__init__.py
     ydb/sqlalchemy/types.py
     ydb/table.py
+    ydb/table_test.py
     ydb/tornado/__init__.py
     ydb/tornado/tornado_helpers.py
     ydb/tracing.py

@@ -1,21 +1,42 @@
 # -*- coding: utf-8 -*-
-from ydb.public.api.grpc import (
-    ydb_cms_v1_pb2_grpc,
-    ydb_discovery_v1_pb2_grpc,
-    ydb_scheme_v1_pb2_grpc,
-    ydb_table_v1_pb2_grpc,
-)
-from ydb.public.api.protos import (
-    ydb_status_codes_pb2,
-    ydb_discovery_pb2,
-    ydb_scheme_pb2,
-    ydb_table_pb2,
-    ydb_value_pb2,
-)
-from ydb.public.api.protos import ydb_operation_pb2
-from ydb.public.api.protos import ydb_common_pb2
-from ydb.public.api.grpc import ydb_operation_v1_pb2_grpc
+# Workaround for good IDE and universal for runtime
+# noinspection PyUnreachableCode
+if False:
+    from ._grpc.v4 import (
+        ydb_cms_v1_pb2_grpc,
+        ydb_discovery_v1_pb2_grpc,
+        ydb_scheme_v1_pb2_grpc,
+        ydb_table_v1_pb2_grpc,
+        ydb_operation_v1_pb2_grpc,
+    )
 
+    from ._grpc.v4.protos import (
+        ydb_status_codes_pb2,
+        ydb_discovery_pb2,
+        ydb_scheme_pb2,
+        ydb_table_pb2,
+        ydb_value_pb2,
+        ydb_operation_pb2,
+        ydb_common_pb2,
+    )
+else:
+    from ._grpc.common import (
+        ydb_cms_v1_pb2_grpc,
+        ydb_discovery_v1_pb2_grpc,
+        ydb_scheme_v1_pb2_grpc,
+        ydb_table_v1_pb2_grpc,
+        ydb_operation_v1_pb2_grpc,
+    )
+
+    from ._grpc.common.protos import (
+        ydb_status_codes_pb2,
+        ydb_discovery_pb2,
+        ydb_scheme_pb2,
+        ydb_table_pb2,
+        ydb_value_pb2,
+        ydb_operation_pb2,
+        ydb_common_pb2,
+    )
 
 StatusIds = ydb_status_codes_pb2.StatusIds
 FeatureFlag = ydb_common_pb2.FeatureFlag

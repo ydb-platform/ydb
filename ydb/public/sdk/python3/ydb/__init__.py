@@ -1,5 +1,6 @@
 from .credentials import *  # noqa
 from .driver import *  # noqa
+from .global_settings import *  # noqa
 from .table import *  # noqa
 from .issues import *  # noqa
 from .types import *  # noqa

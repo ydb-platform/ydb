@@ -1,5 +1,13 @@
-from ydb.public.api.protos import ydb_scripting_pb2
-from ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc
+# Workaround for good IDE and universal for runtime
+# noinspection PyUnreachableCode
+if False:
+    from ._grpc.v4.protos import ydb_scripting_pb2
+    from ._grpc.v4 import ydb_scripting_v1_pb2_grpc
+else:
+    from ._grpc.common.protos import ydb_scripting_pb2
+    from ._grpc.common import ydb_scripting_v1_pb2_grpc
+
+
 from . import issues, convert, settings
 
 

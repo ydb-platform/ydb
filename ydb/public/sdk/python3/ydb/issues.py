@@ -52,6 +52,10 @@ class Error(Exception):
         self.message = message
 
 
+class TruncatedResponseError(Error):
+    status = None
+
+
 class ConnectionError(Error):
     status = None
 

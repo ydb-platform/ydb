@@ -21,11 +21,14 @@ from . import (
     _tx_ctx_impl,
     tracing,
 )
+from ._errors import check_retriable_error
 
 try:
     from . import interceptor
 except ImportError:
     interceptor = None
+
+_allow_split_transaction = True
 
 logger = logging.getLogger(__name__)
 
@@ -780,6 +783,22 @@ class AbstractTransactionModeBuilder(object):
         pass
 
 
+class SnapshotReadOnly(AbstractTransactionModeBuilder):
+    __slots__ = ("_pb", "_name")
+
+    def __init__(self):
+        self._pb = _apis.ydb_table.SnapshotModeSettings()
+        self._name = "snapshot_read_only"
+
+    @property
+    def settings(self):
+        return self._pb
+
+    @property
+    def name(self):
+        return self._name
+
+
 class SerializableReadWrite(AbstractTransactionModeBuilder):
     __slots__ = ("_pb", "_name")
 
@@ -900,11 +919,27 @@ class YdbRetryOperationSleepOpt(object):
     def __init__(self, timeout):
         self.timeout = timeout
 
+    def __eq__(self, other):
+        return type(self) == type(other) and self.timeout == other.timeout
+
+    def __repr__(self):
+        return "YdbRetryOperationSleepOpt(%s)" % self.timeout
+
 
 class YdbRetryOperationFinalResult(object):
     def __init__(self, result):
         self.result = result
         self.exc = None
+
+    def __eq__(self, other):
+        return (
+            type(self) == type(other)
+            and self.result == other.result
+            and self.exc == other.exc
+        )
+
+    def __repr__(self):
+        return "YdbRetryOperationFinalResult(%s, exc=%s)" % (self.result, self.exc)
 
     def set_exception(self, exc):
         self.exc = exc
@@ -922,56 +957,28 @@ def retry_operation_impl(callee, retry_settings=None, *args, **kwargs):
             if result.exc is not None:
                 raise result.exc
 
-        except (
-            issues.Aborted,
-            issues.BadSession,
-            issues.NotFound,
-            issues.InternalError,
-        ) as e:
+        except issues.Error as e:
             status = e
             retry_settings.on_ydb_error_callback(e)
 
-            if isinstance(e, issues.NotFound) and not retry_settings.retry_not_found:
-                raise e
-
-            if (
-                isinstance(e, issues.InternalError)
-                and not retry_settings.retry_internal_error
-            ):
-                raise e
-
-        except (
-            issues.Overloaded,
-            issues.SessionPoolEmpty,
-            issues.ConnectionError,
-        ) as e:
-            status = e
-            retry_settings.on_ydb_error_callback(e)
-            yield YdbRetryOperationSleepOpt(
-                retry_settings.slow_backoff.calc_timeout(attempt)
-            )
-
-        except issues.Unavailable as e:
-            status = e
-            retry_settings.on_ydb_error_callback(e)
-            yield YdbRetryOperationSleepOpt(
-                retry_settings.fast_backoff.calc_timeout(attempt)
-            )
-
-        except issues.Undetermined as e:
-            status = e
-            retry_settings.on_ydb_error_callback(e)
-            if not retry_settings.idempotent:
-                # operation is not idempotent, so we cannot retry.
+            retriable_info = check_retriable_error(e, retry_settings, attempt)
+            if not retriable_info.is_retriable:
                 raise
 
-            yield YdbRetryOperationSleepOpt(
-                retry_settings.fast_backoff.calc_timeout(attempt)
-            )
+            skip_yield_error_types = [
+                issues.Aborted,
+                issues.BadSession,
+                issues.NotFound,
+                issues.InternalError,
+            ]
 
-        except issues.Error as e:
-            retry_settings.on_ydb_error_callback(e)
-            raise
+            yield_sleep = True
+            for t in skip_yield_error_types:
+                if isinstance(e, t):
+                    yield_sleep = False
+
+            if yield_sleep:
+                yield YdbRetryOperationSleepOpt(retriable_info.sleep_timeout_seconds)
 
         except Exception as e:
             # you should provide your own handler you want
@@ -999,6 +1006,7 @@ class TableClientSettings(object):
         self._native_json_in_result_sets = False
         self._native_interval_in_result_sets = False
         self._native_timestamp_in_result_sets = False
+        self._allow_truncated_result = convert._default_allow_truncated_result
 
     def with_native_timestamp_in_result_sets(self, enabled):
         # type:(bool) -> ydb.TableClientSettings
@@ -1033,6 +1041,11 @@ class TableClientSettings(object):
     def with_lazy_result_sets(self, enabled):
         # type:(bool) -> ydb.TableClientSettings
         self._make_result_sets_lazy = enabled
+        return self
+
+    def with_allow_truncated_result(self, enabled):
+        # type:(bool) -> ydb.TableClientSettings
+        self._allow_truncated_result = enabled
         return self
 
 
@@ -1171,7 +1184,9 @@ class ISession:
         pass
 
     @abstractmethod
-    def transaction(self, tx_mode=None):
+    def transaction(
+        self, tx_mode=None, allow_split_transactions=_allow_split_transaction
+    ):
         pass
 
     @abstractmethod
@@ -1676,8 +1691,16 @@ class BaseSession(ISession):
             self._state.endpoint,
         )
 
-    def transaction(self, tx_mode=None):
-        return TxContext(self._driver, self._state, self, tx_mode)
+    def transaction(
+        self, tx_mode=None, allow_split_transactions=_allow_split_transaction
+    ):
+        return TxContext(
+            self._driver,
+            self._state,
+            self,
+            tx_mode,
+            allow_split_transactions=allow_split_transactions,
+        )
 
     def has_prepared(self, query):
         return query in self._state
@@ -2189,9 +2212,27 @@ class ITxContext:
 
 
 class BaseTxContext(ITxContext):
-    __slots__ = ("_tx_state", "_session_state", "_driver", "session")
+    __slots__ = (
+        "_tx_state",
+        "_session_state",
+        "_driver",
+        "session",
+        "_finished",
+        "_allow_split_transactions",
+    )
 
-    def __init__(self, driver, session_state, session, tx_mode=None):
+    _COMMIT = "commit"
+    _ROLLBACK = "rollback"
+
+    def __init__(
+        self,
+        driver,
+        session_state,
+        session,
+        tx_mode=None,
+        *,
+        allow_split_transactions=_allow_split_transaction
+    ):
         """
         An object that provides a simple transaction context manager that allows statements execution
         in a transaction. You don't have to open transaction explicitly, because context manager encapsulates
@@ -2214,6 +2255,8 @@ class BaseTxContext(ITxContext):
         self._tx_state = _tx_ctx_impl.TxState(tx_mode)
         self._session_state = session_state
         self.session = session
+        self._finished = ""
+        self._allow_split_transactions = allow_split_transactions
 
     def __enter__(self):
         """
@@ -2271,6 +2314,9 @@ class BaseTxContext(ITxContext):
 
         :return: A result sets or exception in case of execution errors
         """
+
+        self._check_split()
+
         return self._driver(
             _tx_ctx_impl.execute_request_factory(
                 self._session_state,
@@ -2297,8 +2343,12 @@ class BaseTxContext(ITxContext):
 
         :return: A committed transaction or exception if commit is failed
         """
+
+        self._set_finish(self._COMMIT)
+
         if self._tx_state.tx_id is None and not self._tx_state.dead:
             return self
+
         return self._driver(
             _tx_ctx_impl.commit_request_factory(self._session_state, self._tx_state),
             _apis.TableService.Stub,
@@ -2318,8 +2368,12 @@ class BaseTxContext(ITxContext):
 
         :return: A rolled back transaction or exception if rollback is failed
         """
+
+        self._set_finish(self._ROLLBACK)
+
         if self._tx_state.tx_id is None and not self._tx_state.dead:
             return self
+
         return self._driver(
             _tx_ctx_impl.rollback_request_factory(self._session_state, self._tx_state),
             _apis.TableService.Stub,
@@ -2340,6 +2394,9 @@ class BaseTxContext(ITxContext):
         """
         if self._tx_state.tx_id is not None:
             return self
+
+        self._check_split()
+
         return self._driver(
             _tx_ctx_impl.begin_request_factory(self._session_state, self._tx_state),
             _apis.TableService.Stub,
@@ -2349,6 +2406,21 @@ class BaseTxContext(ITxContext):
             (self._session_state, self._tx_state, self),
             self._session_state.endpoint,
         )
+
+    def _set_finish(self, val):
+        self._check_split(val)
+        self._finished = val
+
+    def _check_split(self, allow=""):
+        """
+        Deny all operaions with transaction after commit/rollback.
+        Exception: double commit and double rollbacks, because it is safe
+        """
+        if self._allow_split_transactions:
+            return
+
+        if self._finished != "" and self._finished != allow:
+            raise RuntimeError("Any operation with finished transaction is denied")
 
 
 class TxContext(BaseTxContext):
@@ -2365,6 +2437,9 @@ class TxContext(BaseTxContext):
 
         :return: A future of query execution
         """
+
+        self._check_split()
+
         return self._driver.future(
             _tx_ctx_impl.execute_request_factory(
                 self._session_state,
@@ -2396,8 +2471,11 @@ class TxContext(BaseTxContext):
 
         :return: A future of commit call
         """
+        self._set_finish(self._COMMIT)
+
         if self._tx_state.tx_id is None and not self._tx_state.dead:
             return _utilities.wrap_result_in_future(self)
+
         return self._driver.future(
             _tx_ctx_impl.commit_request_factory(self._session_state, self._tx_state),
             _apis.TableService.Stub,
@@ -2418,8 +2496,11 @@ class TxContext(BaseTxContext):
 
         :return: A future of rollback call
         """
+        self._set_finish(self._ROLLBACK)
+
         if self._tx_state.tx_id is None and not self._tx_state.dead:
             return _utilities.wrap_result_in_future(self)
+
         return self._driver.future(
             _tx_ctx_impl.rollback_request_factory(self._session_state, self._tx_state),
             _apis.TableService.Stub,
@@ -2441,6 +2522,9 @@ class TxContext(BaseTxContext):
         """
         if self._tx_state.tx_id is not None:
             return _utilities.wrap_result_in_future(self)
+
+        self._check_split()
+
         return self._driver.future(
             _tx_ctx_impl.begin_request_factory(self._session_state, self._tx_state),
             _apis.TableService.Stub,

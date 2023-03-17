@@ -12,6 +12,7 @@ class SchemeEntryType(enum.IntEnum):
     Enumerates all available entry types.
     """
 
+    TYPE_UNSPECIFIED = 0
     DIRECTORY = 1
     TABLE = 2
     PERS_QUEUE_GROUP = 3
@@ -23,6 +24,10 @@ class SchemeEntryType(enum.IntEnum):
     SEQUENCE = 15
     REPLICATION = 16
     TOPIC = 17
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.TYPE_UNSPECIFIED
 
     @staticmethod
     def is_table(entry):
@@ -299,7 +304,7 @@ def _wrap_scheme_entry(entry_pb, scheme_entry_cls=None, *args, **kwargs):
     return scheme_entry_cls(
         entry_pb.name,
         entry_pb.owner,
-        getattr(SchemeEntryType, _apis.ydb_scheme.Entry.Type.Name(entry_pb.type)),
+        SchemeEntryType(entry_pb.type),
         _wrap_permissions(entry_pb.effective_permissions),
         _wrap_permissions(entry_pb.permissions),
         entry_pb.size_bytes,
@@ -318,7 +323,7 @@ def _wrap_list_directory_response(rpc_state, response):
     message = _apis.ydb_scheme.ListDirectoryResult()
     response.operation.result.Unpack(message)
     children = []
-    supported_items = set([i.value for i in SchemeEntryType])
+    supported_items = set(i.value for i in SchemeEntryType)
     for children_item in message.children:
         if children_item.type not in supported_items:
             continue
@@ -328,12 +333,10 @@ def _wrap_list_directory_response(rpc_state, response):
     return Directory(
         message.self.name,
         message.self.owner,
-        getattr(SchemeEntryType, _apis.ydb_scheme.Entry.Type.Name(message.self.type)),
+        SchemeEntryType(message.self.type),
         _wrap_permissions(message.self.effective_permissions),
         _wrap_permissions(message.self.permissions),
-        tuple(
-            children,
-        ),
+        tuple(children),
     )
 
 

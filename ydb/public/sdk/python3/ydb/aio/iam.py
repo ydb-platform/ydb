@@ -60,6 +60,11 @@ class TokenServiceCredentials(AbstractExpiringTokenCredentials):
             return {"access_token": response.iam_token, "expires_in": expires_in}
 
 
+# IamTokenCredentials need for backward compatibility
+# Deprecated
+IamTokenCredentials = TokenServiceCredentials
+
+
 class JWTIamCredentials(TokenServiceCredentials, auth.BaseJWTCredentials):
     def __init__(
         self,
@@ -121,10 +126,13 @@ class MetadataUrlCredentials(AbstractExpiringTokenCredentials):
             ) as response:
                 if not response.ok:
                     self.logger.error(
-                        "Error while getting token from metadata: %s" % response.text()
+                        "Error while getting token from metadata: %s"
+                        % await response.text()
                     )
                 response.raise_for_status()
-                return await response.json()
+                # response from default metadata credentials provider
+                # contains text/plain content type.
+                return await response.json(content_type=None)
 
 
 class ServiceAccountCredentials(JWTIamCredentials):

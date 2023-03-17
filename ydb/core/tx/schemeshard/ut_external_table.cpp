@@ -33,6 +33,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         CreateExternalDataSource(runtime, env, txId++);
         TestCreateExternalTable(runtime, txId++, "/MyRoot", R"(
                 Name: "ExternalTable"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "key" Type: "Uint64" }
@@ -51,6 +52,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         CreateExternalDataSource(runtime, env, txId++);
         TestCreateExternalTable(runtime, txId++, "/MyRoot", R"(
                 Name: "ExternalTable"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "key" Type: "Uint64" }
@@ -99,6 +101,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         auto createFn = [](TTestBasicRuntime& runtime, ui64 txId) {
             TestCreateExternalTable(runtime, txId, "/MyRoot", R"(
                     Name: "ExternalTable"
+                    SourceType: "General"
                     DataSourcePath: "/MyRoot/ExternalDataSource"
                     Location: "/"
                     Columns { Name: "key"   Type: "Uint64" }
@@ -122,6 +125,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
         AsyncCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
                 Name: "ExternalTable1"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "RowId" Type: "Uint64"}
@@ -129,6 +133,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
             )");
         AsyncCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
                 Name: "ExternalTable2"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "key1"  Type: "Uint32"}
@@ -162,6 +167,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
         TString tableConfig = R"(
                 Name: "NilNoviSubLuna"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "key"   Type: "Uint64"}
@@ -212,6 +218,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         AsyncMkDir(runtime, ++txId, "/MyRoot", "SubDirA");
         AsyncCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
                 Name: "ExternalTable1"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "RowId" Type: "Uint64"}
@@ -236,6 +243,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         TestMkDir(runtime, ++txId, "/MyRoot", "SubDirBBBB", {NKikimrScheme::StatusReadOnly});
         TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
                 Name: "ExternalTable1"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "RowId" Type: "Uint64"}
@@ -261,30 +269,35 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         CreateExternalDataSource(runtime, env, txId++);
         TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
                 Name: "Table2"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "RowId" Type: "BlaBlaType"}
             )", {{NKikimrScheme::StatusSchemeError, "Type 'BlaBlaType' specified for column 'RowId' is not supported"}});
         TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
                 Name: "Table2"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "" Type: "Uint64"}
             )", {{NKikimrScheme::StatusSchemeError, "Columns cannot have an empty name"}});
         TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
                 Name: "Table2"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "RowId" TypeId: 27}
             )", {{NKikimrScheme::StatusSchemeError, "a"}});
         TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
                 Name: "Table2"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "RowId" }
             )", {{NKikimrScheme::StatusSchemeError, "Missing Type for column 'RowId'"}});
         TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
                 Name: "Table2"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "RowId" Type: "Uint64" Id: 2}
@@ -292,6 +305,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
             )", {{NKikimrScheme::StatusSchemeError, "Duplicate column id: 2"}});
         TestCreateExternalTable(runtime, ++txId, "/MyRoot/DirA", R"(
                 Name: "Table2"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource1"
                 Location: "/"
                 Columns { Name: "RowId" Type: "Uint64"}

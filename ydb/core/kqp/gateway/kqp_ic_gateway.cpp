@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/grpc_services/table_settings.h>
@@ -2232,6 +2233,7 @@ private:
         externalTableDesc.SetName(name);
         externalTableDesc.SetDataSourcePath(settings.DataSourcePath);
         externalTableDesc.SetLocation(settings.Location);
+        externalTableDesc.SetSourceType("General");
 
         Y_ENSURE(settings.ColumnOrder.size() == settings.Columns.size());
         for (const auto& name : settings.ColumnOrder) {
@@ -2243,6 +2245,12 @@ private:
             columnDesc.SetType(columnIt->second.Type);
             columnDesc.SetNotNull(columnIt->second.NotNull);
         }
+        NKikimrExternalSources::TGeneral general;
+        auto& attributes = *general.mutable_attributes();
+        for (const auto& [key, value]: settings.SourceTypeParameters) {
+            attributes.insert({key, value});
+        }
+        externalTableDesc.SetContent(general.SerializeAsString());
     }
 
     static void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc,

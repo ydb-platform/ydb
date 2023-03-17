@@ -25,6 +25,7 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -300,6 +301,8 @@ public:
 
     TActorId DelayedInitTenantDestination;
     TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;
+
+    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory()};
 
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,

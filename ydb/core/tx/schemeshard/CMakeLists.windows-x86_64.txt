@@ -89,6 +89,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   core-blockstore-core
   ydb-core-engine
   core-engine-minikql
+  ydb-core-external_sources
   core-filestore-core
   core-kesus-tablet
   ydb-core-metering

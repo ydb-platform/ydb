@@ -77,7 +77,23 @@ bool IsAllowedType(ui32 typeId) {
     return true;
 }
 
-TExternalTableInfo::TPtr CreateExternalTable(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDescription& desc, TString& errStr) {
+Ydb::Type CreateYdbType(const NScheme::TTypeInfo& typeInfo, bool notNull) {
+    Ydb::Type ydbType;
+    if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+        auto* typeDesc = typeInfo.GetTypeDesc();
+        auto* pg = ydbType.mutable_pg_type();
+        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+    } else {
+        auto& item = notNull
+            ? ydbType
+            : *ydbType.mutable_optional_type()->mutable_item();
+        item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+    }
+    return ydbType;
+}
+
+TExternalTableInfo::TPtr CreateExternalTable(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDescription& desc, const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& factory, TString& errStr) {
     if (!Validate(sourceType, desc, errStr)) {
         return nullptr;
     }
@@ -90,12 +106,17 @@ TExternalTableInfo::TPtr CreateExternalTable(const TString& sourceType, const NK
     TExternalTableInfo::TPtr externalTableInfo = new TExternalTableInfo;
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
 
+    if (desc.GetSourceType() != "General") {
+        errStr = "Only general data source has been supported as request";
+        return nullptr;
+    }
+
     externalTableInfo->DataSourcePath = desc.GetDataSourcePath();
     externalTableInfo->Location = desc.GetLocation();
     externalTableInfo->AlterVersion = 1;
-    externalTableInfo->Content = desc.GetContent();
     externalTableInfo->SourceType = sourceType;
 
+    NKikimrExternalSources::TSchema schema;
     uint64_t nextColumnId = 1;
     for (const auto& col : desc.GetColumns()) {
         TString colName = col.GetName();
@@ -152,6 +173,20 @@ TExternalTableInfo::TPtr CreateExternalTable(const TString& sourceType, const NK
         TTableInfo::TColumn& column = externalTableInfo->Columns[colId];
         column = TTableInfo::TColumn(colName, colId, typeInfo, ""); // TODO: do we need typeMod here?
         column.NotNull = col.GetNotNull();
+
+        auto& schemaColumn= *schema.add_column();
+        schemaColumn.set_name(colName);
+        *schemaColumn.mutable_type() = CreateYdbType(typeInfo, col.GetNotNull());
+    }
+
+    try {
+        NKikimrExternalSources::TGeneral general;
+        general.ParseFromStringOrThrow(desc.GetContent());
+        auto source = factory->GetOrCreate(sourceType);
+        externalTableInfo->Content = source->Pack(schema, general);
+    } catch (...) {
+        errStr = CurrentExceptionMessage();
+        return nullptr;
     }
 
     return externalTableInfo;
@@ -348,7 +383,7 @@ public:
             return result;
         }
 
-        TExternalTableInfo::TPtr externalTableInfo = CreateExternalTable(externalDataSource->SourceType, externalTableDescription, errStr);
+        TExternalTableInfo::TPtr externalTableInfo = CreateExternalTable(externalDataSource->SourceType, externalTableDescription, context.SS->ExternalSourceFactory, errStr);
         if (!externalTableInfo) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;

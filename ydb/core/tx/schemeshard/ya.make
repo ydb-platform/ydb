@@ -239,6 +239,7 @@ PEERDIR(
     ydb/core/blockstore/core
     ydb/core/engine
     ydb/core/engine/minikql
+    ydb/core/external_sources
     ydb/core/filestore/core
     ydb/core/kesus/tablet
     ydb/core/metering

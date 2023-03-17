@@ -37,6 +37,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
             AsyncMkDir(runtime, ++t.TxId, "/MyRoot", "DirExternalTable");
             AsyncCreateExternalTable(runtime, ++t.TxId, "/MyRoot/DirExternalTable", R"(
                     Name: "ExternalTable"
+                    SourceType: "General"
                     DataSourcePath: "/MyRoot/ExternalDataSource"
                     Location: "/"
                     Columns { Name: "a" Type: "Int32" NotNull: true }
@@ -76,6 +77,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
             CreateExternalDataSource(runtime, *t.TestEnv, t.TxId);
             AsyncCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "DropMe"
+                    SourceType: "General"
                     DataSourcePath: "/MyRoot/ExternalDataSource"
                     Location: "/"
                     Columns { Name: "RowId" Type: "Uint64" }
@@ -104,6 +106,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
                 TInactiveZone inactive(activeZone);
                 TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot",R"(
                         Name: "ExternalTable"
+                        SourceType: "General"
                         DataSourcePath: "/MyRoot/ExternalDataSource"
                         Location: "/"
                         Columns { Name: "a" Type: "Int32" NotNull: true }
@@ -132,6 +135,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
                 TInactiveZone inactive(activeZone);
                 TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot",R"(
                         Name: "ExternalTable"
+                        SourceType: "General"
                         DataSourcePath: "/MyRoot/ExternalDataSource"
                         Location: "/"
                         Columns { Name: "a" Type: "Int32" NotNull: true }
@@ -159,6 +163,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
                 TInactiveZone inactive(activeZone);
                 TestCreateExternalTable(runtime, t.TxId, "/MyRoot", R"(
                         Name: "ExternalTable"
+                        SourceType: "General"
                         DataSourcePath: "/MyRoot/ExternalDataSource"
                         Location: "/"
                         Columns { Name: "RowId"      Type: "Uint64"}
@@ -177,6 +182,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
 
                 TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalTable"
+                        SourceType: "General"
                         DataSourcePath: "/MyRoot/ExternalDataSource"
                         Location: "/"
                         Columns { Name: "RowId"      Type: "Uint64"}
@@ -201,6 +207,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
                 TInactiveZone inactive(activeZone);
                 TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalTable"
+                        SourceType: "General"
                         DataSourcePath: "/MyRoot/ExternalDataSource"
                         Location: "/"
                         Columns { Name: "RowId"      Type: "Uint64"}
@@ -214,6 +221,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
 
             TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "ExternalTable"
+                    SourceType: "General"
                     DataSourcePath: "/MyRoot/ExternalDataSource"
                     Location: "/"
                     Columns { Name: "RowId"      Type: "Uint64"}
@@ -238,6 +246,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
                 TInactiveZone inactive(activeZone);
                 TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalTable"
+                        SourceType: "General"
                         DataSourcePath: "/MyRoot/ExternalDataSource"
                         Location: "/"
                         Columns { Name: "RowId"      Type: "Uint64"}
@@ -250,6 +259,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
 
                 TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalTable"
+                        SourceType: "General"
                         DataSourcePath: "/MyRoot/ExternalDataSource"
                         Location: "/"
                         Columns { Name: "RowId"      Type: "Uint64"}

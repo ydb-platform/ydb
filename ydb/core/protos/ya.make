@@ -55,6 +55,7 @@ SRCS(
     datashard_load.proto
     drivemodel.proto
     export.proto
+    external_sources.proto
     flat_tx_scheme.proto
     flat_scheme_op.proto
     health.proto

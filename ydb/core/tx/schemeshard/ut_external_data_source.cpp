@@ -324,6 +324,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
         TestCreateExternalTable(runtime, txId++, "/MyRoot", R"(
                 Name: "ExternalTable"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "key" Type: "Uint64" }
@@ -362,6 +363,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
         TestCreateExternalTable(runtime, txId++, "/MyRoot", R"(
                 Name: "ExternalTable"
+                SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "key" Type: "Uint64" }

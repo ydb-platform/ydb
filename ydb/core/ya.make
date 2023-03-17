@@ -11,6 +11,7 @@ RECURSE(
     discovery
     engine
     erasure
+    external_sources
     filestore
     fq
     formats

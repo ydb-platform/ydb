@@ -511,7 +511,7 @@ private:
             auto& txResults = ev->GetTxResults();
             result.Results.reserve(txResults.size());
             for(auto& tx : txResults) {
-                result.Results.emplace_back(std::move(tx.GetMkql()));
+                result.Results.emplace_back(tx.GetMkql());
             }
             Parameters->AddTxHolders(std::move(ev->GetTxHolders()));
             Parameters->AddTxResults(std::move(txResults));

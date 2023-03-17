@@ -1,11 +1,12 @@
 #include "kqp_query_data.h"
 
 #include <ydb/core/protos/kqp_physical.pb.h>
+
 #include <ydb/library/mkql_proto/mkql_proto.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NKikimr::NKqp {
 
@@ -160,16 +161,58 @@ std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> TQueryData::GetTxResul
         TypeEnv(), AllocState->HolderFactory);
 }
 
-NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(ui32 txIndex, ui32 resultIndex, google::protobuf::Arena* arena) {
+NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena) {
+    auto txIndex = rb.GetTxResultBinding().GetTxIndex();
+    auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
+
+    YQL_ENSURE(HasResult(txIndex, resultIndex));
+    auto g = TypeEnv().BindAllocator();
     return TxResults[txIndex][resultIndex].GetMkql(arena);
 }
 
 void TQueryData::AddTxResults(TVector<TKqpExecuterTxResult>&& results) {
+    auto g = TypeEnv().BindAllocator();
     TxResults.emplace_back(std::move(results));
 }
 
 void TQueryData::AddTxHolders(TVector<TKqpPhyTxHolder::TConstPtr>&& holders) {
     TxHolders.emplace_back(std::move(holders));
+}
+
+void TQueryData::ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type, NMiniKQL::TTypeEnvironment& txTypeEnv) {
+    auto parameterType = GetParameterType(name);
+    if (!parameterType) {
+        if (type.GetKind() == NKikimrMiniKQL::ETypeKind::Optional) {
+            NKikimrMiniKQL::TValue value;
+            AddMkqlParam(name, type, value);
+            return;
+        }
+        ythrow yexception() << "Missing value for parameter: " << name;
+    }
+
+    auto pType = ImportTypeFromProto(type, txTypeEnv);
+    if (pType == nullptr || !parameterType->IsSameType(*pType)) {
+        ythrow yexception() << "Parameter " << name
+            << " type mismatch, expected: " << type << ", actual: " << *parameterType;
+    }
+}
+
+void TQueryData::PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx, const TPreparedQueryHolder::TConstPtr& preparedQuery,
+    NMiniKQL::TTypeEnvironment& txTypeEnv)
+{
+    for (const auto& paramDesc : preparedQuery->GetParameters()) {
+        ValidateParameter(paramDesc.GetName(), paramDesc.GetType(), txTypeEnv);
+    }
+
+    for(const auto& paramBinding: tx->GetParamBindings()) {
+        MaterializeParamValue(true, paramBinding);
+    }
+}
+
+void TQueryData::CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx) {
+    for (const auto& paramBinding : tx->GetParamBindings()) {
+        MaterializeParamValue(true, paramBinding);
+    }
 }
 
 bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type, const NUdf::TUnboxedValue& value) {

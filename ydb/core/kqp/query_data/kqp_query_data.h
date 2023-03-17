@@ -1,9 +1,11 @@
 #pragma once
 
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
 #include <library/cpp/random_provider/random_provider.h>
@@ -183,7 +185,7 @@ public:
     bool AddTypedValueParam(const TString& name, const Ydb::TypedValue& p);
 
     bool MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyParamBinding& paramBinding);
-    void AddTxResults(TVector<NKikimr::NKqp::TKqpExecuterTxResult>&& results);
+    void AddTxResults(TVector<TKqpExecuterTxResult>&& results);
     void AddTxHolders(TVector<TKqpPhyTxHolder::TConstPtr>&& holders);
 
     bool HasResult(ui32 txIndex, ui32 resultIndex) {
@@ -193,8 +195,13 @@ public:
         return resultIndex < TxResults[txIndex].size();
     }
 
+    void ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type, NMiniKQL::TTypeEnvironment& txTypeEnv);
+    void PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx, const TPreparedQueryHolder::TConstPtr& preparedQuery,
+        NMiniKQL::TTypeEnvironment& txTypeEnv);
+    void CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx);
+
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
-    NKikimrMiniKQL::TResult* GetMkqlTxResult(ui32 txIndex, ui32 resultIndex, google::protobuf::Arena* arena);
+    NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
     TTypedUnboxedValue& GetParameterUnboxedValue(const TString& name);

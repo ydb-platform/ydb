@@ -815,48 +815,6 @@ public:
         }
     }
 
-    void ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type) {
-        auto& txCtx = QueryState->TxCtx;
-        YQL_ENSURE(txCtx);
-        auto parameterType = QueryState->QueryData->GetParameterType(name);
-        if (!parameterType) {
-            if (type.GetKind() == NKikimrMiniKQL::ETypeKind::Optional) {
-                NKikimrMiniKQL::TValue value;
-                QueryState->QueryData->AddMkqlParam(name, type, value);
-                return;
-            }
-            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << "Missing value for parameter: " << name;
-        }
-
-        auto pType = ImportTypeFromProto(type, txCtx->TxAlloc->TypeEnv);
-        if (pType == nullptr || !parameterType->IsSameType(*pType)) {
-            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << "Parameter " << name
-                << " type mismatch, expected: " << type << ", actual: " << *parameterType;
-        }
-    }
-
-    TQueryData::TPtr PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx) {
-        for (const auto& paramDesc : QueryState->PreparedQuery->GetParameters()) {
-            ValidateParameter(paramDesc.GetName(), paramDesc.GetType());
-        }
-
-        try {
-            for(const auto& paramBinding: tx->GetParamBindings()) {
-                QueryState->QueryData->MaterializeParamValue(true, paramBinding);
-            }
-        } catch (const yexception& ex) {
-            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
-        }
-        return QueryState->QueryData;
-    }
-
-    TQueryData::TPtr CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx) {
-        for (const auto& paramBinding : tx->GetParamBindings()) {
-            QueryState->QueryData->MaterializeParamValue(true, paramBinding);
-        }
-        return QueryState->QueryData;
-    }
-
     bool CheckTransacionLocks() {
         auto& txCtx = *QueryState->TxCtx;
         if (!txCtx.DeferredEffects.Empty() && txCtx.Locks.Broken()) {
@@ -900,7 +858,12 @@ public:
         auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx);
         if (!Config->FeatureFlags.GetEnableKqpImmediateEffects()) {
             while (tx && tx->GetHasEffects()) {
-                bool success = txCtx.AddDeferredEffect(tx, CreateKqpValueMap(tx));
+                try {
+                    QueryState->QueryData->CreateKqpValueMap(tx);
+                } catch (const yexception& ex) {
+                    ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+                }
+                bool success = txCtx.AddDeferredEffect(tx, QueryState->QueryData);
                 YQL_ENSURE(success);
                 LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
                 if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
@@ -984,7 +947,12 @@ public:
                     YQL_ENSURE(false, "Unexpected physical tx type in data query: " << (ui32)tx->GetType());
             }
 
-            request.Transactions.emplace_back(tx, PrepareParameters(tx));
+            try {
+                QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txCtx.TxAlloc->TypeEnv);
+            } catch (const yexception& ex) {
+                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+            }
+            request.Transactions.emplace_back(tx, QueryState->QueryData);
             txCtx.HasImmediateEffects = txCtx.HasImmediateEffects || tx->GetHasEffects();
         } else {
             YQL_ENSURE(commit);
@@ -1164,17 +1132,14 @@ public:
         YQL_ENSURE(QueryState);
         LWTRACK(KqpSessionPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, ev->ResultRowsCount);
 
-        auto& executerResults = *response->MutableResult();
-        {
-            auto g = QueryState->QueryData->TypeEnv().BindAllocator();
-            QueryState->QueryData->AddTxResults(std::move(ev->GetTxResults()));
-            QueryState->QueryData->AddTxHolders(std::move(ev->GetTxHolders()));
-        }
+        QueryState->QueryData->AddTxResults(std::move(ev->GetTxResults()));
+        QueryState->QueryData->AddTxHolders(std::move(ev->GetTxHolders()));
 
         if (ev->LockHandle) {
             QueryState->TxCtx->Locks.LockHandle = std::move(ev->LockHandle);
         }
 
+        auto& executerResults = *response->MutableResult();
         if (!MergeLocksWithTxResult(executerResults)) {
             return;
         }
@@ -1389,18 +1354,12 @@ public:
             response->SetPreparedQuery(queryId);
         }
 
-        bool useYdbResponseFormat = QueryState->GetUsePublicResponseDataFormat();
         // Result for scan query is sent directly to target actor.
         if (QueryState->PreparedQuery && !QueryState->IsStreamResult()) {
+            bool useYdbResponseFormat = QueryState->GetUsePublicResponseDataFormat();
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
-                auto& rb = phyQuery.GetResultBindings(i);
-                auto txIndex = rb.GetTxResultBinding().GetTxIndex();
-                auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
-
-                YQL_ENSURE(QueryState->QueryData->HasResult(txIndex, resultIndex));
-                auto g = QueryState->QueryData->TypeEnv().BindAllocator();
-                auto* protoRes = QueryState->QueryData->GetMkqlTxResult(txIndex, resultIndex, arena.get());
+                auto* protoRes = QueryState->QueryData->GetMkqlTxResult(phyQuery.GetResultBindings(i), arena.get());
                 std::optional<IDataProvider::TFillSettings> fillSettings;
                 if (QueryState->PreparedQuery->ResultsSize()) {
                     YQL_ENSURE(phyQuery.ResultBindingsSize() == QueryState->PreparedQuery->ResultsSize(), ""

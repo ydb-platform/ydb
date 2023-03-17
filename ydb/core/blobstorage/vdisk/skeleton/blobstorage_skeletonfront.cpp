@@ -361,7 +361,7 @@ namespace NKikimr {
                                 (MsgId, msgInfo.MsgId),,
                                 (QueueName, Name),
                                 (PassedTimeSeconds, passedTime.Seconds()),
-                                (Trace, (msgInfo.VDiskSkeletonTrace->ToString() ? msgInfo.VDiskSkeletonTrace->ToString() : "None")));
+                                (Trace, (msgInfo.VDiskSkeletonTrace && msgInfo.VDiskSkeletonTrace->ToString() ? msgInfo.VDiskSkeletonTrace->ToString() : "None")));
                     }
                 }
                 return hasError;

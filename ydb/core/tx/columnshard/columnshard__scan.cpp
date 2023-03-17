@@ -177,6 +177,7 @@ private:
     // Returns true if it was able to produce new batch
     bool ProduceResults() {
         Y_VERIFY(!Finished);
+        Y_VERIFY(ScanIterator);
 
         if (ScanIterator->Finished()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
@@ -264,7 +265,7 @@ private:
         // Send new results if there is available capacity
         i64 MAX_SCANDATA_MESSAGES_IN_FLIGHT = 2;
         while (InFlightScanDataMessages < MAX_SCANDATA_MESSAGES_IN_FLIGHT) {
-            if (!ProduceResults()) {
+            if (!ScanIterator || !ProduceResults()) {
                 break;
             }
         }

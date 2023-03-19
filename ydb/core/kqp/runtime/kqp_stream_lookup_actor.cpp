@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -29,7 +30,8 @@ public:
         const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
         std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, NKikimrKqp::TKqpStreamLookupSettings&& settings,
         TIntrusivePtr<TKqpCounters> counters)
-        : InputIndex(inputIndex), Input(input), ComputeActorId(computeActorId), TypeEnv(typeEnv)
+        : LogPrefix(TStringBuilder() << "StreamLookupActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
+        , InputIndex(inputIndex), Input(input), ComputeActorId(computeActorId), TypeEnv(typeEnv)
         , HolderFactory(holderFactory), Alloc(alloc), TablePath(settings.GetTable().GetPath())
         , TableId(MakeTableId(settings.GetTable()))
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
@@ -77,6 +79,8 @@ public:
     }
 
     void Bootstrap() {
+        CA_LOG_D("Start stream lookup actor");
+
         Counters->StreamLookupActorsCount->Inc();
         ResolveTableShards();
         Become(&TKqpStreamLookupActor::StateFunc);
@@ -215,6 +219,7 @@ private:
             && AllReadsFinished()
             && Results.empty();
 
+        CA_LOG_D("Returned " << totalDataSize << " bytes, finished: " << finished);
         return totalDataSize;
     }
 
@@ -253,6 +258,7 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        CA_LOG_D("TEvResolveKeySetResult was received for table: " << TablePath);
         if (ev->Get()->Request->ErrorCount > 0) {
             return RuntimeError(TStringBuilder() << "Failed to get partitioning for table: " << TableId,
                 NYql::NDqProto::StatusIds::SCHEME_ERROR);
@@ -267,6 +273,9 @@ private:
 
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
+
+        CA_LOG_D("TEvReadResult was received for table: " << TablePath <<
+            ", readId: " << record.GetReadId() << ", finished: " << record.GetFinished());
 
         auto readIt = Reads.find(record.GetReadId());
         YQL_ENSURE(readIt != Reads.end(), "Unexpected readId: " << record.GetReadId());
@@ -292,13 +301,16 @@ private:
         switch (record.GetStatus().GetCode()) {
             case Ydb::StatusIds::SUCCESS:
                 break;
+            case Ydb::StatusIds::NOT_FOUND:
             case Ydb::StatusIds::OVERLOADED:
             case Ydb::StatusIds::INTERNAL_ERROR: {
                 ++ErrorsCount;
-                NKikimrTxDataShard::TReadContinuationToken continuationToken;
-                bool parseResult = continuationToken.ParseFromString(record.GetContinuationToken());
-                YQL_ENSURE(parseResult, "Failed to parse continuation token");
-                YQL_ENSURE(continuationToken.GetFirstUnprocessedQuery() <= read.Keys.size());
+                TMaybe<NKikimrTxDataShard::TReadContinuationToken> continuationToken;
+                if (record.HasContinuationToken()) {
+                    bool parseResult = continuationToken->ParseFromString(record.GetContinuationToken());
+                    YQL_ENSURE(parseResult, "Failed to parse continuation token");
+                }
+
                 return RetryTableRead(read, continuationToken);
             }
             default: {
@@ -316,8 +328,12 @@ private:
             THolder<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
             request->Record.SetReadId(record.GetReadId());
             request->Record.SetSeqNo(record.GetSeqNo());
+            request->Record.SetMaxRows(Max<ui16>());
+            request->Record.SetMaxBytes(5_MB);
             Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), read.ShardId, true),
                 IEventHandle::FlagTrackDelivery);
+
+            CA_LOG_D("TEvReadAck was sent to shard: " << read.ShardId);
         }
 
         Results.emplace_back(TResult{read.ShardId, THolder<TEventHandleFat<TEvDataShard::TEvReadResult>>(ev.Release())});
@@ -325,6 +341,8 @@ private:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+
         const auto& tabletId = ev->Get()->TabletId;
         auto shardIt = ReadsPerShard.find(tabletId);
         YQL_ENSURE(shardIt != ReadsPerShard.end());
@@ -345,6 +363,9 @@ private:
     }
 
     void Handle(TEvPrivate::TEvSchemeCacheRequestTimeout::TPtr&) {
+        CA_LOG_D("TEvSchemeCacheRequestTimeout was received, shards for table " << TablePath
+            << " was resolved: " << !!Partitioning);
+
         if (!Partitioning) {
             RuntimeError(TStringBuilder() << "Failed to resolve shards for table: " << TableId
                 << " (request timeout exceeded)", NYql::NDqProto::StatusIds::TIMEOUT);
@@ -402,6 +423,7 @@ private:
             }
         }
 
+        CA_LOG_D("Total batch size: " << totalSize << ", size limit exceeded: " << sizeLimitExceeded);
         return totalSize;
     }
 
@@ -505,6 +527,8 @@ private:
         const auto readId = GetNextReadId();
         TReadState read(readId, shardId, std::move(keys));
 
+        CA_LOG_D("Start reading of table: " << TablePath << ", readId: " << readId << ", shardId: " << shardId);
+
         Counters->CreatedIterators->Inc();
         THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
         auto& record = request->Record;
@@ -518,6 +542,8 @@ private:
         }
 
         record.SetReadId(read.Id);
+        record.SetMaxRows(Max<ui16>());
+        record.SetMaxBytes(5_MB);
         record.SetResultFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
 
         record.MutableTableId()->SetOwnerId(TableId.PathId.OwnerId);
@@ -547,9 +573,13 @@ private:
         return readIt->second;
     }
 
-    void RetryTableRead(TReadState& failedRead, NKikimrTxDataShard::TReadContinuationToken& token) {
-        YQL_ENSURE(token.GetFirstUnprocessedQuery() <= failedRead.Keys.size());
-        for (ui64 idx = token.GetFirstUnprocessedQuery(); idx < failedRead.Keys.size(); ++idx) {
+    void RetryTableRead(TReadState& failedRead, TMaybe<NKikimrTxDataShard::TReadContinuationToken>& token) {
+        CA_LOG_D("Retry reading of table: " << TablePath << ", readId: " << failedRead.Id
+            << ", shardId: " << failedRead.ShardId);
+
+        size_t firstUnprocessedQuery = token ? token->GetFirstUnprocessedQuery() : 0;
+        YQL_ENSURE(firstUnprocessedQuery <= failedRead.Keys.size());
+        for (ui64 idx = firstUnprocessedQuery; idx < failedRead.Keys.size(); ++idx) {
             UnprocessedKeys.emplace_back(std::move(failedRead.Keys[idx]));
         }
 
@@ -566,6 +596,8 @@ private:
     }
 
     void ResolveTableShards() {
+        CA_LOG_D("Resolve shards for table: " << TablePath);
+
         Partitioning.reset();
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
@@ -621,6 +653,7 @@ private:
     }
 
 private:
+    const TString LogPrefix;
     const ui64 InputIndex;
     NUdf::TUnboxedValue Input;
     const NActors::TActorId ComputeActorId;

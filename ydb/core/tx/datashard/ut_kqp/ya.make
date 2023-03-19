@@ -32,6 +32,7 @@ SRCS(
     datashard_ut_common.cpp
     datashard_ut_common.h
     datashard_ut_kqp.cpp
+    datashard_ut_kqp_stream_lookup.cpp
 )
 
 REQUIREMENTS(ram:32)

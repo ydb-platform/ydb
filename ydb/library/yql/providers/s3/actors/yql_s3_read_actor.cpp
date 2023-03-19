@@ -1967,7 +1967,7 @@ private:
         try {
             if (ReadSpec->Arrow) {
                 if (ReadSpec->Compression) {
-                    Issues.AddIssue(TIssue("Blocks optimisations are incompatible with external compression, use Pragma DisableUseBlocks"));
+                    Issues.AddIssue(TIssue("Blocks optimisations are incompatible with external compression"));
                     fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                 } else {
                     try {
@@ -2827,6 +2827,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         readSpec->ParallelRowGroupCount = std::max(1ul, params.GetParallelRowGroupCount());
         readSpec->RowGroupReordering = params.GetRowGroupReordering();
         if (readSpec->Arrow) {
+            fileSizeLimit = cfg.BlockFileSizeLimit;
             arrow::SchemaBuilder builder;
             const TStringBuf blockLengthColumn("_yql_block_length"sv);
             auto extraStructType = static_cast<TStructType*>(pb->NewStructType(structType, blockLengthColumn,

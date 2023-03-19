@@ -185,6 +185,10 @@ void Init(
             readActorFactoryCfg.FileSizeLimit =
                 protoConfig.GetGateways().GetS3().GetFileSizeLimit();
         }
+        if (protoConfig.GetGateways().GetS3().HasBlockFileSizeLimit()) {
+            readActorFactoryCfg.BlockFileSizeLimit =
+                protoConfig.GetGateways().GetS3().GetBlockFileSizeLimit();
+        }
 
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);

@@ -18,10 +18,9 @@ using namespace NYql::NNodes;
 
 class TDqsPhysicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
-    TDqsPhysicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config, bool useBlocks)
+    TDqsPhysicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config)
         : TOptimizeTransformerBase(typeCtx, NLog::EComponent::ProviderDq, {})
         , Config(config)
-        , UseBlocks(useBlocks)
     {
         const bool enablePrecompute = Config->_EnablePrecompute.Get().GetOrElse(false);
 
@@ -129,7 +128,7 @@ protected:
             inputType->Cast<TStructExprType>()->FindItem("_yql_block_length").Defined();
 
         auto wideWrap = ctx.Builder(node.Pos())
-            .Callable(UseBlocks && supportsBlocks ? TDqSourceWideBlockWrap::CallableName() : TDqSourceWideWrap::CallableName())
+            .Callable(supportsBlocks ? TDqSourceWideBlockWrap::CallableName() : TDqSourceWideWrap::CallableName())
                 .Add(0, sourceArg)
                 .Add(1, wrap.DataSource().Ptr())
                 .Add(2, wrap.RowType().Ptr())
@@ -142,8 +141,7 @@ protected:
                 })
             .Seal()
             .Build();
-
-        if (UseBlocks && supportsBlocks) {
+        if (supportsBlocks) {
             wideWrap = ctx.Builder(node.Pos())
                 .Callable("WideFromBlocks")
                     .Add(0, wideWrap)
@@ -383,11 +381,10 @@ protected:
 
 private:
     TDqConfiguration::TPtr Config;
-    const bool UseBlocks;
 };
 
-THolder<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config, bool useBlocks) {
-    return THolder(new TDqsPhysicalOptProposalTransformer(typeCtx, config, useBlocks));
+THolder<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config) {
+    return THolder(new TDqsPhysicalOptProposalTransformer(typeCtx, config));
 }
 
 } // NYql::NDqs

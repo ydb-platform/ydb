@@ -377,7 +377,8 @@ message TS3GatewayConfig {
     repeated TS3ClusterConfig ClusterMapping = 1;
 
     optional uint64 FileSizeLimit = 2;               // Global limit
-    repeated TS3FormatSizeLimit FormatSizeLimit = 6; // Format limits
+    repeated TS3FormatSizeLimit FormatSizeLimit = 6; // Format limits (override FileSizeLimit)
+    optional uint64 BlockFileSizeLimit = 10;         // Global limit for block readers (overrides FormatSizeLimit)
     optional uint64 MaxFilesPerQuery = 3;
     optional uint64 MaxReadSizePerQuery = 4;
     optional uint64 MaxDiscoveryFilesPerQuery = 5;

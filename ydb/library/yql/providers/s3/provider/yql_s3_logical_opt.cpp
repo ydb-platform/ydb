@@ -12,6 +12,7 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 
+#include <util/generic/size_literals.h>
 
 namespace NYql {
 
@@ -230,6 +231,9 @@ public:
                             if (it != State_->Configuration->FormatSizeLimits.end() && fileSizeLimit > it->second) {
                                 fileSizeLimit = it->second;
                             }
+                        }
+                        if (formatName == "parquet" && State_->Configuration->UseBlocksSource.Get().GetOrElse(State_->Types->UseBlocks)) {
+                            fileSizeLimit = State_->Configuration->BlockFileSizeLimit;
                         }
 
                         for (const TS3Path& batch : maybeS3SourceSettings.Cast().Paths()) {

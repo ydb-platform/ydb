@@ -18,6 +18,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, ArrowThreadPool);
     REGISTER_SETTING(*this, ArrowParallelRowGroupCount).Lower(1);
     REGISTER_SETTING(*this, ArrowRowGroupReordering);
+    REGISTER_SETTING(*this, UseBlocksSource);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {
@@ -36,6 +37,7 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
         }
     }
     FileSizeLimit = config.HasFileSizeLimit() ? config.GetFileSizeLimit() : 2_GB;
+    BlockFileSizeLimit = config.HasBlockFileSizeLimit() ? config.GetBlockFileSizeLimit() : 50_GB;
     MaxFilesPerQuery = config.HasMaxFilesPerQuery() ? config.GetMaxFilesPerQuery() : 7000;
     MaxDiscoveryFilesPerQuery = config.HasMaxDiscoveryFilesPerQuery() ? config.GetMaxDiscoveryFilesPerQuery() : 9000;
     MaxDirectoriesAndFilesPerQuery = config.HasMaxDirectoriesAndFilesPerQuery() ? config.GetMaxDirectoriesAndFilesPerQuery() : 9000;
@@ -50,6 +52,10 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
 
     this->SetValidClusters(clusters);
     this->Dispatch(config.GetDefaultSettings());
+
+    if (typeCtx->UseBlocks) {
+        YQL_ENSURE(UseBlocksSource.Get().GetOrElse(true), "Scalar Source is not compatible with Blocks engine");
+    }
 
     for (const auto& cluster: config.GetClusterMapping()) {
         this->Dispatch(cluster.GetName(), cluster.GetSettings());

@@ -1720,7 +1720,7 @@ private:
         TPeepholeSettings peepholeSettings;
         peepholeSettings.CommonConfig = &peepholeConfig;
         bool hasNonDeterministicFunctions;
-        auto status = PeepHoleOptimizeNode<true>(input, output, ctx, *State->TypeCtx, nullptr, hasNonDeterministicFunctions, peepholeSettings);
+        auto status = PeepHoleOptimizeNode(input, output, ctx, *State->TypeCtx, nullptr, hasNonDeterministicFunctions, peepholeSettings);
         if (status.Level != TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TString("Peephole optimization failed for Dq stage")));
             return status;

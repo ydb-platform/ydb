@@ -2102,7 +2102,7 @@ TExprNode::TPtr FuseNarrowMap(const TExprNode& node, TExprContext& ctx) {
         .Seal().Build();
 }
 
-template <bool Ordered, bool EnableNewOptimizers>
+template <bool Ordered>
 TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto& lambda = node->Tail();
     const auto& body = lambda.Tail();
@@ -2121,13 +2121,11 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
             .Seal().Build();
     }
 
-    if constexpr (EnableNewOptimizers) {
-        if (const auto kind = node->Head().GetTypeAnn()->GetKind(); (kind == ETypeAnnotationKind::Flow || kind == ETypeAnnotationKind::List) &&
-            body.IsCallable("AsList") && body.ChildrenSize() > 1U) {
-            constexpr auto multimap = Ordered ? "OrderedMultiMap" : "MultiMap";
-            YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " as " << multimap << " of size " << body.ChildrenSize();
-            return ctx.NewCallable(node->Pos(), multimap, {node->HeadPtr(), ctx.DeepCopyLambda(lambda, body.ChildrenList())});
-        }
+    if (const auto kind = node->Head().GetTypeAnn()->GetKind(); (kind == ETypeAnnotationKind::Flow || kind == ETypeAnnotationKind::List) &&
+        body.IsCallable("AsList") && body.ChildrenSize() > 1U) {
+        constexpr auto multimap = Ordered ? "OrderedMultiMap" : "MultiMap";
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " as " << multimap << " of size " << body.ChildrenSize();
+        return ctx.NewCallable(node->Pos(), multimap, {node->HeadPtr(), ctx.DeepCopyLambda(lambda, body.ChildrenList())});
     }
 
     if (body.IsCallable("If") && 3U == body.ChildrenSize() && 1U == body.Tail().ChildrenSize() && body.Tail().IsCallable({"List", "Nothing"}) && (
@@ -2630,39 +2628,37 @@ TExprNode::TPtr ExpandAggrMinMax(const TExprNode::TPtr& node, TExprContext& ctx)
         .Seal().Build();
 }
 
-template <bool Ordered, bool EnableNewOptimizers>
+template <bool Ordered>
 TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto& arg = node->Tail().Head().Head();
-    if constexpr (EnableNewOptimizers) {
-        if (!arg.IsUsedInDependsOn() && ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) {
-            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over Optional";
-            return ctx.Builder(node->Pos())
-                .Callable("IfPresent")
-                    .Add(0, node->HeadPtr())
-                    .Lambda(1)
-                        .Param("item")
-                        .Callable("Just")
-                            .Apply(0, node->TailPtr()).With(0, "item").Seal()
-                        .Seal()
-                    .Seal()
-                    .Callable(2, "Nothing")
-                        .Add(0, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
+    if (!arg.IsUsedInDependsOn() && ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over Optional";
+        return ctx.Builder(node->Pos())
+            .Callable("IfPresent")
+                .Add(0, node->HeadPtr())
+                .Lambda(1)
+                    .Param("item")
+                    .Callable("Just")
+                        .Apply(0, node->TailPtr()).With(0, "item").Seal()
                     .Seal()
                 .Seal()
-                .Build();
-        }
+                .Callable(2, "Nothing")
+                    .Add(0, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
+                .Seal()
+            .Seal()
+            .Build();
+    }
 
-        if (const auto& input = node->Head(); !arg.IsUsedInDependsOn() && input.IsCallable("AsList")) {
-            TNodeSet uniqueItems(input.ChildrenSize());
-            input.ForEachChild([&uniqueItems](const TExprNode& item){ uniqueItems.emplace(&item); });
-            if (uniqueItems.size() < 0x10U) {
-                YQL_CLOG(DEBUG, CorePeepHole) << "Eliminate " << node->Content() << " over list of " << uniqueItems.size();
-                auto list = input.ChildrenList();
-                for (auto& item : list) {
-                    item = ctx.ReplaceNode(node->Tail().TailPtr(), arg, std::move(item));
-                }
-                return ctx.ChangeChildren(input, std::move(list));
+    if (const auto& input = node->Head(); !arg.IsUsedInDependsOn() && input.IsCallable("AsList")) {
+        TNodeSet uniqueItems(input.ChildrenSize());
+        input.ForEachChild([&uniqueItems](const TExprNode& item){ uniqueItems.emplace(&item); });
+        if (uniqueItems.size() < 0x10U) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Eliminate " << node->Content() << " over list of " << uniqueItems.size();
+            auto list = input.ChildrenList();
+            for (auto& item : list) {
+                item = ctx.ReplaceNode(node->Tail().TailPtr(), arg, std::move(item));
             }
+            return ctx.ChangeChildren(input, std::move(list));
         }
     }
 
@@ -2714,34 +2710,31 @@ TExprNode::TPtr OptimizeSkip(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-template <bool EnableNewOptimizers>
 TExprNode::TPtr OptimizeTake(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if constexpr (EnableNewOptimizers) {
-        if (const auto& input = node->Head(); input.IsCallable({"Filter", "OrderedFilter", "WideFilter"})) {
-            if (2U == input.ChildrenSize()) {
-                YQL_CLOG(DEBUG, CorePeepHole) << "Inject " << node->Content() << " limit into " << input.Content();
-                auto list = input.ChildrenList();
-                list.emplace_back(node->TailPtr());
-                return ctx.ChangeChildren(input, std::move(list));
-            }
-
-            auto childLimit = input.ChildPtr(2);
-            auto myLimit = node->ChildPtr(1);
-            YQL_CLOG(DEBUG, CorePeepHole) << "Merge " << node->Content() << " limit into " << input.Content();
-            return ctx.ChangeChild(input, 2, ctx.NewCallable(node->Pos(), "Min", { myLimit, childLimit }));
+    if (const auto& input = node->Head(); input.IsCallable({"Filter", "OrderedFilter", "WideFilter"})) {
+        if (2U == input.ChildrenSize()) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Inject " << node->Content() << " limit into " << input.Content();
+            auto list = input.ChildrenList();
+            list.emplace_back(node->TailPtr());
+            return ctx.ChangeChildren(input, std::move(list));
         }
 
-        if (const auto& input = node->Head(); 1U == input.UseCount()) {
-            if (input.IsCallable("Sort")) {
-                YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << input.Content();
-                auto children = input.ChildrenList();
-                auto it = children.cbegin();
-                children.emplace(++it, node->TailPtr());
-                return ctx.NewCallable(node->Pos(), "TopSort", std::move(children));
-            } else if (input.IsCallable({"Top", "TopSort"})) {
-                YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << input.Content();
-                return ctx.ChangeChild(input, 1U, ctx.NewCallable(node->Pos(), "Min", {node->TailPtr(), input.ChildPtr(1)}));
-            }
+        auto childLimit = input.ChildPtr(2);
+        auto myLimit = node->ChildPtr(1);
+        YQL_CLOG(DEBUG, CorePeepHole) << "Merge " << node->Content() << " limit into " << input.Content();
+        return ctx.ChangeChild(input, 2, ctx.NewCallable(node->Pos(), "Min", { myLimit, childLimit }));
+    }
+
+    if (const auto& input = node->Head(); 1U == input.UseCount()) {
+        if (input.IsCallable("Sort")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << input.Content();
+            auto children = input.ChildrenList();
+            auto it = children.cbegin();
+            children.emplace(++it, node->TailPtr());
+            return ctx.NewCallable(node->Pos(), "TopSort", std::move(children));
+        } else if (input.IsCallable({"Top", "TopSort"})) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << input.Content();
+            return ctx.ChangeChild(input, 1U, ctx.NewCallable(node->Pos(), "Min", {node->TailPtr(), input.ChildPtr(1)}));
         }
     }
 
@@ -5569,37 +5562,35 @@ TExprNode::TListType GetOptionals(const TPositionHandle& pos, const TTupleExprTy
     return result;
 }
 
-template <bool EnableNewOptimizers, bool TupleOrStruct>
+template <bool TupleOrStruct>
 TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if constexpr (EnableNewOptimizers) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
-        if (auto fields = node->ChildrenSize() > 1U ? node->Tail().ChildrenList() :
-                GetOptionals(node->Pos(), *GetSeqItemType(node->Head().GetTypeAnn())->Cast<std::conditional_t<TupleOrStruct, TTupleExprType, TStructExprType>>(), ctx);
-            fields.empty()) {
-            return node->HeadPtr();
-        } else {
-            return ctx.Builder(node->Pos())
-                .Callable("OrderedFilter")
-                    .Add(0, node->HeadPtr())
-                    .Lambda(1)
-                        .Param("item")
-                        .Callable("And")
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                for (ui32 i = 0U; i < fields.size(); ++i) {
-                                    parent
-                                        .Callable(i, "Exists")
-                                            .Callable(0, TupleOrStruct ? "Nth" : "Member")
-                                                .Arg(0, "item")
-                                                .Add(1, std::move(fields[i]))
-                                            .Seal()
-                                        .Seal();
-                                }
-                                return parent;
-                            })
-                        .Seal()
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    if (auto fields = node->ChildrenSize() > 1U ? node->Tail().ChildrenList() :
+            GetOptionals(node->Pos(), *GetSeqItemType(node->Head().GetTypeAnn())->Cast<std::conditional_t<TupleOrStruct, TTupleExprType, TStructExprType>>(), ctx);
+        fields.empty()) {
+        return node->HeadPtr();
+    } else {
+        return ctx.Builder(node->Pos())
+            .Callable("OrderedFilter")
+                .Add(0, node->HeadPtr())
+                .Lambda(1)
+                    .Param("item")
+                    .Callable("And")
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            for (ui32 i = 0U; i < fields.size(); ++i) {
+                                parent
+                                    .Callable(i, "Exists")
+                                        .Callable(0, TupleOrStruct ? "Nth" : "Member")
+                                            .Arg(0, "item")
+                                            .Add(1, std::move(fields[i]))
+                                        .Seal()
+                                    .Seal();
+                            }
+                            return parent;
+                        })
                     .Seal()
-                .Seal().Build();
-        }
+                .Seal()
+            .Seal().Build();
     }
     return node;
 }
@@ -7066,7 +7057,6 @@ ui64 ToDate(ui64 now)      { return std::min<ui64>(NUdf::MAX_DATE - 1U, now / 86
 ui64 ToDatetime(ui64 now)  { return std::min<ui64>(NUdf::MAX_DATETIME - 1U, now / 1000000ull); }
 ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, now); }
 
-template <bool EnableNewOptimizers>
 struct TPeepHoleRules {
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> CommonStageRulesInit = {
         {"EquiJoin", &ExpandEquiJoin},
@@ -7112,8 +7102,8 @@ struct TPeepHoleRules {
         {"Or", &OptimizeLogicalDups<false>},
         {"CombineByKey", &ExpandCombineByKey},
         {"FinalizeByKey", &ExpandFinalizeByKey},
-        {"SkipNullMembers", &ExpandSkipNullFields<EnableNewOptimizers, false>},
-        {"SkipNullElements", &ExpandSkipNullFields<EnableNewOptimizers, true>},
+        {"SkipNullMembers", &ExpandSkipNullFields<false>},
+        {"SkipNullElements", &ExpandSkipNullFields<true>},
         {"ConstraintsOf", &ExpandConstraintsOf},
         {"==", &ExpandSqlEqual<true, false>},
         {"!=", &ExpandSqlEqual<false, false>},
@@ -7152,19 +7142,19 @@ struct TPeepHoleRules {
     };
 
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {
-        {"Map", &OptimizeMap<false, EnableNewOptimizers>},
-        {"OrderedMap", &OptimizeMap<true, EnableNewOptimizers>},
-        {"FlatMap", &ExpandFlatMap<false, EnableNewOptimizers>},
-        {"OrderedFlatMap", &ExpandFlatMap<true, EnableNewOptimizers>},
+        {"Map", &OptimizeMap<false>},
+        {"OrderedMap", &OptimizeMap<true>},
+        {"FlatMap", &ExpandFlatMap<false>},
+        {"OrderedFlatMap", &ExpandFlatMap<true>},
         {"ListIf", &ExpandContainerIf<false, true>},
         {"OptionalIf", &ExpandContainerIf<false, false>},
         {"FlatListIf", &ExpandContainerIf<true, true>},
         {"FlatOptionalIf", &ExpandContainerIf<true, false>},
-        {"IfPresent", &OptimizeIfPresent<false, EnableNewOptimizers>}
+        {"IfPresent", &OptimizeIfPresent<false>}
     };
 
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> FinalStageRulesInit = {
-        {"Take", &OptimizeTake<EnableNewOptimizers>},
+        {"Take", &OptimizeTake},
         {"Skip", &OptimizeSkip},
         {"Likely", &ReplaceWithFirstArg},
         {"AssumeStrict", &ReplaceWithFirstArg},
@@ -7270,7 +7260,6 @@ struct TPeepHoleRules {
     const TExtPeepHoleOptimizerMap BlockStageExtRules;
 };
 
-template <bool EnableNewOptimizers>
 THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationContext& types,
     IGraphTransformer* typeAnnotator, const TPeepholeSettings& peepholeSettings)
 {
@@ -7290,8 +7279,8 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
     pipeline.Add(CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 return PeepHoleCommonStage(input, output, ctx, types,
-                    TPeepHoleRules<EnableNewOptimizers>::Instance().CommonStageRules,
-                    TPeepHoleRules<EnableNewOptimizers>::Instance().CommonStageExtRules);
+                    TPeepHoleRules::Instance().CommonStageRules,
+                    TPeepHoleRules::Instance().CommonStageExtRules);
             }
         ),
         "PeepHoleCommon",
@@ -7304,7 +7293,6 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
     return pipeline.BuildWithNoArgChecks(false);
 }
 
-template <bool EnableNewOptimizers>
 THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationContext& types,
                                                                IGraphTransformer* typeAnnotator,
                                                                bool* hasNonDeterministicFunctions,
@@ -7326,17 +7314,17 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
         CreateFunctorTransformer(
             [&types, hasNonDeterministicFunctions, withFinalRules = peepholeSettings.WithFinalStageRules,
             withNonDeterministicRules = peepholeSettings.WithNonDeterministicRules](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                auto stageRules = TPeepHoleRules<EnableNewOptimizers>::Instance().SimplifyStageRules;
+                auto stageRules = TPeepHoleRules::Instance().SimplifyStageRules;
                 auto extStageRules = TExtPeepHoleOptimizerMap{};
                 if (withFinalRules) {
-                    const auto& finalRules = TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageRules;
+                    const auto& finalRules = TPeepHoleRules::Instance().FinalStageRules;
                     stageRules.insert(finalRules.begin(), finalRules.end());
 
-                    const auto& finalExtRules = TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageExtRules;
+                    const auto& finalExtRules = TPeepHoleRules::Instance().FinalStageExtRules;
                     extStageRules.insert(finalExtRules.begin(), finalExtRules.end());
                 }
 
-                const auto& nonDetStageRules = withNonDeterministicRules ? TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageNonDetRules : TExtPeepHoleOptimizerMap{};
+                const auto& nonDetStageRules = withNonDeterministicRules ? TPeepHoleRules::Instance().FinalStageNonDetRules : TExtPeepHoleOptimizerMap{};
                 return PeepHoleFinalStage(input, output, ctx, types, hasNonDeterministicFunctions, stageRules, extStageRules, nonDetStageRules);
             }
         ),
@@ -7347,7 +7335,7 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
         CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                 if (types.UseBlocks) {
-                    const auto& extStageRules = TPeepHoleRules<EnableNewOptimizers>::Instance().BlockStageExtRules;
+                    const auto& extStageRules = TPeepHoleRules::Instance().BlockStageExtRules;
                     return PeepHoleBlockStage(input, output, ctx, types, extStageRules);
                 } else {
                     output = input;
@@ -7388,14 +7376,13 @@ IGraphTransformer::TStatus DoPeepHoleOptimizeNode(const TExprNode::TPtr& input, 
     return IGraphTransformer::TStatus::Ok;
 }
 
-template <bool EnableNewOptimizers>
 IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
     bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings)
 {
     hasNonDeterministicFunctions = false;
-    const auto commonTransformer = CreatePeepHoleCommonStageTransformer<EnableNewOptimizers>(types, typeAnnotator, peepholeSettings);
-    const auto finalTransformer = CreatePeepHoleFinalStageTransformer<EnableNewOptimizers>(types, typeAnnotator,
+    const auto commonTransformer = CreatePeepHoleCommonStageTransformer(types, typeAnnotator, peepholeSettings);
+    const auto finalTransformer = CreatePeepHoleFinalStageTransformer(types, typeAnnotator,
         &hasNonDeterministicFunctions, peepholeSettings);
     return DoPeepHoleOptimizeNode(input, output, ctx, *commonTransformer, *finalTransformer);
 }
@@ -7403,19 +7390,12 @@ IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TE
 THolder<IGraphTransformer> MakePeepholeOptimization(TTypeAnnotationContextPtr typeAnnotationContext, const IPipelineConfigurator* config) {
     TPeepholeSettings peepholeSettings;
     peepholeSettings.CommonConfig = peepholeSettings.FinalConfig = config;
-    auto commonTransformer = CreatePeepHoleCommonStageTransformer<true>(*typeAnnotationContext, nullptr, peepholeSettings);
-    auto finalTransformer = CreatePeepHoleFinalStageTransformer<true>(*typeAnnotationContext, nullptr, nullptr, peepholeSettings);
+    auto commonTransformer = CreatePeepHoleCommonStageTransformer(*typeAnnotationContext, nullptr, peepholeSettings);
+    auto finalTransformer = CreatePeepHoleFinalStageTransformer(*typeAnnotationContext, nullptr, nullptr, peepholeSettings);
     return CreateFunctorTransformer(
             [common = std::move(commonTransformer), final = std::move(finalTransformer)](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                 return DoPeepHoleOptimizeNode(input, output, ctx, *common, *final);
             });
 }
 
-template IGraphTransformer::TStatus PeepHoleOptimizeNode<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
-    bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings);
-
-template IGraphTransformer::TStatus PeepHoleOptimizeNode<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
-    bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings);
 }

@@ -177,7 +177,7 @@ TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, 
     peepholeSettings.WithNonDeterministicRules = false;
 
     bool hasNonDeterministicFunctions;
-    auto status = PeepHoleOptimizeNode<true>(program.Ptr(), newProgram, ctx, typesCtx, &typeAnnTransformer,
+    auto status = PeepHoleOptimizeNode(program.Ptr(), newProgram, ctx, typesCtx, &typeAnnTransformer,
         hasNonDeterministicFunctions, peepholeSettings);
     if (status == TStatus::Error) {
         return status;

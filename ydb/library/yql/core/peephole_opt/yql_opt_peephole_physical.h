@@ -14,7 +14,6 @@ struct TPeepholeSettings {
     bool WithNonDeterministicRules = true;
 };
 
-template <bool EnableNewOptimizers>
 IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
     bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings = {});

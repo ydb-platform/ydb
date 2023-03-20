@@ -614,7 +614,7 @@ THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAll
 
             TExprNode::TPtr lambdaInput = ExprContext.DeepCopyLambda(stage.Program().Ref());
             bool hasNonDeterministicFunctions;
-            auto status = PeepHoleOptimizeNode<true>(lambdaInput, lambdaInput, ExprContext, *TypeContext, nullptr, hasNonDeterministicFunctions);
+            auto status = PeepHoleOptimizeNode(lambdaInput, lambdaInput, ExprContext, *TypeContext, nullptr, hasNonDeterministicFunctions);
             if (status != IGraphTransformer::TStatus::Ok) {
                 ExprContext.AddError(TIssue(ExprContext.GetPosition(lambdaInput->Pos()), TString("Peephole optimization failed for Dq stage")));
                 ExprContext.IssueManager.GetIssues().PrintTo(Cerr);

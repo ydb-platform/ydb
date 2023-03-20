@@ -2,7 +2,7 @@
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
 
@@ -54,6 +54,14 @@ TCommandRemoveDirectory::TCommandRemoveDirectory()
 
 void TCommandRemoveDirectory::Config(TConfig& config) {
     TYdbOperationCommand::Config(config);
+    config.Opts->AddLongOption('r', "recursive", "Remove directory and its content recursively. Prompt once by default")
+        .StoreTrue(&Recursive);
+    config.Opts->AddLongOption('f', "force", "Never prompt")
+        .NoArgument().StoreValue(&Prompt, ERecursiveRemovePrompt::Never);
+    config.Opts->AddCharOption('i', "Prompt before every removal")
+        .NoArgument().StoreValue(&Prompt, ERecursiveRemovePrompt::Always);
+    config.Opts->AddCharOption('I', "Prompt once")
+        .NoArgument().StoreValue(&Prompt, ERecursiveRemovePrompt::Once);
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to remove");
@@ -65,13 +73,24 @@ void TCommandRemoveDirectory::Parse(TConfig& config) {
 }
 
 int TCommandRemoveDirectory::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
-    ThrowOnError(
-        client.RemoveDirectory(
-            Path,
-            FillSettings(NScheme::TRemoveDirectorySettings())
-        ).GetValueSync()
-    );
+    TDriver driver = CreateDriver(config);
+    NScheme::TSchemeClient schemeClient(driver);
+    const auto settings = FillSettings(NScheme::TRemoveDirectorySettings());
+
+    if (Recursive) {
+        NTable::TTableClient tableClient(driver);
+        NTopic::TTopicClient topicClient(driver);
+        const auto prompt = Prompt.GetOrElse(ERecursiveRemovePrompt::Once);
+        ThrowOnError(RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, Path, prompt, settings));
+    } else {
+        if (Prompt) {
+            if (!NConsoleClient::Prompt(*Prompt, Path, NScheme::ESchemeEntryType::Directory)) {
+                return EXIT_SUCCESS;
+            }
+        }
+        ThrowOnError(schemeClient.RemoveDirectory(Path, settings).GetValueSync());
+    }
+
     return EXIT_SUCCESS;
 }
 

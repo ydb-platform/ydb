@@ -5,9 +5,9 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -31,6 +31,10 @@ public:
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
+
+private:
+    bool Recursive = false;
+    TMaybe<ERecursiveRemovePrompt> Prompt;
 };
 
 class TCommandDescribe : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {

@@ -1,3 +1,4 @@
+#include "interactive.h"
 #include "recursive_remove.h"
 
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
@@ -36,17 +37,43 @@ NYql::TIssues MakeIssues(const TString& error) {
     return issues;
 }
 
+bool Prompt(const TString& path, ESchemeEntryType type) {
+    Cout << "Remove " << to_lower(ToString(type)) << " '" << path << "' (y/n)? ";
+    return AskYesOrNo();
+}
+
+bool Prompt(ERecursiveRemovePrompt mode, const TString& path, NScheme::ESchemeEntryType type, bool first) {
+    switch (mode) {
+        case ERecursiveRemovePrompt::Always:
+            return Prompt(path, type);
+        case ERecursiveRemovePrompt::Once:
+            if (first) {
+                return Prompt(path, type);
+            } else {
+                return true;
+            }
+        case ERecursiveRemovePrompt::Never:
+            return true;
+    }
+}
+
 template <typename TClient, typename TSettings>
 using TRemoveFunc = TStatus(*)(TClient&, const TString&, const TSettings&);
 
 template <typename TClient, typename TSettings>
-TStatus Remove(TRemoveFunc<TClient, TSettings> func, TClient* client, const TString& path, const TRemoveDirectorySettings& settings) {
+TStatus Remove(TRemoveFunc<TClient, TSettings> func, TClient* client, const TSchemeEntry& entry,
+        ERecursiveRemovePrompt prompt, const TRemoveDirectorySettings& settings)
+{
     if (!client) {
         return TStatus(EStatus::GENERIC_ERROR, MakeIssues(TStringBuilder()
             << TypeName<TClient>() << " not specified"));
     }
 
-    return func(*client, path, TSettings(settings));
+    if (Prompt(prompt, entry.Name, entry.Type, false)) {
+        return func(*client, entry.Name, TSettings(settings));
+    } else {
+        return TStatus(EStatus::SUCCESS, {});
+    }
 }
 
 TStatus RemoveDirectoryRecursive(
@@ -54,6 +81,7 @@ TStatus RemoveDirectoryRecursive(
         TTableClient* tableClient,
         TTopicClient* topicClient,
         const TString& path,
+        ERecursiveRemovePrompt prompt,
         const TRemoveDirectorySettings& settings,
         bool removeSelf)
 {
@@ -62,25 +90,31 @@ TStatus RemoveDirectoryRecursive(
         return recursiveListResult.Status;
     }
 
+    if (prompt == ERecursiveRemovePrompt::Once) {
+        if (!Prompt(path, ESchemeEntryType::Directory)) {
+            return TStatus(EStatus::SUCCESS, {});
+        }
+    }
+
     // output order is: Root, Recursive(children)...
     // we need to reverse it to delete recursively
     for (auto it = recursiveListResult.Entries.rbegin(); it != recursiveListResult.Entries.rend(); ++it) {
         const auto& entry = *it;
         switch (entry.Type) {
             case ESchemeEntryType::Directory:
-                if (auto result = Remove(&RemoveDirectory, &schemeClient, entry.Name, settings); !result.IsSuccess()) {
+                if (auto result = Remove(&RemoveDirectory, &schemeClient, entry, prompt, settings); !result.IsSuccess()) {
                     return result;
                 }
                 break;
 
             case ESchemeEntryType::Table:
-                if (auto result = Remove(&RemoveTable, tableClient, entry.Name, settings); !result.IsSuccess()) {
+                if (auto result = Remove(&RemoveTable, tableClient, entry, prompt, settings); !result.IsSuccess()) {
                     return result;
                 }
                 break;
 
             case ESchemeEntryType::Topic:
-                if (auto result = Remove(&RemoveTopic, topicClient, entry.Name, settings); !result.IsSuccess()) {
+                if (auto result = Remove(&RemoveTopic, topicClient, entry, prompt, settings); !result.IsSuccess()) {
                     return result;
                 }
                 break;
@@ -101,7 +135,7 @@ TStatus RemoveDirectoryRecursive(
         const TRemoveDirectorySettings& settings,
         bool removeSelf)
 {
-    return RemoveDirectoryRecursive(schemeClient, &tableClient, nullptr, path, settings, removeSelf);
+    return RemoveDirectoryRecursive(schemeClient, &tableClient, nullptr, path, ERecursiveRemovePrompt::Never, settings, removeSelf);
 }
 
 TStatus RemoveDirectoryRecursive(
@@ -109,10 +143,11 @@ TStatus RemoveDirectoryRecursive(
         TTableClient& tableClient,
         TTopicClient& topicClient,
         const TString& path,
+        ERecursiveRemovePrompt prompt,
         const TRemoveDirectorySettings& settings,
         bool removeSelf)
 {
-    return RemoveDirectoryRecursive(schemeClient, &tableClient, &topicClient, path, settings, removeSelf);
+    return RemoveDirectoryRecursive(schemeClient, &tableClient, &topicClient, path, prompt, settings, removeSelf);
 }
 
 }

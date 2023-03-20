@@ -6,6 +6,14 @@
 
 namespace NYdb::NConsoleClient {
 
+enum class ERecursiveRemovePrompt {
+    Always,
+    Once,
+    Never,
+};
+
+bool Prompt(ERecursiveRemovePrompt mode, const TString& path, NScheme::ESchemeEntryType type, bool first = true);
+
 TStatus RemoveDirectoryRecursive(
     NScheme::TSchemeClient& schemeClient,
     NTable::TTableClient& tableClient,
@@ -18,6 +26,7 @@ TStatus RemoveDirectoryRecursive(
     NTable::TTableClient& tableClient,
     NTopic::TTopicClient& topicClient,
     const TString& path,
+    ERecursiveRemovePrompt prompt,
     const NScheme::TRemoveDirectorySettings& settings = {},
     bool removeSelf = true);
 

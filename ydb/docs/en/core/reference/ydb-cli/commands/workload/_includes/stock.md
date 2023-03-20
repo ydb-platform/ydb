@@ -53,7 +53,7 @@ Creating a database with 1000 products, 10000 items of each product, and no orde
 
 Creating a database with 10 products, 100 items of each product, 10 orders, and a minimum number of shards equal 100:
 ```bash
-{{ ydb-cli }} workload stock init -p 10 -q 100 -o 10 ----min-partitions 100
+{{ ydb-cli }} workload stock init -p 10 -q 100 -o 10 --min-partitions 100
 ```
 
 ## Running a load test {#run}

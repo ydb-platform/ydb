@@ -7,6 +7,8 @@
 
 namespace NKikimr::NReplication::NController {
 
+const TString ReplicationConsumerName = "replicationConsumer";
+
 void TTargetWithStream::Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) {
     switch (GetStreamState()) {
     case EStreamState::Creating:

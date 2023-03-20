@@ -4,6 +4,8 @@
 
 namespace NKikimr::NReplication::NController {
 
+extern const TString ReplicationConsumerName;
+
 class TTargetWithStream: public TTargetBase {
 public:
     template <typename... Args>

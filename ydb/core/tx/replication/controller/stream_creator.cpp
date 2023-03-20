@@ -1,11 +1,13 @@
 #include "logging.h"
 #include "private_events.h"
 #include "stream_creator.h"
+#include "target_with_stream.h"
 #include "util.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 
 namespace NKikimr::NReplication::NController {
@@ -25,14 +27,15 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             break;
         }
 
-        Become(&TThis::StateWork);
+        Become(&TThis::StateCreateStream);
     }
 
-    STATEFN(StateWork) {
+    STATEFN(StateCreateStream) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, CreateStream);
-            sFunc(TEvents::TEvPoison, PassAway);
+        default:
+            return StateBase(ev, TlsActivationContext->AsActorContext());
         }
     }
 
@@ -42,7 +45,48 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_D("Retry");
+                LOG_D("Retry CreateStream");
+                return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+            }
+
+            LOG_E("Error"
+                << ": status# " << result.GetStatus()
+                << ", issues# " << result.GetIssues().ToOneLineString());
+            return Reply(std::move(result));
+        } else {
+            LOG_I("Success"
+                << ": issues# " << result.GetIssues().ToOneLineString());
+            return CreateConsumer();
+        }
+    }
+
+    void CreateConsumer() {
+        const auto streamPath = CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
+        const auto settings = NYdb::NTopic::TAlterTopicSettings()
+            .BeginAddConsumer()
+                .ConsumerName(ReplicationConsumerName)
+            .EndAddConsumer();
+
+        Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(streamPath, settings));
+        Become(&TThis::StateCreateConsumer);
+    }
+
+    STATEFN(StateCreateConsumer) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvYdbProxy::TEvAlterTopicResponse, Handle);
+            sFunc(TEvents::TEvWakeup, CreateConsumer);
+        default:
+            return StateBase(ev, TlsActivationContext->AsActorContext());
+        }
+    }
+
+    void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+        auto& result = ev->Get()->Result;
+
+        if (!result.IsSuccess()) {
+            if (IsRetryableError(result)) {
+                LOG_D("Retry CreateConsumer");
                 return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
             }
 
@@ -54,7 +98,11 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                 << ": issues# " << result.GetIssues().ToOneLineString());
         }
 
-        Send(Parent, new TEvPrivate::TEvCreateStreamResult(ReplicationId, TargetId, std::move(result)));
+        Reply(std::move(result));
+    }
+
+    void Reply(NYdb::TStatus&& status) {
+        Send(Parent, new TEvPrivate::TEvCreateStreamResult(ReplicationId, TargetId, std::move(status)));
         PassAway();
     }
 
@@ -84,6 +132,12 @@ public:
 
     void Bootstrap() {
         CreateStream();
+    }
+
+    STATEFN(StateBase) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
     }
 
 private:

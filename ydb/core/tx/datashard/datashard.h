@@ -122,6 +122,8 @@ namespace NDataShard {
             WaitingForAsyncJob = 1ULL << 43,
             // Operation must complete before results sending
             WaitCompletion = 1ULL << 44,
+            // Waiting for global tx id allocation
+            WaitingForGlobalTxId = 1ULL << 45,
 
             LastFlag = WaitCompletion,
 

@@ -2000,4 +2000,33 @@ bool TPipeline::AddLockDependencies(const TOperation::TPtr& op, TLocksUpdate& gu
     return addedDependencies;
 }
 
+void TPipeline::ProvideGlobalTxId(const TOperation::TPtr& op, ui64 globalTxId) {
+    Y_VERIFY(op->HasWaitingForGlobalTxIdFlag());
+    ui64 localTxId = op->GetTxId();
+
+    auto itImmediate = ImmediateOps.find(localTxId);
+    Y_VERIFY(itImmediate != ImmediateOps.end());
+    ImmediateOps.erase(itImmediate);
+    auto itActive = ActiveOps.find(op->GetStepOrder());
+    Y_VERIFY(itActive != ActiveOps.end());
+    ActiveOps.erase(itActive);
+    bool removedCandidate = false;
+    auto itCandidate = CandidateOps.find(op->GetStepOrder());
+    if (itCandidate != CandidateOps.end()) {
+        CandidateOps.erase(itCandidate);
+        removedCandidate = true;
+    }
+
+    op->SetGlobalTxId(globalTxId);
+    op->SetWaitingForGlobalTxIdFlag(false);
+    auto resImmediate = ImmediateOps.emplace(op->GetTxId(), op);
+    Y_VERIFY(resImmediate.second);
+    auto resActive = ActiveOps.emplace(op->GetStepOrder(), op);
+    Y_VERIFY(resActive.second);
+    if (removedCandidate) {
+        auto resCandidate = CandidateOps.emplace(op->GetStepOrder(), op);
+        Y_VERIFY(resCandidate.second);
+    }
+}
+
 }}

@@ -41,8 +41,14 @@ namespace NKikimr::NDataShard {
         virtual void OnAbort(ui64 txId) = 0;
     };
 
+    struct TVolatileTxInfoCommitOrderListTag {};
+    struct TVolatileTxInfoPendingCommitListTag {};
+    struct TVolatileTxInfoPendingAbortListTag {};
+
     struct TVolatileTxInfo
-        : public TIntrusiveListItem<TVolatileTxInfo>
+        : public TIntrusiveListItem<TVolatileTxInfo, TVolatileTxInfoCommitOrderListTag>
+        , public TIntrusiveListItem<TVolatileTxInfo, TVolatileTxInfoPendingCommitListTag>
+        , public TIntrusiveListItem<TVolatileTxInfo, TVolatileTxInfoPendingAbortListTag>
     {
         ui64 CommitOrder;
         ui64 TxId;
@@ -58,6 +64,18 @@ namespace NKikimr::NDataShard {
         absl::flat_hash_set<ui64> BlockedOperations;
         absl::flat_hash_set<ui64> WaitingRemovalOperations;
         TStackVec<IVolatileTxCallback::TPtr, 2> Callbacks;
+
+        template<class TTag>
+        bool IsInList() const {
+            using TItem = TIntrusiveListItem<TVolatileTxInfo, TTag>;
+            return !static_cast<const TItem*>(this)->Empty();
+        }
+
+        template<class TTag>
+        void UnlinkFromList() {
+            using TItem = TIntrusiveListItem<TVolatileTxInfo, TTag>;
+            static_cast<TItem*>(this)->Unlink();
+        }
     };
 
     class TVolatileTxManager {
@@ -179,7 +197,7 @@ namespace NKikimr::NDataShard {
         void PersistAddVolatileTx(
             ui64 txId, const TRowVersion& version,
             TConstArrayRef<ui64> commitTxIds,
-            TConstArrayRef<ui64> dependencies,
+            const absl::flat_hash_set<ui64>& dependencies,
             TConstArrayRef<ui64> participants,
             std::optional<ui64> changeGroup,
             bool commitOrdered,
@@ -212,6 +230,7 @@ namespace NKikimr::NDataShard {
         }
 
     private:
+        void RollbackAddVolatileTx(ui64 txId);
         void PersistRemoveVolatileTx(ui64 txId, TTransactionContext& txc);
         void RemoveVolatileTx(ui64 txId);
 
@@ -236,11 +255,11 @@ namespace NKikimr::NDataShard {
         absl::flat_hash_map<ui64, std::unique_ptr<TVolatileTxInfo>> VolatileTxs; // TxId -> Info
         absl::flat_hash_map<ui64, TVolatileTxInfo*> VolatileTxByCommitTxId; // CommitTxId -> Info
         TVolatileTxByVersion VolatileTxByVersion;
-        TIntrusiveList<TVolatileTxInfo> VolatileTxByCommitOrder;
+        TIntrusiveList<TVolatileTxInfo, TVolatileTxInfoCommitOrderListTag> VolatileTxByCommitOrder;
         std::vector<TWaitingSnapshotEvent> WaitingSnapshotEvents;
         TIntrusivePtr<TTxMap> TxMap;
-        std::deque<ui64> PendingCommits;
-        std::deque<ui64> PendingAborts;
+        TIntrusiveList<TVolatileTxInfo, TVolatileTxInfoPendingCommitListTag> PendingCommits;
+        TIntrusiveList<TVolatileTxInfo, TVolatileTxInfoPendingAbortListTag> PendingAborts;
         ui64 NextCommitOrder = 1;
         bool PendingCommitTxScheduled = false;
         bool PendingAbortTxScheduled = false;

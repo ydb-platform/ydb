@@ -275,8 +275,8 @@ public:
         IsRepeatableSnapshot = true;
     }
 
-    bool HasChangeGroup() const override {
-        return bool(ChangeGroup);
+    std::optional<ui64> GetCurrentChangeGroup() const override {
+        return ChangeGroup;
     }
 
     ui64 GetChangeGroup() override {
@@ -321,7 +321,7 @@ public:
             return;
         }
 
-        if (auto lock = Self->SysLocksTable().GetRawLock(lockId, TRowVersion::Min())) {
+        if (auto lock = Self->SysLocksTable().GetRawLock(lockId, TRowVersion::Min()); lock && !VolatileCommitOrdered) {
             lock->ForAllVolatileDependencies([this](ui64 txId) {
                 if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
                     VolatileTxId = EngineBay.GetTxId();
@@ -390,17 +390,8 @@ public:
         return commitTxIds;
     }
 
-    TVector<ui64> GetVolatileDependencies() const {
-        TVector<ui64> dependencies;
-
-        if (!VolatileDependencies.empty() && !VolatileCommitOrdered) {
-            dependencies.reserve(VolatileDependencies.size());
-            for (ui64 dependency : VolatileDependencies) {
-                dependencies.push_back(dependency);
-            }
-        }
-
-        return dependencies;
+    const absl::flat_hash_set<ui64>& GetVolatileDependencies() const {
+        return VolatileDependencies;
     }
 
     std::optional<ui64> GetVolatileChangeGroup() const {
@@ -842,6 +833,7 @@ public:
                     VolatileTxId = EngineBay.GetTxId();
                 }
                 VolatileCommitOrdered = true;
+                VolatileDependencies.clear();
             }
             return;
         }
@@ -956,7 +948,7 @@ public:
             // even though they may not be persistent yet, since this tx will
             // also perform writes, and either it fails, or future generation
             // could not have possibly committed it already.
-            if (info->State != EVolatileTxState::Aborting) {
+            if (info->State != EVolatileTxState::Aborting && !VolatileCommitOrdered) {
                 if (!VolatileTxId) {
                     // All further writes will use this VolatileTxId and will
                     // add it to VolatileCommitTxIds, forcing it to be committed
@@ -1220,7 +1212,7 @@ TVector<ui64> TEngineBay::GetVolatileCommitTxIds() const {
     return host->GetVolatileCommitTxIds();
 }
 
-TVector<ui64> TEngineBay::GetVolatileDependencies() const {
+const absl::flat_hash_set<ui64>& TEngineBay::GetVolatileDependencies() const {
     Y_VERIFY(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());

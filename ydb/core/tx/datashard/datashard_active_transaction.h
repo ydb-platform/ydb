@@ -189,7 +189,7 @@ public:
     void ResetCollectedChanges() { EngineBay.ResetCollectedChanges(); }
 
     TVector<ui64> GetVolatileCommitTxIds() const { return EngineBay.GetVolatileCommitTxIds(); }
-    TVector<ui64> GetVolatileDependencies() const { return EngineBay.GetVolatileDependencies(); }
+    const absl::flat_hash_set<ui64>& GetVolatileDependencies() const { return EngineBay.GetVolatileDependencies(); }
     std::optional<ui64> GetVolatileChangeGroup() const { return EngineBay.GetVolatileChangeGroup(); }
     bool GetVolatileCommitOrdered() const { return EngineBay.GetVolatileCommitOrdered(); }
 

@@ -374,6 +374,13 @@ public:
      */
     bool AddLockDependencies(const TOperation::TPtr& op, TLocksUpdate& guardLocks);
 
+    /**
+     * Provides a global txId for the waiting operation
+     *
+     * The operation must have a WaitingForGlobalTxId flag.
+     */
+    void ProvideGlobalTxId(const TOperation::TPtr& op, ui64 globalTxId);
+
 private:
     struct TStoredExecutionProfile {
         TBasicOpInfo OpInfo;

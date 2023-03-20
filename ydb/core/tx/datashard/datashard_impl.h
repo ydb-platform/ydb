@@ -23,6 +23,7 @@
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <ydb/core/base/appdata.h>
@@ -148,6 +149,8 @@ enum class TSwitchState {
 
 class TDataShardEngineHost;
 struct TSetupSysLocks;
+
+class TNeedGlobalTxId : public yexception {};
 
 ///
 class TDataShard
@@ -1204,6 +1207,7 @@ class TDataShard
     void Handle(TEvTxProcessing::TEvInterruptTransaction::TPtr &ev, const TActorContext &ctx) {
         ForwardEventToOperation(ev, ctx);
     }
+    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx);
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
@@ -1849,12 +1853,13 @@ public:
      *
      * Prerequisites: TSetupSysLocks is active and caller does not have any
      * uncommitted write locks.
-     * Note: the specified table should have some write locks, otherwise
-     * this call is a very expensive no-op.
+     * Note: the specified table should have potential conflicting changes,
+     * otherwise this call is a very expensive no-op.
      *
      * Returns true on success and false on page fault.
      */
-    bool BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tableId, TArrayRef<const TCell> keyCells);
+    bool BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tableId,
+        TArrayRef<const TCell> keyCells, absl::flat_hash_set<ui64>& volatileDependencies);
 
 private:
     ///
@@ -2697,6 +2702,7 @@ protected:
             HFuncTraced(TEvTxProcessing::TEvStreamClearanceResponse, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamClearancePending, Handle);
             HFuncTraced(TEvTxProcessing::TEvInterruptTransaction, Handle);
+            HFuncTraced(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
             HFuncTraced(TEvPrivate::TEvProgressTransaction, Handle);
             HFuncTraced(TEvPrivate::TEvCleanupTransaction, Handle);
             HFuncTraced(TEvPrivate::TEvDelayedProposeTransaction, Handle);

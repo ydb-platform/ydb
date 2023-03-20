@@ -22,20 +22,23 @@ class TDirectTxErase : public IDirectTx {
         TTransactionContext* const Txc;
         const TRowVersion ReadVersion;
         const TRowVersion WriteVersion;
+        const ui64 GlobalTxId;
 
     private:
         explicit TExecuteParams(TDirectTxErase* tx, TTransactionContext* txc,
-                const TRowVersion& readVersion, const TRowVersion& writeVersion)
+                const TRowVersion& readVersion, const TRowVersion& writeVersion,
+                const ui64 globalTxId)
             : Tx(tx)
             , Txc(txc)
             , ReadVersion(readVersion)
             , WriteVersion(writeVersion)
+            , GlobalTxId(globalTxId)
         {
         }
 
     public:
         static TExecuteParams ForCheck() {
-            return TExecuteParams(nullptr, nullptr, TRowVersion(), TRowVersion());
+            return TExecuteParams(nullptr, nullptr, TRowVersion(), TRowVersion(), 0);
         }
 
         template <typename... Args>
@@ -68,7 +71,9 @@ public:
     static bool CheckRequest(TDataShard* self, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
         NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error);
 
-    bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) override;
+    bool Execute(TDataShard* self, TTransactionContext& txc,
+        const TRowVersion& readVersion, const TRowVersion& writeVersion,
+        ui64 globalTxId) override;
     TDirectTxResult GetResult(TDataShard* self) override;
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const override;
 };

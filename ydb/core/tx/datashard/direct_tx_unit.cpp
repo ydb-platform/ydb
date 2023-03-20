@@ -19,11 +19,15 @@ public:
     }
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
-        return !op->HasRuntimeConflicts();
+        return !op->HasRuntimeConflicts() && !op->HasWaitingForGlobalTxIdFlag();
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
+
+        if (op->HasWaitingForGlobalTxIdFlag()) {
+            return EExecutionStatus::Continue;
+        }
 
         if (op->IsImmediate()) {
             // Every time we execute immediate transaction we may choose a new mvcc version
@@ -36,8 +40,26 @@ public:
         TDirectTransaction* tx = dynamic_cast<TDirectTransaction*>(op.Get());
         Y_VERIFY(tx != nullptr);
 
-        if (!tx->Execute(&DataShard, txc)) {
-            return EExecutionStatus::Restart;
+        try {
+            if (!tx->Execute(&DataShard, txc)) {
+                return EExecutionStatus::Restart;
+            }
+        } catch (const TNeedGlobalTxId&) {
+            Y_VERIFY_S(op->GetGlobalTxId() == 0,
+                "Unexpected TNeedGlobalTxId exception for direct operation with TxId# " << op->GetGlobalTxId());
+            Y_VERIFY_S(op->IsImmediate(),
+                "Unexpected TNeedGlobalTxId exception for a non-immediate operation with TxId# " << op->GetTxId());
+
+            ctx.Send(MakeTxProxyID(),
+                new TEvTxUserProxy::TEvAllocateTxId(),
+                0, op->GetTxId());
+            op->SetWaitingForGlobalTxIdFlag();
+
+            if (txc.DB.HasChanges()) {
+                txc.Reschedule();
+                return EExecutionStatus::Restart;
+            }
+            return EExecutionStatus::Continue;
         }
 
         if (Pipeline.AddLockDependencies(op, guardLocks)) {

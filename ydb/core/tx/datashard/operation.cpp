@@ -33,7 +33,7 @@ void PrintDeps(const TOperation *op,
 
 void TBasicOpInfo::Serialize(NKikimrTxDataShard::TBasicOpInfo &info) const
 {
-    info.SetTxId(TxId);
+    info.SetTxId(GetTxId());
     info.SetStep(Step);
     info.SetKind(ToString(Kind));
     info.SetReceivedAt(ReceivedAt.GetValue());

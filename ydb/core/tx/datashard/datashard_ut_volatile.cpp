@@ -2,6 +2,9 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
 
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
+
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
 namespace NKikimr {
@@ -1410,6 +1413,126 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             )"),
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
             "{ items { uint32_value: 20 } items { uint32_value: 30 } }");
+    }
+
+    Y_UNIT_TEST(DistributedWriteThenBulkUpsert) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+                        .Shards(1)
+                        .Columns({
+                            {"key", "Uint32", true, false},
+                            {"value", "Uint32", false, false},
+                            {"value2", "Uint32", false, false}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        CreateShardedTable(server, sender, "/Root", "table-2", opts);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
+
+        ui64 maxReadSetStep = 0;
+        bool captureReadSets = true;
+        TVector<THolder<IEventHandle>> capturedReadSets;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    maxReadSetStep = Max(maxReadSetStep, msg->Record.GetStep());
+                    if (captureReadSets) {
+                        Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest() << Endl;
+                        capturedReadSets.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+            UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (2, 2, 42);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
+        )", sessionId, "", true /* commitTx */), "/Root");
+
+        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
+        // Write to key 2 using bulk upsert
+        {
+            using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
+            using TRowTypes = TVector<std::pair<TString, Ydb::Type>>;
+
+            auto types = std::make_shared<TRowTypes>();
+            
+            Ydb::Type type;
+            type.set_type_id(Ydb::Type::UINT32);
+            types->emplace_back("key", type);
+            types->emplace_back("value", type);
+
+            auto rows = std::make_shared<TRows>();
+
+            TVector<TCell> key{ TCell::Make(ui32(2)) };
+            TVector<TCell> values{ TCell::Make(ui32(22)) };
+            TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
+            TString serializedValues(TSerializedCellVec::Serialize(values));
+            rows->emplace_back(serializedKey, serializedValues);
+
+            auto upsertSender = runtime.AllocateEdgeActor();
+            auto actor = NTxProxy::CreateUploadRowsInternal(upsertSender, "/Root/table-1", types, rows);
+            runtime.Register(actor);
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvUploadRowsResponse>(upsertSender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, Ydb::StatusIds::SUCCESS);
+        }
+
+        // This compaction verifies there's no commit race with the waiting
+        // distributed transaction. If commits happen in incorrect order we
+        // would observe unexpected results.
+        const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
+        CompactTable(runtime, shard1, tableId1, false);
+
+        runtime.SetObserverFunc(prevObserverFunc);
+        for (auto& ev : capturedReadSets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(future))),
+            "<empty>");
+
+        // Verify the result
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value, value2 FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value, value2 FROM `/Root/table-2`
+                ORDER BY key
+                )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } items { uint32_value: 42 } }, "
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } items { null_flag_value: NULL_VALUE } }");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)

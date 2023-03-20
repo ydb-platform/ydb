@@ -113,7 +113,7 @@ public:
     void ResetCollectedChanges();
 
     TVector<ui64> GetVolatileCommitTxIds() const;
-    TVector<ui64> GetVolatileDependencies() const;
+    const absl::flat_hash_set<ui64>& GetVolatileDependencies() const;
     std::optional<ui64> GetVolatileChangeGroup() const;
     bool GetVolatileCommitOrdered() const;
 

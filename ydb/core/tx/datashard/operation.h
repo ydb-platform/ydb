@@ -115,11 +115,20 @@ public:
     TBasicOpInfo()
         : Kind(EOperationKind::Unknown)
         , Flags(0)
-        , TxId(0)
+        , GlobalTxId(0)
         , Step(0)
         , MinStep(0)
         , MaxStep(0)
         , TieBreakerIndex(0)
+    {
+    }
+
+    TBasicOpInfo(EOperationKind kind,
+                 ui64 flags,
+                 ui64 maxStep,
+                 TInstant receivedAt,
+                 ui64 tieBreakerIndex)
+        : TBasicOpInfo(0, kind, flags, maxStep, receivedAt, tieBreakerIndex)
     {
     }
 
@@ -131,7 +140,7 @@ public:
                  ui64 tieBreakerIndex)
         : Kind(kind)
         , Flags(flags)
-        , TxId(txId)
+        , GlobalTxId(txId)
         , Step(0)
         , ReceivedAt(receivedAt)
         , MinStep(0)
@@ -342,10 +351,15 @@ public:
     bool HasWaitCompletionFlag() const { return HasFlag(TTxFlags::WaitCompletion); }
     void SetWaitCompletionFlag(bool val = true) { SetFlag(TTxFlags::WaitCompletion, val); }
 
+    bool HasWaitingForGlobalTxIdFlag() const { return HasFlag(TTxFlags::WaitingForGlobalTxId); }
+    void SetWaitingForGlobalTxIdFlag(bool val = true) { SetFlag(TTxFlags::WaitingForGlobalTxId, val); }
+
     ///////////////////////////////////
     //     OPERATION ID AND PLAN     //
     ///////////////////////////////////
-    ui64 GetTxId() const { return TxId; }
+    ui64 GetTxId() const { return GlobalTxId ? GlobalTxId : TieBreakerIndex; }
+    ui64 GetGlobalTxId() const { return GlobalTxId; }
+    void SetGlobalTxId(ui64 txId) { GlobalTxId = txId; }
 
     ui64 GetStep() const { return Step; }
     void SetStep(ui64 step) { Step = step; }
@@ -391,7 +405,7 @@ protected:
     EOperationKind Kind;
     // See TTxFlags.
     ui64 Flags;
-    ui64 TxId;
+    ui64 GlobalTxId;
     ui64 Step;
     TInstant ReceivedAt;
 

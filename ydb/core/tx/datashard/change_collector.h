@@ -16,7 +16,7 @@ protected:
     ~IDataShardChangeGroupProvider() = default;
 
 public:
-    virtual bool HasChangeGroup() const = 0;
+    virtual std::optional<ui64> GetCurrentChangeGroup() const = 0;
     virtual ui64 GetChangeGroup() = 0;
 };
 
@@ -31,8 +31,8 @@ public:
         , Group(group)
     { }
 
-    bool HasChangeGroup() const override {
-        return bool(Group);
+    std::optional<ui64> GetCurrentChangeGroup() const override {
+        return Group;
     }
 
     ui64 GetChangeGroup() override;

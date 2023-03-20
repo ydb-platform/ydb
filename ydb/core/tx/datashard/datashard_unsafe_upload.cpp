@@ -11,7 +11,9 @@ TDataShard::TTxUnsafeUploadRows::TTxUnsafeUploadRows(TDataShard* ds, TEvDataShar
 
 bool TDataShard::TTxUnsafeUploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
     auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
-    if (!TCommonUploadOps::Execute(Self, txc, readVersion, writeVersion)) {
+    
+    // NOTE: will not throw TNeedGlobalTxId since we set breakLocks to false
+    if (!TCommonUploadOps::Execute(Self, txc, readVersion, writeVersion, /* globalTxId */ 0)) {
         return false;
     }
 

@@ -74,7 +74,11 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, *groupProvider, params.Txc->DB, tableInfo));
     }
 
-    const bool breakWriteConflicts = self->SysLocksTable().HasWriteLocks(fullTableId);
+    const bool breakWriteConflicts = (
+        self->SysLocksTable().HasWriteLocks(fullTableId) ||
+        self->GetVolatileTxManager().GetTxMap());
+
+    absl::flat_hash_set<ui64> volatileDependencies;
 
     bool pageFault = false;
     for (const auto& serializedKey : request.GetKeyColumns()) {
@@ -144,7 +148,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         if (breakWriteConflicts) {
-            if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, keyCells.GetCells())) {
+            if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
                 pageFault = true;
             }
         }
@@ -154,7 +158,15 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
-        params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion);
+
+        if (!volatileDependencies.empty()) {
+            if (!params.GlobalTxId) {
+                throw TNeedGlobalTxId();
+            }
+            params.Txc->DB.UpdateTx(localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId);
+        } else {
+            params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion);
+        }
     }
 
     if (pageFault) {
@@ -163,6 +175,19 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         return EStatus::PageFault;
+    }
+
+    if (!volatileDependencies.empty()) {
+        self->GetVolatileTxManager().PersistAddVolatileTx(
+            params.GlobalTxId,
+            params.WriteVersion,
+            /* commitTxIds */ { params.GlobalTxId },
+            volatileDependencies,
+            /* participants */ { },
+            groupProvider ? groupProvider->GetCurrentChangeGroup() : std::nullopt,
+            /* ordered */ false,
+            *params.Txc);
+        // Note: transaction is already committed, no additional waiting needed
     }
 
     status = NKikimrTxDataShard::TEvEraseRowsResponse::OK;
@@ -184,14 +209,15 @@ bool TDirectTxErase::CheckRequest(TDataShard* self, const NKikimrTxDataShard::TE
 }
 
 bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
-        const TRowVersion& readVersion, const TRowVersion& writeVersion)
+        const TRowVersion& readVersion, const TRowVersion& writeVersion,
+        ui64 globalTxId)
 {
     const auto& record = Ev->Get()->Record;
 
     Result = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
     Result->Record.SetTabletID(self->TabletID());
 
-    const auto params = TExecuteParams::ForExecute(this, &txc, readVersion, writeVersion);
+    const auto params = TExecuteParams::ForExecute(this, &txc, readVersion, writeVersion, globalTxId);
     NKikimrTxDataShard::TEvEraseRowsResponse::EStatus status;
     TString error;
 

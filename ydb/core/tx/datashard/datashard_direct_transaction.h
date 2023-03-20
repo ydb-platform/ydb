@@ -20,15 +20,17 @@ struct TDirectTxResult {
 class IDirectTx {
 public:
     virtual ~IDirectTx() = default;
-    virtual bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) = 0;
+    virtual bool Execute(TDataShard* self, TTransactionContext& txc,
+        const TRowVersion& readVersion, const TRowVersion& writeVersion,
+        ui64 globalTxId) = 0;
     virtual TDirectTxResult GetResult(TDataShard* self) = 0;
     virtual TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const = 0;
 };
 
 class TDirectTransaction : public TOperation {
 public:
-    TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
-    TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
+    TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
+    TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
 
     void BuildExecutionPlan(bool) override;
 

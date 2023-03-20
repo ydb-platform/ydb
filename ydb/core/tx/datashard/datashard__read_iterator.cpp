@@ -897,8 +897,8 @@ class TDataShard::TReadOperation : public TOperation, public IReadOperation {
     static constexpr ui32 Flags = NTxDataShard::TTxFlags::ReadOnly | NTxDataShard::TTxFlags::Immediate;
 
 public:
-    TReadOperation(TDataShard* ds, ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvRead::TPtr ev)
-        : TOperation(TBasicOpInfo(txId, EOperationKind::ReadTx, Flags, 0, receivedAt, tieBreakerIndex))
+    TReadOperation(TDataShard* ds, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvRead::TPtr ev)
+        : TOperation(TBasicOpInfo(EOperationKind::ReadTx, Flags, 0, receivedAt, tieBreakerIndex))
         , Self(ds)
         , Sender(ev->Sender)
         , Request(ev->Release().Release())
@@ -1723,7 +1723,7 @@ public:
 
             if (Ev) {
                 const ui64 tieBreaker = Self->NextTieBreakerIndex++;
-                Op = new TReadOperation(Self, tieBreaker, ctx.Now(), tieBreaker, Ev);
+                Op = new TReadOperation(Self, ctx.Now(), tieBreaker, Ev);
                 Op->BuildExecutionPlan(false);
                 Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
 

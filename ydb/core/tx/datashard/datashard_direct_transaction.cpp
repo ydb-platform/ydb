@@ -5,14 +5,14 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TDirectTransaction::TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev)
-    : TOperation(TBasicOpInfo(txId, EOperationKind::DirectTx, Flags, 0, receivedAt, tieBreakerIndex))
+TDirectTransaction::TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev)
+    : TOperation(TBasicOpInfo(EOperationKind::DirectTx, Flags, 0, receivedAt, tieBreakerIndex))
     , Impl(new TDirectTxUpload(ev))
 {
 }
 
-TDirectTransaction::TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev)
-    : TOperation(TBasicOpInfo(txId, EOperationKind::DirectTx, Flags, 0, receivedAt, tieBreakerIndex))
+TDirectTransaction::TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev)
+    : TOperation(TBasicOpInfo(EOperationKind::DirectTx, Flags, 0, receivedAt, tieBreakerIndex))
     , Impl(new TDirectTxErase(ev))
 {
 }
@@ -32,7 +32,9 @@ void TDirectTransaction::BuildExecutionPlan(bool loaded)
 
 bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
     auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
-    if (!Impl->Execute(self, txc, readVersion, writeVersion))
+
+    // NOTE: may throw TNeedGlobalTxId exception, which is handled in direct tx unit
+    if (!Impl->Execute(self, txc, readVersion, writeVersion, GetGlobalTxId()))
         return false;
 
     if (self->IsMvccEnabled()) {

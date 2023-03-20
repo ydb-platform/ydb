@@ -12,6 +12,7 @@ class TTxDirectBase : public TTransactionBase<TDataShard> {
 
     TOperation::TPtr Op;
     TVector<EExecutionUnitKind> CompleteList;
+    bool WaitComplete = false;
 
 public:
     TTxDirectBase(TDataShard* ds, TEvRequest ev)
@@ -30,29 +31,68 @@ public:
 
         if (Ev) {
             const ui64 tieBreaker = Self->NextTieBreakerIndex++;
-            Op = new TDirectTransaction(tieBreaker, ctx.Now(), tieBreaker, Ev);
+            Op = new TDirectTransaction(ctx.Now(), tieBreaker, Ev);
             Op->BuildExecutionPlan(false);
             Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
 
             Ev = nullptr;
+            Op->IncrementInProgress();
         }
 
+        Y_VERIFY(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
+
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
-        if (!CompleteList.empty()) {
-            return true;
-        } else if (status == EExecutionStatus::Restart) {
-            return false;
+
+        switch (status) {
+            case EExecutionStatus::Restart:
+                return false;
+
+            case EExecutionStatus::Reschedule:
+                Y_FAIL("Unexpected Reschedule status while handling a direct operation");
+
+            case EExecutionStatus::Executed:
+            case EExecutionStatus::Continue:
+                Op->DecrementInProgress();
+                break;
+
+            case EExecutionStatus::WaitComplete:
+                WaitComplete = true;
+                break;
+
+            case EExecutionStatus::ExecutedNoMoreRestarts:
+            case EExecutionStatus::DelayComplete:
+            case EExecutionStatus::DelayCompleteNoMoreRestarts:
+                Y_FAIL_S("unexpected execution status " << status << " for operation "
+                        << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
+        }
+
+        if (WaitComplete || !CompleteList.empty()) {
+            // Keep current operation
         } else {
             Op = nullptr;
-            return true;
         }
+
+        return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxDirectBase(" << GetTxType() << ") Complete"
             << ": at tablet# " << Self->TabletID());
 
-        Self->Pipeline.RunCompleteList(Op, CompleteList, ctx);
+        if (Op) {
+            if (!CompleteList.empty()) {
+                Self->Pipeline.RunCompleteList(Op, CompleteList, ctx);
+            }
+
+            if (WaitComplete) {
+                Op->DecrementInProgress();
+
+                if (!Op->IsInProgress() && !Op->IsExecutionPlanFinished()) {
+                    Self->Pipeline.AddCandidateOp(Op);
+                }
+            }
+        }
+
         if (Self->Pipeline.CanRunAnotherOp()) {
             Self->PlanQueue.Progress(ctx);
         }

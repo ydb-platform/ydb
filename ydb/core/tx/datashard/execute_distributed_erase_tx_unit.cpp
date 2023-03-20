@@ -50,7 +50,9 @@ public:
             THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
-            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, changeCollector.Get())) {
+            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, op->GetGlobalTxId(),
+                    &groupProvider, changeCollector.Get()))
+            {
                 return EExecutionStatus::Restart;
             }
 
@@ -75,7 +77,8 @@ public:
                     Y_VERIFY(body.ParseFromArray(rs.Body.data(), rs.Body.size()));
 
                     Y_VERIFY(presentRows.contains(rs.Origin));
-                    const bool ok = Execute(txc, request, presentRows.at(rs.Origin), DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows()), writeVersion);
+                    const bool ok = Execute(txc, request, presentRows.at(rs.Origin),
+                        DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows()), writeVersion, op->GetGlobalTxId());
                     Y_VERIFY(ok);
                 }
             }
@@ -98,6 +101,8 @@ public:
 
     bool Execute(TTransactionContext& txc, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
             const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& writeVersion,
+            ui64 globalTxId,
+            TDataShardChangeGroupProvider* groupProvider = nullptr,
             IDataShardChangeCollector* changeCollector = nullptr)
     {
         const ui64 tableId = request.GetTableId();
@@ -107,6 +112,10 @@ public:
         const TUserTable& tableInfo = *DataShard.GetUserTables().at(tableId);
 
         const bool breakWriteConflicts = DataShard.SysLocksTable().HasWriteLocks(fullTableId);
+        bool checkVolatileDependencies = bool(DataShard.GetVolatileTxManager().GetTxMap());
+
+        absl::flat_hash_set<ui64> volatileDependencies;
+        bool volatileOrdered = false;
 
         size_t row = 0;
         bool pageFault = false;
@@ -128,15 +137,27 @@ public:
                 key.emplace_back(TRawTypeValue(cell.AsRef(), kt));
             }
 
-            if (changeCollector) {
-                if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion)) {
-                    pageFault = true;
+            if (breakWriteConflicts || checkVolatileDependencies) {
+                if (!DataShard.BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+                    if (breakWriteConflicts) {
+                        pageFault = true;
+                    } else if (checkVolatileDependencies) {
+                        checkVolatileDependencies = false;
+                        volatileDependencies.clear();
+                        volatileOrdered = true;
+                    }
                 }
             }
 
-            if (breakWriteConflicts) {
-                if (!DataShard.BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells())) {
-                    pageFault = true;
+            if (changeCollector) {
+                if (!volatileDependencies.empty() || volatileOrdered) {
+                    if (!changeCollector->OnUpdateTx(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId)) {
+                        pageFault = true;
+                    }
+                } else {
+                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion)) {
+                        pageFault = true;
+                    }
                 }
             }
 
@@ -145,11 +166,29 @@ public:
             }
 
             DataShard.SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
-            txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion);
+
+            if (!volatileDependencies.empty() || volatileOrdered) {
+                txc.DB.UpdateTx(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId);
+            } else {
+                txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion);
+            }
         }
 
         if (pageFault && changeCollector) {
             changeCollector->OnRestart();
+        }
+
+        if (!volatileDependencies.empty() || volatileOrdered) {
+            DataShard.GetVolatileTxManager().PersistAddVolatileTx(
+                globalTxId,
+                writeVersion,
+                /* commitTxIds */ { globalTxId },
+                volatileDependencies,
+                /* participants */ { },
+                groupProvider ? groupProvider->GetCurrentChangeGroup() : std::nullopt,
+                volatileOrdered,
+                txc);
+            // Note: transaction is already committed, no additional waiting needed
         }
 
         return !pageFault;

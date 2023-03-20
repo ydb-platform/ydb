@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-fq-libs-test_connection-ut PUBLIC
   fq-libs-control_plane_proxy
   cpp-testing-unittest
   yql-sql-pg_dummy
+  udf-service-exception_policy
 )
 target_link_options(ydb-core-fq-libs-test_connection-ut PRIVATE
   -ldl

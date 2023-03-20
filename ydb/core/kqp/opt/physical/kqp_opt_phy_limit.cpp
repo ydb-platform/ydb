@@ -176,7 +176,7 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
     auto input = maybeSkip ? maybeSkip.Cast().Input() : take.Input();
 
     bool isReadTable = input.Maybe<TKqpReadTable>().IsValid();
-    bool isReadTableRanges = input.Maybe<TKqlReadTableRangesBase>().IsValid();
+    bool isReadTableRanges = input.Maybe<TKqpReadTableRanges>().IsValid() || input.Maybe<TKqpReadOlapTableRanges>().IsValid() ;
 
     if (!isReadTable && !isReadTableRanges) {
         return node;

@@ -34,7 +34,6 @@ public:
     FEATURE_FLAG_SETTER(EnableBulkUpsertToAsyncIndexedTables)
     FEATURE_FLAG_SETTER(EnableChangefeeds)
     FEATURE_FLAG_SETTER(EnableMoveIndex)
-    FEATURE_FLAG_SETTER(EnablePredicateExtractForDataQueries)
     FEATURE_FLAG_SETTER(EnableNotNullDataColumns)
     FEATURE_FLAG_SETTER(EnableArrowFormatAtDatashard)
     FEATURE_FLAG_SETTER(EnableGrpcAudit)

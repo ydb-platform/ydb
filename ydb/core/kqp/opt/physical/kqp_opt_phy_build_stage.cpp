@@ -312,6 +312,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
         .Done();
 }
 
+
 TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const TParentsMap& parents)
 {
@@ -357,7 +358,12 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
                     .BuildNode(ctx, read.Pos()))
                 .Done();
         } else {
-            auto connections = FindDqConnections(node);
+            TVector<TDqConnection> connections;
+            bool isPure;
+            FindDqConnections(node, connections, isPure);
+            if (!isPure) {
+                return node;
+            }
             YQL_ENSURE(!connections.empty());
             TVector<TDqConnection> inputs;
             TVector<TExprBase> stageInputs;
@@ -370,8 +376,8 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
                     return node;
                 }
 
-                if (!IsSingleConsumerConnection(input, parents, false)) {
-                    continue;
+                if (!IsSingleConsumerConnection(input, parents, true)) {
+                    return node;
                 }
 
                 inputs.push_back(input);

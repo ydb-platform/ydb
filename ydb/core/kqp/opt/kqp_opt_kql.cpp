@@ -88,11 +88,11 @@ bool UseReadTableRanges(const TKikimrTableDescription& tableData, const TIntrusi
         return predicateExtractSetting == EOptionalFlag::Enabled;
     }
 
-    if (kqpCtx->IsScanQuery() && kqpCtx->Config->FeatureFlags.GetEnablePredicateExtractForScanQueries()) {
+    if (kqpCtx->IsScanQuery() && kqpCtx->Config->EnablePredicateExtractForScanQuery) {
         return true;
     }
 
-    if (kqpCtx->IsDataQuery() && kqpCtx->Config->FeatureFlags.GetEnablePredicateExtractForDataQueries()) {
+    if (kqpCtx->IsDataQuery() && kqpCtx->Config->EnablePredicateExtractForDataQuery) {
         return true;
     }
 

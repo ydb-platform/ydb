@@ -169,7 +169,7 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
     return KqpRemoveRedundantSortByPkBase(node, ctx, kqpCtx,
         [&](TExprBase input) -> TMaybe<TTableData> {
             bool isReadTable = input.Maybe<TKqpReadTable>().IsValid();
-            bool isReadTableRanges = input.Maybe<TKqlReadTableRangesBase>().IsValid();
+            bool isReadTableRanges = input.Maybe<TKqpReadTableRanges>().IsValid() || input.Maybe<TKqpReadOlapTableRanges>().IsValid() ;
             if (!isReadTable && !isReadTableRanges) {
                 return Nothing();
             }

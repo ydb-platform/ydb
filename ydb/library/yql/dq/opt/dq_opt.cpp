@@ -133,10 +133,15 @@ ui32 GetStageOutputsCount(const TDqStageBase& stage) {
     return resultsTypeTuple->GetSize();
 }
 
-TVector<TDqConnection> FindDqConnections(const TExprBase& node) {
-    TVector<TDqConnection> connections;
+bool IsDqPureNode(const TExprBase& node) {
+    return !node.Maybe<TDqSource>() &&
+           !node.Maybe<TDqConnection>() &&
+           !node.Maybe<TDqPrecompute>();
+}
 
-    VisitExpr(node.Ptr(), [&connections](const TExprNode::TPtr& exprNode) {
+void FindDqConnections(const TExprBase& node, TVector<TDqConnection>& connections, bool& isPure) {
+    isPure = true;
+    VisitExpr(node.Ptr(), [&](const TExprNode::TPtr& exprNode) {
         TExprBase node(exprNode);
 
         if (node.Maybe<TDqPhyPrecompute>()) {
@@ -149,10 +154,12 @@ TVector<TDqConnection> FindDqConnections(const TExprBase& node) {
             return false;
         }
 
+        if (!IsDqPureNode(node)) {
+            isPure = false;
+        }
+
         return true;
     });
-
-    return connections;
 }
 
 bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure) {
@@ -161,8 +168,7 @@ bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure) {
     };
 
     auto predicate = [](const TExprNode::TPtr& node) {
-        return TMaybeNode<TDqSource>(node).IsValid() ||
-               TMaybeNode<TDqConnection>(node).IsValid();
+        return !IsDqPureNode(TExprBase(node));
     };
 
     if (isPrecomputePure) {

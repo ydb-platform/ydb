@@ -1137,7 +1137,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST_TWIN(PrunePartitionsByLiteral, WithPredicatesExtract) {
         auto cfg = AppCfg();
-        cfg.MutableFeatureFlags()->SetEnablePredicateExtractForScanQueries(WithPredicatesExtract);
+        cfg.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(WithPredicatesExtract);
         auto kikimr = DefaultKikimrRunner({}, cfg);
         auto db = kikimr.GetTableClient();
 
@@ -1979,10 +1979,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForScanQueries(true);
-        settings.SetFeatureFlags(flags);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -2001,10 +1999,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForScanQueries(true);
-        settings.SetFeatureFlags(flags);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -2024,10 +2020,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForDataQueries(true);
-        settings.SetFeatureFlags(flags);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);

@@ -762,13 +762,13 @@ message TFeatureFlags {
     optional bool EnablePublicApiExternalBlobs = 59 [default = false];
     optional bool EnablePublicApiKeepInMemory = 60 [default = false];
     optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
-    optional bool EnablePredicateExtractForScanQueries = 62 [default = true];
+    reserved 62; // EnablePredicateExtractForScanQueries
     optional bool AllowVDiskDefrag = 63 [default = true];
     optional bool EnableAsyncHttpMon = 64 [default = true];
     optional bool EnableChangefeeds = 65 [default = true];
     reserved 66; // EnableKqpScanQueryStreamLookup
     optional bool EnableKqpScanQueryMultipleOlapShardsReads = 67 [default = false];
-    optional bool EnablePredicateExtractForDataQueries = 68 [default = true];
+    reserved 68; // EnablePredicateExtractForDataQueries;
     reserved 69; // optional bool EnableKqpPatternCacheLiteral = 69 [default = false];
     optional bool EnableMoveIndex = 70 [default = true];
     // enable http handle for self termination
@@ -1270,6 +1270,8 @@ message TTableServiceConfig {
     optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     optional bool EnablePublishKqpProxyByRM = 34 [default = false];
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
+    optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
+    optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
 };
 
 // Config describes immediate controls and allows

@@ -368,6 +368,9 @@ private:
         bool enableKqpDataQuerySourceRead = Config.GetEnableKqpDataQuerySourceRead();
         bool enableKqpScanQuerySourceRead = Config.GetEnableKqpScanQuerySourceRead();
 
+        bool enableKqpDataQueryPredicateExtract = Config.GetEnablePredicateExtractForDataQueries();
+        bool enableKqpScanQueryPredicateExtract = Config.GetEnablePredicateExtractForScanQueries();
+
         Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -378,7 +381,9 @@ private:
             Config.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
             Config.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             Config.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
-            Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead) {
+            Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
+            Config.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract || 
+            Config.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract) {
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                 "Iterator read flags was changed. StreamLookup from " << enableKqpDataQueryStreamLookup <<

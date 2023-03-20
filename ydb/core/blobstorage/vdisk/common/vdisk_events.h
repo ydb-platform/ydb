@@ -563,12 +563,12 @@ namespace NKikimr {
                     auto resMsg = resultQoS->MutableMsgId();
                     auto queryMsg = queryRecord->GetMsgQoS().GetMsgId();
 
-                    if (queryMsg->HasSequenceId()) {
-                        resMsg->SetSequenceId(queryMsg->GetSequenceId());
+                    if (queryMsg.HasSequenceId()) {
+                        resMsg->SetSequenceId(queryMsg.GetSequenceId());
                     }
 
-                    if (queryMsg->HasMsgId()) {
-                        resMsg->SetMsgId(queryMsg->GetMsgId());
+                    if (queryMsg.HasMsgId()) {
+                        resMsg->SetMsgId(queryMsg.GetMsgId());
                     }
                 }
 
@@ -576,28 +576,28 @@ namespace NKikimr {
                     auto resMsg = resultQoS->MutableCostSettings();
                     auto queryMsg = queryRecord->GetMsgQoS().GetCostSettings();
 
-                    if (queryMsg->HasSeekTimeUs()) {
-                        resMsg->SetSeekTimeUs(queryMsg->GetSeekTimeUs());
+                    if (queryMsg.HasSeekTimeUs()) {
+                        resMsg->SetSeekTimeUs(queryMsg.GetSeekTimeUs());
                     }
 
-                    if (queryMsg->HasReadSpeedBps()) {
-                        resMsg->SetReadSpeedBps(queryMsg->GetReadSpeedBps());
+                    if (queryMsg.HasReadSpeedBps()) {
+                        resMsg->SetReadSpeedBps(queryMsg.GetReadSpeedBps());
                     }
 
-                    if (queryMsg->HasWriteSpeedBps()) {
-                        resMsg->SetWriteSpeedBps(queryMsg->GetWriteSpeedBps());
+                    if (queryMsg.HasWriteSpeedBps()) {
+                        resMsg->SetWriteSpeedBps(queryMsg.GetWriteSpeedBps());
                     }
 
-                    if (queryMsg->HasReadBlockSize()) {
-                        resMsg->SetReadBlockSize(queryMsg->GetReadBlockSize());
+                    if (queryMsg.HasReadBlockSize()) {
+                        resMsg->SetReadBlockSize(queryMsg.GetReadBlockSize());
                     }
 
-                    if (queryMsg->HasWriteBlockSize()) {
-                        resMsg->SetWriteBlockSize(queryMsg->GetWriteBlockSize());
+                    if (queryMsg.HasWriteBlockSize()) {
+                        resMsg->SetWriteBlockSize(queryMsg.GetWriteBlockSize());
                     }
 
-                    if (queryMsg->HasMinREALHugeBlobInBytes()) {
-                        resMsg->SetMinREALHugeBlobInBytes(queryMsg->GetMinREALHugeBlobInBytes());
+                    if (queryMsg.HasMinREALHugeBlobInBytes()) {
+                        resMsg->SetMinREALHugeBlobInBytes(queryMsg.GetMinREALHugeBlobInBytes());
                     }
                 }
 
@@ -605,24 +605,24 @@ namespace NKikimr {
                     auto resMsg = resultQoS->MutableWindow();
                     auto queryMsg = queryRecord->GetMsgQoS().GetWindow();
 
-                    if (queryMsg->HasActualWindowSize()) {
-                        resMsg->SetActualWindowSize(queryMsg->GetActualWindowSize());
+                    if (queryMsg.HasActualWindowSize()) {
+                        resMsg->SetActualWindowSize(queryMsg.GetActualWindowSize());
                     }
 
-                    if (queryMsg->HasMaxWindowSize()) {
-                        resMsg->SetMaxWindowSize(queryMsg->GetMaxWindowSize());
+                    if (queryMsg.HasMaxWindowSize()) {
+                        resMsg->SetMaxWindowSize(queryMsg.GetMaxWindowSize());
                     }
 
-                    if (queryMsg->HasExpectedMsgId()) {
-                        resMsg->SetExpectedMsgId(queryMsg->GetExpectedMsgId());
+                    if (queryMsg.HasExpectedMsgId()) {
+                        resMsg->SetExpectedMsgId(queryMsg.GetExpectedMsgId());
                     }
 
-                    if (queryMsg->HasFailedMsgId()) {
-                        resMsg->SetFailedMsgId(queryMsg->GetFailedMsgId());
+                    if (queryMsg.HasFailedMsgId()) {
+                        resMsg->SetFailedMsgId(queryMsg.GetFailedMsgId());
                     }
 
-                    if (queryMsg->HasStatus()) {
-                        resMsg->SetStatus(queryMsg->GetStatus());
+                    if (queryMsg.HasStatus()) {
+                        resMsg->SetStatus(queryMsg.GetStatus());
                     }
                 }
 
@@ -630,24 +630,24 @@ namespace NKikimr {
                     auto resMsg = resultQoS->MutableExecTimeStats();
                     auto queryMsg = queryRecord->GetMsgQoS().GetExecTimeStats();
 
-                    if (queryMsg->HasSubmitTimestamp()) {
-                        resMsg->SetSubmitTimestamp(queryMsg->GetSubmitTimestamp());
+                    if (queryMsg.HasSubmitTimestamp()) {
+                        resMsg->SetSubmitTimestamp(queryMsg.GetSubmitTimestamp());
                     }
 
-                    if (queryMsg->HasTotal()) {
-                        resMsg->SetTotal(queryMsg->GetTotal());
+                    if (queryMsg.HasTotal()) {
+                        resMsg->SetTotal(queryMsg.GetTotal());
                     }
 
-                    if (queryMsg->HasInQueue()) {
-                        resMsg->SetInQueue(queryMsg->GetInQueue());
+                    if (queryMsg.HasInQueue()) {
+                        resMsg->SetInQueue(queryMsg.GetInQueue());
                     }
 
-                    if (queryMsg->HasExecution()) {
-                        resMsg->SetExecution(queryMsg->GetExecution());
+                    if (queryMsg.HasExecution()) {
+                        resMsg->SetExecution(queryMsg.GetExecution());
                     }
 
-                    if (queryMsg->HasHugeWriteTime()) {
-                        resMsg->SetHugeWriteTime(queryMsg->GetHugeWriteTime());
+                    if (queryMsg.HasHugeWriteTime()) {
+                        resMsg->SetHugeWriteTime(queryMsg.GetHugeWriteTime());
                     }
                 }
 
@@ -655,12 +655,12 @@ namespace NKikimr {
                     auto resMsg = resultQoS->MutableSenderActorId();
                     auto queryMsg = queryRecord->GetMsgQoS().GetSenderActorId();
 
-                    if (queryMsg->HasRawX1()) {
-                        resMsg->SetRawX1(queryMsg->GetRawX1());
+                    if (queryMsg.HasRawX1()) {
+                        resMsg->SetRawX1(queryMsg.GetRawX1());
                     }
 
-                    if (queryMsg->HasRawX2()) {
-                        resMsg->SetRawX2(queryMsg->GetRawX2());
+                    if (queryMsg.HasRawX2()) {
+                        resMsg->SetRawX2(queryMsg.GetRawX2());
                     }
                 }
 

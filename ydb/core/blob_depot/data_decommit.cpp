@@ -79,17 +79,22 @@ namespace NKikimr::NBlobDepot {
                             // adjust minId to skip already assimilated items in range query
                             if (minId < Self->Data->LastAssimilatedBlobId) {
                                 if (item.GetMustRestoreFirst()) {
-                                    InvokeOtherActor(*this, &TThis::ScanRangeAndIssueGets, TKey(minId),
-                                        TKey(*Self->Data->LastAssimilatedBlobId), EScanFlags::INCLUDE_BEGIN);
+                                    InvokeOtherActor(*this, &TThis::ScanRange, TKey(minId),
+                                        TKey(*Self->Data->LastAssimilatedBlobId), EScanFlags::INCLUDE_BEGIN,
+                                        true /*issueGets*/);
                                 }
                                 minId = *Self->Data->LastAssimilatedBlobId;
                             }
 
+                            // prepare the range first -- we must have it loaded in memory
+                            InvokeOtherActor(*this, &TThis::ScanRange, TKey(minId), TKey(maxId),
+                                EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END, false /*issueGets*/);
+
                             // issue scan query
                             InvokeOtherActor(*this, &TThis::IssueRange, tabletId, minId, maxId, item.GetMustRestoreFirst());
                         } else if (item.GetMustRestoreFirst()) {
-                            InvokeOtherActor(*this, &TThis::ScanRangeAndIssueGets, TKey(minId), TKey(maxId),
-                                EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END);
+                            InvokeOtherActor(*this, &TThis::ScanRange, TKey(minId), TKey(maxId),
+                                EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END, true /*issueGets*/);
                         }
 
                         break;
@@ -119,11 +124,11 @@ namespace NKikimr::NBlobDepot {
             TActivationContext::Send(new IEventHandleFat(TEvPrivate::EvTxComplete, 0, SelfId(), {}, nullptr, 0));
         }
 
-        void ScanRangeAndIssueGets(TKey from, TKey to, TScanFlags flags) {
+        void ScanRange(TKey from, TKey to, TScanFlags flags, bool issueGets) {
             bool progress = false;
 
             auto callback = [&](const TKey& key, const TValue& value) {
-                if (value.GoingToAssimilate) {
+                if (issueGets && value.GoingToAssimilate) {
                     IssueGet(key.GetBlobId(), true /*mustRestoreFirst*/);
                 }
                 return true;

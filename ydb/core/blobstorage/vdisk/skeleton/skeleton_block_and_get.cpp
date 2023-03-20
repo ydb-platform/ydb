@@ -87,7 +87,7 @@ public:
 
         // send TEvVGet request, the reply will go directly to sender.
         // clear ForceBlockTabletData to make sure we never ever have a cycle.
-//        Request->Get()->Record.ClearForceBlockTabletData();
+        Request->Get()->Record.ClearForceBlockTabletData();
         TActivationContext::Send(Request.Release());
         PassAway();
     }

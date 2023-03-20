@@ -320,7 +320,7 @@ public:
 
     virtual void UpdateStats() = 0;
     virtual const TDqTaskRunnerStats* GetStats() const = 0;
-    virtual const TDqBillingStats* GetBillingStats() const = 0;
+    virtual const TDqMeteringStats* GetMeteringStats() const = 0;
 
     [[nodiscard]]
     virtual TString Save() const = 0;

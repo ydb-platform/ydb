@@ -978,10 +978,6 @@ public:
         YQL_ENSURE(packed == 0);
         if (Settings.ColumnsSize() == 0) {
             batch->resize(result->Get()->GetRowsCount(), HolderFactory.GetEmptyContainer());
-            for (ui64 rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
-                // min row size according to datashard
-                RowsSizeCollector.Add(8);
-            }
         } else {
             TVector<NUdf::TUnboxedValue*> editAccessors(result->Get()->GetRowsCount());
             batch->reserve(result->Get()->GetRowsCount());
@@ -1009,10 +1005,6 @@ public:
                     );
                     columnIndex += 1;
                 }
-            }
-
-            for (ui64 rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
-                RowsSizeCollector.Add(GetRowSize((*batch)[rowIndex].GetElements()).DataBytes);
             }
         }
 
@@ -1075,7 +1067,6 @@ public:
                 }
             }
 
-            RowsSizeCollector.Add(rowSize);
             stats.DataBytes += rowSize;
             stats.AllocatedBytes += GetRowSize(rowItems).AllocatedBytes;
             freeSpace -= rowSize;
@@ -1205,7 +1196,7 @@ public:
         return bytes;
     }
 
-    void FillExtraStats(NDqProto::TDqTaskStats* stats, bool last, const NYql::NDq::TDqBillingStats* billing) override {
+    void FillExtraStats(NDqProto::TDqTaskStats* stats, bool last, const NYql::NDq::TDqMeteringStats* mstats) override {
         if (last) {
             stats->SetErrorsCount(ErrorsCount);
 
@@ -1222,11 +1213,11 @@ public:
 
             }
 
-            auto consumedRows = billing ? billing->Inputs[InputIndex]->RowsConsumed : ReceivedRowCount;
+            auto consumedRows = mstats ? mstats->Inputs[InputIndex]->RowsConsumed : ReceivedRowCount;
 
             //FIXME: use real rows count
             tableStats->SetReadRows(tableStats->GetReadRows() + consumedRows);
-            tableStats->SetReadBytes(tableStats->GetReadBytes() + RowsSizeCollector.RowsSize(consumedRows));
+            tableStats->SetReadBytes(tableStats->GetReadBytes() + (mstats ? mstats->Inputs[InputIndex]->BytesConsumed : BytesStats.DataBytes));
             tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
 
             //FIXME: use evread statistics after KIKIMR-16924
@@ -1301,24 +1292,6 @@ public:
     }
 
 private:
-    struct TRowSizeCollector {
-        void Add(ui64 sz) {
-            Prev = Sizes.emplace_back(Prev + sz);
-        }
-
-        ui64 RowsSize(ui64 processed) {
-            if (processed > 0) {
-                return Sizes[processed - 1];
-            } else {
-                return 0;
-            }
-        }
-
-        ui64 Prev = 0;
-        std::vector<ui64> Sizes;
-    } RowsSizeCollector;
-
-
     NKikimrTxDataShard::TKqpReadRangesSourceSettings Settings;
 
     TVector<NScheme::TTypeInfo> KeyColumnTypes;

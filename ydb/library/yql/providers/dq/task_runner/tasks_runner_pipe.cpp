@@ -1607,23 +1607,24 @@ public:
     void UpdateStats() override {
     }
 
-    const TDqBillingStats* GetBillingStats() const override {
+    const TDqMeteringStats* GetMeteringStats() const override {
         try {
             NDqProto::TCommandHeader header;
             header.SetVersion(3);
-            header.SetCommand(NDqProto::TCommandHeader::GET_BILLING_STATS);
+            header.SetCommand(NDqProto::TCommandHeader::GET_METERING_STATS);
             header.SetTaskId(Task.GetId());
             header.Save(&Delegate->GetOutput());
 
-            NDqProto::TBillingStatsResponse response;
+            NDqProto::TMeteringStatsResponse response;
             response.Load(&Delegate->GetInput());
 
-            BillingStats.Inputs.clear();
+            MeteringStats.Inputs.clear();
             for (auto input : response.GetInputs()) {
-                auto i = BillingStats.AddInputs();
+                auto i = MeteringStats.AddInputs();
                 i.RowsConsumed = input.GetRowsConsumed();
+                i.BytesConsumed = input.GetBytesConsumed();
             }
-            return &BillingStats;
+            return &MeteringStats;
         } catch (...) {
             Delegate->RaiseException();
         }
@@ -1670,7 +1671,7 @@ private:
     TIntrusivePtr<TTaskRunner> Delegate;
     NDqProto::TDqTask Task;
     mutable TDqTaskRunnerStats Stats;
-    mutable TDqBillingStats BillingStats;
+    mutable TDqMeteringStats MeteringStats;
 
     THashMap<ui64, IDqInputChannel::TPtr> InputChannels;
     THashMap<ui64, IDqAsyncInputBuffer::TPtr> Sources;

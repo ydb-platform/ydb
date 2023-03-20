@@ -44,7 +44,7 @@ message TCommandHeader {
         SINK_OUTPUT_TYPE = 25; // Header -> TGetTypeResponse
         SINK_STATS = 26; // Header -> TGetSinkStatsResponse
 
-        GET_BILLING_STATS = 27;
+        GET_METERING_STATS = 27;
     };
 
     int32 Version = 1;
@@ -68,9 +68,10 @@ message TPopResponse {
     google.protobuf.Any Stats = 4;
 }
 
-message TBillingStatsResponse {
+message TMeteringStatsResponse {
     message TInputStats {
         uint64 RowsConsumed = 1;
+        uint64 BytesConsumed = 2;
     };
     repeated TInputStats Inputs = 1;
 };

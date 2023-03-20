@@ -139,7 +139,7 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 #define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory, TDqBillingStats::TInputStats* stats)
+    TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory, TDqMeteringStats::TInputStatsMeter stats)
 {
     switch (inputDesc.GetTypeCase()) {
         case NYql::NDqProto::TTaskInput::kSource:
@@ -266,7 +266,7 @@ public:
         }
     }
 
-    const TDqBillingStats* GetBillingStats() const override {
+    const TDqMeteringStats* GetMeteringStats() const override {
         return &BillingStats;
     }
 
@@ -537,7 +537,7 @@ public:
                 TStringBuf outputTypeNodeRaw(transformDesc.GetOutputType());
                 auto outputTypeNode = NMiniKQL::DeserializeNode(outputTypeNodeRaw, typeEnv);
                 YQL_ENSURE(outputTypeNode, "Failed to deserialize transform output type");
-                TType* outputType = static_cast<TType*>(outputTypeNode);
+                TType* outputType = transform->TransformOutputType = static_cast<TType*>(outputTypeNode);
                 auto typeCheckLog = [&] () {
                     TStringStream out;
                     out << *outputType << " != " << *entry->InputItemTypes[i];
@@ -577,14 +577,16 @@ public:
 
             auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, true);
             if (transform) {
-                transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, nullptr);
+                transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {});
                 inputs.clear();
                 inputs.emplace_back(transform->TransformOutput);
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                    CreateInputUnionValue(std::move(inputs), holderFactory, &inputStats));
+                    CreateInputUnionValue(std::move(inputs), holderFactory, 
+                        {&inputStats, transform->TransformOutputType}));
             } else {
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                    DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory, &inputStats));
+                    DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory,
+                        {&inputStats, entry->InputItemTypes[i]}));
             }
         }
 
@@ -941,6 +943,7 @@ private:
         NUdf::TUnboxedValue TransformInput;
         IDqAsyncInputBuffer::TPtr TransformOutput;
         TType* TransformInputType = nullptr;
+        TType* TransformOutputType = nullptr;
     };
 
     struct TOutputTransformInfo {
@@ -983,7 +986,7 @@ private:
     bool CollectBasicStats = false;
     bool CollectProfileStats = false;
     std::unique_ptr<TDqTaskRunnerStats> Stats;
-    TDqBillingStats BillingStats;
+    TDqMeteringStats BillingStats;
     TDuration RunComputeTime;
 
 private:

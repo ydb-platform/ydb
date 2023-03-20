@@ -330,8 +330,19 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
+
         PQGroupInfo = topicInfo->PQGroupInfo;
         SetMeteringMode(PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode());
+
+        if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !PQGroupInfo->Description.GetPQTabletConfig().GetLocalDC()) {
+
+            return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                                        Ydb::PersQueue::ErrorCode::BAD_REQUEST,
+                                        TStringBuilder() << "write to mirrored stream "
+                                        << this->GetProtoRequest()->stream_name()
+                                        << " is forbidden", ctx);
+        }
+
 
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());

@@ -401,8 +401,8 @@ private:
             return Result;
         };
 
-        TVector<TString> GetTopics() const {
-            TVector<TString> ret;
+        TVector<std::pair<TString, TString>> GetTopics() const {
+            TVector<std::pair<TString, TString>> ret;
             if (FirstRequestDone) {
                 for (auto i: SecondTryTopics) {
                     auto account = Topics[i]->GetAccount_();
@@ -416,11 +416,11 @@ private:
                     if (!second.Defined()) {
                         continue;
                     }
-                    ret.push_back(*second);
+                    ret.push_back(std::make_pair(*second, Topics[i]->GetDatabase().GetOrElse("")));
                 }
             } else {
                 for (auto& t : Topics) {
-                    ret.push_back(t->GetPrimaryPath());
+                    ret.push_back(std::make_pair(t->GetPrimaryPath(), t->GetDatabase().GetOrElse("")));
                 }
             }
             return ret;
@@ -496,6 +496,7 @@ private:
         }
         auto reqId = ++RequestId;
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(reqId);
+
         auto inserted = DescribeTopicsWaiters.insert(std::make_pair(reqId, waiter)).second;
         Y_VERIFY(inserted);
 
@@ -503,7 +504,7 @@ private:
                             << (waiter->Type == EWaiterType::DescribeAllTopics ? " all " : "") << waiter->GetTopics().size()
                             << " topics, got " << DescribeTopicsWaiters.size() << " requests infly");
 
-        for (const auto& path : waiter->GetTopics()) {
+        for (const auto& [path, database] : waiter->GetTopics()) {
             auto split = NKikimr::SplitPath(path);
             Y_VERIFY(!split.empty());
             TSchemeCacheNavigate::TEntry entry;
@@ -512,6 +513,7 @@ private:
             entry.SyncVersion = waiter->SyncVersion;
             entry.ShowPrivatePath = waiter->ShowPrivate;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
         }
 
@@ -577,6 +579,11 @@ private:
             auto& navigate = waiter->GetResult();
 
             Y_VERIFY(waiter->Topics.size() == navigate->ResultSet.size());
+            for (auto& entry : navigate->ResultSet) {
+                if (entry.Status == TSchemeCacheNavigate::EStatus::Ok && entry.Kind == TSchemeCacheNavigate::KindTopic) {
+                    Y_VERIFY(entry.PQGroupInfo);
+                }
+            }
             CheckEntrySetHasTopicPath(navigate.get());
             auto *response = new TEvPqNewMetaCache::TEvDescribeTopicsResponse{
                     std::move(waiter->Topics), navigate

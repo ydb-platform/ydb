@@ -662,6 +662,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
             return ::google::protobuf::util::TimeUtil::TimestampToMilliseconds(settings.read_from());
         }
     };
+    auto database = Request->GetDatabaseName().GetOrElse(TString());
 
     for (const auto& topic : init.topics_read_settings()) {
         const TString path = getTopicPath(topic);
@@ -688,8 +689,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal,
-        Request->GetDatabaseName().GetOrElse(TString()));
+    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database);
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason, ctx);
@@ -1074,8 +1074,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
             result.mutable_assigned()->set_read_offset(ev->Get()->Offset);
             result.mutable_assigned()->set_end_offset(ev->Get()->EndOffset);
         } else {
-            // TODO: GetFederationPath() -> GetFederationPathWithDC()
-            result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetFederationPath());
+            auto database = Request->GetDatabaseName().GetOrElse(AppData(ctx)->PQConfig.GetRoot());
+
+            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetRoot()) {
+                result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetFederationPathWithDC());
+            } else {
+                result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetModernName());
+            }
+
             result.mutable_start_partition_session_request()->mutable_partition_session()->set_partition_id(ev->Get()->Partition.Partition);
             result.mutable_start_partition_session_request()->mutable_partition_session()->set_partition_session_id(it->first);
 

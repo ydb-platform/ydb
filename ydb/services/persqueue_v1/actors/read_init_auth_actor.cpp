@@ -39,7 +39,7 @@ void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth for : " << ClientId);
     Become(&TThis::StateFunc);
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
-    DescribeTopics(ctx);
+    DescribeTopics(ctx, true);
 }
 
 void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bool showPrivate) {

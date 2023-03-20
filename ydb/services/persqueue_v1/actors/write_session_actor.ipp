@@ -576,6 +576,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         return;
     }
+    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !description.GetPQTabletConfig().GetLocalDC()) {
+        errorReason = Sprintf("Write to mirrored topic '%s' is forbidden", DiscoveryConverter->GetPrintableString().c_str());
+        CloseSession(errorReason, PersQueue::ErrorCode::BAD_REQUEST, ctx);
+        return;
+    }
+
     FullConverter = DiscoveryConverter->UpgradeToFullConverter(InitialPQTabletConfig,
                                                                AppData(ctx)->PQConfig.GetTestDatabaseRoot());
     InitAfterDiscovery(ctx);

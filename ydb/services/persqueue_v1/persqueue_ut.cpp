@@ -899,11 +899,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             req.set_path("acc/topic1");
             req.set_consumer("user");
             req.set_offset(5);
+            grpc::ClientContext rcontext;
 
             auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
 
             Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
         }
+
 
         {
             Ydb::Topic::StreamReadMessage::FromClient req;

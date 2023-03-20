@@ -102,6 +102,7 @@ protected:
                     }
                     case NKikimrScheme::EStatus::StatusSchemeError:
                     case NKikimrScheme::EStatus::StatusNameConflict:
+
                     case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
                         return this->ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
                     }

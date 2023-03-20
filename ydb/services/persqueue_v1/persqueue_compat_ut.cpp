@@ -1,6 +1,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 using namespace NYdb;
 using namespace NYdb::NPersQueue;
@@ -9,13 +10,13 @@ using namespace NYdb::NPersQueue;
 namespace NKikimr::NPersQueueTests {
 
 class TPQv1CompatTestBase {
-private:
+public:
     THolder<::NPersQueue::TTestServer> Server;
     THolder<TDriver> Driver;
     THolder<TPersQueueClient> PQClient;
     TString DbRoot;
     TString DbPath;
-public:
+
     TPQv1CompatTestBase()
     {
         Server = MakeHolder<::NPersQueue::TTestServer>(false);
@@ -26,16 +27,17 @@ public:
         Server->StartServer();
         //Server->EnableLogs()
         Server->EnableLogs({ NKikimrServices::KQP_PROXY }, NActors::NLog::PRI_EMERG);
-        Server->EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY });
+        Server->EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_METACACHE });
 
-        Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--account--topic1", 1, false);
+
+        Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--account--topic1", 1, true, false);
         Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--account--topic1", 1, true);
 
         Server->WaitInit("account/topic1");
         Server->AnnoyingClient->MkDir("/Root", "LbCommunal");
         Server->AnnoyingClient->MkDir("/Root/LbCommunal", "account");
         Server->AnnoyingClient->CreateTopicNoLegacy(
-                "/Root/LbCommunal/account/topic2", 1, false, true, {}, {}, "account"
+                "/Root/LbCommunal/account/topic2", 1, true, true, {}, {}, "account"
         );
 
         Server->AnnoyingClient->CreateTopicNoLegacy(
@@ -75,6 +77,7 @@ public:
 
         TReadSessionSettings settings;
         settings.ConsumerName("test-consumer").ReadMirrored("dc1");
+
         for (const auto& path : paths) {
             settings.AppendTopics(TTopicReadSettings{path});
         }
@@ -98,7 +101,7 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
 
     void GetLocks(const THashSet<TString>& paths, std::shared_ptr<IReadSession>& readSession) {
         THashMap<TString, THashSet<TString>> clustersFound;
-        for (auto i = 0u; i < paths.size() * 2 /* 2 locks from 2 clusters for each topic */; i++) {
+        for (auto i = 0u; i < paths.size() * 2; i++) {
             auto ev = readSession->GetEvent(true);
             Y_VERIFY(ev.Defined());
             auto* lockEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev);
@@ -183,6 +186,151 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
 
         // Just to verify it even creates anything at all
         testServer.CreateTopic("/Root/LbCommunal/account/some-topic-mirrored-from-dc2", "account", false, false);
+    }
+
+    Y_UNIT_TEST(CommitOffsets) {
+        TPQv1CompatTestBase testServer;
+        std::shared_ptr<grpc::Channel> Channel_;
+        Channel_ = grpc::CreateChannel(
+                         "localhost:" + ToString(testServer.Server->GrpcPort),
+                         grpc::InsecureChannelCredentials()
+                    );
+        auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+
+        {
+            grpc::ClientContext rcontext;
+
+            rcontext.AddMetadata("x-ydb-database", "/Root/LbCommunal/account");
+
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("topic2");
+            req.set_consumer("user");
+            req.set_offset(0);
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+
+        {
+            grpc::ClientContext rcontext;
+
+            rcontext.AddMetadata("x-ydb-database", "/Root/LbCommunal/account");
+
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("topic2-mirrored-from-dc2");
+            req.set_consumer("user");
+            req.set_offset(0);
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+
+    }
+
+    Y_UNIT_TEST(ReadWriteSessions) {
+        TPQv1CompatTestBase testServer;
+        std::shared_ptr<grpc::Channel> Channel_;
+        Channel_ = grpc::CreateChannel(
+                         "localhost:" + ToString(testServer.Server->GrpcPort),
+                         grpc::InsecureChannelCredentials()
+                    );
+        auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+
+
+        for (auto topic : std::vector<TString> {"topic2", "topic2-mirrored-from-dc2"}) {
+            grpc::ClientContext wcontext;
+            wcontext.AddMetadata("x-ydb-database", "/Root/LbCommunal/account");
+
+            auto writeStream = TopicStubP_->StreamWrite(&wcontext);
+            UNIT_ASSERT(writeStream);
+
+            Ydb::Topic::StreamWriteMessage::FromClient req;
+            Ydb::Topic::StreamWriteMessage::FromServer resp;
+
+            req.mutable_init_request()->set_path(topic);
+            req.mutable_init_request()->set_producer_id("A");
+            req.mutable_init_request()->set_partition_id(0);
+            UNIT_ASSERT(writeStream->Write(req));
+            UNIT_ASSERT(writeStream->Read(&resp));
+
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            if (topic == "topic2") {
+                UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+            } else {
+                UNIT_ASSERT(resp.status() == Ydb::StatusIds::BAD_REQUEST);
+                break;
+            }
+            req.Clear();
+
+            auto* write = req.mutable_write_request();
+            write->set_codec(Ydb::Topic::CODEC_RAW);
+
+            auto* msg = write->add_messages();
+            msg->set_seq_no(1);
+            msg->set_data("x");
+            UNIT_ASSERT(writeStream->Write(req));
+            UNIT_ASSERT(writeStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kWriteResponse);
+        }
+
+        for (auto topic : std::vector<TString> {"topic2", "topic2-mirrored-from-dc2"}) {
+            grpc::ClientContext rcontext;
+            rcontext.AddMetadata("x-ydb-database", "/Root/LbCommunal/account");
+
+            auto readStream = TopicStubP_->StreamRead(&rcontext);
+            UNIT_ASSERT(readStream);
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_path(topic);
+
+            req.mutable_init_request()->set_consumer("user");
+
+            UNIT_ASSERT(readStream->Write(req));
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == topic);
+        }
+
+        for (auto topic : std::vector<TString> {"account/topic2", "account/topic2-mirrored-from-dc2"}) {
+            grpc::ClientContext rcontext;
+
+            auto readStream = TopicStubP_->StreamRead(&rcontext);
+            UNIT_ASSERT(readStream);
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_path(topic);
+
+            req.mutable_init_request()->set_consumer("user");
+
+            Cerr << "BEFORE PARSING " << topic << "\n";
+
+            UNIT_ASSERT(readStream->Write(req));
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == topic);
+        }
 
     }
 }

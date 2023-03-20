@@ -1695,11 +1695,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
 
             const bool isTable = Kind == TNavigate::KindTable || Kind == TNavigate::KindColumnTable;
+            const bool isTopic = Kind == TNavigate::KindTopic || Kind == TNavigate::KindCdcStream;
+
             if (entry.Operation == TNavigate::OpTable && !isTable) {
                 return SetError(context, entry, TNavigate::EStatus::PathNotTable);
             }
 
-            if (!Created && isTable) {
+            if (!Created && (isTable || isTopic)) {
                 return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
             }
 

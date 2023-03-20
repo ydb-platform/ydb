@@ -613,10 +613,6 @@ namespace NKikimr {
                         resMsg->SetMaxWindowSize(queryMsg.GetMaxWindowSize());
                     }
 
-                    if (queryMsg.HasExpectedMsgId()) {
-                        resMsg->SetExpectedMsgId(queryMsg.GetExpectedMsgId());
-                    }
-
                     if (queryMsg.HasFailedMsgId()) {
                         if (queryMsg.GetFailedMsgId().HasSequenceId()) {
                             resMsg->MutableFailedMsgId()->SetSequenceId(queryMsg.GetFailedMsgId().GetSequenceId());

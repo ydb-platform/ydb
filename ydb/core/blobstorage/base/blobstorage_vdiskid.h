@@ -55,10 +55,7 @@ struct TVDiskID {
 
     bool SameDisk(const NKikimrBlobStorage::TVDiskID &x) const;
 
-    bool SameDisk(NKikimrCapnProto::TVDiskID::Reader x) const {
-        TVDiskID vdisk = VDiskIDFromVDiskID(x);
-        return *this == vdisk;
-    }
+    bool SameDisk(NKikimrCapnProto::TVDiskID::Reader x) const;
 
     auto ConvertToTuple() const {
         return std::make_tuple(GroupID, GroupGeneration, FailRealm, FailDomain, VDisk);

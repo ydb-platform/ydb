@@ -26,6 +26,11 @@ namespace NKikimr {
         return *this == vdisk;
     }
 
+    bool TVDiskID::SameDisk(NKikimrCapnProto::TVDiskID::Reader x) const {
+        TVDiskID vdisk = VDiskIDFromVDiskID(x);
+        return *this == vdisk;
+    }
+
     TString TVDiskID::ToString() const {
         return Sprintf("[%" PRIx32 ":%" PRIu32 ":%" PRIu8 ":%" PRIu8 ":%" PRIu8 "]",
                         GroupID, GroupGeneration, FailRealm, FailDomain, VDisk).data();

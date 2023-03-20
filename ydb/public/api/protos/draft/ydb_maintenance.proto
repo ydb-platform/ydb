@@ -1,0 +1,305 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Maintenance;
+option java_package = "com.yandex.ydb.maintenance.service";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+
+// Used to describe the scope of a single action
+message ActionScope {
+    message PDiskId {
+        uint32 node_id = 1;
+        uint32 pdisk_id = 2;
+    }
+
+    oneof scope {
+        PDiskId pdisk_id = 1;
+        uint32 node_id = 2;
+        string host_name = 3;
+        // string RackName = 3;
+        // string DataCenter = 4;
+    }
+}
+
+// Taking an exclusive lock to perform maintenance
+message LockAction {
+    ActionScope action_scope = 1;
+    google.protobuf.Duration duration = 2;
+}
+
+// Will not be implemented in the 1st version
+// Switching to maintenance mode. Maintenance modes 
+// can overlap with each other 
+message SetMaintenanceModeAction {
+    ActionScope action_scope = 1;
+    bool drain_tablets = 2;
+    bool evict_vdisks = 3;
+    google.protobuf.Duration duration = 4;
+}
+
+message Action {
+    oneof action {
+        LockAction lock_action = 1;
+        SetMaintenanceModeAction set_maintainance_mode_action = 2;
+    }
+}
+
+message ActionUid {
+    string task_uid = 1;
+    // Unique id within a single task. Defined by cms
+    uint32 group_id = 2; 
+    uint32 action_id = 3;
+}
+
+message ActionState {
+    enum ActionStatus {
+        ACTION_STATUS_UNSPECIFIED = 0;
+        ACTION_STATUS_CREATED = 1;
+        ACTION_STATUS_WAITING = 2;
+        ACTION_STATUS_PENDING = 3;
+        // Action has granded permission.
+        ACTION_STATUS_PERMIT_GRANDED = 4;
+        // Permission withdrawn due to deadline        
+        ACTION_STATUS_TIMEOUT_EXPIRED = 5;
+        // The user marked the action as completed
+        ACTION_STATUS_FINISHED_BY_USER = 6;
+    }
+
+    // The reason why the state did not update
+    enum ActionReason {
+        ACTION_REASON_UNSPECIFIED = 0;
+        // Action is ok
+        ACTION_REASON_OK = 1; 
+        // Affected storage group has too many unavailable (locked or down) vdisks.
+        // Can't grant another for this availability mode
+        ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS = 2;
+        // Blob storage group is already broken
+        ACTION_REASON_STORAGE_GROUP_BROKEN = 3;
+        // Too many unavailable state storage rings,
+        // it is impossible to grant node from another ring
+        ACTION_REASON_TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS = 4;
+        // State storage broken. Too many (more than (nToSelect - 1) / 2) unavailable rings 
+        ACTION_REASON_STATE_STORAGE_BROKEN = 5;
+        // Issue in cluster disabled nodes limit
+        ACTION_REASON_DISABLED_NODES_LIMIT_RICHED = 6;
+        // Issue in tenant limits
+        ACTION_REASON_TENANT_DISABLED_NODES_LIMIT_RICHED = 7;
+        // Wrong request
+        ACTION_REASON_WRONG_REQUEST = 8;
+    }
+
+    Action action = 1;
+    ActionStatus status = 2;
+    ActionUid action_uid = 3;
+    ActionReason reason = 4;
+    // The time when the state was assigned
+    google.protobuf.Timestamp state_timestamp = 5;
+    // Fields specified for PERMISSION_GRANDED state
+    google.protobuf.Timestamp deadline = 6;
+}
+
+message ActionGroup {
+    repeated Action actions = 1;
+}
+
+message ActionGroupStates {
+    repeated ActionState action_states = 1;
+}
+
+enum AvailabilityMode {
+    AVAILABILITY_MODE_UNSPECIFIED = 0;
+    // By default CMS tries to guarantee cluster availability
+    // by allowing at most 1 disabled disk in each storage group.
+    // For compute nodes tenant and cluster policies are followed.
+    // In this mode CMS allows at most 1 disable state storage ring
+    AVAILABILITY_MODE_STRONG = 1;
+    // This mode allows to move cluster restart/update forward
+    // in case some nodes are permanently down. In this mode
+    // CMS allows at most 1 locked (by permission to restart
+    // node or replace device) disk in a group. But total number
+    // of disabled disks for a group shouldn't exceed number
+    // of parity parts in that group.
+    // Compute nodes are handled as in default mode.
+
+    // In this mode CMS allows (nToSelect - 1) / 2 state storage rings
+    AVAILABILITY_MODE_WEAK = 2;
+    // In this mode CMS allows to lock 1 disk in a group, but if it can't
+    // it waits for 15 minutes at gives 1 more node. 
+    AVAILABILITY_MODE_SMART = 3;
+    // In this mode CMS allows at most 1 locked disk in a group
+    // ignoring its parity parts count. Allows to restart nodes
+    // even if multiple disks of some group are down. Using
+    // this mode might cause data unavailability.
+    // For compute nodes CMS follows tenant and cluster policies
+    // but allows to restart at least one node for tenant or
+    // cluster.
+    AVAILABILITY_MODE_FORCE = 4;
+}
+
+enum ItemState {
+    // Device/node state couldn't be identified.
+    ITEM_STATE_UNSPECIFIED = 0;
+    // Device/node is up.
+    ITEM_STATE_UP = 1;
+    // Device/node is Up, but permission granded
+    ITEM_STATE_LOCKED = 2;
+    // Device/node is down due to planned restart.
+    ITEM_STATE_RESTART = 3;
+    // Device/node is down off-schedule.
+    ITEM_STATE_DOWN = 4;
+}
+
+message ListClusterNodesRequest {}
+
+message ListClusterNodesResponse {
+    message Node {
+        uint32 node_id = 1;
+        string data_center = 2;
+        string rack = 3;
+        string fqdn = 4;
+        uint32 interconnect_port = 5;
+        ItemState state = 6;
+        optional string tenant = 7;
+        bool is_storage = 8;
+        bool is_dynamic = 9;
+    }
+
+    repeated Node nodes = 1;
+}
+
+message ListNodesDevicesRequest {
+    repeated uint32 node_id = 1;
+}
+
+message ListNodesDevicesResponse {
+    message Device {
+        string name = 1;
+        ItemState state = 2;
+    }
+
+    message NodeDevices {
+        uint32 node_id = 1;
+        repeated Device devices = 2;
+    }
+
+    repeated NodeDevices nodes_devices = 1;
+}
+
+message MaintenanceTaskOptions { 
+    // The maximum number of action groups in progress at a time
+    uint32 in_flight = 1;
+    bool dry_run = 2;
+    // Name of a task and some comment. 
+    // Provided for the convenience of the user.
+    string name = 3;
+    string comment = 4;
+    // Availability mode is not preserved for scheduled events.
+    AvailabilityMode availability_mode = 5;
+    // User defined GUID
+    string task_uid = 6;
+    // Task with largest priority blocks other tasks 
+    // until all actions are completed. Default is 0 
+    int64 priority = 7;
+}
+
+message CreateMaintenanceTaskRequest {
+    MaintenanceTaskOptions task_options = 1;
+    repeated ActionGroup action_groups = 2; 
+    // Indicates that client is no longer interested in the task after
+    // the specified duration starting from the time task arrives at the cms.
+    // If not specified then default duration from CMS config is used.
+    google.protobuf.Duration task_timeout = 5;
+
+}
+
+// Updated action states and tryes to grand permissions
+message RefreshMaintenanceTaskRequest {
+    string task_uid = 2;
+}
+
+message MaintenanceTaskResponse {
+    StatusIds.StatusCode status = 1;
+    string task_uid = 2;
+    repeated ActionGroupStates actions_states = 3;
+    // Try again after this deadline. Specified if there are no PERMISSION_GRANDED 
+    // actions after request
+    optional google.protobuf.Timestamp deadline = 4;
+}
+
+message ListMaintenanceTasksRequest {
+    // If specified, it will return the tasks created by this user. 
+    // Otherwise all tasks will be returned
+    optional string user = 1;
+}
+
+message ListMaintenanceTasksResponse {
+    repeated string tasks_uids = 1;
+}
+
+// Returns specified task
+message GetMaintenanceTaskRequest { 
+    string task_uid = 1; 
+}
+
+message GetMaintenanceTaskResponse {
+    MaintenanceTaskOptions task_options = 1;
+    repeated ActionGroupStates actions_group_states = 2;
+    google.protobuf.Timestamp task_deadline = 3;
+}
+
+// Drop maintenance task
+message DropMaintenanceTaskRequest {
+    string task_uid = 1;
+}
+
+// Extends Request deadline
+message ProlongateMaintenanceTaskRequest {
+    string task_uid = 1;
+    google.protobuf.Timestamp new_deadline = 2;
+}
+
+message ManageMaintenanceTaskResponse {
+    StatusIds.StatusCode status = 1;
+}
+
+// Removes resolved premits
+message ReleasePermitRequest {
+    repeated ActionUid action_uid = 1;
+}
+
+// Extends permits deadlines
+message ProlongatePermitRequest {
+    message ActionDuration {
+        ActionUid action_uid = 1;
+        google.protobuf.Timestamp new_deadline = 2;
+    }
+    repeated ActionDuration action_durations = 1;
+}
+
+message PermitStatus {
+    ActionUid action_uid = 1;
+    StatusIds.StatusCode status = 2;
+}
+
+message ManagePermitResponse {
+    repeated PermitStatus permit_statuses = 1;
+}
+
+// Getting a detailed reason why the action doesn't get a permit
+message GetReadableActionReasonRequest {
+    repeated ActionUid action_ids = 1;
+}
+
+message GetReadableActionReasonResponse {
+    message Reason {
+        ActionState action_state = 1;
+        string Reason = 2;
+    }
+    repeated Reason reasons = 1;
+}

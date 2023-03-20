@@ -11,6 +11,7 @@ SRCS(
     ydb_persqueue_v1.proto
     ydb_datastreams_v1.proto
     ydb_long_tx_v1.proto
+    ydb_maintenance_v1.proto
     ydb_logstore_v1.proto
     ydb_query_v1.proto
     ydb_console_v1.proto

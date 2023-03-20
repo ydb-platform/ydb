@@ -470,14 +470,6 @@ private:
                             << "Unknown listing option " << int(requests[0].Options)));
                     return TStatus::Error;
                 }
-                auto maybeSerializedVariant = NS3Lister::SerializePatternVariant(pathPatternVariant);
-                if (!maybeSerializedVariant.Defined()) {
-                    ctx.AddError(TIssue(
-                        ctx.GetPosition(read.Pos()),
-                        TStringBuilder() << "Couldn't serialize path pattern variant "
-                                         << int(pathPatternVariant)));
-                    return TStatus::Error;
-                }
 
                 settings.push_back(ctx.NewList(
                     settingsPos,
@@ -489,7 +481,7 @@ private:
                     settingsPos,
                     {
                         ctx.NewAtom(settingsPos, "pathpatternvariant"),
-                        ctx.NewAtom(settingsPos, *maybeSerializedVariant),
+                        ctx.NewAtom(settingsPos, ToString(pathPatternVariant)),
                     }));
             }
 

@@ -58,14 +58,17 @@ public:
     using TListerFactoryMethod = std::function<TFuture<NS3Lister::IS3Lister::TPtr>(
         const NS3Lister::TListingRequest& listingRequest, ES3ListingOptions options)>;
 
-    TCollectingS3ListingStrategy(size_t limit, TListerFactoryMethod&& listerFactoryMethod)
+    TCollectingS3ListingStrategy(size_t limit, TListerFactoryMethod&& listerFactoryMethod, TString collectingName)
         : Limit(limit)
-        , ListerFactoryMethod(std::move(listerFactoryMethod)) { }
+        , ListerFactoryMethod(std::move(listerFactoryMethod))
+        , CollectingName(std::move(collectingName)) { }
 
     TFuture<NS3Lister::TListResult> List(
         const NS3Lister::TListingRequest& listingRequest,
         ES3ListingOptions options) override {
         Y_UNUSED(options);
+        YQL_CLOG(DEBUG, ProviderS3) << "[TCollectingS3ListingStrategy:" << CollectingName
+                                   << "] Going to list " << listingRequest;
         auto futureLister = ListerFactoryMethod(listingRequest, options);
         return futureLister.Apply([this, listingRequest, options](
                                       const TFuture<NS3Lister::IS3Lister::TPtr>& lister) {
@@ -79,17 +82,23 @@ public:
 
 private:
     static inline auto MakeNewListingChunkHandler(
-        NS3Lister::TListResult& state, size_t limit) {
-        return [&state, limit](NS3Lister::TListEntries&& chunkEntries) {
+        NS3Lister::TListResult& state, size_t limit, TString collectingName) {
+        return [&state, limit, name = std::move(collectingName)](NS3Lister::TListEntries&& chunkEntries) {
             auto& stateEntries = std::get<NS3Lister::TListEntries>(state);
             if (stateEntries.Size() + chunkEntries.Size() > limit) {
-                YQL_CLOG(INFO, ProviderS3)
-                    << "[TCollectingS3ListingStrategy] Collected "
+                YQL_CLOG(DEBUG, ProviderS3)
+                    << "[TCollectingS3ListingStrategy:" << name
+                    << "] Collected "
                     << stateEntries.Size() + chunkEntries.Size()
                     << " object paths which is more than limit " << limit;
                 state = TIssues{MakeLimitExceededIssue()};
                 return EAggregationAction::Stop;
             }
+            YQL_CLOG(TRACE, ProviderS3)
+                << "[TCollectingS3ListingStrategy:" << name
+                << "] Collected "
+                << stateEntries.Size() + chunkEntries.Size() << " entries. Listing limit "
+                << limit << " Listing continues. ";
             stateEntries += std::move(chunkEntries);
             return EAggregationAction::Proceed;
         };
@@ -111,10 +120,10 @@ private:
         return NYql::AccumulateWithEarlyStop<NS3Lister::TListResult>(
             std::move(lister),
             NS3Lister::TListResult{},
-            [limit = Limit](NS3Lister::TListResult& state, NS3Lister::TListResult&& chunk) {
+            [limit = Limit, name = CollectingName](NS3Lister::TListResult& state, NS3Lister::TListResult&& chunk) {
                 return std::visit(
                     TOverloaded{
-                        std::move(MakeNewListingChunkHandler(state, limit)),
+                        std::move(MakeNewListingChunkHandler(state, limit, std::move(name))),
                         std::move(MakeIssuesHandler(state))},
                     std::move(chunk));
             },
@@ -124,6 +133,7 @@ private:
 private:
     const size_t Limit;
     const TListerFactoryMethod ListerFactoryMethod;
+    const TString CollectingName;
 };
 
 class TFlatFileS3ListingStrategy : public TCollectingS3ListingStrategy {
@@ -141,7 +151,8 @@ public:
                   Y_UNUSED(options);
                   return listerFactory->Make(
                       httpGateway, listingRequest, Nothing(), allowLocalFiles);
-              }) { }
+              },
+              "TFlatFileS3ListingStrategy") { }
 };
 
 class TDirectoryS3ListingStrategy : public TCollectingS3ListingStrategy {
@@ -159,7 +170,8 @@ public:
                   Y_UNUSED(options);
                   return listerFactory->Make(
                       httpGateway, listingRequest, "/", allowLocalFiles);
-              }) { }
+              },
+              "TDirectoryS3ListingStrategy") { }
 };
 
 class TCompositeS3ListingStrategy : public IS3ListingStrategy {
@@ -404,7 +416,8 @@ public:
                           TDirectoryS3ListingStrategy{
                               listerFactory, httpGateway, limit, allowLocalFiles}});
                   return MakeFuture(std::move(ptr));
-              }) { }
+              },
+              "TPartitionedDatasetS3ListingStrategy") { }
 };
 
 class TBFSDirectoryResolverIterator : public NS3Lister::IS3Lister {
@@ -440,6 +453,10 @@ public:
                 .Apply(
                     [this, sourcePrefix](const TFuture<NS3Lister::TListResult>& future)
                         -> NS3Lister::TListResult {
+                        YQL_CLOG(TRACE, ProviderS3)
+                            << "[TBFSDirectoryResolverIterator] Got new listing result. Collected entries: "
+                            << ReturnedSize + DirectoryPrefixQueue.size();
+
                         try {
                             auto& nextBatch = future.GetValue();
                             if (std::holds_alternative<TIssues>(nextBatch)) {
@@ -452,6 +469,7 @@ public:
                             auto currentListingTotalSize = ReturnedSize +
                                                            DirectoryPrefixQueue.size() +
                                                            listingResult.Size();
+
                             if (currentListingTotalSize > Limit) {
                                 // Stop listing
                                 result.Directories.push_back({.Path = sourcePrefix});
@@ -480,6 +498,7 @@ public:
                                     DirectoryPrefixQueue.clear();
                                 }
                             }
+
                             ReturnedSize += result.Size();
                             return NS3Lister::TListResult{result};
                         } catch (std::exception& e) {
@@ -554,7 +573,8 @@ public:
                           minParallelism,
                           limit});
                   return MakeFuture(std::move(ptr));
-              }) { }
+              },
+              "TUnPartitionedDatasetS3ListingStrategy") {}
 };
 
 

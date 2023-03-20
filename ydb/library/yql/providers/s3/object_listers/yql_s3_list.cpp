@@ -23,37 +23,23 @@
 
 namespace NYql::NS3Lister {
 
-TMaybe<TString> SerializePatternVariant(ES3PatternVariant variant) {
-    switch (variant) {
-        case ES3PatternVariant::PathPattern:
-            return "path_pattern";
-        case ES3PatternVariant::FilePattern:
-            return "file_pattern";
-        default:
-            return Nothing();
-    }
-}
-
-TMaybe<ES3PatternVariant> DeserializePatternVariant(const TString& variant) {
-    if (variant == "path_pattern") {
-        return ES3PatternVariant::PathPattern;
-    }
-
-    if (variant == "file_pattern") {
-        return ES3PatternVariant::FilePattern;
-    }
-
-    return Nothing();
+IOutputStream& operator<<(IOutputStream& stream, const TListingRequest& request) {
+    return stream << "TListingRequest{.url=" << request.Url
+                  << ",.Prefix=" << request.Prefix
+                  << ",.Pattern=" << request.Pattern
+                  << ",.PatternType=" << request.PatternType
+                  << ",.Token=<some token with length " << request.Token.length() << ">}";
 }
 
 namespace {
 
 using namespace NThreading;
 
-using TResultFilter =
+using TPathFilter =
     std::function<bool(const TString& path, std::vector<TString>& matchedGlobs)>;
+using TEarlyStopChecker = std::function<bool(const TString& path)>;
 
-TResultFilter MakeFilterRegexp(const TString& regex) {
+std::pair<TPathFilter, TEarlyStopChecker> MakeFilterRegexp(const TString& regex) {
     auto re = std::make_shared<RE2>(re2::StringPiece(regex), RE2::Options());
     YQL_ENSURE(re->ok());
 
@@ -70,10 +56,10 @@ TResultFilter MakeFilterRegexp(const TString& regex) {
         (*reArgsPtr)[i] = &(*reArgs)[i];
     }
 
-    return [groups,
-            reArgs,
-            reArgsPtr,
-            re](const TString& path, std::vector<TString>& matchedGlobs) {
+    auto filter = [groups,
+                   reArgs,
+                   reArgsPtr,
+                   re](const TString& path, std::vector<TString>& matchedGlobs) {
         matchedGlobs.clear();
         bool matched =
             re2::RE2::FullMatchN(path, *re, reArgsPtr->data(), reArgsPtr->size());
@@ -85,16 +71,27 @@ TResultFilter MakeFilterRegexp(const TString& regex) {
         }
         return matched;
     };
+
+    auto checker = [](const TString& path) {
+        Y_UNUSED(path);
+        return false;
+    };
+
+    return std::make_pair(std::move(filter), std::move(checker));
 }
 
-TResultFilter MakeFilterWildcard(const TString& pattern) {
+std::pair<TPathFilter, TEarlyStopChecker> MakeFilterWildcard(const TString& pattern) {
     auto regexPatternPrefix = pattern.substr(0, NS3::GetFirstWildcardPos(pattern));
     if (regexPatternPrefix == pattern) {
         // just match for equality
-        return [pattern](const TString& path, std::vector<TString>& matchedGlobs) {
+        auto filter = [pattern](const TString& path, std::vector<TString>& matchedGlobs) {
             matchedGlobs.clear();
             return path == pattern;
         };
+
+        auto checker = [pattern](const TString& path) { return path > pattern; };
+
+        return std::make_pair(std::move(filter), std::move(checker));
     }
 
     const auto regex = NS3::RegexFromWildcards(pattern);
@@ -104,7 +101,7 @@ TResultFilter MakeFilterWildcard(const TString& pattern) {
     return MakeFilterRegexp(regex);
 }
 
-TResultFilter MakeFilter(const TString& pattern, ES3PatternType patternType) {
+std::pair<TPathFilter, TEarlyStopChecker> MakeFilter(const TString& pattern, ES3PatternType patternType) {
     switch (patternType) {
         case ES3PatternType::Wildcard:
             return MakeFilterWildcard(pattern);
@@ -168,7 +165,7 @@ public:
     TLocalS3Lister(const TListingRequest& listingRequest, const TMaybe<TString>& delimiter)
         : ListingRequest(listingRequest) {
         Y_ENSURE(!delimiter.Defined(), "delimiter is not supported for local files");
-        Filter = MakeFilter(listingRequest.Pattern, listingRequest.PatternType);
+        Filter = MakeFilter(listingRequest.Pattern, listingRequest.PatternType).first;
     }
 
     TFuture<TListResult> Next() override {
@@ -211,7 +208,7 @@ public:
 
 private:
     const TListingRequest ListingRequest;
-    TResultFilter Filter;
+    TPathFilter Filter;
     bool IsFirst = true;
 };
 
@@ -219,7 +216,8 @@ class TS3Lister : public IS3Lister {
 public:
     struct TListingContext {
         // Filter
-        const TResultFilter Filter;
+        const TPathFilter Filter;
+        const TEarlyStopChecker EarlyStopChecker;
         // Result processing
         NThreading::TPromise<TListResult> Promise;
         NThreading::TPromise<TMaybe<TListingContext>> NextRequestPromise;
@@ -244,10 +242,11 @@ public:
             listingRequest.Url.substr(0, 7) != "file://",
             "This lister does not support reading local files");
 
-        auto filter = MakeFilter(listingRequest.Pattern, listingRequest.PatternType);
+        auto [filter, checker] = MakeFilter(listingRequest.Pattern, listingRequest.PatternType);
 
         auto ctx = TListingContext{
-            filter,
+            std::move(filter),
+            std::move(checker),
             NewPromise<TListResult>(),
             NewPromise<TMaybe<TListingContext>>(),
             std::make_shared<TListEntries>(),
@@ -323,6 +322,7 @@ private:
                     << " entries, got another " << parsedResponse.KeyCount
                     << " entries, request id: [" << ctx.RequestId << "]";
 
+                auto earlyStop = false;
                 for (const auto& content : parsedResponse.Contents) {
                     if (content.Path.EndsWith('/')) {
                         // skip 'directories'
@@ -335,6 +335,9 @@ private:
                         object.Size = content.Size;
                         object.MatchedGlobs.swap(matchedGlobs);
                     }
+                    if (ctx.EarlyStopChecker(content.Path)) {
+                        earlyStop = true;
+                    }
                 }
                 for (const auto& prefix : parsedResponse.CommonPrefixes) {
                     auto& directory = ctx.Output->Directories.emplace_back();
@@ -342,13 +345,14 @@ private:
                     directory.MatchedRegexp = ctx.Filter(prefix, directory.MatchedGlobs);
                 }
 
-                if (parsedResponse.IsTruncated) {
+                if (parsedResponse.IsTruncated && !earlyStop) {
                     YQL_CLOG(DEBUG, ProviderS3) << "Listing of " << ctx.ListingRequest.Url
                                                 << ctx.ListingRequest.Prefix
                                                 << ": got truncated flag, will continue";
 
                     auto newCtx = TListingContext{
                         ctx.Filter,
+                        ctx.EarlyStopChecker,
                         NewPromise<TListResult>(),
                         NewPromise<TMaybe<TListingContext>>(),
                         std::make_shared<TListEntries>(),

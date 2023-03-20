@@ -23,10 +23,6 @@ namespace NS3Lister {
 
 enum class ES3PatternVariant { FilePattern, PathPattern };
 
-TMaybe<TString> SerializePatternVariant(ES3PatternVariant variant);
-
-TMaybe<ES3PatternVariant> DeserializePatternVariant(const TString& variant);
-
 enum class ES3PatternType {
     /**
      * Pattern may include following wildcard expressions:
@@ -84,6 +80,8 @@ struct TListingRequest {
     ES3PatternType PatternType = ES3PatternType::Wildcard;
     TString Prefix;
 };
+
+IOutputStream& operator<<(IOutputStream& stream, const TListingRequest& request);
 
 class IS3Lister : public TIterator<NThreading::TFuture<TListResult>> {
 public:

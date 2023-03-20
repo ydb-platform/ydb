@@ -97,8 +97,7 @@ void UnitAssertListResultEquals(
 Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
     auto strategy = TCollectingS3ListingStrategy{
         10,
-        [](const NS3Lister::TListingRequest& listingRequest,
-           ES3ListingOptions options) {
+        [](const NS3Lister::TListingRequest& listingRequest, ES3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options, ES3ListingOptions::NoOptions);
             return MakeFuture(std::static_pointer_cast<NS3Lister::IS3Lister>(
@@ -115,11 +114,11 @@ Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
                                 .Path = "a/b",
                                 .Size = 15,
                             }}}})));
-        }};
+        },
+        "TTest"};
 
     auto actualResultFuture = strategy.List(
-        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"},
-        ES3ListingOptions::NoOptions);
+        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, ES3ListingOptions::NoOptions);
     auto expectedResult = NS3Lister::TListResult{NS3Lister::TListEntries{
         .Objects = std::vector<NS3Lister::TObjectListEntry>{
             NS3Lister::TObjectListEntry{
@@ -137,8 +136,7 @@ Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
 Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
     auto strategy = TCollectingS3ListingStrategy{
         1,
-        [](const NS3Lister::TListingRequest& listingRequest,
-           ES3ListingOptions options) {
+        [](const NS3Lister::TListingRequest& listingRequest, ES3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options, ES3ListingOptions::NoOptions);
             return MakeFuture(std::static_pointer_cast<NS3Lister::IS3Lister>(
@@ -155,7 +153,8 @@ Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
                                 .Path = "a/b",
                                 .Size = 15,
                             }}}})));
-        }};
+        },
+        "TTest"};
 
     auto actualResultFuture = strategy.List(
         NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"},
@@ -181,7 +180,8 @@ Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
                                 .Size = 10,
                             }}},
                     TIssues{TIssue("TEST_ISSUE")}})));
-        }};
+        },
+        "TTest"};
 
     auto actualResultFuture = strategy.List(
         NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"},
@@ -194,13 +194,13 @@ Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
 Y_UNIT_TEST(IfExceptionIsReturnedFromIteratorThanItShouldCovertItToIssue) {
     auto strategy = TCollectingS3ListingStrategy{
         10,
-        [](const NS3Lister::TListingRequest& listingRequest,
-           ES3ListingOptions options) {
+        [](const NS3Lister::TListingRequest& listingRequest, ES3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options, ES3ListingOptions::NoOptions);
             return MakeFuture(std::static_pointer_cast<NS3Lister::IS3Lister>(
                 std::make_shared<TMockS3ExceptionLister>("EXCEPTION MESSAGE")));
-        }};
+        },
+        "TTest"};
 
     auto actualResultFuture = strategy.List(
         NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"},

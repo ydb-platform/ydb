@@ -5,6 +5,8 @@ SRCS(
     yql_s3_path.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(yql_s3_list.h)
+
 PEERDIR(
     contrib/libs/re2
     library/cpp/xml/document

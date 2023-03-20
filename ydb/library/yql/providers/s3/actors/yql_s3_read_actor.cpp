@@ -1545,12 +1545,12 @@ public:
             LOG_CORO_W("Download completed for unknown/discarded range [" << readyRange.Offset << "-" << readyRange.Length << "]");
             return;
         }
-        
+
         if (it->second.Cookie != event.Cookie) {
             LOG_CORO_W("Mistmatched cookie for range [" << readyRange.Offset << "-" << readyRange.Length << "], received " << event.Cookie << ", expected " << it->second.Cookie);
             return;
-        } 
-        
+        }
+
         it->second.Data = event.Get()->Result.Extract();
         ui64 size = it->second.Data.size();
         it->second.Ready = true;
@@ -1659,7 +1659,7 @@ public:
                     CpuTime += GetCpuTimeDelta();
 
                     // if reordering is not allowed wait for row groups sequentially
-                    while (ReadyRowGroups.empty() 
+                    while (ReadyRowGroups.empty()
                             || (!ReadSpec->RowGroupReordering && ReadyRowGroups.top() > readyGroupCount) ) {
                         ProcessOneEvent();
                     }
@@ -2790,13 +2790,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             ythrow yexception()
                 << "'pathpatternvariant' must be configured for directory listing";
         }
-        auto maybePathPatternVariant =
-            NS3Lister::DeserializePatternVariant(pathPatternVariantValue->second);
-        if (maybePathPatternVariant.Empty()) {
+        if (!TryFromString(pathPatternVariantValue->second, pathPatternVariant)) {
             ythrow yexception()
                 << "Unknown 'pathpatternvariant': " << pathPatternVariantValue->second;
         }
-        pathPatternVariant = *maybePathPatternVariant;
     }
     ui64 fileSizeLimit = cfg.FileSizeLimit;
     if (params.HasFormat()) {

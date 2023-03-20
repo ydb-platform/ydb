@@ -8,6 +8,9 @@ A set of commonly used hash functions.
 * ```Digest::Fnv32(String{Flags::AutoMap}) -> Uint32```
 * ```Digest::Fnv64(String{Flags::AutoMap}) -> Uint64```
 * ```Digest::MurMurHash(String{Flags:AutoMap}) -> Uint64```
+* ```Digest::MurMurHash32(String{Flags:AutoMap}) -> Uint32```
+* ```Digest::MurMurHash2A(String{Flags:AutoMap}) -> Uint64```
+* ```Digest::MurMurHash2A32(String{Flags:AutoMap}) -> Uint32```
 * ```Digest::CityHash(String{Flags:AutoMap}) -> Uint64```
 * ```Digest::CityHash128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>```
 * ```Digest::NumericHash(Uint64{Flags:AutoMap}) -> Uint64```

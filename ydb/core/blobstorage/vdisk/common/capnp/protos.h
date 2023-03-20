@@ -549,6 +549,9 @@ namespace NKikimrCapnProto {
                         elements.push_back(extremeQuery);
                     }
                 }
+
+                std::cout << "\n\ndeserialized record: " << ShortDebugString() << "\n\n";
+
                 return true;
             }
         };
@@ -584,14 +587,20 @@ namespace NKikimrCapnProto {
             }
 
             std::string ShortDebugString() const {
-                return "ShortDebugString";
+                std::ostringstream ss;
+                ss << "{ "
+                   << "#tabletId " << GetTabletId() << " "
+                   << "#snapshotId " << GetSnapshotId() << " "
+                   << "#VDiskId " << GetVDiskID().GetVDisk() << " "
+                   << "#cookie " << GetCookie()
+                   << "#extremeQueriesCnt " << elements.size()
+                   << " }";
+                return ss.str();
             }
 
             std::string GetTypeName() const {
                 return "TEvVGet";
             }
-
-//            bool ParseFromString(std::string) { return true; }
 
             void CopyFrom(const Builder& other) {
                 // TODO(stetsyuk): think of a better solution
@@ -604,6 +613,8 @@ namespace NKikimrCapnProto {
                 for (size_t i = 0; i != elements.size(); ++i) {
                     interviews.setWithCaveats(i, GetExtremeQueries(i).GetCapnpBase());
                 }
+
+                std::cout << "\n\nserializing record: " << ShortDebugString() << "\n\n";
 
                 kj::VectorOutputStream stream;
                 capnp::writePackedMessage(stream, *message);

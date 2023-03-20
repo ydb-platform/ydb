@@ -2695,6 +2695,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto& changefeeds = describeResult.GetTableDescription().GetChangefeedDescriptions();
             UNIT_ASSERT_VALUES_EQUAL(changefeeds.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0), TChangefeedDescription("feed", mode, format));
+            UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0).GetState(), EChangefeedState::Enabled);
         }
 
         {

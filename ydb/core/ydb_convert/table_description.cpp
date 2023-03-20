@@ -460,11 +460,10 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
 
         switch (stream.GetState()) {
         case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateReady:
-            changefeed->set_state(Ydb::Table::ChangefeedDescription::STATE_ENABLED);
         case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled:
-            changefeed->set_state(Ydb::Table::ChangefeedDescription::STATE_DISABLED);
         case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan:
-            changefeed->set_state(Ydb::Table::ChangefeedDescription::STATE_INITIAL_SCAN);
+            changefeed->set_state(static_cast<Ydb::Table::ChangefeedDescription::State>(stream.GetState()));
+            break;
         default:
             break;
         }

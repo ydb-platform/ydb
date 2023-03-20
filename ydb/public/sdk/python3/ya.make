@@ -49,8 +49,6 @@ PY_SRCS(
     ydb/sqlalchemy/types.py
     ydb/table.py
     ydb/table_test.py
-    ydb/tornado/__init__.py
-    ydb/tornado/tornado_helpers.py
     ydb/tracing.py
     ydb/types.py
     ydb/ydb_version.py

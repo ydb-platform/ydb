@@ -618,7 +618,20 @@ namespace NKikimr {
                     }
 
                     if (queryMsg.HasFailedMsgId()) {
-                        resMsg->SetFailedMsgId(queryMsg.GetFailedMsgId());
+                        if (queryMsg.GetFailedMsgId().HasSequenceId()) {
+                            resMsg->MutableFailedMsgId().SetSequenceId(queryMsg.GetFailedMsgId().GetSequenceId());
+                        }
+                        if (queryMsg.GetFailedMsgId().HasMsgId()) {
+                            resMsg->MutableFailedMsgId().SetMsgId(queryMsg.GetFailedMsgId().GetMsgId());
+                        }
+                    }
+                    if (queryMsg.HasExpectedMsgId()) {
+                        if (queryMsg.GetExpectedMsgId().HasSequenceId()) {
+                            resMsg->MutableExpectedMsgId().SetSequenceId(queryMsg.GetExpectedMsgId().GetSequenceId());
+                        }
+                        if (queryMsg.GetExpectedMsgId().HasMsgId()) {
+                            resMsg->MutableExpectedMsgId().SetMsgId(queryMsg.GetExpectedMsgId().GetMsgId());
+                        }
                     }
 
                     if (queryMsg.HasStatus()) {

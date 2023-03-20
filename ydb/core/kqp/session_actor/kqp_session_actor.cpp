@@ -69,6 +69,17 @@ public:
     {}
 };
 
+std::unique_ptr<TEvKqp::TEvQueryResponse> AllocQueryResponse(const std::shared_ptr<TKqpQueryState>& state) {
+    auto resEv = std::make_unique<TEvKqp::TEvQueryResponse>();
+    if (auto reqArena = state->GetArena()) {
+        resEv->Record.ReallocRef(reqArena);
+    } else {
+        auto arena = std::make_shared<google::protobuf::Arena>();
+        resEv->Record.Realloc(arena);
+    }
+    return resEv;
+}
+
 struct TKqpCleanupCtx {
     std::deque<TIntrusivePtr<TKqpTransactionContext>> TransactionsToBeAborted;
     bool IsWaitingForWorkerToClose = false;
@@ -1300,9 +1311,8 @@ public:
     }
 
     void ReplySuccess() {
-        auto resEv = std::make_unique<TEvKqp::TEvQueryResponse>();
-        std::shared_ptr<google::protobuf::Arena> arena(new google::protobuf::Arena());
-        resEv->Record.Realloc(arena);
+        YQL_ENSURE(QueryState);
+        auto resEv = AllocQueryResponse(QueryState);
         auto *record = &resEv->Record.GetRef();
         auto *response = record->MutableResponse();
 
@@ -1312,7 +1322,6 @@ public:
 
         FillStats(record);
 
-        YQL_ENSURE(QueryState);
         if (QueryState->TxCtx) {
             QueryState->TxCtx->OnEndQuery();
         }
@@ -1361,11 +1370,12 @@ public:
         }
 
         // Result for scan query is sent directly to target actor.
+        Y_VERIFY(response->GetArena());
         if (QueryState->PreparedQuery && !QueryState->IsStreamResult()) {
             bool useYdbResponseFormat = QueryState->GetUsePublicResponseDataFormat();
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
-                auto* protoRes = QueryState->QueryData->GetMkqlTxResult(phyQuery.GetResultBindings(i), arena.get());
+                auto* protoRes = QueryState->QueryData->GetMkqlTxResult(phyQuery.GetResultBindings(i), response->GetArena());
                 std::optional<IDataProvider::TFillSettings> fillSettings;
                 if (QueryState->PreparedQuery->ResultsSize()) {
                     YQL_ENSURE(phyQuery.ResultBindingsSize() == QueryState->PreparedQuery->ResultsSize(), ""
@@ -1376,7 +1386,7 @@ public:
                         fillSettings->RowsLimitPerWrite = result.GetRowsLimit();
                     }
                 }
-                auto* finalResult = KikimrResultToProto(*protoRes, {}, fillSettings.value_or(FillSettings), arena.get());
+                auto* finalResult = KikimrResultToProto(*protoRes, {}, fillSettings.value_or(FillSettings), response->GetArena());
                 if (useYdbResponseFormat) {
                     ConvertKqpQueryResultToDbResult(*finalResult, response->AddYdbResults());
                 } else {

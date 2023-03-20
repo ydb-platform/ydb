@@ -282,6 +282,11 @@ public:
         ResetTimer();
         return CpuTime;
     }
+
+    // Returns nullptr in case of no local event
+    google::protobuf::Arena* GetArena() {
+        return RequestEv->GetArena();
+    }
 };
 
 

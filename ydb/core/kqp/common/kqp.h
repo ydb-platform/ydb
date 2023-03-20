@@ -377,6 +377,10 @@ struct TEvKqp {
             return RequestCtx ? RequestActorId : ActorIdFromProto(Record.GetRequestActorId());
         }
 
+        google::protobuf::Arena* GetArena() {
+            return RequestCtx ? RequestCtx->GetArena() : nullptr;
+        }
+
         const TString& GetTraceId() const {
             if (RequestCtx) {
                 if (!TraceId) {
@@ -564,25 +568,32 @@ struct TEvKqp {
     public:
         TProtoArenaHolder()
             : Protobuf_(google::protobuf::Arena::CreateMessage<TProto>(nullptr))
+            , NeedDelete_(true)
         {}
 
         ~TProtoArenaHolder() {
             // Deallocate message only if it was "normal" allocation
             // In case of protobuf arena memory will be freed during arena deallocation
-            if (!Protobuf_->GetArena()) {
+            if (NeedDelete_) {
                 delete Protobuf_;
             }
         }
 
         void Realloc(std::shared_ptr<google::protobuf::Arena> arena) {
+            ReallocRef(arena.get());
+            Arena_ = arena;
+        }
+
+        void ReallocRef(google::protobuf::Arena* arena) {
             // Allow realloc only if previous allocation was made using "normal" allocator
             // and no data was writen. It prevents ineffective using of protobuf.
             Y_ASSERT(!Protobuf_->GetArena());
             Y_ASSERT(ByteSize() == 0);
             delete Protobuf_;
-            Protobuf_ = google::protobuf::Arena::CreateMessage<TProto>(arena.get());
-            // Make sure arena is alive
-            Arena_ = arena;
+            Protobuf_ = google::protobuf::Arena::CreateMessage<TProto>(arena);
+            if (arena) {
+                NeedDelete_ = false;
+            }
         }
 
         bool ParseFromString(const TString& data) {
@@ -630,6 +641,7 @@ struct TEvKqp {
         TProtoArenaHolder& operator=(TProtoArenaHolder&&) = default;
         TProto* Protobuf_;
         std::shared_ptr<google::protobuf::Arena> Arena_;
+        bool NeedDelete_;
     };
 
     struct TEvQueryResponse : public TEventPB<TEvQueryResponse, TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>,

@@ -104,8 +104,8 @@ ALLOW .* -> vendor/github.com/DataDog/temporalite
 
 # CONTRIB-2353
 ALLOW .* -> vendor/go.temporal.io/server
-ALLOW infra/temporal/swat/server -> vendor/github.com/urfave/cli
-ALLOW infra/temporal/swat/tctl -> vendor/github.com/urfave/cli
+ALLOW infra/temporal -> vendor/github.com/urfave/cli
+ALLOW infra/temporal -> vendor/github.com/urfave/cli
 ALLOW infra/temporal -> vendor/github.com/uber-go/tally
 ALLOW market/sre/tools/temporal/cmd/tctl -> vendor/github.com/urfave/cli
 

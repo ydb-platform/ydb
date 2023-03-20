@@ -13,6 +13,8 @@
 
 namespace NKikimr::NSQS {
 
+std::tuple<TString, TString, TString> ParseCloudSecurityToken(const TString& token);
+
 class TProxyActor
     : public TActorBootstrapped<TProxyActor>
 {

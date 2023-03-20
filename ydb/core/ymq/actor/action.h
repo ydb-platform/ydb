@@ -77,9 +77,10 @@ public:
             return;
         }
 
-        TStringBuf tokenBuf(SecurityToken_);
-        UserName_ = TString(tokenBuf.NextTok(':'));
-        FolderId_ = TString(tokenBuf);
+        auto items = ParseCloudSecurityToken(SecurityToken_);
+        UserName_ = std::get<0>(items);
+        FolderId_ = std::get<1>(items);
+        UserSID_ = std::get<2>(items);
     }
 
     void DoBootstrap() {

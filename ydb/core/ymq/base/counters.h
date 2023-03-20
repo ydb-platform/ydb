@@ -794,6 +794,7 @@ struct TCloudAuthCounters {
     }
 
     void IncCounter(const NCloudAuth::EActionType actionType, const NCloudAuth::ECredentialType credentialType, int grpcStatus);
+    void IncAuthorizeCounter(const NCloudAuth::ECredentialType credentialType, bool error);
 
     static constexpr int GRPC_STATUSES_COUNT = 18;
 
@@ -805,6 +806,8 @@ private:
     TLazyCachedCounter CloudAuthCounters[NCloudAuth::EActionType::ActionTypesCount] // 3 types.
                                         [NCloudAuth::ECredentialType::CredentialTypesCount] // 2 types.
                                         [GRPC_STATUSES_COUNT]; // 18 types.
+    TLazyCachedCounter AuthorizeSuccess[NCloudAuth::ECredentialType::CredentialTypesCount];
+    TLazyCachedCounter AuthorizeError[NCloudAuth::ECredentialType::CredentialTypesCount];
 };
 
 // Metering counters in SQS core subsystem.

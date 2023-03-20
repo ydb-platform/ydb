@@ -55,11 +55,8 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Aggregate-TableFullScan",
+                                                "Node Type": "TableFullScan",
                                                 "Operators": [
-                                                    {
-                                                        "Name": "Aggregate"
-                                                    },
                                                     {
                                                         "Name": "TableFullScan",
                                                         "ReadColumns": [
@@ -107,6 +104,29 @@
                                                                         "Predicate": {
                                                                             "Id": 107
                                                                         }
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "GroupBy": {
+                                                                        "Aggregates": [
+                                                                            {
+                                                                                "Column": {
+                                                                                    "Id": 108
+                                                                                },
+                                                                                "Function": {
+                                                                                    "Id": 2
+                                                                                }
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "Projection": {
+                                                                        "Columns": [
+                                                                            {
+                                                                                "Id": 108
+                                                                            }
+                                                                        ]
                                                                     }
                                                                 }
                                                             ],

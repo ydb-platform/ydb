@@ -62,7 +62,7 @@
                                                     },
                                                     {
                                                         "Name": "Filter",
-                                                        "Predicate": "Apply"
+                                                        "Predicate": "item.URL StringContains \"google\""
                                                     },
                                                     {
                                                         "Name": "TableFullScan",

@@ -35,7 +35,7 @@
                                                     {
                                                         "Limit": "10",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": "$56.c"
+                                                        "TopSortBy": "$21.c"
                                                     },
                                                     {
                                                         "Name": "Aggregate"
@@ -69,13 +69,13 @@
                                                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: MIN(item.URL),_yql_agg_1: MIN(item.Title),_yql_agg_2: Inc(state._yql_agg_2)}",
+                                                                                        "Aggregation": "{_yql_agg_0: MIN(item.URL),_yql_agg_1: MIN(item.Title),_yql_agg_2: SUM(state._yql_agg_2)}",
                                                                                         "GroupBy": "item.SearchPhrase",
                                                                                         "Name": "Aggregate"
                                                                                     },
                                                                                     {
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "Apply And Not And item.SearchPhrase != \"\""
+                                                                                        "Predicate": "item.Title StringContains \"Google\" And Not And item.SearchPhrase != \"\""
                                                                                     },
                                                                                     {
                                                                                         "Name": "TableFullScan",
@@ -143,7 +143,7 @@
                                                                                                     },
                                                                                                     {
                                                                                                         "Name": "Filter",
-                                                                                                        "Predicate": "Apply And Not And item.SearchPhrase != \"\""
+                                                                                                        "Predicate": "item.Title StringContains \"Google\" And Not And item.SearchPhrase != \"\""
                                                                                                     },
                                                                                                     {
                                                                                                         "Name": "TableFullScan",

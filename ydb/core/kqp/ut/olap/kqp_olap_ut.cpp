@@ -1215,7 +1215,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
 
             qBuilder << R"(PRAGMA Kikimr.OptEnablePredicateExtract = "false";)" << Endl;
-            qBuilder << R"(PRAGMA AnsiLike;)" << Endl;
             qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
             qBuilder << predicate;
             qBuilder << " ORDER BY `timestamp`";
@@ -2758,7 +2757,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 10;
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
-            .SetExpectedReadNodeType("Aggregate-Filter-TableFullScan");
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
         q22.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q39;

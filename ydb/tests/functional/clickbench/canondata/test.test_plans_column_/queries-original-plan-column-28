@@ -35,7 +35,7 @@
                                                     {
                                                         "Limit": "25",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": "$43.l"
+                                                        "TopSortBy": "$23.l"
                                                     },
                                                     {
                                                         "Name": "Filter",
@@ -59,7 +59,7 @@
                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0),_yql_agg_2: MIN(item.Referer)}",
+                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0),_yql_agg_2: MIN(item.Referer)}",
                                                                         "GroupBy": "item.key",
                                                                         "Name": "Aggregate"
                                                                     },

@@ -79,7 +79,7 @@
                                                                 "Operators": [
                                                                     {
                                                                         "Aggregation": "state",
-                                                                        "GroupBy": "item.UserID",
+                                                                        "GroupBy": "row.UserID",
                                                                         "Name": "Aggregate"
                                                                     },
                                                                     {

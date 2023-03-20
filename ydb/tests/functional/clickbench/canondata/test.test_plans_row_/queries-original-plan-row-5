@@ -79,7 +79,7 @@
                                                                 "Operators": [
                                                                     {
                                                                         "Aggregation": "state",
-                                                                        "GroupBy": "item.SearchPhrase",
+                                                                        "GroupBy": "row.SearchPhrase",
                                                                         "Name": "Aggregate"
                                                                     },
                                                                     {

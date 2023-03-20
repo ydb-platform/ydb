@@ -35,7 +35,7 @@
                                                     {
                                                         "Limit": "10",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": "$36.c"
+                                                        "TopSortBy": "$15.c"
                                                     },
                                                     {
                                                         "Name": "Aggregate"
@@ -56,7 +56,7 @@
                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0),_yql_agg_1: SUM(item.IsRefresh)}",
+                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0),_yql_agg_1: SUM(item.IsRefresh)}",
                                                                         "GroupBy": "",
                                                                         "Name": "Aggregate"
                                                                     },

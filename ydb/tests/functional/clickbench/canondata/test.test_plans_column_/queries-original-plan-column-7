@@ -35,7 +35,7 @@
                                                     {
                                                         "Limit": "1001",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": "$15.cnt"
+                                                        "TopSortBy": "$9.cnt"
                                                     },
                                                     {
                                                         "Name": "Aggregate"
@@ -55,7 +55,7 @@
                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
+                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0)}",
                                                                         "GroupBy": "item.AdvEngineID",
                                                                         "Name": "Aggregate"
                                                                     },

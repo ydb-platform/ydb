@@ -54,7 +54,7 @@
                                                                     {
                                                                         "Limit": "10 + 1000",
                                                                         "Name": "TopSort",
-                                                                        "TopSortBy": "$22.Minute"
+                                                                        "TopSortBy": "$16.Minute"
                                                                     },
                                                                     {
                                                                         "Name": "Aggregate"
@@ -74,7 +74,7 @@
                                                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
+                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0)}",
                                                                                         "GroupBy": "item.Minute",
                                                                                         "Name": "Aggregate"
                                                                                     },

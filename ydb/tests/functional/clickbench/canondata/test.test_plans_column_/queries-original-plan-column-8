@@ -35,7 +35,7 @@
                                                     {
                                                         "Limit": "10",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": "$13.u"
+                                                        "TopSortBy": "$7.u"
                                                     },
                                                     {
                                                         "Name": "Aggregate"

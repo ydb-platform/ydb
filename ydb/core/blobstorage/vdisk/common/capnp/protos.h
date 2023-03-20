@@ -554,6 +554,22 @@ namespace NKikimrCapnProto {
 
                 return true;
             }
+
+            std::string ShortDebugString() const {
+                std::ostringstream ss;
+                ss << "{ "
+                   << "#tabletId " << GetTabletId() << " "
+                   << "#snapshotId " << GetSnapshotId() << " "
+                   << "#VDiskId " << GetVDiskID().GetVDisk() << " "
+                   << "#cookie " << GetCookie()
+                   << "#extremeQueriesCnt " << elements.size()
+                   << " }";
+                return ss.str();
+            }
+
+            std::string GetTypeName() const {
+                return "TEvVGet";
+            }
         };
 
         struct Builder : public Reader {
@@ -584,22 +600,6 @@ namespace NKikimrCapnProto {
 
             long ByteSizeLong() const {
                 return builder.totalSize().wordCount * 8;
-            }
-
-            std::string ShortDebugString() const {
-                std::ostringstream ss;
-                ss << "{ "
-                   << "#tabletId " << GetTabletId() << " "
-                   << "#snapshotId " << GetSnapshotId() << " "
-                   << "#VDiskId " << GetVDiskID().GetVDisk() << " "
-                   << "#cookie " << GetCookie()
-                   << "#extremeQueriesCnt " << elements.size()
-                   << " }";
-                return ss.str();
-            }
-
-            std::string GetTypeName() const {
-                return "TEvVGet";
             }
 
             void CopyFrom(const Builder& other) {

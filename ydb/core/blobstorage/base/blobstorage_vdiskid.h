@@ -56,11 +56,8 @@ struct TVDiskID {
     bool SameDisk(const NKikimrBlobStorage::TVDiskID &x) const;
 
     bool SameDisk(NKikimrCapnProto::TVDiskID::Reader x) const {
-        return GroupID == x.GetGroupID()
-               && FailDomain == x.GetDomain()
-               && FailRealm == x.GetRing()
-               && VDisk == x.GetVDisk()
-               && GroupGeneration == x.GetGroupGeneration();
+        TVDiskID vdisk = VDiskIDFromVDiskID(x);
+        return *this == vdisk;
     }
 
     auto ConvertToTuple() const {

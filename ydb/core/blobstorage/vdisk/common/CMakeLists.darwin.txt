@@ -18,10 +18,7 @@ target_link_libraries(blobstorage-vdisk-common PUBLIC
   vdisk-hulldb-base
   blobstorage-vdisk-protos
   ydb-core-protos
-  capnp
-  kj
 )
-
 target_sources(blobstorage-vdisk-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.cpp
@@ -40,6 +37,3 @@ target_sources(blobstorage-vdisk-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_recoverylogwriter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_response.cpp
 )
-
-find_path(CAPNP_INCLUDE_DIR capnp/message.h)
-target_include_directories(blobstorage-vdisk-common PRIVATE ${CAPNP_INCLUDE_DIR})

@@ -381,7 +381,7 @@ function(conan_cmake_detect_unix_libcxx result)
             set(${result} libstdc++ PARENT_SCOPE)
         endif()
     else()
-        set(${result} libstdc++ PARENT_SCOPE)
+        set(${result} libc++ PARENT_SCOPE)
     endif()
 endfunction()
 

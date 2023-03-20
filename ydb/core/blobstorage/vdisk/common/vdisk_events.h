@@ -536,6 +536,141 @@ namespace NKikimr {
                 auto *resultQoS = TBase::Record.MutableMsgQoS();
                 // TODO(stetsyuk): implement Swap method
                 // resultQoS->Swap(queryRecord->GetMsgQoS());
+                if (queryRecord->HasDeadlineSeconds()) {
+                    resultQoS->SetDeadlineSeconds(queryRecord->GetDeadlineSeconds());
+                }
+                if (queryRecord->HasCost()) {
+                    resultQoS->SetCost(queryRecord->GetCost());
+                }
+                if (queryRecord->HasSendMeCostSettings()) {
+                    resultQoS->SetSendMeCostSettings(queryRecord->GetSendMeCostSettings());
+                }
+                if (queryRecord->HasProxyNodeId()) {
+                    resultQoS->SetProxyNodeId(queryRecord->GetProxyNodeId());
+                }
+                if (queryRecord->HasReplVDiskId()) {
+                    resultQoS->SetReplVDiskId(queryRecord->GetReplVDiskId());
+                }
+                if (queryRecord->HasVDiskLoadId()) {
+                    resultQoS->SetVDiskLoadId(queryRecord->GetVDiskLoadId());
+                }
+                if (queryRecord->HasVPatchVDiskId()) {
+                    resultQoS->SetVPatchVDiskId(queryRecord->GetVPatchVDiskId());
+                }
+
+
+                if (queryRecord->HasMsgId()) {
+                    auto resMsg = resultQoS->MutableMsgId();
+                    auto queryMsg = queryRecord->GetMsgId();
+
+                    if (queryMsg->HasSequenceId()) {
+                        resMsg->SetSequenceId(queryMsg->GetSequenceId());
+                    }
+
+                    if (queryMsg->HasMsgId()) {
+                        resMsg->SetMsgId(queryMsg->GetMsgId());
+                    }
+                }
+
+                if (queryRecord->HasCostSettings()) {
+                    auto resMsg = resultQoS->MutableCostSettings();
+                    auto queryMsg = queryRecord->GetCostSettings();
+
+                    if (queryMsg->HasSeekTimeUs()) {
+                        resMsg->SetSeekTimeUs(queryMsg->GetSeekTimeUs());
+                    }
+
+                    if (queryMsg->HasReadSpeedBps()) {
+                        resMsg->SetReadSpeedBps(queryMsg->GetReadSpeedBps());
+                    }
+
+                    if (queryMsg->HasWriteSpeedBps()) {
+                        resMsg->SetWriteSpeedBps(queryMsg->GetWriteSpeedBps());
+                    }
+
+                    if (queryMsg->HasReadBlockSize()) {
+                        resMsg->SetReadBlockSize(queryMsg->GetReadBlockSize());
+                    }
+
+                    if (queryMsg->HasWriteBlockSize()) {
+                        resMsg->SetWriteBlockSize(queryMsg->GetWriteBlockSize());
+                    }
+
+                    if (queryMsg->HasMinREALHugeBlobInBytes()) {
+                        resMsg->SetMinREALHugeBlobInBytes(queryMsg->GetMinREALHugeBlobInBytes());
+                    }
+                }
+
+                if (queryRecord->HasWindow()) {
+                    auto resMsg = resultQoS->MutableWindow();
+                    auto queryMsg = queryRecord->GetWindow();
+
+                    if (queryMsg->HasActualWindowSize()) {
+                        resMsg->SetActualWindowSize(queryMsg->GetActualWindowSize());
+                    }
+
+                    if (queryMsg->HasMaxWindowSize()) {
+                        resMsg->SetMaxWindowSize(queryMsg->GetMaxWindowSize());
+                    }
+
+                    if (queryMsg->HasExpectedMsgId()) {
+                        resMsg->SetExpectedMsgId(queryMsg->GetExpectedMsgId());
+                    }
+
+                    if (queryMsg->HasFailedMsgId()) {
+                        resMsg->SetFailedMsgId(queryMsg->GetFailedMsgId());
+                    }
+
+                    if (queryMsg->HasStatus()) {
+                        resMsg->SetStatus(queryMsg->GetStatus());
+                    }
+                }
+
+                if (queryRecord->HasExecTimeStats()) {
+                    auto resMsg = resultQoS->MutableExecTimeStats();
+                    auto queryMsg = queryRecord->GetExecTimeStats();
+
+                    if (queryMsg->HasSubmitTimestamp()) {
+                        resMsg->SetSubmitTimestamp(queryMsg->GetSubmitTimestamp());
+                    }
+
+                    if (queryMsg->HasTotal()) {
+                        resMsg->SetTotal(queryMsg->GetTotal());
+                    }
+
+                    if (queryMsg->HasInQueue()) {
+                        resMsg->SetInQueue(queryMsg->GetInQueue());
+                    }
+
+                    if (queryMsg->HasExecution()) {
+                        resMsg->SetExecution(queryMsg->GetExecution());
+                    }
+
+                    if (queryMsg->HasHugeWriteTime()) {
+                        resMsg->SetHugeWriteTime(queryMsg->GetHugeWriteTime());
+                    }
+                }
+
+                if (queryRecord->HasSenderActorId()) {
+                    auto resMsg = resultQoS->MutableSenderActorId();
+                    auto queryMsg = queryRecord->GetSenderActorId();
+
+                    if (queryMsg->HasRawX1()) {
+                        resMsg->SetRawX1(queryMsg->GetRawX1());
+                    }
+
+                    if (queryMsg->HasRawX2()) {
+                        resMsg->SetRawX2(queryMsg->GetRawX2());
+                    }
+                }
+
+                if (queryRecord->HasExtQueueId()) {
+                    resultQoS->SetExtQueueId(static_cast<NKikimrBlobStorage::EVDiskQueueId>(queryRecord->GetExtQueueId()));
+                }
+                if (queryRecord->HasIntQueueId()) {
+                    resultQoS->SetIntQueueId(static_cast<NKikimrBlobStorage::EVDiskInternalQueueId>(queryRecord->GetIntQueueId()));
+                }
+
                 resultQoS->ClearDeadlineSeconds();
                 resultQoS->ClearSendMeCostSettings();
             } else {

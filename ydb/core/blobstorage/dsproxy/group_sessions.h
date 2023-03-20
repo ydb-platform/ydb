@@ -42,9 +42,9 @@ namespace NKikimr {
                 template<typename T>
                 static NKikimrBlobStorage::EVDiskQueueId VDiskQueueId(const T& event) {
                     Y_VERIFY(event.Record.HasMsgQoS());
-                    auto msgQoS = event.Record.GetMsgQoS();
+                    auto &msgQoS = event.Record.GetMsgQoS();
                     Y_VERIFY(msgQoS.HasExtQueueId());
-                    auto queueId = static_cast<NKikimrBlobStorage::EVDiskQueueId>(msgQoS.GetExtQueueId());
+                    NKikimrBlobStorage::EVDiskQueueId queueId = static_cast<NKikimrBlobStorage::EVDiskQueueId>(msgQoS.GetExtQueueId());
                     Y_VERIFY(queueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
                     return queueId;
                 }

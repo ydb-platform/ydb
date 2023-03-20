@@ -141,6 +141,30 @@ bool IsProxyAction(EAction action) {
 #undef ACTION_CASE
 }
 
+
+// Actions modifying a schema 
+#define ENUMERATE_MODIFY_SCHEME_ACTIONS(macro)      \
+        macro(CreateQueue)      \
+        macro(CreateUser) \
+        macro(DeleteQueue)                \
+        macro(DeleteQueueBatch)           \
+        macro(DeleteUser)                  \
+        macro(ModifyPermissions)
+
+
+#define SQS_SWITCH_MODIFY_SCHEME_REQUEST(request, default_case)       \
+    SQS_SWITCH_REQUEST_CUSTOM(request, ENUMERATE_MODIFY_SCHEME_ACTIONS, default_case)
+
+
+bool IsModifySchemaRequest(const NKikimrClient::TSqsRequest& req) {
+#define SQS_REQUEST_CASE(action) return true;
+
+    SQS_SWITCH_MODIFY_SCHEME_REQUEST(req, return false)
+
+#undef SQS_REQUEST_CASE
+}
+
+
 } // namespace NKikimr::NSQS
 
 template<>

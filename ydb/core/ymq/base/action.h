@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/protos/msgbus.pb.h>
+
 #include <util/generic/string.h>
 
 namespace NKikimr::NSQS {
@@ -48,8 +50,27 @@ bool IsActionForMessage(EAction action);
 bool IsFastAction(EAction action);
 bool IsPrivateAction(EAction action);
 
+bool IsModifySchemaRequest(const NKikimrClient::TSqsRequest& req);
+
 // get nonbatch action variant for given action
 EAction GetNonBatchAction(EAction action);
+
+#define SQS_REQUEST_CASE_WRAP(action)                    \
+    case NKikimrClient::TSqsRequest::Y_CAT(k, action): { \
+        SQS_REQUEST_CASE(action)                         \
+        break;                                           \
+    }
+
+// DO NOT proxy account creation or queue listing
+
+#define SQS_SWITCH_REQUEST_CUSTOM(request, enumerate, default_case) \
+    switch ((request).GetRequestCase()) {                           \
+        enumerate(SQS_REQUEST_CASE_WRAP)                            \
+        default:                                                    \
+            default_case;                                           \
+    }
+
+
 
 // Actions with proxy
 #define ENUMERATE_PROXY_ACTIONS(macro)      \

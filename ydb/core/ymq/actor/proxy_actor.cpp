@@ -2,6 +2,7 @@
 #include "error.h"
 #include "proxy_actor.h"
 
+#include <ydb/core/ymq/base/action.h>
 #include <ydb/core/protos/sqs.pb.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/security.h>
@@ -12,6 +13,10 @@
 
 
 namespace NKikimr::NSQS {
+
+
+#define SQS_SWITCH_REQUEST(request, default_case)       \
+    SQS_SWITCH_REQUEST_CUSTOM(request, ENUMERATE_PROXY_ACTIONS, default_case)
 
 TString SecurityPrint(const NKikimrClient::TSqsResponse& resp) {
     switch (resp.GetResponseCase()) {

@@ -11,6 +11,7 @@
 #include "serviceid.h"
 #include "schema.h"
 
+#include <ydb/core/audit/audit_log.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/base/quoter.h>
@@ -294,8 +295,86 @@ protected:
             Response_.SetResourceId(GetQueueName());
         }
 
+        AuditLog();
+
         Cb_->DoSendReply(Response_);
         PassAway();
+    }
+
+    void AuditLog() {
+        if (IsModifySchemaRequest(SourceSqsRequest_)) {
+            #define RESPONSE_CASE(action)                                       \
+                case NKikimrClient::TSqsResponse::Y_CAT(k, action): {           \
+                    AuditLogEntry(Response_.Y_CAT(Get, action)(), RequestId_);  \
+                    break;                                                      \
+                }
+
+            #define RESPONSE_BATCH_CASE(action)                                                 \
+                case NKikimrClient::TSqsResponse::Y_CAT(k, action): {                           \
+                    const auto& resp = Response_.Y_CAT(Get, action)();                          \
+                    const TError* globalError = resp.HasError() ? &resp.GetError() : nullptr;   \
+                    for (size_t i = 0; i < resp.EntriesSize(); ++i) {                           \
+                        TString reqId = TStringBuilder() << RequestId_ << "_" << i;             \
+                        AuditLogEntry(resp.GetEntries()[i], reqId, globalError);                \
+                    }                                                                           \
+                    break;                                                                      \
+                }
+
+            switch (Response_.GetResponseCase()) {
+                RESPONSE_CASE(ChangeMessageVisibility)
+                RESPONSE_BATCH_CASE(ChangeMessageVisibilityBatch)
+                RESPONSE_CASE(CreateQueue)
+                RESPONSE_CASE(CreateUser)
+                RESPONSE_CASE(DeleteMessage)
+                RESPONSE_BATCH_CASE(DeleteMessageBatch)
+                RESPONSE_CASE(DeleteQueue)
+                RESPONSE_CASE(DeleteUser)
+                RESPONSE_CASE(ListPermissions)
+                RESPONSE_CASE(GetQueueAttributes)
+                RESPONSE_CASE(GetQueueUrl)
+                RESPONSE_CASE(ListQueues)
+                RESPONSE_CASE(ListUsers)
+                RESPONSE_CASE(ModifyPermissions)
+                RESPONSE_CASE(PurgeQueue)
+                RESPONSE_CASE(ReceiveMessage)
+                RESPONSE_CASE(SendMessage)
+                RESPONSE_BATCH_CASE(SendMessageBatch)
+                RESPONSE_CASE(SetQueueAttributes)
+                RESPONSE_CASE(ListDeadLetterSourceQueues)
+                RESPONSE_CASE(CountQueues) 
+            case NKikimrClient::TSqsResponse::kDeleteQueueBatch:
+            case NKikimrClient::TSqsResponse::kGetQueueAttributesBatch:
+            case NKikimrClient::TSqsResponse::kPurgeQueueBatch:
+                // DeleteQueueBatch, GetQueueAttributesBatch, PurgeQueueBatch - generates not batch queries inside
+            case NKikimrClient::TSqsResponse::RESPONSE_NOT_SET:
+                break;
+            }
+
+            #undef RESPONSE_BATCH_CASE
+            #undef RESPONSE_CASE
+        }
+    }
+    
+    template <class TResponse>
+    void AuditLogEntry(const TResponse& response, const TString& requestId, const TError* error = nullptr) {
+        if (!error && response.HasError()) {
+            error = &response.GetError();
+        }
+        static const TString EmptyValue = "{none}";
+        AUDIT_LOG(
+            AUDIT_PART("component", TString("ymq"))
+            AUDIT_PART("request_id", requestId)
+            AUDIT_PART("subject", (UserSID_ ? UserSID_ : EmptyValue))
+            AUDIT_PART("account", UserName_)
+            AUDIT_PART("cloud_id", UserName_, Cfg().GetYandexCloudMode())
+            AUDIT_PART("folder_id", Response_.GetFolderId(), Cfg().GetYandexCloudMode())
+            AUDIT_PART("resource_id", GetQueueName(), Cfg().GetYandexCloudMode())
+            AUDIT_PART("operation", ActionToCloudConvMethod(Action_))
+            AUDIT_PART("queue", GetQueueName())
+            AUDIT_PART("status", TString(error ? "ERROR": "SUCCESS"))
+            AUDIT_PART("reason", error->GetMessage(), error)
+            AUDIT_PART("detailed_status", error->GetErrorCode(), error)
+        );
     }
 
     void PassAway() {

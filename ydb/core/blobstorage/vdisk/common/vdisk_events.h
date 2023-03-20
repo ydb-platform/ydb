@@ -631,7 +631,7 @@ namespace NKikimr {
                     }
 
                     if (queryMsg.HasStatus()) {
-                        resMsg->SetStatus(queryMsg.GetStatus());
+                        resMsg->SetStatus(static_cast<NKikimrBlobStorage::TWindowFeedback_EStatus>(queryMsg.GetStatus()));
                     }
                 }
 

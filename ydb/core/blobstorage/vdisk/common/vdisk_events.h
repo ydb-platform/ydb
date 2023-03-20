@@ -536,32 +536,32 @@ namespace NKikimr {
                 auto *resultQoS = TBase::Record.MutableMsgQoS();
                 // TODO(stetsyuk): implement Swap method
                 // resultQoS->Swap(queryRecord->GetMsgQoS());
-                if (queryRecord->HasDeadlineSeconds()) {
-                    resultQoS->SetDeadlineSeconds(queryRecord->GetDeadlineSeconds());
+                if (queryRecord->GetMsgQoS()->HasDeadlineSeconds()) {
+                    resultQoS->SetDeadlineSeconds(queryRecord->GetMsgQoS()->GetDeadlineSeconds());
                 }
-                if (queryRecord->HasCost()) {
-                    resultQoS->SetCost(queryRecord->GetCost());
+                if (queryRecord->GetMsgQoS()->HasCost()) {
+                    resultQoS->SetCost(queryRecord->GetMsgQoS()->GetCost());
                 }
-                if (queryRecord->HasSendMeCostSettings()) {
-                    resultQoS->SetSendMeCostSettings(queryRecord->GetSendMeCostSettings());
+                if (queryRecord->GetMsgQoS()->HasSendMeCostSettings()) {
+                    resultQoS->SetSendMeCostSettings(queryRecord->GetMsgQoS()->GetSendMeCostSettings());
                 }
-                if (queryRecord->HasProxyNodeId()) {
-                    resultQoS->SetProxyNodeId(queryRecord->GetProxyNodeId());
+                if (queryRecord->GetMsgQoS()->HasProxyNodeId()) {
+                    resultQoS->SetProxyNodeId(queryRecord->GetMsgQoS()->GetProxyNodeId());
                 }
-                if (queryRecord->HasReplVDiskId()) {
-                    resultQoS->SetReplVDiskId(queryRecord->GetReplVDiskId());
+                if (queryRecord->GetMsgQoS()->HasReplVDiskId()) {
+                    resultQoS->SetReplVDiskId(queryRecord->GetMsgQoS()->GetReplVDiskId());
                 }
-                if (queryRecord->HasVDiskLoadId()) {
-                    resultQoS->SetVDiskLoadId(queryRecord->GetVDiskLoadId());
+                if (queryRecord->GetMsgQoS()->HasVDiskLoadId()) {
+                    resultQoS->SetVDiskLoadId(queryRecord->GetMsgQoS()->GetVDiskLoadId());
                 }
-                if (queryRecord->HasVPatchVDiskId()) {
-                    resultQoS->SetVPatchVDiskId(queryRecord->GetVPatchVDiskId());
+                if (queryRecord->GetMsgQoS()->HasVPatchVDiskId()) {
+                    resultQoS->SetVPatchVDiskId(queryRecord->GetMsgQoS()->GetVPatchVDiskId());
                 }
 
 
-                if (queryRecord->HasMsgId()) {
+                if (queryRecord->GetMsgQoS()->HasMsgId()) {
                     auto resMsg = resultQoS->MutableMsgId();
-                    auto queryMsg = queryRecord->GetMsgId();
+                    auto queryMsg = queryRecord->GetMsgQoS()->GetMsgId();
 
                     if (queryMsg->HasSequenceId()) {
                         resMsg->SetSequenceId(queryMsg->GetSequenceId());
@@ -572,9 +572,9 @@ namespace NKikimr {
                     }
                 }
 
-                if (queryRecord->HasCostSettings()) {
+                if (queryRecord->GetMsgQoS()->HasCostSettings()) {
                     auto resMsg = resultQoS->MutableCostSettings();
-                    auto queryMsg = queryRecord->GetCostSettings();
+                    auto queryMsg = queryRecord->GetMsgQoS()->GetCostSettings();
 
                     if (queryMsg->HasSeekTimeUs()) {
                         resMsg->SetSeekTimeUs(queryMsg->GetSeekTimeUs());
@@ -601,9 +601,9 @@ namespace NKikimr {
                     }
                 }
 
-                if (queryRecord->HasWindow()) {
+                if (queryRecord->GetMsgQoS()->HasWindow()) {
                     auto resMsg = resultQoS->MutableWindow();
-                    auto queryMsg = queryRecord->GetWindow();
+                    auto queryMsg = queryRecord->GetMsgQoS()->GetWindow();
 
                     if (queryMsg->HasActualWindowSize()) {
                         resMsg->SetActualWindowSize(queryMsg->GetActualWindowSize());
@@ -626,9 +626,9 @@ namespace NKikimr {
                     }
                 }
 
-                if (queryRecord->HasExecTimeStats()) {
+                if (queryRecord->GetMsgQoS()->HasExecTimeStats()) {
                     auto resMsg = resultQoS->MutableExecTimeStats();
-                    auto queryMsg = queryRecord->GetExecTimeStats();
+                    auto queryMsg = queryRecord->GetMsgQoS()->GetExecTimeStats();
 
                     if (queryMsg->HasSubmitTimestamp()) {
                         resMsg->SetSubmitTimestamp(queryMsg->GetSubmitTimestamp());
@@ -651,9 +651,9 @@ namespace NKikimr {
                     }
                 }
 
-                if (queryRecord->HasSenderActorId()) {
+                if (queryRecord->GetMsgQoS()->HasSenderActorId()) {
                     auto resMsg = resultQoS->MutableSenderActorId();
-                    auto queryMsg = queryRecord->GetSenderActorId();
+                    auto queryMsg = queryRecord->GetMsgQoS()->GetSenderActorId();
 
                     if (queryMsg->HasRawX1()) {
                         resMsg->SetRawX1(queryMsg->GetRawX1());
@@ -664,11 +664,11 @@ namespace NKikimr {
                     }
                 }
 
-                if (queryRecord->HasExtQueueId()) {
-                    resultQoS->SetExtQueueId(static_cast<NKikimrBlobStorage::EVDiskQueueId>(queryRecord->GetExtQueueId()));
+                if (queryRecord->GetMsgQoS()->HasExtQueueId()) {
+                    resultQoS->SetExtQueueId(static_cast<NKikimrBlobStorage::EVDiskQueueId>(queryRecord->GetMsgQoS()->GetExtQueueId()));
                 }
-                if (queryRecord->HasIntQueueId()) {
-                    resultQoS->SetIntQueueId(static_cast<NKikimrBlobStorage::EVDiskInternalQueueId>(queryRecord->GetIntQueueId()));
+                if (queryRecord->GetMsgQoS()->HasIntQueueId()) {
+                    resultQoS->SetIntQueueId(static_cast<NKikimrBlobStorage::EVDiskInternalQueueId>(queryRecord->GetMsgQoS()->GetIntQueueId()));
                 }
 
                 resultQoS->ClearDeadlineSeconds();

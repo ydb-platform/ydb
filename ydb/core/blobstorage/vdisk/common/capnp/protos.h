@@ -611,6 +611,12 @@ namespace NKikimrCapnProto {
                 return true;
             }
 
+            void ClearForceBlockTabletData() {
+                auto data = MutableForceBlockTabletData();
+                data.SetGeneration(0);
+                data.SetId(0);
+            }
+
             void SetNotifyIfNotReady(const bool& value) { return builder.setNotifyIfNotReady(value); }
             void SetShowInternals(const bool& value) { return builder.setShowInternals(value); }
             void SetCookie(const uint64_t& value) { return builder.setCookie(value); }

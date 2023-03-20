@@ -1505,7 +1505,7 @@ public:
                 }
             }
             for (ui64 i = 0; i < nextVGets.size(); ++i) {
-                auto &vDiskID = nextVGets[i]->Record.GetVDiskID();
+                const auto &vDiskID = nextVGets[i]->Record.GetVDiskID();
                 VERBOSE("Additional TEvVGet to VDiskID# " << VDiskIDFromVDiskID(vDiskID));
                 vGets.push_back(std::move(nextVGets[i]));
                 RequestsOrder.push_back(RequestsOrder.size());
@@ -1703,7 +1703,7 @@ public:
             }
 
             for (ui64 i = 0; i < nextVGets.size(); ++i) {
-                auto &vDiskID = nextVGets[i]->Record.GetVDiskID();
+                const auto &vDiskID = nextVGets[i]->Record.GetVDiskID();
                 VERBOSE("Additional TEvVGet to VDiskID# " << VDiskIDFromVDiskID(vDiskID));
                 vGets.push_back(std::move(nextVGets[i]));
                 requestOrder.push_back(requestOrder.size());

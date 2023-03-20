@@ -275,13 +275,13 @@ struct mem_traits {
     MACRO_END
 
 inline int in_long(i64& longVal, const char* ptrBuf) {
-    int ret;
+    int ret = 0;
     UNPACK_64(longVal, ptrBuf, mem_traits, ret);
     return ret;
 }
 
 inline int out_long(const i64& longVal, char* ptrBuf) {
-    int ret;
+    int ret = 0;
     PACK_64(longVal, ptrBuf, mem_traits, ret); /*7*/
     return ret;
 }
@@ -291,13 +291,13 @@ inline int len_long(const i64& longVal) {
 }
 
 inline int in_long(i32& longVal, const char* ptrBuf) {
-    int ret;
+    int ret = 0;
     UNPACK_32(longVal, ptrBuf, mem_traits, ret);
     return ret;
 }
 
 inline int out_long(const i32& longVal, char* ptrBuf) {
-    int ret;
+    int ret = 0;
     PACK_32(longVal, ptrBuf, mem_traits, ret);
     return ret;
 }

@@ -202,6 +202,7 @@ namespace NProtobufJson {
     /// @throw yexception
     template <typename T>
     T Json2Proto(IInputStream& in, const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
+        // NOTE: TJson2ProtoConfig.AllowComments=true doesn't work, when using TJsonReaderConfig
         NJson::TJsonReaderConfig readerConfig;
         readerConfig.DontValidateUtf8 = true;
         return Json2Proto<T>(in, readerConfig, config);
@@ -210,15 +211,15 @@ namespace NProtobufJson {
     /// @throw yexception
     template <typename T>
     T Json2Proto(const TString& value, const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
-        TStringInput in(value);
-        return Json2Proto<T>(in, config);
+        return Json2Proto<T>(TStringBuf(value), config);
     }
 
     /// @throw yexception
     template <typename T>
     T Json2Proto(const TStringBuf& value, const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
-        TMemoryInput in(value);
-        return Json2Proto<T>(in, config);
+        T protoValue;
+        Json2Proto(value, protoValue, config);
+        return protoValue;
     }
 
     /// @throw yexception

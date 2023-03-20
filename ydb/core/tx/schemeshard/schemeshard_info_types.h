@@ -1881,10 +1881,6 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         auto& topics = DiskSpaceUsage.Topics;
         topics.DataSize += (newAggr.DataSize - oldAggr.DataSize);
         topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
-
-        Y_VERIFY_S(topics.DataSize >= 0, "TDiskSpaceUsage.Topic.AccountSize: DataSize: " << topics.DataSize);
-        Y_VERIFY_S(topics.UsedReserveSize >= 0, "TDiskSpaceUsage.Topic.AccountSize: UsedReserveSize: " << topics.UsedReserveSize);
-        Y_VERIFY_S(topics.DataSize >= topics.UsedReserveSize, "TDiskSpaceUsage.Topic.AccountSize: DataSize: " << topics.DataSize << ", UsedReserveSize: " << topics.UsedReserveSize);
     }
 
     const TDiskSpaceUsage& GetDiskSpaceUsage() const {

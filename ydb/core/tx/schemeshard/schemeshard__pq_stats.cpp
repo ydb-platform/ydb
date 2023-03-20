@@ -34,6 +34,15 @@ bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQ
     newStats.DataSize = rec.GetDataSize();
     newStats.UsedReserveSize = rec.GetUsedReserveSize();
 
+    if (newStats.DataSize < newStats.UsedReserveSize) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+               "Got wrong periodic topic stats at partition " << pathId
+                        << ". DataSize must be greater than or equal to UsedReserveSize but "
+                        << " DataSize " << rec.GetDataSize()
+                        << " UsedReserveSize " << rec.GetUsedReserveSize());
+        return true;
+    }
+
     const auto it = Self->Topics.find(pathId);
     if (it == Self->Topics.end()) {
         return true;

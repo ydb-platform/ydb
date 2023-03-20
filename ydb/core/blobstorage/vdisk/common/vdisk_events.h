@@ -619,18 +619,18 @@ namespace NKikimr {
 
                     if (queryMsg.HasFailedMsgId()) {
                         if (queryMsg.GetFailedMsgId().HasSequenceId()) {
-                            resMsg->MutableFailedMsgId().SetSequenceId(queryMsg.GetFailedMsgId().GetSequenceId());
+                            resMsg->MutableFailedMsgId()->SetSequenceId(queryMsg.GetFailedMsgId().GetSequenceId());
                         }
                         if (queryMsg.GetFailedMsgId().HasMsgId()) {
-                            resMsg->MutableFailedMsgId().SetMsgId(queryMsg.GetFailedMsgId().GetMsgId());
+                            resMsg->MutableFailedMsgId()->SetMsgId(queryMsg.GetFailedMsgId().GetMsgId());
                         }
                     }
                     if (queryMsg.HasExpectedMsgId()) {
                         if (queryMsg.GetExpectedMsgId().HasSequenceId()) {
-                            resMsg->MutableExpectedMsgId().SetSequenceId(queryMsg.GetExpectedMsgId().GetSequenceId());
+                            resMsg->MutableExpectedMsgId()->SetSequenceId(queryMsg.GetExpectedMsgId().GetSequenceId());
                         }
                         if (queryMsg.GetExpectedMsgId().HasMsgId()) {
-                            resMsg->MutableExpectedMsgId().SetMsgId(queryMsg.GetExpectedMsgId().GetMsgId());
+                            resMsg->MutableExpectedMsgId()->SetMsgId(queryMsg.GetExpectedMsgId().GetMsgId());
                         }
                     }
 

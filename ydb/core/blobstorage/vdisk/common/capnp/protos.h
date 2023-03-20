@@ -591,7 +591,7 @@ namespace NKikimrCapnProto {
                 return "TEvVGet";
             }
 
-            bool ParseFromString(std::string) { return true; }
+//            bool ParseFromString(std::string) { return true; }
 
             void CopyFrom(const Builder& other) {
                 // TODO(stetsyuk): think of a better solution

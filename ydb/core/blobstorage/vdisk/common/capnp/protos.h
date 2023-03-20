@@ -556,15 +556,15 @@ namespace NKikimrCapnProto {
             }
 
             std::string ShortDebugString() const {
-                std::ostringstream ss;
+                TStringStream ss;
                 ss << "{ "
                    << "#tabletId " << GetTabletId() << " "
                    << "#snapshotId " << GetSnapshotId() << " "
                    << "#VDiskId " << GetVDiskID().GetVDisk() << " "
-                   << "#cookie " << GetCookie()
-                   << "#extremeQueriesCnt " << elements.size()
+                   << "#cookie " << GetCookie() << " "
+                   << "#extremeQueriesCnt " << elements.size() << " "
                    << " }";
-                return ss.str();
+                return ss.Str();
             }
 
             std::string GetTypeName() const {

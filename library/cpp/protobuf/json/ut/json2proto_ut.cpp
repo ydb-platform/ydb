@@ -1143,6 +1143,10 @@ Y_UNIT_TEST(TestAllowComments) {
     UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto, config));
     UNIT_ASSERT_VALUES_EQUAL(proto.GetI32(), 4);
     UNIT_ASSERT_VALUES_EQUAL(proto.GetI64(), 3423);
+    proto = TFlatOptional();
+    UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(json, config));
+    UNIT_ASSERT_VALUES_EQUAL(proto.GetI32(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(proto.GetI64(), 3423);
 } // TestAllowComments
 
 Y_UNIT_TEST(TestSimplifiedDuration) {
@@ -1167,7 +1171,6 @@ Y_UNIT_TEST(TestSimplifiedTimestamp) {
     json["Timestamp"] = "2014-08-26T15:52:15Z";
     NProtobufJson::Json2Proto(json, simpleTimestamp, NProtobufJson::TJson2ProtoConfig().SetAllowString2TimeConversion(true));
     UNIT_ASSERT_EQUAL(NProtoInterop::CastFromProto(simpleTimestamp.GetTimestamp()), TInstant::ParseIso8601("2014-08-26T15:52:15Z"));
-
 } // TestSimplifiedTimestamp
 
 } // TJson2ProtoTest

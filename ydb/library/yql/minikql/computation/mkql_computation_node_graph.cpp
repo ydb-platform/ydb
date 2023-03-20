@@ -463,11 +463,7 @@ private:
             name == "KqpWideReadTableRanges" ||
             name == "KqpBlockReadTableRanges" ||
             name == "KqpLookupTable" ||
-            name == "KqpReadTable" ||
-            name == "RangeMultiply" ||
-            name == "RangeUnion" ||
-            name == "RangeIntersect" ||
-            name == "RangeFinalize"
+            name == "KqpReadTable"
         ) {
             PatternNodes->SuitableForCache = false;
         }

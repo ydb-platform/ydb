@@ -15,7 +15,7 @@
 
 namespace NKikimr::NHttpProxy {
 
-TString ProxyFieldNameConverter(const google::protobuf::FieldDescriptor& descriptor) {
+inline TString ProxyFieldNameConverter(const google::protobuf::FieldDescriptor& descriptor) {
     return NNaming::SnakeToCamelCase(descriptor.name());
 }
 

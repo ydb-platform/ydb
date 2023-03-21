@@ -1496,7 +1496,7 @@ namespace NKikimr::NDataStreams::V1 {
             }
             if (!results.empty()) {
                 auto last = results.rbegin();
-                shardIterator.SetReadTimestamp(last->GetCreateTimestampMS() + 1);
+                shardIterator.SetReadTimestamp(0);
                 shardIterator.SetSequenceNumber(last->GetOffset() + 1);
                 Result.set_millis_behind_latest(TInstant::Now().MilliSeconds() - last->GetWriteTimestampMS());
             } else { // remove else?

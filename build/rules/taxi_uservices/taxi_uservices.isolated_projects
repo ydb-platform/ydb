@@ -36,6 +36,7 @@ taxi/uservices/services/bank-forms
 taxi/uservices/services/bank-h2h
 taxi/uservices/services/bank-h2h-authproxy
 taxi/uservices/services/bank-idm
+taxi/uservices/services/bank-kwargs
 taxi/uservices/services/bank-notifications
 taxi/uservices/services/bank-settings
 taxi/uservices/services/bank-tokenizer-resolver

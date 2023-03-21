@@ -21,7 +21,6 @@ class TPurgeActor : public TActorBootstrapped<TPurgeActor> {
             ui64 Offset = 0;
             TInstant SentTimestamp = TInstant::Zero();
         };
-        std::pair<ui64, ui64> CurrentOffsets;
         TMessageBoundary CurrentLastMessage;
         TMessageBoundary PreviousSuccessfullyProcessedLastMessage;
     };

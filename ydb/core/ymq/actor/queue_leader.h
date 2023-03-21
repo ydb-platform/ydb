@@ -33,7 +33,17 @@ class TQueueLeader : public TActorBootstrapped<TQueueLeader> {
     struct TLoadBatch;
 
 public:
-    TQueueLeader(TString userName, TString queueName, TString folderId, TString rootUrl, TIntrusivePtr<TQueueCounters> counters, TIntrusivePtr<TUserCounters> userCounters, const TActorId& schemeCache, const TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions>& quoterResourcesForUser);
+    TQueueLeader(
+        TString userName,
+        TString queueName,
+        TString folderId,
+        TString rootUrl,
+        TIntrusivePtr<TQueueCounters> counters,
+        TIntrusivePtr<TUserCounters> userCounters,
+        const TActorId& schemeCache,
+        const TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions>& quoterResourcesForUser,
+        bool useCPUOptimization
+    );
 
     void Bootstrap();
 
@@ -47,6 +57,7 @@ private:
 
     void PassAway() override;
     void HandleWakeup(TEvWakeup::TPtr& ev);
+    void HandleState(const TSqsEvents::TEvExecuted::TRecord& ev);
     void HandleGetConfigurationWhileIniting(TSqsEvents::TEvGetConfiguration::TPtr& ev);
     void HandleGetConfigurationWhileWorking(TSqsEvents::TEvGetConfiguration::TPtr& ev);
     void HandleExecuteWhileIniting(TSqsEvents::TEvExecute::TPtr& ev);
@@ -68,9 +79,11 @@ private:
     void HandleGetRuntimeQueueAttributesWhileIniting(TSqsEvents::TEvGetRuntimeQueueAttributes::TPtr& ev);
     void HandleGetRuntimeQueueAttributesWhileWorking(TSqsEvents::TEvGetRuntimeQueueAttributes::TPtr& ev);
     void HandleDeadLetterQueueNotification(TSqsEvents::TEvDeadLetterQueueNotification::TPtr& ev);
+    void HandleForceReloadState(TSqsEvents::TEvForceReloadState::TPtr& ev);
 
     void BecomeWorking();
     void RequestConfiguration();
+    void UpdateStateRequest();
     void StartGatheringMetrics();
     void RequestMessagesCountMetrics(ui64 shard);
     void RequestOldestTimestampMetrics(ui64 shard);
@@ -128,7 +141,7 @@ private:
     void WaitAddMessagesToInflyOrTryAnotherShard(TReceiveMessageBatchRequestProcessing& reqInfo);
     void Reply(TReceiveMessageBatchRequestProcessing& reqInfo);
     // batching
-    void OnLoadStdMessagesBatchSuccess(const NKikimr::NClient::TValue& value, TShardInfo& shardInfo, TIntrusivePtr<TLoadBatch> batch);
+    void OnLoadStdMessagesBatchSuccess(const NKikimr::NClient::TValue& value, ui64 shard, TShardInfo& shardInfo, TIntrusivePtr<TLoadBatch> batch);
     void OnLoadStdMessagesBatchExecuted(ui64 shard, ui64 batchId, const bool usedDLQ, const TSqsEvents::TEvExecuted::TRecord& reply);
 
     // delete
@@ -144,6 +157,8 @@ private:
     TQueuePath GetQueuePath() {
         return TQueuePath(Cfg().GetRoot(), UserName_, QueueName_, QueueVersion_);
     }
+    void SetMessagesCount(ui64 shard, const NKikimr::NClient::TValue& value);
+    void SetMessagesCount(ui64 shard, ui64 value);
 
     void ScheduleMetricsRequest();
 
@@ -376,6 +391,7 @@ private:
         ui64 MessagesCount = 0;
         ui64 InflyMessagesCount = 0;
         ui64 OldestMessageTimestampMs = Max();
+        ui64 OldestMessageOffset = 0;
         ui64 LastSuccessfulOldestMessageTimestampValueMs = 0; // for query optimization - more accurate range
 
         bool MessagesCountIsRequesting = false;
@@ -417,6 +433,8 @@ private:
     };
     std::vector<TShardInfo> Shards_;
     TMessageDelayStatistics DelayStatistics_;
+    bool UpdateStateRequestInProcess = false;
+    bool UseCPUOptimization = false;
 
     // background actors
     TActorId DeduplicationCleanupActor_;

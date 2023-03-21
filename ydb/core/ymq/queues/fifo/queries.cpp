@@ -400,6 +400,7 @@ const char* const DeleteMessageQuery = R"__(
 
         (return (Extend
             (AsList (SetResult 'deleted result))
+            (AsList (SetResult 'newMessagesCount count))
             (ListIf (HasItems valid) (UpdateRow stateTable stateRow stateUpdate))
 
             (Map valid (lambda '(item) (block '(
@@ -865,6 +866,7 @@ const char* const ReadOrRedriveMessageQuery = R"__(
             (AsList (SetResult 'dlqExists dlqExists))
             (AsList (SetResult 'result messagesToReturnAsStruct))
             (AsList (SetResult 'movedMessagesCount (Length messagesToMoveAsStruct)))
+            (AsList (SetResult 'movedMessages messagesToMoveAsStruct))
             (AsList (SetResult 'newMessagesCount newSourceMsgCount))
             (ListIf (And (HasItems messagesToMoveAsStruct) dlqExists) (UpdateRow dlqStateTable dlqStateRow dlqStateUpdate))
             (ListIf (And (HasItems messagesToMoveAsStruct) dlqExists) (UpdateRow sourceStateTable sourceStateRow sourceStateUpdate))
@@ -1132,6 +1134,7 @@ const char* const WriteMessageQuery = R"__(
 
         (return (Extend
             (AsList (SetResult 'result result))
+            (AsList (SetResult 'newMessagesCount newMessagesCount))
 
             (AsList (If (Greater (Length messagesAdded) (Uint64 '0)) (UpdateRow stateTable stateRow stateUpdate) (Void)))
 
@@ -1410,7 +1413,8 @@ const char* const GetOldestMessageTimestampMetricsQuery = R"__(
             '('SentTimestamp timeFrom (Uint64 '18446744073709551615))
             '('Offset (Uint64 '0) (Uint64 '18446744073709551615))))
         (let sentIdxSelect '(
-            'SentTimestamp))
+            'SentTimestamp
+            'Offset))
         (let selectResult (SelectRange sentTsIdx sentIdxRange sentIdxSelect '('('"ItemsLimit" (Uint64 '1)))))
         (let messages (Member selectResult 'List))
 
@@ -1495,6 +1499,29 @@ const char* const ListDeadLetterSourceQueuesQuery = R"__(
     )
 )__";
 
+const char* const GetStateQuery = R"__(
+    (
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
+
+        (let stateRange '(
+            )__" ALL_SHARDS_RANGE_PARAM R"__(
+        ))
+        (let stateSelect '(
+            'MessageCount
+            'InflyCount
+            'InflyVersion
+            'CreatedTimestamp
+            'RetentionBoundary))
+
+        (let stateRead (Member (SelectRange stateTable stateRange stateSelect '()) 'List))
+
+        (return (AsList (SetResult 'state stateRead)))
+    )
+)__";
+
 } // namespace
 
 const char* GetFifoQueryById(size_t id) {
@@ -1535,6 +1562,8 @@ const char* GetFifoQueryById(size_t id) {
         return ListDeadLetterSourceQueuesQuery;
     case READ_OR_REDRIVE_MESSAGE_ID:
         return ReadOrRedriveMessageQuery;
+    case GET_STATE_ID:
+        return GetStateQuery;
     }
 
     return nullptr;

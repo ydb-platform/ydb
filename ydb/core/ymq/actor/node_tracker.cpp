@@ -132,15 +132,25 @@ namespace NKikimr::NSQS {
         }
     }
 
-    void TNodeTrackerActor::AnswerForSubscriber(ui64 subscriptionId, ui32 nodeId) {
-        Send(ParentActor, new TSqsEvents::TEvNodeTrackerSubscriptionStatus(subscriptionId, nodeId));
+    void TNodeTrackerActor::AnswerForSubscriber(ui64 subscriptionId, ui32 nodeId, bool disconnected) {
+        Send(ParentActor, new TSqsEvents::TEvNodeTrackerSubscriptionStatus(subscriptionId, nodeId, disconnected));
     }
 
     void TNodeTrackerActor::HandlePipeClientDisconnected(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext&) {
-        auto it = TabletsInfo.find(ev->Get()->TabletId);
+        ui64 tabletId = ev->Get()->TabletId;
+        auto it = TabletsInfo.find(tabletId);
         if (it != TabletsInfo.end()) {
-            LOG_SQS_DEBUG(GetLogPrefix() << "tablet pipe " << ev->Get()->TabletId << " disconnected");
-            ReconnectToTablet(ev->Get()->TabletId);
+            LOG_SQS_DEBUG(GetLogPrefix() << "tablet pipe " << tabletId << " disconnected");
+
+            auto& info = it->second;
+            if (info.PipeServer) {
+                for (auto& [id, subscriber] : info.Subscribers) {
+                    if (subscriber->NodeId) {
+                        AnswerForSubscriber(id, subscriber->NodeId.value(), true);
+                    }
+                }
+            }
+            ReconnectToTablet(tabletId);
         } else {
             LOG_SQS_WARN(GetLogPrefix() << " disconnected from unrequired tablet id: [" << ev->Get()->TabletId << "]. Client pipe actor: " << ev->Get()->ClientId << ". Server pipe actor: " << ev->Get()->ServerId);
         }

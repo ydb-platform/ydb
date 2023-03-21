@@ -1105,7 +1105,8 @@ const char* const GetOldestMessageTimestampMetricsQuery = R"__(
             '('SentTimestamp timeFrom (Uint64 '18446744073709551615))
             '('Offset (Uint64 '0) (Uint64 '18446744073709551615))))
         (let sentIdxSelect '(
-            'SentTimestamp))
+            'SentTimestamp
+            'Offset))
         (let selectResult (SelectRange sentTsIdx sentIdxRange sentIdxSelect '('('"ItemsLimit" (Uint64 '1)))))
         (let messages (Member selectResult 'List))
 
@@ -1286,6 +1287,31 @@ const char* const GetMessageCountMetricsQuery = R"__(
     )
 )__";
 
+
+const char* const GetStateQuery = R"__(
+    (
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
+
+        (let stateRange '(
+            )__" ALL_SHARDS_RANGE_PARAM R"__(
+        ))
+        (let stateSelect '(
+            ')__" SHARD_COLUMN_NAME_PARAM R"__(
+            'MessageCount
+            'InflyCount
+            'InflyVersion
+            'CreatedTimestamp
+            'RetentionBoundary))
+
+        (let stateRead (Member (SelectRange stateTable stateRange stateSelect '()) 'List))
+        (return (AsList (SetResult 'state stateRead)))
+    )
+)__";
+
+
 const char* const GetQueuesListQuery = R"__(
     (
         (let fromUser  (Parameter 'FROM_USER  (DataType 'Utf8String)))
@@ -1363,6 +1389,8 @@ const char* GetStdQueryById(size_t id) {
         return GetQueuesListQuery;
     case GET_MESSAGE_COUNT_METRIC_ID:
         return GetMessageCountMetricsQuery;
+    case GET_STATE_ID:
+        return GetStateQuery;
     }
     return nullptr;
 }

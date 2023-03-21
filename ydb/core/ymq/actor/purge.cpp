@@ -151,7 +151,20 @@ static void FillMessagesParam(NClient::TWriteValue& messagesParam, const NClient
 }
 
 void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages, const TMaybe<TValue>& inflyMessages, const ui64 shardId, TShard* shard) {
-    auto onExecuted = [this, shardId, shard] (const TSqsEvents::TEvExecuted::TRecord& ev) {
+    TVector<ui64> offsets;
+    auto collectOffsetsFrom = [&](const TValue& msgs) {
+        for (size_t i = 0; i < msgs.Size(); ++i) {
+            const ui64 offset = msgs[i]["Offset"];
+            offsets.push_back(offset);
+        }
+    };
+
+    collectOffsetsFrom(messages);
+    if (inflyMessages) {
+        collectOffsetsFrom(*inflyMessages);
+    }
+
+    auto onExecuted = [this, shardId, shard, offsets] (const TSqsEvents::TEvExecuted::TRecord& ev) {
         const ui32 status = ev.GetStatus();
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
             const TValue val(TValue::Create(ev.GetExecutionEngineEvaluatedResponse()));
@@ -168,6 +181,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
                 auto notification = MakeHolder<TSqsEvents::TEvQueuePurgedNotification>();
                 notification->Shard = shardId;
                 notification->NewMessagesCount = static_cast<ui64>(newMessagesCount);
+                notification->DeletedOffsets = std::move(offsets);
                 Send(QueueLeader_, std::move(notification));
             }
 

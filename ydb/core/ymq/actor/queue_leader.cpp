@@ -27,6 +27,7 @@
 
 LWTRACE_USING(SQS_PROVIDER);
 
+
 namespace NKikimr::NSQS {
 
 constexpr ui64 UPDATE_COUNTERS_TAG = 0;
@@ -38,7 +39,29 @@ const TString INFLY_INVALIDATION_REASON_VERSION_CHANGED = "InflyVersionChanged";
 const TString INFLY_INVALIDATION_REASON_DEADLINE_CHANGED = "MessageDeadlineChanged";
 const TString INFLY_INVALIDATION_REASON_DELETED = "MessageDeleted";
 
-TQueueLeader::TQueueLeader(TString userName, TString queueName, TString folderId, TString rootUrl, TIntrusivePtr<TQueueCounters> counters, TIntrusivePtr<TUserCounters> userCounters, const TActorId& schemeCache, const TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions>& quoterResourcesForUser)
+constexpr TDuration STATE_UPDATE_PERIOD_MIN = TDuration::MilliSeconds(200);
+constexpr TDuration STATE_UPDATE_PERIOD_MAX = TDuration::Minutes(1);
+
+TDuration GetNextReloadStateWaitPeriod(TDuration current = TDuration::Zero()) {
+    if (current == STATE_UPDATE_PERIOD_MAX) {
+        return TDuration::Max();
+    }
+    auto nextWaitPeriod = 2 * Max(current, STATE_UPDATE_PERIOD_MIN);
+    nextWaitPeriod += TDuration::MilliSeconds(RandomNumber<ui64>(nextWaitPeriod.MilliSeconds() / 2));
+    return Max(STATE_UPDATE_PERIOD_MAX, nextWaitPeriod);
+}
+
+TQueueLeader::TQueueLeader(
+    TString userName,
+    TString queueName,
+    TString folderId,
+    TString rootUrl,
+    TIntrusivePtr<TQueueCounters> counters,
+    TIntrusivePtr<TUserCounters> userCounters,
+    const TActorId& schemeCache,
+    const TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions>& quoterResourcesForUser,
+    bool useCPUOptimization
+)
     : UserName_(std::move(userName))
     , QueueName_(std::move(queueName))
     , FolderId_(std::move(folderId))
@@ -46,9 +69,13 @@ TQueueLeader::TQueueLeader(TString userName, TString queueName, TString folderId
     , SchemeCache_(schemeCache)
     , Counters_(std::move(counters))
     , UserCounters_(std::move(userCounters))
+    , UseCPUOptimization(useCPUOptimization)
 {
     if (quoterResourcesForUser) {
         QuoterResources_ = new TSqsEvents::TQuoterResourcesForActions(*quoterResourcesForUser);
+    }
+    if (UseCPUOptimization) {
+        LOG_SQS_INFO("Use CPU optimization for queue " << TLogQueueName(UserName_, QueueName_));
     }
 }
 
@@ -62,8 +89,11 @@ void TQueueLeader::BecomeWorking() {
     Become(&TQueueLeader::StateWorking);
     const auto& cfg = Cfg();
     const ui64 randomTimeToWait = RandomNumber<ui64>(cfg.GetBackgroundMetricsUpdateTimeMs() / 4); // Don't start all such operations at one moment
-    Schedule(TDuration::MilliSeconds(randomTimeToWait), new TEvWakeup(UPDATE_COUNTERS_TAG));
-
+    if (UseCPUOptimization) {
+        Schedule(TDuration::MilliSeconds(randomTimeToWait), new TSqsEvents::TEvForceReloadState(GetNextReloadStateWaitPeriod()));
+    } else {
+        Schedule(TDuration::MilliSeconds(randomTimeToWait), new TEvWakeup(UPDATE_COUNTERS_TAG));
+    }
     Schedule(TDuration::Seconds(1), new TEvWakeup(UPDATE_MESSAGES_METRICS_TAG));
 
     std::vector<TSqsEvents::TEvExecute::TPtr> requests;
@@ -103,6 +133,7 @@ STATEFN(TQueueLeader::StateInit) {
         hFunc(TSqsEvents::TEvChangeMessageVisibilityBatch, HandleChangeMessageVisibilityBatchWhileIniting); // from change message visibility action actor
         hFunc(TSqsEvents::TEvGetRuntimeQueueAttributes, HandleGetRuntimeQueueAttributesWhileIniting); // from get queue attributes action actor
         hFunc(TSqsEvents::TEvDeadLetterQueueNotification, HandleDeadLetterQueueNotification); // service periodically notifies active dead letter queues
+        hFunc(TSqsEvents::TEvForceReloadState, HandleForceReloadState);
 
         // internal
         hFunc(TSqsEvents::TEvQueueId, HandleQueueId); // discover dlq id and version
@@ -127,6 +158,7 @@ STATEFN(TQueueLeader::StateWorking) {
         hFunc(TSqsEvents::TEvChangeMessageVisibilityBatch, HandleChangeMessageVisibilityBatchWhileWorking); // from change message visibility action actor
         hFunc(TSqsEvents::TEvGetRuntimeQueueAttributes, HandleGetRuntimeQueueAttributesWhileWorking); // from get queue attributes action actor
         hFunc(TSqsEvents::TEvDeadLetterQueueNotification, HandleDeadLetterQueueNotification); // service periodically notifies active dead letter queues
+        hFunc(TSqsEvents::TEvForceReloadState, HandleForceReloadState);
 
         // internal
         hFunc(TSqsEvents::TEvQueueId, HandleQueueId); // discover dlq id and version
@@ -193,6 +225,79 @@ void TQueueLeader::HandleWakeup(TEvWakeup::TPtr& ev) {
     }
     default:
         Y_FAIL("Unknown wakeup tag: %lu", ev->Get()->Tag);
+    }
+}
+
+
+void TQueueLeader::HandleForceReloadState(TSqsEvents::TEvForceReloadState::TPtr& ev) {
+    if (!UseCPUOptimization) {
+        return;
+    }
+    auto nextTryAfter = ev->Get()->NextTryAfter;
+    if (nextTryAfter != TDuration::Max()) {
+        Schedule(nextTryAfter, new TSqsEvents::TEvForceReloadState(GetNextReloadStateWaitPeriod(nextTryAfter)));
+    }
+
+    if (UpdateStateRequestInProcess) {
+        LOG_SQS_DEBUG("Update state request already in process for queue " << TLogQueueName(UserName_, QueueName_));
+        return;
+    }
+    LOG_SQS_DEBUG("Start update state request for queue " << TLogQueueName(UserName_, QueueName_));
+    TExecutorBuilder(SelfId(), "")
+        .User(UserName_)
+        .Queue(QueueName_)
+        .QueueLeader(SelfId())
+        .TablesFormat(TablesFormat_)
+        .QueryId(GET_STATE_ID)
+        .QueueVersion(QueueVersion_)
+        .Fifo(IsFifoQueue_)
+        .RetryOnTimeout()
+        .OnExecuted([this](const TSqsEvents::TEvExecuted::TRecord& ev) { HandleState(ev); })
+        .Counters(Counters_)
+        .Params()
+            .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
+        .ParentBuilder().Start();
+}
+
+void TQueueLeader::HandleState(const TSqsEvents::TEvExecuted::TRecord& reply) {
+    LOG_SQS_DEBUG("Handle state for " << TLogQueueName(UserName_, QueueName_));
+    Y_VERIFY(!UpdateStateRequestInProcess);
+    UpdateStateRequestInProcess = false;
+
+    if (reply.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
+        using NKikimr::NClient::TValue;
+        const TValue val(TValue::Create(reply.GetExecutionEngineEvaluatedResponse()));
+        const TValue shardStates = val["state"];
+
+        for (size_t i = 0; i < shardStates.Size(); ++i) {
+            const auto& state = shardStates[i];
+            const ui64 shard = IsFifoQueue_ ? 0 : (TablesFormat_ == 1 ? ui32(state["Shard"]) : ui64(state["State"]));
+            auto& shardInfo = Shards_[shard];
+            auto inflyCountVal = state["InflyCount"];
+            Y_VERIFY(i64(inflyCountVal) >= 0);
+            ui64 inflyMessagesCount = static_cast<ui64>(i64(inflyCountVal));
+            ui64 inflyVersion = state["InflyVersion"].IsNull() ? 0 : ui64(state["InflyVersion"]);
+
+            SetMessagesCount(shard, state["MessageCount"]);
+            shardInfo.InflyMessagesCount = inflyMessagesCount;
+            shardInfo.CreatedTimestamp = TInstant::MilliSeconds(ui64(state["CreatedTimestamp"]));
+                
+            if (shardInfo.InflyVersion != inflyVersion) {
+                shardInfo.NeedInflyReload = true;
+            }
+
+            if (shardInfo.MessagesCount > 0) {
+                RequestOldestTimestampMetrics(shard);
+            }
+            if (shardInfo.MessagesCount == 0 && !shardInfo.MessagesCountWasGot) {
+                Send(RetentionActor_, new TSqsEvents::TEvChangeRetentionActiveCheck(false));
+            }
+
+            shardInfo.MessagesCountWasGot = true;
+        }
+    } else {
+        LOG_SQS_ERROR("Failed to update state for " << TLogQueueName(UserName_, QueueName_) << ": " << reply);
     }
 }
 
@@ -442,11 +547,7 @@ void TQueueLeader::OnSendBatchExecuted(ui64 shard, ui64 batchId, const TSqsEvent
                 DelayStatistics_.AddDelayedMessage(batch->TransactionStartedTime + entry.Message.Delay, batch->TransactionStartedTime);
             }
         }
-        if (!IsFifoQueue_) {
-            const i64 newMessagesCount = val["newMessagesCount"];
-            Y_VERIFY(newMessagesCount >= 0);
-            shardInfo.MessagesCount = static_cast<ui64>(newMessagesCount);
-        }
+        SetMessagesCount(shard, val["newMessagesCount"]);
     } else {
         const TString* prevRequestId = nullptr;
         for (size_t i = 0; i < batch->Size(); ++i) {
@@ -642,10 +743,15 @@ void TQueueLeader::OnFifoMessagesReadSuccess(const NKikimr::NClient::TValue& val
     if (const ui64 movedMessagesCount = value["movedMessagesCount"]) {
         ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount);
 
-        const i64 newMessagesCount = value["newMessagesCount"];
-        Y_VERIFY(newMessagesCount >= 0);
-        auto& shardInfo = Shards_[0];
-        shardInfo.MessagesCount = static_cast<ui64>(newMessagesCount);
+        SetMessagesCount(0, value["newMessagesCount"]);
+        
+        const auto& moved = value["movedMessages"]; // TODO return only moved offsets
+        for (size_t i = 0; i < moved.Size(); ++i) {
+            const ui64 offset = moved[i]["SourceOffset"];
+            if (offset == Shards_.front().OldestMessageOffset) {
+                RequestOldestTimestampMetrics(0);
+            }
+        }
     }
 
     reqInfo.Answer->Messages.resize(list.Size());
@@ -831,16 +937,14 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
     }
 }
 
-void TQueueLeader::OnLoadStdMessagesBatchSuccess(const NKikimr::NClient::TValue& value, TShardInfo& shardInfo, TIntrusivePtr<TLoadBatch> batch) {
+void TQueueLeader::OnLoadStdMessagesBatchSuccess(const NKikimr::NClient::TValue& value, ui64 shard, TShardInfo& shardInfo, TIntrusivePtr<TLoadBatch> batch) {
     const NKikimr::NClient::TValue list(value["result"]);
     Y_VERIFY(list.Size() == batch->Size());
 
     if (const ui64 movedMessagesCount = value["movedMessagesCount"]) {
         ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount);
 
-        const i64 newMessagesCount = value["newMessagesCount"];
-        Y_VERIFY(newMessagesCount >= 0);
-        shardInfo.MessagesCount = static_cast<ui64>(newMessagesCount);
+        SetMessagesCount(shard, value["newMessagesCount"]);
     }
 
     THashMap<ui64, const TLoadBatchEntry*> offset2entry;
@@ -852,6 +956,14 @@ void TQueueLeader::OnLoadStdMessagesBatchSuccess(const NKikimr::NClient::TValue&
     for (size_t i = 0; i < list.Size(); ++i) {
         auto msg = list[i];
         const ui64 offset = msg["Offset"];
+        
+        const bool exists = msg["Exists"];
+        const auto wasDeadLetterValue = msg["IsDeadLetter"];
+        const bool wasDeadLetter = wasDeadLetterValue.HaveValue() ? bool(wasDeadLetterValue) : false;
+        const bool valid = msg["Valid"];
+        if (exists && wasDeadLetter && valid && shardInfo.OldestMessageOffset == offset) {
+            RequestOldestTimestampMetrics(shard);
+        }
         const auto entry = offset2entry.find(offset);
         Y_VERIFY(entry != offset2entry.end());
         OnLoadStdMessageResult(entry->second->RequestId, offset, true, &msg, false);
@@ -873,7 +985,7 @@ void TQueueLeader::OnLoadStdMessagesBatchExecuted(ui64 shard, ui64 batchId, cons
         dlqExists = value["dlqExists"];
         if (dlqExists) {
             success = true;
-            OnLoadStdMessagesBatchSuccess(value, shardInfo, batch);
+            OnLoadStdMessagesBatchSuccess(value, shard, shardInfo, batch);
         }
     }
 
@@ -1081,6 +1193,9 @@ void TQueueLeader::OnDeleteBatchExecuted(ui64 shard, ui64 batchId, const TSqsEve
                 OnMessageDeleted(entry.RequestId, shard, entry.IndexInRequest, reply, &messageResult);
             }
             batch->Offset2Entry.erase(first, last);
+            if (shardInfo.OldestMessageOffset == offset) {
+                RequestOldestTimestampMetrics(shard);
+            }
         }
         // others are already deleted messages:
         for (const auto& [offset, entryIndex] : batch->Offset2Entry) {
@@ -1088,11 +1203,7 @@ void TQueueLeader::OnDeleteBatchExecuted(ui64 shard, ui64 batchId, const TSqsEve
             OnMessageDeleted(entry.RequestId, shard, entry.IndexInRequest, reply, nullptr);
         }
 
-        if (!IsFifoQueue_) {
-            const i64 newMessagesCount = val["newMessagesCount"];
-            Y_VERIFY(newMessagesCount >= 0);
-            shardInfo.MessagesCount = static_cast<ui64>(newMessagesCount);
-        }
+        SetMessagesCount(shard, val["newMessagesCount"]);
     } else {
         const TString* prevRequestId = nullptr;
         for (size_t i = 0; i < batch->Size(); ++i) {
@@ -1496,7 +1607,11 @@ void TQueueLeader::StartGatheringMetrics() {
 
         IsDlqQueue_ = false;
     }
-
+    
+    if (UseCPUOptimization) {
+        return;
+    }
+    
     for (ui64 shard = 0; shard < ShardsCount_; ++shard) {
         if (IsFifoQueue_ || IsDlqQueue_) {
             RequestMessagesCountMetrics(shard);
@@ -1564,7 +1679,7 @@ void TQueueLeader::ReceiveMessagesCountMetrics(ui64 shard, const TSqsEvents::TEv
     LOG_SQS_DEBUG("Handle message count metrics for " << TLogQueueName(UserName_, QueueName_, shard));
     Y_VERIFY(MetricsQueriesInfly_ > 0);
     --MetricsQueriesInfly_;
-    if (MetricsQueriesInfly_ == 0) {
+    if (MetricsQueriesInfly_ == 0 && !UseCPUOptimization) {
         ScheduleMetricsRequest();
     }
     Y_VERIFY(shard < Shards_.size());
@@ -1575,8 +1690,7 @@ void TQueueLeader::ReceiveMessagesCountMetrics(ui64 shard, const TSqsEvents::TEv
         const TValue val(TValue::Create(reply.GetExecutionEngineEvaluatedResponse()));
         const TValue messagesCount = val["messagesCount"];
         if (!messagesCount.IsNull()) { // can be null in case of parallel queue deletion (SQS-292)
-            Y_VERIFY(i64(messagesCount) >= 0);
-            Shards_[shard].MessagesCount = static_cast<ui64>(i64(messagesCount)); // MessageCount is Int64 type in database
+            SetMessagesCount(shard, messagesCount);
         }
         const TValue createdTimestamp = val["createdTimestamp"];
         if (!createdTimestamp.IsNull()) {
@@ -1599,7 +1713,7 @@ void TQueueLeader::ReceiveOldestTimestampMetrics(ui64 shard, const TSqsEvents::T
     LOG_SQS_DEBUG("Handle oldest timestamp metrics for " << TLogQueueName(UserName_, QueueName_, shard));
     Y_VERIFY(MetricsQueriesInfly_ > 0);
     --MetricsQueriesInfly_;
-    if (MetricsQueriesInfly_ == 0) {
+    if (MetricsQueriesInfly_ == 0 && !UseCPUOptimization) {
         ScheduleMetricsRequest();
     }
     Y_VERIFY(shard < Shards_.size());
@@ -1610,6 +1724,10 @@ void TQueueLeader::ReceiveOldestTimestampMetrics(ui64 shard, const TSqsEvents::T
         const TValue list = val["messages"];
         if (list.Size()) {
             Shards_[shard].LastSuccessfulOldestMessageTimestampValueMs = Shards_[shard].OldestMessageTimestampMs = list[0]["SentTimestamp"];
+            Shards_[shard].OldestMessageOffset = list[0]["Offset"];
+            LOG_SQS_INFO("Got oldest message for " << TLogQueueName(UserName_, QueueName_, shard) 
+                << ": offset=" << Shards_[shard].OldestMessageOffset << " ts=" << TInstant::MilliSeconds(Shards_[shard].OldestMessageTimestampMs));
+            
         } else {
             Shards_[shard].OldestMessageTimestampMs = Max();
         }
@@ -1618,6 +1736,27 @@ void TQueueLeader::ReceiveOldestTimestampMetrics(ui64 shard, const TSqsEvents::T
         // leave old metrics values
     }
     ReportOldestTimestampMetricsIfReady();
+}
+
+void TQueueLeader::SetMessagesCount(ui64 shard, const NKikimr::NClient::TValue& value) {
+    const i64 newMessagesCountVal = value;
+    Y_VERIFY(newMessagesCountVal >= 0);
+    ui64 newMessagesCount = static_cast<ui64>(newMessagesCountVal);
+    SetMessagesCount(shard, newMessagesCount);
+}
+
+void TQueueLeader::SetMessagesCount(ui64 shard, ui64 newMessagesCount) {
+    TShardInfo& shardInfo = Shards_[shard];
+    if (UseCPUOptimization) {
+        if (shardInfo.MessagesCount == 0 && newMessagesCount > 0) {
+            RequestOldestTimestampMetrics(shard);
+            Send(RetentionActor_, new TSqsEvents::TEvChangeRetentionActiveCheck(true));
+        }
+        if (shardInfo.MessagesCount > 0 && newMessagesCount == 0) {
+            Send(RetentionActor_, new TSqsEvents::TEvChangeRetentionActiveCheck(false));
+        }
+    }
+    shardInfo.MessagesCount = newMessagesCount;
 }
 
 void TQueueLeader::ScheduleMetricsRequest() {
@@ -1632,7 +1771,7 @@ void TQueueLeader::ReportMessagesCountMetricsIfReady() {
     const TInstant now = TActivationContext::Now();
     for (const auto& shardInfo : Shards_) {
         if (IsFifoQueue_) {
-            if (shardInfo.MessagesCountIsRequesting) {
+            if (shardInfo.MessagesCountIsRequesting || !shardInfo.MessagesCountWasGot) {
                 return;
             }
         } else {
@@ -1658,8 +1797,13 @@ void TQueueLeader::ReportOldestTimestampMetricsIfReady() {
         if (shardInfo.OldestMessageAgeIsRequesting) {
             return;
         }
-        oldestMessagesTimestamp = Min(oldestMessagesTimestamp, shardInfo.OldestMessageTimestampMs);
+        ui64 ts = shardInfo.OldestMessageTimestampMs;
+        if (UseCPUOptimization && shardInfo.MessagesCountWasGot && shardInfo.MessagesCount == 0) {
+            ts = Max<ui64>();
+        }
+        oldestMessagesTimestamp = Min(oldestMessagesTimestamp, ts);
     }
+
     if (Counters_) {
         if (oldestMessagesTimestamp != Max<ui64>()) {
             auto age = (TActivationContext::Now() - TInstant::MilliSeconds(oldestMessagesTimestamp)).Seconds();
@@ -1793,14 +1937,13 @@ void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRec
         shardInfo.InflyVersion = val["inflyVersion"];
         LOG_SQS_DEBUG("Infly version for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": " << shardInfo.InflyVersion);
 
-        auto messagesCount = val["messageCount"];
         auto inflyCount = val["inflyCount"];
-        Y_VERIFY(i64(messagesCount) >= 0);
         Y_VERIFY(i64(inflyCount) >= 0);
-        shardInfo.MessagesCount = static_cast<ui64>(i64(messagesCount));
+        SetMessagesCount(shard, val["messageCount"]);
         shardInfo.InflyMessagesCount = static_cast<ui64>(i64(inflyCount));
         shardInfo.ReadOffset = val["readOffset"];
         shardInfo.CreatedTimestamp = TInstant::MilliSeconds(ui64(val["createdTimestamp"]));
+        
 
         shardInfo.DelayStatisticsInited = true;
 
@@ -1894,7 +2037,7 @@ void TQueueLeader::OnAddedMessagesToInfly(ui64 shard, const TSqsEvents::TEvExecu
             shardInfo.ReadOffset = val["readOffset"];
 
             // Update messages count
-            shardInfo.MessagesCount = static_cast<ui64>(i64(val["messagesCount"]));
+            SetMessagesCount(shard, val["messagesCount"]);
         }
     } else {
         LOG_SQS_ERROR("Failed to add new messages to infly for " << TLogQueueName(UserName_, QueueName_, shard) << ": " << reply);
@@ -2113,8 +2256,15 @@ void TQueueLeader::HandleInflyIsPurgingNotification(TSqsEvents::TEvInflyIsPurgin
 }
 
 void TQueueLeader::HandleQueuePurgedNotification(TSqsEvents::TEvQueuePurgedNotification::TPtr& ev) {
-    auto& shardInfo = Shards_[ev->Get()->Shard];
-    shardInfo.MessagesCount = ev->Get()->NewMessagesCount;
+    ui64 shard = ev->Get()->Shard;
+    auto& shardInfo = Shards_[shard];
+    SetMessagesCount(shard, ev->Get()->NewMessagesCount);
+    for (ui64 offset : ev->Get()->DeletedOffsets) {
+        if (shardInfo.OldestMessageOffset <= offset) {
+            RequestOldestTimestampMetrics(shard);
+            break;
+        }
+    }
 }
 
 void TQueueLeader::HandleGetRuntimeQueueAttributesWhileIniting(TSqsEvents::TEvGetRuntimeQueueAttributes::TPtr& ev) {
@@ -2134,6 +2284,7 @@ void TQueueLeader::HandleDeadLetterQueueNotification(TSqsEvents::TEvDeadLetterQu
     if (!IsFifoQueue_ && !IsDlqQueue_) {
         // we need to start the process only once
         IsDlqQueue_ = true;
+        UseCPUOptimization = false;
         LOG_SQS_INFO("Started periodic message counting for queue " << TLogQueueName(UserName_, QueueName_)
                                                                     << ". Latest dlq notification was at " << LatestDlqNotificationTs_);
 

@@ -77,7 +77,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
             TString folderId, ui32 tablesFormat, ui64 version, ui64 shardsCount, const TIntrusivePtr<TUserCounters>& userCounters,
             const TIntrusivePtr<TFolderCounters>& folderCounters,
             const TActorId& schemeCache, TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResourcesForUser,
-            bool insertCounters
+            bool insertCounters, bool useLeaderCPUOptimization
     )
         : UserName_(std::move(userName))
         , QueueName_(std::move(queueName))
@@ -94,6 +94,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
         , FolderCounters_(folderCounters)
         , SchemeCache_(schemeCache)
         , QuoterResourcesForUser_(std::move(quoterResourcesForUser))
+        , UseLeaderCPUOptimization(useLeaderCPUOptimization)
     {
     }
 
@@ -112,12 +113,21 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
             StopLocalLeaderIfNeeded(LEADER_DESTROY_REASON_TABLET_ON_ANOTHER_NODE);
         }
     }
+    
+    void LocalLeaderWayMoved() const {
+        if (LocalLeader_) {
+            TActivationContext::Send(new IEventHandleFat(LocalLeader_, SelfId(), new TSqsEvents::TEvForceReloadState()));
+        }
+    }
 
     void StartLocalLeader(const TString& reason) {
         if (!LocalLeader_) {
             Counters_ = Counters_->GetCountersForLeaderNode();
             LWPROBE(CreateLeader, UserName_, QueueName_, reason);
-            LocalLeader_ = TActivationContext::Register(new TQueueLeader(UserName_, QueueName_, FolderId_, RootUrl_, Counters_, UserCounters_, SchemeCache_, QuoterResourcesForUser_));
+            LocalLeader_ = TActivationContext::Register(new TQueueLeader(
+                UserName_, QueueName_, FolderId_, RootUrl_, Counters_, UserCounters_,
+                SchemeCache_, QuoterResourcesForUser_, UseLeaderCPUOptimization
+            ));
             LOG_SQS_INFO("Start local leader [" << UserName_ << "/" << QueueName_ << "] actor " << LocalLeader_);
 
             if (FolderId_) {
@@ -183,6 +193,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     TActorId SchemeCache_;
     ui64 LocalLeaderRefCount_ = 0;
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResourcesForUser_;
+    bool UseLeaderCPUOptimization;
 
     // State machine
     THashSet<TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> GetLeaderNodeRequests_;
@@ -246,6 +257,7 @@ struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
     TLocalRateLimiterResource DeleteObjectsQuoterResource_;
     TLocalRateLimiterResource OtherActionsQuoterResource_;
     i64 EarlyRequestQueuesListBudget_ = EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET; // Defence from continuously requesting queues list.
+    bool UseLeaderCPUOptimization = false;
 
     // State machine
     THashMultiMap<TString, TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> GetLeaderNodeRequests_; // queue name -> request
@@ -747,7 +759,11 @@ void TSqsService::HandleNodeTrackingSubscriptionStatus(TSqsEvents::TEvNodeTracke
     auto queuePtr = it->second;
     auto& queue = *queuePtr;
     auto nodeId = ev->Get()->NodeId;
+    bool disconnected = ev->Get()->Disconnected;
     queue.SetLeaderNodeId(nodeId);
+    if (disconnected) {
+        queue.LocalLeaderWayMoved();
+    }
     LOG_SQS_DEBUG(
         "Got node leader for queue [" << queue.UserName_ << "/" << queue.QueueName_
         << "]. Node: " << nodeId << " subscription id: " << subscriptionId
@@ -921,6 +937,16 @@ void TSqsService::HandleUserSettingsChanged(TSqsEvents::TEvUserSettingsChanged::
         const bool needExport = FromStringWithDefault(value->second, false);
         user->Counters_->ExportTransactionCounters(needExport);
     }
+
+    if (IsIn(*diff, USE_CPU_LEADER_OPTIMIZATION)) {
+        const auto value = newSettings->find(USE_CPU_LEADER_OPTIMIZATION);
+        Y_VERIFY(value != newSettings->end());
+        const bool use = FromStringWithDefault(value->second, false);
+        user->UseLeaderCPUOptimization = use;
+        for (auto queue : user->Queues_) {
+            queue.second->UseLeaderCPUOptimization = use;
+        }
+    }
 }
 
 TSqsService::TUserInfoPtr TSqsService::MutableUser(const TString& userName, bool moveUserRequestsToUserRecord, bool* requestsWereMoved) {
@@ -1039,7 +1065,7 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
 
     auto ret = user->Queues_.insert(std::make_pair(queue, TQueueInfoPtr(new TQueueInfo(
             userName, queue, RootUrl_, leaderTabletId, isFifo, customName, folderId, tablesFormat, version, shardsCount,
-            user->Counters_, folderCntrIter->second, SchemeCache_, user->QuoterResources_, insertCounters)))
+            user->Counters_, folderCntrIter->second, SchemeCache_, user->QuoterResources_, insertCounters, user->UseLeaderCPUOptimization)))
     ).first;
 
     auto queueInfo = ret->second;

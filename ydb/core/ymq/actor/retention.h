@@ -23,6 +23,7 @@ private:
     void SetRetentionBoundary();
 
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
+    void Handle(TSqsEvents::TEvChangeRetentionActiveCheck::TPtr& ev);
     void HandlePoisonPill(TEvPoisonPill::TPtr&);
     void HandleWakeup();
 
@@ -34,6 +35,7 @@ private:
     const ui32 TablesFormat_;
     const TString RequestId_;
     const TActorId QueueLeader_;
+    bool Active = true;
 };
 
 } // namespace NKikimr::NSQS

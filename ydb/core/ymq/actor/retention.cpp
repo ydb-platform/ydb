@@ -57,7 +57,9 @@ void TRetentionActor::SetRetentionBoundary() {
             RLOG_SQS_ERROR("Failed to set retention boundary for queue " << TLogQueueName(QueuePath_));
         }
 
-        Schedule(RandomRetentionPeriod(), new TEvWakeup());
+        if (Active) {
+            Schedule(RandomRetentionPeriod(), new TEvWakeup());
+        }
     };
 
     TExecutorBuilder(SelfId(), RequestId_)
@@ -83,6 +85,14 @@ void TRetentionActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     ev->Get()->Call();
 }
 
+void TRetentionActor::Handle(TSqsEvents::TEvChangeRetentionActiveCheck::TPtr& ev) {
+    if (!Active && ev->Get()->Active) {
+        Schedule(RandomRetentionPeriod(), new TEvWakeup());
+    }
+    Active = ev->Get()->Active;
+    RLOG_SQS_INFO("Handle change retention actor state " << TLogQueueName(QueuePath_) << " : " << Active);
+}
+
 void TRetentionActor::HandlePoisonPill(TEvPoisonPill::TPtr&) {
     RLOG_SQS_DEBUG("Handle poison pill in retention actor for queue " << TLogQueueName(QueuePath_));
     PassAway();
@@ -97,6 +107,7 @@ STATEFN(TRetentionActor::StateFunc) {
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvWakeup::EventType, HandleWakeup);
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
+        hFunc(TSqsEvents::TEvChangeRetentionActiveCheck, Handle);
         hFunc(TEvPoisonPill, HandlePoisonPill);
     }
 }

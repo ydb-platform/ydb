@@ -76,7 +76,7 @@ public:
     ui64 GetTabletId(const TMap<TKeyPrefix, ui64>& tabletsPerEndKeyRange, TKeyPrefix keyPrefix) const;
     ui64 GetTabletId(const TSubscriberInfo& subscriber) const;
 
-    void AnswerForSubscriber(ui64 subscriptionId, ui32 nodeId);
+    void AnswerForSubscriber(ui64 subscriptionId, ui32 nodeId, bool disconnected=false);
     void RemoveSubscriber(TSqsEvents::TEvNodeTrackerUnsubscribeRequest::TPtr& request, const NActors::TActorContext& ctx);
     bool SubscriberMustWait(const TSubscriberInfo& subscriber) const;
     void AddSubscriber(TSqsEvents::TEvNodeTrackerSubscribeRequest::TPtr& request, const NActors::TActorContext& ctx);

@@ -130,6 +130,9 @@ struct TSqsEvents {
         EvNodeTrackerUnsubscribeRequest,
         EvNodeTrackerSubscriptionStatus,
 
+        EvForceReloadState,
+        EvChangeRetentionActiveCheck,
+
         EvEnd,
     };
 
@@ -730,6 +733,7 @@ struct TSqsEvents {
     struct TEvQueuePurgedNotification : public NActors::TEventLocal<TEvQueuePurgedNotification, EvQueuePurgedNotification> {
         ui64 Shard = 0;
         ui64 NewMessagesCount = 0;
+        TVector<ui64> DeletedOffsets;
     };
 
     struct TEvGetRuntimeQueueAttributes : public NActors::TEventLocal<TEvGetRuntimeQueueAttributes, EvGetRuntimeQueueAttributes> {
@@ -926,12 +930,28 @@ struct TSqsEvents {
     };
 
     struct TEvNodeTrackerSubscriptionStatus : public NActors::TEventLocal<TEvNodeTrackerSubscriptionStatus, EvNodeTrackerSubscriptionStatus> {
-        explicit TEvNodeTrackerSubscriptionStatus(ui64 subscriptionId, ui32 nodeId)
+        TEvNodeTrackerSubscriptionStatus(ui64 subscriptionId, ui32 nodeId, bool disconnected=false)
             : SubscriptionId(subscriptionId)
             , NodeId(nodeId)
+            , Disconnected(disconnected)
         {}
         ui64 SubscriptionId;
         ui32 NodeId;
+        bool Disconnected;
+    };
+    
+    struct TEvForceReloadState : public NActors::TEventLocal<TEvForceReloadState, EvForceReloadState> {
+        explicit TEvForceReloadState(TDuration nextTryAfter = TDuration::Zero())
+            : NextTryAfter(nextTryAfter)
+        {}
+        TDuration NextTryAfter;
+    };
+    
+    struct TEvChangeRetentionActiveCheck : public NActors::TEventLocal<TEvChangeRetentionActiveCheck, EvChangeRetentionActiveCheck> {
+        explicit TEvChangeRetentionActiveCheck(bool active)
+            : Active(active)
+        {}
+        bool Active;
     };
 };
 

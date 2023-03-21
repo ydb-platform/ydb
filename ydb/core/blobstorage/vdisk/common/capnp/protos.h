@@ -618,7 +618,7 @@ namespace NKikimrCapnProto {
 
                 kj::VectorOutputStream stream;
                 capnp::writePackedMessage(stream, *message);
-                const TString s(stream.getArray().begin(), stream.getArray().size());
+                const TString s((const char *) stream.getArray().begin(), stream.getArray().size());
                 output->WriteString(&s);
                 return true;
             }

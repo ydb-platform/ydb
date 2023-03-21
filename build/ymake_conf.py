@@ -1636,7 +1636,9 @@ class LD(Linker):
         self.ar_type = 'GNU_AR'
         self.llvm_ar_format = 'None'
 
-        if 'llvm-ar' in self.ar:
+        if 'libtool' in self.ar:
+            self.ar_type = 'LIBTOOL'
+        elif 'llvm-ar' in self.ar:
             self.ar_type = 'LLVM_AR'
             if target.is_apple:
                 self.llvm_ar_format="darwin"

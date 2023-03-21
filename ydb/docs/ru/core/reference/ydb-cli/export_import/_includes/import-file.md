@@ -11,7 +11,7 @@
 Общий вид команды:
 
 ```bash
-{{ ydb-cli }} [connection options] import file csv|tsv [options]
+{{ ydb-cli }} [connection options] import file csv|json|parquet|tsv [options]
 ```
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}

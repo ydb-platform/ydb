@@ -675,3 +675,7 @@ ALLOW noc/.* -> contrib/python/asyncssh
 ALLOW jupytercloud/backend/.* -> contrib/python/asyncssh
 ALLOW intranet/trip -> contrib/python/asyncssh
 DENY .* -> contrib/python/asyncssh
+
+# https://st.yandex-team.ru/CONTRIB-2913
+ALLOW logos/.* -> contrib/python/pysftp
+DENY .* -> contrib/python/pysftp

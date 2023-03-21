@@ -196,7 +196,7 @@ net_classifier_config:
     retry_interval_seconds: 30
     net_data_update_interval_seconds: 60
   cms_config_timeout_seconds: 30
-yandex_query_config:
+federated_query_config:
   enabled: false
   common:
     use_bearer_for_ydb: true

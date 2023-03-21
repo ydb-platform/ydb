@@ -729,7 +729,6 @@ taxi/uservices/services/talaria-misc
 taxi/uservices/services/talaria-payments
 taxi/uservices/services/talaria-proxy
 taxi/uservices/services/tariffs-promotions
-taxi/uservices/services/taxi-order-fines
 taxi/uservices/services/taxi-payments
 taxi/uservices/services/test-configs-from-configs3
 taxi/uservices/services/test-rps-limiter

@@ -1,9 +1,7 @@
 #include "datashard_ut_common.h"
 #include "datashard_ut_common_kqp.h"
+#include "datashard_ut_common_pq.h"
 #include "datashard_active_transaction.h"
-
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
@@ -1478,31 +1476,32 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
 
         // Write to key 2 using bulk upsert
+        NThreading::TFuture<Ydb::Table::BulkUpsertResponse> bulkUpsertFuture;
         {
-            using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
-            using TRowTypes = TVector<std::pair<TString, Ydb::Type>>;
+            Ydb::Table::BulkUpsertRequest request;
+            request.set_table("/Root/table-1");
+            auto* r = request.mutable_rows();
 
-            auto types = std::make_shared<TRowTypes>();
-            
-            Ydb::Type type;
-            type.set_type_id(Ydb::Type::UINT32);
-            types->emplace_back("key", type);
-            types->emplace_back("value", type);
+            auto* reqRowType = r->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
+            auto* reqKeyType = reqRowType->add_members();
+            reqKeyType->set_name("key");
+            reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT32);
+            auto* reqValueType = reqRowType->add_members();
+            reqValueType->set_name("value");
+            reqValueType->mutable_type()->set_type_id(Ydb::Type::UINT32);
 
-            auto rows = std::make_shared<TRows>();
+            auto* reqRows = r->mutable_value();
+            auto* row1 = reqRows->add_items();
+            row1->add_items()->set_uint32_value(2);
+            row1->add_items()->set_uint32_value(22);
 
-            TVector<TCell> key{ TCell::Make(ui32(2)) };
-            TVector<TCell> values{ TCell::Make(ui32(22)) };
-            TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
-            TString serializedValues(TSerializedCellVec::Serialize(values));
-            rows->emplace_back(serializedKey, serializedValues);
+            using TEvBulkUpsertRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<
+                Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
+            bulkUpsertFuture = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
+                std::move(request), "/Root", "", runtime.GetActorSystem(0));
 
-            auto upsertSender = runtime.AllocateEdgeActor();
-            auto actor = NTxProxy::CreateUploadRowsInternal(upsertSender, "/Root/table-1", types, rows);
-            runtime.Register(actor);
-
-            auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvUploadRowsResponse>(upsertSender);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, Ydb::StatusIds::SUCCESS);
+            auto response = AwaitResponse(runtime, std::move(bulkUpsertFuture));
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         }
 
         // This compaction verifies there's no commit race with the waiting
@@ -1533,6 +1532,172 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 2 } items { uint32_value: 22 } items { uint32_value: 42 } }, "
             "{ items { uint32_value: 10 } items { uint32_value: 10 } items { null_flag_value: NULL_VALUE } }, "
             "{ items { uint32_value: 20 } items { uint32_value: 20 } items { null_flag_value: NULL_VALUE } }");
+    }
+
+    namespace {
+        using TCdcStream = TShardedTableOptions::TCdcStream;
+
+        TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+            return TCdcStream{
+                .Name = name,
+                .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+                .Format = format,
+            };
+        }
+
+        TCdcStream WithInitialScan(TCdcStream streamDesc) {
+            streamDesc.InitialState = NKikimrSchemeOp::ECdcStreamStateScan;
+            return streamDesc;
+        }
+
+        void WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<TString>& expected) {
+            while (true) {
+                const auto records = GetPqRecords(*server->GetRuntime(), sender, path, 0);
+                if (records.size() >= expected.size()) {
+                    for (ui32 i = 0; i < expected.size(); ++i) {
+                        UNIT_ASSERT_VALUES_EQUAL(records.at(i).second, expected.at(i));
+                    }
+
+                    UNIT_ASSERT_VALUES_EQUAL(records.size(), expected.size());
+                    break;
+                }
+
+                SimulateSleep(server, TDuration::Seconds(1));
+            }
+        }
+    } // namespace
+
+    Y_UNIT_TEST(DistributedWriteThenBulkUpsertWithCdc) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000)
+            .SetEnableChangefeedInitialScan(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+                        .Shards(1)
+                        .Columns({
+                            {"key", "Uint32", true, false},
+                            {"value", "Uint32", false, false},
+                            {"value2", "Uint32", false, false}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        CreateShardedTable(server, sender, "/Root", "table-2", opts);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
+
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "table-1",
+            WithInitialScan(NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        WaitForContent(server, sender, "/Root/table-1/Stream", {
+            R"({"update":{},"newImage":{"value2":null,"value":1},"key":[1]})",
+        });
+
+        ui64 maxReadSetStep = 0;
+        bool captureReadSets = true;
+        TVector<THolder<IEventHandle>> capturedReadSets;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    maxReadSetStep = Max(maxReadSetStep, msg->Record.GetStep());
+                    if (captureReadSets) {
+                        Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest() << Endl;
+                        capturedReadSets.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+            UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (2, 2, 42);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
+        )", sessionId, "", true /* commitTx */), "/Root");
+
+        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
+        // Write to key 2 using bulk upsert
+        NThreading::TFuture<Ydb::Table::BulkUpsertResponse> bulkUpsertFuture;
+        {
+            Ydb::Table::BulkUpsertRequest request;
+            request.set_table("/Root/table-1");
+            auto* r = request.mutable_rows();
+
+            auto* reqRowType = r->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
+            auto* reqKeyType = reqRowType->add_members();
+            reqKeyType->set_name("key");
+            reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT32);
+            auto* reqValueType = reqRowType->add_members();
+            reqValueType->set_name("value");
+            reqValueType->mutable_type()->set_type_id(Ydb::Type::UINT32);
+
+            auto* reqRows = r->mutable_value();
+            auto* row1 = reqRows->add_items();
+            row1->add_items()->set_uint32_value(2);
+            row1->add_items()->set_uint32_value(22);
+
+            using TEvBulkUpsertRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<
+                Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
+            bulkUpsertFuture = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
+                std::move(request), "/Root", "", runtime.GetActorSystem(0));
+
+            // Note: we expect bulk upsert to block until key 2 outcome is decided
+            SimulateSleep(runtime, TDuration::Seconds(1));
+            UNIT_ASSERT(!bulkUpsertFuture.HasValue());
+        }
+
+        runtime.SetObserverFunc(prevObserverFunc);
+        for (auto& ev : capturedReadSets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(future))),
+            "<empty>");
+
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // Verify the result
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value, value2 FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value, value2 FROM `/Root/table-2`
+                ORDER BY key
+                )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } items { uint32_value: 42 } }, "
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } items { null_flag_value: NULL_VALUE } }");
+
+        WaitForContent(server, sender, "/Root/table-1/Stream", {
+            R"({"update":{},"newImage":{"value2":null,"value":1},"key":[1]})",
+            R"({"update":{},"newImage":{"value2":42,"value":2},"key":[2]})",
+            R"({"update":{},"newImage":{"value2":42,"value":22},"key":[2],"oldImage":{"value2":42,"value":2}})",
+        });
+
+        UNIT_ASSERT(bulkUpsertFuture.HasValue());
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)

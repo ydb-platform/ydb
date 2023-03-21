@@ -49,10 +49,26 @@ public:
             NTable::TRowState& row,
             const TMaybe<TRowVersion>& readVersion = {}) override;
 
+    void AddCommitTxId(ui64 txId, const TRowVersion& commitVersion);
+
+    absl::flat_hash_set<ui64>& GetVolatileReadDependencies() {
+        return VolatileReadDependencies;
+    }
+
+private:
+    class TReadTxObserver;
+    NTable::ITransactionMapPtr& GetReadTxMap();
+    NTable::ITransactionObserverPtr& GetReadTxObserver();
+    void CheckReadDependency(ui64 txId);
+
 private:
     TDataShard& Self;
     NTable::TDatabase& Db;
     TRowVersion ReadVersion;
+    NTable::ITransactionMapPtr TxMap;
+    TIntrusivePtr<NTable::TDynamicTransactionMap> DynamicTxMap;
+    NTable::ITransactionObserverPtr TxObserver;
+    absl::flat_hash_set<ui64> VolatileReadDependencies;
 };
 
 } // namespace NKikimr::NDataShard

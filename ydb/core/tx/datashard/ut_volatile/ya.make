@@ -31,6 +31,8 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     datashard_ut_common.cpp
     datashard_ut_common.h
+    datashard_ut_common_pq.cpp
+    datashard_ut_common_pq.h
     datashard_ut_volatile.cpp
 )
 

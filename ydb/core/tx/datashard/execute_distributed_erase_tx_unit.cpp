@@ -51,8 +51,19 @@ public:
 
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
             if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, op->GetGlobalTxId(),
-                    &groupProvider, changeCollector.Get()))
+                    &userDb, &groupProvider, changeCollector.Get()))
             {
+                return EExecutionStatus::Restart;
+            }
+
+            if (!userDb.GetVolatileReadDependencies().empty()) {
+                for (ui64 txId : userDb.GetVolatileReadDependencies()) {
+                    op->AddVolatileDependency(txId);
+                    bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, op->GetTxId());
+                    Y_VERIFY_S(ok, "Unexpected failure to attach " << *op << " to volatile tx " << txId);
+                }
+
+                txc.Reschedule();
                 return EExecutionStatus::Restart;
             }
 
@@ -102,6 +113,7 @@ public:
     bool Execute(TTransactionContext& txc, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
             const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& writeVersion,
             ui64 globalTxId,
+            TDataShardUserDb* userDb = nullptr,
             TDataShardChangeGroupProvider* groupProvider = nullptr,
             IDataShardChangeCollector* changeCollector = nullptr)
     {
@@ -119,6 +131,7 @@ public:
 
         size_t row = 0;
         bool pageFault = false;
+        bool commitAdded = false;
         Y_FOR_EACH_BIT(i, presentRows) {
             if (!confirmedRows.Test(i)) {
                 ++row;
@@ -169,6 +182,11 @@ public:
 
             if (!volatileDependencies.empty() || volatileOrdered) {
                 txc.DB.UpdateTx(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId);
+                if (!commitAdded && userDb) {
+                    // Make sure we see our own changes on further iterations
+                    userDb->AddCommitTxId(globalTxId, writeVersion);
+                    commitAdded = true;
+                }
             } else {
                 txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion);
             }

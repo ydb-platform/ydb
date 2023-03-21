@@ -34,8 +34,17 @@ bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
     auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
 
     // NOTE: may throw TNeedGlobalTxId exception, which is handled in direct tx unit
-    if (!Impl->Execute(self, txc, readVersion, writeVersion, GetGlobalTxId()))
+    absl::flat_hash_set<ui64> volatileReadDependencies;
+    if (!Impl->Execute(self, txc, readVersion, writeVersion, GetGlobalTxId(), volatileReadDependencies)) {
+        if (!volatileReadDependencies.empty()) {
+            for (ui64 txId : volatileReadDependencies) {
+                AddVolatileDependency(txId);
+                bool ok = self->GetVolatileTxManager().AttachBlockedOperation(txId, GetTxId());
+                Y_VERIFY_S(ok, "Unexpected failure to attach " << *static_cast<TOperation*>(this) << " to volatile tx " << txId);
+            }
+        }
         return false;
+    }
 
     if (self->IsMvccEnabled()) {
         // Note: we always wait for completion, so we can ignore the result

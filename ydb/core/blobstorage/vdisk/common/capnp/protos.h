@@ -550,7 +550,7 @@ namespace NKikimrCapnProto {
                     }
                 }
 
-                std::cout << "\n\ndeserialized record: " << ShortDebugString() << "\n\n";
+                std::cerr << "\n\ndeserialized record: " << ShortDebugString() << "\n\n";
 
                 return true;
             }
@@ -614,7 +614,7 @@ namespace NKikimrCapnProto {
                     interviews.setWithCaveats(i, GetExtremeQueries(i).GetCapnpBase());
                 }
 
-                std::cout << "\n\nserializing record: " << ShortDebugString() << "\n\n";
+                std::cerr << "\n\nserializing record: " << ShortDebugString() << "\n\n";
 
                 kj::VectorOutputStream stream;
                 capnp::writePackedMessage(stream, *message);

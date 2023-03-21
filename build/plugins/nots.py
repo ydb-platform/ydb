@@ -270,7 +270,7 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
         "BINARY-PATH": os.path.join(test_dir, unit.filename()),
         "SPLIT-FACTOR": unit.get("TEST_SPLIT_FACTOR") or "",
         "FORK-MODE": unit.get("TEST_FORK_MODE") or "",
-        "SIZE": "SMALL",
+        "SIZE": unit.get("TEST_SIZE_NAME") or "",
         "TEST-FILES": ytest.serialize_list(test_files),
         "TEST-CWD": test_cwd or "",
         "TAG": ytest.serialize_list(ytest.get_values_list(unit, "TEST_TAGS_VALUE")),

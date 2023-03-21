@@ -137,8 +137,8 @@ class TopicClientAsyncIO:
 
     def reader(
         self,
-        consumer: str,
         topic: str,
+        consumer: str,
         buffer_size_bytes: int = 50 * 1024 * 1024,
         # decoders: map[codec_code] func(encoded_bytes)->decoded_bytes
         decoders: Union[Mapping[int, Callable[[bytes], bytes]], None] = None,
@@ -306,8 +306,8 @@ class TopicClient:
 
     def reader(
         self,
-        consumer: str,
         topic: str,
+        consumer: str,
         buffer_size_bytes: int = 50 * 1024 * 1024,
         # decoders: map[codec_code] func(encoded_bytes)->decoded_bytes
         decoders: Union[Mapping[int, Callable[[bytes], bytes]], None] = None,

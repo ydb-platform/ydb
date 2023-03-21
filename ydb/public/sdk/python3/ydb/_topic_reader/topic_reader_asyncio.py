@@ -95,14 +95,6 @@ class PublicAsyncIOReader:
         """
         raise NotImplementedError()
 
-    async def receive_message(self) -> typing.Union[topic_reader.PublicMessage, None]:
-        """
-        Block until receive new message
-
-        use asyncio.wait_for for wait with timeout.
-        """
-        raise NotImplementedError()
-
     def batches(
         self,
         *,
@@ -132,6 +124,15 @@ class PublicAsyncIOReader:
         """
         await self._reconnector.wait_message()
         return self._reconnector.receive_batch_nowait()
+
+    async def receive_message(self) -> typing.Optional[datatypes.PublicMessage]:
+        """
+        Block until receive new message
+
+        use asyncio.wait_for for wait with timeout.
+        """
+        await self._reconnector.wait_message()
+        return self._reconnector.receive_message_nowait()
 
     async def commit_on_exit(
         self, mess: datatypes.ICommittable
@@ -243,6 +244,9 @@ class ReaderReconnector:
 
     def receive_batch_nowait(self):
         return self._stream_reader.receive_batch_nowait()
+
+    def receive_message_nowait(self):
+        return self._stream_reader.receive_message_nowait()
 
     def commit(
         self, batch: datatypes.ICommittable
@@ -397,11 +401,23 @@ class ReaderStream:
             raise self._get_first_error()
 
         if not self._message_batches:
-            return
+            return None
 
         batch = self._message_batches.popleft()
         self._buffer_release_bytes(batch._bytes_size)
         return batch
+
+    def receive_message_nowait(self):
+        try:
+            batch = self._message_batches[0]
+            message = batch.pop_message()
+        except IndexError:
+            return None
+
+        if batch.empty():
+            self._message_batches.popleft()
+
+        return message
 
     def commit(
         self, batch: datatypes.ICommittable

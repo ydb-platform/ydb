@@ -83,19 +83,28 @@ class TopicReaderSync:
         It has no async_ version for prevent lost messages, use async_wait_message as signal for new batches available.
 
         if no new message in timeout seconds (default - infinite): stop iterations by raise StopIteration
-        if timeout <= 0 - it will fast non block method, get messages from internal buffer only.
+        if timeout <= 0 - it will fast wait only one event loop cycle - without wait any i/o operations or pauses,
+            get messages from internal buffer only.
         """
         raise NotImplementedError()
 
-    def receive_message(self, *, timeout: Union[float, None] = None) -> PublicMessage:
+    def receive_message(
+        self, *, timeout: TimeoutType = None
+    ) -> datatypes.PublicMessage:
         """
         Block until receive new message
         It has no async_ version for prevent lost messages, use async_wait_message as signal for new batches available.
+        receive_message(timeout=0) may return None even right after async_wait_message() is ok - because lost of partition
+        or connection to server lost
 
         if no new message in timeout seconds (default - infinite): raise TimeoutError()
-        if timeout <= 0 - it will fast non block method, get messages from internal buffer only.
+        if timeout <= 0 - it will fast wait only one event loop cycle - without wait any i/o operations or pauses, get messages from internal buffer only.
         """
-        raise NotImplementedError()
+        self._check_closed()
+
+        return self._caller.safe_call_with_result(
+            self._async_reader.receive_message(), timeout
+        )
 
     def async_wait_message(self) -> concurrent.futures.Future:
         """
@@ -105,7 +114,11 @@ class TopicReaderSync:
         Possible situation when receive signal about message available, but no messages when try to receive a message.
         If message expired between send event and try to retrieve message (for example connection broken).
         """
-        raise NotImplementedError()
+        self._check_closed()
+
+        return self._caller.unsafe_call_with_future(
+            self._async_reader._reconnector.wait_message()
+        )
 
     def batches(
         self,
@@ -119,7 +132,7 @@ class TopicReaderSync:
         It has no async_ version for prevent lost messages, use async_wait_message as signal for new batches available.
 
         if no new message in timeout seconds (default - infinite): stop iterations by raise StopIteration
-        if timeout <= 0 - it will fast non block method, get messages from internal buffer only.
+        if timeout <= 0 - it will fast wait only one event loop cycle - without wait any i/o operations or pauses, get messages from internal buffer only.
         """
         raise NotImplementedError()
 
@@ -135,7 +148,7 @@ class TopicReaderSync:
         It has no async_ version for prevent lost messages, use async_wait_message as signal for new batches available.
 
         if no new message in timeout seconds (default - infinite): raise TimeoutError()
-        if timeout <= 0 - it will fast non block method, get messages from internal buffer only.
+        if timeout <= 0 - it will fast wait only one event loop cycle - without wait any i/o operations or pauses, get messages from internal buffer only.
         """
         self._check_closed()
 

@@ -4692,6 +4692,11 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), "Can't unwrap PostgreSQL type"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
             output = ctx.Expr.ChangeChild(*input, 0, ctx.Expr.Builder(input->Pos())
                 .Callable("Nothing")

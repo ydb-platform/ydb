@@ -48,11 +48,18 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 ## Переименование вторичного индекса {#rename-secondary-index}
 
-```RENAME INDEX``` — переименовывает индекс с указанным именем
+`RENAME INDEX` — переименовывает индекс с указанным именем.
 
-Если индекс с новым именем существует, будет возвращена ошибка. Возможность транзакционной подмены индекса под нагрузкой поддерживается специализированными методами в [CLI](https://ydb.tech/ru/docs/reference/ydb-cli/commands/secondary_index#rename) и SDK.
+Если индекс с новым именем существует, будет возвращена ошибка.
 
-Пример преименования индекса:
+{% if backend_name == YDB %}
+
+Возможность атомарной замены индекса под нагрузкой поддерживается командой [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) {{ ydb-short-name }} CLI и специализированными методами {{ ydb-short-name }} SDK.
+
+{% endif %}
+
+Пример переименования индекса:
+
 ```sql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 ```

@@ -1257,12 +1257,6 @@ public:
 
     void FillTxInfo(NKikimrKqp::TQueryResponse* response) {
         YQL_ENSURE(QueryState);
-        if (QueryState->Commit) {
-            if (auto ctx = Transactions.ReleaseTransaction(QueryState->TxId)) {
-                Transactions.AddToBeAborted(std::move(ctx));
-            }
-            QueryState->TxId = TTxId();
-        }
         response->MutableTxMeta()->set_id(QueryState->TxId.GetHumanStr());
 
         if (QueryState->TxCtx) {
@@ -1328,6 +1322,8 @@ public:
 
         if (QueryState->Commit) {
             ResetTxState();
+            Transactions.ReleaseTransaction(QueryState->TxId);
+            QueryState->TxId = TTxId();
         }
 
         FillTxInfo(response);

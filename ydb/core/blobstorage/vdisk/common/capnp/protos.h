@@ -607,7 +607,7 @@ namespace NKikimrCapnProto {
                 builder = other.builder;
             }
 
-            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
+            bool SerializeToZeroCopyStream(NActors::TAllocChunkSerializer *output) const {
                 NKikimrCapnProto_::TEvVGet::Builder b(builder);
                 auto interviews = b.initExtremeQueries(elements.size());
                 for (size_t i = 0; i != elements.size(); ++i) {
@@ -618,7 +618,8 @@ namespace NKikimrCapnProto {
 
                 kj::VectorOutputStream stream;
                 capnp::writePackedMessage(stream, *message);
-                output->WriteAliasedRaw(stream.getArray().begin(), stream.getArray().size());
+                const TString s(stream.getArray().begin(), stream.getArray().size());
+                output->WriteString(&s);
                 return true;
             }
 

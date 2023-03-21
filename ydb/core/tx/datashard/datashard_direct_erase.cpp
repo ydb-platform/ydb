@@ -126,7 +126,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
 
         if (condition) {
             NTable::TRowState row;
-            const auto ready = params.Txc->DB.Select(localTableId, key, condition->Tags(), row, 0, params.ReadVersion);
+            const auto ready = userDb->SelectRow(fullTableId, key, condition->Tags(), row);
 
             switch (ready) {
             case NTable::EReady::Page:

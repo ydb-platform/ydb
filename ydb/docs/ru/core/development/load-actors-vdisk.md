@@ -1,49 +1,30 @@
 # VDiskLoad
 
-Подает нагрузку write-only на VDisk. Имитирует Distributed Storage Proxy. Результатом теста является производительность записи в операциях в секунду.
+Подает нагрузку write-only на VDisk. Имитирует Distributed Storage Proxy. Результатом теста является производительность записи на VDisk в операциях в секунду.
 
 {% include notitle [addition](../_includes/addition.md) %}
 
 ## Параметры актора {#options}
 
-```proto
-message TVDiskLoad {
-    optional uint64 Tag = 1;
+{% include [load-actors-params](../_includes/load-actors-params.md) %}
 
-    // full VDisk identifier
-    optional NKikimrBlobStorage.TVDiskID VDiskId = 2;
+Параметр | Описание
+--- | ---
+`VDiskId` | Параметры VDisk, от имени которого подается нагрузка.<ul><li>`GroupID` — идентификатор группы.</li><li>`GroupGeneration` — поколение группы.</li><li>`Ring` — идентификатор кольца в группе.</li><li>`Domain` — идентификатор фэйл-домена в кольце.</li><li>`VDisk` — индекс VDisk в фэйл-домене.</li></ul>
+`GroupInfo` | Описание группы, в которую входит нагружаемый VDisk (в корректном поколении).
+`TabletId` | Идентификатор таблетки, от имени которой подается нагрузка. Должен быть уникальным для каждого нагружающего актора.
+`Channel` | Номер канала внутри таблетки, который будет указан в командах записи блобов и сборки мусора.
+`DurationSeconds` | Полная длительность теста в секундах, по достижению которой нагрузка автоматически прекращается.
+`WriteIntervals` | Описание [параметров вероятностного распределения](#params) временных интервалов между записями.
+`WriteSizes` | Размер записываемых данных. Для каждого запроса выбирается случайным образом из интервала `Min`-`Max`. Вы можете задать несколько диапазонов `WriteSizes`, и тогда выбор значения из конкретного диапазона будет определяться его `Weight`.
+`InFlightPutsMax` | Максимальное количество одновременно выполняемых запросов на запись блоба в VDisk (TEvVPut-запросы); если не указан, то число запросов не ограничивается.
+`InFlightPutBytesMax` | Максимальное количество байт в одновременно выполняемых запросах на запись блоба в VDisk (TEvVPut-запросы).
+`PutHandleClass` | Класс записи данных в дисковую подсистему. В случае `TabletLog` запись выполняется с максимальным приоритетом.
+`BarrierAdvanceIntervals` | Описание [параметров вероятностного распределения](#params) интервалов между передвижением барьера сборки мусора и шага записи.
+`StepDistance` | Расстояние между текущим записываемым шагом `Gen:Step` блоба и собираемым. Чем больше эта величина, тем больше данных хранится. Запись происходит с `Step = X`, удаление — всех блобов со `Step = X - StepDistance`. При этом периодически (с периодом `BarrierAdvanceIntervals`) `Step` увеличивается на единицу.
 
-    reserved 3; // obsolete field
-    reserved 4; // obsolete field
-    optional NKikimrBlobStorage.TGroupInfo GroupInfo = 16;
+### Параметры вероятностного распределения {#params}
 
-    // tablet id, channel and generation used in blob ids and barriers
-    optional uint64 TabletId = 5;
-    optional uint32 Channel = 6;
-    optional uint32 Generation = 7;
+{% include [load-actors-params](../_includes/load-actors-interval.md) %}
 
-    // duration of the test in seconds
-    optional uint32 DurationSeconds = 8;
-
-    // a distribution of intervals between adjacent writes
-    repeated TIntervalInfo WriteIntervals = 9;
-
-    // a distribution of write block sizes (expressed in bytes of BlobSize; i.e. PartSize bytes are actually written)
-    repeated TSizeInfo WriteSizes = 10;
-
-    // maximum number of unconfirmed parallel writes
-    optional uint32 InFlightPutsMax = 11;
-
-    // soft maximum of total in flight put bytes
-    optional uint64 InFlightPutBytesMax = 12;
-
-    // put handle class
-    optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 13;
-
-    // a distribution of intervals between barrier advances
-    repeated TIntervalInfo BarrierAdvanceIntervals = 14;
-
-    // minimum distance kept between current Step of written blobs and CollectStep of barriers
-    optional uint32 StepDistance = 15;
-}
-```
+<!-- ## Примеры {#examples} -->

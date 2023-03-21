@@ -19,6 +19,7 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <chrono>
+#include <format>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -121,6 +122,9 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
     NUdf::EDataSlot dataType = NUdf::GetDataSlot(colTypeId);
     res.DataType = dataType;
 
+    const NYql::NUdf::TDataTypeInfo& ti =  GetDataTypeInfo(dataType);
+    res.Name = ti.Name;
+
     switch (dataType){
         case NUdf::EDataSlot::Bool:
             res.Bytes = sizeof(bool); break;
@@ -184,9 +188,7 @@ void TGraceJoinPacker::Pack()  {
 
     TuplesPacked++;
     TuplesBatchPacked++;
-    for (ui64 i = 0; i < NullsBitmapSize; ++i) {
-        TupleIntVals[i] = 0;  // Clearing nulls bit array. Bit 1 means particular column contains null value
-    }
+    std::fill(TupleIntVals.begin(), TupleIntVals.end(), 0);
 
     for (ui64 i = 0; i < ColumnsPackInfo.size(); i++) {
 
@@ -502,8 +504,14 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     ui32 currIdx = 0;
     std::vector<GraceJoin::TColTypeInterface> ctiv;
 
+    bool prevKeyColumn = false;
+
     for( auto & p: ColumnsPackInfo ) {
         if ( !p.IsString && !p.IsIType ) {
+            if (prevKeyColumn && !p.IsKeyColumn) {
+                currIntOffset = ( (currIntOffset + sizeof(ui64) - 1) / sizeof(ui64) ) * sizeof(ui64); 
+            }
+            prevKeyColumn = p.IsKeyColumn;
             p.Offset = currIntOffset;
             Offsets[p.ColumnIdx] = currIntOffset;
             currIntOffset += p.Bytes;
@@ -746,7 +754,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                             auto & valPtr = output[RightRenames[2 * i + 1]];
                             if ( valPtr ) {
                                 *valPtr = valsRight[RightRenames[2 * i]];
-                            }
+                                }
                         }
 
                         return EFetchResult::One;

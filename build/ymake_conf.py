@@ -1625,10 +1625,7 @@ class LD(Linker):
         self.musl = Setting('MUSL', convert=to_bool)
 
         if self.ar is None:
-            if target.is_apple:
-                # Use libtool. cctools ar does not understand -M needed for archive merging
-                self.ar = '${CCTOOLS_ROOT_RESOURCE_GLOBAL}/bin/libtool'
-            elif self.tc.is_from_arcadia:
+            if self.tc.is_from_arcadia:
                 if self.tc.is_clang:
                     self.ar = '{}/bin/llvm-ar'.format(self.tc.name_marker)
                 if self.tc.is_gcc:
@@ -1639,9 +1636,7 @@ class LD(Linker):
         self.ar_type = 'GNU_AR'
         self.llvm_ar_format = 'None'
 
-        if 'libtool' in self.ar:
-            self.ar_type = 'LIBTOOL'
-        elif 'llvm-ar' in self.ar:
+        if 'llvm-ar' in self.ar:
             self.ar_type = 'LLVM_AR'
             if target.is_apple:
                 self.llvm_ar_format="darwin"

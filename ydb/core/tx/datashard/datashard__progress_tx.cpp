@@ -77,12 +77,16 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
                     Self->ExecuteProgressTx(ActiveOp, ctx);
                     Rescheduled = true;
                 }
+                ActiveOp->DecrementInProgress();
                 break;
 
             case EExecutionStatus::Executed:
             case EExecutionStatus::Continue:
+                ActiveOp->DecrementInProgress();
+                break;
+
             case EExecutionStatus::WaitComplete:
-                // No special handling
+                WaitComplete = true;
                 break;
 
             default:
@@ -90,12 +94,11 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
                         << *ActiveOp << " " << ActiveOp->GetKind() << " at " << Self->TabletID());
         }
 
-        if (!CompleteList.empty()) {
+        if (WaitComplete || !CompleteList.empty()) {
             // Keep operation active until we run the complete list
             CommitStart = AppData()->TimeProvider->Now();
         } else {
             // Release operation as it's no longer needed
-            ActiveOp->DecrementInProgress();
             ActiveOp = nullptr;
         }
 
@@ -122,13 +125,18 @@ void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
 
             Self->Pipeline.RunCompleteList(ActiveOp, CompleteList, ctx);
         }
-        ActiveOp->DecrementInProgress();
 
-        if (!ActiveOp->IsInProgress() && !ActiveOp->IsExecutionPlanFinished())
-            Self->Pipeline.AddCandidateOp(ActiveOp);
+        if (WaitComplete) {
+            ActiveOp->DecrementInProgress();
 
-        if (Self->Pipeline.CanRunAnotherOp())
-            Self->PlanQueue.Progress(ctx);
+            if (!ActiveOp->IsInProgress() && !ActiveOp->IsExecutionPlanFinished()) {
+                Self->Pipeline.AddCandidateOp(ActiveOp);
+
+                if (Self->Pipeline.CanRunAnotherOp()) {
+                    Self->PlanQueue.Progress(ctx);
+                }
+            }
+        }
     }
 
     Self->CheckSplitCanStart(ctx);

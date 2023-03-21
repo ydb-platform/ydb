@@ -124,12 +124,16 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                     Self->ExecuteProgressTx(Op, ctx);
                     Rescheduled = true;
                 }
+                Op->DecrementInProgress();
                 break;
 
             case EExecutionStatus::Executed:
             case EExecutionStatus::Continue:
+                Op->DecrementInProgress();
+                break;
+
             case EExecutionStatus::WaitComplete:
-                // No special handling
+                WaitComplete = true;
                 break;
 
             default:
@@ -137,12 +141,11 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                         << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
         }
 
-        if (!CompleteList.empty()) {
+        if (WaitComplete || !CompleteList.empty()) {
             // Keep operation active until we run the complete list
             CommitStart = AppData()->TimeProvider->Now();
         } else {
             // Release operation as it's no longer needed
-            Op->DecrementInProgress();
             Op = nullptr;
         }
 
@@ -184,13 +187,18 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
 
             Self->Pipeline.RunCompleteList(Op, CompleteList, ctx);
         }
-        Op->DecrementInProgress();
 
-        if (!Op->IsInProgress() && !Op->IsExecutionPlanFinished())
-            Self->Pipeline.AddCandidateOp(Op);
+        if (WaitComplete) {
+            Op->DecrementInProgress();
 
-        if (Self->Pipeline.CanRunAnotherOp())
-            Self->PlanQueue.Progress(ctx);
+            if (!Op->IsInProgress() && !Op->IsExecutionPlanFinished()) {
+                Self->Pipeline.AddCandidateOp(Op);
+
+                if (Self->Pipeline.CanRunAnotherOp()) {
+                    Self->PlanQueue.Progress(ctx);
+                }
+            }
+        }
     }
 
     Self->CheckSplitCanStart(ctx);

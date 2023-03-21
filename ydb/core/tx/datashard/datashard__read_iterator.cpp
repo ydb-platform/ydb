@@ -1675,6 +1675,7 @@ class TDataShard::TTxReadViaPipeline : public NTabletFlatExecutor::TTransactionB
 
     TOperation::TPtr Op;
     TVector<EExecutionUnitKind> CompleteList;
+    bool WaitComplete = false;
 
 public:
     TTxReadViaPipeline(TDataShard* ds, TEvDataShard::TEvRead::TPtr ev)
@@ -1748,12 +1749,16 @@ public:
                         Op->IncrementInProgress();
                         Self->ExecuteProgressTx(Op, ctx);
                     }
+                    Op->DecrementInProgress();
                     break;
 
                 case EExecutionStatus::Executed:
                 case EExecutionStatus::Continue:
+                    Op->DecrementInProgress();
+                    break;
+
                 case EExecutionStatus::WaitComplete:
-                    // No special handling
+                    WaitComplete = true;
                     break;
 
                 default:
@@ -1761,8 +1766,10 @@ public:
                             << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
             }
 
-            if (CompleteList.empty()) {
-                Op->DecrementInProgress();
+            if (WaitComplete || !CompleteList.empty()) {
+                // Keep operation active until we run the complete list
+            } else {
+                // Release operation as it's no longer needed
                 Op = nullptr;
             }
 
@@ -1790,13 +1797,17 @@ public:
             Self->Pipeline.RunCompleteList(Op, CompleteList, ctx);
         }
 
-        Op->DecrementInProgress();
+        if (WaitComplete) {
+            Op->DecrementInProgress();
 
-        if (!Op->IsInProgress() && !Op->IsExecutionPlanFinished())
-            Self->Pipeline.AddCandidateOp(Op);
+            if (!Op->IsInProgress() && !Op->IsExecutionPlanFinished()) {
+                Self->Pipeline.AddCandidateOp(Op);
 
-        if (Self->Pipeline.CanRunAnotherOp())
-            Self->PlanQueue.Progress(ctx);
+                if (Self->Pipeline.CanRunAnotherOp()) {
+                    Self->PlanQueue.Progress(ctx);
+                }
+            }
+        }
     }
 };
 

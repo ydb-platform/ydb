@@ -78,6 +78,7 @@ private:
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
     bool Rescheduled = false;
+    bool WaitComplete = false;
 };
 
 class TDataShard::TTxProposeTransactionBase : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -108,6 +109,7 @@ protected:
     TInstant CommitStart;
     bool Acked;
     bool Rescheduled = false;
+    bool WaitComplete = false;
     NWilson::TSpan ProposeTransactionSpan;
 };
 

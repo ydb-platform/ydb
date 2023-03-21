@@ -89,12 +89,12 @@ public:
 
                 if (!Op->IsInProgress() && !Op->IsExecutionPlanFinished()) {
                     Self->Pipeline.AddCandidateOp(Op);
+
+                    if (Self->Pipeline.CanRunAnotherOp()) {
+                        Self->PlanQueue.Progress(ctx);
+                    }
                 }
             }
-        }
-
-        if (Self->Pipeline.CanRunAnotherOp()) {
-            Self->PlanQueue.Progress(ctx);
         }
     }
 

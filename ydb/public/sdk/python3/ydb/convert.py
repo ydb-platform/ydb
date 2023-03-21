@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import decimal
 from google.protobuf import struct_pb2
-import six
 
 from . import issues, types, _apis
 
@@ -13,7 +12,7 @@ _DecimalNanRepr = 10**35 + 1
 _DecimalInfRepr = 10**35
 _DecimalSignedInfRepr = -(10**35)
 _primitive_type_by_id = {}
-_default_allow_truncated_result = True
+_default_allow_truncated_result = False
 
 
 def _initialize():
@@ -82,9 +81,7 @@ def _pb_to_list(type_pb, value_pb, table_client_settings):
 def _pb_to_tuple(type_pb, value_pb, table_client_settings):
     return tuple(
         _to_native_value(item_type, item_value, table_client_settings)
-        for item_type, item_value in six.moves.zip(
-            type_pb.tuple_type.elements, value_pb.items
-        )
+        for item_type, item_value in zip(type_pb.tuple_type.elements, value_pb.items)
     )
 
 
@@ -107,7 +104,7 @@ class _Struct(_DotDict):
 
 def _pb_to_struct(type_pb, value_pb, table_client_settings):
     result = _Struct()
-    for member, item in six.moves.zip(type_pb.struct_type.members, value_pb.items):
+    for member, item in zip(type_pb.struct_type.members, value_pb.items):
         result[member.name] = _to_native_value(member.type, item, table_client_settings)
     return result
 
@@ -202,9 +199,7 @@ def _list_to_pb(type_pb, value):
 
 def _tuple_to_pb(type_pb, value):
     value_pb = _apis.ydb_value.Value()
-    for element_type, element_value in six.moves.zip(
-        type_pb.tuple_type.elements, value
-    ):
+    for element_type, element_value in zip(type_pb.tuple_type.elements, value):
         value_item_proto = value_pb.items.add()
         value_item_proto.MergeFrom(_from_native_value(element_type, element_value))
     return value_pb
@@ -290,7 +285,7 @@ def parameters_to_pb(parameters_types, parameters_values):
         return {}
 
     param_values_pb = {}
-    for name, type_pb in six.iteritems(parameters_types):
+    for name, type_pb in parameters_types.items():
         result = _apis.ydb_value.TypedValue()
         ttype = type_pb
         if isinstance(type_pb, types.AbstractTypeBuilder):
@@ -332,7 +327,7 @@ class _ResultSet(object):
 
         for row_proto in message.rows:
             row = _Row(message.columns)
-            for column, value, column_info in six.moves.zip(
+            for column, value, column_info in zip(
                 message.columns, row_proto.items, column_parsers
             ):
                 v_type = value.WhichOneof("value")
@@ -400,9 +395,7 @@ class _LazyRow(_DotDict):
         super(_LazyRow, self).__init__()
         self._columns = columns
         self._table_client_settings = table_client_settings
-        for i, (column, row_item) in enumerate(
-            six.moves.zip(self._columns, proto_row.items)
-        ):
+        for i, (column, row_item) in enumerate(zip(self._columns, proto_row.items)):
             super(_LazyRow, self).__setitem__(
                 column.name,
                 _LazyRowItem(row_item, column.type, table_client_settings, parsers[i]),

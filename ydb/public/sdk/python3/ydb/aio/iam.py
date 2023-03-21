@@ -3,7 +3,6 @@ import time
 
 import abc
 import logging
-import six
 from ydb.iam import auth
 from .credentials import AbstractExpiringTokenCredentials
 
@@ -24,7 +23,6 @@ except ImportError:
     aiohttp = None
 
 
-@six.add_metaclass(abc.ABCMeta)
 class TokenServiceCredentials(AbstractExpiringTokenCredentials):
     def __init__(self, iam_endpoint=None, iam_channel_credentials=None):
         super(TokenServiceCredentials, self).__init__()

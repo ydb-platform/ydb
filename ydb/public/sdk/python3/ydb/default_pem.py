@@ -1,6 +1,3 @@
-import six
-
-
 data = """
 # Issuer: CN=GlobalSign Root CA O=GlobalSign nv-sa OU=Root CA
 # Subject: CN=GlobalSign Root CA O=GlobalSign nv-sa OU=Root CA
@@ -4686,6 +4683,4 @@ LpuQKbSbIERsmR+QqQ==
 def load_default_pem():
     global data
 
-    if six.PY3:
-        return data.encode("utf-8")
-    return data
+    return data.encode("utf-8")

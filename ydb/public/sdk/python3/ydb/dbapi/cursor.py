@@ -5,8 +5,6 @@ import datetime
 import itertools
 import logging
 
-import six
-
 import ydb
 from .errors import DatabaseError
 
@@ -42,7 +40,7 @@ def render_datetime(value):
 def render(value):
     if value is None:
         return "NULL"
-    if isinstance(value, six.string_types):
+    if isinstance(value, str):
         return render_str(value)
     if isinstance(value, datetime.datetime):
         return render_datetime(value)

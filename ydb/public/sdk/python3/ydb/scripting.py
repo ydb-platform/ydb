@@ -1,6 +1,7 @@
+import typing
+
 # Workaround for good IDE and universal for runtime
-# noinspection PyUnreachableCode
-if False:
+if typing.TYPE_CHECKING:
     from ._grpc.v4.protos import ydb_scripting_pb2
     from ._grpc.v4 import ydb_scripting_v1_pb2_grpc
 else:

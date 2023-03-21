@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from google.protobuf import text_format
 import enum
-from six.moves import queue
+import queue
 
 from . import _apis
 
@@ -159,9 +159,16 @@ class SessionPoolEmpty(Error, queue.Empty):
 def _format_issues(issues):
     if not issues:
         return ""
+
     return " ,".join(
-        [text_format.MessageToString(issue, False, True) for issue in issues]
+        text_format.MessageToString(issue, as_utf8=False, as_one_line=True)
+        for issue in issues
     )
+
+
+def _format_response(response):
+    fmt_issues = _format_issues(response.issues)
+    return f"{fmt_issues} (server_code: {response.status})"
 
 
 _success_status_codes = {StatusCode.STATUS_CODE_UNSPECIFIED, StatusCode.SUCCESS}
@@ -190,4 +197,4 @@ _server_side_error_map = {
 def _process_response(response_proto):
     if response_proto.status not in _success_status_codes:
         exc_obj = _server_side_error_map.get(response_proto.status)
-        raise exc_obj(_format_issues(response_proto.issues), response_proto.issues)
+        raise exc_obj(_format_response(response_proto), response_proto.issues)

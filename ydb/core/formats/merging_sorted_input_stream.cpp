@@ -8,17 +8,104 @@
 
 namespace NKikimr::NArrow {
 
+class TRowsBuffer : public IRowsBuffer {
+public:
+    using TBuilders = std::vector<std::unique_ptr<arrow::ArrayBuilder>>;
+
+    static constexpr const size_t BUFFER_SIZE = 256;
+
+    TRowsBuffer(TBuilders& columns, size_t maxRows)
+        : Columns(columns)
+        , MaxRows(maxRows)
+    {
+        Rows.reserve(BUFFER_SIZE);
+    }
+
+    bool AddRow(const TSortCursor& cursor) override {
+        Rows.emplace_back(cursor->all_columns, cursor->getRow());
+        if (Rows.size() >= BUFFER_SIZE) {
+            Flush();
+        }
+        ++AddedRows;
+        return true;
+    }
+
+    void Flush() override {
+        if (Rows.empty()) {
+            return;
+        }
+        for (size_t i = 0; i < Columns.size(); ++i) {
+            arrow::ArrayBuilder& builder = *Columns[i];
+            for (auto& [srcColumn, rowPosition] : Rows) {
+                Append(builder, *srcColumn->at(i), rowPosition);
+            }
+        }
+        Rows.clear();
+    }
+
+    bool Limit() const override {
+        return MaxRows && (AddedRows >= MaxRows);
+    }
+
+private:
+    TBuilders& Columns;
+    std::vector<std::pair<const TArrayVec*, size_t>> Rows;
+    size_t MaxRows = 0;
+    size_t AddedRows = 0;
+};
+
+class TSlicedRowsBuffer : public IRowsBuffer {
+public:
+    TSlicedRowsBuffer(size_t maxRows)
+        : MaxRows(maxRows)
+    {}
+
+    bool AddRow(const TSortCursor& cursor) override {
+        if (!Batch) {
+            Batch = cursor->current_batch;
+            Offset = cursor->getRow();
+        }
+        if (Batch.get() != cursor->current_batch.get()) {
+            // append from another batch
+            return false;
+        } else if (cursor->getRow() != (Offset + AddedRows)) {
+            // append from the same batch with data hole
+            return false;
+        }
+        ++AddedRows;
+        return true;
+    }
+
+    void Flush() override {
+    }
+
+    bool Limit() const override {
+        return MaxRows && (AddedRows >= MaxRows);
+    }
+
+    std::shared_ptr<arrow::RecordBatch> GetBatch() {
+        if (Batch) {
+            return Batch->Slice(Offset, AddedRows);
+        }
+        return {};
+    }
+
+private:
+    std::shared_ptr<arrow::RecordBatch> Batch;
+    size_t Offset = 0;
+    size_t MaxRows = 0;
+    size_t AddedRows = 0;
+};
+
 TMergingSortedInputStream::TMergingSortedInputStream(const std::vector<IInputStream::TPtr>& inputs,
                                                      std::shared_ptr<TSortDescription> description,
-                                                     size_t maxBatchRows,
-                                                     ui64 limit)
+                                                     size_t maxBatchRows, bool slice)
     : Description(description)
     , MaxBatchSize(maxBatchRows)
-    , Limit(limit)
+    , SliceSources(slice)
     , SourceBatches(inputs.size())
     , Cursors(inputs.size())
 {
-    Y_VERIFY(MaxBatchSize);
     Children.insert(Children.end(), inputs.begin(), inputs.end());
     Header = Children.at(0)->Schema();
 }
@@ -41,7 +128,7 @@ void TMergingSortedInputStream::Init() {
 
         const size_t rows = batch->num_rows();
         if (ExpectedBatchSize < rows) {
-            ExpectedBatchSize = std::min(rows, MaxBatchSize);
+            ExpectedBatchSize = MaxBatchSize ? std::min(rows, MaxBatchSize) : rows;
         }
 
         Cursors[i] = TSortCursorImpl(batch, Description, i);
@@ -52,7 +139,7 @@ void TMergingSortedInputStream::Init() {
     /// Let's check that all source blocks have the same structure.
     for (const auto& batch : SourceBatches) {
         if (batch) {
-            Y_VERIFY(batch->schema()->Equals(*Header));
+            Y_VERIFY_DEBUG(batch->schema()->Equals(*Header));
         }
     }
 }
@@ -62,24 +149,33 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
         return {};
     }
 
-    if (Children.size() == 1 && !Description->Replace() && !Limit) {
+    if (Children.size() == 1 && !Description->Replace()) {
         return Children[0]->Read();
     }
 
     if (First) {
         Init();
     }
-    auto builders = NArrow::MakeBuilders(Header, ExpectedBatchSize);
-    if (builders.empty()) {
-        return {};
+
+    if (SliceSources) {
+        Y_VERIFY_DEBUG(!Description->Reverse);
+        TSlicedRowsBuffer rowsBuffer(MaxBatchSize);
+        Merge(rowsBuffer, Queue);
+        return rowsBuffer.GetBatch();
+    } else {
+        auto builders = NArrow::MakeBuilders(Header, ExpectedBatchSize);
+        if (builders.empty()) {
+            return {};
+        }
+
+        Y_VERIFY(builders.size() == (size_t)Header->num_fields());
+        TRowsBuffer rowsBuffer(builders, MaxBatchSize);
+        Merge(rowsBuffer, Queue);
+
+        auto arrays = NArrow::Finish(std::move(builders));
+        Y_VERIFY(arrays.size());
+        return arrow::RecordBatch::Make(Header, arrays[0]->length(), arrays);
     }
-
-    Y_VERIFY(builders.size() == (size_t)Header->num_fields());
-    Merge(builders, Queue);
-
-    auto arrays = NArrow::Finish(std::move(builders));
-    Y_VERIFY(arrays.size());
-    return arrow::RecordBatch::Make(Header, arrays[0]->length(), arrays);
 }
 
 /// Get the next block from the corresponding source, if there is one.
@@ -97,9 +193,8 @@ void TMergingSortedInputStream::FetchNextBatch(const TSortCursor& current, TSort
         }
 
         if (batch->num_rows()) {
-#if 1
-            Y_VERIFY(batch->schema()->Equals(*Header));
-#endif
+            Y_VERIFY_DEBUG(batch->schema()->Equals(*Header));
+
             Cursors[order].Reset(batch);
             queue.ReplaceTop(TSortCursor(&Cursors[order], Description->NotNull));
             break;
@@ -107,66 +202,43 @@ void TMergingSortedInputStream::FetchNextBatch(const TSortCursor& current, TSort
     }
 }
 
-static void AppendResetRows(TMergingSortedInputStream::TBuilders& columns,
-                            std::vector<std::pair<const TArrayVec*, size_t>>& rows) {
-    if (rows.empty()) {
-        return;
-    }
-    for (size_t i = 0; i < columns.size(); ++i) {
-        arrow::ArrayBuilder& builder = *columns[i];
-        for (auto& [srcColumn, rowPosition] : rows) {
-            Append(builder, *srcColumn->at(i), rowPosition);
-        }
-    }
-    rows.clear();
-}
-
-/// Take rows in required order and put them into `mergedColumns`,
+/// Take rows in required order and put them into `rowBuffer`,
 /// while the number of rows are no more than `max_block_size`
-void TMergingSortedInputStream::Merge(TBuilders& mergedColumns, TSortingHeap& queue) {
-    static constexpr const size_t BUFFER_SIZE = 256;
-    std::vector<std::pair<const TArrayVec*, size_t>> rowsBuffer;
-    rowsBuffer.reserve(BUFFER_SIZE);
-
-    for (size_t mergedRows = 0; queue.IsValid();) {
-        if (Limit && TotalMergedRows >= Limit) {
-            break;
-        }
-        if (mergedRows >= MaxBatchSize) {
-            AppendResetRows(mergedColumns, rowsBuffer);
+void TMergingSortedInputStream::Merge(IRowsBuffer& rowsBuffer, TSortingHeap& queue) {
+    while (queue.IsValid()) {
+        if (rowsBuffer.Limit()) {
+            rowsBuffer.Flush();
             return;
         }
 
         auto current = queue.Current();
 
-        bool append = true;
         if (Description->Replace()) {
             auto key = std::make_shared<TReplaceKey>(current->replace_columns, current->getRow());
-            if (PrevKey && *key == *PrevKey) {
-                append = false;
+            bool isDup = (PrevKey && *key == *PrevKey);
+
+            if (isDup || rowsBuffer.AddRow(current)) {
+                PrevKey = key;
+            } else {
+                rowsBuffer.Flush();
+                return;
             }
-            PrevKey = key;
-        }
-
-        if (append) {
-            rowsBuffer.emplace_back(current->all_columns.get(), current->getRow());
-            ++mergedRows;
-            ++TotalMergedRows;
-        }
-
-        if (rowsBuffer.size() == BUFFER_SIZE) {
-            AppendResetRows(mergedColumns, rowsBuffer);
+        } else {
+            if (!rowsBuffer.AddRow(current)) {
+                rowsBuffer.Flush();
+                return;
+            }
         }
 
         if (!current->isLast()) {
             queue.Next();
         } else {
-            AppendResetRows(mergedColumns, rowsBuffer);
+            rowsBuffer.Flush();
             FetchNextBatch(current, queue);
         }
     }
 
-    AppendResetRows(mergedColumns, rowsBuffer);
+    rowsBuffer.Flush();
 
     /// We have read all data. Ask children to cancel providing more data.
     Cancel();

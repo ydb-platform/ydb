@@ -45,10 +45,12 @@ struct TSortDescription {
 /// Cursor moves inside single block. It is used in priority queue.
 struct TSortCursorImpl {
     std::shared_ptr<TArrayVec> sort_columns;
-    std::shared_ptr<TArrayVec> all_columns;
-    std::shared_ptr<TArrayVec> replace_columns;
     std::shared_ptr<TSortDescription> desc;
     ui32 order = 0; // Number of cursor. It determines an order if comparing columns are equal.
+    //
+    std::shared_ptr<arrow::RecordBatch> current_batch;
+    const TArrayVec* all_columns;
+    std::shared_ptr<TArrayVec> replace_columns;
 
     TSortCursorImpl() = default;
 
@@ -64,8 +66,9 @@ struct TSortCursorImpl {
     size_t LastRow() const { return Rows() - 1; }
 
     void Reset(std::shared_ptr<arrow::RecordBatch> batch) {
+        current_batch = batch;
         sort_columns = std::make_shared<TArrayVec>(ExtractColumns(batch, desc->SortingKey)->columns());
-        all_columns = std::make_shared<TArrayVec>(batch->columns());
+        all_columns = &batch->columns();
         if (desc->ReplaceKey) {
             replace_columns = std::make_shared<TArrayVec>(ExtractColumns(batch, desc->ReplaceKey)->columns());
         }

@@ -85,7 +85,10 @@ std::shared_ptr<arrow::RecordBatch> CombineSortedBatches(const std::vector<std::
                                                          const std::shared_ptr<TSortDescription>& description);
 std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                                                     const std::shared_ptr<TSortDescription>& description,
-                                                                    size_t maxBatchRows, ui64 limit = 0);
+                                                                    size_t maxBatchRows);
+std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
+                                                                    const std::shared_ptr<TSortDescription>& description,
+                                                                    size_t maxBatchRows = 0);
 std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                                const std::vector<ui32>& sharding,
                                                                ui32 numShards);

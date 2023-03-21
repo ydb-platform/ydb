@@ -84,22 +84,44 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
             continue;
         }
 
-        // The core of optimization: do not merge slice if it's alone in its key range
+        // Do not merge slice if it's alone in its key range
         if (slices.size() == 1) {
             auto batch = slices[0];
             if (batchesToDedup.count(batch.get())) {
+#if 1
+                auto deduped = SliceSortedBatches({batch}, description);
+                for (auto& batch : deduped) {
+                    if (batch && batch->num_rows()) {
+                        Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, description->ReplaceKey));
+                        out.push_back(batch);
+                    }
+                }
+#else
                 if (!NArrow::IsSortedAndUnique(batch, description->ReplaceKey)) {
                     batch = NArrow::CombineSortedBatches({batch}, description);
                     Y_VERIFY(batch);
+                    Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, description->ReplaceKey));
+                    out.push_back(batch);
                 }
+#endif
+            } else {
+                Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, description->ReplaceKey));
+                out.push_back(batch);
             }
-            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, description->ReplaceKey));
-            out.push_back(batch);
             continue;
         }
-
+#if 1
+        auto deduped = SliceSortedBatches(slices, description);
+        for (auto& batch : deduped) {
+            if (batch && batch->num_rows()) {
+                Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, description->ReplaceKey));
+                out.push_back(batch);
+            }
+        }
+#else
         auto batch = NArrow::CombineSortedBatches(slices, description);
         out.push_back(batch);
+#endif
     }
 
     return out;

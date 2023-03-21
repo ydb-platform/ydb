@@ -692,25 +692,6 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT(NArrow::IsSorted(sorted[0], descr->SortingKey));
         UNIT_ASSERT(NArrow::IsSorted(sorted[1], descr->SortingKey));
         UNIT_ASSERT(RestoreOne(sorted[0], 499) <= RestoreOne(sorted[1], 0));
-
-        {   // maxBatchSize = 1000, limit = 500
-            TVector<NArrow::IInputStream::TPtr> streams;
-            for (auto& batch : batches) {
-                streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
-            }
-
-            NArrow::IInputStream::TPtr mergeStream =
-                std::make_shared<NArrow::TMergingSortedInputStream>(streams, descr, 1000, 500);
-
-            while (auto batch = mergeStream->Read()) {
-                sorted.emplace_back(batch);
-            }
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(sorted.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(sorted[2]->num_rows(), 500);
-        UNIT_ASSERT(CheckSorted(sorted[2]));
-        UNIT_ASSERT_VALUES_EQUAL(RestoreOne(sorted[0], 499), RestoreOne(sorted[2], 499));
     }
 
     Y_UNIT_TEST(MergingSortedInputStreamReversed) {
@@ -751,25 +732,6 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT(NArrow::IsSorted(sorted[0], descr->SortingKey, true));
         UNIT_ASSERT(NArrow::IsSorted(sorted[1], descr->SortingKey, true));
         UNIT_ASSERT(RestoreOne(sorted[0], 499) >= RestoreOne(sorted[1], 0));
-
-        {   // maxBatchSize = 1000, limit = 500
-            TVector<NArrow::IInputStream::TPtr> streams;
-            for (auto& batch : batches) {
-                streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
-            }
-
-            NArrow::IInputStream::TPtr mergeStream =
-                std::make_shared<NArrow::TMergingSortedInputStream>(streams, descr, 1000, 500);
-
-            while (auto batch = mergeStream->Read()) {
-                sorted.emplace_back(batch);
-            }
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(sorted.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(sorted[2]->num_rows(), 500);
-        UNIT_ASSERT(CheckSorted(sorted[2], true));
-        UNIT_ASSERT_VALUES_EQUAL(RestoreOne(sorted[0], 499), RestoreOne(sorted[2], 499));
     }
 
     Y_UNIT_TEST(MergingSortedInputStreamReplace) {

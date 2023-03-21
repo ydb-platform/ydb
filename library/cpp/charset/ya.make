@@ -1,5 +1,9 @@
 LIBRARY()
 
+IF (NOT OPENSOURCE)
+    CXXFLAGS(-DUSE_ICONV_EXTENSIONS)
+ENDIF()
+
 SRCS(
     generated/cp_data.cpp
     generated/encrec_data.cpp

@@ -290,11 +290,31 @@ bool TSortedConstraintNode::IsPrefixOf(const TSortedConstraintNode& node) const 
     return node.Includes(*this);
 }
 
-const TSortedConstraintNode::TFullSetType TSortedConstraintNode::GetAllSets() const {
+TSortedConstraintNode::TFullSetType TSortedConstraintNode::GetAllSets() const {
     TFullSetType sets;
     for (const auto& key : Content_)
         sets.insert_unique(key.first);
     return sets;
+}
+
+void TSortedConstraintNode::FilterUncompleteReferences(TSetType& references) const {
+    TSetType complete;
+    complete.reserve(references.size());
+
+    for (const auto& item : Content_) {
+        bool found = false;
+        for (const auto& path : item.first) {
+            if (references.contains(path)) {
+                found = true;
+                complete.insert_unique(path);
+            }
+        }
+
+        if (!found)
+            break;
+    }
+
+    references = std::move(complete);
 }
 
 const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx) {
@@ -675,6 +695,14 @@ bool TUniqueConstraintNodeBase<Distinct>::HasEqualColumns(const std::vector<std:
 }
 
 template<bool Distinct>
+void TUniqueConstraintNodeBase<Distinct>::FilterUncompleteReferences(TSetType& references) const {
+    for (const auto& set : Sets_) {
+        if (!std::all_of(set.cbegin(), set.cend(), std::bind(&TSetType::contains<TPathType>, std::cref(references), std::placeholders::_1)))
+            std::for_each(set.cbegin(), set.cend(), [&references] (const TPathType& path) { references.erase(path); });
+    }
+}
+
+template<bool Distinct>
 const TUniqueConstraintNodeBase<Distinct>*
 TUniqueConstraintNodeBase<Distinct>::FilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
     auto sets = Sets_;
@@ -908,6 +936,34 @@ TPartOfConstraintNode<TOriginalConstraintNode>::RenameFields(TExprContext& ctx, 
         else
             ++part;
     }
+    return mapping.empty() ? nullptr : ctx.MakeConstraint<TPartOfConstraintNode>(std::move(mapping));
+}
+
+template<class TOriginalConstraintNode>
+const TPartOfConstraintNode<TOriginalConstraintNode>*
+TPartOfConstraintNode<TOriginalConstraintNode>::CompleteOnly(TExprContext& ctx) const {
+    TMapType mapping(Mapping_);
+
+    for (auto it = mapping.begin(); mapping.end() != it;) {
+        TSetType set;
+        set.reserve(it->second.size());
+        std::for_each(it->second.cbegin(), it->second.cend(), [&](const TPartType::value_type& pair) { set.insert_unique(pair.second); });
+
+        it->first->FilterUncompleteReferences(set);
+
+        for (auto jt = it->second.cbegin(); it->second.cend() != jt;) {
+            if (set.contains(jt->second))
+                ++jt;
+            else
+                jt = it->second.erase(jt);
+        }
+
+        if (it->second.empty())
+            it = mapping.erase(it);
+        else
+            ++it;
+    }
+
     return mapping.empty() ? nullptr : ctx.MakeConstraint<TPartOfConstraintNode>(std::move(mapping));
 }
 

@@ -162,10 +162,10 @@ public:
         Functions["ForceRemoveMember"] = &TCallableConstraintTransformer::RemoveMemberWrap;
         Functions["ReplaceMember"] = &TCallableConstraintTransformer::ReplaceMemberWrap;
         Functions["AsList"] = &TCallableConstraintTransformer::AsListWrap;
-        Functions["OptionalIf"] = &TCallableConstraintTransformer::FromSecond<TPassthroughConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TSortedConstraintNode, TPartOfSortedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
-        Functions["ListIf"] = &TCallableConstraintTransformer::CopyAllFrom<1>;
-        Functions["FlatListIf"] = &TCallableConstraintTransformer::CopyAllFrom<1>;
-        Functions["FlatOptionalIf"] = &TCallableConstraintTransformer::CopyAllFrom<1>;
+        Functions["OptionalIf"] = &TCallableConstraintTransformer::PassOrEmptyWrap<false, false>;
+        Functions["FlatOptionalIf"] = &TCallableConstraintTransformer::PassOrEmptyWrap<false, true>;
+        Functions["ListIf"] = &TCallableConstraintTransformer::PassOrEmptyWrap<true, false>;
+        Functions["FlatListIf"] = &TCallableConstraintTransformer::PassOrEmptyWrap<true, true>;
         Functions["EmptyIterator"] = &TCallableConstraintTransformer::FromEmpty;
         Functions["List"] = &TCallableConstraintTransformer::ListWrap;
         Functions["Dict"] = &TCallableConstraintTransformer::DictWrap;
@@ -1696,6 +1696,31 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
         return TStatus::Ok;
+    }
+
+    template<bool IsList, bool IsFlat>
+    TStatus PassOrEmptyWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        if (const auto part = input->Tail().GetConstraint<TPartOfSortedConstraintNode>())
+            if (const auto filtered = part->CompleteOnly(ctx))
+                input->AddConstraint(filtered);
+
+        if (const auto part = input->Tail().GetConstraint<TPartOfDistinctConstraintNode>())
+            if (const auto filtered = part->CompleteOnly(ctx))
+                input->AddConstraint(filtered);
+
+        if (const auto part = input->Tail().GetConstraint<TPartOfUniqueConstraintNode>())
+            if constexpr (IsList) {
+                if (const auto filtered = part->CompleteOnly(ctx))
+                    input->AddConstraint(filtered);
+            } else
+                input->AddConstraint(part);
+
+        if constexpr (IsFlat) {
+            if (const auto empty = input->Tail().GetConstraint<TEmptyConstraintNode>())
+                input->AddConstraint(empty);
+        }
+
+        return FromSecond<TPassthroughConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TSortedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
     }
 
     TStatus IfWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {

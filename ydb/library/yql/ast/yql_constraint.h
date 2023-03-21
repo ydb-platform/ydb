@@ -24,7 +24,6 @@ class TConstraintNode {
 protected:
     TConstraintNode(TExprContext& ctx, std::string_view name);
     TConstraintNode(TConstraintNode&& constr);
-
 public:
     using TPathType = std::deque<std::string_view>;
     using TSetType = NSorted::TSimpleSet<TPathType>;
@@ -193,7 +192,7 @@ public:
         return Content_;
     }
 
-    const TFullSetType GetAllSets() const;
+    TFullSetType GetAllSets() const;
 
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
@@ -203,6 +202,8 @@ public:
     bool IsPrefixOf(const TSortedConstraintNode& node) const;
 
     const TSortedConstraintNode* CutPrefix(size_t newPrefixLength, TExprContext& ctx) const;
+
+    void FilterUncompleteReferences(TSetType& references) const;
 
     static const TSortedConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
     const TSortedConstraintNode* MakeCommon(const TSortedConstraintNode* other, TExprContext& ctx) const;
@@ -240,6 +241,8 @@ public:
 
     bool IsOrderBy(const TSortedConstraintNode& sorted) const;
     bool HasEqualColumns(const std::vector<std::string_view>& columns) const;
+
+    void FilterUncompleteReferences(TSetType& references) const;
 
     static const TUniqueConstraintNodeBase* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
     const TUniqueConstraintNodeBase* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
@@ -304,6 +307,7 @@ public:
     const TPartOfConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
     const TPartOfConstraintNode* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
     const TPartOfConstraintNode* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
+    const TPartOfConstraintNode* CompleteOnly(TExprContext& ctx) const;
 
     static const TPartOfConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 
@@ -426,13 +430,8 @@ private:
     TMapType Mapping_;
 };
 
-class TMultiConstraintNode: public TConstraintNode {
+class TMultiConstraintNode final: public TConstraintNode {
 public:
-    struct TConstraintKey {
-        TStringBuf operator()(const TConstraintNode* node) const {
-            return node->GetName();
-        }
-    };
     using TMapType = NSorted::TSimpleMap<ui32, TConstraintSet>;
 
 public:
@@ -464,7 +463,7 @@ public:
 
     bool FilteredIncludes(const TConstraintNode& node, const THashSet<TString>& blacklist) const;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
-protected:
+private:
     TMapType Items_;
 };
 

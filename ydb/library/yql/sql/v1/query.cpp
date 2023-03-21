@@ -659,9 +659,14 @@ public:
                 columnsSet.insert(col.Name);
             }
 
+            THashSet<TString> pkColumns;
             for (auto& keyColumn : Params.PkColumns) {
                 if (!columnsSet.contains(keyColumn.Name)) {
                     ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
+                    return false;
+                }
+                if (!pkColumns.insert(keyColumn.Name).second) {
+                    ctx.Error(keyColumn.Pos) << "Duplicated column in PK: " << keyColumn.Name;
                     return false;
                 }
             }
@@ -741,13 +746,18 @@ public:
             opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
         }
 
+        THashSet<TString> notNullColumnsSet;
+        auto notNullColumns = Y();
         auto columns = Y();
         for (auto& col : Params.Columns) {
             auto columnDesc = Y();
             columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
             auto type = col.Type;
             if (col.Nullable) {
-                type = Y("OptionalType", type);
+                type = Y("AsOptionalType", type);
+            } else {
+                if (notNullColumnsSet.insert(col.Name).second)
+                    notNullColumns = L(notNullColumns, BuildQuotedAtom(Pos, col.Name));
             }
             columnDesc = L(columnDesc, type);
             if (col.Families) {
@@ -787,6 +797,10 @@ public:
                 ctx.Error() << "PRIMARY KEY cannot be used with ORDER BY, use PARTITION BY instead";
                 return false;
             }
+        }
+
+        if (!notNullColumnsSet.empty()) {
+            opts = L(opts, Q(Y(Q("notnull"), Q(notNullColumns))));
         }
 
         if (!Params.PartitionByColumns.empty()) {
@@ -959,7 +973,7 @@ public:
                 columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
                 auto type = col.Type;
                 if (col.Nullable) {
-                    type = Y("OptionalType", type);
+                    type = Y("AsOptionalType", type);
                 }
                 columnDesc = L(columnDesc, type);
                 if (col.Families) {

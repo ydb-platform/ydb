@@ -530,7 +530,7 @@ TChange ExtractUserAttrChange(const NKikimrSchemeOp::TModifyScheme& tx) {
                 result.Remove.push_back(key);
             } else {
                 str.clear();
-                str << key << ": " << "value";
+                str << key << ": " << value;
                 result.Add.push_back(str);
             }
         }

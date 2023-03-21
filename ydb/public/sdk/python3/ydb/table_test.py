@@ -1,5 +1,5 @@
 from unittest import mock
-from ydb import (
+from . import (
     retry_operation_impl,
     YdbRetryOperationFinalResult,
     issues,

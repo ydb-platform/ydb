@@ -1,9 +1,9 @@
-from ydb.scheme import (
+from .scheme import (
     SchemeEntryType,
     _wrap_scheme_entry,
     _wrap_list_directory_response,
 )
-from ydb._apis import ydb_scheme
+from ._apis import ydb_scheme
 
 
 def test_wrap_scheme_entry():

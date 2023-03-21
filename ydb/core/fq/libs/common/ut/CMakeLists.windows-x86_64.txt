@@ -22,6 +22,7 @@ target_link_libraries(ydb-core-fq-libs-common-ut PUBLIC
   cpp-testing-unittest_main
   fq-libs-common
   udf-service-stub
+  yql-sql-pg_dummy
   ydb-services-ydb
 )
 target_sources(ydb-core-fq-libs-common-ut PRIVATE

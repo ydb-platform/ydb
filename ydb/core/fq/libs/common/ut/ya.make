@@ -14,6 +14,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/public/udf/service/stub
+    ydb/library/yql/sql/pg_dummy
     ydb/services/ydb
 )
 

@@ -2489,9 +2489,15 @@ namespace {
     }
 
     IGraphTransformer::TStatus ExtendWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!input->ChildrenSize()) {
-            output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
-            return IGraphTransformer::TStatus::Repeat;
+        switch (input->ChildrenSize()) {
+            case 0U:
+                output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
+                return IGraphTransformer::TStatus::Repeat;
+            case 1U:
+                output = input->HeadPtr();
+                return IGraphTransformer::TStatus::Repeat;
+            default:
+                break;
         }
 
         const bool hasEmptyLists = AnyOf(input->Children(), IsEmptyList);
@@ -2521,9 +2527,15 @@ namespace {
     }
 
     IGraphTransformer::TStatus UnionAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!input->ChildrenSize()) {
-            output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
-            return IGraphTransformer::TStatus::Repeat;
+        switch (input->ChildrenSize()) {
+            case 0U:
+                output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
+                return IGraphTransformer::TStatus::Repeat;
+            case 1U:
+                output = input->HeadPtr();
+                return IGraphTransformer::TStatus::Repeat;
+            default:
+                break;
         }
 
         const bool hasEmptyLists = AnyOf(input->Children(), IsEmptyList);

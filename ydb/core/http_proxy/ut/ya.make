@@ -8,9 +8,11 @@ PEERDIR(
     contrib/restricted/nlohmann_json
     library/cpp/resource
     ydb/core/http_proxy
-    ydb/public/sdk/cpp/client/ydb_types
-    ydb/library/yql/sql/pg_dummy
     ydb/library/yql/public/udf/service/exception_policy
+    ydb/library/yql/sql/pg_dummy
+    ydb/public/sdk/cpp/client/ydb_types
+    ydb/services/kesus
+    ydb/services/persqueue_cluster_discovery
 )
 
 SRCS(

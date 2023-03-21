@@ -20,9 +20,11 @@ target_link_libraries(ydb-core-http_proxy-ut PUBLIC
   ydb-core-http_proxy
   contrib-restricted-nlohmann_json
   library-cpp-resource
-  cpp-client-ydb_types
-  yql-sql-pg_dummy
   udf-service-exception_policy
+  yql-sql-pg_dummy
+  cpp-client-ydb_types
+  ydb-services-kesus
+  ydb-services-persqueue_cluster_discovery
 )
 target_link_options(ydb-core-http_proxy-ut PRIVATE
   -ldl

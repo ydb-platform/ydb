@@ -20,9 +20,11 @@ target_link_libraries(ydb-core-http_proxy-ut PUBLIC
   ydb-core-http_proxy
   contrib-restricted-nlohmann_json
   library-cpp-resource
-  cpp-client-ydb_types
-  yql-sql-pg_dummy
   udf-service-exception_policy
+  yql-sql-pg_dummy
+  cpp-client-ydb_types
+  ydb-services-kesus
+  ydb-services-persqueue_cluster_discovery
 )
 target_sources(ydb-core-http_proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/ut/json_proto_conversion_ut.cpp

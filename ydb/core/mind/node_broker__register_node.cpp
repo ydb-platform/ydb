@@ -56,7 +56,7 @@ public:
 
         if (rec.HasPath() && ScopeId == NActors::TScopeId()) {
             return Error(TStatus::ERROR,
-                         TStringBuilder() << "Cannot resolve scope id for path" << rec.GetPath(),
+                         TStringBuilder() << "Cannot resolve scope id for path " << rec.GetPath(),
                          ctx);
         }
 

@@ -3,7 +3,7 @@
 The `topic read` command reads messages from a topic and outputs them to a file or the command-line terminal:
 
 ```bash
-{{ ydb-cli }} [connection options] topic read <topic-path> --consumer-name STR \
+{{ ydb-cli }} [connection options] topic read <topic-path> --consumer STR \
   [--format STR] [--wait] [--limit INT] \
   [--transform STR] [--file STR] [--commit BOOL] \
   [additional parameters...]
@@ -24,7 +24,7 @@ Three command modes are supported:
 | Name | Description |
 ---|---
 | `<topic-path>` | Topic path |
-| `-c VAL`, `--consumer-name VAL` | Topic consumer name.<br>Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).<br>The current offset is shifted as messages are consumed and output (if `--commit=false` is not set). |
+| `-c VAL`, `--consumer VAL` | Topic consumer name.<br>Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).<br>The current offset is shifted as messages are consumed and output (if `--commit=false` is not set). |
 
 ### Basic optional parameters
 

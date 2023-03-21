@@ -1701,13 +1701,10 @@ private:
     TStatus IfWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {
         std::vector<const TConstraintSet*> constraints;
         constraints.reserve((input->ChildrenSize() << 1U) + 1U);
-        if (1U != input->Tail().ChildrenSize() || !input->Tail().IsCallable({"List", "Nothing"}))
-            constraints.emplace_back(&input->Tail().GetConstraintSet());
+        constraints.emplace_back(&input->Tail().GetConstraintSet());
 
         for (auto i = 0U; i < input->ChildrenSize() - 1U; ++i) {
-            if (const auto child = input->Child(++i); 1U != child->ChildrenSize() || !child->IsCallable({"List", "Nothing"})) {// TODO: Use empty constraint.
-                constraints.emplace_back(&child->GetConstraintSet());
-            }
+            constraints.emplace_back(&input->Child(++i)->GetConstraintSet());
         }
 
         if (constraints.empty())
@@ -1716,7 +1713,6 @@ private:
             input->SetConstraints(**constraints.cbegin());
         else
             TApplyCommonConstraint<TSortedConstraintNode
-                , TSortedConstraintNode
                 , TPartOfSortedConstraintNode
                 , TUniqueConstraintNode
                 , TPartOfUniqueConstraintNode
@@ -1751,7 +1747,6 @@ private:
 
         const std::vector<const TConstraintSet*> both = { &lambda->GetConstraintSet(), &input->Tail().GetConstraintSet() };
         TApplyCommonConstraint<TSortedConstraintNode
-            , TSortedConstraintNode
             , TPartOfSortedConstraintNode
             , TUniqueConstraintNode
             , TPartOfUniqueConstraintNode

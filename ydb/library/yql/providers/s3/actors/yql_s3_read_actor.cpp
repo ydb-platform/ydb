@@ -1560,7 +1560,9 @@ public:
                 ReadyRowGroups.push(*it->second.RowGroupIndex);
             }
             ReadInflightSize[*it->second.RowGroupIndex] += size;
-            RawInflightSize->Add(size);
+            if (RawInflightSize) {
+                RawInflightSize->Add(size);
+            }
         }
     }
 

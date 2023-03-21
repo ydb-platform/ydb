@@ -20,8 +20,7 @@ jobs:
     - name: Configure
       shell: bash
       run: |
-        ls
-        ls ..
+        mkdir ../build
         cd ../build
         rm -rf *
         cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb

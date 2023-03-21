@@ -122,7 +122,7 @@ const char * GetFunctionName(EOperation op) {
         case EOperation::BinaryLength:
             return "binary_length";
         case EOperation::MatchSubstring:
-            return "match_substring";
+            return "match_substring_regex";
         case EOperation::MatchLike:
             return "match_like";
         case EOperation::StartsWith:

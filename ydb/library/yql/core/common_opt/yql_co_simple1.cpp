@@ -2369,7 +2369,7 @@ TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
         return ctx.NewCallable(node->Pos(), "EmptyIterator", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
     }
 
-    if (node->Head().IsCallable({"ForwardList", "LazyList", "ToStream"})) {
+    if (node->Head().IsCallable({"LazyList", "ToStream"})) {
         YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
         return ctx.ChangeChildren(*node, node->Head().ChildrenList());
     }

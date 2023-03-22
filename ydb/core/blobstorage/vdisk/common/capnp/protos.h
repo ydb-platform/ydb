@@ -607,7 +607,7 @@ namespace NKikimrCapnProto {
                 builder = other.builder;
             }
 
-            bool SerializeToZeroCopyStream(NActors::TAllocChunkSerializer *output) const {
+            bool SerializeToZeroCopyStream(NActors::TChunkSerializer *output) const {
                 NKikimrCapnProto_::TEvVGet::Builder b(builder);
                 auto interviews = b.initExtremeQueries(elements.size());
                 for (size_t i = 0; i != elements.size(); ++i) {

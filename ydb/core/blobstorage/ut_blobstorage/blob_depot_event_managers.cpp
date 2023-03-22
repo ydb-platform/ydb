@@ -538,28 +538,15 @@ void VerifyTEvCollectGarbageResult(TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvC
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::BLOCKED);
         }
     } else {
-        if (collect) {
-            if (hard) {
-                if (collectGeneration < hardCollectGen || (collectGeneration == hardCollectGen && collectStep < hardCollectStep)) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(status, NKikimrProto::OK);
-                }
-            } else {
-                if (collectGeneration < softCollectGen || (collectGeneration == softCollectGen && collectStep < softCollectStep)) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(status, NKikimrProto::OK);
-                }
-            }
-        }
-
         if (status == NKikimrProto::OK) {
-            if (collect) {
-                if (hard) {
-                    hardCollectGen = collectGeneration;
-                    hardCollectStep = collectStep;
-                } else {
-                    softCollectGen = collectGeneration;
-                    softCollectStep = collectStep;
-                }
+            if (hard) {
+                hardCollectGen = std::max(hardCollectGen, collectGeneration);
+                hardCollectStep = std::max(hardCollectStep, collectStep);
+            } else {
+                softCollectGen = std::max(softCollectGen, collectGeneration);
+                softCollectStep = std::max(softCollectStep, collectStep);
             }
+
             for (auto& blob : blobs) {
                 if (keep) {
                     if (setKeep.find(blob.Id) != setKeep.end()) {
@@ -573,7 +560,7 @@ void VerifyTEvCollectGarbageResult(TAutoPtr<TEventHandleFat<TEvBlobStorage::TEvC
                 }
 
                 if ((blob.Status == TBlobInfo::EStatus::WRITTEN) && (blob.Id.TabletID() == tabletId) && (blob.Id.Channel() == channel) &&
-                        IsCollected(blob, softCollectGen, softCollectStep, hardCollectGen, hardCollectStep)) {
+                        (hard || collect) && IsCollected(blob, softCollectGen, softCollectStep, hardCollectGen, hardCollectStep)) {
                     blob.Status = TBlobInfo::EStatus::COLLECTED;
                 }
             }

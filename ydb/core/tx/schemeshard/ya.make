@@ -170,6 +170,7 @@ SRCS(
     schemeshard__upgrade_access_database.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard_audit_log_fragment.cpp
+    schemeshard_audit_log.cpp
     schemeshard_impl.cpp
     schemeshard_impl.h
     schemeshard_billing_helpers.cpp

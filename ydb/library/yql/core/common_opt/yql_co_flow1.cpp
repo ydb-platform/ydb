@@ -1356,6 +1356,11 @@ TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx, T
         return node->Head().HeadPtr();
     }
 
+    if (node->Head().IsCallable("ForwardList")) {
+        YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
+        return ctx.ChangeChild(*node, 0U,  node->Head().HeadPtr());
+    }
+
     if (node->Head().IsCallable("Chopper")) {
         YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
         auto children = node->Head().ChildrenList();

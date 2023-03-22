@@ -18,6 +18,9 @@ struct TAuditLogFragment {
     TVector<TString> ACLRemove;
     TVector<TString> UserAttrsAdd;
     TVector<TString> UserAttrsRemove;
+    TString LoginUser;
+    TString LoginGroup;
+    TString LoginMember;
 };
 
 TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx);

@@ -987,8 +987,8 @@ void TCloudAuthCounters::InitCounters(TIntrusivePtr<::NMonitoring::TDynamicCount
             const auto actionAndCredentialCounters = actionCounters->GetSubgroup("credential_type", credentialTypeStr);
             
             if (actionType == NCloudAuth::EActionType::Authorize) {
-                INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, AuthorizeSuccess[credentialType], "success", ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
-                INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, AuthorizeError[credentialType], "error", ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
+                INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, AuthorizeSuccess[credentialType], "Ok", ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
+                INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, AuthorizeError[credentialType], "PermissionDenied", ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
             } else {
                 for (size_t grpcStatus = 0; grpcStatus < GRPC_STATUSES_COUNT; ++grpcStatus) {
                     INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, CloudAuthCounters[actionType][credentialType][grpcStatus], StringifyGrpcStatus(grpcStatus), ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));

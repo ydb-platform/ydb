@@ -8,7 +8,8 @@
 
 namespace {
 
-TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
+TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
+    NKikimrSchemeOp::EOperationType type = tx.GetOperationType();
     switch (type) {
     // common
     case NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL:
@@ -21,8 +22,27 @@ TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
         return "CREATE LOCK";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropLock:
         return "DROP LOCK";
+    // specify ESchemeOpAlterLogin with each separate case
+    // it looks a bit out of the scheme, but improve reading of audit logs
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin:
-        return "ALTER LOGIN";
+        switch (tx.GetAlterLogin().GetAlterCase()) {
+            case NKikimrSchemeOp::TAlterLogin::kCreateUser:
+                return "CREATE USER";
+            case NKikimrSchemeOp::TAlterLogin::kModifyUser:
+                return "MODIFY USER";
+            case NKikimrSchemeOp::TAlterLogin::kRemoveUser:
+                return "REMOVE USER";
+            case NKikimrSchemeOp::TAlterLogin::kCreateGroup:
+                return "CREATE GROUP";
+            case NKikimrSchemeOp::TAlterLogin::kAddGroupMembership:
+                return "ADD GROUP MEMBERSHIP";
+            case NKikimrSchemeOp::TAlterLogin::kRemoveGroupMembership:
+                return "REMOVE GROUP MEMBERSHIP";
+            case NKikimrSchemeOp::TAlterLogin::kRemoveGroup:
+                return "REMOVE GROUP";
+            default:
+                Y_FAIL("switch should cover all operation types");
+        }
     case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
         return "ESchemeOp_DEPRECATED_35";
     // dir
@@ -540,6 +560,46 @@ TChange ExtractUserAttrChange(const NKikimrSchemeOp::TModifyScheme& tx) {
     return {};
 }
 
+struct TChangeLogin {
+    TString LoginUser;
+    TString LoginGroup;
+    TString LoginMember;
+};
+
+TChangeLogin ExtractLoginChange(const NKikimrSchemeOp::TModifyScheme& tx) {
+    if (tx.HasAlterLogin()) {
+        TChangeLogin result;
+        switch (tx.GetAlterLogin().GetAlterCase()) {
+            case NKikimrSchemeOp::TAlterLogin::kCreateUser:
+                result.LoginUser = tx.GetAlterLogin().GetCreateUser().GetUser();
+                break;
+            case NKikimrSchemeOp::TAlterLogin::kModifyUser:
+                result.LoginUser = tx.GetAlterLogin().GetModifyUser().GetUser();
+                break;
+            case NKikimrSchemeOp::TAlterLogin::kRemoveUser:
+                result.LoginUser = tx.GetAlterLogin().GetRemoveUser().GetUser();
+                break;
+            case NKikimrSchemeOp::TAlterLogin::kCreateGroup:
+                result.LoginGroup = tx.GetAlterLogin().GetCreateGroup().GetGroup();
+                break;
+            case NKikimrSchemeOp::TAlterLogin::kAddGroupMembership:
+                result.LoginGroup = tx.GetAlterLogin().GetAddGroupMembership().GetGroup();
+                result.LoginMember = tx.GetAlterLogin().GetAddGroupMembership().GetMember();
+                break;
+            case NKikimrSchemeOp::TAlterLogin::kRemoveGroupMembership:
+                result.LoginGroup = tx.GetAlterLogin().GetRemoveGroupMembership().GetGroup();
+                result.LoginMember = tx.GetAlterLogin().GetRemoveGroupMembership().GetMember();
+                break;
+            case NKikimrSchemeOp::TAlterLogin::kRemoveGroup:
+                result.LoginGroup = tx.GetAlterLogin().GetRemoveGroup().GetGroup();
+                break;
+            default:
+                Y_FAIL("switch should cover all operation types");
+        }
+        return result;
+    }
+    return {};
+}
 
 } // anonymous namespace
 
@@ -548,14 +608,19 @@ namespace NKikimr::NSchemeShard {
 TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx) {
     auto [aclAdd, aclRemove] = ExtractACLChange(tx);
     auto [userAttrsAdd, userAttrsRemove] = ExtractUserAttrChange(tx);
+    auto [loginUser, loginGroup, loginMember] = ExtractLoginChange(tx);
+    
     return {
-        .Operation = DefineUserOperationName(tx.GetOperationType()),
+        .Operation = DefineUserOperationName(tx),
         .Paths = ExtractChangingPaths(tx),
         .NewOwner = ExtractNewOwner(tx),
         .ACLAdd = aclAdd,
         .ACLRemove = aclRemove,
         .UserAttrsAdd = userAttrsAdd,
         .UserAttrsRemove = userAttrsRemove,
+        .LoginUser = loginUser,
+        .LoginGroup = loginGroup,
+        .LoginMember = loginMember,
     };
 }
 

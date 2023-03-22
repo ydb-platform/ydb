@@ -1691,6 +1691,12 @@ public:
         return GroupLayoutSanitizer;
     }
 
+    // For test purposes, required for self heal actor
+    void CreateEmptyHostRecordsMap() {
+        TEvInterconnect::TEvNodesInfo nodes;
+        HostRecords = std::make_shared<THostRecordMapImpl>(&nodes);
+    }
+
 private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Online state

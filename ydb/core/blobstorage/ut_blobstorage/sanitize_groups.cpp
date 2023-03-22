@@ -1,5 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
-#include <ydb/core/mind/bscontroller/ut_layout_helpers.h>
+#include <ydb/core/mind/bscontroller/layout_helpers.h>
 
 Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
 
@@ -44,19 +44,19 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
 
         TString error;
         auto cfg = env.FetchBaseConfig();
-        UNIT_ASSERT_C(CheckGroupLayout(geom, cfg, error), error);
+        UNIT_ASSERT_C(CheckBaseConfigLayout(geom, cfg, error), error);
         env.Cleanup();
 
         std::random_shuffle(locations.begin(), locations.end());
         env.Initialize();
         env.Sim(TDuration::Seconds(100));
         cfg = env.FetchBaseConfig();
-        CheckGroupLayout(geom, cfg, error);
+        CheckBaseConfigLayout(geom, cfg, error);
         Cerr << error << Endl;
 
         env.UpdateSettings(true, false, true);
         env.Sim(TDuration::Minutes(15));
         cfg = env.FetchBaseConfig();
-        UNIT_ASSERT_C(CheckGroupLayout(geom, cfg, error), error);
+        UNIT_ASSERT_C(CheckBaseConfigLayout(geom, cfg, error), error);
     }
 }

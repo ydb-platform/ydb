@@ -1183,4 +1183,16 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TSetup setup;
         setup.Run(cases);
     }
+
+    Y_UNIT_TEST(UnaryOp) {
+        TCases cases = {
+            {"select -x,+x,~x,-1,-1.0,+1,+1.0,~1u",
+             "SELECT\n\t-x,\n\t+x,\n\t~x,\n\t-1,\n\t-1.0,\n\t+1,\n\t+1.0,\n\t~1u;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    
 }

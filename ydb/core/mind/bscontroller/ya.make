@@ -29,6 +29,8 @@ SRCS(
     impl.h
     indir.h
     init_scheme.cpp
+    layout_helpers.h
+    layout_helpers.cpp
     load_everything.cpp
     migrate.cpp
     monitoring.cpp

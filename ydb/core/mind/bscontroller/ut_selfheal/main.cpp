@@ -4,7 +4,7 @@
 
 #include "env.h"
 
-#include <ydb/core/mind/bscontroller/ut_layout_helpers.h>
+#include <ydb/core/mind/bscontroller/layout_helpers.h>
 
 Y_UNIT_TEST_SUITE(BsControllerTest) {
 
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
         }
 
         TString error;
-        UNIT_ASSERT_C(CheckGroupLayout(geom, response.GetStatus(0).GetBaseConfig(), error), "Initial group layout is incorrect, ErrorReason# "
+        UNIT_ASSERT_C(CheckBaseConfigLayout(geom, response.GetStatus(0).GetBaseConfig(), error), "Initial group layout is incorrect, ErrorReason# "
             << error);
 
         UNIT_ASSERT_VALUES_EQUAL(active.size(), numNodes * numDisksPerNode);
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
                     UNIT_FAIL("non-active disk is present in group");
                 }
             }
-            UNIT_ASSERT_C(CheckGroupLayout(geom, response.GetStatus(0).GetBaseConfig(), error), "Error on step# " << i
+            UNIT_ASSERT_C(CheckBaseConfigLayout(geom, response.GetStatus(0).GetBaseConfig(), error), "Error on step# " << i
                 << ", ErrorReason# " << error);
         }
     }

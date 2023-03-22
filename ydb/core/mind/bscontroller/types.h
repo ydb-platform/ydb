@@ -419,6 +419,9 @@ inline size_t THash<NKikimr::NBsController::TPDiskId>::operator ()(NKikimr::NBsC
     return THash<T>()(key);
 }
 
+template<>
+struct std::hash<NKikimr::NBsController::TPDiskId> : THash<NKikimr::NBsController::TPDiskId> {};
+
 inline size_t THash<NKikimr::NBsController::TVSlotId>::operator ()(NKikimr::NBsController::TVSlotId x) const {
     auto key = x.GetKey();
     using T = decltype(key);

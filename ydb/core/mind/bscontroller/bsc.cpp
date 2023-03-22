@@ -117,9 +117,6 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
         }
     }
 
-    // create self-heal actor
-    SelfHealId = Register(CreateSelfHealActor());
-
     // create stat processor
     StatProcessorActorId = Register(CreateStatProcessorActor());
 
@@ -154,10 +151,12 @@ void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     const bool initial = !HostRecords;
     HostRecords = std::make_shared<THostRecordMap::element_type>(ev->Get());
     Schedule(TDuration::Minutes(5), new TEvPrivate::TEvHostRecordsTimeToLiveExceeded);
-    Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
     if (initial) {
+        // create self-heal actor
+        SelfHealId = Register(CreateSelfHealActor());
         Execute(CreateTxInitScheme());
     }
+    Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
 }
 
 void TBlobStorageController::HandleHostRecordsTimeToLiveExceeded() {

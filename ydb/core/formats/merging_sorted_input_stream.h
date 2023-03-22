@@ -12,6 +12,7 @@ struct IRowsBuffer {
     virtual bool AddRow(const TSortCursor& cursor) = 0;
     virtual void Flush() = 0;
     virtual bool Limit() const = 0;
+    virtual bool HasLimit() const = 0;
 };
 
 /// Merges several sorted streams into one sorted stream.
@@ -44,6 +45,9 @@ private:
     void Init();
     void FetchNextBatch(const TSortCursor& current, TSortingHeap& queue);
     void Merge(IRowsBuffer& rowsBuffer, TSortingHeap& queue);
+
+    template <bool replace, bool limit>
+    void MergeImpl(IRowsBuffer& rowsBuffer, TSortingHeap& queue);
 };
 
 }

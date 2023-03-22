@@ -47,6 +47,10 @@ public:
         return MaxRows && (AddedRows >= MaxRows);
     }
 
+    bool HasLimit() const override {
+        return MaxRows;
+    }
+
 private:
     TBuilders& Columns;
     std::vector<std::pair<const TArrayVec*, size_t>> Rows;
@@ -81,6 +85,10 @@ public:
 
     bool Limit() const override {
         return MaxRows && (AddedRows >= MaxRows);
+    }
+
+    bool HasLimit() const override {
+        return MaxRows;
     }
 
     std::shared_ptr<arrow::RecordBatch> GetBatch() {
@@ -204,28 +212,40 @@ void TMergingSortedInputStream::FetchNextBatch(const TSortCursor& current, TSort
 
 /// Take rows in required order and put them into `rowBuffer`,
 /// while the number of rows are no more than `max_block_size`
-void TMergingSortedInputStream::Merge(IRowsBuffer& rowsBuffer, TSortingHeap& queue) {
+template <bool replace, bool limit>
+void TMergingSortedInputStream::MergeImpl(IRowsBuffer& rowsBuffer, TSortingHeap& queue) {
+    if constexpr (replace) {
+        if (!PrevKey && queue.IsValid()) {
+            auto current = queue.Current();
+            PrevKey = std::make_shared<TReplaceKey>(current->replace_columns, current->getRow());
+            if (!rowsBuffer.AddRow(current)) {
+                return;
+            }
+            // Do not get Next() for simplicity. Lead to a dup
+        }
+    }
+
     while (queue.IsValid()) {
-        if (rowsBuffer.Limit()) {
-            rowsBuffer.Flush();
-            return;
+        if constexpr (limit) {
+            if (rowsBuffer.Limit()) {
+                return;
+            }
         }
 
         auto current = queue.Current();
 
-        if (Description->Replace()) {
-            auto key = std::make_shared<TReplaceKey>(current->replace_columns, current->getRow());
-            bool isDup = (PrevKey && *key == *PrevKey);
+        if constexpr (replace) {
+            TReplaceKey key(current->replace_columns, current->getRow());
 
-            if (isDup || rowsBuffer.AddRow(current)) {
-                PrevKey = key;
+            if (key == *PrevKey) {
+                // do nothing
+            } else if (rowsBuffer.AddRow(current)) {
+                *PrevKey = key;
             } else {
-                rowsBuffer.Flush();
                 return;
             }
         } else {
             if (!rowsBuffer.AddRow(current)) {
-                rowsBuffer.Flush();
                 return;
             }
         }
@@ -238,11 +258,30 @@ void TMergingSortedInputStream::Merge(IRowsBuffer& rowsBuffer, TSortingHeap& que
         }
     }
 
-    rowsBuffer.Flush();
-
     /// We have read all data. Ask children to cancel providing more data.
     Cancel();
     Finished = true;
+}
+
+void TMergingSortedInputStream::Merge(IRowsBuffer& rowsBuffer, TSortingHeap& queue) {
+    const bool replace = Description->Replace();
+    const bool limit = rowsBuffer.HasLimit();
+
+    if (replace) {
+        if (limit) {
+            MergeImpl<true, true>(rowsBuffer, queue);
+        } else {
+            MergeImpl<true, false>(rowsBuffer, queue);
+        }
+    } else {
+        if (limit) {
+            MergeImpl<false, true>(rowsBuffer, queue);
+        } else {
+            MergeImpl<false, false>(rowsBuffer, queue);
+        }
+    }
+
+    rowsBuffer.Flush();
 }
 
 }

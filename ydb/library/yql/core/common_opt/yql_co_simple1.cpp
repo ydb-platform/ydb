@@ -1180,7 +1180,7 @@ TExprNode::TPtr OptimizeFlatContainerIf(const TExprNode::TPtr& node, TExprContex
     return node;
 }
 
-template <bool HeadOrTail, bool OrderAware = true>
+template <bool HeadOrTail>
 TExprNode::TPtr OptimizeToOptional(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().IsCallable("ToList")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
@@ -1196,13 +1196,6 @@ TExprNode::TPtr OptimizeToOptional(const TExprNode::TPtr& node, TExprContext& ct
     if (1U == nodeToCheck.ChildrenSize() && nodeToCheck.IsCallable("List")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over empty " << nodeToCheck.Content();
         return ctx.NewCallable(node->Head().Pos(), "Nothing", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
-    }
-
-    if constexpr (!OrderAware) {
-        if (node->Head().GetConstraint<TSortedConstraintNode>()) {
-            YQL_CLOG(DEBUG, Core) << node->Content() << " over sorted collection";
-            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
-        }
     }
 
     return node;
@@ -4566,7 +4559,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["ToOptional"] = std::bind(OptimizeToOptional<true, false>, _1, _2);
+    map["ToOptional"] = std::bind(OptimizeToOptional<true>, _1, _2);
     map["Head"] = std::bind(OptimizeToOptional<true>, _1, _2);
     map["Last"] = std::bind(OptimizeToOptional<false>, _1, _2);
 
@@ -4688,7 +4681,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return node->Head().HeadPtr();
         }
 
-        if (node->Head().IsCallable({"Map", "FlatMap", "Filter", "Extend"})) {
+        if (node->Head().IsCallable({"Unordered", "Map", "FlatMap", "MultiMap", "Filter", "Extend"})) {
             YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over unordered " << node->Head().Content();
             return node->HeadPtr();
         }
@@ -5327,11 +5320,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
         if (TCoNothing::Match(&node->Head())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-            return ctx.Builder(node->Pos())
-                .Callable("Nothing")
-                    .Add(0, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
-                .Seal()
-                .Build();
+            return Build<TCoNothing>(ctx, node->Pos())
+                .OptionalType(ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
+                .Done().Ptr();
         }
         return node;
     };

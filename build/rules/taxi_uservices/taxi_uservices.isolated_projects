@@ -571,6 +571,7 @@ taxi/uservices/services/market-datacamp-shopper-tms
 taxi/uservices/services/market-datacamp-stroller-api
 taxi/uservices/services/market-delivery-actualizer
 taxi/uservices/services/market-delivery-cost-calculator
+taxi/uservices/services/market-dynprice
 taxi/uservices/services/market-echo-example
 taxi/uservices/services/market-fast-mappings-reader
 taxi/uservices/services/market-hide-offers-aggregator

@@ -3,7 +3,6 @@ import time
 import abc
 import asyncio
 import logging
-import six
 from ydb import issues, credentials
 
 logger = logging.getLogger(__name__)
@@ -55,7 +54,6 @@ class _AtMostOneExecution(object):
             asyncio.ensure_future(self._wrapped_execution(callback))
 
 
-@six.add_metaclass(abc.ABCMeta)
 class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredentials):
     def __init__(self):
         super(AbstractExpiringTokenCredentials, self).__init__()

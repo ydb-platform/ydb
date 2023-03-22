@@ -22,7 +22,7 @@
 
 Имя | Описание
 ---|---
-`--consumer-name VAL` | Имя читателя, которого нужно удалить.
+`--consumer VAL` | Имя читателя, которого нужно удалить.
 
 ## Примеры {#examples}
 
@@ -32,6 +32,6 @@
 
 ```bash
 {{ ydb-cli }} -p db1 topic consumer drop \
-  --consumer-name my-consumer \
+  --consumer my-consumer \
   my-topic
 ```

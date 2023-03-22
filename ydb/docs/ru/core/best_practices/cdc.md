@@ -25,7 +25,7 @@ CDC представлен объектом схемы данных — пото
 ```bash
 {{ ydb-cli }} topic consumer add \
   my/table/updates_feed \
-  --consumer-name=my_consumer
+  --consumer=my_consumer
 ```
 
 Теперь можно воспользоваться созданным потребителем данных и запустить процесс отслеживания. Ниже приведен пример команды, с помощью которой можно отслеживать изменения данных в интерфейсе командной строки:
@@ -71,7 +71,7 @@ CDC представлен объектом схемы данных — пото
     ```bash
     {{ ydb-cli }} topic consumer add \
       orders/updates \
-      --consumer-name=my_consumer
+      --consumer=my_consumer
     ```
 
 1. Запустите процесс отслеживания:

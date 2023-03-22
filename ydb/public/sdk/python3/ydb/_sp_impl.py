@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import collections
 from concurrent import futures
-from six.moves import queue
+import queue
 import time
 import threading
 from . import settings, issues, _utilities, tracing

@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
+import typing
+
 # Workaround for good IDE and universal for runtime
-# noinspection PyUnreachableCode
-if False:
+if typing.TYPE_CHECKING:
     from ._grpc.v4 import (
         ydb_cms_v1_pb2_grpc,
         ydb_discovery_v1_pb2_grpc,
         ydb_scheme_v1_pb2_grpc,
         ydb_table_v1_pb2_grpc,
         ydb_operation_v1_pb2_grpc,
+        ydb_topic_v1_pb2_grpc,
     )
 
     from ._grpc.v4.protos import (
@@ -26,6 +28,7 @@ else:
         ydb_scheme_v1_pb2_grpc,
         ydb_table_v1_pb2_grpc,
         ydb_operation_v1_pb2_grpc,
+        ydb_topic_v1_pb2_grpc,
     )
 
     from ._grpc.common.protos import (
@@ -37,6 +40,7 @@ else:
         ydb_operation_pb2,
         ydb_common_pb2,
     )
+
 
 StatusIds = ydb_status_codes_pb2.StatusIds
 FeatureFlag = ydb_common_pb2.FeatureFlag
@@ -95,3 +99,13 @@ class TableService(object):
     KeepAlive = "KeepAlive"
     StreamReadTable = "StreamReadTable"
     BulkUpsert = "BulkUpsert"
+
+
+class TopicService(object):
+    Stub = ydb_topic_v1_pb2_grpc.TopicServiceStub
+
+    CreateTopic = "CreateTopic"
+    DescribeTopic = "DescribeTopic"
+    DropTopic = "DropTopic"
+    StreamRead = "StreamRead"
+    StreamWrite = "StreamWrite"

@@ -41,6 +41,8 @@ SRCS(
     mkql_block_skiptake.h
     mkql_block_top.cpp
     mkql_block_top.h
+    mkql_block_tuple.cpp
+    mkql_block_tuple.h
     mkql_blocks.cpp
     mkql_blocks.h
     mkql_callable.cpp

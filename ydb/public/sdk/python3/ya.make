@@ -4,11 +4,32 @@ PY_SRCS(
     TOP_LEVEL
     ydb/__init__.py
     ydb/_apis.py
+    ydb/_dbapi/__init__.py
+    ydb/_dbapi/connection.py
+    ydb/_dbapi/cursor.py
+    ydb/_dbapi/errors.py
     ydb/_errors.py
     ydb/_grpc/__init__.py
     ydb/_grpc/common/__init__.py
+    ydb/_grpc/grpcwrapper/__init__.py
+    ydb/_grpc/grpcwrapper/common_utils.py
+    ydb/_grpc/grpcwrapper/ydb_scheme.py
+    ydb/_grpc/grpcwrapper/ydb_topic.py
+    ydb/_grpc/grpcwrapper/ydb_topic_public_types.py
     ydb/_session_impl.py
     ydb/_sp_impl.py
+    ydb/_topic_common/__init__.py
+    ydb/_topic_common/common.py
+    ydb/_topic_common/test_helpers.py
+    ydb/_topic_reader/__init__.py
+    ydb/_topic_reader/datatypes.py
+    ydb/_topic_reader/topic_reader.py
+    ydb/_topic_reader/topic_reader_asyncio.py
+    ydb/_topic_reader/topic_reader_sync.py
+    ydb/_topic_writer/__init__.py
+    ydb/_topic_writer/topic_writer.py
+    ydb/_topic_writer/topic_writer_asyncio.py
+    ydb/_topic_writer/topic_writer_sync.py
     ydb/_tx_ctx_impl.py
     ydb/_utilities.py
     ydb/aio/__init__.py
@@ -42,13 +63,12 @@ PY_SRCS(
     ydb/pool.py
     ydb/resolver.py
     ydb/scheme.py
-    ydb/scheme_test.py
     ydb/scripting.py
     ydb/settings.py
     ydb/sqlalchemy/__init__.py
     ydb/sqlalchemy/types.py
     ydb/table.py
-    ydb/table_test.py
+    ydb/topic.py
     ydb/tracing.py
     ydb/types.py
     ydb/ydb_version.py

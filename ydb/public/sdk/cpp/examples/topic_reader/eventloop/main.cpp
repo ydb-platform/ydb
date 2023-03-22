@@ -23,7 +23,7 @@ struct TOptions {
             .StoreResult(&Database);
         opts.AddLongOption('t', "topic-path", "Topic path for reading").Required().RequiredArgument("PATH")
             .StoreResult(&TopicPath);
-        opts.AddLongOption('c', "consumer-name", "Consumer name").Required().RequiredArgument("CONSUMER")
+        opts.AddLongOption('c', "consumer", "Consumer name").Required().RequiredArgument("CONSUMER")
             .StoreResult(&ConsumerName);
         opts.AddLongOption("commit-after-processing", "Commit data after processing")
             .SetFlag(&CommitAfterProcessing).NoArgument();

@@ -28,6 +28,7 @@ class TJsonCompute : public TViewerPipeClient<TJsonCompute> {
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
     THashMap<TPathId, TTabletId> HiveBySubDomainKey;
+    THashMap<TString, TPathId> SubDomainKeyByPath;
     THashMap<TString, THolder<NSchemeCache::TSchemeCacheNavigate>> NavigateResult;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
@@ -40,6 +41,7 @@ class TJsonCompute : public TViewerPipeClient<TJsonCompute> {
     ui32 Timeout = 0;
     TString User;
     TString Path;
+    TString DomainPath;
     TPathId FilterSubDomain;
     bool Tablets = true;
     TTabletId RootHiveId = 0;
@@ -60,6 +62,22 @@ public:
         return TStringBuilder() << pathId.OwnerId << '-' << pathId.LocalPathId;
     }
 
+    bool IsFitsToPath(const TString& path) const {
+        if (Path.empty()) {
+            return true;
+        }
+        if (Path == path) {
+            return true;
+        }
+        if (Path == DomainPath) {
+            return false;
+        }
+        if (Path.StartsWith(path)) {
+            return true;
+        }
+        return false;
+    }
+
     void Bootstrap(const TActorContext& ) {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
@@ -76,13 +94,13 @@ public:
 
         RequestConsoleListTenants();
 
-        TString domainPath = "/" + domain->Name;
-        if (Path.empty() || domainPath == Path) {
-            NKikimrViewer::TTenant& tenant = TenantByPath[domainPath];
-            tenant.SetName(domainPath);
+        DomainPath = "/" + domain->Name;
+        if (Path.empty() || DomainPath == Path) {
+            NKikimrViewer::TTenant& tenant = TenantByPath[DomainPath];
+            tenant.SetName(DomainPath);
             tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
             tenant.SetType(NKikimrViewer::Domain);
-            RequestSchemeCacheNavigate(domainPath);
+            RequestSchemeCacheNavigate(DomainPath);
         }
         RootHiveId = domains->GetHive(domain->DefaultHiveUid);
         if (Requests == 0) {
@@ -124,11 +142,11 @@ public:
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const TString& path : listTenantsResult.paths()) {
-            if (!Path.empty() && path != Path) {
-                continue;
+            if (IsFitsToPath(path)) {
+                TString p(Path.empty() ? path : Path);
+                TenantByPath[p];
+                RequestSchemeCacheNavigate(p);
             }
-            TenantByPath[path];
-            RequestSchemeCacheNavigate(path);
         }
         RequestDone();
     }
@@ -148,43 +166,59 @@ public:
             tenant.MutableMetrics()->CopyFrom(hiveStat.GetMetrics());
             tenant.MutableNodeIds()->CopyFrom(hiveStat.GetNodeIds());
             tenant.SetAliveNodes(hiveStat.GetAliveNodes());
-
-            for (TNodeId nodeId : hiveStat.GetNodeIds()) {
-                if (NodeIds.insert(nodeId).second) {
-                    TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-                    THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
-                    SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-                    if (Tablets) {
-                        THolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest>();
-                        SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-                    }
-                }
-            }
         }
         HiveDomainStats[ev->Cookie] = std::move(ev->Release());
         RequestDone();
     }
 
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
+        for (const NKikimrHive::THiveNodeStats& nodeStat : ev->Get()->Record.GetNodeStats()) {
+            auto nodeId = nodeStat.GetNodeId();
+            if (NodeIds.insert(nodeId).second) {
+                TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
+                THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
+                SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
+                if (Tablets && !ev->Get()->Record.GetExtendedTabletInfo()) {
+                    THolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest>();
+                    SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
+                }
+            }
+        }
         HiveNodeStats[ev->Cookie] = std::move(ev->Release());
         RequestDone();
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (ev->Get()->Request->ResultSet.size() == 1 && ev->Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            auto domainInfo = ev->Get()->Request->ResultSet.begin()->DomainInfo;
+            const NSchemeCache::TSchemeCacheNavigate::TEntry& result(ev->Get()->Request->ResultSet.front());
+            ui64 pathId = 0;
+            if (!Path.empty() && result.Self) {
+                switch (result.Self->Info.GetPathType()) {
+                    case NKikimrSchemeOp::EPathTypeTable:
+                    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+                    case NKikimrSchemeOp::EPathTypeTableIndex:
+                    case NKikimrSchemeOp::EPathTypeColumnTable:
+                    case NKikimrSchemeOp::EPathTypeColumnStore:
+                    case NKikimrSchemeOp::EPathTypeCdcStream:
+                    case NKikimrSchemeOp::EPathTypeKesus:
+                        pathId = result.Self->Info.GetPathId();
+                        break;
+                    default:
+                        break;
+                }
+            }
+            auto domainInfo = result.DomainInfo;
             ui64 hiveId = domainInfo->Params.GetHive();
-            if (hiveId) {
-                RequestHiveDomainStats(hiveId);
-                RequestHiveNodeStats(hiveId);
-                HiveBySubDomainKey[domainInfo->DomainKey] = hiveId;
-            } else {
+            if (hiveId == 0) {
                 if (!RootHiveRequested) {
-                    RequestHiveDomainStats(RootHiveId);
-                    RequestHiveNodeStats(RootHiveId);
+                    hiveId = RootHiveId;
                     RootHiveRequested = true;
                 }
-                HiveBySubDomainKey[domainInfo->DomainKey] = RootHiveId;
+            }
+            if (hiveId) {
+                RequestHiveDomainStats(hiveId);
+                RequestHiveNodeStats(hiveId, pathId);
+                HiveBySubDomainKey[domainInfo->DomainKey] = hiveId;
             }
             if (domainInfo->ResourcesDomainKey != domainInfo->DomainKey) {
                 TenantBySubDomainKey[domainInfo->ResourcesDomainKey].SetType(NKikimrViewer::Shared);
@@ -192,9 +226,10 @@ public:
                 TenantBySubDomainKey[domainInfo->DomainKey].SetResourceId(GetDomainId(domainInfo->ResourcesDomainKey));
             }
 
-            TString path = CanonizePath(ev->Get()->Request->ResultSet.begin()->Path);
+            TString path = CanonizePath(result.Path);
+            SubDomainKeyByPath[path] = domainInfo->DomainKey;
             NavigateResult[path] = std::move(ev->Get()->Request);
-            if (Path && Path == path) {
+            if (IsFitsToPath(path)) {
                 FilterSubDomain = domainInfo->DomainKey;
             }
         }
@@ -227,14 +262,7 @@ public:
         }
     }
 
-    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        ui32 nodeId = ev->Get()->NodeId;
-        if (NodeSysInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
-            RequestDone();
-        }
-        if (NodeTabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
-            RequestDone();
-        }
+    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
     }
 
     void ReplyAndPassAway() {
@@ -262,10 +290,9 @@ public:
             const TString& path = prTenant.first;
             NKikimrViewer::TComputeTenantInfo& computeTenantInfo = *Result.AddTenants();
             computeTenantInfo.SetName(path);
-            auto itNavigate = NavigateResult.find(path);
-            if (itNavigate != NavigateResult.end()) {
-                NSchemeCache::TSchemeCacheNavigate::TEntry entry = itNavigate->second->ResultSet.front();
-                TPathId subDomainKey(entry.DomainInfo->DomainKey);
+            auto itSubDomainKey = SubDomainKeyByPath.find(path);
+            if (itSubDomainKey != SubDomainKeyByPath.end()) {
+                TPathId subDomainKey(itSubDomainKey->second);
                 const NKikimrViewer::TTenant& tenantBySubDomainKey(TenantBySubDomainKey[subDomainKey]);
                 for (TNodeId nodeId : tenantBySubDomainKey.GetNodeIds()) {
                     NKikimrViewer::TComputeNodeInfo& computeNodeInfo = *computeTenantInfo.AddNodes();
@@ -337,6 +364,15 @@ public:
                     auto itHiveNodeStats = hiveNodeStatsIndex.find(nodeId);
                     if (itHiveNodeStats != hiveNodeStatsIndex.end()) {
                         computeNodeInfo.MutableMetrics()->CopyFrom(itHiveNodeStats->second->GetMetrics());
+                        for (const auto& state : itHiveNodeStats->second->GetStateStats()) {
+                            if (state.HasTabletType()) {
+                                NKikimrViewer::TTabletStateInfo& tablet = *computeNodeInfo.AddTablets();
+                                tablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(state.GetTabletType()));
+                                tablet.SetCount(state.GetCount());
+                                NKikimrViewer::EFlag flag = GetFlagFromTabletState(state.GetVolatileState());
+                                tablet.SetState(flag);
+                            }
+                        }
                     }
                 }
             }

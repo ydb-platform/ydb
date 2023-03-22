@@ -162,7 +162,7 @@ View the description of the add consumer command:
 
 | Name | Description |
 ---|---
-| `--consumer-name VAL` | Name of the consumer to be created. |
+| `--consumer VAL` | Name of the consumer to be created. |
 | `--starting-message-timestamp VAL` | Time in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format. Consumption starts as soon as the first [message](../../concepts/topic.md#message) is received after the specified time. If the time is not specified, consumption will start from the oldest message in the topic. |
 
 ### Examples {#consumer-add-examples}
@@ -171,7 +171,7 @@ Create a consumer with the `my-consumer` name for the [previously created](#topi
 
 ```bash
 {{ ydb-cli }} -p db1 topic consumer add \
-  --consumer-name my-consumer \
+  --consumer my-consumer \
   --starting-message-timestamp 1660568400 \
   my-topic
 ```
@@ -221,7 +221,7 @@ View the description of the delete consumer command:
 
 | Name | Description |
 ---|---
-| `--consumer-name VAL` | Name of the consumer to be deleted. |
+| `--consumer VAL` | Name of the consumer to be deleted. |
 
 ### Examples {#consumer-drop-examples}
 
@@ -229,6 +229,6 @@ Delete the [previously created](#consumer-add) consumer with the `my-consumer` n
 
 ```bash
 {{ ydb-cli }} -p db1 topic consumer drop \
-  --consumer-name my-consumer \
+  --consumer my-consumer \
   my-topic
 ```

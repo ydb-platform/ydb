@@ -139,4 +139,29 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
             .SetContentType("text/xml");
         UNIT_ASSERT_STRINGS_EQUAL(ToString(resp), EXPECTED);
     }
+
+    Y_UNIT_TEST(TestAddOrReplaceHeader) {
+        THttpResponse resp(HTTP_FORBIDDEN);
+        resp.AddOrReplaceHeader(THttpInputHeader("X-Header-1", "ValueOne"));
+        resp.AddOrReplaceHeader("X-Header-2", 10);
+        resp.AddOrReplaceHeader("X-Header-3", true);
+
+        const char* EXPECTED_ADDED = "HTTP/1.1 403 Forbidden\r\n"
+                               "X-Header-1: ValueOne\r\n"
+                               "X-Header-2: 10\r\n"
+                               "X-Header-3: 1\r\n"
+                               "\r\n";
+        UNIT_ASSERT_STRINGS_EQUAL(ToString(resp), EXPECTED_ADDED);
+
+        resp.AddOrReplaceHeader(THttpInputHeader("X-Header-1", "ValueTwo"));
+        resp.AddOrReplaceHeader("X-Header-2", 20);
+        resp.AddOrReplaceHeader("X-Header-3", false);
+
+        const char* EXPECTED_REPLACED = "HTTP/1.1 403 Forbidden\r\n"
+                               "X-Header-1: ValueTwo\r\n"
+                               "X-Header-2: 20\r\n"
+                               "X-Header-3: 0\r\n"
+                               "\r\n";
+        UNIT_ASSERT_STRINGS_EQUAL(ToString(resp), EXPECTED_REPLACED);
+    }
 }

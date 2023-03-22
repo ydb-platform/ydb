@@ -111,7 +111,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         const NKikimrClient::TPersQueuePartitionRequest::TCmdDeregisterMessageGroup& cmd,
         NPersQueue::NErrorCode::EErrorCode& code, TString& error) const;
 
-    void OnAllPartitionConfigChanged(const TActorContext& ctx);
+    void TrySendUpdateConfigResponses(const TActorContext& ctx);
 
     //client request
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
@@ -307,6 +307,8 @@ private:
                            const NKikimrPQ::TPQTabletConfig& cfg,
                            const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
                            const TActorContext& ctx);
+
+    void ClearNewConfig();
 };
 
 

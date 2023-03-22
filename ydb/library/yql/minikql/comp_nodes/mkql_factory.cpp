@@ -14,6 +14,7 @@
 #include "mkql_block_compress.h"
 #include "mkql_block_skiptake.h"
 #include "mkql_block_top.h"
+#include "mkql_block_tuple.h"
 #include "mkql_callable.h"
 #include "mkql_chain_map.h"
 #include "mkql_chain1_map.h"
@@ -291,6 +292,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockNot", &WrapBlockNot},
         {"BlockJust", &WrapBlockJust},
         {"BlockCompress", &WrapBlockCompress},
+        {"BlockAsTuple", &WrapBlockAsTuple},
+        {"BlockNth", &WrapBlockNth},
         {"BlockExpandChunked", &WrapBlockExpandChunked},
         {"BlockCombineAll", &WrapBlockCombineAll},
         {"BlockCombineHashed", &WrapBlockCombineHashed},

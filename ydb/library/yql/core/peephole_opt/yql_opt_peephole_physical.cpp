@@ -4944,16 +4944,22 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
             return true;
         }
 
-        if (!node->IsCallable()) {
+        if (!node->IsList() && !node->IsCallable()) {
+            return true;
+        }
+
+        if (node->IsList() && !node->GetTypeAnn()->IsComputable()) {
             return true;
         }
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        if (node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just"}))
+        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just", "Nth"}))
         {
             for (auto& child : node->ChildrenList()) {
-                if (child->IsComplete()) {
+                if (!child->GetTypeAnn()->IsComputable()) {
+                    funcArgs.push_back(child);
+                } else  if (child->IsComplete()) {
                     funcArgs.push_back(ctx.NewCallable(node->Pos(), "AsScalar", { child }));
                 } else if (auto rit = rewrites.find(child.Get()); rit != rewrites.end()) {
                     funcArgs.push_back(rit->second);
@@ -4962,7 +4968,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 }
             }
 
-            TString blockFuncName = TString("Block") + node->Content();
+            TString blockFuncName = TString("Block") + (node->IsList() ? "AsTuple" : node->Content());
             if (node->IsCallable({"And", "Or", "Xor"}) && funcArgs.size() > 2) {
                 // Split original argument list by pairs (since the order is not important balanced tree is used)
                 rewrites[node.Get()] = SplitByPairs(node->Pos(), blockFuncName, funcArgs, 0, funcArgs.size(), ctx);

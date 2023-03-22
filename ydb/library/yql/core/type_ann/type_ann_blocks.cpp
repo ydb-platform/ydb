@@ -256,6 +256,109 @@ IGraphTransformer::TStatus BlockJustWrapper(const TExprNode::TPtr& input, TExprN
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockAsTupleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TTypeAnnotationNode::TListType items;
+    bool onlyScalars = true;
+    for (const auto& child : input->Children()) {
+        if (!EnsureBlockOrScalarType(*child, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool isScalar;
+        const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
+        onlyScalars = onlyScalars && isScalar;
+        items.push_back(blockItemType);
+    }
+
+    const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TTupleExprType>(items);
+    if (onlyScalars) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus BlockNthWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto child = input->Child(0);
+    if (!EnsureBlockOrScalarType(*child, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isScalar;
+    const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
+    const TTypeAnnotationNode* resultType;
+    if (IsNull(*blockItemType)) {
+        resultType = blockItemType;
+    } else {
+        const TTupleExprType* tupleType;
+        bool isOptional;
+        if (blockItemType->GetKind() == ETypeAnnotationKind::Optional) {
+            auto itemType = blockItemType->Cast<TOptionalExprType>()->GetItemType();
+            if (!EnsureTupleType(child->Pos(), *itemType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            tupleType = itemType->Cast<TTupleExprType>();
+            isOptional = true;
+        }
+        else {
+            if (!EnsureTupleType(child->Pos(), *blockItemType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            tupleType = blockItemType->Cast<TTupleExprType>();
+            isOptional = false;
+        }
+
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ui32 index = 0;
+        if (!TryFromString(input->Tail().Content(), index)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Failed to convert to integer: " << input->Tail().Content()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (index >= tupleType->GetSize()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Index out of range. Index: " <<
+                index << ", size: " << tupleType->GetSize()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputableType(input->Head().Pos(), *tupleType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        resultType = tupleType->GetItems()[index];
+        if (isOptional && !resultType->IsOptionalOrNull()) {
+            resultType = ctx.Expr.MakeType<TOptionalExprType>(resultType);
+        }
+    }
+
+    if (isScalar) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 2U, ctx.Expr)) {

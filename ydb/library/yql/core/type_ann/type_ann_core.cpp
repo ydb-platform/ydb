@@ -1652,7 +1652,7 @@ namespace NTypeAnnImpl {
         }
 
         input->SetTypeAnn(tupleType->GetItems()[index]);
-        if (isOptional && input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional && input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Null) {
+        if (isOptional && !input->GetTypeAnn()->IsOptionalOrNull()) {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(input->GetTypeAnn()));
         }
 
@@ -11883,6 +11883,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockNot"] = &BlockLogicalWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
+        Functions["BlockAsTuple"] = &BlockAsTupleWrapper;
+        Functions["BlockNth"] = &BlockNthWrapper;
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
 

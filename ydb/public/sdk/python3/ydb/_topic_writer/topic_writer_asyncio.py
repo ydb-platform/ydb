@@ -6,6 +6,8 @@ import typing
 from collections import deque
 from typing import Deque, AsyncIterator, Union, List, Optional, Dict, Callable
 
+import logging
+
 import ydb
 from .topic_writer import (
     PublicWriterSettings,
@@ -38,15 +40,13 @@ from .._grpc.grpcwrapper.common_utils import (
     GrpcWrapperAsyncIO,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class WriterAsyncIO:
     _loop: asyncio.AbstractEventLoop
     _reconnector: "WriterAsyncIOReconnector"
     _closed: bool
-
-    @property
-    def last_seqno(self) -> int:
-        raise NotImplementedError()
 
     def __init__(self, driver: SupportedDriverType, settings: PublicWriterSettings):
         self._loop = asyncio.get_running_loop()
@@ -65,7 +65,7 @@ class WriterAsyncIO:
         if self._closed or self._loop.is_closed():
             return
 
-        self._loop.call_soon(self.close)
+        self._loop.call_soon(self.close, False)
 
     async def close(self, *, flush: bool = True):
         if self._closed:
@@ -158,7 +158,6 @@ class WriterAsyncIOReconnector:
     _credentials: Union[ydb.credentials.Credentials, None]
     _driver: ydb.aio.Driver
     _init_message: StreamWriteMessage.InitRequest
-    _init_info: asyncio.Future
     _stream_connected: asyncio.Event
     _settings: WriterSettings
     _codec: PublicCodec
@@ -168,7 +167,6 @@ class WriterAsyncIOReconnector:
     _codec_selector_last_codec: Optional[PublicCodec]
     _codec_selector_check_batches_interval: int
 
-    _last_known_seq_no: int
     if typing.TYPE_CHECKING:
         _messages_for_encode: asyncio.Queue[List[InternalMessage]]
     else:
@@ -176,8 +174,14 @@ class WriterAsyncIOReconnector:
     _messages: Deque[InternalMessage]
     _messages_future: Deque[asyncio.Future]
     _new_messages: asyncio.Queue
-    _stop_reason: asyncio.Future
     _background_tasks: List[asyncio.Task]
+
+    _state_changed: asyncio.Event
+    if typing.TYPE_CHECKING:
+        _stop_reason: asyncio.Future[BaseException]
+    else:
+        _stop_reason: asyncio.Future
+    _init_info: Optional[PublicWriterInitInfo]
 
     def __init__(self, driver: SupportedDriverType, settings: WriterSettings):
         self._closed = False
@@ -186,7 +190,7 @@ class WriterAsyncIOReconnector:
         self._credentials = driver._credentials
         self._init_message = settings.create_init_request()
         self._new_messages = asyncio.Queue()
-        self._init_info = self._loop.create_future()
+        self._init_info = None
         self._stream_connected = asyncio.Event()
         self._settings = settings
 
@@ -223,14 +227,17 @@ class WriterAsyncIOReconnector:
             asyncio.create_task(self._encode_loop(), name="encode_loop"),
         ]
 
+        self._state_changed = asyncio.Event()
+
     async def close(self, flush: bool):
         if self._closed:
             return
+        self._closed = True
+        logger.debug("Close writer reconnector")
 
         if flush:
             await self.flush()
 
-        self._closed = True
         self._stop(TopicWriterStopped())
 
         for task in self._background_tasks:
@@ -244,19 +251,20 @@ class WriterAsyncIOReconnector:
             pass
 
     async def wait_init(self) -> PublicWriterInitInfo:
-        done, _ = await asyncio.wait(
-            [self._init_info, self._stop_reason], return_when=asyncio.FIRST_COMPLETED
-        )
-        res = done.pop()  # type: asyncio.Future
-        res_val = res.result()
+        while True:
+            if self._stop_reason.done():
+                raise self._stop_reason.exception()
 
-        if isinstance(res_val, BaseException):
-            raise res_val
+            if self._init_info:
+                return self._init_info
 
-        return res_val
+            await self._state_changed.wait()
 
-    async def wait_stop(self) -> Exception:
-        return await self._stop_reason
+    async def wait_stop(self) -> BaseException:
+        try:
+            await self._stop_reason
+        except BaseException as stop_reason:
+            return stop_reason
 
     async def write_with_ack_future(
         self, messages: List[PublicMessage]
@@ -347,13 +355,14 @@ class WriterAsyncIOReconnector:
                     self._settings.update_token_interval,
                 )
                 try:
-                    self._last_known_seq_no = stream_writer.last_seqno
-                    self._init_info.set_result(
-                        PublicWriterInitInfo(
+                    if self._init_info is None:
+                        self._last_known_seq_no = stream_writer.last_seqno
+                        self._init_info = PublicWriterInitInfo(
                             last_seqno=stream_writer.last_seqno,
                             supported_codecs=stream_writer.supported_codecs,
                         )
-                    )
+                        self._state_changed.set()
+
                 except asyncio.InvalidStateError:
                     pass
 
@@ -373,9 +382,6 @@ class WriterAsyncIOReconnector:
                 await stream_writer.close()
                 done.pop().result()
             except issues.Error as err:
-                # todo log error
-                print(err)
-
                 err_info = check_retriable_error(err, retry_settings, attempt)
                 if not err_info.is_retriable:
                     self._stop(err)
@@ -554,8 +560,13 @@ class WriterAsyncIOReconnector:
 
         self._stop_reason.set_result(reason)
 
+        for f in self._messages_future:
+            f.set_exception(reason)
+
+        self._state_changed.set()
+        logger.info("Stop topic writer: %s" % reason)
+
     async def flush(self):
-        self._check_stop()
         if not self._messages_future:
             return
 

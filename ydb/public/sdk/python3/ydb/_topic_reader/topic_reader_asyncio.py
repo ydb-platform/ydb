@@ -75,46 +75,10 @@ class PublicAsyncIOReader:
 
     def __del__(self):
         if not self._closed:
-            self._loop.create_task(self.close(), name="close reader")
-
-    async def sessions_stat(self) -> typing.List["topic_reader.SessionStat"]:
-        """
-        Receive stat from the server
-
-        use asyncio.wait_for for wait with timeout.
-        """
-        raise NotImplementedError()
-
-    def messages(
-        self, *, timeout: typing.Union[float, None] = None
-    ) -> typing.AsyncIterable[topic_reader.PublicMessage]:
-        """
-        Block until receive new message
-
-        if no new messages in timeout seconds: stop iteration by raise StopAsyncIteration
-        """
-        raise NotImplementedError()
-
-    def batches(
-        self,
-        *,
-        max_messages: typing.Union[int, None] = None,
-        max_bytes: typing.Union[int, None] = None,
-        timeout: typing.Union[float, None] = None,
-    ) -> typing.AsyncIterable[datatypes.PublicBatch]:
-        """
-        Block until receive new batch.
-        All messages in a batch from same partition.
-
-        if no new message in timeout seconds (default - infinite): stop iterations by raise StopIteration
-        """
-        raise NotImplementedError()
+            self._loop.create_task(self.close(flush=False), name="close reader")
 
     async def receive_batch(
         self,
-        *,
-        max_messages: typing.Union[int, None] = None,
-        max_bytes: typing.Union[int, None] = None,
     ) -> typing.Union[datatypes.PublicBatch, None]:
         """
         Get one messages batch from reader.
@@ -133,16 +97,6 @@ class PublicAsyncIOReader:
         """
         await self._reconnector.wait_message()
         return self._reconnector.receive_message_nowait()
-
-    async def commit_on_exit(
-        self, mess: datatypes.ICommittable
-    ) -> typing.AsyncContextManager:
-        """
-        commit the mess match/message if exit from context manager without exceptions
-
-        reader will close if exit from context manager with exception
-        """
-        raise NotImplementedError()
 
     def commit(
         self, batch: typing.Union[datatypes.PublicMessage, datatypes.PublicBatch]
@@ -166,20 +120,12 @@ class PublicAsyncIOReader:
         waiter = self._reconnector.commit(batch)
         await waiter.future
 
-    async def flush(self):
-        """
-        force send all commit messages from internal buffers to server and wait acks for all of them.
-
-        use asyncio.wait_for for wait with timeout.
-        """
-        raise NotImplementedError()
-
-    async def close(self):
+    async def close(self, flush: bool = True):
         if self._closed:
             raise TopicReaderClosedError()
 
         self._closed = True
-        await self._reconnector.close()
+        await self._reconnector.close(flush)
 
 
 class ReaderReconnector:
@@ -253,13 +199,19 @@ class ReaderReconnector:
     ) -> datatypes.PartitionSession.CommitAckWaiter:
         return self._stream_reader.commit(batch)
 
-    async def close(self):
+    async def close(self, flush: bool):
         if self._stream_reader:
+            if flush:
+                await self.flush()
             await self._stream_reader.close()
         for task in self._background_tasks:
             task.cancel()
 
         await asyncio.wait(self._background_tasks)
+
+    async def flush(self):
+        if self._stream_reader:
+            await self._stream_reader.flush()
 
     def _set_first_error(self, err: issues.Error):
         try:
@@ -642,7 +594,6 @@ class ReaderStream:
 
                 if messages:
                     batch = datatypes.PublicBatch(
-                        session_metadata=server_batch.write_session_meta,
                         messages=messages,
                         _partition_session=partition_session,
                         _bytes_size=bytes_per_batch,
@@ -695,6 +646,16 @@ class ReaderStream:
     def _get_first_error(self) -> Optional[YdbError]:
         if self._first_error.done():
             return self._first_error.result()
+
+    async def flush(self):
+        if self._closed:
+            raise RuntimeError("Flush on closed Stream")
+
+        futures = []
+        for session in self._partition_sessions.values():
+            futures.extend(w.future for w in session._ack_waiters)
+
+        await asyncio.gather(*futures)
 
     async def close(self):
         if self._closed:

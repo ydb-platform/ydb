@@ -37,13 +37,6 @@ class PublicWriterSettings:
     encoders: Optional[
         typing.Mapping[PublicCodec, typing.Callable[[bytes], bytes]]
     ] = None
-    # get_last_seqno: bool = False
-    # serializer: Union[Callable[[Any], bytes], None] = None
-    # send_buffer_count: Optional[int] = 10000
-    # send_buffer_bytes: Optional[int] = 100 * 1024 * 1024
-    # codec: Optional[int] = None
-    # codec_autoselect: bool = True
-    # retry_policy: Optional["RetryPolicy"] = None
     update_token_interval: Union[int, float] = 3600
 
     def __post_init__(self):

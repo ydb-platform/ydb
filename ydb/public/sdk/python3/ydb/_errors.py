@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from ydb import issues
+from . import issues
 
 _errors_retriable_fast_backoff_types = [
     issues.Unavailable,

@@ -1,7 +1,7 @@
 import asyncio
 import concurrent.futures
 import typing
-from typing import List, Union, Iterable, Optional
+from typing import List, Union, Optional
 
 from ydb._grpc.grpcwrapper.common_utils import SupportedDriverType
 from ydb._topic_common.common import (
@@ -10,10 +10,9 @@ from ydb._topic_common.common import (
     TimeoutType,
 )
 from ydb._topic_reader import datatypes
-from ydb._topic_reader.datatypes import PublicMessage, PublicBatch, ICommittable
+from ydb._topic_reader.datatypes import PublicBatch
 from ydb._topic_reader.topic_reader import (
     PublicReaderSettings,
-    SessionStat,
     CommitResult,
 )
 from ydb._topic_reader.topic_reader_asyncio import (
@@ -51,42 +50,13 @@ class TopicReaderSync:
         ).result()
 
     def __del__(self):
-        self.close()
+        self.close(flush=False)
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-
-    def async_sessions_stat(self) -> concurrent.futures.Future:
-        """
-        Receive stat from the server, return feature.
-        """
-        raise NotImplementedError()
-
-    async def sessions_stat(self) -> List[SessionStat]:
-        """
-        Receive stat from the server
-
-        use async_sessions_stat for set explicit wait timeout
-        """
-        raise NotImplementedError()
-
-    def messages(
-        self, *, timeout: Union[float, None] = None
-    ) -> Iterable[PublicMessage]:
-        """
-        todo?
-
-        Block until receive new message
-        It has no async_ version for prevent lost messages, use async_wait_message as signal for new batches available.
-
-        if no new message in timeout seconds (default - infinite): stop iterations by raise StopIteration
-        if timeout <= 0 - it will fast wait only one event loop cycle - without wait any i/o operations or pauses,
-            get messages from internal buffer only.
-        """
-        raise NotImplementedError()
 
     def receive_message(
         self, *, timeout: TimeoutType = None
@@ -120,22 +90,6 @@ class TopicReaderSync:
             self._async_reader._reconnector.wait_message()
         )
 
-    def batches(
-        self,
-        *,
-        max_messages: Union[int, None] = None,
-        max_bytes: Union[int, None] = None,
-        timeout: Union[float, None] = None,
-    ) -> Iterable[PublicBatch]:
-        """
-        Block until receive new batch.
-        It has no async_ version for prevent lost messages, use async_wait_message as signal for new batches available.
-
-        if no new message in timeout seconds (default - infinite): stop iterations by raise StopIteration
-        if timeout <= 0 - it will fast wait only one event loop cycle - without wait any i/o operations or pauses, get messages from internal buffer only.
-        """
-        raise NotImplementedError()
-
     def receive_batch(
         self,
         *,
@@ -153,9 +107,7 @@ class TopicReaderSync:
         self._check_closed()
 
         return self._caller.safe_call_with_result(
-            self._async_reader.receive_batch(
-                max_messages=max_messages, max_bytes=max_bytes
-            ),
+            self._async_reader.receive_batch(),
             timeout,
         )
 
@@ -173,7 +125,9 @@ class TopicReaderSync:
         self._caller.call_sync(self._async_reader.commit(mess))
 
     def commit_with_ack(
-        self, mess: ICommittable, timeout: TimeoutType = None
+        self,
+        mess: typing.Union[datatypes.PublicMessage, datatypes.PublicBatch],
+        timeout: TimeoutType = None,
     ) -> Union[CommitResult, List[CommitResult]]:
         """
         write commit message to a buffer and wait ack from the server.
@@ -198,25 +152,13 @@ class TopicReaderSync:
             self._async_reader.commit_with_ack(mess)
         )
 
-    def async_flush(self) -> concurrent.futures.Future:
-        """
-        force send all commit messages from internal buffers to server and return Future for wait server acks.
-        """
-        raise NotImplementedError()
-
-    def flush(self):
-        """
-        force send all commit messages from internal buffers to server and wait acks for all of them.
-        """
-        raise NotImplementedError()
-
-    def close(self, *, timeout: TimeoutType = None):
+    def close(self, *, flush: bool = True, timeout: TimeoutType = None):
         if self._closed:
             return
 
         self._closed = True
 
-        self._caller.safe_call_with_result(self._async_reader.close(), timeout)
+        self._caller.safe_call_with_result(self._async_reader.close(flush), timeout)
 
     def _check_closed(self):
         if self._closed:

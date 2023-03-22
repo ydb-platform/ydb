@@ -36,19 +36,6 @@ class PublicReaderSettings:
 
     # decoder_executor, must be set for handle non raw messages
     decoder_executor: Optional[concurrent.futures.Executor] = None
-
-    # on_commit: Callable[["Events.OnCommit"], None] = None
-    # on_get_partition_start_offset: Callable[
-    #     ["Events.OnPartitionGetStartOffsetRequest"],
-    #     "Events.OnPartitionGetStartOffsetResponse",
-    # ] = None
-    # on_partition_session_start: Callable[["StubEvent"], None] = None
-    # on_partition_session_stop: Callable[["StubEvent"], None] = None
-    # on_partition_session_close: Callable[["StubEvent"], None] = None  # todo?
-    # deserializer: Union[Callable[[bytes], Any], None] = None
-    # one_attempt_connection_timeout: Union[float, None] = 1
-    # connection_timeout: Union[float, None] = None
-    # retry_policy: Union["RetryPolicy", None] = None
     update_token_interval: Union[int, float] = 3600
 
     def _init_message(self) -> StreamReadMessage.InitRequest:

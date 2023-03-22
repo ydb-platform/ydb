@@ -492,10 +492,8 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::v
 
     auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows);
     while (std::shared_ptr<arrow::RecordBatch> batch = mergeStream->Read()) {
-        Y_VERIFY(batch);
-        if (batch->num_rows()) {
-            out.push_back(batch);
-        }
+        Y_VERIFY(batch->num_rows());
+        out.push_back(batch);
     }
     return out;
 }
@@ -518,6 +516,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::v
 
     auto dedupStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows, true);
     while (std::shared_ptr<arrow::RecordBatch> batch = dedupStream->Read()) {
+        Y_VERIFY(batch->num_rows());
         out.push_back(batch);
     }
     return out;

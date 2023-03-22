@@ -492,7 +492,10 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::v
 
     auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows);
     while (std::shared_ptr<arrow::RecordBatch> batch = mergeStream->Read()) {
-        out.push_back(batch);
+        Y_VERIFY(batch);
+        if (batch->num_rows()) {
+            out.push_back(batch);
+        }
     }
     return out;
 }

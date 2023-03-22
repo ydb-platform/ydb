@@ -424,6 +424,10 @@ private:
             AfterInvokeExpr = true;
         }
 
+        if (descr == TRule_unary_op::GetDescriptor()) {
+            AfterUnaryOp = true;
+        }
+
         if (scopePtr) {
             if (*scopePtr == EScope::TypeName) {
                 ++InsideType;
@@ -1156,19 +1160,30 @@ private:
 
         //Cerr << str << "\n";
         auto currentScope = Scopes.back();
-        if (AfterLess && str == ">") {
-            Out(' ');
-        } else if (AfterDigits && str == ".") {
-            Out(' ');
-        } else if (OutColumn && (currentScope == EScope::DoubleQuestion || str != "?")
-            && str != ":" && str != "." && str != "," && str != ";" && str != ")" && str != "]"
-            && str != "}" && str != "|>" && str != "::" && !AfterNamespace && !AfterBracket
-            && !AfterInvokeExpr && !AfterDollarOrAt && !AfterDot && (!AfterQuestion || str != "?")
-            && (!InsideType || (str != "<" && str != ">" && str != "<>"))
-            && (!InsideType || !AfterLess)
-            && (!AfterKeyExpr || str != "[")
-            ) {
-            Out(' ');
+        if (!SkipSpaceAfterUnaryOp) {
+            if (AfterLess && str == ">") {
+                Out(' ');
+            } else if (AfterDigits && str == ".") {
+                Out(' ');
+            } else if (OutColumn && (currentScope == EScope::DoubleQuestion || str != "?")
+                && str != ":" && str != "." && str != "," && str != ";" && str != ")" && str != "]"
+                && str != "}" && str != "|>" && str != "::" && !AfterNamespace && !AfterBracket
+                && !AfterInvokeExpr && !AfterDollarOrAt && !AfterDot && (!AfterQuestion || str != "?")
+                && (!InsideType || (str != "<" && str != ">" && str != "<>"))
+                && (!InsideType || !AfterLess)
+                && (!AfterKeyExpr || str != "[")
+                ) {
+                Out(' ');
+            }
+        }
+
+        SkipSpaceAfterUnaryOp = false;
+        if (AfterUnaryOp) {
+            if (str == "+" || str == "-" || str == "~") {
+                SkipSpaceAfterUnaryOp = true;
+            }
+
+            AfterUnaryOp = false;
         }
 
         AfterInvokeExpr = false;
@@ -1901,6 +1916,8 @@ private:
     bool AfterNamespace = false;
     bool AfterBracket = false;
     bool AfterInvokeExpr = false;
+    bool AfterUnaryOp = false;
+    bool SkipSpaceAfterUnaryOp = false;
     bool AfterDollarOrAt = false;
     bool AfterDot = false;
     bool AfterDigits = false;

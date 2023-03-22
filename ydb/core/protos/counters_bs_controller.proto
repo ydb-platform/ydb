@@ -75,6 +75,8 @@ enum ECumulativeCounters {
     COUNTER_DISK_SCRUB_QUANTUM_FINISHED = 38 [(CounterOpts) = {Name: "QuantumFinished"}];
 
     COUNTER_CONFIGCMD_READ_SETTINGS_USEC = 39 [(CounterOpts) = {Name: "ReadSettings"}];
+    COUNTER_CONFIGCMD_WIPE_VDISK_USEC = 40 [(CounterOpts) = {Name: "WipeVDisk"}];
+    COUNTER_CONFIGCMD_SANITIZE_GROUP_USEC = 41 [(CounterOpts) = {Name: "SanitizeGroup"}];
 }
 
 enum EPercentileCounters {

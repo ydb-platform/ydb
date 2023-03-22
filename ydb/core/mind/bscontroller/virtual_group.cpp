@@ -120,6 +120,7 @@ namespace NKikimr::NBsController {
             group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::NEW;
             group->HiveId = cmd.GetHiveId();
             group->NeedAlter = true;
+            group->CalculateGroupStatus();
 
             NKikimrBlobDepot::TBlobDepotConfig config;
             config.SetVirtualGroupId(groupId);
@@ -207,6 +208,7 @@ namespace NKikimr::NBsController {
                 TGroupInfo *group = State->Groups.FindForUpdate(Machine->GroupId);
                 Y_VERIFY(group);
                 Callback(*group);
+                group->CalculateGroupStatus();
                 TString error;
                 if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update",

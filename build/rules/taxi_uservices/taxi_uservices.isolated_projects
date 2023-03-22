@@ -118,7 +118,6 @@ taxi/uservices/services/cctv-workers
 taxi/uservices/services/classifier
 taxi/uservices/services/client-events
 taxi/uservices/services/client-routing-sidecar
-taxi/uservices/services/clients-monitorings
 taxi/uservices/services/combo-contractors
 taxi/uservices/services/combo-matcher
 taxi/uservices/services/combo-passengers

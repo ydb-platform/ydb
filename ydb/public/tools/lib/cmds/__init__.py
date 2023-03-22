@@ -388,7 +388,7 @@ def start(arguments):
     info = recipe.read_metafile()
     for node_id, node_meta in info['nodes'].items():
         files = {}
-        if os.path.exists(node_meta['stderr_file']):
+        if node_meta['stderr_file'] is not None and os.path.exists(node_meta['stderr_file']):
             files = {
                 'stdin_file': node_meta['stdin_file'],
                 'stderr_file': node_meta['stderr_file'],

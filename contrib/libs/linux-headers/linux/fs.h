@@ -284,6 +284,7 @@ typedef int __bitwise __kernel_rwf_t;
 #undef RWF_DSYNC
 #undef RWF_SYNC
 #undef RWF_NOWAIT
+#undef RWF_APPEND
 
 /* high priority request, poll if possible */
 #define RWF_HIPRI	((__kernel_rwf_t)0x00000001)

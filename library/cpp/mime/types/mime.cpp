@@ -100,6 +100,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_TTF, "font/ttf\0", "ttf\0"},
     {MIME_WEBMANIFEST, "application/manifest+json\0", "webmanifest\0"},
     {MIME_CBOR, "application/cbor\0application/x-amz-cbor-1.1\0", "cbor\0"},
+    {MIME_CSV, "text/csv\0", "csv\0"},
     {MIME_MAX, nullptr, nullptr},
 
     // Additional records

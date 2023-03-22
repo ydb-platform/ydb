@@ -1143,20 +1143,16 @@ private:
 
         SaveQueryResponse(ev);
 
-        const bool failure = Issues.Size() > 0;
-        {
-            auto statusCode = ev->Get()->Record.GetStatusCode();
-            if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED
-                || (failure != (ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS))
-            ) {
-                QueryCounters.Counters->GetCounter(NYql::NDqProto::StatusIds_StatusCode_Name(statusCode), false)->Inc();
-            }
+        auto statusCode = ev->Get()->Record.GetStatusCode();
+        if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
+           LOG_E("StatusCode == NYql::NDqProto::StatusIds::UNSPECIFIED, it is not expected, the query will be failed.");
         }
+        const bool failure = statusCode != NYql::NDqProto::StatusIds::SUCCESS;
         const bool finalize = failure || DqGraphIndex + 1 >= static_cast<i32>(DqGraphParams.size());
         if (finalize) {
 
             if (failure) {
-                ResignQuery(ev->Get()->Record.GetStatusCode());
+                ResignQuery(statusCode);
                 return;
             }
 

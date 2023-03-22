@@ -4,6 +4,7 @@
 #include "config.h"
 #include "group_geometry_info.h"
 #include "group_layout_checker.h"
+#include "layout_helpers.h"
 
 namespace NKikimr::NBsController {
 
@@ -237,7 +238,9 @@ namespace NKikimr::NBsController {
             TDuration RetryTimeout = MinRetryTimeout;
             TInstant NextRetryTimestamp = TInstant::Zero();
             THashMap<TVDiskID, TVDiskStatusTracker> VDiskStatus;
-            bool LayoutValid = false;
+
+            bool LayoutValid = true;
+            TString LayoutError;
 
             TGroupRecord(TGroupId groupId) : GroupId(groupId) {}
         };
@@ -251,16 +254,26 @@ namespace NKikimr::NBsController {
         bool GroupLayoutSanitizer = false;
         THostRecordMap HostRecords;
 
+        enum EPeriodicProcess {
+            SELF_HEAL = 0,
+            GROUP_LAYOUT_SANITIZER,
+        };
+
+        static constexpr TDuration SelfHealWakeupPeriod = TDuration::Seconds(10);
+        static constexpr TDuration GroupLayoutSanitizerWakeupPeriod = TDuration::Seconds(60);
+
     public:
-        TSelfHealActor(ui64 tabletId, std::shared_ptr<std::atomic_uint64_t> unreassignableGroups)
+        TSelfHealActor(ui64 tabletId, std::shared_ptr<std::atomic_uint64_t> unreassignableGroups, THostRecordMap hostRecords)
             : TabletId(tabletId)
             , UnreassignableGroups(std::move(unreassignableGroups))
+            , HostRecords(std::move(hostRecords))
         {}
 
         void Bootstrap(const TActorId& parentId) {
             ControllerId = parentId;
             Become(&TThis::StateFunc);
-            HandleWakeup();
+            HandleWakeup(EPeriodicProcess::SELF_HEAL);
+            HandleWakeup(EPeriodicProcess::GROUP_LAYOUT_SANITIZER);
         }
 
         void Handle(TEvControllerUpdateSelfHealInfo::TPtr& ev) {
@@ -273,9 +286,13 @@ namespace NKikimr::NBsController {
                     const auto [it, inserted] = Groups.try_emplace(groupId, groupId);
                     auto& g = it->second;
                     bool hasFaultyDisks = false;
+                    
                     g.Content = std::move(*data);
-                    g.LayoutValid = false;
-                    GroupsWithInvalidLayout.PushBack(&g);
+
+                    if (GroupLayoutSanitizer) {
+                        UpdateGroupLayoutInformation(g);
+                    }
+
                     for (const auto& [vdiskId, vdisk] : g.Content.VDisks) {
                         g.VDiskStatus[vdiskId].Update(vdisk.VDiskStatus, now);
                         hasFaultyDisks |= vdisk.Faulty;
@@ -355,6 +372,43 @@ namespace NKikimr::NBsController {
             UnreassignableGroups->store(counter);
         }
 
+        void UpdateGroupLayoutInformation(TGroupRecord& group) {
+            NLayoutChecker::TDomainMapper domainMapper;
+            Y_VERIFY(group.Content.Geometry);
+            Y_VERIFY(HostRecords);
+            auto groupDef = MakeGroupDefinition(group.Content.VDisks, *group.Content.Geometry);
+
+            std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdisks;
+            for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
+                ui32 nodeId = vdisk.Location.NodeId;
+                TPDiskId pdiskId = vdisk.Location.ComprisingPDiskId();
+                if (HostRecords->GetHostId(nodeId)) {
+                    pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper,
+                            HostRecords->GetLocation(nodeId),
+                            pdiskId,
+                            *group.Content.Geometry);
+                } else {
+                    // Node location cannot be obtained, assume group layout is valid
+                    return;
+                }
+            }
+
+            TString error;
+            bool isValid = CheckLayoutByGroupDefinition(groupDef,
+                    pdisks,
+                    *group.Content.Geometry,
+                    error);
+
+            if (group.LayoutValid && !isValid) {
+                group.LayoutError = error;
+                GroupsWithInvalidLayout.PushBack(&group);
+            } else if (!group.LayoutValid && isValid) {
+                group.LayoutError.clear();
+                GroupsWithInvalidLayout.Remove(&group);
+            }
+            group.LayoutValid = isValid;
+        }
+
         std::optional<TVDiskID> FindVDiskToReplace(const THashMap<TVDiskID, TVDiskStatusTracker>& tracker,
                 const TEvControllerUpdateSelfHealInfo::TGroupContent& content, TInstant now) {
             auto status = [&](const TVDiskID& id) {
@@ -402,7 +456,7 @@ namespace NKikimr::NBsController {
                 CheckGroups();
             }
         }
-        
+
         using TVDiskInfo = TEvControllerUpdateSelfHealInfo::TGroupContent::TVDiskInfo;
         TGroupMapper::TGroupDefinition MakeGroupDefinition(const TMap<TVDiskID, TVDiskInfo>& vdisks, 
                 const TGroupGeometryInfo& geom) {
@@ -418,9 +472,26 @@ namespace NKikimr::NBsController {
             return std::move(groupDefinition);
         }
 
-        void HandleWakeup() {
-            CheckGroups();
-            Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+        void HandleWakeup(EPeriodicProcess process) {
+            switch (process) {
+            case EPeriodicProcess::SELF_HEAL:
+                CheckGroups();
+                Schedule(SelfHealWakeupPeriod, new TEvents::TEvWakeup(EPeriodicProcess::SELF_HEAL));
+                break;
+
+            case EPeriodicProcess::GROUP_LAYOUT_SANITIZER:
+                if (GroupLayoutSanitizer) {
+                    for (auto& [_, group] : Groups) {
+                        UpdateGroupLayoutInformation(group);
+                    }
+                }
+                Schedule(GroupLayoutSanitizerWakeupPeriod, new TEvents::TEvWakeup(EPeriodicProcess::GROUP_LAYOUT_SANITIZER));
+                break;
+            }
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr& ev) {
+            HandleWakeup(EPeriodicProcess(ev->Get()->Tag));
         }
 
         void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
@@ -557,6 +628,89 @@ namespace NKikimr::NBsController {
                         }
                     }
                 }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Group Layout Sanitizer";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "Status: " << (GroupLayoutSanitizer ? "enabled" : "disabled");
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Groups with invalid layout";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table-sortable table") {
+                            TABLEHEAD() {
+                                ui32 numCols = 0;
+                                for (const TGroupRecord& group : GroupsWithInvalidLayout) {
+                                    numCols = Max<ui32>(numCols, group.Content.VDisks.size());
+                                }
+
+                                TABLER() {
+                                    TABLEH() { out << "GroupId:Gen"; }
+                                    for (ui32 i = 0; i < numCols; ++i) {
+                                        TABLEH() { out << "OrderNum# " << i; }
+                                    }
+                                    TABLEH() { out << "LayoutErrorReason# "; }
+                                }
+                            }
+                            TABLEBODY() {
+                                for (const TGroupRecord& group : GroupsWithInvalidLayout) {
+                                    TABLER() {
+                                        out << "<td rowspan='2'><a href='?TabletID=" << TabletId
+                                            << "&page=GroupDetail&GroupId=" << group.GroupId << "'>"
+                                            << group.GroupId << "</a>:" << group.Content.Generation << "</td>";
+
+                                        for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
+                                            TABLED() {
+                                                out << vdiskId.ToString();
+                                                out << "<br/>";
+                                                out << vdisk.VDiskStatus;
+                                                out << "<br/><strong>";
+                                                if (const auto it = group.VDiskStatus.find(vdiskId); it != group.VDiskStatus.end()) {
+                                                    if (const auto& status = it->second.GetStatus(now)) {
+                                                        out << *status;
+                                                    } else {
+                                                        out << "unsure";
+                                                    }
+                                                } else {
+                                                    out << "?";
+                                                }
+                                                out << "</strong>";
+                                            }
+                                        }
+
+                                        out << "<td rowspan='2'>" << group.LayoutError << "</td>";
+                                    }
+                                    TABLER() {
+                                        for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
+                                            TABLED() {
+                                                const auto& l = vdisk.Location;
+                                                if (vdisk.Faulty) {
+                                                    out << "<strong>";
+                                                }
+                                                if (vdisk.Bad) {
+                                                    out << "<font color='red'>";
+                                                }
+                                                out << "[" << l.NodeId << ":" << l.PDiskId << ":" << l.VSlotId << "]";
+                                                if (vdisk.Bad) {
+                                                    out << "</font>";
+                                                }
+                                                if (vdisk.Faulty) {
+                                                    out << "</strong>";
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -569,13 +723,14 @@ namespace NKikimr::NBsController {
             hFunc(TEvControllerUpdateSelfHealInfo, Handle);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
             hFunc(TEvReassignerDone, Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            hFunc(TEvents::TEvWakeup, Handle);
             hFunc(TEvPrivate::TEvUpdateHostRecords, Handle);
         })
     };
 
     IActor *TBlobStorageController::CreateSelfHealActor() {
-        return new TSelfHealActor(TabletID(), SelfHealUnreassignableGroups);
+        Y_VERIFY(HostRecords);
+        return new TSelfHealActor(TabletID(), SelfHealUnreassignableGroups, HostRecords);
     }
 
     void TBlobStorageController::InitializeSelfHealState() {

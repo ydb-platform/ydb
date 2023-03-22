@@ -3,7 +3,21 @@
 
 namespace NKikimr::NOlap {
 
-std::vector<bool> MakeSnapshotFilter(std::shared_ptr<arrow::Table> table,
+struct TFilteredBatch {
+    std::shared_ptr<arrow::RecordBatch> Batch;
+    std::vector<bool> Filter;
+
+    bool Valid() const {
+        if (Batch) {
+            return Filter.empty() || (Filter.size() == (size_t)Batch->num_rows());
+        }
+        return false;
+    }
+
+    void ApplyFilter();
+};
+
+std::vector<bool> MakeSnapshotFilter(std::shared_ptr<arrow::RecordBatch> batch,
                                      std::shared_ptr<arrow::Schema> snapSchema,
                                      ui64 planStep, ui64 txId);
 
@@ -19,7 +33,7 @@ void ReplaceDupKeys(std::shared_ptr<arrow::RecordBatch>& batch,
                     const std::shared_ptr<arrow::Schema>& replaceSchema, bool lastWins = false);
 
 struct TReadMetadata;
-std::shared_ptr<arrow::RecordBatch> FilterPortion(std::shared_ptr<arrow::Table> table,
-                                                  const TReadMetadata& readMetadata);
+TFilteredBatch FilterPortion(const std::shared_ptr<arrow::RecordBatch>& batch, const TReadMetadata& readMetadata);
+TFilteredBatch FilterNotIndexed(const std::shared_ptr<arrow::RecordBatch>& batch, const TReadMetadata& readMetadata);
 
 }

@@ -244,7 +244,9 @@ void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& co
 
     if (waitingFor.empty()) {
         WaitIndexed.erase(batchNo);
-        Indexed[batchNo] = AssembleIndexedBatch(batchNo);
+        if (auto batch = AssembleIndexedBatch(batchNo)) {
+            Indexed[batchNo] = batch;
+        }
         UpdateGranuleWaits(batchNo);
     }
 }
@@ -252,13 +254,7 @@ void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& co
 std::shared_ptr<arrow::RecordBatch> TIndexedReadData::AssembleIndexedBatch(ui32 batchNo) {
     auto& portionInfo = Portion(batchNo);
 
-    auto portion = portionInfo.Assemble(ReadMetadata->IndexInfo, ReadMetadata->LoadSchema, Data);
-    Y_VERIFY(portion);
-
-    /// @warning The replace logic is correct only in assumption that predicate is applyed over a part of ReplaceKey.
-    /// It's not OK to apply predicate before replacing key duplicates otherwise.
-    /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
-    auto batch = NOlap::FilterPortion(portion, *ReadMetadata);
+    auto batch = portionInfo.AssembleInBatch(ReadMetadata->IndexInfo, ReadMetadata->LoadSchema, Data);
     Y_VERIFY(batch);
 
     for (auto& rec : portionInfo.Records) {
@@ -266,7 +262,15 @@ std::shared_ptr<arrow::RecordBatch> TIndexedReadData::AssembleIndexedBatch(ui32 
         Data.erase(blobRange);
     }
 
-    return batch;
+    /// @warning The replace logic is correct only in assumption that predicate is applyed over a part of ReplaceKey.
+    /// It's not OK to apply predicate before replacing key duplicates otherwise.
+    /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
+    auto filtered = NOlap::FilterPortion(batch, *ReadMetadata);
+    if (filtered.Batch) {
+        Y_VERIFY(filtered.Valid());
+        filtered.ApplyFilter();
+    }
+    return filtered.Batch;
 }
 
 void TIndexedReadData::UpdateGranuleWaits(ui32 batchNo) {
@@ -282,8 +286,7 @@ void TIndexedReadData::UpdateGranuleWaits(ui32 batchNo) {
 }
 
 std::shared_ptr<arrow::RecordBatch>
-TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                      ui64 planStep, ui64 txId) const {
+TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>& srcBatch, ui64 planStep, ui64 txId) const {
     Y_VERIFY(srcBatch);
 
     // Extract columns (without check), filter, attach snapshot, extract columns with check
@@ -292,41 +295,20 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
     auto batch = NArrow::ExtractExistedColumns(srcBatch, ReadMetadata->LoadSchema);
     Y_VERIFY(batch);
 
-    { // Apply predicate
-        // TODO: Extract this info function
-        std::vector<bool> less;
-        if (ReadMetadata->LessPredicate) {
-            Y_VERIFY(NArrow::HasAllColumns(batch, ReadMetadata->LessPredicate->Batch->schema()));
-
-            auto cmpType = ReadMetadata->LessPredicate->Inclusive ?
-                NArrow::ECompareType::LESS_OR_EQUAL : NArrow::ECompareType::LESS;
-            less = NArrow::MakePredicateFilter(batch, ReadMetadata->LessPredicate->Batch, cmpType);
-        }
-
-        std::vector<bool> greater;
-        if (ReadMetadata->GreaterPredicate) {
-            Y_VERIFY(NArrow::HasAllColumns(batch, ReadMetadata->GreaterPredicate->Batch->schema()));
-
-            auto cmpType = ReadMetadata->GreaterPredicate->Inclusive ?
-                NArrow::ECompareType::GREATER_OR_EQUAL : NArrow::ECompareType::GREATER;
-            greater = NArrow::MakePredicateFilter(batch, ReadMetadata->GreaterPredicate->Batch, cmpType);
-        }
-
-        std::vector<bool> bits = NArrow::CombineFilters(std::move(less), std::move(greater));
-        if (bits.size()) {
-            auto res = arrow::compute::Filter(batch, NArrow::MakeFilter(bits));
-            Y_VERIFY_S(res.ok(), res.status().message());
-            Y_VERIFY((*res).kind() == arrow::Datum::RECORD_BATCH);
-            batch = (*res).record_batch();
-        }
+    auto filtered = FilterNotIndexed(batch, *ReadMetadata);
+    if (!filtered.Batch) {
+        return {};
     }
 
-    batch = TIndexInfo::AddSpecialColumns(batch, planStep, txId);
-    Y_VERIFY(batch);
+    filtered.Batch = TIndexInfo::AddSpecialColumns(filtered.Batch, planStep, txId);
+    Y_VERIFY(filtered.Batch);
 
-    batch = NArrow::ExtractColumns(batch, ReadMetadata->LoadSchema);
-    Y_VERIFY(batch);
-    return batch;
+    filtered.Batch = NArrow::ExtractColumns(filtered.Batch, ReadMetadata->LoadSchema);
+    Y_VERIFY(filtered.Batch);
+
+    Y_VERIFY(filtered.Valid());
+    filtered.ApplyFilter();
+    return filtered.Batch;
 }
 
 TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxRowsInBatch) {
@@ -350,7 +332,7 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
     }
 
     // Extact ready granules (they are ready themselves but probably not ready to go out)
-    TVector<ui32> ready;
+    std::vector<ui32> ready;
     for (auto& [batchNo, batch] : Indexed) {
         ui64 granule = BatchGranule(batchNo);
         if (ReadyGranules.count(granule)) {
@@ -477,7 +459,7 @@ TIndexedReadData::MergeNotIndexed(std::vector<std::shared_ptr<arrow::RecordBatch
     { // remove empty batches
         size_t dst = 0;
         for (size_t src = 0; src < batches.size(); ++src) {
-            if (batches[src]->num_rows()) {
+            if (batches[src] && batches[src]->num_rows()) {
                 if (dst != src) {
                     batches[dst] = batches[src];
                 }

@@ -974,6 +974,30 @@ std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2)
     return f1;
 }
 
+std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2, size_t& count) {
+    count = 0;
+    if (f1.empty() && !f2.empty()) {
+        f1.swap(f2);
+    }
+    if (f1.empty()) {
+        return {};
+    }
+
+    if (f2.empty()) {
+        for (bool bit : f1) {
+            count += bit;
+        }
+        return f1;
+    }
+
+    Y_VERIFY(f1.size() == f2.size());
+    for (size_t i = 0; i < f1.size(); ++i) {
+        f1[i] = f1[i] && f2[i];
+        count += f1[i];
+    }
+    return f1;
+}
+
 std::vector<bool> MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border,
                                       ECompareType compareType) {
     std::vector<NArrow::ECompareResult> cmps;

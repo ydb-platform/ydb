@@ -101,6 +101,7 @@ std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size);
 std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse = false);
 std::shared_ptr<arrow::BooleanArray> MakeFilter(const std::vector<bool>& bits);
 std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2);
+std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2, size_t& count);
 TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
 // Return size in bytes including size of bitmap mask
 ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);

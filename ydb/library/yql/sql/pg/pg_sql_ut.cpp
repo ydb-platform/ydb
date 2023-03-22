@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '()) '('notnull '()))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '()) '('notnull '('a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('notnull '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -175,5 +175,14 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
 
         auto issue = *(res.Issues.begin());
         UNIT_ASSERT(issue.GetMessage().find("duplicate") != TString::npos);
+    }
+
+    Y_UNIT_TEST(CreateTableStmt_PKHasColumnsNotBelongingToTable_Fails) {
+        auto res = PgSqlToYql("CREATE TABLE t (a int, primary key(b))");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT(issue.GetMessage().find("PK column does not belong to table") != TString::npos);
     }
 }

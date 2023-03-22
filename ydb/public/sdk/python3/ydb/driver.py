@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 from . import credentials as credentials_impl, table, scheme, pool
 from . import tracing
-import six
 import os
 import grpc
 from . import _utilities
 
-if six.PY2:
-    Any = None
-else:
-    from typing import Any  # noqa
+from typing import Any  # noqa
 
 
 class RPCCompression:
@@ -23,10 +19,17 @@ class RPCCompression:
 def default_credentials(credentials=None, tracer=None):
     tracer = tracer if tracer is not None else tracing.Tracer(None)
     with tracer.trace("Driver.default_credentials") as ctx:
-        if credentials is not None:
+        if credentials is None:
+            ctx.trace({"credentials.anonymous": True})
+            return credentials_impl.AnonymousCredentials()
+        else:
             ctx.trace({"credentials.prepared": True})
             return credentials
 
+
+def credentials_from_env_variables(tracer=None):
+    tracer = tracer if tracer is not None else tracing.Tracer(None)
+    with tracer.trace("Driver.credentials_from_env_variables") as ctx:
         service_account_key_file = os.getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
         if service_account_key_file is not None:
             ctx.trace({"credentials.service_account_key_file": True})
@@ -51,9 +54,7 @@ def default_credentials(credentials=None, tracer=None):
             ctx.trace({"credentials.access_token": True})
             return credentials_impl.AuthTokenCredentials(access_token)
 
-        import ydb.iam
-
-        return ydb.iam.MetadataUrlCredentials(tracer=tracer)
+        return default_credentials(None, tracer)
 
 
 class DriverConfig(object):
@@ -70,6 +71,7 @@ class DriverConfig(object):
         "grpc_keep_alive_timeout",
         "secure_channel",
         "table_client_settings",
+        "topic_client_settings",
         "endpoints",
         "primary_user_agent",
         "tracer",
@@ -92,6 +94,7 @@ class DriverConfig(object):
         private_key=None,
         grpc_keep_alive_timeout=None,
         table_client_settings=None,
+        topic_client_settings=None,
         endpoints=None,
         primary_user_agent="python-library",
         tracer=None,
@@ -138,6 +141,7 @@ class DriverConfig(object):
         self.private_key = private_key
         self.grpc_keep_alive_timeout = grpc_keep_alive_timeout
         self.table_client_settings = table_client_settings
+        self.topic_client_settings = topic_client_settings
         self.primary_user_agent = primary_user_agent
         self.tracer = tracer if tracer is not None else tracing.Tracer(None)
         self.grpc_lb_policy_name = grpc_lb_policy_name
@@ -228,6 +232,8 @@ class Driver(pool.ConnectionPool):
         :param database: A database path
         :param credentials: A credentials. If not specifed credentials constructed by default.
         """
+        from . import topic  # local import for prevent cycle import error
+
         driver_config = get_config(
             driver_config,
             connection_string,
@@ -238,5 +244,9 @@ class Driver(pool.ConnectionPool):
         )
 
         super(Driver, self).__init__(driver_config)
+
+        self._credentials = driver_config.credentials
+
         self.scheme_client = scheme.SchemeClient(self)
         self.table_client = table.TableClient(self, driver_config.table_client_settings)
+        self.topic_client = topic.TopicClient(self, driver_config.topic_client_settings)

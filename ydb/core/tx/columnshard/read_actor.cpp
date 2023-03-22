@@ -67,6 +67,8 @@ public:
         }
 
         auto ready = IndexedData.GetReadyResults(Max<i64>());
+        LOG_S_TRACE("Ready results with " << ready.size() << " batches at tablet " << TabletId << " (read)");
+
         size_t next = 1;
         for (auto it = ready.begin(); it != ready.end(); ++it, ++next) {
             bool lastOne = Finished() && (next == ready.size());

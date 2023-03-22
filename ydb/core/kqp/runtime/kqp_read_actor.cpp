@@ -738,7 +738,6 @@ public:
         }
         CA_LOG_D("Retrying read #" << id);
 
-        SendCancel(id);
         ResetRead(id);
 
         if (Reads[id].SerializedContinuationToken) {
@@ -938,6 +937,12 @@ public:
 
     void ResetRead(size_t id) {
         if (Reads[id]) {
+            Counters->SentIteratorCancels->Inc();
+            auto* state = Reads[id].Shard;
+            auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+            cancel->Record.SetReadId(id);
+            Send(::PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId));
+
             Reads[id].Reset();
             ResetReads++;
         }
@@ -1156,9 +1161,6 @@ public:
                 }
 
                 if (Reads[id].IsLastMessage(msg)) {
-                    if (!record.GetFinished()) {
-                        SendCancel(id);
-                    }
                     ResetRead(id);
                 }
 
@@ -1232,17 +1234,6 @@ public:
     void CommitState(const NYql::NDqProto::TCheckpoint&) override {}
     void LoadState(const NYql::NDqProto::TSourceState&) override {}
 
-    void SendCancel(ui32 id) {
-        if (!Reads[id]) {
-            return;
-        }
-        Counters->SentIteratorCancels->Inc();
-        auto* state = Reads[id].Shard;
-        auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
-        cancel->Record.SetReadId(id);
-        Send(::PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId));
-    }
-
     void PassAway() override {
         Counters->ReadActorsCount->Dec();
         {
@@ -1250,7 +1241,7 @@ public:
             Results.clear();
             Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
             for (size_t i = 0; i < Reads.size(); ++i) {
-                SendCancel(i);
+                ResetRead(i);
             }
         }
         TBase::PassAway();

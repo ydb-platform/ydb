@@ -22,7 +22,7 @@ View the description of the delete consumer command:
 
 | Name | Description |
 ---|---
-| `--consumer-name VAL` | Name of the consumer to be deleted. |
+| `--consumer VAL` | Name of the consumer to be deleted. |
 
 ## Examples {#examples}
 
@@ -32,6 +32,6 @@ Delete the [previously created](#consumer-add) consumer with the `my-consumer` n
 
 ```bash
 {{ ydb-cli }} -p db1 topic consumer drop \
-  --consumer-name my-consumer \
+  --consumer my-consumer \
   my-topic
 ```

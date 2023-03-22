@@ -25,7 +25,7 @@ Before reading data, add a [consumer](../concepts/topic.md#consumer). Below is a
 ```bash
 {{ ydb-cli }} topic consumer add \
   my/table/updates_feed \
-  --consumer-name=my_consumer
+  --consumer=my_consumer
 ```
 
 Next, you can use the created consumer to start tracking changes. Below is a sample command for tracking data changes in the CLI:
@@ -71,7 +71,7 @@ As a load generator, you can use the feature of [emulating an online store](../r
    ```bash
    {{ ydb-cli }} topic consumer add \
      orders/updates \
-     --consumer-name=my_consumer
+     --consumer=my_consumer
    ```
 
 1. Start tracking changes:

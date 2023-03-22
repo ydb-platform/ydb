@@ -7,7 +7,6 @@ import time
 import random
 import enum
 
-import six
 from . import (
     issues,
     convert,
@@ -28,7 +27,7 @@ try:
 except ImportError:
     interceptor = None
 
-_allow_split_transaction = True
+_default_allow_split_transaction = False
 
 logger = logging.getLogger(__name__)
 
@@ -770,8 +769,7 @@ class TableDescription(object):
         return self
 
 
-@six.add_metaclass(abc.ABCMeta)
-class AbstractTransactionModeBuilder(object):
+class AbstractTransactionModeBuilder(abc.ABC):
     @property
     @abc.abstractmethod
     def name(self):
@@ -949,7 +947,7 @@ def retry_operation_impl(callee, retry_settings=None, *args, **kwargs):
     retry_settings = RetrySettings() if retry_settings is None else retry_settings
     status = None
 
-    for attempt in six.moves.range(retry_settings.max_retries + 1):
+    for attempt in range(retry_settings.max_retries + 1):
         try:
             result = YdbRetryOperationFinalResult(callee(*args, **kwargs))
             yield result
@@ -1103,8 +1101,7 @@ def _scan_query_request_factory(query, parameters=None, settings=None):
     )
 
 
-@six.add_metaclass(abc.ABCMeta)
-class ISession:
+class ISession(abc.ABC):
     @abstractmethod
     def __init__(self, driver, table_client_settings):
         pass
@@ -1184,9 +1181,7 @@ class ISession:
         pass
 
     @abstractmethod
-    def transaction(
-        self, tx_mode=None, allow_split_transactions=_allow_split_transaction
-    ):
+    def transaction(self, tx_mode=None, allow_split_transactions=None):
         pass
 
     @abstractmethod
@@ -1268,8 +1263,7 @@ class ISession:
         pass
 
 
-@six.add_metaclass(abc.ABCMeta)
-class ITableClient:
+class ITableClient(abc.ABC):
     def __init__(self, driver, table_client_settings=None):
         pass
 
@@ -1691,9 +1685,7 @@ class BaseSession(ISession):
             self._state.endpoint,
         )
 
-    def transaction(
-        self, tx_mode=None, allow_split_transactions=_allow_split_transaction
-    ):
+    def transaction(self, tx_mode=None, allow_split_transactions=None):
         return TxContext(
             self._driver,
             self._state,
@@ -2100,8 +2092,7 @@ class Session(BaseSession):
         )
 
 
-@six.add_metaclass(abc.ABCMeta)
-class ITxContext:
+class ITxContext(abc.ABC):
     @abstractmethod
     def __init__(self, driver, session_state, session, tx_mode=None):
         """
@@ -2231,7 +2222,7 @@ class BaseTxContext(ITxContext):
         session,
         tx_mode=None,
         *,
-        allow_split_transactions=_allow_split_transaction
+        allow_split_transactions=None
     ):
         """
         An object that provides a simple transaction context manager that allows statements execution
@@ -2316,6 +2307,8 @@ class BaseTxContext(ITxContext):
         """
 
         self._check_split()
+        if commit_tx:
+            self._set_finish(self._COMMIT)
 
         return self._driver(
             _tx_ctx_impl.execute_request_factory(
@@ -2416,7 +2409,13 @@ class BaseTxContext(ITxContext):
         Deny all operaions with transaction after commit/rollback.
         Exception: double commit and double rollbacks, because it is safe
         """
-        if self._allow_split_transactions:
+        allow_split_transaction = (
+            self._allow_split_transactions
+            if self._allow_split_transactions is not None
+            else _default_allow_split_transaction
+        )
+
+        if allow_split_transaction:
             return
 
         if self._finished != "" and self._finished != allow:

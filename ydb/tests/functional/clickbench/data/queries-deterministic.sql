@@ -1,7 +1,7 @@
 /*0*/ SELECT COUNT(*) FROM $data;
 /*1*/ SELECT COUNT(*) FROM $data WHERE AdvEngineID <> 0;
 /*2*/ SELECT SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth) FROM $data;
-/*3*/ SELECT AVG(UserID) FROM $data;
+--/*3*/ SELECT AVG(UserID) FROM $data;
 /*4*/ SELECT COUNT(DISTINCT UserID) FROM $data;
 /*5*/ SELECT COUNT(DISTINCT SearchPhrase) FROM $data;
 /*6*/ SELECT MIN(EventDate), MAX(EventDate) FROM $data;

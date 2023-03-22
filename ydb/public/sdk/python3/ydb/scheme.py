@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import abc
 import enum
-import six
 from abc import abstractmethod
 from . import issues, operation, settings as settings_impl, _apis
 
@@ -347,8 +346,7 @@ def _wrap_describe_path_response(rpc_state, response):
     return _wrap_scheme_entry(message.self)
 
 
-@six.add_metaclass(abc.ABCMeta)
-class ISchemeClient:
+class ISchemeClient(abc.ABC):
     @abstractmethod
     def __init__(self, driver):
         pass

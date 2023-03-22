@@ -85,7 +85,7 @@ std::string_view GetSchemeHostPortParameterized(const std::string_view url) {
 
 ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetSchemeHostPort, GetSchemeHostPortParameterized);
 
-SIMPLE_UDF(TGetPort, TOptional<ui64>(TOptional<char*>)) {
+BEGIN_SIMPLE_ARROW_UDF(TGetPort, TOptional<ui64>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     Y_UNUSED(valueBuilder);
     ui16 port = 0;
@@ -97,6 +97,24 @@ SIMPLE_UDF(TGetPort, TOptional<ui64>(TOptional<char*>)) {
         ? TUnboxedValuePod(port)
         : TUnboxedValuePod();
 }
+struct TGetPortKernelExec : public TUnaryKernelExec<TGetPortKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        if (!arg) {
+            return sink(TBlockItem());
+        }
+        ui16 port = 0;
+        TStringBuf scheme, host;
+        TString lowerUri(arg.AsStringRef());
+        std::transform(lowerUri.cbegin(), lowerUri.cbegin() + GetSchemePrefixSize(lowerUri),
+                        lowerUri.begin(), [](unsigned char c){ return std::tolower(c); });
+        if (TryGetSchemeHostAndPort(lowerUri, scheme, host, port) && port) {
+            return sink(TBlockItem(port));
+        }
+        sink(TBlockItem());
+    }
+};
+END_SIMPLE_ARROW_UDF(TGetPort, TGetPortKernelExec::Do);
 
 BEGIN_SIMPLE_ARROW_UDF(TGetTail, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
@@ -164,13 +182,28 @@ struct TGetPathKernelExec : public TUnaryKernelExec<TGetPathKernelExec> {
 };
 END_SIMPLE_ARROW_UDF(TGetPath, TGetPathKernelExec::Do);
 
-SIMPLE_UDF(TGetFragment, TOptional<char*>(TOptional<char*>)) {
+BEGIN_SIMPLE_ARROW_UDF(TGetFragment, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     const std::string_view url(args[0].AsStringRef());
     const auto pos = url.find('#');
     return pos == std::string_view::npos ? TUnboxedValue() :
         valueBuilder->SubString(args[0], pos + 1U, url.length() - pos - 1U);
 }
+struct TGetFragmentKernelExec : public TUnaryKernelExec<TGetFragmentKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        if (!arg) {
+            return sink(TBlockItem());
+        }
+        const std::string_view url(arg.AsStringRef());
+        const auto pos = url.find('#');
+        if (pos == std::string_view::npos) {
+            return sink(TBlockItem());
+        }
+        return sink(TBlockItem(arg.AsStringRef().Substring(pos + 1U, url.length() - pos - 1U)));
+    }
+};
+END_SIMPLE_ARROW_UDF(TGetFragment, TGetFragmentKernelExec::Do);
 
 SIMPLE_UDF(TGetDomain, TOptional<char*>(TOptional<char*>, ui8)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);

@@ -1553,6 +1553,48 @@ TRuntimeNode TProgramBuilder::BlockCoalesce(TRuntimeNode first, TRuntimeNode sec
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockNth(TRuntimeNode tuple, ui32 index) {
+    auto blockType = AS_TYPE(TBlockType, tuple.GetStaticType());
+    bool isOptional;
+    const auto type = AS_TYPE(TTupleType, UnpackOptional(blockType->GetItemType(), isOptional));
+
+    MKQL_ENSURE(index < type->GetElementsCount(), "Index out of range: " << index <<
+        " is not less than " << type->GetElementsCount());
+    auto itemType = type->GetElementType(index);
+    if (isOptional && !itemType->IsOptional() && !itemType->IsNull() && !itemType->IsPg()) {
+        itemType = TOptionalType::Create(itemType, Env);
+    }
+
+    auto returnType = NewBlockType(itemType, blockType->GetShape());
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(tuple);
+    callableBuilder.Add(NewDataLiteral<ui32>(index));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockAsTuple(const TArrayRef<const TRuntimeNode>& args) {
+    MKQL_ENSURE(!args.empty(), "Expected at least one argument");
+
+    TBlockType::EShape resultShape = TBlockType::EShape::Scalar;
+    TVector<TType*> types;
+    for (const auto& x : args) {
+        auto blockType = AS_TYPE(TBlockType, x.GetStaticType());
+        types.push_back(blockType->GetItemType());
+        if (blockType->GetShape() == TBlockType::EShape::Many) {
+            resultShape = TBlockType::EShape::Many;
+        }
+    }
+
+    auto tupleType = NewTupleType(types);
+    auto returnType = NewBlockType(tupleType, resultShape);
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    for (const auto& x : args) {
+        callableBuilder.Add(x);
+    }
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BlockNot(TRuntimeNode data) {
     auto dataType = AS_TYPE(TBlockType, data.GetStaticType());
 

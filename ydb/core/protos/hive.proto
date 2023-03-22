@@ -282,6 +282,7 @@ message TEvRequestHiveDomainStats {
 message THiveDomainStatsStateCount {
     optional ETabletVolatileState VolatileState = 1;
     optional uint32 Count = 2;
+    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3; // only for extended tablet info
 }
 
 message THiveDomainStats {
@@ -299,6 +300,8 @@ message TEvResponseHiveDomainStats {
 
 message TEvRequestHiveNodeStats {
     optional bool ReturnMetrics = 5;
+    optional bool ReturnExtendedTabletInfo = 6;
+    optional uint64 FilterTabletsByPathId = 7;
 }
 
 message THiveNodeStats {
@@ -312,6 +315,7 @@ message THiveNodeStats {
 
 message TEvResponseHiveNodeStats {
     repeated THiveNodeStats NodeStats = 1;
+    optional bool ExtendedTabletInfo = 2;
 }
 
 message TEvRequestHiveStorageStats {

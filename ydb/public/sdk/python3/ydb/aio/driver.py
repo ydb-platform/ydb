@@ -1,42 +1,7 @@
-import os
-
 from . import pool, scheme, table
 import ydb
-from ydb.driver import get_config
-
-
-def default_credentials(credentials=None):
-    if credentials is not None:
-        return credentials
-
-    service_account_key_file = os.getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
-    if service_account_key_file is not None:
-        from .iam import ServiceAccountCredentials
-
-        return ServiceAccountCredentials.from_file(service_account_key_file)
-
-    anonymous_credetials = os.getenv("YDB_ANONYMOUS_CREDENTIALS", "0") == "1"
-    if anonymous_credetials:
-        return ydb.credentials.AnonymousCredentials()
-
-    metadata_credentials = os.getenv("YDB_METADATA_CREDENTIALS", "0") == "1"
-    if metadata_credentials:
-        from .iam import MetadataUrlCredentials
-
-        return MetadataUrlCredentials()
-
-    access_token = os.getenv("YDB_ACCESS_TOKEN_CREDENTIALS")
-    if access_token is not None:
-        return ydb.credentials.AccessTokenCredentials(access_token)
-
-    # (legacy instantiation)
-    creds = ydb.auth_helpers.construct_credentials_from_environ()
-    if creds is not None:
-        return creds
-
-    from .iam import MetadataUrlCredentials
-
-    return MetadataUrlCredentials()
+from .. import _utilities
+from ydb.driver import get_config, default_credentials
 
 
 class DriverConfig(ydb.DriverConfig):
@@ -56,7 +21,7 @@ class DriverConfig(ydb.DriverConfig):
     def default_from_connection_string(
         cls, connection_string, root_certificates=None, credentials=None, **kwargs
     ):
-        endpoint, database = ydb.parse_connection_string(connection_string)
+        endpoint, database = _utilities.parse_connection_string(connection_string)
         return cls(
             endpoint,
             database,
@@ -67,6 +32,8 @@ class DriverConfig(ydb.DriverConfig):
 
 
 class Driver(pool.ConnectionPool):
+    _credentials: ydb.Credentials  # used for topic clients
+
     def __init__(
         self,
         driver_config=None,
@@ -77,6 +44,8 @@ class Driver(pool.ConnectionPool):
         credentials=None,
         **kwargs
     ):
+        from .. import topic  # local import for prevent cycle import error
+
         config = get_config(
             driver_config,
             connection_string,
@@ -89,5 +58,8 @@ class Driver(pool.ConnectionPool):
 
         super(Driver, self).__init__(config)
 
+        self._credentials = config.credentials
+
         self.scheme_client = scheme.SchemeClient(self)
         self.table_client = table.TableClient(self, config.table_client_settings)
+        self.topic_client = topic.TopicClientAsyncIO(self, config.topic_client_settings)

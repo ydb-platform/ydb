@@ -2464,6 +2464,21 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockBitCast(arg, targetType);
     });
 
+    AddCallable("BlockNth", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto tupleObj = MkqlBuildExpr(node.Head(), ctx);
+        const auto index = FromString<ui32>(node.Tail().Content());
+        return ctx.ProgramBuilder.BlockNth(tupleObj, index);
+    });
+
+    AddCallable("BlockAsTuple", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        TVector<TRuntimeNode> args;
+        for (const auto& x : node.Children()) {
+            args.push_back(MkqlBuildExpr(*x, ctx));
+        }
+
+        return ctx.ProgramBuilder.BlockAsTuple(args);
+    });
+
     AddCallable("BlockCombineAll", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto arg = MkqlBuildExpr(*node.Child(0), ctx);
         std::optional<ui32> filterColumn;

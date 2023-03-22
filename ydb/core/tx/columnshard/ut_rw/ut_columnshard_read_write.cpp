@@ -19,7 +19,7 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
 template <typename TKey = ui64>
-bool DataHas(const TVector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range,
+bool DataHas(const std::vector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range,
              bool requireUniq = false) {
     static constexpr const bool isStrKey = std::is_same_v<TKey, std::string>;
 
@@ -79,7 +79,7 @@ bool DataHas(const TVector<TString>& blobs, const TString& srtSchema, std::pair<
 }
 
 template <typename TKey = ui64>
-bool DataHasOnly(const TVector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range) {
+bool DataHasOnly(const std::vector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range) {
     static constexpr const bool isStrKey = std::is_same_v<TKey, std::string>;
 
     THashSet<TKey> keys;
@@ -225,35 +225,51 @@ bool CheckOrdered(const TString& blob, const TString& srtSchema) {
     }
 
     ui64 prev{};
+    TString strPrev;
     for (int i = 0; i < array->length(); ++i) {
         ui64 value{};
+        TString strValue;
 
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-#if 0
-            if constexpr (isStrKey && arrow::has_string_view<typename TWrap::T>()) {
-                value = static_cast<const TArray&>(*array).GetView(i);
-                return true;
-            }
-#endif
-            if constexpr (/*!isStrKey && */arrow::has_c_type<typename TWrap::T>()) {
+
+            if constexpr (arrow::has_c_type<typename TWrap::T>()) {
                 auto& column = static_cast<const TArray&>(*array);
                 value = column.Value(i);
                 return true;
             }
+            if constexpr (arrow::is_base_binary_type<typename TWrap::T>()) {
+                auto v = static_cast<const TArray&>(*array).GetView(i);
+                strValue = TString(v.data(), v.size());
+                return true;
+            }
+
+            Cerr << array->type()->ToString() << "\n";
             UNIT_ASSERT(false);
             return false;
         });
 
-        if (!i) {
-            prev = value;
-            continue;
-        }
+        if (arrow::is_base_binary_like(array->type_id())) {
+            if (!i) {
+                strPrev = strValue;
+                continue;
+            }
 
-        if (prev > value) {
-            Cerr << "Unordered: " << prev << " " << value << "\n";
-            return false;
+            if (strPrev > strValue) {
+                Cerr << "Unordered: " << strPrev << " " << strValue << "\n";
+                return false;
+            }
+        } else {
+            if (!i) {
+                prev = value;
+                continue;
+            }
+
+            if (prev > value) {
+                Cerr << "Unordered: " << prev << " " << value << "\n";
+                return false;
+            }
         }
     }
     return true;
@@ -315,6 +331,38 @@ void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  TString codec = "none") {
     TestTableDescription table{schema, pk, true};
     SetupSchema(runtime, sender, pathId, table, codec);
+}
+
+std::vector<TString> ReadManyResults(TTestBasicRuntime& runtime, TString& schema,
+                                     NKikimrTxColumnShard::TMetadata& meta, ui32 expected = 1000) {
+    std::vector<TString> readData;
+    TAutoPtr<IEventHandle> handle;
+    bool finished = false;
+    for (ui32 i = 0; i < expected; ++i) {
+        auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+        UNIT_ASSERT(event);
+
+        auto& resRead = Proto(event);
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), TTestTxConfig::TxTablet1);
+        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        UNIT_ASSERT(resRead.GetData().size() > 0);
+        //UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+        //Cerr << "GOT BATCH " << resRead.GetBatch() << " data size " << resRead.GetData().size() << "\n";
+        if (resRead.GetFinished()) {
+            expected = resRead.GetBatch() + 1;
+            meta = resRead.GetMeta();
+            finished = true;
+        }
+        readData.push_back(resRead.GetData());
+
+        if (schema.empty()) {
+            schema = resRead.GetMeta().GetSchema();
+        }
+        UNIT_ASSERT(CheckOrdered(resRead.GetData(), schema));
+    }
+    UNIT_ASSERT(finished);
+    return readData;
 }
 
 void TestWrite(const TestTableDescription& table) {
@@ -459,21 +507,11 @@ void TestWriteReadDup() {
         if (planStep != initPlanStep) {
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
                         new TEvColumnShard::TEvRead(sender, metaShard, planStep-1, Max<ui64>(), tableId));
-            auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-            UNIT_ASSERT(event);
 
-            auto& resRead = Proto(event);
-            UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-            UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-            UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-            UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
-            UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-            UNIT_ASSERT(resRead.GetData().size() > 0);
-
-            auto data = resRead.GetData();
-            auto meta = resRead.GetMeta();
-            UNIT_ASSERT(CheckColumns(data, meta, TTestSchema::ExtractNames(ydbSchema), numRows));
-            UNIT_ASSERT(DataHas(TVector<TString>{data}, meta.GetSchema(), portion, true));
+            TString schema;
+            NKikimrTxColumnShard::TMetadata meta;
+            std::vector<TString> readData = ReadManyResults(runtime, schema, meta);
+            UNIT_ASSERT(DataHas(readData, schema, portion, true));
         }
     }
 }
@@ -815,29 +853,11 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
                 new TEvColumnShard::TEvRead(sender, metaShard, 23, txId, tableId));
-    TVector<TString> readData;
-    TString schema;
-    ui32 expected = 1000;
-    for (ui32 i = 0; i < expected; ++i) {
-        auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-        UNIT_ASSERT(event);
 
-        auto& resRead = Proto(event);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-        UNIT_ASSERT(resRead.GetData().size() > 0);
-        //UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
-        //UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-        if (resRead.GetFinished()) {
-            expected = resRead.GetBatch() + 1;
-        }
-        readData.push_back(resRead.GetData());
-        if (schema.empty()) {
-            schema = resRead.GetMeta().GetSchema();
-        }
-        UNIT_ASSERT(CheckOrdered(resRead.GetData(), schema));
-    }
+    TString schema;
+    NKikimrTxColumnShard::TMetadata meta;
+    std::vector<TString> readData = ReadManyResults(runtime, schema, meta);
+
     UNIT_ASSERT(DataHas(readData, schema, portion[0]));
     UNIT_ASSERT(DataHas(readData, schema, portion[1]));
     UNIT_ASSERT(DataHas(readData, schema, portion[2]));
@@ -856,7 +876,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
                 new TEvColumnShard::TEvRead(sender, metaShard, 24, txId, tableId));
     readData.clear();
     schema.clear();
-    expected = 1000;
+    ui32 expected = 1000;
     for (ui32 i = 0; i < expected; ++i) {
         auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
         UNIT_ASSERT(event);
@@ -1096,23 +1116,11 @@ void TestCompactionInGranuleImpl(bool reboots,
         Proto(read.get()).AddColumnNames("message");
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
-        auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-        UNIT_ASSERT(event);
 
-        auto& resRead = Proto(event);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
-        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-        UNIT_ASSERT(resRead.GetData().size() > 0);
-        UNIT_ASSERT(resRead.HasMeta());
+        TString schema;
+        NKikimrTxColumnShard::TMetadata meta;
+        std::vector<TString> readData = ReadManyResults(runtime, schema, meta);
 
-        auto& meta = resRead.GetMeta();
-        auto& schema = meta.GetSchema();
-
-        TVector<TString> readData;
-        readData.push_back(resRead.GetData());
         if (ydbPk[0].second == TTypeInfo(NTypeIds::String) || ydbPk[0].second == TTypeInfo(NTypeIds::Utf8)) {
             UNIT_ASSERT(DataHas<std::string>(readData, schema, triggerPortion, true));
             UNIT_ASSERT(DataHas<std::string>(readData, schema, smallWrites, true));
@@ -2043,45 +2051,23 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
             }
 
-            ui32 expected = 0;
-            ui32 num = 0;
-            TVector<TString> readData;
-            while (!expected || num < expected) {
-                auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-                UNIT_ASSERT(event);
+            TString schema;
+            NKikimrTxColumnShard::TMetadata meta;
+            std::vector<TString> readData = ReadManyResults(runtime, schema, meta, 20000);
+            {
+                schema = meta.GetSchema();
 
-                auto& resRead = Proto(event);
-                UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-                UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-                UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-                UNIT_ASSERT(resRead.GetData().size() > 0);
-                //UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+                UNIT_ASSERT(meta.HasReadStats());
+                auto& readStats = meta.GetReadStats();
 
-                readData.push_back(resRead.GetData());
-
-                if (resRead.GetFinished()) {
-                    expected = resRead.GetBatch() + 1;
-
-                    UNIT_ASSERT(resRead.HasMeta());
-
-                    auto& meta = resRead.GetMeta();
-                    schema = meta.GetSchema();
-
-                    UNIT_ASSERT(meta.HasReadStats());
-                    auto& readStats = meta.GetReadStats();
-
-                    UNIT_ASSERT(readStats.GetBeginTimestamp() > 0);
-                    UNIT_ASSERT(readStats.GetDurationUsec() > 0);
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
-                    UNIT_ASSERT(readStats.GetIndexBatches() > 0);
-                    //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetUsedColumns(), 7); // planStep, txId + 4 PK columns + "message"
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 3); // got 2 split compactions
-                    //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), x);
-                }
-
-                ++num;
-                UNIT_ASSERT(num < 100);
+                UNIT_ASSERT(readStats.GetBeginTimestamp() > 0);
+                UNIT_ASSERT(readStats.GetDurationUsec() > 0);
+                UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
+                UNIT_ASSERT(readStats.GetIndexBatches() > 0);
+                //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
+                UNIT_ASSERT_VALUES_EQUAL(readStats.GetUsedColumns(), 7); // planStep, txId + 4 PK columns + "message"
+                UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 3); // got 2 split compactions
+                //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), x);
             }
 
             if (isStrPk0) {

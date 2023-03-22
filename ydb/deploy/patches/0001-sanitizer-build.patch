@@ -1,0 +1,55 @@
+diff --git a/cmake/global_flags.cmake b/cmake/global_flags.cmake
+index e57e9ebcf9..c185d140e5 100644
+--- a/cmake/global_flags.cmake
++++ b/cmake/global_flags.cmake
+@@ -1,6 +1,3 @@
+-set(CMAKE_C_FLAGS "")
+-set(CMAKE_CXX_FLAGS "")
+-
+ # workaround when old NDK toolchain that does not set CMAKE_ANDROID_NDK_VERSION is used
+ # See for details: https://gitlab.kitware.com/cmake/cmake/-/issues/24386
+ if(ANDROID_NDK_REVISION AND NOT CMAKE_ANDROID_NDK_VERSION)
+diff --git a/contrib/libs/tcmalloc/tcmalloc/libc_override.h b/contrib/libs/tcmalloc/tcmalloc/libc_override.h
+index 89f8e4e5c8..2cbec9c65c 100644
+--- a/contrib/libs/tcmalloc/tcmalloc/libc_override.h
++++ b/contrib/libs/tcmalloc/tcmalloc/libc_override.h
+@@ -28,12 +28,4 @@
+ 
+ #include "tcmalloc/tcmalloc.h"
+ 
+-#if defined(__GLIBC__)
+-#include "tcmalloc/libc_override_glibc.h"
+-
+-#else
+-#include "tcmalloc/libc_override_redefine.h"
+-
+-#endif
+-
+ #endif  // TCMALLOC_LIBC_OVERRIDE_H_
+diff --git a/library/cpp/lfalloc/CMakeLists.linux-x86_64.txt b/library/cpp/lfalloc/CMakeLists.linux-x86_64.txt
+index de6f97ec6a..4ea93e519c 100644
+--- a/library/cpp/lfalloc/CMakeLists.linux-x86_64.txt
++++ b/library/cpp/lfalloc/CMakeLists.linux-x86_64.txt
+@@ -19,5 +19,5 @@ target_link_libraries(library-cpp-lfalloc PUBLIC
+   cpp-malloc-api
+ )
+ target_sources(library-cpp-lfalloc PRIVATE
+-  ${CMAKE_SOURCE_DIR}/library/cpp/lfalloc/lf_allocX64.cpp
++  ${CMAKE_SOURCE_DIR}/library/cpp/lfalloc/lf_dummy.cpp
+ )
+diff --git a/library/cpp/lfalloc/lf_dummy.cpp b/library/cpp/lfalloc/lf_dummy.cpp
+new file mode 100644
+index 0000000000..456de95152
+--- /dev/null
++++ b/library/cpp/lfalloc/lf_dummy.cpp
+@@ -0,0 +1,7 @@
++#include "lf_allocX64.h"
++NMalloc::TMallocInfo NMalloc::MallocInfo() {
++    NMalloc::TMallocInfo r;
++    r.Name = "system-darwin";
++    return r;
++}
++
+-- 
+2.25.1
+

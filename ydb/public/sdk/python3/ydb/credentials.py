@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import abc
-import six
+import typing
+
 from . import tracing, issues, connection
 from . import settings as settings_impl
 import threading
@@ -9,8 +10,7 @@ import logging
 import time
 
 # Workaround for good IDE and universal for runtime
-# noinspection PyUnreachableCode
-if False:
+if typing.TYPE_CHECKING:
     from ._grpc.v4.protos import ydb_auth_pb2
     from ._grpc.v4 import ydb_auth_v1_pb2_grpc
 else:
@@ -22,15 +22,13 @@ YDB_AUTH_TICKET_HEADER = "x-ydb-auth-ticket"
 logger = logging.getLogger(__name__)
 
 
-@six.add_metaclass(abc.ABCMeta)
-class AbstractCredentials(object):
+class AbstractCredentials(abc.ABC):
     """
     An abstract class that provides auth metadata
     """
 
 
-@six.add_metaclass(abc.ABCMeta)
-class Credentials(object):
+class Credentials(abc.ABC):
     def __init__(self, tracer=None):
         self.tracer = tracer if tracer is not None else tracing.Tracer(None)
 
@@ -40,6 +38,12 @@ class Credentials(object):
         :return: An iterable with auth metadata
         """
         pass
+
+    def get_auth_token(self) -> str:
+        for header, token in self.auth_metadata():
+            if header == YDB_AUTH_TICKET_HEADER:
+                return token
+        return ""
 
 
 class OneToManyValue(object):
@@ -87,7 +91,6 @@ class AtMostOneExecution(object):
             self._can_schedule = True
 
 
-@six.add_metaclass(abc.ABCMeta)
 class AbstractExpiringTokenCredentials(Credentials):
     def __init__(self, tracer=None):
         super(AbstractExpiringTokenCredentials, self).__init__(tracer)

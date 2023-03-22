@@ -14,6 +14,9 @@ enum class EDebugOutput {
     ToCerr,
 };
 
+const ui32 PRETTY_FLAGS = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote |
+                          NYql::TAstPrintFlags::AdaptArbitraryContent;
+
 TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::None) {
     TStringStream s;
     res.Issues.PrintTo(s);
@@ -784,6 +787,115 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["primarykey"]);
+    }
+
+    Y_UNIT_TEST(CreateTableNonNullableYqlTypeAstCorrect) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32 not null);");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (DataType 'Int32)))) '('notnull '('"a")))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableNullableYqlTypeAstCorrect) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32);");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32))))))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableNonNullablePgTypeAstCorrect) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a pg_int4 not null);");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (PgType '_int4)))) '('notnull '('"a")))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableNullablePgTypeAstCorrect) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a pg_int4);");
+        UNIT_ASSERT(res.Root);
+
+            res.Root->PrettyPrintTo(Cout, PRETTY_FLAGS);
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                if (word == "Write!") {
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                               line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (PgType '_int4))))))))__"));
+                }
+            };
+
+            TWordCountHive elementStat = {{TString("Write!"), 0}};
+            VerifyProgram(res, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableNullPkColumnsAreAllowed) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32, primary key(a));");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (AsOptionalType (DataType 'Int32))))) '('primarykey '('"a")))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableNotNullPkColumnsAreIdempotentAstCorrect) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32 not null, primary key(a));");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (DataType 'Int32)))) '('primarykey '('"a")) '('notnull '('"a")))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableDuplicatedPkColumnsFail) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32 not null, primary key(a, a));");
+        UNIT_ASSERT(!res.Root);
     }
 
     Y_UNIT_TEST(DeleteFromTableByKey) {

@@ -475,20 +475,46 @@ std::shared_ptr<arrow::RecordBatch> CombineSortedBatches(const std::vector<std::
 
 std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                                                     const std::shared_ptr<TSortDescription>& description,
-                                                                    size_t maxBatchRows, ui64 limit) {
+                                                                    size_t maxBatchRows) {
     Y_VERIFY(maxBatchRows);
     ui64 numRows = 0;
-    TVector<NArrow::IInputStream::TPtr> streams;
+    std::vector<NArrow::IInputStream::TPtr> streams;
+    streams.reserve(batches.size());
     for (auto& batch : batches) {
-        numRows += batch->num_rows();
-        streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
+        if (batch->num_rows()) {
+            numRows += batch->num_rows();
+            streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
+        }
     }
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> out;
     out.reserve(numRows / maxBatchRows + 1);
 
-    auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows, limit);
+    auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows);
     while (std::shared_ptr<arrow::RecordBatch> batch = mergeStream->Read()) {
+        out.push_back(batch);
+    }
+    return out;
+}
+
+std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
+                                                                    const std::shared_ptr<TSortDescription>& description,
+                                                                    size_t maxBatchRows) {
+    Y_VERIFY(!description->Reverse);
+
+    std::vector<NArrow::IInputStream::TPtr> streams;
+    streams.reserve(batches.size());
+    for (auto& batch : batches) {
+        if (batch->num_rows()) {
+            streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
+        }
+    }
+
+    std::vector<std::shared_ptr<arrow::RecordBatch>> out;
+    out.reserve(streams.size());
+
+    auto dedupStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows, true);
+    while (std::shared_ptr<arrow::RecordBatch> batch = dedupStream->Read()) {
         out.push_back(batch);
     }
     return out;
@@ -944,6 +970,30 @@ std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2)
     Y_VERIFY(f1.size() == f2.size());
     for (size_t i = 0; i < f1.size(); ++i) {
         f1[i] = f1[i] && f2[i];
+    }
+    return f1;
+}
+
+std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2, size_t& count) {
+    count = 0;
+    if (f1.empty() && !f2.empty()) {
+        f1.swap(f2);
+    }
+    if (f1.empty()) {
+        return {};
+    }
+
+    if (f2.empty()) {
+        for (bool bit : f1) {
+            count += bit;
+        }
+        return f1;
+    }
+
+    Y_VERIFY(f1.size() == f2.size());
+    for (size_t i = 0; i < f1.size(); ++i) {
+        f1[i] = f1[i] && f2[i];
+        count += f1[i];
     }
     return f1;
 }

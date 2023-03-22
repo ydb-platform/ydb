@@ -11,7 +11,7 @@ public:
         : Columns(columns)
         , Position(position)
     {
-        Y_VERIFY(Size() > 0 && Position < Column(0).length());
+        Y_VERIFY_DEBUG(Size() > 0 && Position < Column(0).length());
     }
 
     size_t Hash() const {
@@ -21,10 +21,10 @@ public:
     // TODO: NULLs
     template<typename T>
     bool operator == (const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY(Size() == key.Size());
+        Y_VERIFY_DEBUG(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
-            Y_VERIFY(Column(i).type_id() == key.Column(i).type_id());
+            Y_VERIFY_DEBUG(Column(i).type_id() == key.Column(i).type_id());
 
             if (!TypedEquals(Column(i), Position, key.Column(i), key.Position)) {
                 return false;
@@ -35,7 +35,7 @@ public:
 
     template<typename T>
     bool operator < (const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY(Size() == key.Size());
+        Y_VERIFY_DEBUG(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             int cmp = CompareColumnValue(i, key, i);
@@ -50,7 +50,7 @@ public:
 
     template<typename T>
     bool LessNotNull(const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY(Size() == key.Size());
+        Y_VERIFY_DEBUG(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             int cmp = CompareColumnValue(i, key, i, true);
@@ -65,7 +65,7 @@ public:
 
     template<typename T>
     int CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn, bool notNull = false) const {
-        Y_VERIFY(Column(column).type_id() == key.Column(keyColumn).type_id());
+        Y_VERIFY_DEBUG(Column(column).type_id() == key.Column(keyColumn).type_id());
 
         if (notNull) {
             return TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.Position);

@@ -1075,8 +1075,13 @@ private:
 
         for (auto i = 0; i < ListLength(pk->keys); ++i) {
             auto node = ListNodeNth(pk->keys, i);
+            auto nodeName = StrVal(node);
 
-            AddNonNullColumn(ctx, StrVal(node));
+            if (!ctx.ColumnsSet.contains(nodeName)) {
+                AddError("PK column does not belong to table");
+                return false;
+            }
+            AddNonNullColumn(ctx, nodeName);
             ctx.PrimaryKey.push_back(QA(StrVal(node)));
         }
 
@@ -1166,11 +1171,17 @@ private:
     }
 
     TAstNode* BuildCreateTableOptions(TCreateTableCtx& ctx) {
-        return QL(
-                QL(QA("mode"), QA("create")),
-                QL(QA("columns"), QVL(ctx.Columns.data(), ctx.Columns.size())),
-                QL(QA("primarykey"), QVL(ctx.PrimaryKey.data(), ctx.PrimaryKey.size())),
-                QL(QA("notnull"), QVL(ctx.NotNullColumns.data(), ctx.NotNullColumns.size())));
+        std::vector<TAstNode*> options;
+
+        options.push_back(QL(QA("mode"), QA("create")));
+        options.push_back(QL(QA("columns"), QVL(ctx.Columns.data(), ctx.Columns.size())));
+        if (!ctx.PrimaryKey.empty()) {
+            options.push_back(QL(QA("primarykey"), QVL(ctx.PrimaryKey.data(), ctx.PrimaryKey.size())));
+        }
+        if (!ctx.NotNullColumns.empty()) {
+            options.push_back(QL(QA("notnull"), QVL(ctx.NotNullColumns.data(), ctx.NotNullColumns.size())));
+        }
+        return QVL(options.data(), options.size());
     }
 
 public:

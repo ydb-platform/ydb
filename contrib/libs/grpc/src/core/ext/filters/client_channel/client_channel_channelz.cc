@@ -73,7 +73,7 @@ Json SubchannelNode::RenderJson() {
   Json::Object object{
       {"ref",
        Json::Object{
-           {"subchannelId", ToString(uuid())},
+           {"subchannelId", ::ToString(uuid())},
        }},
       {"data", std::move(data)},
   };
@@ -86,7 +86,7 @@ Json SubchannelNode::RenderJson() {
   if (child_socket != nullptr && child_socket->uuid() != 0) {
     object["socketRef"] = Json::Array{
         Json::Object{
-            {"socketId", ToString(child_socket->uuid())},
+            {"socketId", ::ToString(child_socket->uuid())},
             {"name", child_socket->name()},
         },
     };

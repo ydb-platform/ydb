@@ -123,7 +123,7 @@ static grpc_error_handle client_filter_incoming_metadata(
               grpc_error_set_str(
                   GRPC_ERROR_CREATE_FROM_STATIC_STRING(
                       "Received http2 :status header with non-200 OK status"),
-                  GRPC_ERROR_STR_VALUE, ToString(*status)),
+                  GRPC_ERROR_STR_VALUE, ::ToString(*status)),
               GRPC_ERROR_INT_GRPC_STATUS,
               grpc_http2_status_to_grpc_status(*status)),
           GRPC_ERROR_STR_GRPC_MESSAGE, msg);

@@ -206,6 +206,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TExprList> columns;
     TMaybeNode<TCoAtomList> primaryKey;
+    TMaybeNode<TCoAtomList> notNullColumns;
     TMaybeNode<TCoAtomList> partitionBy;
     TMaybeNode<TCoNameValueTupleList> orderBy;
     TMaybeNode<TCoLambda> filter;
@@ -294,6 +295,9 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
             } else if (name == "tableType") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 tableType = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "notnull") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
+                notNullColumns = tuple.Value().Cast<TCoAtomList>();
             } else {
                 other.push_back(tuple);
             }
@@ -328,6 +332,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.Mode = mode;
     ret.Columns = columns;
     ret.PrimaryKey = primaryKey;
+    ret.NotNullColumns = notNullColumns;
     ret.PartitionBy = partitionBy;
     ret.OrderBy = orderBy;
     ret.Filter = filter;

@@ -11,14 +11,6 @@ namespace NFyaml {
 
 const char* zstr = "";
 
-struct TStringHashT {
-    size_t operator()(const TString& str) const {
-        auto* ptr = str.empty() ? zstr : &str[0];
-        return MurmurHash<size_t>(reinterpret_cast<char*>(&ptr), sizeof(ptr));
-    }
-};
-
-
 enum class EErrorType {
     Debug = FYET_DEBUG,
     Info = FYET_INFO,
@@ -295,8 +287,8 @@ TNode TNodeRef::Copy() const {
 TNode TNodeRef::Copy(TDocument& to) const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     auto* fromDoc = fy_node_document(Node_);
-    auto& fromUserdata = *reinterpret_cast<THashSet<TString, TStringHashT>*>(fy_document_get_userdata(fromDoc));
-    auto& toUserdata = *reinterpret_cast<THashSet<TString, TStringHashT>*>(fy_document_get_userdata(to.Document_.get()));
+    auto& fromUserdata = *reinterpret_cast<THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>*>(fy_document_get_userdata(fromDoc));
+    auto& toUserdata = *reinterpret_cast<THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>*>(fy_document_get_userdata(to.Document_.get()));
     toUserdata.insert(fromUserdata.begin(), fromUserdata.end());
     return TNode(fy_node_copy(to.Document_.get(), Node_));
 }
@@ -714,7 +706,7 @@ TDocument::TDocument(TString str, fy_document* doc, fy_diag* diag)
     : Document_(doc, fy_document_destroy)
     , Diag_(diag, fy_diag_destroy)
 {
-    auto* userdata = new THashSet<TString, TStringHashT>({str});
+    auto* userdata = new THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>({MakeSimpleShared<TString>(std::move(str))});
     fy_document_set_userdata(doc, userdata);
     fy_document_register_on_destroy(doc, &DestroyDocumentStrings);
     RegisterUserDataCleanup();
@@ -729,7 +721,7 @@ TDocument::TDocument(fy_document* doc, fy_diag* diag)
 
 
 TDocument TDocument::Parse(TString str) {
-    auto* cstr = str.empty() ? zstr : &str[0];
+    const char* cstr = str.empty() ? zstr : str.cbegin();
     fy_diag_cfg dcfg;
     fy_diag_cfg_default(&dcfg);
     std::unique_ptr<fy_diag, void(*)(fy_diag*)> diag(fy_diag_create(&dcfg), fy_diag_destroy);
@@ -757,8 +749,8 @@ TDocument TDocument::Clone() const {
     fy_document* doc = fy_document_clone(Document_.get());
     fy_document_set_userdata(
         doc,
-        new THashSet<TString, TStringHashT>(
-            *reinterpret_cast<THashSet<TString, TStringHashT>*>(fy_document_get_userdata(Document_.get()))
+        new THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>(
+            *reinterpret_cast<THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>*>(fy_document_get_userdata(Document_.get()))
         )
     );
     fy_document_register_on_destroy(doc, &DestroyDocumentStrings);
@@ -879,7 +871,7 @@ TParser::TParser(TString rawStream, fy_parser* parser, fy_diag* diag)
 
 TParser TParser::Create(TString str)
 {
-    auto* stream = str.empty() ? zstr : &str[0];
+    const char* stream = str.empty() ? zstr : str.cbegin();
     fy_diag_cfg dcfg;
     fy_diag_cfg_default(&dcfg);
     std::unique_ptr<fy_diag, void(*)(fy_diag*)> diag(fy_diag_create(&dcfg), fy_diag_destroy);

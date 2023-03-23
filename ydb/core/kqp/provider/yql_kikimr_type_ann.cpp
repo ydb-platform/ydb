@@ -559,6 +559,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             meta->TableSettings.PartitionBy.emplace_back(column.Value());
         }
 
+        THashSet<TString> notNullColumns;
+        for (const auto& column : create.NotNullColumns()) {
+            notNullColumns.emplace(column.Value());
+        }
+
         for (auto item : create.Columns()) {
             auto columnTuple = item.Cast<TExprList>();
             auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
@@ -569,10 +574,31 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
 
             auto type = columnType->Cast<TTypeExprType>()->GetType();
-            auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
-            auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-            if (
-                actualType->GetKind() != ETypeAnnotationKind::Data
+
+            auto isOptional = type->GetKind() == ETypeAnnotationKind::Optional;
+            auto actualType = !isOptional ? type : type->Cast<TOptionalExprType>()->GetItemType();
+
+            bool notNull;
+            if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
+                if (notNullColumns.contains(columnName)) {
+                    if (std::find(meta->KeyColumnNames.begin(), meta->KeyColumnNames.end(), columnName) == meta->KeyColumnNames.end()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(create.NotNullColumns().Pos()), TStringBuilder()
+                            << "notnull option for pg column " << columnName << " is forbidden"));
+                        return TStatus::Error;
+                    } else {
+                        //TODO: KIKIMR-17471
+                        //Right now YDB ignores the constraint native Postgres enforces
+                        //on primary key values; it should be used very carefully.
+                        ctx.AddWarning(TIssue(ctx.GetPosition(create.NotNullColumns().Pos()), TStringBuilder()
+                            << "notnull option for primary key column " << columnName << " will be ignored"));
+                    }
+                }
+                //TODO: set notnull for pg types
+                notNull = false;
+            } else {
+                notNull = !isOptional;
+            }
+            if (actualType->GetKind() != ETypeAnnotationKind::Data
                 && actualType->GetKind() != ETypeAnnotationKind::Pg
             ) {
                 columnTypeError(typeNode.Pos(), columnName, "Only YQL data types and PG types are currently supported");
@@ -596,7 +622,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     NKikimr::NScheme::NTypeIds::Pg,
                     NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId)
                 );
-                YQL_ENSURE(!notNull, "notNull is forbidden for pg types");
             }
             columnMeta.NotNull = notNull;
 

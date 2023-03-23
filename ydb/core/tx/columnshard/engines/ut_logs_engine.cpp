@@ -336,7 +336,7 @@ bool Compact(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap, TH
 
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
     THashSet<ui64> pathsToDrop;
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop);
+    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop, 1000);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 

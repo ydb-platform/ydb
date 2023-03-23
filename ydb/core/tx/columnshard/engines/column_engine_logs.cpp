@@ -749,14 +749,17 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
 }
 
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
-                                                                         THashSet<ui64>& pathsToDrop) {
+                                                                         THashSet<ui64>& pathsToDrop,
+                                                                         ui32 maxRecords) {
     auto changes = std::make_shared<TChanges>(*this, snapshot, Limits);
+    ui32 affectedRecords = 0;
 
     // Add all portions from dropped paths
     THashSet<ui64> dropPortions;
-    THashSet<ui64> activePathsToDrop;
+    THashSet<ui64> emptyPaths;
     for (ui64 pathId : pathsToDrop) {
         if (!PathGranules.count(pathId)) {
+            emptyPaths.insert(pathId);
             continue;
         }
 
@@ -765,13 +768,23 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
             auto spg = Granules[granule];
             Y_VERIFY(spg);
             for (auto& [portion, info] : spg->Portions) {
+                affectedRecords += info.NumRecords();
                 changes->PortionsToDrop.push_back(info);
                 dropPortions.insert(portion);
-                activePathsToDrop.insert(pathId);
             }
         }
+
+        if (affectedRecords > maxRecords) {
+            break;
+        }
     }
-    pathsToDrop.swap(activePathsToDrop);
+    for (ui64 pathId : emptyPaths) {
+        pathsToDrop.erase(pathId);
+    }
+
+    if (affectedRecords > maxRecords) {
+        return changes;
+    }
 
     // Add stale portions of alive paths
     THashSet<ui64> activeCleanupGranules;
@@ -786,9 +799,14 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
             if (!info.IsActive()) {
                 activeCleanupGranules.insert(granule);
                 if (info.XSnapshot() < snapshot) {
+                    affectedRecords += info.NumRecords();
                     changes->PortionsToDrop.push_back(info);
                 }
             }
+        }
+
+        if (affectedRecords > maxRecords) {
+            break;
         }
     }
     CleanupGranules.swap(activeCleanupGranules);

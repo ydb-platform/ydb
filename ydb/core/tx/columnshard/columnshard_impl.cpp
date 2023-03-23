@@ -937,7 +937,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
 
     NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
 
-    auto changes = PrimaryIndex->StartCleanup(cleanupSnapshot, PathsToDrop);
+    auto changes = PrimaryIndex->StartCleanup(cleanupSnapshot, PathsToDrop, TLimits::MAX_TX_RECORDS);
     if (!changes) {
         LOG_S_NOTICE("Cannot prepare cleanup at tablet " << TabletID());
         return {};
@@ -947,7 +947,6 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     Y_VERIFY(changes->DataToIndex.empty());
     Y_VERIFY(changes->AppendedPortions.empty());
 
-    // TODO: limit PortionsToDrop total size. Delete them in small portions.
     // Filter PortionsToDrop
     TVector<NOlap::TPortionInfo> portionsCanBedropped;
     THashSet<ui64> excludedPortions;

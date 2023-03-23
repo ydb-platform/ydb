@@ -222,16 +222,6 @@ ALLOW contrib/python/Geohash/tests -> contrib/python/Geohash
 ALLOW yql/udfs/common/python/python_arc -> contrib/python/Geohash
 DENY .* -> contrib/python/Geohash
 
-ALLOW metrika/java/api -> contrib/java/patched/com/android/tools/r8
-ALLOW metrika/java/api -> contrib/java/patched/com/ryantenney/metrics/metrics-spring
-ALLOW direct -> contrib/java/patched/io/leangen/graphql/spqr
-ALLOW direct -> contrib/java/patched/com/github/shyiko/mysql-binlog-connector-java
-ALLOW contrib/java/patched/com/android/tools/r8 -> contrib/java/patched/com/android/tools/r8
-ALLOW contrib/java/patched/com/ryantenney/metrics/metrics-spring -> contrib/java/patched/com/ryantenney/metrics/metrics-spring
-ALLOW contrib/java/patched/io/leangen/graphql/spqr -> contrib/java/patched/io/leangen/graphql/spqr
-ALLOW contrib/java/patched/com/github/shyiko/mysql-binlog-connector-java -> contrib/java/patched/com/github/shyiko/mysql-binlog-connector-java
-DENY .* -> contrib/java/patched
-
 # because library will not work without external dependencies - IBM MQ
 # See https://st.yandex-team.ru/CONTRIB-1854 and pymqi README for details
 ALLOW travel/avia -> contrib/python/pymqi

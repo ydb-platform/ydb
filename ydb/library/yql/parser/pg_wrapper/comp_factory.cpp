@@ -2962,13 +2962,17 @@ public:
             if (typeDesc.OutFuncId) {
                 OutFuncId = NYql::NPg::LookupProc("array_out", { 0 }).ProcId;
             }
+            if (NYql::NPg::HasCast(ElementTypeId, ElementTypeId) && typeDesc.TypeModInFuncId) {
+                NeedsCoercion = true;
+                TypeModInFuncId = typeDesc.TypeModInFuncId;
+            }
         } else {
             YdbTypeName = TString("pg") + desc.Name;
             StoredSize = TypeLen < 0 ? 0 : TypeLen;
             if (TypeId == NAMEOID) {
                 StoredSize = 0; // store 'name' as usual string
             }
-            if (NYql::NPg::HasCast(TypeId, TypeId) && TypeModInFuncId != 0) {
+            if (NYql::NPg::HasCast(TypeId, TypeId) && TypeModInFuncId) {
                 NeedsCoercion = true;
             }
         }
@@ -3166,7 +3170,7 @@ public:
         dvalues.reserve(params.size());
 
         TString textNumberParam;
-        if (TypeId == INTERVALOID) {
+        if (TypeId == INTERVALOID || TypeId == INTERVALARRAYOID) {
             i32 typmod = -1;
             auto ok = NYql::ParsePgIntervalModifier(params[0], typmod);
             if (!ok) {
@@ -3274,14 +3278,23 @@ public:
         NMiniKQL::TPAllocScope scope;
         Datum datum = 0;
         Datum datumCasted = 0;
+        TVector<Datum> elems;
+        TVector<bool> nulls;
+        TVector<Datum> castedElements;
+        bool passByValueElem = false;
         text* serialized = nullptr;
         Y_DEFER {
             if (!PassByValue) {
                 if (datum) {
                     pfree((void*)datum);
                 }
-                if (datumCasted && datumCasted != datum) {
+                if (datumCasted) {
                     pfree((void*)datumCasted);
+                }
+            }
+            if (IsArray() && !passByValueElem) {
+                for (ui32 i = 0; i < castedElements.size(); ++i) {
+                    pfree((void*)castedElements[i]);
                 }
             }
             if (serialized) {
@@ -3292,23 +3305,51 @@ public:
         {
             datum = Receive(binary.Data(), binary.Size());
 
-            const auto& cast = NYql::NPg::LookupCast(TypeId, TypeId);
-            FmgrInfo finfo;
-            InitFunc(cast.FunctionId, &finfo, 2, 3);
-            LOCAL_FCINFO(callInfo, 3);
-            Zero(*callInfo);
-            callInfo->flinfo = &finfo;
-            callInfo->nargs = 3;
-            callInfo->fncollation = DEFAULT_COLLATION_OID;
-            callInfo->isnull = false;
-            callInfo->args[0] = { datum, false };
-            callInfo->args[1] = { Int32GetDatum(typmod), false };
-            callInfo->args[2] = { BoolGetDatum(false), false };
+            if (IsArray()) {
+                const auto& typeDesc = NYql::NPg::LookupType(ElementTypeId);
+                passByValueElem = typeDesc.PassByValue;
 
-            datumCasted = finfo.fn_addr(callInfo);
-            Y_ENSURE(!callInfo->isnull);
+                auto arr = (ArrayType*)DatumGetPointer(datum);
+                auto ndim = ARR_NDIM(arr);
+                auto dims = ARR_DIMS(arr);
+                auto lb = ARR_LBOUND(arr);
+                auto nitems = ArrayGetNItems(ndim, dims);
 
-            if (datum == datumCasted) {
+                elems.resize(nitems);
+                nulls.resize(nitems);
+                castedElements.reserve(nitems);
+
+                array_iter iter;
+                array_iter_setup(&iter, (AnyArrayType*)arr);
+                for (ui32 i = 0; i < nitems; ++i) {
+                    bool isNull;
+                    auto datum = array_iter_next(&iter, &isNull, i,
+                        typeDesc.TypeLen, typeDesc.PassByValue, typeDesc.TypeAlign);
+                    if (isNull) {
+                        elems[i] = 0;
+                        nulls[i] = true;
+                        continue;
+                    }
+                    elems[i] = CoerceOne(ElementTypeId, datum, typmod);
+                    nulls[i] = false;
+                    if (elems[i] != datum) {
+                        castedElements.push_back(elems[i]);
+                    }
+                }
+
+                if (!castedElements.empty()) {
+                    auto newArray = construct_md_array(elems.data(), nulls.data(), ndim, dims, lb,
+                        typeDesc.TypeId, typeDesc.TypeLen, typeDesc.PassByValue, typeDesc.TypeAlign);
+                    datumCasted = PointerGetDatum(newArray);
+                }
+            } else {
+                datumCasted = CoerceOne(TypeId, datum, typmod);
+                if (datumCasted == datum) {
+                    datumCasted = 0;
+                }
+            }
+
+            if (!datumCasted) {
                 return {{}, {}};
             } else {
                 FmgrInfo finfo;
@@ -3330,9 +3371,7 @@ public:
         {
             auto error_data = CopyErrorData();
             TStringBuilder errMsg;
-            errMsg << "Error in 'cast' function: "
-                << NYql::NPg::LookupProc(ReceiveFuncId).Name
-                << ", reason: " << error_data->message;
+            errMsg << "Error while coercing value, reason: " << error_data->message;
             FreeErrorData(error_data);
             FlushErrorState();
             return {{}, errMsg};
@@ -3341,6 +3380,26 @@ public:
     }
 
 private:
+    Datum CoerceOne(ui32 typeId, Datum datum, i32 typmod) const {
+        const auto& cast = NYql::NPg::LookupCast(typeId, typeId);
+
+        FmgrInfo finfo;
+        InitFunc(cast.FunctionId, &finfo, 2, 3);
+        LOCAL_FCINFO(callInfo, 3);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { datum, false };
+        callInfo->args[1] = { Int32GetDatum(typmod), false };
+        callInfo->args[2] = { BoolGetDatum(false), false };
+
+        auto result = finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return result;
+    }
+
     Datum Receive(const char* data, size_t size) const {
         StringInfoData stringInfo;
         stringInfo.data = (char*)data;
@@ -3363,6 +3422,10 @@ private:
         auto result = finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         return result;
+    }
+
+    bool IsArray() {
+        return TypeId == ArrayTypeId;
     }
 
     static inline void InitFunc(ui32 funcId, FmgrInfo* info, ui32 argCountMin, ui32 argCountMax) {

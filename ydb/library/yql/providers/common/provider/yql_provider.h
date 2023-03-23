@@ -36,6 +36,7 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TExprList> Columns;
     NNodes::TMaybeNode<NNodes::TCoAtomList> PrimaryKey;
+    NNodes::TMaybeNode<NNodes::TCoAtomList> NotNullColumns;
     NNodes::TMaybeNode<NNodes::TCoAtomList> PartitionBy;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> OrderBy;
     NNodes::TMaybeNode<NNodes::TCoLambda> Filter;

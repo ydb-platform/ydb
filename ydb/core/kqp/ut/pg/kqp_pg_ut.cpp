@@ -1121,7 +1121,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(CreateTable) {
+    Y_UNIT_TEST(V1CreateTable) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec, bool isArray) {
@@ -1183,6 +1183,67 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(PgCreateTable) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+
+        auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec, bool isArray) {
+            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+
+            auto tableName = "/Root/Pg" + ToString(spec.TypeId) + (isArray ? "array" : "");
+            auto typeName = ((isArray) ? "_" : "") + NYql::NPg::LookupType(spec.TypeId).Name;
+            auto keyEntry = spec.IsKey ? ("key "+ typeName) : "key int2";
+            auto valueEntry = "value " + typeName;
+            auto req = Sprintf("\
+            --!syntax_pg\n\
+            CREATE TABLE \"%s\" (\n\
+                %s PRIMARY KEY,\n\
+                %s\n\
+            );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
+            Cerr << req << Endl;
+            auto result = client.ExecuteYqlScript(req).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (!isArray) {
+                ExecutePgInsert(kikimr, tableName, spec);
+                result = ExecutePgSelect(kikimr, tableName);
+                ValidatePgYqlResult(result, spec);
+            } else {
+                ExecutePgArrayInsert(kikimr, tableName, spec);
+                result = ExecutePgSelect(kikimr, tableName);
+                TResultSetParser parser(result.GetResultSetParser(0));
+                for (size_t i = 0; parser.TryNextRow(); ++i) {
+                    auto check = [&parser, &spec] (const TString& column, const TString& expected) {
+                        auto& c = parser.ColumnParser(column);
+                        UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
+                    };
+                    TString expected = spec.TextOut(i);
+                    check("value", expected);
+                }
+            }
+        };
+
+        auto testType = [&] (const TPgTypeTestSpec& spec) {
+            auto textOutArray = [&spec] (auto i) {
+                auto str = spec.TextOut(i);
+                return spec.ArrayPrint(str);
+            };
+
+            TPgTypeTestSpec arraySpec{spec.TypeId, false, spec.TextIn, textOutArray};
+
+            testSingleType(spec, false);
+            testSingleType(arraySpec, true);
+        };
+
+        for (const auto& spec : typeSpecs) {
+            Cerr << spec.TypeId << Endl;
+            if (spec.TypeId == CHAROID) {
+                continue;
+                // I cant come up with a query with explicit char conversion.
+                // ::char, ::character casts to pg_bpchar
+            }
+            testType(spec);
+        }
+    }
+
     Y_UNIT_TEST(CreateNotNullPgColumn) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
@@ -1191,16 +1252,32 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
         NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
         auto req = TStringBuilder() << R"(
+        --!syntax_pg
+        CREATE TABLE "/Root/Pg" (
+        key int2 PRIMARY KEY,
+        value int2 NOT NULL
+        );)";
+        Cerr << req << Endl;
+        auto result = client.ExecuteYqlScript(req).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Type annotation, code: 1030\n"
+        "    <main>:1:1: Error: At function: KiCreateTable!\n"
+        "        <main>:1:1: Error: notnull option for primary key column key will be ignored\n"
+        "        <main>:1:1: Error: notnull option for pg column value is forbidden\n");
+
+        TString reqV1 = TStringBuilder() << R"(
         --!syntax_v1
         CREATE TABLE `/Root/Pg` (
         key pg_int2,
         value pg_int2 NOT NULL,
         PRIMARY KEY (key)
         );)";
-        Cerr << req << Endl;
-        auto result = client.ExecuteYqlScript(req).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
-        UNIT_ASSERT(result.GetIssues().begin()->GetMessage().EndsWith("notNull is forbidden for pg types"));
+        Cerr << reqV1 << Endl;
+        result = client.ExecuteYqlScript(reqV1).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Type annotation, code: 1030\n"
+        "    <main>:6:22: Error: At function: KiCreateTable!\n"
+        "        <main>:6:22: Error: notnull option for pg column value is forbidden\n");
     }
 
     Y_UNIT_TEST(ValuesInsert) {

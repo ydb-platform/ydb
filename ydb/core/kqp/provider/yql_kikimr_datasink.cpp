@@ -508,12 +508,17 @@ public:
                         settings.PartitionBy = Build<TCoAtomList>(ctx, node->Pos()).Done();
                     }
 
+                    if (!settings.NotNullColumns.IsValid()) {
+                        settings.NotNullColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
+                    }
+
                     return Build<TKiCreateTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Columns(settings.Columns.Cast())
                         .PrimaryKey(settings.PrimaryKey.Cast())
+                        .NotNullColumns(settings.NotNullColumns.Cast())
                         .Settings(settings.Other)
                         .Indexes(settings.Indexes.Cast())
                         .Changefeeds(settings.Changefeeds.Cast())

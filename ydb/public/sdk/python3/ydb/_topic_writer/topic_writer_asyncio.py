@@ -47,13 +47,20 @@ class WriterAsyncIO:
     _loop: asyncio.AbstractEventLoop
     _reconnector: "WriterAsyncIOReconnector"
     _closed: bool
+    _parent: typing.Any  # need for prevent close parent client by GC
 
-    def __init__(self, driver: SupportedDriverType, settings: PublicWriterSettings):
+    def __init__(
+        self,
+        driver: SupportedDriverType,
+        settings: PublicWriterSettings,
+        _client=None,
+    ):
         self._loop = asyncio.get_running_loop()
         self._closed = False
         self._reconnector = WriterAsyncIOReconnector(
             driver=driver, settings=WriterSettings(settings)
         )
+        self._parent = _client
 
     async def __aenter__(self) -> "WriterAsyncIO":
         return self

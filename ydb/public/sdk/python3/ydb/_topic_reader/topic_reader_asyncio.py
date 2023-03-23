@@ -61,11 +61,19 @@ class PublicAsyncIOReader:
     _loop: asyncio.AbstractEventLoop
     _closed: bool
     _reconnector: ReaderReconnector
+    _parent: typing.Any  # need for prevent close parent client by GC
 
-    def __init__(self, driver: Driver, settings: topic_reader.PublicReaderSettings):
+    def __init__(
+        self,
+        driver: Driver,
+        settings: topic_reader.PublicReaderSettings,
+        *,
+        _parent=None,
+    ):
         self._loop = asyncio.get_running_loop()
         self._closed = False
         self._reconnector = ReaderReconnector(driver, settings)
+        self._parent = _parent
 
     async def __aenter__(self):
         return self

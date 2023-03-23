@@ -1,6 +1,7 @@
 import concurrent.futures
 import datetime
 import enum
+import itertools
 import uuid
 from dataclasses import dataclass
 from enum import Enum
@@ -12,6 +13,7 @@ import ydb.aio
 from .._grpc.grpcwrapper.ydb_topic import StreamWriteMessage
 from .._grpc.grpcwrapper.common_utils import IToProto
 from .._grpc.grpcwrapper.ydb_topic_public_types import PublicCodec
+from .. import connection
 
 Message = typing.Union["PublicMessage", "PublicMessage.SimpleMessageSourceType"]
 
@@ -200,14 +202,94 @@ def default_serializer_message_content(data: Any) -> bytes:
 def messages_to_proto_requests(
     messages: List[InternalMessage],
 ) -> List[StreamWriteMessage.FromClient]:
-    # todo split by proto message size and codec
-    res = []
-    for msg in messages:
+
+    gropus = _slit_messages_for_send(messages)
+
+    res = []  # type: List[StreamWriteMessage.FromClient]
+    for group in gropus:
         req = StreamWriteMessage.FromClient(
             StreamWriteMessage.WriteRequest(
-                messages=[msg.to_message_data()],
-                codec=msg.codec,
+                messages=list(map(InternalMessage.to_message_data, group)),
+                codec=group[0].codec,
             )
         )
         res.append(req)
+    return res
+
+
+_max_int = 2**63 - 1
+
+_message_data_overhead = (
+    StreamWriteMessage.FromClient(
+        StreamWriteMessage.WriteRequest(
+            messages=[
+                StreamWriteMessage.WriteRequest.MessageData(
+                    seq_no=_max_int,
+                    created_at=datetime.datetime(3000, 1, 1, 1, 1, 1, 1),
+                    data=bytes(1),
+                    uncompressed_size=_max_int,
+                    partitioning=StreamWriteMessage.PartitioningMessageGroupID(
+                        message_group_id="a" * 100,
+                    ),
+                ),
+            ],
+            codec=20000,
+        )
+    )
+    .to_proto()
+    .ByteSize()
+)
+
+
+def _slit_messages_for_send(
+    messages: List[InternalMessage],
+) -> List[List[InternalMessage]]:
+    codec_groups = []  # type: List[List[InternalMessage]]
+    for _, messages in itertools.groupby(messages, lambda x: x.codec):
+        codec_groups.append(list(messages))
+
+    res = []  # type: List[List[InternalMessage]]
+    for codec_group in codec_groups:
+        group_by_size = _split_messages_by_size_with_default_overhead(codec_group)
+        res.extend(group_by_size)
+    return res
+
+
+def _split_messages_by_size_with_default_overhead(
+    messages: List[InternalMessage],
+) -> List[List[InternalMessage]]:
+    def get_message_size(msg: InternalMessage):
+        return len(msg.data) + _message_data_overhead
+
+    return _split_messages_by_size(
+        messages, connection._DEFAULT_MAX_GRPC_MESSAGE_SIZE, get_message_size
+    )
+
+
+def _split_messages_by_size(
+    messages: List[InternalMessage],
+    split_size: int,
+    get_msg_size: typing.Callable[[InternalMessage], int],
+) -> List[List[InternalMessage]]:
+    res = []
+    group = []
+    group_size = 0
+
+    for msg in messages:
+        msg_size = get_msg_size(msg)
+
+        if len(group) == 0:
+            group.append(msg)
+            group_size += msg_size
+        elif group_size + msg_size <= split_size:
+            group.append(msg)
+            group_size += msg_size
+        else:
+            res.append(group)
+            group = [msg]
+            group_size = msg_size
+
+    if len(group) > 0:
+        res.append(group)
+
     return res

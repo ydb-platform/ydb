@@ -24,6 +24,8 @@ YDB_DATABASE_HEADER = "x-ydb-database"
 YDB_TRACE_ID_HEADER = "x-ydb-trace-id"
 YDB_REQUEST_TYPE_HEADER = "x-ydb-request-type"
 
+_DEFAULT_MAX_GRPC_MESSAGE_SIZE = 64 * 10**6
+
 
 def _message_to_string(message):
     """
@@ -179,10 +181,9 @@ def _construct_channel_options(driver_config, endpoint_options=None):
     :param endpoint_options: Endpoint options
     :return: A channel initialization options
     """
-    _max_message_size = 64 * 10**6
     _default_connect_options = [
-        ("grpc.max_receive_message_length", _max_message_size),
-        ("grpc.max_send_message_length", _max_message_size),
+        ("grpc.max_receive_message_length", _DEFAULT_MAX_GRPC_MESSAGE_SIZE),
+        ("grpc.max_send_message_length", _DEFAULT_MAX_GRPC_MESSAGE_SIZE),
         ("grpc.primary_user_agent", driver_config.primary_user_agent),
         (
             "grpc.lb_policy_name",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import typing
 from concurrent.futures import Future
 from typing import Union, List, Optional
 
@@ -25,6 +26,7 @@ class WriterSync:
     _caller: CallFromSyncToAsync
     _async_writer: WriterAsyncIO
     _closed: bool
+    _parent: typing.Any  # need for prevent close parent client by GC
 
     def __init__(
         self,
@@ -32,6 +34,7 @@ class WriterSync:
         settings: PublicWriterSettings,
         *,
         eventloop: Optional[asyncio.AbstractEventLoop] = None,
+        _parent=None,
     ):
 
         self._closed = False
@@ -49,6 +52,7 @@ class WriterSync:
         self._async_writer = self._caller.safe_call_with_result(
             create_async_writer(), None
         )
+        self._parent = _parent
 
     def __enter__(self):
         return self

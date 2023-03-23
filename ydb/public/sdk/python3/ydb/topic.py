@@ -44,14 +44,13 @@ from ._topic_writer.topic_writer import (  # noqa: F401
     RetryPolicy as TopicWriterRetryPolicy,
 )
 
+from ydb._topic_writer.topic_writer_asyncio import WriterAsyncIO as TopicWriterAsyncIO
 from ._topic_writer.topic_writer_sync import WriterSync as TopicWriter
 
 from ._topic_common.common import (
     wrap_operation as _wrap_operation,
     create_result_wrapper as _create_result_wrapper,
 )
-
-from ydb._topic_writer.topic_writer_asyncio import WriterAsyncIO as TopicWriterAsyncIO
 
 from ._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from ._grpc.grpcwrapper import ydb_topic_public_types as _ydb_topic_public_types
@@ -174,7 +173,7 @@ class TopicClientAsyncIO:
 
         settings = TopicReaderSettings(**args)
 
-        return TopicReaderAsyncIO(self._driver, settings)
+        return TopicReaderAsyncIO(self._driver, settings, _parent=self)
 
     def writer(
         self,
@@ -201,7 +200,7 @@ class TopicClientAsyncIO:
         if not settings.encoder_executor:
             settings.encoder_executor = self._executor
 
-        return TopicWriterAsyncIO(self._driver, settings)
+        return TopicWriterAsyncIO(self._driver, settings, _client=self)
 
     def close(self):
         if self._closed:
@@ -331,7 +330,7 @@ class TopicClient:
 
         settings = TopicReaderSettings(**args)
 
-        return TopicReader(self._driver, settings)
+        return TopicReader(self._driver, settings, _parent=self)
 
     def writer(
         self,
@@ -359,7 +358,7 @@ class TopicClient:
         if not settings.encoder_executor:
             settings.encoder_executor = self._executor
 
-        return TopicWriter(self._driver, settings)
+        return TopicWriter(self._driver, settings, _parent=self)
 
     def close(self):
         if self._closed:

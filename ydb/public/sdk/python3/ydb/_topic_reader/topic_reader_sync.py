@@ -25,6 +25,7 @@ class TopicReaderSync:
     _caller: CallFromSyncToAsync
     _async_reader: PublicAsyncIOReader
     _closed: bool
+    _parent: typing.Any  # need for prevent stop the client by GC
 
     def __init__(
         self,
@@ -32,6 +33,7 @@ class TopicReaderSync:
         settings: PublicReaderSettings,
         *,
         eventloop: Optional[asyncio.AbstractEventLoop] = None,
+        _parent=None,  # need for prevent stop the client by GC
     ):
         self._closed = False
 
@@ -48,6 +50,8 @@ class TopicReaderSync:
         self._async_reader = asyncio.run_coroutine_threadsafe(
             create_reader(), loop
         ).result()
+
+        self._parent = _parent
 
     def __del__(self):
         self.close(flush=False)
@@ -122,7 +126,7 @@ class TopicReaderSync:
         """
         self._check_closed()
 
-        self._caller.call_sync(self._async_reader.commit(mess))
+        self._caller.call_sync(lambda: self._async_reader.commit(mess))
 
     def commit_with_ack(
         self,

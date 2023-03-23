@@ -59,6 +59,7 @@ enum MimeTypes {
     MIME_TTF = 45,
     MIME_WEBMANIFEST = 46,
     MIME_CBOR = 47,
+    MIME_CSV = 48,
     MIME_MAX
 };
 

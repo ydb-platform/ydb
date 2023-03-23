@@ -1,5 +1,6 @@
 #include "kqp_opt_phy_olap_filter_collection.h"
 
+#include <ydb/core/formats/ssa_runtime_version.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -27,12 +28,15 @@ bool IsSupportedPredicate(const TCoCompare& predicate) {
         return true;
     } else if (predicate.Maybe<TCoCmpLessOrEqual>()) {
         return true;
-    } else if (predicate.Maybe<TCoCmpStringContains>()) {
-        return true;
-    } else if (predicate.Maybe<TCoCmpStartsWith>()) {
-        return true;
-    } else if (predicate.Maybe<TCoCmpEndsWith>()) {
-        return true;
+    } else if (NKikimr::NSsa::RuntimeVersion >= 2U) {
+        // We introduced LIKE pushdown in v2 of SSA program
+        if (predicate.Maybe<TCoCmpStringContains>()) {
+            return true;
+        } else if (predicate.Maybe<TCoCmpStartsWith>()) {
+            return true;
+        } else if (predicate.Maybe<TCoCmpEndsWith>()) {
+            return true;
+        }
     }
 
     return false;

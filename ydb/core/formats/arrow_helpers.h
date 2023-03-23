@@ -129,6 +129,9 @@ bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
                        const std::shared_ptr<arrow::Schema>& sortingKey,
                        bool desc = false);
+void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
+                       const std::shared_ptr<arrow::Schema>& sortingKey,
+                       std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
 bool HasAllColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& schema);
 
 std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& column);

@@ -1,5 +1,24 @@
 from __future__ import annotations
 
+__all__ = [
+    "TopicClient",
+    "TopicClientAsyncIO",
+    "TopicClientSettings",
+    "TopicCodec",
+    "TopicConsumer",
+    "TopicDescription",
+    "TopicError",
+    "TopicMeteringMode",
+    "TopicReader",
+    "TopicReaderAsyncIO",
+    "TopicReaderSettings",
+    "TopicStatWindow",
+    "TopicWriter",
+    "TopicWriterAsyncIO",
+    "TopicWriterMessage",
+    "TopicWriterSettings",
+]
+
 import concurrent.futures
 import datetime
 from dataclasses import dataclass
@@ -25,14 +44,13 @@ from ._topic_writer.topic_writer import (  # noqa: F401
     RetryPolicy as TopicWriterRetryPolicy,
 )
 
+from ydb._topic_writer.topic_writer_asyncio import WriterAsyncIO as TopicWriterAsyncIO
 from ._topic_writer.topic_writer_sync import WriterSync as TopicWriter
 
 from ._topic_common.common import (
     wrap_operation as _wrap_operation,
     create_result_wrapper as _create_result_wrapper,
 )
-
-from ydb._topic_writer.topic_writer_asyncio import WriterAsyncIO as TopicWriterAsyncIO
 
 from ._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from ._grpc.grpcwrapper import ydb_topic_public_types as _ydb_topic_public_types
@@ -145,18 +163,6 @@ class TopicClientAsyncIO:
         decoder_executor: Optional[
             concurrent.futures.Executor
         ] = None,  # default shared client executor pool
-        # on_commit: Callable[["Events.OnCommit"], None] = None
-        # on_get_partition_start_offset: Callable[
-        #     ["Events.OnPartitionGetStartOffsetRequest"],
-        #     "Events.OnPartitionGetStartOffsetResponse",
-        # ] = None
-        # on_partition_session_start: Callable[["StubEvent"], None] = None
-        # on_partition_session_stop: Callable[["StubEvent"], None] = None
-        # on_partition_session_close: Callable[["StubEvent"], None] = None  # todo?
-        # deserializer: Union[Callable[[bytes], Any], None] = None
-        # one_attempt_connection_timeout: Union[float, None] = 1
-        # connection_timeout: Union[float, None] = None
-        # retry_policy: Union["RetryPolicy", None] = None
     ) -> TopicReaderAsyncIO:
 
         if not decoder_executor:
@@ -167,7 +173,7 @@ class TopicClientAsyncIO:
 
         settings = TopicReaderSettings(**args)
 
-        return TopicReaderAsyncIO(self._driver, settings)
+        return TopicReaderAsyncIO(self._driver, settings, _parent=self)
 
     def writer(
         self,
@@ -194,14 +200,14 @@ class TopicClientAsyncIO:
         if not settings.encoder_executor:
             settings.encoder_executor = self._executor
 
-        return TopicWriterAsyncIO(self._driver, settings)
+        return TopicWriterAsyncIO(self._driver, settings, _client=self)
 
     def close(self):
         if self._closed:
             return
 
         self._closed = True
-        self._executor.shutdown(wait=False, cancel_futures=True)
+        self._executor.shutdown(wait=False)
 
     def _check_closed(self):
         if not self._closed:
@@ -314,18 +320,6 @@ class TopicClient:
         decoder_executor: Optional[
             concurrent.futures.Executor
         ] = None,  # default shared client executor pool
-        # on_commit: Callable[["Events.OnCommit"], None] = None
-        # on_get_partition_start_offset: Callable[
-        #     ["Events.OnPartitionGetStartOffsetRequest"],
-        #     "Events.OnPartitionGetStartOffsetResponse",
-        # ] = None
-        # on_partition_session_start: Callable[["StubEvent"], None] = None
-        # on_partition_session_stop: Callable[["StubEvent"], None] = None
-        # on_partition_session_close: Callable[["StubEvent"], None] = None  # todo?
-        # deserializer: Union[Callable[[bytes], Any], None] = None
-        # one_attempt_connection_timeout: Union[float, None] = 1
-        # connection_timeout: Union[float, None] = None
-        # retry_policy: Union["RetryPolicy", None] = None
     ) -> TopicReader:
         if not decoder_executor:
             decoder_executor = self._executor
@@ -336,7 +330,7 @@ class TopicClient:
 
         settings = TopicReaderSettings(**args)
 
-        return TopicReader(self._driver, settings)
+        return TopicReader(self._driver, settings, _parent=self)
 
     def writer(
         self,
@@ -364,14 +358,14 @@ class TopicClient:
         if not settings.encoder_executor:
             settings.encoder_executor = self._executor
 
-        return TopicWriter(self._driver, settings)
+        return TopicWriter(self._driver, settings, _parent=self)
 
     def close(self):
         if self._closed:
             return
 
         self._closed = True
-        self._executor.shutdown(wait=False, cancel_futures=True)
+        self._executor.shutdown(wait=False)
 
     def _check_closed(self):
         if not self._closed:

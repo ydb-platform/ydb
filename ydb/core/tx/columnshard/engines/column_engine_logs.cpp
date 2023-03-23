@@ -1562,9 +1562,16 @@ TVector<TString> TColumnEngineForLogs::IndexBlobs(const TIndexInfo& indexInfo,
         changes->AddPathIfNotExists(pathId);
 
         // We could merge data here cause tablet limits indexing data portions
+#if 0
         auto merged = NArrow::CombineSortedBatches(batches, indexInfo.SortDescription()); // insert: no replace
         Y_VERIFY(merged);
         Y_VERIFY_DEBUG(NArrow::IsSorted(merged, indexInfo.GetReplaceKey()));
+#else
+        auto merged = NArrow::CombineSortedBatches(batches, indexInfo.SortReplaceDescription());
+        Y_VERIFY(merged);
+        Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(merged, indexInfo.GetReplaceKey()));
+
+#endif
 
         auto granuleBatches = SliceIntoGranules(merged, changes->PathToGranule[pathId], indexInfo);
         for (auto& [granule, batch] : granuleBatches) {

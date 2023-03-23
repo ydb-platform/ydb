@@ -50,7 +50,7 @@ TQueryInfo GenerateSelect(const TString& table, const TString& key) {
 
         DECLARE $key AS Text;
 
-        SELECT * FROM `%s` WHERE id == '$key';
+        SELECT * FROM `%s` WHERE id == $key;
     )__", table.c_str());
 
     NYdb::TParamsBuilder paramsBuilder;

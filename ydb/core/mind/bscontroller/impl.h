@@ -136,6 +136,7 @@ public:
                 } else {
                     DropFromVSlotReadyTimestampQ();
                 }
+                const_cast<TGroupInfo&>(*Group).CalculateGroupStatus();
             }
         }
 

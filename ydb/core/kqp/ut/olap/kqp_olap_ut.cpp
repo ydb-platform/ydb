@@ -1171,10 +1171,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(CAST("2" As Int32) >= `level`)",
             R"(`timestamp` >= CAST(3000001u AS Timestamp))",
             R"((`timestamp`, `level`) >= (CAST(3000001u AS Timestamp), 3))",
+#if SSA_RUNTIME_VERSION >= 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",
             R"(`uid` LIKE "%001")",
             R"(`uid` LIKE "uid%001")",
+#endif
         };
 
         std::vector<TString> testDataNoPush = {
@@ -1192,6 +1194,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
             // We can handle this case in future
             R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
+#if SSA_RUNTIME_VERSION < 2U
+            R"(`uid` LIKE "%30000%")",
+            R"(`uid` LIKE "uid%")",
+            R"(`uid` LIKE "%001")",
+            R"(`uid` LIKE "uid%001")",
+#endif
         };
 
         std::vector<TString> testDataPartialPush = {
@@ -2567,9 +2575,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY c, resource_id DESC LIMIT 3
             )")
             .SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-#if SSA_RUNTIME_VERSION >= 2U
             .SetExpectedReadNodeType("Aggregate-TableFullScan");
-#endif
         testCase.FillExpectedAggregationGroupByPlanOptions();
         TestAggregations({ testCase });
     }

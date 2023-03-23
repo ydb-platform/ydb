@@ -88,22 +88,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
         if (slices.size() == 1) {
             auto batch = slices[0];
             if (batchesToDedup.count(batch.get())) {
-#if 1
-                auto deduped = SliceSortedBatches({batch}, description);
-                for (auto& batch : deduped) {
-                    if (batch && batch->num_rows()) {
-                        Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, description->ReplaceKey));
-                        out.push_back(batch);
-                    }
-                }
-#else
-                if (!NArrow::IsSortedAndUnique(batch, description->ReplaceKey)) {
-                    batch = NArrow::CombineSortedBatches({batch}, description);
-                    Y_VERIFY(batch);
-                    Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, description->ReplaceKey));
-                    out.push_back(batch);
-                }
-#endif
+                NArrow::DedupSortedBatch(batch, description->ReplaceKey, out);
             } else {
                 Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, description->ReplaceKey));
                 out.push_back(batch);
@@ -179,9 +164,11 @@ THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGr
         }
 
         // If there's no PK dups in granule we could use optimized version of merge
-        if (portionInfo.CanHaveDups()) {
+        if (portionInfo.CanIntersectOthers()) {
             GranulesWithDups.emplace(granule);
-            PortionsWithDups.emplace(portion);
+            if (portionInfo.CanHaveDups()) {
+                PortionsWithDups.emplace(portion);
+            }
         }
 
         for (const NOlap::TColumnRecord& rec : portionInfo.Records) {

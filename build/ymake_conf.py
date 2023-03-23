@@ -1660,9 +1660,6 @@ class LD(Linker):
             if not self.tc.is_clang:
                 self.ld_flags.append('-Wl,-no_compact_unwind')
 
-        if target.is_android and target.android_api < 29:
-            emit('_ANDROID_API_LESS_THEN_29', 'yes')
-
         self.ld_sdk = select(default=None, selectors=[
             (target.is_macos_arm64, '-Wl,-sdk_version,11.0'),
             (target.is_macos, '-Wl,-sdk_version,10.15'),

@@ -518,7 +518,6 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
                 NotReadyVSlotIds.insert(it->second->VSlotId);
             }
             it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono);
-            const_cast<TGroupInfo*>(group)->CalculateGroupStatus();
             sh->VDiskStatusUpdate.emplace_back(it->second->GetVDiskId(), it->second->Status);
             ScrubState.UpdateVDiskState(&*it->second);
         }

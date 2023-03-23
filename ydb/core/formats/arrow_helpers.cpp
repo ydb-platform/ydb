@@ -492,6 +492,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::v
 
     auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows);
     while (std::shared_ptr<arrow::RecordBatch> batch = mergeStream->Read()) {
+        Y_VERIFY(batch->num_rows());
         out.push_back(batch);
     }
     return out;
@@ -515,6 +516,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::v
 
     auto dedupStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows, true);
     while (std::shared_ptr<arrow::RecordBatch> batch = dedupStream->Read()) {
+        Y_VERIFY(batch->num_rows());
         out.push_back(batch);
     }
     return out;
@@ -580,24 +582,64 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared
     return out;
 }
 
+void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
+                      const std::shared_ptr<arrow::Schema>& sortingKey,
+                      std::vector<std::shared_ptr<arrow::RecordBatch>>& out) {
+    if (batch->num_rows() < 2) {
+        out.push_back(batch);
+        return;
+    }
+
+    Y_VERIFY_DEBUG(NArrow::IsSorted(batch, sortingKey));
+
+    auto keyBatch = ExtractColumns(batch, sortingKey);
+    auto& keyColumns = keyBatch->columns();
+
+    bool same = false;
+    int start = 0;
+    for (int i = 1; i < batch->num_rows(); ++i) {
+        TRawReplaceKey prev(&keyColumns, i - 1);
+        TRawReplaceKey current(&keyColumns, i);
+        if (prev == current) {
+            if (!same) {
+                out.push_back(batch->Slice(start, i - start));
+                Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(out.back(), sortingKey));
+                same = true;
+            }
+        } else if (same) {
+            same = false;
+            start = i;
+        }
+    }
+    if (!start) {
+        out.push_back(batch);
+    } else if (!same) {
+        out.push_back(batch->Slice(start, batch->num_rows() - start));
+    }
+    Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(out.back(), sortingKey));
+}
+
 template <bool desc, bool uniq>
 static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    auto columns = std::make_shared<TArrayVec>(batch->columns());
+    if (batch->num_rows() < 2) {
+        return true;
+    }
+    auto& columns = batch->columns();
 
-    for (int i = 0; i < batch->num_rows() - 1; ++i) {
-        TRawReplaceKey current(columns.get(), i);
-        TRawReplaceKey next(columns.get(), i + 1);
+    for (int i = 1; i < batch->num_rows(); ++i) {
+        TRawReplaceKey prev(&columns, i - 1);
+        TRawReplaceKey current(&columns, i);
         if constexpr (desc) {
-            if (current < next) {
+            if (prev < current) {
                 return false;
             }
         } else {
-            if (next < current) {
+            if (current < prev) {
                 return false;
             }
         }
         if constexpr (uniq) {
-            if (next == current) {
+            if (prev == current) {
                 return false;
             }
         }
@@ -607,10 +649,6 @@ static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) {
 
 bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
               const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
-    if (batch->num_rows() < 2) {
-        return true;
-    }
-
     auto keyBatch = ExtractColumns(batch, sortingKey);
     if (desc) {
         return IsSelfSorted<true, false>(keyBatch);
@@ -621,10 +659,6 @@ bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
 
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
                        const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
-    if (batch->num_rows() < 2) {
-        return true;
-    }
-
     auto keyBatch = ExtractColumns(batch, sortingKey);
     if (desc) {
         return IsSelfSorted<true, true>(keyBatch);

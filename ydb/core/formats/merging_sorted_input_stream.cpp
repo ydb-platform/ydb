@@ -169,7 +169,13 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
         Y_VERIFY_DEBUG(!Description->Reverse);
         TSlicedRowsBuffer rowsBuffer(MaxBatchSize);
         Merge(rowsBuffer, Queue);
-        return rowsBuffer.GetBatch();
+        auto batch = rowsBuffer.GetBatch();
+        Y_VERIFY(batch);
+        if (!batch->num_rows()) {
+            Y_VERIFY(Finished);
+            return {};
+        }
+        return batch;
     } else {
         auto builders = NArrow::MakeBuilders(Header, ExpectedBatchSize);
         if (builders.empty()) {
@@ -182,6 +188,10 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
 
         auto arrays = NArrow::Finish(std::move(builders));
         Y_VERIFY(arrays.size());
+        if (!arrays[0]->length()) {
+            Y_VERIFY(Finished);
+            return {};
+        }
         return arrow::RecordBatch::Make(Header, arrays[0]->length(), arrays);
     }
 }

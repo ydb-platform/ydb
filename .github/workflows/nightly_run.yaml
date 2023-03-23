@@ -1,0 +1,19 @@
+name: Nightly-run
+on: 
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+  
+jobs:
+  build:
+    strategy:
+      matrix:
+        arch: [ X64, ARM64 ]
+        sanitizer: [ "", "sanitize=address" ]
+      fail-fast: false
+
+    uses: ./.github/workflows/build_and_test.yaml
+    with:
+      runner_label: ${{matrix.arch}}
+      sanitizer: ${{matrix.sanitizer}}
+    secrets: inherit

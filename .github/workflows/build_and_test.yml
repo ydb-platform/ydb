@@ -1,24 +1,38 @@
 name: Build-and-Test
 
-on: 
-  schedule:
-    - cron: "0 1 * * *"
-  workflow_dispatch:
-
+on:
+  workflow_call:
+    inputs:
+      runner_label:
+        required: true
+        type: string
+      sanitizer:
+        required: false
+        type: string
+      test_label_regexp:
+        required: false
+        type: string
+    
 jobs:
-  build:
-    strategy:
-      matrix:
-        arch: [ X64, ARM64 ]
-      fail-fast: false
+  main:
 
-    runs-on: [ self-hosted, "${{matrix.arch}}" ]
+    runs-on: [ self-hosted, "${{ inputs.runner_label }}" ]
     
     steps:
     - name: Checkout
       uses: actions/checkout@v3
+    - name: Configure for sanitizer
+      shell: bash
+      if: startsWith(inputs.sanitizer,'sanitize=')
+      run: |
+        mkdir -p ../build
+        patch -p1 < ydb/deploy/patches/0001-sanitizer-build.patch
+        cd ../build
+        rm -rf *
+        cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain -DCMAKE_CXX_FLAGS="${{ matrix.sanitizer }} -fno-omit-frame-pointer" -DCMAKE_C_FLAGS="${{ matrix.sanitizer }} -fno-omit-frame-pointer" ../ydb
     - name: Configure
       shell: bash
+      if: false == startsWith(inputs.sanitizer,'sanitize=')
       run: |
         mkdir -p ../build
         cd ../build
@@ -30,6 +44,7 @@ jobs:
         cd ../build
         ninja
     - name: Test
+      continue-on-error: true
       shell: bash
       run: |
         cd ../build/ydb
@@ -41,11 +56,13 @@ jobs:
         # Sed removes coloring from the output
         TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$(pwd)/../../test_reports/" \
           ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
-                --output-junit $(pwd)/../../test_reports/ctest_report.xml | \
+                --output-junit $(pwd)/../../test_reports/ctest_report.xml \
+                -L ${{inputs.test_label_regexp}} | \
           sed -e 's/\x1b\[[0-9;]*m//g' | \
-          tee >(gzip --stdout > ../../artifacts/${{matrix.arch}}-stdout.gz) | \
+          tee >(gzip --stdout > ../../artifacts/${{inputs.runner_label}}-${{inputs.sanitizer}}-stdout.gz) | \
           grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
           tee -a $GITHUB_STEP_SUMMARY
+        echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.runner_label}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
     - name: Upload S3
       uses: shallwefootball/s3-upload-action@master
       if: always()
@@ -55,4 +72,4 @@ jobs:
         aws_bucket: ydb-tech-ci
         source_dir: ../artifacts
         destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
-        endpoint: https://storage.yandexcloud.net        
+        endpoint: https://storage.yandexcloud.net

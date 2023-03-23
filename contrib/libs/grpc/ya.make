@@ -798,16 +798,7 @@ RECURSE(
     src/proto/grpc/health/v1
     src/proto/grpc/reflection/v1alpha
     src/proto/grpc/status
-    src/proto/grpc/testing
-    src/proto/grpc/testing/duplicate
-    src/proto/grpc/testing/xds
     src/python/grpcio
-    src/python/grpcio_tests
-    test/core/util
-    test/cpp/end2end
-    test/cpp/end2end/health
-    test/cpp/end2end/server_interceptors
-    test/cpp/util
     third_party/address_sorting
     third_party/upb
 )

@@ -961,13 +961,13 @@ protected:
             }
         }
 
-        bool IsOfflineToken() const {
+        bool NeedsRefresh() const {
             switch (TokenType) {
                 case TDerived::ETokenType::Builtin:
                 case TDerived::ETokenType::Login:
-                    return true;
-                default:
                     return false;
+                default:
+                    return Signature.AccessKeyId.empty();
             }
         }
 
@@ -1071,10 +1071,10 @@ protected:
         if (!record.ExpireTime) {
             record.ExpireTime = GetExpireTime(now);
         }
-        if (record.IsOfflineToken()) {
-            record.RefreshTime = record.ExpireTime;
-        } else {
+        if (record.NeedsRefresh()) {
             record.SetOkRefreshTime(this, now);
+        } else {
+            record.RefreshTime = record.ExpireTime;
         }
         CounterTicketsSuccess->Inc();
         CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
@@ -1168,7 +1168,9 @@ protected:
 
     template <typename TTokenRecord>
     bool CanRefreshTicket(const TString& key, TTokenRecord& record) {
-        if (AccessServiceValidator && (record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::Unknown)) {
+        if (AccessServiceValidator
+            && ((record.TokenType == TDerived::ETokenType::AccessService && !record.Signature.AccessKeyId)
+                || record.TokenType == TDerived::ETokenType::Unknown)) {
             GetDerived()->ResetTokenRecord(record);
             if (record.Permissions) {
                 RequestAccessServiceAuthorization(key, record);

@@ -23,7 +23,7 @@ target_link_libraries(library-cpp-actors-interconnect-ut_huge_cluster PUBLIC
 )
 target_link_options(library-cpp-actors-interconnect-ut_huge_cluster PRIVATE
   -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
+  -Wl,-sdk_version,11.0
   -fPIC
   -fPIC
   -framework

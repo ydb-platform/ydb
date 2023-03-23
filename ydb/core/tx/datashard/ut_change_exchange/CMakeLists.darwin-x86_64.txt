@@ -36,7 +36,7 @@ target_link_libraries(ydb-core-tx-datashard-ut_change_exchange PUBLIC
 )
 target_link_options(ydb-core-tx-datashard-ut_change_exchange PRIVATE
   -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
+  -Wl,-sdk_version,11.0
   -fPIC
   -fPIC
   -framework

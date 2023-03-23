@@ -31,7 +31,7 @@ target_link_libraries(schemeshard-ut_external_data_source_reboots PUBLIC
 )
 target_link_options(schemeshard-ut_external_data_source_reboots PRIVATE
   -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
+  -Wl,-sdk_version,11.0
   -fPIC
   -fPIC
   -framework

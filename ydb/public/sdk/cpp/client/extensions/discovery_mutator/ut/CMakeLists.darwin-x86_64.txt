@@ -22,7 +22,7 @@ target_link_libraries(client-extensions-discovery_mutator-ut PUBLIC
 )
 target_link_options(client-extensions-discovery_mutator-ut PRIVATE
   -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
+  -Wl,-sdk_version,11.0
   -fPIC
   -fPIC
   -framework

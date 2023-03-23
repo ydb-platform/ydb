@@ -20,7 +20,7 @@ target_link_libraries(perf PUBLIC
 )
 target_link_options(perf PRIVATE
   -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
+  -Wl,-sdk_version,11.0
   -fPIC
   -fPIC
 )

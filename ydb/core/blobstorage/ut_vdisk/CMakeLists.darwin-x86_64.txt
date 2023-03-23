@@ -34,7 +34,7 @@ target_link_libraries(ydb-core-blobstorage-ut_vdisk PUBLIC
 )
 target_link_options(ydb-core-blobstorage-ut_vdisk PRIVATE
   -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
+  -Wl,-sdk_version,11.0
   -fPIC
   -fPIC
   -framework

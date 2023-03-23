@@ -31,7 +31,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_index_build PUBLIC
 )
 target_link_options(ydb-core-tx-schemeshard-ut_index_build PRIVATE
   -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
+  -Wl,-sdk_version,11.0
   -fPIC
   -fPIC
   -framework

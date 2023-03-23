@@ -1,5 +1,5 @@
-import os
 import json
+import os
 
 from six import iteritems
 
@@ -55,7 +55,8 @@ class PackageJson(object):
             os.mkdir(directory)
 
         with open(path, "w") as f:
-            json.dump(self.data, f, indent=4)
+            json.dump(self.data, f, indent=2, ensure_ascii=False)
+            f.write('\n')  # it's better for diff algorithm in arc
 
     def get_name(self):
         return self.data["name"]

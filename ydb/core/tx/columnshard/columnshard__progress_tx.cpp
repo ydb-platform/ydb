@@ -206,7 +206,7 @@ public:
 
         switch (Trigger) {
             case ETriggerActivities::POST_INSERT:
-                Self->EnqueueBackgroundActivities(false, true);
+                Self->EnqueueBackgroundActivities(false, TBackgroundActivity::Indexation());
                 break;
             case ETriggerActivities::POST_SCHEMA:
                 Self->EnqueueBackgroundActivities();

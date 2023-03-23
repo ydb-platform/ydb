@@ -672,15 +672,18 @@ void TColumnShard::SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& s
     }
 }
 
-void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
-    if (periodic && LastBackActivation > TInstant::Now() - ActivationPeriod) {
-        return;
+void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivity activity) {
+    if (periodic) {
+        if (LastPeriodicBackActivation > TInstant::Now() - ActivationPeriod) {
+            return;
+        }
+        LastPeriodicBackActivation = TInstant::Now();
     }
 
     const TActorContext& ctx = TActivationContext::ActorContextFor(SelfId());
     SendPeriodicStats();
 
-    if (insertOnly) {
+    if (activity.IndexationOnly()) {
         if (auto event = SetupIndexation()) {
             ctx.Send(IndexingActor, event.release());
         }
@@ -690,44 +693,56 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
     // Preventing conflicts between indexing and compaction leads to election between them.
     // Indexing vs compaction probability depends on index and insert table overload status.
     // Prefer compaction: 25% by default; 50% if IndexOverloaded(); 6.25% if InsertTableOverloaded().
-    ui32 mask = IndexOverloaded() ? 0x1 : 0x3;
-    if (InsertTableOverloaded()) {
-        mask = 0x0F;
-    }
-    bool preferIndexing = (++BackgroundActivation) & mask;
+    if (activity.HasIndexation() && activity.HasCompaction()) {
+        ui32 mask = IndexOverloaded() ? 0x1 : 0x3;
+        if (InsertTableOverloaded()) {
+            mask = 0x0F;
+        }
+        bool preferIndexing = (++BackgroundActivation) & mask;
 
-    if (preferIndexing) {
+        if (preferIndexing) {
+            if (auto evIdx = SetupIndexation()) {
+                ctx.Send(IndexingActor, evIdx.release());
+            } else if (auto event = SetupCompaction()) {
+                ctx.Send(CompactionActor, event.release());
+            }
+        } else {
+            if (auto event = SetupCompaction()) {
+                ctx.Send(CompactionActor, event.release());
+            } else if (auto evIdx = SetupIndexation()) {
+                ctx.Send(IndexingActor, evIdx.release());
+            }
+        }
+    } else if (activity.HasIndexation()) {
         if (auto evIdx = SetupIndexation()) {
             ctx.Send(IndexingActor, evIdx.release());
-        } else if (auto event = SetupCompaction()) {
-            ctx.Send(CompactionActor, event.release());
         }
-    } else {
+    } else if (activity.HasCompaction()) {
         if (auto event = SetupCompaction()) {
             ctx.Send(CompactionActor, event.release());
-        } else if (auto evIdx = SetupIndexation()) {
-            ctx.Send(IndexingActor, evIdx.release());
         }
     }
 
-    if (auto event = SetupCleanup()) {
-        ctx.Send(SelfId(), event.release());
-    } else {
-        // Small cleanup (no index changes)
-        THashSet<NOlap::TEvictedBlob> blobsToForget;
-        BlobManager->GetCleanupBlobs(blobsToForget);
-        ForgetBlobs(ctx, blobsToForget);
-    }
-
-    if (auto event = SetupTtl()) {
-        if (event->NeedDataReadWrite()) {
-            ctx.Send(EvictionActor, event.release());
+    if (activity.HasCleanup()) {
+        if (auto event = SetupCleanup()) {
+            ctx.Send(SelfId(), event.release());
         } else {
-            ctx.Send(SelfId(), event->TxEvent.release());
+            // Small cleanup (no index changes)
+            THashSet<NOlap::TEvictedBlob> blobsToForget;
+            BlobManager->GetCleanupBlobs(blobsToForget);
+            ForgetBlobs(ctx, blobsToForget);
         }
     }
 
-    LastBackActivation = TInstant::Now();
+    if (activity.HasTtl()) {
+        if (auto event = SetupTtl()) {
+            if (event->NeedDataReadWrite()) {
+                ctx.Send(EvictionActor, event.release());
+            } else {
+                ctx.Send(SelfId(), event->TxEvent.release());
+            }
+        }
+    }
 }
 
 std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
@@ -834,16 +849,12 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
     }
 
     PrimaryIndex->UpdateCompactionLimits(CompactionLimits.Get());
-    auto compactionInfo = PrimaryIndex->Compact();
+    auto compactionInfo = PrimaryIndex->Compact(LastCompactedGranule);
     if (!compactionInfo || compactionInfo->Empty()) {
         LOG_S_DEBUG("Compaction not started: no portions to compact at tablet " << TabletID());
         return {};
     }
 
-    // TODO: Compact granules in parallel
-
-    // Rotate compaction granules: do not choose the same granule all the time.
-    LastCompactedGranule = compactionInfo->ChooseOneGranule(LastCompactedGranule);
     Y_VERIFY(compactionInfo->Good());
 
     LOG_S_DEBUG("Prepare " << *compactionInfo << " at tablet " << TabletID());

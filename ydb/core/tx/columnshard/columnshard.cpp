@@ -129,7 +129,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         return;
     }
 
-    if (LastBackActivation < TInstant::Now() - ActivationPeriod) {
+    if (LastPeriodicBackActivation < TInstant::Now() - ActivationPeriod) {
         SendWaitPlanStep(GetOutdatedStep());
     }
 

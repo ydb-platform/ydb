@@ -307,7 +307,8 @@ struct TExpected {
 
 bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange, TString>&& blobs, ui32& step,
              const TExpected& expected) {
-    auto compactionInfo = engine.Compact();
+    ui64 lastCompactedGranule = 0;
+    auto compactionInfo = engine.Compact(lastCompactedGranule);
     UNIT_ASSERT_VALUES_EQUAL(compactionInfo->Granules.size(), 1);
     UNIT_ASSERT(!compactionInfo->InGranule);
 

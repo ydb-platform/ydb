@@ -595,8 +595,10 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             SessionStartedTs = TInstant::Now();
             OnErrorResolved();
 
-            //EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
-            result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
+            if (!FirstTokenSent) {
+                result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
+                FirstTokenSent = true;
+            }
             // Kickstart send after session reestablishment
             SendImpl();
             break;
@@ -673,7 +675,6 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 sequenceNumber) {
     if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == sequenceNumber) {
         auto memoryUsage = OnMemoryUsageChangedImpl(-SentPackedMessage.front().Data.size());
         result = memoryUsage.NowOk && !memoryUsage.WasOk;
-            //EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
         const auto& front = SentPackedMessage.front();
         if (front.Compressed) {
             compressedSize = front.Data.size();

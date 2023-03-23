@@ -18,6 +18,12 @@ struct fy_node_pair;
 
 namespace NFyaml {
 
+struct TStringPtrHashT {
+    size_t operator()(const TSimpleSharedPtr<TString>& str) const {
+        return (size_t)str.Get();
+    }
+};
+
 struct TFyamlEx : public yexception {};
 
 enum class ENodeType {
@@ -589,7 +595,7 @@ private:
     static void DestroyDocumentStrings(fy_document *fyd, void *user) {
         Y_UNUSED(fyd);
         if (user) {
-            auto* data = reinterpret_cast<THashSet<TString>*>(user);
+            auto* data = reinterpret_cast<THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>*>(user);
             delete data;
         }
     }

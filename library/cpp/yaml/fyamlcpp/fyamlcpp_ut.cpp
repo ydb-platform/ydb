@@ -86,4 +86,71 @@ test: b
         auto docOpt3 = parser.NextDocument();
         UNIT_ASSERT(!docOpt3);
     }
+
+    Y_UNIT_TEST(Leak) {
+        std::optional<NFyaml::TDocument> doc;
+
+        {
+            std::optional<NFyaml::TDocument> item1;
+            std::optional<NFyaml::TDocument> item2;
+            {
+                const TString items = R"(
+item:
+  x: 1
+  y: 2
+---
+test:
+  a: noop
+  b:
+  - 1
+  - 2
+  - 3
+---
+x: b
+)";
+                auto parser = NFyaml::TParser::Create(items);
+
+                item1.emplace(*parser.NextDocument());
+                item2.emplace(*parser.NextDocument());
+                parser.NextDocument();
+                parser.NextDocument();
+            }
+
+            {
+                const TString config = R"(
+test: a
+---
+test: []
+---
+x: b
+)";
+                auto parser = NFyaml::TParser::Create(config);
+
+                parser.NextDocument();
+                doc.emplace(*parser.NextDocument());
+                parser.NextDocument();
+                parser.NextDocument();
+            }
+
+            {
+                auto item1NodeRef = item1->Root().Map().at("item");
+                auto item2NodeRef = item2->Root().Map().at("test");
+                auto docNodeRef = doc->Root().Map().at("test");
+                auto node1 = item1NodeRef.Copy(*doc);
+                auto node2 = item2NodeRef.Copy(*doc);
+                docNodeRef.Sequence().Append(node1.Ref());
+                docNodeRef.Sequence().Append(node2.Ref());
+                item1.reset();
+                item2.reset();
+            }
+        }
+
+        auto seq = doc->Root().Map().at("test").Sequence();
+        UNIT_ASSERT_VALUES_EQUAL(seq[0].Map().at("x").Scalar(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(seq[0].Map().at("y").Scalar(), "2");
+        UNIT_ASSERT_VALUES_EQUAL(seq[1].Map().at("a").Scalar(), "noop");
+        UNIT_ASSERT_VALUES_EQUAL(seq[1].Map().at("b").Sequence().at(0).Scalar(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(seq[1].Map().at("b").Sequence().at(1).Scalar(), "2");
+        UNIT_ASSERT_VALUES_EQUAL(seq[1].Map().at("b").Sequence().at(2).Scalar(), "3");
+    }
 }

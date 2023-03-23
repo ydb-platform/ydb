@@ -1,6 +1,7 @@
 #include "kqp_opt_phy_rules.h"
 #include "kqp_opt_phy_olap_filter_collection.h"
 
+#include <ydb/core/formats/ssa_runtime_version.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
@@ -136,12 +137,15 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
         compareOperator = "gt";
     } else if (predicate.Maybe<TCoCmpGreaterOrEqual>() && !forceStrictComparison) {
         compareOperator = "gte";
-    } else if (predicate.Maybe<TCoCmpStringContains>()) {
-        compareOperator = "string_contains";
-    } else if (predicate.Maybe<TCoCmpStartsWith>()) {
-        compareOperator = "starts_with";
-    } else if (predicate.Maybe<TCoCmpEndsWith>()) {
-        compareOperator = "ends_with";
+    } else if (NKikimr::NSsa::RuntimeVersion >= 2U) {
+        // We introduced LIKE pushdown in v2 of SSA program
+        if (predicate.Maybe<TCoCmpStringContains>()) {
+            compareOperator = "string_contains";
+        } else if (predicate.Maybe<TCoCmpStartsWith>()) {
+            compareOperator = "starts_with";
+        } else if (predicate.Maybe<TCoCmpEndsWith>()) {
+            compareOperator = "ends_with";
+        }
     }
 
     YQL_ENSURE(!compareOperator.empty(), "Unsupported comparison node: " << predicate.Ptr()->Content());

@@ -179,9 +179,11 @@ THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGr
         }
 
         // If there's no PK dups in granule we could use optimized version of merge
-        if (portionInfo.CanHaveDups()) {
+        if (portionInfo.CanIntersectOthers()) {
             GranulesWithDups.emplace(granule);
-            PortionsWithDups.emplace(portion);
+            if (portionInfo.CanHaveDups()) {
+                PortionsWithDups.emplace(portion);
+            }
         }
 
         for (const NOlap::TColumnRecord& rec : portionInfo.Records) {

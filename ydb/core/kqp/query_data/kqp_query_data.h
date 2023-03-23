@@ -200,6 +200,9 @@ public:
         NMiniKQL::TTypeEnvironment& txTypeEnv);
     void CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx);
 
+    void ParseParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params);
+    void ParseParameters(const NKikimrMiniKQL::TParams& parameters);
+
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
     NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
 

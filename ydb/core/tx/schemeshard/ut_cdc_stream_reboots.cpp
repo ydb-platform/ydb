@@ -302,4 +302,45 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
+    Y_UNIT_TEST(Attributes) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            auto request = CreateCdcStreamRequest(++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                  UserAttributes { Key: "key" Value: "value" }
+                }
+            )");
+            t.TestEnv->ReliablePropose(runtime, request, {
+                NKikimrScheme::StatusAccepted,
+                NKikimrScheme::StatusAlreadyExists,
+                NKikimrScheme::StatusMultipleModifications,
+            });
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                    NLs::UserAttrsHas({
+                        {"key", "value"},
+                    })
+                });
+            }
+        });
+    }
+
 } // TCdcStreamWithRebootsTests

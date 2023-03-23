@@ -1,10 +1,10 @@
-name: C/C++ CI
+name: Build-and-Test
 
 on: 
   schedule:
     - cron: "0 1 * * *"
   workflow_dispatch:
-  
+
 jobs:
   build:
     strategy:
@@ -20,6 +20,7 @@ jobs:
     - name: Configure
       shell: bash
       run: |
+        mkdir -p ../build
         cd ../build
         rm -rf *
         cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
@@ -34,11 +35,24 @@ jobs:
         cd ../build/ydb
         rm -rf $(pwd)/../../tmp/*
         rm -rf $(pwd)/../../test_reports/*
+        mkdir -p ../../artifacts
+        rm -rf $(pwd)/../../artifacts/*
+        
         # Sed removes coloring from the output
         TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$(pwd)/../../test_reports/" \
           ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
                 --output-junit $(pwd)/../../test_reports/ctest_report.xml | \
           sed -e 's/\x1b\[[0-9;]*m//g' | \
-          tee testrun.log | \
-          grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of'
-  
+          tee >(gzip --stdout > ../../artifacts/${{matrix.arch}}-stdout.gz) | \
+          grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
+          tee -a $GITHUB_STEP_SUMMARY
+    - name: Upload S3
+      uses: shallwefootball/s3-upload-action@master
+      if: always()
+      with:
+        aws_key_id: ${{ secrets.AWS_KEY_ID }}
+        aws_secret_access_key: ${{ secrets.AWS_KEY_VALUE}}
+        aws_bucket: ydb-tech-ci
+        source_dir: ../artifacts
+        destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
+        endpoint: https://storage.yandexcloud.net        

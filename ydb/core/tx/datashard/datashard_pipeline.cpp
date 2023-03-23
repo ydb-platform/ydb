@@ -1764,6 +1764,9 @@ void TPipeline::AddWaitingReadIterator(
     TEvDataShard::TEvRead::TPtr ev,
     const TActorContext& ctx)
 {
+    // Combined with registration for convenience
+    RegisterWaitingReadIterator(TReadIteratorId(ev->Sender, ev->Get()->Record.GetReadId()), ev->Get());
+
     if (Y_UNLIKELY(Self->MvccSwitchState == TSwitchState::SWITCHING)) {
         // postpone tx processing till mvcc state switch is finished
         WaitingDataReadIterators.emplace(TRowVersion::Min(), ev);
@@ -1785,6 +1788,38 @@ void TPipeline::AddWaitingReadIterator(
         << " to wait version# " << version
         << ", waitStep# " << waitStep
         << ", current unreliable edge# " << unreadableEdge);
+}
+
+bool TPipeline::HasWaitingReadIterator(const TReadIteratorId& readId) {
+    return WaitingReadIteratorsById.contains(readId);
+}
+
+bool TPipeline::CancelWaitingReadIterator(const TReadIteratorId& readId) {
+    auto it = WaitingReadIteratorsById.find(readId);
+    if (it != WaitingReadIteratorsById.end()) {
+        if (!it->second->Cancelled) {
+            it->second->Cancelled = true;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+void TPipeline::RegisterWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event) {
+    auto res = WaitingReadIteratorsById.emplace(readId, event);
+    Y_VERIFY(res.second);
+}
+
+bool TPipeline::HandleWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event) {
+    auto it = WaitingReadIteratorsById.find(readId);
+    if (it != WaitingReadIteratorsById.end() && it->second == event) {
+        bool ok = !it->second->Cancelled;
+        WaitingReadIteratorsById.erase(it);
+        return ok;
+    }
+
+    return true;
 }
 
 TRowVersion TPipeline::GetReadEdge() const {

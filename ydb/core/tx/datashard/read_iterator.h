@@ -17,7 +17,7 @@ namespace NKikimr::NDataShard {
 
 struct TReadIteratorId {
     TActorId Sender;
-    ui64 ReadId = 0;
+    ui64 ReadId;
 
     TReadIteratorId(const TActorId& sender, ui64 readId)
         : Sender(sender)

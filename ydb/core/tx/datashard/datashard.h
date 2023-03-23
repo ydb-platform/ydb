@@ -904,6 +904,9 @@ struct TEvDataShard {
         // In current kqp impl ranges are already in TSerializedTableRange
         // format, thus same format here
         TVector<TSerializedTableRange> Ranges;
+
+        // True when TEvRead is cancelled while enqueued in a waiting queue
+        bool Cancelled = false;
     };
 
     struct TEvReadResult : public TEventPB<TEvReadResult,

@@ -33,7 +33,7 @@ target_link_libraries(example_02_discovery PUBLIC
 )
 target_link_options(example_02_discovery PRIVATE
   -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
+  -Wl,-sdk_version,11.0
   -fPIC
   -fPIC
   -framework

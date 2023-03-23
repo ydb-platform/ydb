@@ -24,6 +24,7 @@ namespace {
         TString TypeMod;
         bool ShouldPass;
         std::function<TString()> TextIn, TextOut;
+        std::function<TString(TString)> ArrayPrint = [] (auto s) { return Sprintf("{%s,%s}", s.c_str(), s.c_str()); };
     };
 }
 
@@ -417,7 +418,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             BPCHAROID, "6",
             SUCCESS,
             [] () { return TString("abcd"); },
-            [] () { return TString("abcd  "); }
+            [] () { return TString("abcd  "); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
 
         {
@@ -562,69 +564,80 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             TIMESTAMPOID, "2",
             SUCCESS,
             [] () { return TString("2001-01-01 01:02:03.1234"); },
-            [] () { return TString("2001-01-01 01:02:03.12"); }
+            [] () { return TString("2001-01-01 01:02:03.12"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
         {
             TIMESTAMPOID, "4",
             SUCCESS,
             [] () { return TString("2001-01-01 01:02:03.1234"); },
-            [] () { return TString("2001-01-01 01:02:03.1234"); }
+            [] () { return TString("2001-01-01 01:02:03.1234"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
         {
             TIMESTAMPOID, "6",
             SUCCESS,
             [] () { return TString("2001-01-01 01:02:03.1234"); },
-            [] () { return TString("2001-01-01 01:02:03.1234"); }
+            [] () { return TString("2001-01-01 01:02:03.1234"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
 
         {
             TIMESTAMPTZOID, "2",
             SUCCESS,
             [] () { return TString("2001-01-01 01:02:03.1234+00"); },
-            [] () { return TString("2001-01-01 01:02:03.12+00"); }
+            [] () { return TString("2001-01-01 01:02:03.12+00"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
         {
             TIMESTAMPTZOID, "4",
             SUCCESS,
             [] () { return TString("2001-01-01 01:02:03.1234+00"); },
-            [] () { return TString("2001-01-01 01:02:03.1234+00"); }
+            [] () { return TString("2001-01-01 01:02:03.1234+00"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
         {
             TIMESTAMPTZOID, "6",
             SUCCESS,
             [] () { return TString("2001-01-01 01:02:03.1234+00"); },
-            [] () { return TString("2001-01-01 01:02:03.1234+00"); }
+            [] () { return TString("2001-01-01 01:02:03.1234+00"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
 
         {
             INTERVALOID, "day",
             SUCCESS,
             [] () { return TString("100 01:02:03.1234"); },
-            [] () { return TString("100 days"); }
+            [] () { return TString("100 days"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
         {
             INTERVALOID, "day to minute",
             SUCCESS,
             [] () { return TString("100 01:02:03.1234"); },
-            [] () { return TString("100 days 01:02:00"); }
+            [] () { return TString("100 days 01:02:00"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
         {
             INTERVALOID, "day to second,2",
             SUCCESS,
             [] () { return TString("100 01:02:03.1234"); },
-            [] () { return TString("100 days 01:02:03.12"); }
+            [] () { return TString("100 days 01:02:03.12"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
         {
             INTERVALOID, "day to second,6",
             SUCCESS,
             [] () { return TString("100 01:02:03.1234"); },
-            [] () { return TString("100 days 01:02:03.1234"); }
+            [] () { return TString("100 days 01:02:03.1234"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
         {
             INTERVALOID, "day to second,6",
             SUCCESS,
             [] () { return TString("100 01:02:03.1234"); },
-            [] () { return TString("100 days 01:02:03.1234"); }
+            [] () { return TString("100 days 01:02:03.1234"); },
+            [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
     };
 
@@ -836,7 +849,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
     Y_UNIT_TEST(TypeCoercionBulkUpsert) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
-        auto testType = [&kikimr] (const TPgTypeCoercionTestSpec& spec) {
+        auto testSingleType = [&kikimr] (const TPgTypeCoercionTestSpec& spec) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -872,16 +885,42 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     auto result = NPg::PgNativeTextFromNativeBinary(c.GetPg().Content_, spec.TypeId);
                     UNIT_ASSERT_C(!result.Error, *result.Error);
                     UNIT_ASSERT_VALUES_EQUAL(expected, result.Str);
-                    Cerr << expected << Endl;
+                    Cerr << result.Str << Endl;
                 }
             }
 
             session.Close().GetValueSync();
         };
 
+        auto testType = [&] (const TPgTypeCoercionTestSpec& spec) {
+            auto textInArray = [&spec] () {
+                auto str = spec.TextIn();
+                return spec.ArrayPrint(str);
+            };
+
+            auto textOutArray = [&spec] () {
+                auto str = spec.TextOut();
+                return spec.ArrayPrint(str);
+            };
+
+            auto arrayTypeId = NYql::NPg::LookupType(spec.TypeId).ArrayTypeId;
+            TPgTypeCoercionTestSpec arraySpec{arrayTypeId, spec.TypeMod, spec.ShouldPass, textInArray, textOutArray};
+
+            testSingleType(spec);
+            testSingleType(arraySpec);
+        };
+
         for (const auto& spec : typeCoercionSpecs) {
             testType(spec);
         }
+
+        TPgTypeCoercionTestSpec partialArrayCoerce{
+            NUMERICARRAYOID, "2",
+            false,
+            [] () { return TString("{99,99,9999,99}"); },
+            [] () { return TString(""); }
+        };
+        testSingleType(partialArrayCoerce);
     }
 
     Y_UNIT_TEST(EmptyQuery) {

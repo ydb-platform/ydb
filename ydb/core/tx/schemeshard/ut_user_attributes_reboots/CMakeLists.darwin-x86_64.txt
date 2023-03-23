@@ -31,7 +31,7 @@ target_link_libraries(core-tx-schemeshard-ut_user_attributes_reboots PUBLIC
 )
 target_link_options(core-tx-schemeshard-ut_user_attributes_reboots PRIVATE
   -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
+  -Wl,-sdk_version,11.0
   -fPIC
   -fPIC
   -framework

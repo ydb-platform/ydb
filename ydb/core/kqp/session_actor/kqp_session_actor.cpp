@@ -692,39 +692,13 @@ public:
                 YQL_ENSURE(false, "Unexpected query action: " << action);
         }
 
-        ParseParameters(QueryState->GetParameters());
-        ParseParameters(QueryState->GetYdbParameters());
+        try {
+            QueryState->QueryData->ParseParameters(QueryState->GetParameters());
+            QueryState->QueryData->ParseParameters(QueryState->GetYdbParameters());
+        } catch(const yexception& ex) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+        }
         return true;
-    }
-
-    void ParseParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params) {
-        if (!params.size()){
-            return;
-        }
-
-        for(const auto& [name, param] : params) {
-            try {
-                auto success = QueryState->QueryData->AddTypedValueParam(name, param);
-                YQL_ENSURE(success, "Duplicate parameter: " << name);
-            } catch(const yexception& ex) {
-                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
-            }
-        }
-    }
-
-    void ParseParameters(const NKikimrMiniKQL::TParams& parameters) {
-        if (!parameters.HasType()) {
-            return;
-        }
-
-        YQL_ENSURE(parameters.GetType().GetKind() == NKikimrMiniKQL::Struct, "Expected struct as query parameters type");
-        auto& structType = parameters.GetType().GetStruct();
-        for (ui32 i = 0; i < structType.MemberSize(); ++i) {
-            const auto& memberName = structType.GetMember(i).GetName();
-            YQL_ENSURE(i < parameters.GetValue().StructSize(), "Missing value for parameter: " << memberName);
-            auto success = QueryState->QueryData->AddMkqlParam(memberName, structType.GetMember(i).GetType(), parameters.GetValue().GetStruct(i));
-            YQL_ENSURE(success, "Duplicate parameter: " << memberName);
-        }
     }
 
     void ReplyPrepareResult() {

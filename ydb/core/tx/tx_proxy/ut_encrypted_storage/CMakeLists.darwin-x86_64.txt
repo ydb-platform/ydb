@@ -30,7 +30,7 @@ target_link_libraries(ydb-core-tx-tx_proxy-ut_encrypted_storage PUBLIC
 )
 target_link_options(ydb-core-tx-tx_proxy-ut_encrypted_storage PRIVATE
   -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
+  -Wl,-sdk_version,11.0
   -fPIC
   -fPIC
   -framework

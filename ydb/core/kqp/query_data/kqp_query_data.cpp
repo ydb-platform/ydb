@@ -215,6 +215,28 @@ void TQueryData::CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx) {
     }
 }
 
+void TQueryData::ParseParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params) {
+    for(const auto& [name, param] : params) {
+        auto success = AddTypedValueParam(name, param);
+        YQL_ENSURE(success, "Duplicate parameter: " << name);
+    }
+}
+
+void TQueryData::ParseParameters(const NKikimrMiniKQL::TParams& parameters) {
+    if (!parameters.HasType()) {
+        return;
+    }
+
+    YQL_ENSURE(parameters.GetType().GetKind() == NKikimrMiniKQL::Struct, "Expected struct as query parameters type");
+    auto& structType = parameters.GetType().GetStruct();
+    for (ui32 i = 0; i < structType.MemberSize(); ++i) {
+        const auto& memberName = structType.GetMember(i).GetName();
+        YQL_ENSURE(i < parameters.GetValue().StructSize(), "Missing value for parameter: " << memberName);
+        auto success = AddMkqlParam(memberName, structType.GetMember(i).GetType(), parameters.GetValue().GetStruct(i));
+        YQL_ENSURE(success, "Duplicate parameter: " << memberName);
+    }
+}
+
 bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type, const NUdf::TUnboxedValue& value) {
     auto g = TypeEnv().BindAllocator();
     auto [_, success] = UnboxedData.emplace(name, std::make_pair(type, value));

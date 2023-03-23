@@ -1661,8 +1661,7 @@ class LD(Linker):
                 self.ld_flags.append('-Wl,-no_compact_unwind')
 
         self.ld_sdk = select(default=None, selectors=[
-            (target.is_macos_arm64, '-Wl,-sdk_version,11.0'),
-            (target.is_macos, '-Wl,-sdk_version,10.15'),
+            (target.is_macos, '-Wl,-sdk_version,11.0'),
             (not target.is_iossim and target.is_ios, '-Wl,-sdk_version,13.1'),
             (target.is_iossim, '-Wl,-sdk_version,14.5'),
         ])

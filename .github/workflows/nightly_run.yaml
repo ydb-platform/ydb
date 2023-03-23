@@ -12,7 +12,7 @@ jobs:
         sanitizer: [ "", "sanitize=address" ]
       fail-fast: false
 
-    uses: ./.github/workflows/build_and_test.yaml
+    uses: ./.github/workflows/build_and_test.yml
     with:
       runner_label: ${{matrix.arch}}
       sanitizer: ${{matrix.sanitizer}}

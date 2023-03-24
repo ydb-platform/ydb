@@ -108,7 +108,7 @@ If there are multiple followers, their delay from the leader may vary: although 
 
 ## Deleting expired data (TTL) {#ttl}
 
-{{ ydb-short-name }} supports automatic background deletion of expired data. A table data schema may define a column containing a value of [supported type](../../../concepts/ttl.md#restrictions). A comparison of this value with the current time for all rows will be performed in the background. Rows for which the current time becomes greater than the column value, factoring in the specified delay, will be deleted.
+{{ ydb-short-name }} supports automatic background deletion of expired data. A table data schema may define a column of the [appropriate type](../../../concepts/ttl.md#restrictions). The column value for all rows will be compared with the current time in the background. Rows for which the current time becomes greater than the column value, factoring in the specified delay, will be deleted.
 
 | Parameter name | Type | Acceptable values | Update possibility | Reset capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |

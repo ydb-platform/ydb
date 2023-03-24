@@ -1,5 +1,7 @@
 #include "kqp_query_state.h"
 
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NSchemeCache;
@@ -191,4 +193,104 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
         CompileResult->Query, compileDeadline, DbCounters, std::move(Orbit));
 }
 
+void TKqpQueryState::AddOffsetsToTransaction() {
+    YQL_ENSURE(HasTopicOperations());
+
+    const auto& operations = GetTopicOperations();
+
+    TMaybe<TString> consumer;
+    if (operations.HasConsumer())
+        consumer = operations.GetConsumer();
+
+    TopicOperations = NTopic::TTopicOperations();
+
+    for (auto& topic : operations.GetTopics()) {
+        auto path = CanonizePath(NPersQueue::GetFullTopicPath(TlsActivationContext->AsActorContext(),
+            GetDatabase(), topic.path()));
+
+        for (auto& partition : topic.partitions()) {
+            if (partition.partition_offsets().empty()) {
+                TopicOperations.AddOperation(path, partition.partition_id());
+            } else {
+                for (auto& range : partition.partition_offsets()) {
+                    YQL_ENSURE(consumer.Defined());
+
+                    TopicOperations.AddOperation(path, partition.partition_id(), *consumer, range);
+                }
+            }
+        }
+    }
+}
+
+bool TKqpQueryState::TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message) {
+    try {
+        TxCtx->TopicOperations.Merge(operations);
+        return true;
+    } catch (const NTopic::TOffsetsRangeIntersectExpection &ex) {
+        message = ex.what();
+        return false;
+    }
+}
+
+std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TKqpQueryState::BuildSchemeCacheNavigate() {
+    auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+    navigate->DatabaseName = CanonizePath(GetDatabase());
+
+    const auto& operations = GetTopicOperations();
+    TMaybe<TString> consumer;
+    if (operations.HasConsumer())
+        consumer = operations.GetConsumer();
+
+    TopicOperations.FillSchemeCacheNavigate(*navigate, std::move(consumer));
+    navigate->UserToken = UserToken;
+    navigate->Cookie = QueryId;
+    return navigate;
+}
+
+bool TKqpQueryState::IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message) {
+    auto rights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
+    // don't build message string on success path
+    bool denied = std::any_of(response.ResultSet.begin(), response.ResultSet.end(), [&] (auto& result) {
+        return result.SecurityObject && !result.SecurityObject->CheckAccess(rights, *UserToken);
+    });
+
+    if (!denied) {
+        return false;
+    }
+
+    TStringBuilder builder;
+    builder << "Access for topic(s)";
+    for (auto& result : response.ResultSet) {
+        if (result.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+            continue;
+        }
+
+        if (result.SecurityObject && !result.SecurityObject->CheckAccess(rights, *UserToken)) {
+            builder << " '" << JoinPath(result.Path) << "'";
+        }
+    }
+
+    builder << " is denied for subject '" << UserToken->GetUserSID() << "'";
+    message = std::move(builder);
+
+    return true;
+}
+
+bool TKqpQueryState::HasErrors(const NSchemeCache::TSchemeCacheNavigate& response, TString& message) {
+    if (response.ErrorCount == 0) {
+        return false;
+    }
+
+    TStringBuilder builder;
+
+    builder << "Unable to navigate:";
+    for (const auto& result : response.ResultSet) {
+        if (result.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+            builder << "path: '" << JoinPath(result.Path) << "' status: " << result.Status;
+        }
+    }
+    message = std::move(builder);
+
+    return true;
+}
 }

@@ -23,6 +23,7 @@
 
 #include <functional>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/strings/string_view.h"
 

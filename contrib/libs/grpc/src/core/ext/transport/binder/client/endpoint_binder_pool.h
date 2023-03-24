@@ -19,6 +19,7 @@
 
 #include <functional>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/container/flat_hash_map.h"
 

@@ -25,6 +25,7 @@
 #include <stddef.h>
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include <grpc/impl/codegen/gpr_types.h>
 

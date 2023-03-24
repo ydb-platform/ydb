@@ -25,6 +25,7 @@
 
 #include <map>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include <grpc/support/alloc.h>
 #include <grpc/support/atm.h>

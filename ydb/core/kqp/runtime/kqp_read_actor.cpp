@@ -924,10 +924,13 @@ public:
         ++ErrorsCount;
 
         TVector<ui32> reads;
-        reads.swap(ReadIdByTabletId[msg.TabletId]);
+        reads = ReadIdByTabletId[msg.TabletId];
+        CA_LOG_W("Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered);
         for (auto read : reads) {
-            CA_LOG_W("Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered);
-            RetryRead(read, false);
+            if (Reads[read]) {
+                Counters->IteratorDeliveryProblems->Inc();
+            }
+            RetryRead(read);
         }
     }
 
@@ -941,7 +944,7 @@ public:
             auto* state = Reads[id].Shard;
             auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
             cancel->Record.SetReadId(id);
-            Send(::PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId));
+            Send(::PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId, false));
 
             Reads[id].Reset();
             ResetReads++;
@@ -1239,10 +1242,10 @@ public:
         {
             auto guard = BindAllocator();
             Results.clear();
-            Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
             for (size_t i = 0; i < Reads.size(); ++i) {
                 ResetRead(i);
             }
+            Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         }
         TBase::PassAway();
     }

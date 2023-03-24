@@ -25,6 +25,7 @@
 
 #include <map>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "src/core/lib/channel/channel_trace.h"
 #include "src/core/lib/channel/channelz.h"

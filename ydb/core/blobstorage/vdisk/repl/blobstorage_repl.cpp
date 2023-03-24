@@ -252,9 +252,9 @@ namespace NKikimr {
 
             LastReplStart = TAppData::TimeProvider->Now();
             ReplCtx->MonGroup.ReplUnreplicatedVDisks() = 1;
-            ReplCtx->MonGroup.ReplWorkUnitsRemaining() = -1;
+            ReplCtx->MonGroup.ReplWorkUnitsRemaining() = 0;
             ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
-            ReplCtx->MonGroup.ReplItemsRemaining() = -1;
+            ReplCtx->MonGroup.ReplItemsRemaining() = 0;
             ReplCtx->MonGroup.ReplItemsDone() = 0;
 
             Become(&TThis::StateRepl);

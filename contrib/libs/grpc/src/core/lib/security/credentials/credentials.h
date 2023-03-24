@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include <grpc/grpc.h>
 #include <grpc/grpc_security.h>

@@ -378,6 +378,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRetries;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorFails;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
     // Physical tx duration
     NMonitoring::THistogramPtr LiteralTxTotalTimeHistogram;

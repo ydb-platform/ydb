@@ -22,8 +22,6 @@
 
 #include <grpc/support/string_util.h>
 
-#include <util/string/cast.h>
-
 #include "src/core/ext/filters/client_channel/client_channel.h"
 #include "src/core/lib/channel/channelz_registry.h"
 #include "src/core/lib/gpr/useful.h"

@@ -21,6 +21,7 @@
 #include <functional>
 #include <memory>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/status/status.h"
 #include "y_absl/strings/string_view.h"

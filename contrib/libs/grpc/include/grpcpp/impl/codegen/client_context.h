@@ -39,6 +39,7 @@
 #include <map>
 #include <memory>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include <grpc/impl/codegen/compression_types.h>
 #include <grpc/impl/codegen/propagation_bits.h>

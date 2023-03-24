@@ -22,6 +22,7 @@
 // IWYU pragma: private, include <grpcpp/support/config.h>
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 /// The following macros are deprecated and appear only for users
 /// with PB files generated using gRPC 1.0.x plugins. They should

@@ -372,7 +372,7 @@ namespace NKikimr::NBlobDepot {
                 (Status, resp.Status), (NumGetsUnprocessed, GetIdToUnprocessedPuts.size()));
             if (resp.Status == NKikimrProto::OK) {
                 std::vector<ui8> channels(1);
-                if (!Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
+                if (Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
                     TChannelInfo& channel = Self->Channels[channels.front()];
                     const ui64 value = channel.NextBlobSeqId++;
                     const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);

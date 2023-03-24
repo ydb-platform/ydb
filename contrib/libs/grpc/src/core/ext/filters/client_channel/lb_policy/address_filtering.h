@@ -21,6 +21,7 @@
 
 #include <map>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <vector>
 
 #include "y_absl/status/statusor.h"

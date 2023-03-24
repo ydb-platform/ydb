@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/string_view.h"

@@ -29,6 +29,11 @@ from_chars_result parse_infnan(const char *first, const char *last, T &value)  n
       minusSign = true;
       ++first;
   }
+#if FASTFLOAT_ALLOWS_LEADING_PLUS // disabled by default
+  if (*first == '+') {
+      ++first;
+  }
+#endif
   if (last - first >= 3) {
     if (fastfloat_strncasecmp(first, "nan", 3)) {
       answer.ptr = (first += 3);

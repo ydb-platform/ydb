@@ -12,9 +12,11 @@ namespace fast_float {
 
 // Next function can be micro-optimized, but compilers are entirely
 // able to optimize it well.
-fastfloat_really_inline bool is_integer(char c)  noexcept  { return c >= '0' && c <= '9'; }
+fastfloat_really_inline constexpr bool is_integer(char c) noexcept {
+  return c >= '0' && c <= '9';
+}
 
-fastfloat_really_inline uint64_t byteswap(uint64_t val) {
+fastfloat_really_inline constexpr uint64_t byteswap(uint64_t val) {
   return (val & 0xFF00000000000000) >> 56
     | (val & 0x00FF000000000000) >> 40
     | (val & 0x0000FF0000000000) >> 24
@@ -44,7 +46,8 @@ fastfloat_really_inline void write_u64(uint8_t *chars, uint64_t val) {
 }
 
 // credit  @aqrit
-fastfloat_really_inline uint32_t  parse_eight_digits_unrolled(uint64_t val) {
+fastfloat_really_inline FASTFLOAT_CONSTEXPR14
+uint32_t parse_eight_digits_unrolled(uint64_t val) {
   const uint64_t mask = 0x000000FF000000FF;
   const uint64_t mul1 = 0x000F424000000064; // 100 + (1000000ULL << 32)
   const uint64_t mul2 = 0x0000271000000001; // 1 + (10000ULL << 32)
@@ -59,7 +62,7 @@ fastfloat_really_inline uint32_t parse_eight_digits_unrolled(const char *chars) 
 }
 
 // credit @aqrit
-fastfloat_really_inline bool is_made_of_eight_digits_fast(uint64_t val)  noexcept  {
+fastfloat_really_inline constexpr bool is_made_of_eight_digits_fast(uint64_t val)  noexcept  {
   return !((((val + 0x4646464646464646) | (val - 0x3030303030303030)) &
      0x8080808080808080));
 }

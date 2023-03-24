@@ -196,7 +196,7 @@ private:
                 Counters->SentIteratorCancels->Inc();
                 auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
                 cancel->Record.SetReadId(id);
-                Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId));
+                Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
             }
         }
 
@@ -351,6 +351,7 @@ private:
 
         for (auto* read : shardIt->second.Reads) {
             if (read->State == EReadState::Running) {
+                Counters->IteratorDeliveryProblems->Inc();
                 for (auto& key : read->Keys) {
                     UnprocessedKeys.emplace_back(std::move(key));
                 }

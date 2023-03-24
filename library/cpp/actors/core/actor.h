@@ -29,6 +29,7 @@ namespace NActors {
         ui32 CapturedActivation = 0;
         ESendingType CapturedType = ESendingType::Lazy;
         ESendingType SendingType = ESendingType::Common;
+        bool IsEnoughCpu = true;
     };
 
     extern Y_POD_THREAD(TThreadContext*) TlsThreadContext;
@@ -522,6 +523,12 @@ namespace NActors {
         }
 
     protected:
+        void SetEnoughCpu(bool isEnough) {
+            if (TlsThreadContext) {
+                TlsThreadContext->IsEnoughCpu = isEnough;
+            }
+        }
+
         void Describe(IOutputStream&) const noexcept override;
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
         bool Send(const TActorId& recipient, IEventHandleLight* ev) const noexcept;

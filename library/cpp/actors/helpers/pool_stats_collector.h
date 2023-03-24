@@ -135,6 +135,7 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr IncreasingThreadsByNeedyState;
         NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByStarvedState;
         NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByHoggishState;
+        NMonitoring::TDynamicCounters::TCounterPtr NotEnoughCpuExecutions;
 
 
         THistogramCounters LegacyActivationTimeHistogram;
@@ -190,6 +191,7 @@ private:
             IncreasingThreadsByNeedyState = PoolGroup->GetCounter("IncreasingThreadsByNeedyState", true);
             DecreasingThreadsByStarvedState = PoolGroup->GetCounter("DecreasingThreadsByStarvedState", true);
             DecreasingThreadsByHoggishState = PoolGroup->GetCounter("DecreasingThreadsByHoggishState", true);
+            NotEnoughCpuExecutions = PoolGroup->GetCounter("NotEnoughCpuExecutions", true);
 
             LegacyActivationTimeHistogram.Init(PoolGroup.Get(), "ActivationTime", "usec", 5*1000*1000);
             ActivationTimeHistogram = PoolGroup->GetHistogram(
@@ -237,6 +239,7 @@ private:
             *IncreasingThreadsByNeedyState = poolStats.IncreasingThreadsByNeedyState;
             *DecreasingThreadsByStarvedState = poolStats.DecreasingThreadsByStarvedState;
             *DecreasingThreadsByHoggishState = poolStats.DecreasingThreadsByHoggishState;
+            *NotEnoughCpuExecutions = stats.NotEnoughCpuExecutions;
 
             LegacyActivationTimeHistogram.Set(stats.ActivationTimeHistogram);
             ActivationTimeHistogram->Reset();

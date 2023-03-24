@@ -1117,22 +1117,7 @@ TExprNode::TPtr OptimizeContainerIf(const TExprNode::TPtr& node, TExprContext& c
     if (node->Head().IsCallable("Bool")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content() << " '" << node->Head().Head().Content();
         const auto value = FromString<bool>(node->Head().Head().Content());
-        auto res = value
-            ? ctx.NewCallable(node->Tail().Pos(), IsList ? "AsList" : "Just", {node->TailPtr()})
-            : //TODO: ctx.NewCallable(node->Head().Pos(), IsList ? "List" : "Nothing", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)})
-              ctx.Builder(node->Head().Pos())
-                .Callable(IsList ? "List" : "Nothing")
-                    .Callable(0, IsList ? "ListType" : "OptionalType")
-                        .Callable(0, "TypeOf")
-                            .Add(0, node->TailPtr())
-                        .Seal()
-                    .Seal()
-                .Seal().Build();
-        if (IsList) {
-            res = KeepConstraints(res, *node, ctx);
-        }
-        return res;
-
+        return ctx.WrapByCallableIf(!value, "NothingFrom", ctx.NewCallable(node->Tail().Pos(), IsList ? "AsList" : "Just", {node->TailPtr()}));
     }
     return node;
 }

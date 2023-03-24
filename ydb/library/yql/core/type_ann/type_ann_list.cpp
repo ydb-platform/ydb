@@ -7152,13 +7152,26 @@ namespace {
             }
         } else {
             auto children = input->ChildrenList();
-            children.emplace_back(ctx.Expr.NewCallable(input->Pos(), "Uint64", {ctx.Expr.NewAtom(input->Pos(), "0", TNodeFlags::Default)}));
+            children.emplace_back(ctx.Expr.NewCallable(input->Pos(), "Uint64", {ctx.Expr.NewAtom(input->Pos(), 0U)}));
             output = ctx.Expr.ChangeChildren(*input, std::move(children));
             return IGraphTransformer::TStatus::Repeat;
         }
 
         const auto itemType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
         input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(ctx.Expr.MakeType<TListExprType>(itemType)));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus NothingFromWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (const TTypeAnnotationNode* itemType = nullptr; !EnsureNewSeqType<true>(input->Head(), ctx.Expr, &itemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
         return IGraphTransformer::TStatus::Ok;
     }
 

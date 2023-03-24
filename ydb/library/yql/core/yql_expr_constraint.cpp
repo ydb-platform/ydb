@@ -167,6 +167,7 @@ public:
         Functions["ListIf"] = &TCallableConstraintTransformer::PassOrEmptyWrap<true, false>;
         Functions["FlatListIf"] = &TCallableConstraintTransformer::PassOrEmptyWrap<true, true>;
         Functions["EmptyIterator"] = &TCallableConstraintTransformer::FromEmpty;
+        Functions["NothingFrom"] = &TCallableConstraintTransformer::NothingFromWrap;
         Functions["List"] = &TCallableConstraintTransformer::ListWrap;
         Functions["Dict"] = &TCallableConstraintTransformer::DictWrap;
         Functions["EmptyList"] = &TCallableConstraintTransformer::FromEmpty;
@@ -310,6 +311,20 @@ private:
 
     TStatus FromEmpty(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        return TStatus::Ok;
+    }
+
+    TStatus NothingFromWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        auto set = input->Head().GetConstraintSet();
+        set.RemoveConstraint(TEmptyConstraintNode::Name());
+        if (!set) {
+            const auto type = input->GetTypeAnn();
+            output = ctx.NewCallable(input->Pos(), GetEmptyCollectionName(type), {ExpandType(input->Pos(), *type, ctx)});
+            return TStatus::Repeat;
+        }
+
+        set.AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        input->SetConstraints(set);
         return TStatus::Ok;
     }
 

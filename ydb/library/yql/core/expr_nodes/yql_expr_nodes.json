@@ -373,6 +373,11 @@
             "Match": {"Type": "Callable", "Name": "UnorderedSubquery"}
         },
         {
+            "Name": "TCoNothingFrom",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "NothingFrom"}
+        },
+        {
             "Name": "TCoConditionalValueBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},

@@ -107,7 +107,8 @@ private:
             return TStatus::Repeat;
         }
 
-        if (!EnsureAtom(*input->Child(TS3Target::idx_Format), ctx) || !NCommon::ValidateFormatForOutput(input->Child(TS3Target::idx_Format)->Content(), ctx)) {
+        const auto format = input->Child(TS3Object::idx_Format)->Content();
+        if (!EnsureAtom(*input->Child(TS3Target::idx_Format), ctx) || !NCommon::ValidateFormatForOutput(format, ctx)) {
             return TStatus::Error;
         }
 
@@ -126,7 +127,7 @@ private:
                         return false;
                     }
 
-                    return NCommon::ValidateCompressionForOutput(value.Content(), ctx);
+                    return NCommon::ValidateCompressionForOutput(format, value.Content(), ctx);
                 }
 
                 if (name == "partitionedby") {

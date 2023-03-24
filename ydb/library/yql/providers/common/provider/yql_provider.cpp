@@ -1144,8 +1144,15 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
     writer.OnEndMap();
 }
 
-bool ValidateCompressionForInput(std::string_view compression, TExprContext& ctx) {
-    if (compression.empty() || IsIn(Compressions, compression)) {
+bool ValidateCompressionForInput(std::string_view format, std::string_view compression, TExprContext& ctx) {
+    if (compression.empty()) {
+        return true;
+    }
+    if (format == "parquet"sv) {
+        ctx.AddError(TIssue(TStringBuilder() << "External compression for parquet is not supported"));
+        return false;
+    }
+    if (IsIn(Compressions, compression)) {
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown compression: " << compression
@@ -1153,8 +1160,15 @@ bool ValidateCompressionForInput(std::string_view compression, TExprContext& ctx
     return false;
 }
 
-bool ValidateCompressionForOutput(std::string_view compression, TExprContext& ctx) {
-    if (compression.empty() || IsIn(Compressions, compression)) {
+bool ValidateCompressionForOutput(std::string_view format, std::string_view compression, TExprContext& ctx) {
+    if (compression.empty()) {
+        return true;
+    }
+    if (format == "parquet"sv) {
+        ctx.AddError(TIssue(TStringBuilder() << "External compression for parquet is not supported"));
+        return false;
+    }
+    if (IsIn(Compressions, compression)) {
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown compression: " << compression

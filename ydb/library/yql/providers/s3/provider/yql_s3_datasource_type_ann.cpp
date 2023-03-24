@@ -505,7 +505,7 @@ public:
                     if (!ExtractSettingValue(setting.Tail(), "compression"sv, format, {}, ctx, compression)) {
                         return false;
                     }
-                    return NCommon::ValidateCompressionForInput(compression, ctx);
+                    return NCommon::ValidateCompressionForInput(format, compression, ctx);
                 }
 
                 if (name == "partitionedby"sv) {

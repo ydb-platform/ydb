@@ -264,6 +264,7 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
         "TEST-TIMEOUT": unit.get("TEST_TIMEOUT") or "",
         "TEST-ENV": ytest.prepare_env(unit.get("TEST_ENV_VALUE")),
         "TESTED-PROJECT-NAME": os.path.splitext(unit.filename())[0],
+        "TEST-RECIPES": ytest.prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
         "SCRIPT-REL-PATH": test_type,
         "SOURCE-FOLDER-PATH": test_dir,
         "BUILD-FOLDER-PATH": test_dir,
@@ -277,7 +278,7 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
         "REQUIREMENTS": ytest.serialize_list(ytest.get_values_list(unit, "TEST_REQUIREMENTS_VALUE")),
         "NODEJS-ROOT-VAR-NAME": unit.get("NODEJS_ROOT_VAR_NAME"),
         "NODE-MODULES-BUNDLE-FILENAME": constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
-        "CUSTOM-DEPENDENCIES": " ".join(deps) if deps else "",
+        "CUSTOM-DEPENDENCIES": " ".join((deps or []) + ytest.get_values_list(unit, 'TEST_DEPENDS_VALUE')),
     }
 
     if test_record:

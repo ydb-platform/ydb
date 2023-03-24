@@ -5379,7 +5379,7 @@ namespace {
         ui32 expectedArgs;
         if (name == "count_all") {
             expectedArgs = overState ? 2 : 1;
-        } else if (name == "count" || name == "sum" || name == "avg" || name == "min" || name == "max") {
+        } else if (name == "count" || name == "sum" || name == "avg" || name == "min" || name == "max" || name == "some") {
             expectedArgs = 2;
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
@@ -5454,6 +5454,10 @@ namespace {
                 }
             }
 
+            input->SetTypeAnn(retType);
+        } else if (name == "some") {
+            auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            const TTypeAnnotationNode* retType = itemType;
             input->SetTypeAnn(retType);
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),

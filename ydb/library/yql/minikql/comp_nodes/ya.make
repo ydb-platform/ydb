@@ -17,6 +17,8 @@ SRCS(
     mkql_block_agg_factory.h
     mkql_block_agg_minmax.cpp
     mkql_block_agg_minmax.h
+    mkql_block_agg_some.cpp
+    mkql_block_agg_some.h
     mkql_block_agg_sum.cpp
     mkql_block_agg_sum.h
     mkql_block_builder.cpp

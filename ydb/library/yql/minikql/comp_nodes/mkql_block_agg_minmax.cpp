@@ -106,13 +106,13 @@ constexpr TIn InitialStateValue() {
 
 template <typename TIn, bool IsMin>
 struct TState<true, TIn, IsMin> {
-    TIn Value_ = InitialStateValue<TIn, IsMin>();
-    ui8 IsValid_ = 0;
+    TIn Value = InitialStateValue<TIn, IsMin>();
+    ui8 IsValid = 0;
 };
 
 template <typename TIn, bool IsMin>
 struct TState<false, TIn, IsMin> {
-    TIn Value_ = InitialStateValue<TIn, IsMin>();
+    TIn Value = InitialStateValue<TIn, IsMin>();
 };
 
 using TGenericState = NUdf::TUnboxedValuePod;
@@ -131,12 +131,12 @@ public:
     void Add(const void* state) final {
         auto typedState = static_cast<const TStateType*>(state);
         if constexpr (IsNullable) {
-            if (!typedState->IsValid_) {
+            if (!typedState->IsValid) {
                 Builder_.Add(TBlockItem());
                 return;
             }
         }
-        Builder_.Add(TBlockItem(typedState->Value_));
+        Builder_.Add(TBlockItem(typedState->Value));
     }
 
     NUdf::TUnboxedValue Build() final {
@@ -630,11 +630,11 @@ public:
             Y_ENSURE(datum.is_scalar());
             if constexpr (IsNullable) {
                 if (datum.scalar()->is_valid) {
-                    typedState->Value_ = datum.scalar_as<TInScalar>().value;
-                    typedState->IsValid_ = 1;
+                    typedState->Value = datum.scalar_as<TInScalar>().value;
+                    typedState->IsValid = 1;
                 }
             } else {
-                typedState->Value_ = datum.scalar_as<TInScalar>().value;
+                typedState->Value = datum.scalar_as<TInScalar>().value;
             }
         } else {
             const auto& array = datum.array();
@@ -647,9 +647,9 @@ public:
             }
 
             if (!filtered) {
-                TIn value = typedState->Value_;
+                TIn value = typedState->Value;
                 if constexpr (IsNullable) {
-                    typedState->IsValid_ = 1;
+                    typedState->IsValid = 1;
                 }
 
                 if (IsNullable && nullCount != 0) {
@@ -665,14 +665,14 @@ public:
                     }
                 }
 
-                typedState->Value_ = value;
+                typedState->Value = value;
             } else {
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
                 const auto& filterArray = filterDatum.array();
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
                 const ui8* filterBitmap = filterArray->template GetValues<uint8_t>(1);
 
-                TIn value = typedState->Value_;
+                TIn value = typedState->Value;
                 ui64 validCount = 0;
                 if (IsNullable && nullCount != 0) {
                     auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
@@ -691,9 +691,9 @@ public:
                 }
 
                 if constexpr (IsNullable) {
-                    typedState->IsValid_ |= validCount ? 1 : 0;
+                    typedState->IsValid |= validCount ? 1 : 0;
                 }
-                typedState->Value_ = value;
+                typedState->Value = value;
             }
         }
     }
@@ -701,12 +701,12 @@ public:
     NUdf::TUnboxedValue FinishOne(const void* state) final {
         auto typedState = static_cast<const TStateType*>(state);
         if constexpr (IsNullable) {
-            if (!typedState->IsValid_) {
+            if (!typedState->IsValid) {
                 return NUdf::TUnboxedValuePod();
             }
         }
 
-        return NUdf::TUnboxedValuePod(typedState->Value_);
+        return NUdf::TUnboxedValuePod(typedState->Value);
     }
 
 private:
@@ -720,28 +720,28 @@ static void PushValueToState(TState<IsNullable, TIn, IsMin>* typedState, const a
         Y_ENSURE(datum.is_scalar());
         if constexpr (IsNullable) {
             if (datum.scalar()->is_valid) {
-                typedState->Value_ = datum.scalar_as<TInScalar>().value;
-                typedState->IsValid_ = 1;
+                typedState->Value = datum.scalar_as<TInScalar>().value;
+                typedState->IsValid = 1;
             }
         } else {
-            typedState->Value_ = datum.scalar_as<TInScalar>().value;
+            typedState->Value = datum.scalar_as<TInScalar>().value;
         }
     } else {
         const auto &array = datum.array();
         auto ptr = array->GetValues<TIn>(1);
         if constexpr (IsNullable) {
             if (array->GetNullCount() == 0) {
-                typedState->IsValid_ = 1;
-                typedState->Value_ = UpdateMinMax<IsMin>(typedState->Value_, ptr[row]);
+                typedState->IsValid = 1;
+                typedState->Value = UpdateMinMax<IsMin>(typedState->Value, ptr[row]);
             } else {
                 auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                 ui64 fullIndex = row + array->offset;
                 ui8 notNull = (nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1;
-                typedState->Value_ = UpdateMinMax<IsMin>(typedState->Value_, SelectArg(notNull, ptr[row], typedState->Value_));
-                typedState->IsValid_ |= notNull;
+                typedState->Value = UpdateMinMax<IsMin>(typedState->Value, SelectArg(notNull, ptr[row], typedState->Value));
+                typedState->IsValid |= notNull;
             }
         } else {
-            typedState->Value_ = UpdateMinMax<IsMin>(typedState->Value_, ptr[row]);
+            typedState->Value = UpdateMinMax<IsMin>(typedState->Value, ptr[row]);
         }
     }
 }

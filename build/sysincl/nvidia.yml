@@ -29,6 +29,7 @@
   - curand_mtgp32_host.h
   - curand_mtgp32dc_p_11213.h
   - cusolverDn.h
+  - cusolverSp.h
   - cusparse.h
   - cusparseLt.h
   - device_atomic_functions.h

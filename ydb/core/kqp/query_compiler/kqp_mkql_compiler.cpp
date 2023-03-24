@@ -4,6 +4,8 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -220,8 +222,26 @@ const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& ta
     return meta;
 }
 
-TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx) {
+TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx, TTypeAnnotationContext& typesCtx) {
     auto compiler = MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>();
+
+    compiler->AddCallable({TDqSourceWideWrap::CallableName(), TDqSourceWideBlockWrap::CallableName(), TDqReadWideWrap::CallableName()},
+        [](const TExprNode& node, NCommon::TMkqlBuildContext&) {
+            YQL_ENSURE(false, "Unsupported reader: " << node.Head().Content());
+            return TRuntimeNode();
+        });
+
+    for (const auto& provider : typesCtx.DataSources) {
+        if (auto* dqIntegration = provider->GetDqIntegration()) {
+            dqIntegration->RegisterMkqlCompiler(*compiler);
+        }
+    }
+
+    for (const auto& provider : typesCtx.DataSinks) {
+        if (auto* dqIntegration = provider->GetDqIntegration()) {
+            dqIntegration->RegisterMkqlCompiler(*compiler);
+        }
+    }
 
     compiler->AddCallable(TKqpWideReadTable::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {

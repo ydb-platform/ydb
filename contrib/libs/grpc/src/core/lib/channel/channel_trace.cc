@@ -161,7 +161,7 @@ Json ChannelTrace::TraceEvent::RenderTraceEvent() const {
          referenced_entity_->type() == BaseNode::EntityType::kInternalChannel);
     object[is_channel ? "channelRef" : "subchannelRef"] = Json::Object{
         {(is_channel ? "channelId" : "subchannelId"),
-         ToString(referenced_entity_->uuid())},
+         ::ToString(referenced_entity_->uuid())},
     };
   }
   return object;
@@ -176,7 +176,7 @@ Json ChannelTrace::RenderJson() const {
       {"creationTimestamp", gpr_format_timespec(time_created_)},
   };
   if (num_events_logged_ > 0) {
-    object["numEventsLogged"] = ToString(num_events_logged_);
+    object["numEventsLogged"] = ::ToString(num_events_logged_);
   }
   // Only add in the event list if it is non-empty.
   if (head_trace_ != nullptr) {

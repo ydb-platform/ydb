@@ -55,7 +55,7 @@ struct TPortionInfo {
     bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
     bool CanHaveDups() const { return !Valid(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted(); }
-    ui32 NumRecords() const { return Records.size(); }
+    size_t NumRecords() const { return Records.size(); }
 
     bool EvictReady(size_t hotSize) const {
         return Meta.Produced == TPortionMeta::COMPACTED

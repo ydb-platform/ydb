@@ -128,17 +128,17 @@ void CallCountingHelper::PopulateCallCounts(Json::Object* json) {
   CounterData data;
   CollectData(&data);
   if (data.calls_started != 0) {
-    (*json)["callsStarted"] = ToString(data.calls_started);
+    (*json)["callsStarted"] = ::ToString(data.calls_started);
     gpr_timespec ts = gpr_convert_clock_type(
         gpr_cycle_counter_to_time(data.last_call_started_cycle),
         GPR_CLOCK_REALTIME);
     (*json)["lastCallStartedTimestamp"] = gpr_format_timespec(ts);
   }
   if (data.calls_succeeded != 0) {
-    (*json)["callsSucceeded"] = ToString(data.calls_succeeded);
+    (*json)["callsSucceeded"] = ::ToString(data.calls_succeeded);
   }
   if (data.calls_failed) {
-    (*json)["callsFailed"] = ToString(data.calls_failed);
+    (*json)["callsFailed"] = ::ToString(data.calls_failed);
   }
 }
 
@@ -196,7 +196,7 @@ Json ChannelNode::RenderJson() {
   Json::Object json = {
       {"ref",
        Json::Object{
-           {"channelId", ToString(uuid())},
+           {"channelId", ::ToString(uuid())},
        }},
       {"data", std::move(data)},
   };
@@ -212,7 +212,7 @@ void ChannelNode::PopulateChildRefs(Json::Object* json) {
     Json::Array array;
     for (intptr_t subchannel_uuid : child_subchannels_) {
       array.emplace_back(Json::Object{
-          {"subchannelId", ToString(subchannel_uuid)},
+          {"subchannelId", ::ToString(subchannel_uuid)},
       });
     }
     (*json)["subchannelRef"] = std::move(array);
@@ -221,7 +221,7 @@ void ChannelNode::PopulateChildRefs(Json::Object* json) {
     Json::Array array;
     for (intptr_t channel_uuid : child_channels_) {
       array.emplace_back(Json::Object{
-          {"channelId", ToString(channel_uuid)},
+          {"channelId", ::ToString(channel_uuid)},
       });
     }
     (*json)["channelRef"] = std::move(array);
@@ -299,7 +299,7 @@ TString ServerNode::RenderServerSockets(intptr_t start_socket_id,
     for (; it != child_sockets_.end() && sockets_rendered < pagination_limit;
          ++it, ++sockets_rendered) {
       array.emplace_back(Json::Object{
-          {"socketId", ToString(it->first)},
+          {"socketId", ::ToString(it->first)},
           {"name", it->second->name()},
       });
     }
@@ -323,7 +323,7 @@ Json ServerNode::RenderJson() {
   Json::Object object = {
       {"ref",
        Json::Object{
-           {"serverId", ToString(uuid())},
+           {"serverId", ::ToString(uuid())},
        }},
       {"data", std::move(data)},
   };
@@ -334,7 +334,7 @@ Json ServerNode::RenderJson() {
       Json::Array array;
       for (const auto& it : child_listen_sockets_) {
         array.emplace_back(Json::Object{
-            {"socketId", ToString(it.first)},
+            {"socketId", ::ToString(it.first)},
             {"name", it.second->name()},
         });
       }
@@ -507,7 +507,7 @@ Json SocketNode::RenderJson() {
   gpr_timespec ts;
   int64_t streams_started = streams_started_.load(std::memory_order_relaxed);
   if (streams_started != 0) {
-    data["streamsStarted"] = ToString(streams_started);
+    data["streamsStarted"] = ::ToString(streams_started);
     gpr_cycle_counter last_local_stream_created_cycle =
         last_local_stream_created_cycle_.load(std::memory_order_relaxed);
     if (last_local_stream_created_cycle != 0) {
@@ -528,15 +528,15 @@ Json SocketNode::RenderJson() {
   int64_t streams_succeeded =
       streams_succeeded_.load(std::memory_order_relaxed);
   if (streams_succeeded != 0) {
-    data["streamsSucceeded"] = ToString(streams_succeeded);
+    data["streamsSucceeded"] = ::ToString(streams_succeeded);
   }
   int64_t streams_failed = streams_failed_.load(std::memory_order_relaxed);
   if (streams_failed != 0) {
-    data["streamsFailed"] = ToString(streams_failed);
+    data["streamsFailed"] = ::ToString(streams_failed);
   }
   int64_t messages_sent = messages_sent_.load(std::memory_order_relaxed);
   if (messages_sent != 0) {
-    data["messagesSent"] = ToString(messages_sent);
+    data["messagesSent"] = ::ToString(messages_sent);
     ts = gpr_convert_clock_type(
         gpr_cycle_counter_to_time(
             last_message_sent_cycle_.load(std::memory_order_relaxed)),
@@ -546,7 +546,7 @@ Json SocketNode::RenderJson() {
   int64_t messages_received =
       messages_received_.load(std::memory_order_relaxed);
   if (messages_received != 0) {
-    data["messagesReceived"] = ToString(messages_received);
+    data["messagesReceived"] = ::ToString(messages_received);
     ts = gpr_convert_clock_type(
         gpr_cycle_counter_to_time(
             last_message_received_cycle_.load(std::memory_order_relaxed)),
@@ -555,13 +555,13 @@ Json SocketNode::RenderJson() {
   }
   int64_t keepalives_sent = keepalives_sent_.load(std::memory_order_relaxed);
   if (keepalives_sent != 0) {
-    data["keepAlivesSent"] = ToString(keepalives_sent);
+    data["keepAlivesSent"] = ::ToString(keepalives_sent);
   }
   // Create and fill the parent object.
   Json::Object object = {
       {"ref",
        Json::Object{
-           {"socketId", ToString(uuid())},
+           {"socketId", ::ToString(uuid())},
            {"name", name()},
        }},
       {"data", std::move(data)},
@@ -587,7 +587,7 @@ Json ListenSocketNode::RenderJson() {
   Json::Object object = {
       {"ref",
        Json::Object{
-           {"socketId", ToString(uuid())},
+           {"socketId", ::ToString(uuid())},
            {"name", name()},
        }},
   };

@@ -42,6 +42,7 @@ target_link_libraries(core-kqp-provider PUBLIC
   providers-common-proto
   providers-common-provider
   common-schema-expr
+  providers-dq-expr_nodes
   providers-result-expr_nodes
   providers-result-provider
   tools-enum_parser-enum_serialization_runtime

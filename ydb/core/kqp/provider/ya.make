@@ -40,6 +40,7 @@ PEERDIR(
     ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/schema/expr
+    ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/providers/result/provider
 )

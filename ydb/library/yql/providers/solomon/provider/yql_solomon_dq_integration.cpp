@@ -74,7 +74,7 @@ public:
     {
     }
 
-    TMaybe<ui64> CanRead(const TDqSettings&, const TExprNode&, TExprContext&, bool) override {
+    TMaybe<ui64> CanRead(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode&, TExprContext&, bool) override {
         YQL_ENSURE(false, "Unimplemented");
     }
 

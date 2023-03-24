@@ -14,6 +14,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
     ydb/core/kqp/ut/common
     ydb/library/yql/sql/pg_dummy
 )

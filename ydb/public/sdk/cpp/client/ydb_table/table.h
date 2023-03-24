@@ -213,6 +213,10 @@ public:
     TChangefeedDescription& WithRetentionPeriod(const TDuration& value);
     // Initial scan will output the current state of the table first
     TChangefeedDescription& WithInitialScan();
+    // Attributes
+    TChangefeedDescription& AddAttribute(const TString& key, const TString& value);
+    TChangefeedDescription& SetAttributes(const THashMap<TString, TString>& attrs);
+    TChangefeedDescription& SetAttributes(THashMap<TString, TString>&& attrs);
 
     const TString& GetName() const;
     EChangefeedMode GetMode() const;
@@ -220,6 +224,7 @@ public:
     EChangefeedState GetState() const;
     bool GetVirtualTimestamps() const;
     bool GetInitialScan() const;
+    const THashMap<TString, TString>& GetAttributes() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
     TString ToString() const;
@@ -240,6 +245,7 @@ private:
     bool VirtualTimestamps_ = false;
     std::optional<TDuration> RetentionPeriod_;
     bool InitialScan_ = false;
+    THashMap<TString, TString> Attributes_;
 };
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);

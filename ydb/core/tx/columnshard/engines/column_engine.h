@@ -36,20 +36,6 @@ struct TCompactionInfo {
     bool Empty() const { return Granules.empty(); }
     bool Good() const { return Granules.size() == 1; }
 
-    ui64 ChooseOneGranule(ui64 lastGranule) {
-        Y_VERIFY(Granules.size());
-
-        auto it = Granules.upper_bound(lastGranule);
-        if (it == Granules.end()) {
-            it = Granules.begin();
-        }
-
-        ui64 granule = *it;
-        Granules.clear();
-        Granules.insert(granule);
-        return granule;
-    }
-
     friend IOutputStream& operator << (IOutputStream& out, const TCompactionInfo& info) {
         if (info.Good() == 1) {
             ui64 granule = *info.Granules.begin();
@@ -318,12 +304,12 @@ public:
                                                 const THashSet<ui32>& columnIds,
                                                 std::shared_ptr<TPredicate> from,
                                                 std::shared_ptr<TPredicate> to) const = 0;
-    virtual std::unique_ptr<TCompactionInfo> Compact() = 0;
+    virtual std::unique_ptr<TCompactionInfo> Compact(ui64& lastCompactedGranule) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartInsert(TVector<TInsertedData>&& dataToIndex) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
                                                                   const TSnapshot& outdatedSnapshot) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot,
-                                                               THashSet<ui64>& pathsToDrop) = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,
+                                                               ui32 maxRecords) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
                                                            ui64 maxBytesToEvict = TCompactionLimits::DEFAULT_EVICTION_BYTES) = 0;
     virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) = 0;

@@ -3,6 +3,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -699,7 +701,7 @@ TIntrusivePtr<TKikimrTableMetadata> GetIndexMetadata(const TKqlReadTableIndex& r
 }
 
 TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TKikimrTablesData& tablesData,
-    TExprContext& ctx, bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    TExprContext& ctx, bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, NYql::TTypeAnnotationContext& typesCtx)
 {
     TVector<TKqlQuery> queryBlocks;
     queryBlocks.reserve(dataQueryBlocks.ArgCount());
@@ -748,12 +750,25 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
         TOptimizeExprSettings optSettings(nullptr);
         optSettings.VisitChanges = true;
         auto status = OptimizeExpr(queryBlock.Ptr(), optResult,
-            [&tablesData, withSystemColumns, &kqpCtx](const TExprNode::TPtr& input, TExprContext &ctx) {
+            [&tablesData, withSystemColumns, &kqpCtx, &typesCtx](const TExprNode::TPtr& input, TExprContext &ctx) {
                 auto node = TExprBase(input);
                 TExprNode::TPtr effect;
 
-                if (auto maybeRead = node.Maybe<TCoRight>().Input().Maybe<TKiReadTable>()) {
-                    return HandleReadTable(maybeRead.Cast(), ctx, tablesData, withSystemColumns, kqpCtx);
+                if (auto input = node.Maybe<TCoRight>().Input()) {
+                    if (auto maybeRead = input.Maybe<TKiReadTable>()) {
+                        return HandleReadTable(maybeRead.Cast(), ctx, tablesData, withSystemColumns, kqpCtx);
+                    }
+                    if (input.Raw()->ChildrenSize() > 1 && TCoDataSource::Match(input.Raw()->Child(1))) {
+                        auto dataSourceName = input.Raw()->Child(1)->Child(0)->Content();
+                        auto dataSource = typesCtx.DataSourceMap.FindPtr(dataSourceName);
+                        YQL_ENSURE(dataSource);
+                        if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
+                            auto newRead = dqIntegration->WrapRead(NYql::TDqSettings(), input.Cast().Ptr(), ctx);
+                            if (newRead.Get() != input.Raw()) {
+                                return newRead;
+                            }
+                        }
+                    }
                 }
 
                 return input;

@@ -11,8 +11,9 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/cache/cache.h>
 
-#include <util/generic/strbuf.h>
 #include <util/generic/flags.h>
+#include <util/generic/is_in.h>
+#include <util/generic/strbuf.h>
 
 namespace NYql {
 
@@ -66,8 +67,8 @@ enum class EKikimrQueryType {
     YqlInternal,
     Scan,
     YqlScriptStreaming,
-    Query,
-    FederatedQuery,
+    Query, // ExecuteQuery
+    Script, // ExecuteScript
 };
 
 struct TKikimrQueryContext : TThrRefBase {
@@ -309,7 +310,7 @@ public:
                 return false;
             }
 
-            if ((queryType == EKikimrQueryType::Query || queryType == EKikimrQueryType::FederatedQuery) && (newOp & KikimrSchemeOps())) {
+            if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, queryType) && (newOp & KikimrSchemeOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in query";
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));

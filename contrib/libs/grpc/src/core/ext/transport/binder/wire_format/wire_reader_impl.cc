@@ -190,7 +190,7 @@ y_absl::Status WireReaderImpl::ProcessTransaction(transaction_code_t code,
       gpr_log(GPR_ERROR, "calling uid = %d", uid);
       if (!security_policy_->IsAuthorized(uid)) {
         return y_absl::PermissionDeniedError(
-            "UID " + ToString(uid) +
+            "UID " + ::ToString(uid) +
             " is not allowed to connect to this "
             "transport according to security policy.");
       }

@@ -154,6 +154,8 @@ message Changefeed {
     bool virtual_timestamps = 5;
     // Initial scan will output the current state of the table first
     bool initial_scan = 6;
+    // Attributes. Total size is limited to 10 KB.
+    map<string, string> attributes = 7 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
 }
 
 message ChangefeedDescription {
@@ -182,6 +184,8 @@ message ChangefeedDescription {
     State state = 4;
     // State of emitting of virtual timestamps along with data
     bool virtual_timestamps = 5;
+    // Attributes
+    map<string, string> attributes = 6;
 }
 
 message StoragePool {

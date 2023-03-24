@@ -2,12 +2,13 @@
 
 #include "dq_opt.h"
 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_aggregate_expander.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
-
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 using namespace NYql::NNodes;
 
@@ -285,6 +286,28 @@ NNodes::TExprBase DqSqlInDropCompact(NNodes::TExprBase node, TExprContext& ctx) 
             RemoveSetting(maybeSqlIn.Cast().Options().Ref(), "isCompact", ctx)));
     }
     return node;
+}
+
+IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TDqSettings& config) {
+    TOptimizeExprSettings settings{&typesCtx};
+    auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
+        if (auto maybeRead = TMaybeNode<TCoRight>(node).Input()) {
+            if (maybeRead.Raw()->ChildrenSize() > 1 && TCoDataSource::Match(maybeRead.Raw()->Child(1))) {
+                auto dataSourceName = maybeRead.Raw()->Child(1)->Child(0)->Content();
+                auto dataSource = typesCtx.DataSourceMap.FindPtr(dataSourceName);
+                YQL_ENSURE(dataSource);
+                if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
+                    auto newRead = dqIntegration->WrapRead(config, maybeRead.Cast().Ptr(), ctx);
+                    if (newRead.Get() != maybeRead.Raw()) {
+                        return newRead;
+                    }
+                }
+            }
+        }
+
+        return node;
+    }, ctx, settings);
+    return status;
 }
 
 }

@@ -749,14 +749,17 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
 }
 
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
-                                                                         THashSet<ui64>& pathsToDrop) {
+                                                                         THashSet<ui64>& pathsToDrop,
+                                                                         ui32 maxRecords) {
     auto changes = std::make_shared<TChanges>(*this, snapshot, Limits);
+    ui32 affectedRecords = 0;
 
     // Add all portions from dropped paths
     THashSet<ui64> dropPortions;
-    THashSet<ui64> activePathsToDrop;
+    THashSet<ui64> emptyPaths;
     for (ui64 pathId : pathsToDrop) {
         if (!PathGranules.count(pathId)) {
+            emptyPaths.insert(pathId);
             continue;
         }
 
@@ -765,13 +768,24 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
             auto spg = Granules[granule];
             Y_VERIFY(spg);
             for (auto& [portion, info] : spg->Portions) {
+                affectedRecords += info.NumRecords();
                 changes->PortionsToDrop.push_back(info);
                 dropPortions.insert(portion);
-                activePathsToDrop.insert(pathId);
             }
         }
+
+        if (affectedRecords > maxRecords) {
+            changes->NeedRepeat = true;
+            break;
+        }
     }
-    pathsToDrop.swap(activePathsToDrop);
+    for (ui64 pathId : emptyPaths) {
+        pathsToDrop.erase(pathId);
+    }
+
+    if (affectedRecords > maxRecords) {
+        return changes;
+    }
 
     // Add stale portions of alive paths
     THashSet<ui64> activeCleanupGranules;
@@ -786,9 +800,15 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
             if (!info.IsActive()) {
                 activeCleanupGranules.insert(granule);
                 if (info.XSnapshot() < snapshot) {
+                    affectedRecords += info.NumRecords();
                     changes->PortionsToDrop.push_back(info);
                 }
             }
+        }
+
+        if (affectedRecords > maxRecords) {
+            changes->NeedRepeat = true;
+            break;
         }
     }
     CleanupGranules.swap(activeCleanupGranules);
@@ -1478,44 +1498,53 @@ static bool NeedSplit(const TVector<const TPortionInfo*>& actual, const TCompact
         || sumSize >= limits.GranuleOverloadSize;
 }
 
-std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact() {
-    auto info = std::make_unique<TCompactionInfo>();
-    info->InGranule = true;
-    auto& out = info->Granules;
+std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompactedGranule) {
+    if (CompactionGranules.empty()) {
+        return {};
+    }
 
-    std::vector<ui64> goodGranules;
-    for (ui64 granule : CompactionGranules) {
+    std::optional<ui64> outGranule;
+    bool inGranule = true;
+
+    auto it = CompactionGranules.upper_bound(lastCompactedGranule);
+    if (it == CompactionGranules.end()) {
+        it = CompactionGranules.begin();
+    }
+
+    while (!CompactionGranules.empty()) {
+        ui64 granule = *it;
         auto spg = Granules.find(granule)->second;
         Y_VERIFY(spg);
 
         // We need only actual portions here (with empty XPlanStep:XTxId)
         auto actualPortions = GetActualPortions(spg->Portions);
         if (actualPortions.empty()) {
+            it = CompactionGranules.erase(it);
             continue;
         }
 
         ui32 inserted = 0;
         bool needSplit = NeedSplit(actualPortions, Limits, inserted);
         if (needSplit) {
-            if (info->InGranule) {
-                info->InGranule = false;
-                out.clear(); // clear in-granule candidates, we have a splitting one
-            }
-            out.insert(granule);
+            inGranule = false;
+            outGranule = granule;
+            break;
         } else if (inserted) {
-            if (info->InGranule) {
-                out.insert(granule);
-            }
-        } else {
-            goodGranules.push_back(granule);
+            outGranule = granule;
+            break;
+        }
+
+        it = CompactionGranules.erase(it);
+        if (it == CompactionGranules.end()) {
+            it = CompactionGranules.begin();
         }
     }
 
-    for (ui64 granule : goodGranules) {
-        CompactionGranules.erase(granule);
-    }
-
-    if (!out.empty()) {
+    if (outGranule) {
+        auto info = std::make_unique<TCompactionInfo>();
+        info->Granules.insert(*outGranule);
+        info->InGranule = inGranule;
+        lastCompactedGranule = *outGranule;
         return info;
     }
     return {};

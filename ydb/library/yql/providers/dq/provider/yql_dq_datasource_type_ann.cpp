@@ -15,18 +15,21 @@ namespace {
 
 class TDqsDataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
-    TDqsDataSourceTypeAnnotationTransformer()
+    TDqsDataSourceTypeAnnotationTransformer(bool annotateConfigure)
         : TVisitorTransformerBase(true)
+        , AnnotateConfigure(annotateConfigure)
     {
         AddHandler({TDqSourceWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleSourceWrap<false, false>));
         AddHandler({TDqSourceWideWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleSourceWrap<true, false>));
         AddHandler({TDqSourceWideBlockWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleSourceWrap<true, true>));
         AddHandler({TDqReadWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleReadWrap));
         AddHandler({TDqReadWideWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleWideReadWrap));
-        AddHandler({TCoConfigure::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleConfig));
         AddHandler({TDqSource::CallableName()}, Hndl(&NDq::AnnotateDqSource));
         AddHandler({TDqPhyLength::CallableName()}, Hndl(&NDq::AnnotateDqPhyLength));
-        
+
+        if (AnnotateConfigure) {
+            AddHandler({TCoConfigure::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleConfig));
+        }
     }
 
 private:
@@ -166,12 +169,15 @@ private:
 
         return TStatus::Ok;
     }
+
+private:
+    const bool AnnotateConfigure;
 };
 
 } // unnamed
 
-THolder<TVisitorTransformerBase> CreateDqsDataSourceTypeAnnotationTransformer() {
-    return THolder(new TDqsDataSourceTypeAnnotationTransformer());
+THolder<TVisitorTransformerBase> CreateDqsDataSourceTypeAnnotationTransformer(bool annotateConfigure) {
+    return THolder(new TDqsDataSourceTypeAnnotationTransformer(annotateConfigure));
 }
 
 } // NYql

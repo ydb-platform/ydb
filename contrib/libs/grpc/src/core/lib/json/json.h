@@ -124,11 +124,11 @@ class Json {
   template <typename NumericType>
   // NOLINTNEXTLINE(google-explicit-constructor)
   Json(NumericType number)
-      : type_(Type::NUMBER), string_value_(ToString(number)) {}
+      : type_(Type::NUMBER), string_value_(::ToString(number)) {}
   template <typename NumericType>
   Json& operator=(NumericType number) {
     type_ = Type::NUMBER;
-    string_value_ = ToString(number);
+    string_value_ = ::ToString(number);
     return *this;
   }
 

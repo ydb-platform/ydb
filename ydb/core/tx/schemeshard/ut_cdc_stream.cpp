@@ -4,6 +4,9 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+
+#include <util/string/escape.h>
 #include <util/string/printf.h>
 
 using namespace NKikimr;
@@ -138,6 +141,85 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
                 NLs::RetentionPeriod(rp),
             });
         }
+    }
+
+    Y_UNIT_TEST(Attributes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // user attr
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream1"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              UserAttributes { Key: "key" Value: "value" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& table = record.GetPathDescription().GetTable();
+                UNIT_ASSERT_VALUES_EQUAL(table.CdcStreamsSize(), 1);
+
+                const auto& stream = table.GetCdcStreams(0);
+                UNIT_ASSERT_VALUES_EQUAL(stream.UserAttributesSize(), 1);
+
+                const auto& attr = stream.GetUserAttributes(0);
+                UNIT_ASSERT_VALUES_EQUAL(attr.GetKey(), "key");
+                UNIT_ASSERT_VALUES_EQUAL(attr.GetValue(), "value");
+            }
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream1"), {
+            NLs::UserAttrsHas({
+                {"key", "value"},
+            })
+        });
+
+        // async replication attr
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream2"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              UserAttributes { Key: "__async_replication" Value: "value" }
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        NJson::TJsonValue json;
+        json["id"] = "some-id";
+        json["path"] = "/some/path";
+        const auto jsonString = NJson::WriteJson(json, false);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream2"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              UserAttributes { Key: "__async_replication" Value: "%s" }
+            }
+        )", EscapeC(jsonString).c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream2"), {
+            NLs::UserAttrsHas({
+                {"__async_replication", jsonString},
+            })
+        });
     }
 
     Y_UNIT_TEST(Negative) {

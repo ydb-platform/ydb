@@ -200,6 +200,14 @@ public:
             return result;
         }
 
+        TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
+        if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateChangefeed, streamDesc.GetUserAttributes(), errStr) ||
+            !userAttrs->CheckLimits(errStr))
+        {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            return result;
+        }
+
         auto stream = TCdcStreamInfo::Create(streamDesc);
         Y_VERIFY(stream);
 
@@ -213,6 +221,7 @@ public:
 
         context.DbChanges.PersistPath(pathId);
         context.DbChanges.PersistPath(tablePath.Base()->PathId);
+        context.DbChanges.PersistApplyUserAttrs(pathId);
         context.DbChanges.PersistAlterCdcStream(pathId);
         context.DbChanges.PersistTxState(OperationId);
 
@@ -227,6 +236,7 @@ public:
         streamPath.Base()->CreateTxId = OperationId.GetTxId();
         streamPath.Base()->LastTxId = OperationId.GetTxId();
         streamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
+        streamPath.Base()->UserAttrs->AlterData = userAttrs;
 
         context.SS->CdcStreams[pathId] = stream;
         context.SS->IncrementPathDbRefCount(pathId);

@@ -252,8 +252,8 @@ public:
     std::shared_ptr<TColumnEngineChanges> StartInsert(TVector<TInsertedData>&& dataToIndex) override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
                                                           const TSnapshot& outdatedSnapshot) override;
-    std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot,
-                                                       THashSet<ui64>& pathsToDrop) override;
+    std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,
+                                                       ui32 maxRecords) override;
     std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) override;
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
@@ -269,7 +269,7 @@ public:
                                         const THashSet<ui32>& columnIds,
                                         std::shared_ptr<TPredicate> from,
                                         std::shared_ptr<TPredicate> to) const override;
-    std::unique_ptr<TCompactionInfo> Compact() override;
+    std::unique_ptr<TCompactionInfo> Compact(ui64& lastCompactedGranule) override;
 
     // Static part of IColumnEngine iface (called from actors). It's static cause there's no threads sync.
 
@@ -317,7 +317,7 @@ private:
     THashSet<ui64> GranulesInSplit;
     THashSet<ui64> EmptyGranules;
     THashMap<ui64, THashSet<ui64>> PathsGranulesOverloaded;
-    THashSet<ui64> CompactionGranules;
+    TSet<ui64> CompactionGranules;
     THashSet<ui64> CleanupGranules;
     TColumnEngineStats Counters;
     ui64 LastPortion;

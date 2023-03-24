@@ -182,7 +182,7 @@ y_absl::Status StatusCreate(y_absl::StatusCode code, y_absl::string_view msg,
 
 void StatusSetInt(y_absl::Status* status, StatusIntProperty key, intptr_t value) {
   status->SetPayload(GetStatusIntPropertyUrl(key),
-                     y_absl::Cord(ToString(value)));
+                     y_absl::Cord(::ToString(value)));
 }
 
 y_absl::optional<intptr_t> StatusGetInt(const y_absl::Status& status,

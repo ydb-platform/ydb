@@ -3,11 +3,13 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
+#include <ydb/library/yql/core/yql_graph_transformer.h>
 
 #include <functional>
 
 namespace NYql {
     struct TTypeAnnotationContext;
+    struct TDqSettings;
 }
 
 namespace NYql::NDq {
@@ -30,5 +32,7 @@ NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedInStage(NNodes::TExprBase node,
     const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx, TTypeAnnotationContext* typeCtx);
 
 NNodes::TExprBase DqSqlInDropCompact(NNodes::TExprBase node, TExprContext& ctx);
+
+IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TDqSettings& config);
 
 } // namespace NYql::NDq

@@ -45,13 +45,31 @@ pathId: [OwnerId: <some>, LocalPathId: <some>], path type: EPathTypeDir, path st
 
 Команда `scheme rmdir` удаляет директорию:
 
-``` bash
-{{ ydb-cli }} [connection options] scheme rmdir <path>
+```bash
+{{ ydb-cli }} [global options...] scheme rmdir [options...] <path>
 ```
 
-{% include [conn_options_ref.md](conn_options_ref.md) %}
+* `global options` — [глобальные параметры](../../commands/global-options.md).
+* `options` — [параметры подкоманды](#rmdir-options).
+* `path` — путь до удаляемой директории.
 
-В параметре `path` указывается путь до директории, которая должна быть удалена. Эта директория не должна содержать объектов (включая таблицы и поддиректории), иначе команда не будет выполнена с выдачей ошибки:
+Посмотрите описание команды для удаления директории:
+
+```bash
+{{ ydb-cli }} scheme rmdir --help
+```
+
+### Параметры подкоманды {#rmdir-options}
+
+Имя | Описание
+---|---
+`-r`, `--recursive` | Рекурсивное удаление директории вместе с дочерними объектами (поддиректориями, таблицами, топиками). При указании этого параметра по умолчанию будет запрошено подтверждение.
+`-f`, `--force` | Не запрашивать никаких подтверждений.
+`-i` | Запрашивать подтверждение на удаление каждого объекта.
+`-I` | Однократно запросить подтверждение.
+`--timeout <значение>` | Таймаут операции, мс. 
+
+При попытке удалить непустую директорию без указания параметра `-r` или `--recursive` команда не будет выполнена с выдачей ошибки:
 
 ``` text
 Status: SCHEME_ERROR
@@ -60,6 +78,38 @@ Issues:
 doesn't accept it, pathId: [OwnerId: <some>, LocalPathId: <some>], path type: 
 EPathTypeDir, path state: EPathStateNoChanges, alive children: <count>
 ```
+
+### Примеры {#rmdir-examples}
+
+- Удаление пустой директории:
+
+  ```bash
+  {{ ydb-cli }} scheme rmdir dir1
+  ```
+
+- Удаление пустой директории с запросом подтверждения:
+
+  ```bash
+  {{ ydb-cli }} scheme rmdir -I dir1
+  ```
+
+- Рекурсивное удаление непустой директории с запросом подтверждения:
+
+  ```bash
+  {{ ydb-cli }} scheme rmdir -r dir1
+  ```
+
+- Рекурсивное удаление непустой директории без запроса подтверждения:
+
+  ```bash
+  {{ ydb-cli }} scheme rmdir -rf dir1
+  ```
+
+- Рекурсивное удаление непустой директории с запросом подтверждения на каждый объект:
+
+  ```bash
+  {{ ydb-cli }} scheme rmdir -ri dir1
+  ```
 
 ## Использование директорий в других командах CLI {#use}
 

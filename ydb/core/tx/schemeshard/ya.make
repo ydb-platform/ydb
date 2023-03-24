@@ -233,6 +233,7 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
+    library/cpp/json
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base

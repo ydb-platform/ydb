@@ -136,8 +136,8 @@ double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx);
 
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics);
 
-bool ValidateCompressionForInput(std::string_view compression, TExprContext& ctx);
-bool ValidateCompressionForOutput(std::string_view compression, TExprContext& ctx);
+bool ValidateCompressionForInput(std::string_view format, std::string_view compression, TExprContext& ctx);
+bool ValidateCompressionForOutput(std::string_view format, std::string_view compression, TExprContext& ctx);
 
 bool ValidateFormatForInput(std::string_view format, TExprContext& ctx);
 bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx);

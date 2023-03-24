@@ -2094,14 +2094,8 @@ public:
 };
 
 void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ctx) {
-    if (MediatorStateWaiting) {
-        MediatorStateWaitingMsgs.emplace_back(ev.Release());
-        UpdateProposeQueueSize();
-        return;
-    }
-
     // note that ins some cases we mutate this request below
-    const auto* request = ev->Get();
+    auto* request = ev->Get();
     const auto& record = request->Record;
     if (Y_UNLIKELY(!record.HasReadId())) {
         std::unique_ptr<TEvDataShard::TEvReadResult> result(new TEvDataShard::TEvReadResult());
@@ -2111,6 +2105,10 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     }
 
     TReadIteratorId readId(ev->Sender, record.GetReadId());
+    if (!Pipeline.HandleWaitingReadIterator(readId, request)) {
+        // This request has been cancelled
+        return;
+    }
 
     auto replyWithError = [&] (auto code, const auto& msg) {
         std::unique_ptr<TEvDataShard::TEvReadResult> result(new TEvDataShard::TEvReadResult());
@@ -2121,6 +2119,27 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         result->Record.SetReadId(readId.ReadId);
         ctx.Send(ev->Sender, result.release());
     };
+
+    if (Y_UNLIKELY(Pipeline.HasWaitingReadIterator(readId) || ReadIterators.contains(readId))) {
+        replyWithError(
+            Ydb::StatusIds::ALREADY_EXISTS,
+            TStringBuilder() << "Request " << readId.ReadId << " already executing");
+        return;
+    }
+
+    if (!IsStateActive()) {
+        replyWithError(
+            Ydb::StatusIds::OVERLOADED,
+            TStringBuilder() << "Shard " << TabletID() << " is splitting/merging");
+        return;
+    }
+
+    if (MediatorStateWaiting) {
+        Pipeline.RegisterWaitingReadIterator(readId, request);
+        MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return;
+    }
 
     if (Pipeline.HasDrop()) {
         replyWithError(
@@ -2136,13 +2155,6 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         replyWithError(
             Ydb::StatusIds::OVERLOADED,
             TStringBuilder() << "Request " << readId.ReadId << " rejected, MaxTxInFly was exceeded");
-        return;
-    }
-
-    if (Y_UNLIKELY(ReadIterators.contains(readId))) {
-        replyWithError(
-            Ydb::StatusIds::ALREADY_EXISTS,
-            TStringBuilder() << "Request " << readId.ReadId << " already executing");
         return;
     }
 
@@ -2409,6 +2421,11 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " ReadCancel: " << record);
 
     TReadIteratorId readId(ev->Sender, record.GetReadId());
+    if (Pipeline.CancelWaitingReadIterator(readId)) {
+        Y_VERIFY(!ReadIterators.contains(readId));
+        return;
+    }
+
     auto it = ReadIterators.find(readId);
     if (it == ReadIterators.end())
         return;

@@ -11,6 +11,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -28,6 +29,7 @@ public:
         , KqpCtx(*kqpCtx)
     {
 #define HNDL(name) "KqpPhysical-"#name, Hndl(&TKqpPhysicalOptTransformer::name)
+        AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
         AddHandler(0, &TKqlReadTable::Match, HNDL(BuildReadTableStage));
         AddHandler(0, &TKqlReadTableRanges::Match, HNDL(BuildReadTableRangesStage));
         AddHandler(0, &TKqlLookupTable::Match, HNDL(BuildLookupTableStage));
@@ -199,7 +201,7 @@ protected:
         DumpAppliedRule("BuildHashShuffleByKeyStage", node.Ptr(), output.Ptr(), ctx);
         return TExprBase(output);
     }
-        
+
 
     TMaybeNode<TExprBase> ExpandAggregatePhase(TExprBase node, TExprContext& ctx) {
         auto output = ExpandAggregatePeepholeImpl(node.Ptr(), ctx, TypesCtx, KqpCtx.Config->HasOptUseFinalizeByKey(), false);
@@ -492,6 +494,12 @@ protected:
     TMaybeNode<TExprBase> PrecomputeToInput(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPrecomputeToInput(node, ctx);
         DumpAppliedRule("PrecomputeToInput", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildStageWithSourceWrap(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqBuildStageWithSourceWrap(node, ctx);
+        DumpAppliedRule("BuildStageWithSourceWrap", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

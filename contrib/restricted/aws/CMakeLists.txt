@@ -6,10 +6,9 @@
 # original buildsystem will not be accepted.
 
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-endif()
+add_subdirectory(aws-c-cal)
+add_subdirectory(aws-c-common)
+add_subdirectory(aws-c-event-stream)
+add_subdirectory(aws-c-io)
+add_subdirectory(aws-checksums)
+add_subdirectory(s2n)

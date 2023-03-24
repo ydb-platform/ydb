@@ -8,6 +8,7 @@
 
 add_subdirectory(antlr3_cpp_runtime)
 add_subdirectory(apache)
+add_subdirectory(aws-sdk-cpp)
 add_subdirectory(base64)
 add_subdirectory(brotli)
 add_subdirectory(cctz)

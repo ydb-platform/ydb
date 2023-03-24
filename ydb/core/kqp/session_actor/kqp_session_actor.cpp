@@ -27,7 +27,6 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/event_pb.h>
@@ -399,42 +398,9 @@ public:
             return;
         }
 
-        YQL_ENSURE(QueryState->HasTopicOperations());
+        QueryState->AddOffsetsToTransaction();
 
-        const NKikimrKqp::TTopicOperations& operations = QueryState->GetTopicOperations();
-
-        TMaybe<TString> consumer;
-        if (operations.HasConsumer()) {
-            consumer = operations.GetConsumer();
-        }
-
-        QueryState->TopicOperations = NTopic::TTopicOperations();
-
-        for (auto& topic : operations.GetTopics()) {
-            auto path =
-                CanonizePath(NPersQueue::GetFullTopicPath(ctx, QueryState->GetDatabase(), topic.path()));
-
-            for (auto& partition : topic.partitions()) {
-                if (partition.partition_offsets().empty()) {
-                    QueryState->TopicOperations.AddOperation(path, partition.partition_id());
-                } else {
-                    for (auto& range : partition.partition_offsets()) {
-                        YQL_ENSURE(consumer.Defined());
-
-                        QueryState->TopicOperations.AddOperation(path, partition.partition_id(),
-                                                                 *consumer,
-                                                                 range);
-                    }
-                }
-            }
-        }
-
-        auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        navigate->DatabaseName = CanonizePath(QueryState->GetDatabase());
-        QueryState->TopicOperations.FillSchemeCacheNavigate(*navigate,
-                                                            std::move(consumer));
-        navigate->UserToken = QueryState->UserToken;
-        navigate->Cookie = QueryState->QueryId;
+        auto navigate = QueryState->BuildSchemeCacheNavigate();
 
         Become(&TKqpSessionActor::TopicOpsState);
         ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
@@ -1907,89 +1873,28 @@ private:
         Ydb::StatusIds_StatusCode status;
         TString message;
 
-        if (IsAccessDenied(*response, message)) {
+        if (QueryState->IsAccessDenied(*response, message)) {
             ythrow TRequestFail(Ydb::StatusIds::UNAUTHORIZED) << message;
         }
-        if (HasErrors(*response, message)) {
+        if (QueryState->HasErrors(*response, message)) {
             ythrow TRequestFail(Ydb::StatusIds::SCHEME_ERROR) << message;
         }
 
-        QueryState->TopicOperations.ProcessSchemeCacheNavigate(response->ResultSet,
-                                                               status,
-                                                               message);
+        QueryState->TopicOperations.ProcessSchemeCacheNavigate(response->ResultSet, status, message);
         if (status != Ydb::StatusIds::SUCCESS) {
             ythrow TRequestFail(status) << message;
         }
 
-        if (!TryMergeTopicOffsets(QueryState->TopicOperations, message)) {
+        if (!QueryState->TryMergeTopicOffsets(QueryState->TopicOperations, message)) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
         ReplySuccess();
     }
 
-    bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response,
-                        TString& message)
-    {
-        bool denied = false;
-
-        TStringBuilder builder;
-        builder << "Access for topic(s)";
-        for (auto& result : response.ResultSet) {
-            if (result.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                continue;
-            }
-
-            auto rights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
-            if (result.SecurityObject && !result.SecurityObject->CheckAccess(rights, *QueryState->UserToken)) {
-                builder << " '" << JoinPath(result.Path) << "'";
-                denied = true;
-            }
-        }
-
-        if (denied) {
-            builder << " is denied for subject '" << QueryState->UserToken->GetUserSID() << "'";
-            message = std::move(builder);
-        }
-
-        return denied;
-    }
-
-    bool HasErrors(const NSchemeCache::TSchemeCacheNavigate& response,
-                   TString& message)
-    {
-        if (response.ErrorCount == 0) {
-            return false;
-        }
-
-        TStringBuilder builder;
-
-        builder << "Unable to navigate:";
-        for (const auto& result : response.ResultSet) {
-            if (result.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                builder << "path: '" << JoinPath(result.Path) << "' status: " << result.Status;
-            }
-        }
-        message = std::move(builder);
-
-        return true;
-    }
-
-    bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message) {
-        try {
-            YQL_ENSURE(QueryState);
-            QueryState->TxCtx->TopicOperations.Merge(operations);
-            return true;
-        } catch (const NTopic::TOffsetsRangeIntersectExpection &ex) {
-            message = ex.what();
-            return false;
-        }
-    }
-
     void HandleTopicOps(TEvKqp::TEvCloseSessionRequest::TPtr&) {
         YQL_ENSURE(QueryState);
-        ReplyQueryError(Ydb::StatusIds::BAD_SESSION,
-                "Request cancelled due to explicit session close request");
+        ReplyQueryError(Ydb::StatusIds::BAD_SESSION, "Request cancelled due to explicit session close request");
         Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
     }
 

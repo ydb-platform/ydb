@@ -79,13 +79,22 @@ public:
         return node;
     }
 
-    bool CanPullResult(const TExprNode&, TSyncMap& syncList, bool& canRef) override {
+    bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override {
         Y_UNUSED(syncList);
         canRef = false;
+        if (node.IsCallable(TCoRight::CallableName())) {
+            const auto input = node.Child(0);
+            if (input->IsCallable(TS3ReadObject::CallableName())) {
+                return true;
+            }
+        }
         return false;
     }
 
-    bool CanExecute(const TExprNode&) override {
+    bool CanExecute(const TExprNode& node) override {
+        if (node.IsCallable(TS3ReadObject::CallableName())) {
+            return true;
+        }
         return false;
     }
 

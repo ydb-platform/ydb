@@ -8,6 +8,7 @@
 
 add_subdirectory(abseil-cpp)
 add_subdirectory(abseil-cpp-tstring)
+add_subdirectory(aws)
 add_subdirectory(boost)
 add_subdirectory(cityhash-1.0.2)
 add_subdirectory(fast_float)

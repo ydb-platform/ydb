@@ -1145,6 +1145,15 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     PathIdFromPathId(pathId, desc.MutablePathId());
     desc.SetState(info->State);
     desc.SetSchemaVersion(info->AlterVersion);
+
+    Y_VERIFY(PathsById.contains(pathId));
+    auto path = PathsById.at(pathId);
+
+    for (const auto& [key, value] : path->UserAttrs->Attrs) {
+        auto& attr = *desc.AddUserAttributes();
+        attr.SetKey(key);
+        attr.SetValue(value);
+    }
 }
 
 void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,

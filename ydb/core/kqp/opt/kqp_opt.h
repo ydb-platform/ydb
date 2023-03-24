@@ -50,7 +50,7 @@ bool IsKqpEffectsStage(const NYql::NNodes::TDqStageBase& stage);
 
 TMaybe<NYql::NNodes::TKqlQueryList> BuildKqlQuery(NYql::NNodes::TKiDataQueryBlocks queryBlocks,
     const NYql::TKikimrTablesData& tablesData, NYql::TExprContext& ctx, bool withSystemColumns,
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, NYql::TTypeAnnotationContext& typesCtx);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpFinalizingOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
 TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryPhasesTransformer();

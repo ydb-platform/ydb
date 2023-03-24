@@ -287,6 +287,13 @@ public:
     google::protobuf::Arena* GetArena() {
         return RequestEv->GetArena();
     }
+
+    //// Topic ops ////
+    void AddOffsetsToTransaction();
+    bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message);
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate();
+    bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
+    bool HasErrors(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
 };
 
 

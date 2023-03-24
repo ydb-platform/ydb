@@ -238,7 +238,8 @@ def fetch_url(url, unpack, resource_file_name, expected_md5=None, expected_sha1=
         with tarfile.open(tmp_file_name, mode="r|gz") as tar:
             tar.extractall(tmp_dir)
         tmp_file_name = os.path.join(tmp_dir, resource_file_name)
-        real_md5 = md5file(tmp_file_name)
+        if expected_md5:
+            real_md5 = md5file(tmp_file_name)
 
     logging.info('File size %s (expected %s)', real_file_size, expected_file_size or "UNKNOWN")
     logging.info('File md5 %s (expected %s)', real_md5, expected_md5)
@@ -317,12 +318,9 @@ def process(fetched_file, file_name, args, remove=True):
 
     # make all read only
     if fetched_file_is_dir:
-        chmod(fetched_file, 0o555)
-        for root, dirs, files in os.walk(fetched_file):
+        for root, _, files in os.walk(fetched_file):
             for filename in files:
                 chmod(os.path.join(root, filename), 0o444)
-            for dirname in dirs:
-                chmod(os.path.join(root, dirname), 0o555)
     else:
         chmod(fetched_file, 0o444)
 

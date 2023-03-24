@@ -1675,27 +1675,8 @@ class LD(Linker):
         self.sys_lib = self.tc.sys_lib
 
         if target.is_android:
-            if target.is_armv7 and self.type != Linker.LLD:
-                self.sys_lib.append('-Wl,--fix-cortex-a8')
-
-            # NDK r23 onwards has stopped using libgcc:
-            # - https://github.com/android/ndk/wiki/Changelog-r23#changes
-            # - https://github.com/android/ndk/issues/1230
-            #   LLVM's libunwind is now used instead of libgcc for all architectures rather than just 32-bit Arm.
-            # - https://github.com/android/ndk/issues/1231
-            #   LLVM's libclang_rt.builtins is now used instead of libgcc.
-            if self.tc.android_ndk_version >= 23:
-                # Use toolchain defaults to link with libunwind/clang_rt.builtins
-                self.use_stdlib = '-nostdlib++'
-            else:
-                # Preserve old behaviour: specify runtime libs manually
-                self.use_stdlib = '-nodefaultlibs'
-                if target.is_armv7:
-                    self.sys_lib.append('-lunwind')
-                self.sys_lib.append('-lgcc')
-
-        if self.tc.is_clang and not self.tc.version_at_least(4, 0) and target.is_linux_x86_64:
-            self.sys_lib.append('-L/usr/lib/x86_64-linux-gnu')
+            # Use toolchain defaults to link with libunwind/clang_rt.builtins
+            self.use_stdlib = '-nostdlib++'
 
     def print_linker(self):
         super(LD, self).print_linker()

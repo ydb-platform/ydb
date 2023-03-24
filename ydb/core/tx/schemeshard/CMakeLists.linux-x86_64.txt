@@ -265,6 +265,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index__get.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index__progress.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_validate_ttl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/user_attributes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import_scheme_getter.cpp
 )
 generate_enum_serilization(core-tx-schemeshard

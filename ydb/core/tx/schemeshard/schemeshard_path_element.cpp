@@ -1,7 +1,8 @@
 #include "schemeshard_path_element.h"
 
-namespace NKikimr {
-namespace NSchemeShard {
+#include <library/cpp/json/json_reader.h>
+
+namespace NKikimr::NSchemeShard {
 
 TPathElement::TPathElement(TPathId pathId, TPathId parentPathId, TPathId domainPathId, const TString& name, const TString& owner)
     : PathId(pathId)
@@ -256,31 +257,34 @@ void TPathElement::ApplySpecialAttributes() {
     VolumeSpaceSSDNonrepl.Limit = Max<ui64>();
     VolumeSpaceSSDSystem.Limit = Max<ui64>();
     ExtraPathSymbolsAllowed = TString();
-    for (const auto& item : UserAttrs->Attrs) {
-        switch (TUserAttributes::ParseName(item.first)) {
+    DocumentApiVersion = 0;
+    AsyncReplication = NJson::TJsonValue();
+
+    for (const auto& [key, value] : UserAttrs->Attrs) {
+        switch (TUserAttributes::ParseName(key)) {
             case EAttribute::VOLUME_SPACE_LIMIT:
-                HandleAttributeValue(item.second, VolumeSpaceRaw.Limit);
+                HandleAttributeValue(value, VolumeSpaceRaw.Limit);
                 break;
             case EAttribute::VOLUME_SPACE_LIMIT_SSD:
-                HandleAttributeValue(item.second, VolumeSpaceSSD.Limit);
+                HandleAttributeValue(value, VolumeSpaceSSD.Limit);
                 break;
             case EAttribute::VOLUME_SPACE_LIMIT_HDD:
-                HandleAttributeValue(item.second, VolumeSpaceHDD.Limit);
+                HandleAttributeValue(value, VolumeSpaceHDD.Limit);
                 break;
             case EAttribute::VOLUME_SPACE_LIMIT_SSD_NONREPL:
-                HandleAttributeValue(item.second, VolumeSpaceSSDNonrepl.Limit);
+                HandleAttributeValue(value, VolumeSpaceSSDNonrepl.Limit);
                 break;
             case EAttribute::VOLUME_SPACE_LIMIT_SSD_SYSTEM:
-                HandleAttributeValue(item.second, VolumeSpaceSSDSystem.Limit);
+                HandleAttributeValue(value, VolumeSpaceSSDSystem.Limit);
                 break;
             case EAttribute::EXTRA_PATH_SYMBOLS_ALLOWED:
-                HandleAttributeValue(item.second, ExtraPathSymbolsAllowed);
+                HandleAttributeValue(value, ExtraPathSymbolsAllowed);
                 break;
             case EAttribute::DOCUMENT_API_VERSION:
-                HandleAttributeValue(item.second, DocumentApiVersion);
+                HandleAttributeValue(value, DocumentApiVersion);
                 break;
             case EAttribute::ASYNC_REPLICATION:
-                HandleAttributeValue(item.second, AsyncReplication);
+                HandleAttributeValue(value, AsyncReplication);
                 break;
             default:
                 break;
@@ -380,5 +384,5 @@ void TPathElement::SerializeRuntimeAttrs(
     process(VolumeSpaceSSDNonrepl, "__volume_space_allocated_ssd_nonrepl");
     process(VolumeSpaceSSDSystem, "__volume_space_allocated_ssd_system");
 }
-}
+
 }

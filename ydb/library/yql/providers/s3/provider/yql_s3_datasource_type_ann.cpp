@@ -92,7 +92,14 @@ public:
         , CommonTypes(CreateCommonAvailableTypes())
         , EnumTypes(CreateEnumAvailableTypes())
         , DateTypes(CreateDateAvailableTypes())
-    {}
+    {
+        for (auto item: ColumnsType->GetItems()) {
+            auto type = item->GetItemType();
+            if (type->GetKind() == ETypeAnnotationKind::Data) {
+                DataSlotColumns[TString{item->GetName()}] = type->Cast<TDataExprType>()->GetSlot();
+            }
+        }
+    }
 
     bool ValidatePartitonBy(const std::vector<TString>& partitionedBy) {
         TSet<TString> partitionedByColumns{partitionedBy.begin(), partitionedBy.end()};
@@ -108,7 +115,7 @@ public:
     }
 
     bool ValidateProjection(const TString& projection, const std::vector<TString>& partitionedBy) {
-        auto generator = NPathGenerator::CreatePathGenerator(projection, partitionedBy);
+        auto generator = NPathGenerator::CreatePathGenerator(projection, partitionedBy, DataSlotColumns);
         TMap<TString, NPathGenerator::IPathGenerator::EType> projectionColumns;
         for (const auto& column: generator->GetConfig().Rules) {
             projectionColumns[column.Name] = column.Type;
@@ -170,7 +177,10 @@ private:
         return {
             Ctx.MakeType<TDataExprType>(EDataSlot::String),
             Ctx.MakeType<TDataExprType>(EDataSlot::Utf8),
-            Ctx.MakeType<TDataExprType>(EDataSlot::Int64)
+            Ctx.MakeType<TDataExprType>(EDataSlot::Int64),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Int32),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Uint32),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Uint64)
         };
     }
 
@@ -188,7 +198,8 @@ private:
             Ctx.MakeType<TDataExprType>(EDataSlot::Uint64),
             Ctx.MakeType<TDataExprType>(EDataSlot::Int32),
             Ctx.MakeType<TDataExprType>(EDataSlot::Uint32),
-            Ctx.MakeType<TDataExprType>(EDataSlot::Date)
+            Ctx.MakeType<TDataExprType>(EDataSlot::Date),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Datetime)
         };
     }
 
@@ -197,7 +208,8 @@ private:
             Ctx.MakeType<TDataExprType>(EDataSlot::String),
             Ctx.MakeType<TDataExprType>(EDataSlot::Utf8),
             Ctx.MakeType<TDataExprType>(EDataSlot::Uint32),
-            Ctx.MakeType<TDataExprType>(EDataSlot::Date)
+            Ctx.MakeType<TDataExprType>(EDataSlot::Date),
+            Ctx.MakeType<TDataExprType>(EDataSlot::Datetime)
         };
     }
 
@@ -209,6 +221,7 @@ private:
     const TTypesContainer CommonTypes;
     const TTypesContainer EnumTypes;
     const TTypesContainer DateTypes;
+    TMap<TString, NUdf::EDataSlot> DataSlotColumns;
 };
 
 

@@ -16,7 +16,16 @@ NYql::TIssues ValidateIntegerProjectionType(const NYdb::TType& columnType, const
             .Primitive(NYdb::EPrimitiveType::String)
             .Build(),
         NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Int32)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Uint32)
+            .Build(),
+        NYdb::TTypeBuilder{}
             .Primitive(NYdb::EPrimitiveType::Int64)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Uint64)
             .Build(),
         NYdb::TTypeBuilder{}
             .Primitive(NYdb::EPrimitiveType::Utf8)
@@ -56,6 +65,9 @@ NYql::TIssues ValidateCommonProjectionType(const NYdb::TType& columnType, const 
             .Build(),
         NYdb::TTypeBuilder{}
             .Primitive(NYdb::EPrimitiveType::Date)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Datetime)
             .Build()
     };
     return ValidateProjectionType(columnType, columnName, availableTypes);
@@ -74,9 +86,25 @@ NYql::TIssues ValidateDateProjectionType(const NYdb::TType& columnType, const TS
             .Build(),
         NYdb::TTypeBuilder{}
             .Primitive(NYdb::EPrimitiveType::Date)
+            .Build(),
+        NYdb::TTypeBuilder{}
+            .Primitive(NYdb::EPrimitiveType::Datetime)
             .Build()
     };
     return ValidateProjectionType(columnType, columnName, availableTypes);
+}
+
+TMap<TString, NYql::NUdf::EDataSlot> GetDataSlotColumns(const FederatedQuery::Schema& schema) {
+    TMap<TString, NYql::NUdf::EDataSlot> dataSlotColumns;
+    for (const auto& column: schema.column()) {
+        if (column.has_type()) {
+            const auto& type = column.type();
+            if (type.has_type_id()) {
+                dataSlotColumns[column.name()] = NYql::NUdf::GetDataSlot(type.type_id());
+            }
+        }
+    }
+    return dataSlotColumns;
 }
 
 }
@@ -288,7 +316,7 @@ NYql::TIssues ValidateProjectionColumns(const FederatedQuery::Schema& schema, co
 }
 
 NYql::TIssues ValidateProjection(const FederatedQuery::Schema& schema, const TString& projection, const TVector<TString>& partitionedBy) {
-    auto generator =NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy); // an exception is thrown if an error occurs
+    auto generator =NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy, GetDataSlotColumns(schema)); // an exception is thrown if an error occurs
     TMap<TString, NYql::NPathGenerator::IPathGenerator::EType> projectionColumns;
     for (const auto& column: generator->GetConfig().Rules) {
         projectionColumns[column.Name] = column.Type;

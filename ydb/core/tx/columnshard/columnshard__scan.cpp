@@ -211,6 +211,13 @@ private:
         auto& batch = result.ResultBatch;
         int numRows = batch->num_rows();
         int numColumns = batch->num_columns();
+        if (!numRows) {
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " producing result: got empty batch"
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+            return true;
+        }
+
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " producing result: got ready result"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId

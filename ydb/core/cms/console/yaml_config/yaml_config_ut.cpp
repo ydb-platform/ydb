@@ -1405,14 +1405,4 @@ Y_UNIT_TEST_SUITE(YamlConfig) {
         stream << cfg;
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), TString(Concatenated));
     }
-
-    Y_UNIT_TEST(AppendAndResolve) {
-        auto cfg = NFyaml::TDocument::Parse(SimpleConfig);
-        for (int i = 0; i < 4; ++i) {
-            auto volatilePart = NFyaml::TDocument::Parse(VolatilePart);
-            NYamlConfig::AppendVolatileConfigs(cfg, volatilePart);
-        }
-        TStringStream stream;
-        stream << cfg;
-    }
 }

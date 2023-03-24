@@ -156,11 +156,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // user attr
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             StreamDescription {
-              Name: "Stream1"
+              Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
               Format: ECdcStreamFormatProto
               UserAttributes { Key: "key" Value: "value" }
@@ -182,17 +181,30 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             }
         });
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream1"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
             NLs::UserAttrsHas({
                 {"key", "value"},
             })
         });
+    }
 
-        // async replication attr
+    Y_UNIT_TEST(ReplicationAttribute) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             StreamDescription {
-              Name: "Stream2"
+              Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
               Format: ECdcStreamFormatProto
               UserAttributes { Key: "__async_replication" Value: "value" }
@@ -207,7 +219,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableName: "Table"
             StreamDescription {
-              Name: "Stream2"
+              Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
               Format: ECdcStreamFormatProto
               UserAttributes { Key: "__async_replication" Value: "%s" }
@@ -215,11 +227,42 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )", EscapeC(jsonString).c_str()));
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream2"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
             NLs::UserAttrsHas({
                 {"__async_replication", jsonString},
             })
         });
+
+        // now it is forbidden to change the scheme
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "extra" Type: "Uint64" }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DropColumns { Name: "value" }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+
+        // drop stream
+        TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // now it is allowed to change the scheme
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "extra" Type: "Uint64" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DropColumns { Name: "value" }
+        )");
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST(Negative) {
@@ -1134,7 +1177,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         // the table is locked now
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
-            Columns { Name: "extra"  Type: "Uint64"}
+            Columns { Name: "extra" Type: "Uint64" }
         )", {NKikimrScheme::StatusMultipleModifications});
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
@@ -1156,7 +1199,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         // the table is no longer locked
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
-            Columns { Name: "extra"  Type: "Uint64"}
+            Columns { Name: "extra" Type: "Uint64" }
         )");
         env.TestWaitNotification(runtime, txId);
 

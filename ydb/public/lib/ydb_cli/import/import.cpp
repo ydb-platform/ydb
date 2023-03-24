@@ -114,7 +114,7 @@ namespace {
 TStatus WaitForQueue(std::deque<TAsyncStatus>& inFlightRequests, size_t maxQueueSize) {
     std::vector<TStatus> problemResults;
     while (!inFlightRequests.empty() && inFlightRequests.size() > maxQueueSize && problemResults.empty()) {
-        Y_UNUSED(NThreading::WaitAny(inFlightRequests));
+        NThreading::WaitAny(inFlightRequests).Wait();
         ui32 delta = 0;
         for (ui32 i = 0; i + delta < inFlightRequests.size();) {
             if (inFlightRequests[i].HasValue() || inFlightRequests[i].HasException()) {

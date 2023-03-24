@@ -1091,8 +1091,10 @@ private:
 
             auto& result = ev->Get()->Record;
 
-            LOG_D("Query evaluation " << NYql::NDqProto::StatusIds_StatusCode_Name(result.GetStatusCode())
-                << "." << it->second.Index << " response. Issues count: " << result.IssuesSize()
+            QueryEvalStatusCode = result.GetStatusCode();
+
+            LOG_D("Query evaluation " << NYql::NDqProto::StatusIds_StatusCode_Name(QueryEvalStatusCode)
+                << ". " << it->second.Index << " response. Issues count: " << result.IssuesSize()
                 << ". Rows count: " << result.GetRowsCount());
 
             queryResult.Data = result.yson();
@@ -1100,7 +1102,7 @@ private:
             TIssues issues;
             IssuesFromMessage(result.GetIssues(), issues);
 
-            if (result.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR && !Params.Config.GetCommon().GetKeepInternalErrors()) {
+            if (QueryEvalStatusCode == NYql::NDqProto::StatusIds::INTERNAL_ERROR && !Params.Config.GetCommon().GetKeepInternalErrors()) {
                 auto issue = WrapInternalIssues(issues);
                 issues.Clear();
                 issues.AddIssue(issue);
@@ -1737,6 +1739,7 @@ private:
             AddTableBindingsFromBindings(Params.Bindings, YqConnections, sqlSettings);
         } catch (const std::exception& e) {
             Issues.AddIssue(ExceptionToIssue(e));
+            QueryEvalStatusCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             FinishProgram(TProgram::TStatus::Error);
             return;
         }
@@ -1798,11 +1801,13 @@ private:
                 FillGraphMemoryInfo(graphParams);
             }
         } else {
-            TString abortMessage = message;
-            if (abortMessage == "") {
-                abortMessage = TStringBuilder() << "Run query failed: " << ToString(status);
+            Issues.AddIssues(issues);
+            if (message) {
+                Issues.AddIssue(TIssue(message));
             }
-            Abort(abortMessage, FederatedQuery::QueryMeta::FAILED, issues);
+            ResignQuery(
+                QueryEvalStatusCode != NYql::NDqProto::StatusIds::UNSPECIFIED ? QueryEvalStatusCode : NYql::NDqProto::StatusIds::ABORTED
+            );
         }
     }
 
@@ -2020,6 +2025,7 @@ private:
     bool FinalizingStatusIsWritten = false;
     bool QueryResponseArrived = false;
     FederatedQuery::QueryMeta::ComputeStatus FinalQueryStatus = FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED; // Status that will be assigned to query after it finishes.
+    NYql::NDqProto::StatusIds::StatusCode QueryEvalStatusCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
 
     // Cookies for pings
     enum : ui64 {

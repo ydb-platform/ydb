@@ -214,8 +214,8 @@ namespace NKikimr {
                 TIntrusivePtr<TBlobStorageGroupInfo> ginfo,
                 const TLogoBlobID &startKey,
                 TEvReplFinished::TInfoPtr replInfo,
-                TBlobIdQueuePtr&& blobsToReplicatePtr,
-                TBlobIdQueuePtr&& unreplicatedBlobsPtr)
+                TBlobIdQueuePtr blobsToReplicatePtr,
+                TBlobIdQueuePtr unreplicatedBlobsPtr)
             : ReplCtx(std::move(replCtx))
             , GInfo(std::move(ginfo))
             , StartKey(startKey)
@@ -320,8 +320,7 @@ namespace NKikimr {
         void Bootstrap() {
             STLOG(PRI_DEBUG, BS_REPL, BSVR02, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::Bootstrap"));
             TimeAccount.SetState(ETimeState::PREPARE_PLAN);
-            auto actor = std::make_unique<THullReplPlannerActor>(ReplCtx, GInfo, StartKey, ReplInfo,
-               std::move(BlobsToReplicatePtr), std::move(UnreplicatedBlobsPtr));
+            auto actor = std::make_unique<THullReplPlannerActor>(ReplCtx, GInfo, StartKey, ReplInfo, BlobsToReplicatePtr, UnreplicatedBlobsPtr);
             auto aid = RunInBatchPool(TActivationContext::ActorContextFor(SelfId()), actor.release());
             ActiveActors.Insert(aid);
             Become(&TThis::StatePreparePlan);
@@ -336,12 +335,20 @@ namespace NKikimr {
 
             auto& mon = ReplCtx->MonGroup;
 
-            Y_VERIFY_DEBUG_S(mon.ReplWorkUnitsRemaining() == -1 || ReplInfo->WorkUnitsTotal <= (ui64)mon.ReplWorkUnitsRemaining(),
-                "WorkUnitsTotal# " << ReplInfo->WorkUnitsTotal << " ReplWorkUnitsRemaining# " << mon.ReplWorkUnitsRemaining());
-            mon.ReplWorkUnitsRemaining() = ReplInfo->WorkUnitsTotal;
+            if ((mon.ReplWorkUnitsRemaining() && ReplInfo->WorkUnitsTotal > (ui64)mon.ReplWorkUnitsRemaining()) ||
+                    (mon.ReplItemsRemaining() && ReplInfo->ItemsTotal > (ui64)mon.ReplItemsRemaining())) {
+                STLOG(PRI_WARN, BS_REPL, BSVR36, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "replication work added"),
+                    (WorkUnitsTotal, ReplInfo->WorkUnitsTotal),
+                    (ReplWorkUnitsRemaining, (ui64)mon.ReplWorkUnitsRemaining()),
+                    (ItemsTotal, ReplInfo->ItemsTotal),
+                    (ReplItemsRemaining, (ui64)mon.ReplItemsRemaining()),
+                    (LastKey, LastKey),
+                    (Eof, Eof),
+                    (BlobsToReplicatePtr.size, ssize_t(BlobsToReplicatePtr ? BlobsToReplicatePtr->size() : (ssize_t)-1)),
+                    (UnreplicatedBlobsPtr.size, UnreplicatedBlobsPtr->size()));
+            }
 
-            Y_VERIFY_DEBUG_S(mon.ReplItemsRemaining() == -1 || ReplInfo->ItemsTotal <= (ui64)mon.ReplItemsRemaining(),
-                "ItemsTotal# " << ReplInfo->ItemsTotal << " ReplItemsRemaining# " << mon.ReplItemsRemaining());
+            mon.ReplWorkUnitsRemaining() = ReplInfo->WorkUnitsTotal;
             mon.ReplItemsRemaining() = ReplInfo->ItemsTotal;
 
             if (RecoveryMachine->NoTasks()) {

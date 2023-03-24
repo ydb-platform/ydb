@@ -1797,9 +1797,8 @@ bool TPipeline::HasWaitingReadIterator(const TReadIteratorId& readId) {
 bool TPipeline::CancelWaitingReadIterator(const TReadIteratorId& readId) {
     auto it = WaitingReadIteratorsById.find(readId);
     if (it != WaitingReadIteratorsById.end()) {
-        if (!it->second->Cancelled) {
-            it->second->Cancelled = true;
-        }
+        it->second->Cancelled = true;
+        WaitingReadIteratorsById.erase(it);
         return true;
     }
 
@@ -1814,12 +1813,10 @@ void TPipeline::RegisterWaitingReadIterator(const TReadIteratorId& readId, TEvDa
 bool TPipeline::HandleWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event) {
     auto it = WaitingReadIteratorsById.find(readId);
     if (it != WaitingReadIteratorsById.end() && it->second == event) {
-        bool ok = !it->second->Cancelled;
         WaitingReadIteratorsById.erase(it);
-        return ok;
     }
 
-    return true;
+    return !event->Cancelled;
 }
 
 TRowVersion TPipeline::GetReadEdge() const {

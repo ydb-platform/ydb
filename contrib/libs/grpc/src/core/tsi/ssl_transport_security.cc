@@ -34,6 +34,7 @@
 #endif
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include <openssl/bio.h>
 #include <openssl/crypto.h> /* For OPENSSL_free */

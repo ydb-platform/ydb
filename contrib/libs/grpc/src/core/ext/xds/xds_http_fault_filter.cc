@@ -19,6 +19,7 @@
 #include "src/core/ext/xds/xds_http_fault_filter.h"
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/str_cat.h"

@@ -22,6 +22,7 @@
 #include <grpc/support/port_platform.h>
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/strings/str_format.h"
 #include "y_absl/time/time.h"

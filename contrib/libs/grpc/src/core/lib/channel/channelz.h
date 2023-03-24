@@ -24,6 +24,7 @@
 #include <atomic>
 #include <set>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/container/inlined_vector.h"
 #include "y_absl/types/optional.h"

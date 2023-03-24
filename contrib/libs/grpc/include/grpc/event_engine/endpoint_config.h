@@ -17,6 +17,7 @@
 #include <grpc/support/port_platform.h>
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/variant.h"

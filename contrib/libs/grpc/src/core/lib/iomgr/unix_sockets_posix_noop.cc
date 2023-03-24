@@ -23,6 +23,7 @@
 #ifndef GRPC_HAVE_UNIX_SOCKET
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include <grpc/support/log.h>
 

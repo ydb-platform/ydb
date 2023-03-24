@@ -23,6 +23,7 @@
 #include <memory>
 #include <set>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/status/status.h"
 #include "y_absl/types/optional.h"

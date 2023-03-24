@@ -20,6 +20,7 @@
 #include <grpc/support/port_platform.h>
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <vector>
 
 #include "y_absl/strings/str_format.h"

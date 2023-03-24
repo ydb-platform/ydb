@@ -22,6 +22,7 @@
 #include <grpc/support/port_platform.h>
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/gprpp/ref_counted.h"

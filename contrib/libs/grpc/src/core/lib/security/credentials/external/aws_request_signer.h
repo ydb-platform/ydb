@@ -21,6 +21,7 @@
 
 #include <map>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/uri/uri_parser.h"

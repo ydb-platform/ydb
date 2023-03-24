@@ -21,6 +21,7 @@
 #include <inttypes.h>
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/strings/str_cat.h"
 

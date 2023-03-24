@@ -22,6 +22,7 @@
 #include <queue>
 #include <set>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <vector>
 
 #include "src/core/ext/transport/binder/utils/transport_stream_receiver.h"

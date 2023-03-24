@@ -22,6 +22,7 @@
 #include <map>
 #include <set>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/container/inlined_vector.h"
 #include "envoy/config/endpoint/v3/endpoint.upbdefs.h"

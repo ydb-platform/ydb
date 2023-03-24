@@ -19,6 +19,7 @@
 #include "src/core/lib/service_config/service_config.h"
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/strings/str_cat.h"
 

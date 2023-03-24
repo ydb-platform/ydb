@@ -53,8 +53,6 @@
 #include "src/core/lib/transport/error_utils.h"
 #include "src/core/lib/uri/uri_parser.h"
 
-#include <util/string/cast.h>
-
 namespace grpc_core {
 namespace channelz {
 

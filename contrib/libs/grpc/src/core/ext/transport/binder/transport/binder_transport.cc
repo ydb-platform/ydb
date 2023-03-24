@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <memory>
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <utility>
 
 #include "y_absl/memory/memory.h"

@@ -37,6 +37,7 @@
 #include <unistd.h>
 
 #include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include "y_absl/strings/str_format.h"
 

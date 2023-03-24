@@ -122,4 +122,6 @@ NYql::NNodes::TExprBase DqPropagatePrecomuteFlatmap(NYql::NNodes::TExprBase node
 TVector<NYql::NNodes::TCoArgument> PrepareArgumentsReplacement(const NYql::NNodes::TExprBase& node, const TVector<NYql::NNodes::TDqConnection>& newInputs,
     NYql::TExprContext& ctx, NYql::TNodeOnNodeOwnedMap& replaceMap);
 
+NNodes::TExprBase DqBuildStageWithSourceWrap(NNodes::TExprBase node, TExprContext& ctx);
+
 } // namespace NYql::NDq

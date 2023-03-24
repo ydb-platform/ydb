@@ -422,7 +422,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 if (entry.Status == EStatus::Ok && expectedSchemaVersion && entry.TableId.SchemaVersion) {
                     if (entry.TableId.SchemaVersion != expectedSchemaVersion) {
                         const auto message = TStringBuilder()
-                            << "schema version missmatch during metadata loading for: "
+                            << "schema version mismatch during metadata loading for: "
                             << CombinePath(entry.Path.begin(), entry.Path.end())
                             << " expected " << expectedSchemaVersion
                             << " got " << entry.TableId.SchemaVersion;

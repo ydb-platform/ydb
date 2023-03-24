@@ -37,7 +37,7 @@ public:
                 querySettings.Type = EPhysicalQueryType::Query;
                 break;
             }
-            case EKikimrQueryType::FederatedQuery: {
+            case EKikimrQueryType::Script: {
                 querySettings.Type = EPhysicalQueryType::FederatedQuery;
                 break;
             }

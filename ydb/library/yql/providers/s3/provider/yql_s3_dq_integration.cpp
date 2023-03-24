@@ -121,7 +121,7 @@ public:
         return 0;
     }
 
-    TMaybe<ui64> CanRead(const TDqSettings&, const TExprNode& read, TExprContext&, bool) override {
+    TMaybe<ui64> CanRead(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode& read, TExprContext&, bool) override {
         if (TS3ReadObject::Match(&read)) {
             return 0ul; // TODO: return real size
         }

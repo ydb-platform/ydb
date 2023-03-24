@@ -14,7 +14,7 @@ ui64 TDqIntegrationBase::Partition(const TDqSettings& config, size_t maxPartitio
     return 0;
 }
 
-TMaybe<ui64> TDqIntegrationBase::CanRead(const TDqSettings&, const TExprNode& read, TExprContext& ctx, bool skipIssues) {
+TMaybe<ui64> TDqIntegrationBase::CanRead(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode& read, TExprContext& ctx, bool skipIssues) {
     Y_UNUSED(read);
     Y_UNUSED(ctx);
     Y_UNUSED(skipIssues);

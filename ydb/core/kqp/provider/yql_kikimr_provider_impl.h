@@ -13,7 +13,7 @@ namespace NYql {
 
 class TKiSourceVisitorTransformer: public TSyncTransformerBase {
 public:
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
     void Rewind() override {
     }
@@ -174,7 +174,7 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
     TVector<NKqpProto::TKqpTableInfo>& infos);
 
 // Optimizer rules
-TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TIntrusivePtr<TKikimrTablesData> tablesData);
+TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TIntrusivePtr<TKikimrTablesData> tablesData, TTypeAnnotationContext& types);
 TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions();

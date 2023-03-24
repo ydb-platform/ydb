@@ -9,6 +9,6 @@ namespace NYql {
 
 class TTypeAnnotationNode;
 
-THolder<TVisitorTransformerBase> CreateDqsDataSourceTypeAnnotationTransformer();
+THolder<TVisitorTransformerBase> CreateDqsDataSourceTypeAnnotationTransformer(bool annotateConfigure = true);
 
 } // NYql

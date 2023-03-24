@@ -17,7 +17,8 @@ public:
 };
 
 TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster,
-    const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, const NMiniKQL::IFunctionRegistry& funcRegistry);
+    const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, const NMiniKQL::IFunctionRegistry& funcRegistry,
+    NYql::TTypeAnnotationContext& typesCtx);
 
 } // namespace NKqp
 } // namespace NKikimr

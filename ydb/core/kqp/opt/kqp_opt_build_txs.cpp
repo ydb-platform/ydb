@@ -70,7 +70,7 @@ private:
             return EPhysicalTxType::Scan;
         }
 
-        if (QueryType == EKikimrQueryType::Query || QueryType == EKikimrQueryType::FederatedQuery) {
+        if (QueryType == EKikimrQueryType::Query || QueryType == EKikimrQueryType::Script) {
             if (IsPrecompute && allStagesArePure) {
                 return EPhysicalTxType::Compute;
             }

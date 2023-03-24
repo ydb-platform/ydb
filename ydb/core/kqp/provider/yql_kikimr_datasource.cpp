@@ -5,6 +5,9 @@
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+
+#include <util/generic/is_in.h>
 
 namespace NYql {
 namespace {
@@ -402,6 +405,22 @@ public:
             node.IsCallable(TKiReadTableList::CallableName()))
         {
             return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName;
+        }
+
+        if (
+            IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, SessionCtx->Query().Type)
+            &&
+            (
+                node.IsCallable(TDqSourceWrap::CallableName()) ||
+                node.IsCallable(TDqSourceWideWrap::CallableName()) ||
+                node.IsCallable(TDqSourceWideBlockWrap::CallableName()) ||
+                node.IsCallable(TDqReadWrap::CallableName()) ||
+                node.IsCallable(TDqReadWideWrap::CallableName()) ||
+                node.IsCallable(TDqSource::CallableName())
+            )
+        )
+        {
+            return true;
         }
 
         YQL_ENSURE(!KikimrDataSourceFunctions().contains(node.Content()));

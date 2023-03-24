@@ -12,6 +12,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 #include <util/generic/scope.h>
@@ -105,24 +106,7 @@ public:
 
         State_->TypeCtx->DqFallbackPolicy = State_->Settings->FallbackPolicy.Get().GetOrElse("default");
 
-        auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
-            if (auto maybeRead = TMaybeNode<TCoRight>(node).Input()) {
-                if (maybeRead.Raw()->ChildrenSize() > 1 && TCoDataSource::Match(maybeRead.Raw()->Child(1))) {
-                    auto dataSourceName = maybeRead.Raw()->Child(1)->Child(0)->Content();
-                    auto dataSource = State_->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
-                    YQL_ENSURE(dataSource);
-                    if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
-                        auto newRead = dqIntegration->WrapRead(*State_->Settings, maybeRead.Cast().Ptr(), ctx);
-                        if (newRead.Get() != maybeRead.Raw()) {
-                            return newRead;
-                        }
-                    }
-                }
-            }
-
-            return node;
-        }, ctx, TOptimizeExprSettings{State_->TypeCtx});
-
+        IGraphTransformer::TStatus status = NDq::DqWrapRead(input, output, ctx, *State_->TypeCtx, *State_->Settings);
         if (input != output) {
             YQL_CLOG(DEBUG, ProviderDq) << "DqsRecapture";
             // TODO: Add before/after recapture transformers
@@ -183,7 +167,7 @@ private:
                 if (dqIntegration) {
                     TMaybe<ui64> size;
                     bool pragmas = true;
-                    if ((pragmas = dqIntegration->CheckPragmas(node, ctx, false)) && (size = dqIntegration->CanRead(*State_->Settings, node, ctx, /*skipIssues = */ false))) {
+                    if ((pragmas = dqIntegration->CheckPragmas(node, ctx, false)) && (size = dqIntegration->CanRead(State_->Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob), State_->Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage), node, ctx, /*skipIssues = */ false))) {
                         dataSize += *size;
                     } else {
                         good = false;

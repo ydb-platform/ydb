@@ -15,6 +15,8 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 
+#include <util/generic/is_in.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -177,7 +179,7 @@ public:
     TIntrusivePtr<TAsyncQueryResult> PrepareQuery(const TString& cluster, const TExprNode::TPtr& query,
         TExprContext& ctx, const IKikimrQueryExecutor::TExecuteSettings& settings) override
     {
-        YQL_ENSURE(TransformCtx->QueryCtx->Type == EKikimrQueryType::Query || TransformCtx->QueryCtx->Type == EKikimrQueryType::FederatedQuery);
+        YQL_ENSURE(IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, TransformCtx->QueryCtx->Type));
         YQL_ENSURE(TransformCtx->QueryCtx->PrepareOnly);
         YQL_ENSURE(TransformCtx->QueryCtx->PreparingQuery);
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
@@ -243,13 +245,13 @@ private:
             case EKikimrQueryType::Dml:
             case EKikimrQueryType::Scan:
             case EKikimrQueryType::Query:
-            case EKikimrQueryType::FederatedQuery:
+            case EKikimrQueryType::Script:
                 break;
             default:
                 YQL_ENSURE(false, "PrepareQueryNewEngine, unexpected query type: " << queryType);
         }
 
-        auto kqlQueryBlocks = BuildKqlQuery(dataQueryBlocks, *TransformCtx->Tables, ctx, sysColumnsEnabled, OptimizeCtx);
+        auto kqlQueryBlocks = BuildKqlQuery(dataQueryBlocks, *TransformCtx->Tables, ctx, sysColumnsEnabled, OptimizeCtx, TypesCtx);
         if (!kqlQueryBlocks) {
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
@@ -310,7 +312,7 @@ private:
 
         auto& preparedQuery = *TransformCtx->QueryCtx->PreparingQuery;
         TKqpPhysicalQuery physicalQuery(transformedQuery);
-        auto compiler = CreateKqpQueryCompiler(Cluster, OptimizeCtx->Tables, FuncRegistry);
+        auto compiler = CreateKqpQueryCompiler(Cluster, OptimizeCtx->Tables, FuncRegistry, TypesCtx);
         auto ret = compiler->CompilePhysicalQuery(physicalQuery, dataQueryBlocks, *preparedQuery.MutablePhysicalQuery(), ctx);
         if (!ret) {
             ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to compile physical query."));

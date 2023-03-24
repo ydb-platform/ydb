@@ -7,6 +7,9 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
+
+#include <util/generic/is_in.h>
 
 namespace NYql {
 namespace {
@@ -102,7 +105,19 @@ class TKiSourceTypeAnnotationTransformer : public TKiSourceVisitorTransformer {
 public:
     TKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
         : SessionCtx(sessionCtx)
-        , Types(types) {}
+        , Types(types)
+        , DqsTypeAnn(IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, SessionCtx->Query().Type) ? CreateDqsDataSourceTypeAnnotationTransformer(false) : nullptr)
+    {}
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        if (DqsTypeAnn && DqsTypeAnn->CanParse(*input)) {
+            TStatus status = DqsTypeAnn->DoTransform(input, output, ctx);
+            if (input->GetTypeAnn()) {
+                return status;
+            }
+        }
+        return TKiSourceVisitorTransformer::DoTransform(input, output, ctx);
+    }
 
 private:
     TStatus HandleKiRead(TKiReadBase node, TExprContext& ctx) override {
@@ -216,6 +231,7 @@ private:
 private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TTypeAnnotationContext& Types;
+    THolder<TVisitorTransformerBase> DqsTypeAnn;
 };
 
 namespace {

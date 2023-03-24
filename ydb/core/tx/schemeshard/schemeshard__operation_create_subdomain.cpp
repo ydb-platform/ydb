@@ -86,7 +86,7 @@ public:
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateSubDomain Propose"
-                         << ", path" << parentPathStr << "/" << name
+                         << ", path: " << parentPathStr << "/" << name
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 

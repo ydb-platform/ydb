@@ -134,8 +134,8 @@ protected:
     virtual void DoAddNull() = 0;
 
 protected:
-    ui32 ValuesConsumed;
-    size_t ConsumedSize;
+    ui32 ValuesConsumed = 0;
+    size_t ConsumedSize = 0;
 };
 
 /***************************************************************************//**

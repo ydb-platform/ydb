@@ -30,21 +30,21 @@ def makedirs(dirname):
             raise
 
 
-def copy_file(src, dst, overwrite=False, orig_path=None, generated=False):
+def copy_file(src, dst, overwrite=False, orig_path=None):
     if os.path.exists(dst) and not overwrite:
         return
 
     makedirs(os.path.dirname(dst))
 
     with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
-        if (orig_path or generated) and src.endswith('.md'):
+        if orig_path and src.endswith('.md'):
             out = b''
             buf = fsrc.readline()
             bom_length = len(codecs.BOM_UTF8)
             if buf[:bom_length] == codecs.BOM_UTF8:
                 out += codecs.BOM_UTF8
                 buf = buf[bom_length:]
-            info = 'generated: true\n' if generated else 'vcsPath: {}\n'.format(orig_path)
+            info = 'vcsPath: {}\n'.format(orig_path)
             if buf.startswith(b'---') and b'\n' in buf[3:] and buf[3:].rstrip(b'\r\n') == b'':
                 content = b''
                 found = False
@@ -143,21 +143,21 @@ def main():
             copy_file(file_src, file_dst, overwrite=is_overwrite_existing, orig_path=None)
 
     for src in args.files:
-        generated = False
         file_src = os.path.normpath(src)
         assert os.path.isfile(file_src), 'File [{}] does not exist...'.format(file_src)
         rel_path = file_src
+        orig_path = None
         if file_src.startswith(source_root):
             rel_path = file_src[len(source_root):]
+            orig_path = rel_path
         elif file_src.startswith(build_root):
-            # generated = True
-            # rel_path = file_src[len(build_root):]
-            rel_path = None
+            rel_path = file_src[len(build_root):]
         else:
             raise Exception('Unexpected file path [{}].'.format(file_src))
         assert not os.path.isabs(rel_path)
         file_dst = os.path.join(args.dest_dir, rel_path)
-        copy_file(file_src, file_dst, is_overwrite_existing, rel_path, generated)
+        if file_dst != file_src:
+            copy_file(file_src, file_dst, is_overwrite_existing, orig_path)
 
 
 if __name__ == '__main__':

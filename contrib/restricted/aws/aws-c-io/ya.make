@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.13.18)
+VERSION(0.13.19)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-io/archive/v0.13.18.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-io/archive/v0.13.19.tar.gz)
 
 PEERDIR(
     contrib/restricted/aws/aws-c-cal

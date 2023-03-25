@@ -63,7 +63,7 @@ struct TEvDq {
             return issues;
         }
 
-        static IEventBase* Load(TIntrusivePtr<NActors::TEventSerializedData> input) {
+        static IEventBase* Load(NActors::TEventSerializedData *input) {
             auto result = NActors::TEventPB<TEvAbortExecution, NDqProto::TEvAbortExecution, TDqEvents::EvAbortExecution>::Load(input);
             if (result) {
                 auto evAbort = reinterpret_cast<TEvAbortExecution *>(result);

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef Y_ABSL_CONTAINER_INTERNAL_CONTAINER_H_
-#define Y_ABSL_CONTAINER_INTERNAL_CONTAINER_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_COMMON_H_
+#define Y_ABSL_CONTAINER_INTERNAL_COMMON_H_
 
 #include <cassert>
 #include <type_traits>
@@ -204,4 +204,4 @@ struct InsertReturnType {
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // Y_ABSL_CONTAINER_INTERNAL_CONTAINER_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_COMMON_H_

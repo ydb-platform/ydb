@@ -14,6 +14,7 @@
 #ifndef Y_ABSL_STATUS_INTERNAL_STATUS_INTERNAL_H_
 #define Y_ABSL_STATUS_INTERNAL_STATUS_INTERNAL_H_
 
+#include <memory>
 #include <util/generic/string.h>
 #include <utility>
 

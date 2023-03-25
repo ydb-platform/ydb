@@ -65,12 +65,6 @@ Y_ABSL_NAMESPACE_END
 #define Y_ABSL_INTERNAL_STRING_VIEW_MEMCMP memcmp
 #endif  // Y_ABSL_HAVE_BUILTIN(__builtin_memcmp)
 
-#if defined(__cplusplus) && __cplusplus >= 201402L
-#define Y_ABSL_INTERNAL_STRING_VIEW_CXX14_CONSTEXPR constexpr
-#else
-#define Y_ABSL_INTERNAL_STRING_VIEW_CXX14_CONSTEXPR
-#endif
-
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
 
@@ -343,7 +337,7 @@ class string_view {
   //
   // Removes the first `n` characters from the `string_view`. Note that the
   // underlying string is not changed, only the view.
-  Y_ABSL_INTERNAL_STRING_VIEW_CXX14_CONSTEXPR void remove_prefix(size_type n) {
+  constexpr void remove_prefix(size_type n) {
     Y_ABSL_HARDENING_ASSERT(n <= length_);
     ptr_ += n;
     length_ -= n;
@@ -353,7 +347,7 @@ class string_view {
   //
   // Removes the last `n` characters from the `string_view`. Note that the
   // underlying string is not changed, only the view.
-  Y_ABSL_INTERNAL_STRING_VIEW_CXX14_CONSTEXPR void remove_suffix(size_type n) {
+  constexpr void remove_suffix(size_type n) {
     Y_ABSL_HARDENING_ASSERT(n <= length_);
     length_ -= n;
   }
@@ -361,7 +355,7 @@ class string_view {
   // string_view::swap()
   //
   // Swaps this `string_view` with another `string_view`.
-  Y_ABSL_INTERNAL_STRING_VIEW_CXX14_CONSTEXPR void swap(string_view& s) noexcept {
+  constexpr void swap(string_view& s) noexcept {
     auto t = *this;
     *this = s;
     s = t;
@@ -680,7 +674,6 @@ std::ostream& operator<<(std::ostream& o, string_view piece);
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#undef Y_ABSL_INTERNAL_STRING_VIEW_CXX14_CONSTEXPR
 #undef Y_ABSL_INTERNAL_STRING_VIEW_MEMCMP
 
 #endif  // Y_ABSL_USES_STD_STRING_VIEW

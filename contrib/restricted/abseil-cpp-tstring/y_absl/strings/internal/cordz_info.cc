@@ -35,7 +35,7 @@ namespace cord_internal {
 using ::y_absl::base_internal::SpinLockHolder;
 
 #ifdef Y_ABSL_INTERNAL_NEED_REDUNDANT_CONSTEXPR_DECL
-constexpr int CordzInfo::kMaxStackDepth;
+constexpr size_t CordzInfo::kMaxStackDepth;
 #endif
 
 Y_ABSL_CONST_INIT CordzInfo::List CordzInfo::global_list_{y_absl::kConstInit};
@@ -291,7 +291,7 @@ CordzInfo::MethodIdentifier CordzInfo::GetParentMethod(const CordzInfo* src) {
                                                            : src->method_;
 }
 
-int CordzInfo::FillParentStack(const CordzInfo* src, void** stack) {
+size_t CordzInfo::FillParentStack(const CordzInfo* src, void** stack) {
   assert(stack);
   if (src == nullptr) return 0;
   if (src->parent_stack_depth_) {
@@ -302,11 +302,14 @@ int CordzInfo::FillParentStack(const CordzInfo* src, void** stack) {
   return src->stack_depth_;
 }
 
-CordzInfo::CordzInfo(CordRep* rep, const CordzInfo* src,
+CordzInfo::CordzInfo(CordRep* rep,
+                     const CordzInfo* src,
                      MethodIdentifier method)
     : rep_(rep),
-      stack_depth_(y_absl::GetStackTrace(stack_, /*max_depth=*/kMaxStackDepth,
-                                       /*skip_count=*/1)),
+      stack_depth_(
+          static_cast<size_t>(y_absl::GetStackTrace(stack_,
+                                                  /*max_depth=*/kMaxStackDepth,
+                                                  /*skip_count=*/1))),
       parent_stack_depth_(FillParentStack(src, parent_stack_)),
       method_(method),
       parent_method_(GetParentMethod(src)),

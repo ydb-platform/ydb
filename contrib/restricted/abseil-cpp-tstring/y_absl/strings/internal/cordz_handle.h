@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef Y_ABSL_STRINGS_CORDZ_HANDLE_H_
-#define Y_ABSL_STRINGS_CORDZ_HANDLE_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_CORDZ_HANDLE_H_
+#define Y_ABSL_STRINGS_INTERNAL_CORDZ_HANDLE_H_
 
 #include <atomic>
 #include <vector>
@@ -128,4 +128,4 @@ class CordzSnapshot : public CordzHandle {
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // Y_ABSL_STRINGS_CORDZ_HANDLE_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_CORDZ_HANDLE_H_

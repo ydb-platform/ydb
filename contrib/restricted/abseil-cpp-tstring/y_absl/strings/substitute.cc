@@ -40,7 +40,8 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
                      y_absl::CEscape(format).c_str());
 #endif
         return;
-      } else if (y_absl::ascii_isdigit(format[i + 1])) {
+      } else if (y_absl::ascii_isdigit(
+                     static_cast<unsigned char>(format[i + 1]))) {
         int index = format[i + 1] - '0';
         if (static_cast<size_t>(index) >= num_args) {
 #ifndef NDEBUG
@@ -80,7 +81,7 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
   char* target = &(*output)[original_size];
   for (size_t i = 0; i < format.size(); i++) {
     if (format[i] == '$') {
-      if (y_absl::ascii_isdigit(format[i + 1])) {
+      if (y_absl::ascii_isdigit(static_cast<unsigned char>(format[i + 1]))) {
         const y_absl::string_view src = args_array[format[i + 1] - '0'];
         target = std::copy(src.begin(), src.end(), target);
         ++i;  // Skip next char.
@@ -110,7 +111,8 @@ Arg::Arg(const void* value) {
     } while (num != 0);
     *--ptr = 'x';
     *--ptr = '0';
-    piece_ = y_absl::string_view(ptr, scratch_ + sizeof(scratch_) - ptr);
+    piece_ = y_absl::string_view(
+        ptr, static_cast<size_t>(scratch_ + sizeof(scratch_) - ptr));
   }
 }
 
@@ -132,7 +134,7 @@ Arg::Arg(Hex hex) {
     beg = writer;
   }
 
-  piece_ = y_absl::string_view(beg, end - beg);
+  piece_ = y_absl::string_view(beg, static_cast<size_t>(end - beg));
 }
 
 // TODO(jorg): Don't duplicate so much code between here and str_cat.cc
@@ -147,7 +149,7 @@ Arg::Arg(Dec dec) {
     *--writer = '0' + (value % 10);
     value /= 10;
   }
-  *--writer = '0' + value;
+  *--writer = '0' + static_cast<char>(value);
   if (neg) *--writer = '-';
 
   ptrdiff_t fillers = writer - minfill;
@@ -164,7 +166,7 @@ Arg::Arg(Dec dec) {
     if (add_sign_again) *--writer = '-';
   }
 
-  piece_ = y_absl::string_view(writer, end - writer);
+  piece_ = y_absl::string_view(writer, static_cast<size_t>(end - writer));
 }
 
 }  // namespace substitute_internal

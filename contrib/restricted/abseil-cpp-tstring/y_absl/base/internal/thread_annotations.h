@@ -38,6 +38,13 @@
 #ifndef Y_ABSL_BASE_INTERNAL_THREAD_ANNOTATIONS_H_
 #define Y_ABSL_BASE_INTERNAL_THREAD_ANNOTATIONS_H_
 
+// Y_ABSL_LEGACY_THREAD_ANNOTATIONS is a *temporary* compatibility macro that can
+// be defined on the compile command-line to restore the legacy spellings of the
+// thread annotations macros/functions. The macros in this file are available
+// under Y_ABSL_ prefixed spellings in y_absl/base/thread_annotations.h. This macro
+// and the legacy spellings will be removed in the future.
+#ifdef Y_ABSL_LEGACY_THREAD_ANNOTATIONS
+
 #if defined(__clang__)
 #define THREAD_ANNOTATION_ATTRIBUTE__(x)   __attribute__((x))
 #else
@@ -267,5 +274,7 @@ inline T& y_ts_unchecked_read(T& v) NO_THREAD_SAFETY_ANALYSIS {
 }
 
 }  // namespace thread_safety_analysis
+
+#endif  // defined(Y_ABSL_LEGACY_THREAD_ANNOTATIONS)
 
 #endif  // Y_ABSL_BASE_INTERNAL_THREAD_ANNOTATIONS_H_

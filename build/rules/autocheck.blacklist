@@ -1584,7 +1584,6 @@ zen/frontend
 practicum/services/revisor
 billing/frontend/vhost
 pay/console-frontend
-direct/infra/logshatter
 classifieds/nodejs/nodejs-deb
 vh-selfservice
 fintech/dwh

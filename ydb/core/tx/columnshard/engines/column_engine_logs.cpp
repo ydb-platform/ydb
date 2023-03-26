@@ -1290,6 +1290,7 @@ void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, const TMark& 
 
     Granules.erase(granule);
     EmptyGranules.erase(granule);
+    CompactionGranules.erase(granule);
     PathGranules[pathId].erase(mark);
 }
 

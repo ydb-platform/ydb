@@ -1513,26 +1513,25 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompact
     }
 
     while (!CompactionGranules.empty()) {
+        Y_VERIFY(it != CompactionGranules.end());
         ui64 granule = *it;
+        Y_VERIFY(Granules.count(granule));
         auto spg = Granules.find(granule)->second;
         Y_VERIFY(spg);
 
         // We need only actual portions here (with empty XPlanStep:XTxId)
         auto actualPortions = GetActualPortions(spg->Portions);
-        if (actualPortions.empty()) {
-            it = CompactionGranules.erase(it);
-            continue;
-        }
-
-        ui32 inserted = 0;
-        bool needSplit = NeedSplit(actualPortions, Limits, inserted);
-        if (needSplit) {
-            inGranule = false;
-            outGranule = granule;
-            break;
-        } else if (inserted) {
-            outGranule = granule;
-            break;
+        if (!actualPortions.empty()) {
+            ui32 inserted = 0;
+            bool needSplit = NeedSplit(actualPortions, Limits, inserted);
+            if (needSplit) {
+                inGranule = false;
+                outGranule = granule;
+                break;
+            } else if (inserted) {
+                outGranule = granule;
+                break;
+            }
         }
 
         it = CompactionGranules.erase(it);

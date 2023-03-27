@@ -85,6 +85,8 @@ quasar/infra/tasklets
 observability/tracing
 velocity/error-booster
 samsaravteam/chat-bots
+serp/renderer/templates-manual-releases
+serp/renderer/templates-releases
 crowdsourcing/bbrules-root
 mba/admin/oracle_sql/post_reload_sqls/
 haas/m3/eng-configs

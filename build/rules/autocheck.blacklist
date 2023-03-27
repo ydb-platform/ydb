@@ -1104,6 +1104,7 @@ plus/appsmith
 plus/frontend/payment-widget
 plus/frontend/plus
 plus/frontend/plusui
+plus/frontend/plus-i18n
 portal/archive/achievement-api
 portal/archive/admin-wfront-dev
 portal/archive/apphost-xs

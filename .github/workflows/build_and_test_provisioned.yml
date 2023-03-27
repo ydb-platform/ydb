@@ -12,6 +12,17 @@ on:
       test_label_regexp:
         required: false
         type: string
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        required: true
+        type: string
+      sanitizer:
+        required: false
+        type: string
+      test_label_regexp:
+        required: false
+        type: string
     
 jobs:
   main:

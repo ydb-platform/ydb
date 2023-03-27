@@ -1,0 +1,33 @@
+name: Build-and-Test Provisioned VM
+
+on:
+  workflow_call:
+    inputs:
+      runner_label:
+        required: true
+        type: string
+      sanitizer:
+        required: false
+        type: string
+      test_label_regexp:
+        required: false
+        type: string
+    
+jobs:
+  main:
+    name: Build and test
+    runs-on: [ self-hosted, Provisioned, "${{ inputs.runner_label }}" ]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Build
+      uses: ./.github/actions/build
+      with: 
+        sanitizer: ${{ inputs.sanitizer }}
+    - name: Test
+      uses: ./.github/actions/test
+      with: 
+        log_suffix: ${{ inputs.runner_label }}
+        test_label_regexp: ${{ inputs.test_label_regexp }}
+        aws_key_id: ${{secrets.AWS_KEY_ID}}
+        aws_key_value: ${{secrets.AWS_KEY_VALUE}}

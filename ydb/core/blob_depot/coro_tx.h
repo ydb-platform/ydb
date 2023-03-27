@@ -7,6 +7,8 @@ namespace NKikimr::NBlobDepot {
 
     struct TExDead {};
 
+    using TTokens = std::vector<std::weak_ptr<TToken>>;
+
     class TCoroTx : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         class TContext;
         std::unique_ptr<TContext> Context;
@@ -14,7 +16,7 @@ namespace NKikimr::NBlobDepot {
         static thread_local TCoroTx *Current;
 
     public:
-        TCoroTx(TBlobDepot *self, const std::weak_ptr<TToken>& token, std::function<void()> body);
+        TCoroTx(TBlobDepot *self, TTokens&& tokens, std::function<void()> body);
         TCoroTx(TCoroTx& predecessor);
         ~TCoroTx();
 

@@ -24,16 +24,16 @@ namespace NKikimr::NBlobDepot {
 
         EOutcome Outcome = EOutcome::UNSET;
 
-        std::weak_ptr<TToken> Token;
+        TTokens Tokens;
         std::function<void()> Body;
 
         bool Finished = false;
 
     public:
-        TContext(const std::weak_ptr<TToken>& token, std::function<void()>&& body)
+        TContext(TTokens&& tokens, std::function<void()>&& body)
             : Stack(65536)
             , Context({this, TArrayRef(Stack.Begin(), Stack.End())})
-            , Token(token)
+            , Tokens(std::move(tokens))
             , Body(std::move(body))
         {
 #ifndef NDEBUG
@@ -90,14 +90,23 @@ namespace NKikimr::NBlobDepot {
             Outcome = outcome;
             Y_VERIFY(BackContext);
             Context.SwitchTo(BackContext);
-            if (Token.expired() || Finished) {
+            if (IsExpired() || Finished) {
                 throw TExDead();
             }
         }
 
     private:
+        bool IsExpired() const {
+            for (auto& token : Tokens) {
+                if (token.expired()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         void DoRun() override {
-            if (!Token.expired()) {
+            if (!IsExpired()) {
                 try {
                     Body();
                 } catch (const TExDead&) {
@@ -109,9 +118,9 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    TCoroTx::TCoroTx(TBlobDepot *self, const std::weak_ptr<TToken>& token, std::function<void()> body)
+    TCoroTx::TCoroTx(TBlobDepot *self, TTokens&& tokens, std::function<void()> body)
         : TTransactionBase(self)
-        , Context(std::make_unique<TContext>(token, std::move(body)))
+        , Context(std::make_unique<TContext>(std::move(tokens), std::move(body)))
     {}
 
     TCoroTx::TCoroTx(TCoroTx& predecessor)

@@ -1,6 +1,6 @@
 # Changelog
 
-## 07.03.2023 {#07-03-2023}
+## 07/03/2023 {#07-03-2023}
 
 ### {{ ydb-short-name }} 22.5 {#ydb-22-5}
 
@@ -8,20 +8,20 @@ To update to version **22.5**, select the [Downloads](downloads/index.md) sectio
 
 **What's new:**
 
-* Added [changefeed configuration settings](yql/reference/syntax/alter_table#changefeed-options) to transfer additional info about changes to topic.
-* Added support of [rename for tables](concepts/datamodel/table.md#rename) with TTL setting enabled.
-* Added [retention period setting](concepts/cdc#retention-period) for cdc-log.
+* Added [changefeed configuration parameters](yql/reference/syntax/alter_table#changefeed-options) to transfer additional information about changes to a topic.
+* You can now [rename tables](concepts/datamodel/table.md#rename) that have TTL enabled.
+* You can now [manage the record retention period](concepts/cdc#retention-period).
 
-**BugFixes & Improvements:**
+**Bug fixes and improvements:**
 
-* Fixed: Error inserting 0 rows via BulkUpsert.
-* Fixed: Error when importing Date/DateTime columns from CSV.
-* Fixed: Error importing data from CSV with line breaks in values.
-* Fixed: Error importing data from CSV with empty values.
-* Improved Query Processing performance (WorkerActor was replaced with SessionActor).
-* DataShard compaction now starts immediately after split or merge operations.
+* Fixed an error inserting 0 rows with a BulkUpsert.
+* Fixed an error importing Date/DateTime columns from CSV.
+* Fixed an error importing CSV data with line breaks.
+* Fixed an error importing CSV data with NULL values.
+* Improved Query Processing performance (by replacing WorkerActor with SessionActor).
+* DataShard compaction now starts immediately after a split or merge.
 
-## 10.12.2022 {#10-12-2022}
+## 12/10/2022 {#12-10-2022}
 
 **What's new in version 22.4**
 
@@ -58,7 +58,7 @@ To update to version **22.4**, select the [Downloads](downloads/index.md) sectio
    * Added support for authentication with static credentials.
    * Added system tables for query performance troubleshooting.
 
-## 09.22.2022 {#22-09-2022}
+## 20/09/2022 {#22-09-2022}
 
 {{ ydb-short-name }} CLI 2.0.0:
 
@@ -83,7 +83,7 @@ To update to version **22.4**, select the [Downloads](downloads/index.md) sectio
 * Added the ability to import data in JSON format from a file or stdin (see the `ydb import file json` command).
 * Improved command processing. Improved the accuracy of user input parsing and validation.
 
-## 06.25.2022 {#25-06-2022}
+## 25/06/2022 {#25-06-2022}
 
 {{ ydb-short-name }} CLI 1.9.1:
 

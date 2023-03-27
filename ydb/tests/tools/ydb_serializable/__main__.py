@@ -4,6 +4,7 @@ import time
 import signal
 import multiprocessing
 from argparse import ArgumentParser
+import asyncio
 from ydb.tests.tools.ydb_serializable.lib import (
     DatabaseChecker,
     DatabaseCheckerOptions,
@@ -49,6 +50,20 @@ def main():
     options.ignore_read_table = args.ignore_read_table
     options.read_table_snapshot = args.read_table_snapshot
 
+    async def async_run_single():
+        iterations = args.iterations
+
+        async with DatabaseChecker(args.endpoint, args.database, path=args.path, logger=logger) as checker:
+            while iterations is None or iterations > 0:
+                try:
+                    await checker.async_run(options)
+                except SerializabilityError as e:
+                    e.history.write_to_file(os.path.join(args.output_path, os.path.basename(e.table) + '_history.json'))
+                    raise
+
+                if iterations is not None:
+                    iterations -= 1
+
     def run_single():
         def handler(signum, frame, sys=sys, logger=logger):
             logger.warning('Terminating on signal %d', signum)
@@ -57,18 +72,7 @@ def main():
         signal.signal(signal.SIGINT, handler)
         signal.signal(signal.SIGTERM, handler)
 
-        iterations = args.iterations
-
-        with DatabaseChecker(args.endpoint, args.database, path=args.path, logger=logger) as checker:
-            while iterations is None or iterations > 0:
-                try:
-                    checker.run(options)
-                except SerializabilityError as e:
-                    e.history.write_to_file(os.path.join(args.output_path, os.path.basename(e.table) + '_history.json'))
-                    raise
-
-                if iterations is not None:
-                    iterations -= 1
+        asyncio.run(async_run_single())
 
     def run_multiple():
         def handler(signum, frame, sys=sys, logger=logger):

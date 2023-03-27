@@ -84,6 +84,7 @@ taxi/uservices/services/cargo-ext-authproxy
 taxi/uservices/services/cargo-finance
 taxi/uservices/services/cargo-fiscal
 taxi/uservices/services/cargo-fixer
+taxi/uservices/services/cargo-ivr-support
 taxi/uservices/services/cargo-matcher
 taxi/uservices/services/cargo-misc
 taxi/uservices/services/cargo-order-core

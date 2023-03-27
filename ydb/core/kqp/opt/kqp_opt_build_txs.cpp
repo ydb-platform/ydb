@@ -22,7 +22,8 @@ using TStatus = IGraphTransformer::TStatus;
 namespace {
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(bool allowDependantConsumers) {
-    return NDq::CreateDqBuildPhyStagesTransformer(allowDependantConsumers);
+    bool useWideChannels = false;
+    return NDq::CreateDqBuildPhyStagesTransformer(allowDependantConsumers, useWideChannels);
 }
 
 class TKqpBuildTxTransformer : public TSyncTransformerBase {

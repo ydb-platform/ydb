@@ -2742,6 +2742,30 @@ bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& typ
     return true;
 }
 
+bool EnsureWideStreamType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected wide stream type, but got lambda"));
+        return false;
+    }
+
+    if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Stream || node.GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Multi) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected wide stream type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
+    return true;
+}
+
+bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Stream || type.Cast<TStreamExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Multi) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected wide stream type, but got: " << type));
+        return false;
+    }
+
+    return true;
+}
+
 bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
     if (!EnsureWideFlowType(node, ctx)) {
         return false;

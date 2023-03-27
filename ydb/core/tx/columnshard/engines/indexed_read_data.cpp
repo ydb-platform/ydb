@@ -240,6 +240,7 @@ void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& co
 
 std::shared_ptr<arrow::RecordBatch> TIndexedReadData::AssembleIndexedBatch(ui32 batchNo) {
     auto& portionInfo = Portion(batchNo);
+    Y_VERIFY(portionInfo.Produced());
 
     auto batch = portionInfo.AssembleInBatch(ReadMetadata->IndexInfo, ReadMetadata->LoadSchema, Data);
     Y_VERIFY(batch);
@@ -258,7 +259,7 @@ std::shared_ptr<arrow::RecordBatch> TIndexedReadData::AssembleIndexedBatch(ui32 
         filtered.ApplyFilter();
     }
 #if 1 // optimization
-    if (ReadMetadata->Program && portionInfo.AllowEarlyFilter()) {
+    if (filtered.Batch && ReadMetadata->Program && portionInfo.AllowEarlyFilter()) {
         filtered = NOlap::EarlyFilter(filtered.Batch, ReadMetadata->Program);
     }
     if (filtered.Batch) {

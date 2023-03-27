@@ -1461,6 +1461,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                 auto& portionInfo = portions.find(portion)->second;
 
                 TPortionInfo outPortion;
+                outPortion.Meta = portionInfo.Meta;
                 outPortion.Records.reserve(columnIds.size());
 
                 for (auto& rec : portionInfo.Records) {
@@ -1469,6 +1470,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                         outPortion.Records.push_back(rec);
                     }
                 }
+                Y_VERIFY(outPortion.Produced());
                 out->Portions.emplace_back(std::move(outPortion));
                 granuleHasDataForSnaphsot = true;
             }

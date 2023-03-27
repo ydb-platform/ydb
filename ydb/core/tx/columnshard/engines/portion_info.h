@@ -51,7 +51,8 @@ struct TPortionInfo {
     TString TierName;
 
     bool Empty() const { return Records.empty(); }
-    bool Valid() const { return !Empty() && Meta.Produced != TPortionMeta::UNSPECIFIED && HasMinMax(FirstPkColumn); }
+    bool Produced() const { return Meta.Produced != TPortionMeta::UNSPECIFIED; }
+    bool Valid() const { return !Empty() && Produced() && HasMinMax(FirstPkColumn); }
     bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
     bool CanHaveDups() const { return !Valid(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted(); }

@@ -155,7 +155,7 @@ def _get_test_runner_handlers():
 
 
 def _add_jest_ts_test(unit, test_runner, test_files, deps, test_record):
-    # TODO: remove these 3 lines. NOTS-PLUGINS-PATH is for back-compat with ya nad test_tool
+    # TODO: remove these 3 lines. NOTS-PLUGINS-PATH is for back-compat with ya and test_tool
     nots_plugins_path = os.path.join(unit.get("NOTS_PLUGINS_PATH"), "jest")
     deps.append(nots_plugins_path)
     test_record["NOTS-PLUGINS-PATH"] = nots_plugins_path
@@ -218,7 +218,10 @@ def _setup_eslint(unit):
     lint_files = _resolve_module_files(unit, mod_dir, lint_files)
     deps = _create_pm(unit).get_peers_from_package_json()
     test_record = {
-        "ESLINT_CONFIG_NAME": unit.get("ESLINT_CONFIG_NAME"),
+        "ESLINT_CONFIG_PATH": unit.get("ESLINT_CONFIG_PATH"),
+        # TODO: remove ESLINT_CONFIG_NAME after ya + test_tool release - it is for back-compat
+        #       in addion to that remove .eslintrc.js - it will no longer be needed
+        "ESLINT_CONFIG_NAME": unit.get("ESLINT_CONFIG_PATH"),
     }
 
     _add_test(unit, "eslint", lint_files, deps, test_record, mod_dir)

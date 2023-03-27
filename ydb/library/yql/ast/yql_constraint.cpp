@@ -995,13 +995,9 @@ TPartOfConstraintNode<TOriginalConstraintNode>::MakeCommon(const std::vector<con
     bool first = true;
     TMapType mapping;
     for (size_t i = 0; i < constraints.size(); ++i) {
-        auto part = constraints[i]->GetConstraint<TPartOfConstraintNode>();
-        if (!part) {
-            if (constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
-                continue;
-            }
+        const auto part = constraints[i]->GetConstraint<TPartOfConstraintNode>();
+        if (!part)
             return nullptr;
-        }
         if (first) {
             mapping = part->GetColumnMapping();
             first = false;

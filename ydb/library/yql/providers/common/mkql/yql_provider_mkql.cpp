@@ -1274,7 +1274,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.Unwrap(opt, message, pos.File, pos.Row, pos.Column);
     });
 
-    AddCallable("NothingFrom", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable("EmptyFrom", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto type = BuildType(node.Head(), *node.GetTypeAnn(), ctx.ProgramBuilder);
         switch (node.GetTypeAnn()->GetKind()) {
             case ETypeAnnotationKind::Flow:
@@ -1287,7 +1287,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             case ETypeAnnotationKind::Dict:
                 return ctx.ProgramBuilder.NewDict(type, {});
             default:
-                ythrow TNodeException(node) << "Nothing from " << *node.GetTypeAnn() << " isn't supported.";
+                ythrow TNodeException(node) << "Empty from " << *node.GetTypeAnn() << " isn't supported.";
         }
     });
 

@@ -68,7 +68,7 @@ bool IsJustOrSingleAsList(const TExprNode& node) {
 }
 
 bool IsTransparentIfPresent(const TExprNode& node) {
-    return (node.IsCallable("FlatMap") || (3U == node.ChildrenSize() && node.IsCallable("IfPresent") && node.Tail().IsCallable({"Nothing", "NothingFrom"})))
+    return (node.IsCallable("FlatMap") || (3U == node.ChildrenSize() && node.IsCallable("IfPresent") && node.Tail().IsCallable({"Nothing", "EmptyFrom"})))
         && node.Child(1U)->Tail().IsCallable("Just");
 }
 
@@ -347,7 +347,7 @@ bool IsEmpty(const TExprNode& node, const TTypeAnnotationContext& typeCtx) {
 
 bool IsEmptyContainer(const TExprNode& node) {
     return node.IsCallable({"EmptyList", "EmptyDict"})
-        || (1U == node.ChildrenSize() && node.IsCallable({"List", "Nothing", "EmptyIterator", "Dict", "NothingFrom"}));
+        || (1U == node.ChildrenSize() && node.IsCallable({"List", "Nothing", "EmptyIterator", "Dict", "EmptyFrom"}));
 }
 
 const TTypeAnnotationNode* RemoveOptionalType(const TTypeAnnotationNode* type) {
@@ -1151,7 +1151,7 @@ TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx
             .Seal().Build();
     }
 
-    if (std::any_of(optionals.cbegin(), optionals.cend(), [](const TExprNode::TPtr& node) { return node->IsCallable({"Nothing","NothingFrom"}); })) {
+    if (std::any_of(optionals.cbegin(), optionals.cend(), [](const TExprNode::TPtr& node) { return node->IsCallable({"Nothing","EmptyFrom"}); })) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over Nothing.";
         return node->TailPtr();
     }
@@ -1220,14 +1220,14 @@ TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx
                 .Seal().Build();
         }
 
-        if (lambda.Tail().IsCallable({"SafeCast", "StrictCast"}) && node->Tail().IsCallable({"Nothing","NothingFrom"}) && &lambda.Tail().Head() == &lambda.Head().Head() &&
+        if (lambda.Tail().IsCallable({"SafeCast", "StrictCast"}) && node->Tail().IsCallable({"Nothing","EmptyFrom"}) && &lambda.Tail().Head() == &lambda.Head().Head() &&
             ETypeAnnotationKind::Optional != node->Head().GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType()->GetKind()) {
             YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " with " << lambda.Tail().Content() << " and " << node->Tail().Content();
             return ctx.ChangeChild(lambda.Tail(), 0U, node->HeadPtr());
         }
 
         if constexpr (Cannonize) {
-            if (node->Tail().IsCallable({"Nothing","NothingFrom"}) && node->Tail().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
+            if (node->Tail().IsCallable({"Nothing","EmptyFrom"}) && node->Tail().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " with else " << node->Tail().Content();
                 return ctx.NewCallable(node->Pos(), "FlatMap", { node->HeadPtr(), node->ChildPtr(1) });
             }
@@ -1300,7 +1300,7 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx)  
         return MakeBool<true>(node->Pos(), ctx);
     }
 
-    if (node->Head().IsCallable({"Nothing","NothingFrom"})) {
+    if (node->Head().IsCallable({"Nothing","EmptyFrom"})) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         return MakeBool<false>(node->Pos(), ctx);
     }

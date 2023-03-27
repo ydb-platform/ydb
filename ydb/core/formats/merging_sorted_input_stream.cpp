@@ -122,6 +122,7 @@ TMergingSortedInputStream::TMergingSortedInputStream(const std::vector<IInputStr
 void TMergingSortedInputStream::Init() {
     Y_VERIFY(First);
     First = false;
+    size_t totalRows = 0;
 
     for (size_t i = 0; i < SourceBatches.size(); ++i) {
         auto& batch = SourceBatches[i];
@@ -134,13 +135,11 @@ void TMergingSortedInputStream::Init() {
             continue;
         }
 
-        const size_t rows = batch->num_rows();
-        if (ExpectedBatchSize < rows) {
-            ExpectedBatchSize = MaxBatchSize ? std::min(rows, MaxBatchSize) : rows;
-        }
-
+        totalRows += batch->num_rows();
         Cursors[i] = TSortCursorImpl(batch, Description, i);
     }
+
+    ExpectedBatchSize = MaxBatchSize ? std::min(totalRows, MaxBatchSize) : totalRows;
 
     Queue = TSortingHeap(Cursors, Description->NotNull);
 

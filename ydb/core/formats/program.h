@@ -202,6 +202,8 @@ struct TProgramStep {
     arrow::Status ApplyFilters(TDatumBatch& batch) const;
     arrow::Status ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
     arrow::Status ApplyProjection(TDatumBatch& batch) const;
+
+   arrow::Status MakeCombinedFilter(TDatumBatch& batch, std::vector<bool>& bits) const;
 };
 
 struct TProgram {
@@ -227,6 +229,9 @@ struct TProgram {
         }
         return arrow::Status::OK();
     }
+
+    std::vector<bool> MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                      arrow::compute::ExecContext* ctx) const;
 };
 
 inline arrow::Status ApplyProgram(

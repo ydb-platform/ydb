@@ -242,6 +242,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Schema::SaveSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
     }
 
+    Self->PrimaryIndex->FreeLocks(changes);
+
     if (changes->IsInsert()) {
         Self->ActiveIndexingOrCompaction = false;
 

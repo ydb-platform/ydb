@@ -376,11 +376,13 @@ Key | Description
 
 {% endlist %}
 
-## actor_system_config: Actor system {#actor-system}
+## Actor system {#actor-system}
 
-Create an actor system configuration. Specify how processor cores will be distributed across the pools of cores available in the system.
+The `actor_system_config` section specifies the number of node CPU cores to be allocated to different {{ ydb-full-name }} cluster subsystems.
 
-```bash
+The CPU resources are mainly used by the actor system. Depending on the type, all actors run in one of the pools (the `name` parameter). Configuring is allocating a node's CPU cores across the actor system pools. When allocating them, please keep in mind that PDisks and the gRPC API run outside the actor system and require separate resources.
+
+```yaml
 actor_system_config:
   executor:
   - name: System
@@ -410,11 +412,17 @@ actor_system_config:
     spin_threshold: 0
 ```
 
-{% note warning %}
-
-Make sure the total number of cores assigned to the IC, Batch, System, and User pools does not exceed the number of available system cores.
-
-{% endnote %}
+| Parameter | Description |
+--- | ---
+| `executor` | Pool configuration.<br>You should only change the number of CPU cores (the `threads` parameter) in the pool configs. |
+| `name` | Pool name that indicates its purpose. Possible values:<ul><li>`System`: A pool that is designed for running quick internal operations in {{ ydb-full-name }} (it serves system tablets, state storage, distributed storage I/O, and erasure coding).</li><li>`User`: A pool that serves the user load (user tablets, queries run in the Query Processor).</li><li>`Batch`: A pool that serves tasks with no strict limit on the execution time, background operations like garbage collection and heavy queries run in the Query Processor.</li><li>`IO`: A pool responsible for performing any tasks with blocking operations (such as authentication or writing logs to a file).</li><li>`IC`: Interconnect, it serves the load related to internode communication (system calls to wait for sending and send data across the network, data serialization, as well as message splits and merges).</li></ul> |
+| `spin_threshold` | The number of CPU cycles before going to sleep if there are no messages. In sleep mode, there is less power consumption, but it may increase request latency under low loads. |
+| `threads` | The number of CPU cores allocated per pool.<br>Make sure the total number of cores assigned to the System, User, Batch, and IC pools does not exceed the number of available system cores. |
+| `time_per_mailbox_micro_secs` | The number of messages per actor to be handled before switching to a different actor. |
+| `type` | Pool type. Possible values:<ul><li>`IO` should be set for IO pools.</li><li>`BASIC` should be set for any other pool.</li></ul> |
+| `scheduler` | Scheduler configuration. The actor system scheduler is responsible for the delivery of deferred messages exchanged by actors.<br>We do not recommend changing the default scheduler parameters. |
+| `progress_threshold` | The actor system supports requesting message sending scheduled for a later point in time. The system might fail to send all scheduled messages at some point. In this case, it starts sending them in "virtual time" by handling message sending in each loop over a period that doesn't exceed the `progress_threshold` value in microseconds and shifting the virtual time by the `progress_threshold` value until it reaches real time. |
+| `resolution` | When making a schedule for sending messages, discrete time slots are used. The slot duration is set by the `resolution` parameter in microseconds. |
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

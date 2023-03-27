@@ -3,19 +3,19 @@ import concurrent.futures
 import typing
 from typing import List, Union, Optional
 
-from ydb._grpc.grpcwrapper.common_utils import SupportedDriverType
-from ydb._topic_common.common import (
+from .._grpc.grpcwrapper.common_utils import SupportedDriverType
+from .._topic_common.common import (
     _get_shared_event_loop,
     CallFromSyncToAsync,
     TimeoutType,
 )
-from ydb._topic_reader import datatypes
-from ydb._topic_reader.datatypes import PublicBatch
-from ydb._topic_reader.topic_reader import (
+from . import datatypes
+from .datatypes import PublicBatch
+from .topic_reader import (
     PublicReaderSettings,
     CommitResult,
 )
-from ydb._topic_reader.topic_reader_asyncio import (
+from .topic_reader_asyncio import (
     PublicAsyncIOReader,
     TopicReaderClosedError,
 )

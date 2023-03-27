@@ -2,8 +2,8 @@ import asyncio
 import logging
 import random
 
-from ydb import issues
-from ydb.pool import ConnectionsCache as _ConnectionsCache, IConnectionPool
+from .. import issues
+from ..pool import ConnectionsCache as _ConnectionsCache, IConnectionPool
 
 from .connection import Connection
 

@@ -8,7 +8,7 @@ from typing import Deque, AsyncIterator, Union, List, Optional, Dict, Callable
 
 import logging
 
-import ydb
+from ydb.public.sdk.python3 import ydb
 from .topic_writer import (
     PublicWriterSettings,
     WriterSettings,

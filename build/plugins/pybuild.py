@@ -440,6 +440,12 @@ def onpy_srcs(unit, *args):
                 py_register(unit, mod, py3)
                 process_pyx(filename, path, out_suffix, with_ext)
 
+            if cythonize_py:
+                # Lint checks are not added for cythonized files by default, so we must add it here
+                # as we are doing for regular pys.
+                _23 = 3 if py3 else 2
+                add_python_lint_checks(unit, _23, [path for path, mod in pyxs if path.endswith(".py")] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split())
+
         if py_files2res:
             # Compile original and generated sources into target for proper cython coverage calculation
             for files2res in (py_files2res, cpp_files2res):

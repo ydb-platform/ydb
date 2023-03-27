@@ -7,6 +7,7 @@ namespace NKikimr::NBlobDepot {
 
     class TBlobDepotAgent::TBlobMappingCache
         : public TRequestSender
+        , public std::enable_shared_from_this<TBlobMappingCache>
     {
         struct TCachedKeyItem : TIntrusiveListItem<TCachedKeyItem> {
             TStringBuf Key; // key buffer (view of key part of the Cache set)

@@ -465,7 +465,7 @@ namespace NKikimr::NBlobDepot {
         // Blob mapping cache
 
         class TBlobMappingCache;
-        std::unique_ptr<TBlobMappingCache> BlobMappingCachePtr;
+        std::shared_ptr<TBlobMappingCache> BlobMappingCachePtr;
         TBlobMappingCache& BlobMappingCache;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

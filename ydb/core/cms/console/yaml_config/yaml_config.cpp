@@ -4,6 +4,27 @@
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/core/base/appdata.h>
 
+template <>
+struct THash<NYamlConfig::TLabel> {
+    inline size_t operator()(const NYamlConfig::TLabel& value) const {
+        return CombineHashes(THash<TString>{}(value.Value), (size_t)value.Type);
+    }
+};
+
+template <>
+struct THash<TVector<TString>> {
+    inline size_t operator()(const TVector<TString>& value) const {
+        size_t result = 0;
+        for (auto& str : value) {
+            result = CombineHashes(result, THash<TString>{}(str));
+        }
+        return result;
+    }
+};
+
+template <>
+struct THash<TVector<NYamlConfig::TLabel>> : public TSimpleRangeHash {};
+
 namespace NYamlConfig {
 
 inline const TMap<TString, EYamlConfigLabelTypeClass> ClassMapping{
@@ -20,18 +41,6 @@ TString GetKey(const NFyaml::TNodeRef& node, TString key) {
     auto map = node.Map();
     auto k = map.at(key).Scalar();
     return k;
-}
-
-TString CalcHash(const NFyaml::TDocument& resolved) {
-    TStringStream ss;
-    ss << resolved;
-    TString s = ss.Str();
-    SHA256_CTX sha;
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, s.data(), s.size());
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_Final(hash, &sha);
-    return TString(reinterpret_cast<char*>(hash), sizeof(hash));
 }
 
 bool Fit(const TSelector& selector, const TSet<TNamedLabel>& labels) {
@@ -520,6 +529,27 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
     return {labelNames, std::move(configs)};
 }
 
+size_t Hash(const NFyaml::TNodeRef& resolved) {
+    TStringStream ss;
+    ss << resolved;
+    TString s = ss.Str();
+    return THash<TString>{}(s);
+}
+
+size_t Hash(const TResolvedConfig& config)
+{
+    size_t configsHash = 0;
+    for (auto& [labelSet, docConfig] : config.Configs) {
+        for (auto labels : labelSet) {
+            auto labelsHash = THash<TVector<TLabel>>{}(labels);
+            configsHash = CombineHashes(labelsHash, configsHash);
+        }
+        configsHash = CombineHashes(Hash(docConfig.second), configsHash);
+    }
+
+    return CombineHashes(THash<TVector<TString>>{}(config.Labels), configsHash);
+}
+
 void ValidateVolatileConfig(NFyaml::TDocument& doc) {
     auto root = doc.Root();
     auto seq = root.Sequence();
@@ -556,6 +586,15 @@ void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatil
         auto node = elem.Copy(config);
         selectors.Append(node.Ref());
     }
+}
+
+ui64 GetVersion(const TString& config) {
+    auto parser = NFyaml::TParser::Create(config);
+    auto header = parser.NextDocument();
+    auto str = header->Root().Map().at("version").Scalar();
+    ui64 version = 0;
+    TryFromString<ui64>(str, version);
+    return version;
 }
 
 } // namespace NYamlConfig

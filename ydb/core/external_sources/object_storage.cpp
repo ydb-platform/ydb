@@ -217,7 +217,16 @@ private:
                 .Primitive(NYdb::EPrimitiveType::String)
                 .Build(),
             NYdb::TTypeBuilder{}
+                .Primitive(NYdb::EPrimitiveType::Int32)
+                .Build(),
+            NYdb::TTypeBuilder{}
+                .Primitive(NYdb::EPrimitiveType::Uint32)
+                .Build(),
+            NYdb::TTypeBuilder{}
                 .Primitive(NYdb::EPrimitiveType::Int64)
+                .Build(),
+            NYdb::TTypeBuilder{}
+                .Primitive(NYdb::EPrimitiveType::Uint64)
                 .Build(),
             NYdb::TTypeBuilder{}
                 .Primitive(NYdb::EPrimitiveType::Utf8)
@@ -257,6 +266,9 @@ private:
                 .Build(),
             NYdb::TTypeBuilder{}
                 .Primitive(NYdb::EPrimitiveType::Date)
+                .Build(),
+            NYdb::TTypeBuilder{}
+                .Primitive(NYdb::EPrimitiveType::Datetime)
                 .Build()
         };
         return ValidateProjectionType(columnType, columnName, availableTypes);
@@ -275,13 +287,16 @@ private:
                 .Build(),
             NYdb::TTypeBuilder{}
                 .Primitive(NYdb::EPrimitiveType::Date)
+                .Build(),
+            NYdb::TTypeBuilder{}
+                .Primitive(NYdb::EPrimitiveType::Date)
                 .Build()
         };
         return ValidateProjectionType(columnType, columnName, availableTypes);
     }
 
     static NYql::TIssues ValidateProjection(const NKikimrExternalSources::TSchema& schema, const TString& projection, const TVector<TString>& partitionedBy) {
-        auto generator =NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy); // an exception is thrown if an error occurs
+        auto generator = NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy, GetDataSlotColumns(schema)); // an exception is thrown if an error occurs
         TMap<TString, NYql::NPathGenerator::IPathGenerator::EType> projectionColumns;
         for (const auto& column: generator->GetConfig().Rules) {
             projectionColumns[column.Name] = column.Type;
@@ -307,6 +322,19 @@ private:
             }
         }
         return issues;
+    }
+
+    static TMap<TString, NYql::NUdf::EDataSlot> GetDataSlotColumns(const NKikimrExternalSources::TSchema& schema) {
+        TMap<TString, NYql::NUdf::EDataSlot> dataSlotColumns;
+        for (const auto& column: schema.column()) {
+            if (column.has_type()) {
+                const auto& type = column.type();
+                if (type.has_type_id()) {
+                    dataSlotColumns[column.name()] = NYql::NUdf::GetDataSlot(type.type_id());
+                }
+            }
+        }
+        return dataSlotColumns;
     }
 };
 

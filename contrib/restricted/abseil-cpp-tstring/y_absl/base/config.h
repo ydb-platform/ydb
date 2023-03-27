@@ -111,7 +111,7 @@
 //
 // LTS releases can be obtained from
 // https://github.com/abseil/abseil-cpp/releases.
-#define Y_ABSL_LTS_RELEASE_VERSION 20220623
+#define Y_ABSL_LTS_RELEASE_VERSION 20230125
 #define Y_ABSL_LTS_RELEASE_PATCH_LEVEL 1
 
 // Helper macro to convert a CPP variable to a string literal.
@@ -243,6 +243,7 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #ifdef Y_ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE
 #error Y_ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE cannot be directly set
 #elif defined(_LIBCPP_VERSION) || defined(_MSC_VER) || \
+    (defined(__clang__) && __clang_major__ >= 15) ||   \
     (!defined(__clang__) && defined(__GLIBCXX__) &&    \
      Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(4, 8))
 #define Y_ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE 1
@@ -264,13 +265,25 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #elif defined(Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE)
 #error Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE cannot directly set
 #elif (defined(__clang__) && defined(_LIBCPP_VERSION)) ||                    \
+    (defined(__clang__) && __clang_major__ >= 15) ||                         \
     (!defined(__clang__) &&                                                  \
      ((Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(7, 4) && defined(__GLIBCXX__)) || \
       (Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(8, 2) &&                          \
        defined(_LIBCPP_VERSION)))) ||                                        \
-    (defined(_MSC_VER) && !defined(__NVCC__))
+    (defined(_MSC_VER) && !defined(__NVCC__) && !defined(__clang__))
 #define Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE 1
 #define Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE 1
+#endif
+
+// Y_ABSL_HAVE_STD_IS_TRIVIALLY_COPYABLE
+//
+// Checks whether `std::is_trivially_copyable<T>` is supported.
+//
+// Notes: Clang 15+ with libc++ supports these features, GCC hasn't been tested.
+#if defined(Y_ABSL_HAVE_STD_IS_TRIVIALLY_COPYABLE)
+#error Y_ABSL_HAVE_STD_IS_TRIVIALLY_COPYABLE cannot be directly set
+#elif defined(__clang__) && (__clang_major__ >= 15)
+#define Y_ABSL_HAVE_STD_IS_TRIVIALLY_COPYABLE 1
 #endif
 
 // Y_ABSL_HAVE_THREAD_LOCAL
@@ -741,6 +754,18 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #define Y_ABSL_DLL
 #endif  // defined(_MSC_VER)
 
+#if defined(_MSC_VER)
+#if defined(Y_ABSL_BUILD_TEST_DLL)
+#define Y_ABSL_TEST_DLL __declspec(dllexport)
+#elif defined(Y_ABSL_CONSUME_TEST_DLL)
+#define Y_ABSL_TEST_DLL __declspec(dllimport)
+#else
+#define Y_ABSL_TEST_DLL
+#endif
+#else
+#define Y_ABSL_TEST_DLL
+#endif  // defined(_MSC_VER)
+
 // Y_ABSL_HAVE_MEMORY_SANITIZER
 //
 // MemorySanitizer (MSan) is a detector of uninitialized reads. It consists of
@@ -899,10 +924,26 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 
 // Y_ABSL_INTERNAL_HAVE_ARM_NEON is used for compile-time detection of NEON (ARM
 // SIMD).
+//
+// If __CUDA_ARCH__ is defined, then we are compiling CUDA code in device mode.
+// In device mode, NEON intrinsics are not available, regardless of host
+// platform.
+// https://llvm.org/docs/CompileCudaWithLLVM.html#detecting-clang-vs-nvcc-from-code
 #ifdef Y_ABSL_INTERNAL_HAVE_ARM_NEON
 #error Y_ABSL_INTERNAL_HAVE_ARM_NEON cannot be directly set
-#elif defined(__ARM_NEON)
+#elif defined(__ARM_NEON) && !defined(__CUDA_ARCH__)
 #define Y_ABSL_INTERNAL_HAVE_ARM_NEON 1
+#endif
+
+// Y_ABSL_HAVE_CONSTANT_EVALUATED is used for compile-time detection of
+// constant evaluation support through `y_absl::is_constant_evaluated`.
+#ifdef Y_ABSL_HAVE_CONSTANT_EVALUATED
+#error Y_ABSL_HAVE_CONSTANT_EVALUATED cannot be directly set
+#endif
+#if defined(__cpp_lib_is_constant_evaluated) && (!defined(__CUDACC__) || CUDA_VERSION >= 11000)
+#define Y_ABSL_HAVE_CONSTANT_EVALUATED 1
+#elif Y_ABSL_HAVE_BUILTIN(__builtin_is_constant_evaluated) && (!defined(__CUDACC__) || CUDA_VERSION >= 11000)
+#define Y_ABSL_HAVE_CONSTANT_EVALUATED 1
 #endif
 
 #endif  // Y_ABSL_BASE_CONFIG_H_

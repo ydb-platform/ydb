@@ -17,12 +17,15 @@
 #include <assert.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <util/generic/string.h>
 
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/internal/resize_uninitialized.h"
 #include "y_absl/strings/numbers.h"
+#include "y_absl/strings/string_view.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
@@ -56,7 +59,7 @@ AlphaNum::AlphaNum(Dec dec) {
     *--writer = '0' + (value % 10);
     value /= 10;
   }
-  *--writer = '0' + value;
+  *--writer = '0' + static_cast<char>(value);
   if (neg) *--writer = '-';
 
   ptrdiff_t fillers = writer - minfill;
@@ -73,7 +76,7 @@ AlphaNum::AlphaNum(Dec dec) {
     if (add_sign_again) *--writer = '-';
   }
 
-  piece_ = y_absl::string_view(writer, end - writer);
+  piece_ = y_absl::string_view(writer, static_cast<size_t>(end - writer));
 }
 
 // ----------------------------------------------------------------------
@@ -141,12 +144,12 @@ namespace strings_internal {
 TString CatPieces(std::initializer_list<y_absl::string_view> pieces) {
   TString result;
   size_t total_size = 0;
-  for (const y_absl::string_view& piece : pieces) total_size += piece.size();
+  for (y_absl::string_view piece : pieces) total_size += piece.size();
   strings_internal::STLStringResizeUninitialized(&result, total_size);
 
   char* const begin = &result[0];
   char* out = begin;
-  for (const y_absl::string_view& piece : pieces) {
+  for (y_absl::string_view piece : pieces) {
     const size_t this_size = piece.size();
     if (this_size != 0) {
       memcpy(out, piece.data(), this_size);
@@ -170,7 +173,7 @@ void AppendPieces(TString* dest,
                   std::initializer_list<y_absl::string_view> pieces) {
   size_t old_size = dest->size();
   size_t total_size = old_size;
-  for (const y_absl::string_view& piece : pieces) {
+  for (y_absl::string_view piece : pieces) {
     ASSERT_NO_OVERLAP(*dest, piece);
     total_size += piece.size();
   }
@@ -178,7 +181,7 @@ void AppendPieces(TString* dest,
 
   char* const begin = &(*dest)[0];
   char* out = begin + old_size;
-  for (const y_absl::string_view& piece : pieces) {
+  for (y_absl::string_view piece : pieces) {
     const size_t this_size = piece.size();
     if (this_size != 0) {
       memcpy(out, piece.data(), this_size);

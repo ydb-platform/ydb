@@ -152,7 +152,7 @@ public:
         Functions["Just"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Unwrap"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["ToList"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
-        Functions["ToOptional"] = &TCallableConstraintTransformer::ToOptionalWrap;
+        Functions["ToOptional"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Head"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Last"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Reverse"] = &TCallableConstraintTransformer::ReverseWrap;
@@ -167,6 +167,7 @@ public:
         Functions["ListIf"] = &TCallableConstraintTransformer::PassOrEmptyWrap<true, false>;
         Functions["FlatListIf"] = &TCallableConstraintTransformer::PassOrEmptyWrap<true, true>;
         Functions["EmptyIterator"] = &TCallableConstraintTransformer::FromEmpty;
+        Functions["NothingFrom"] = &TCallableConstraintTransformer::NothingFromWrap;
         Functions["List"] = &TCallableConstraintTransformer::ListWrap;
         Functions["Dict"] = &TCallableConstraintTransformer::DictWrap;
         Functions["EmptyList"] = &TCallableConstraintTransformer::FromEmpty;
@@ -310,6 +311,20 @@ private:
 
     TStatus FromEmpty(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        return TStatus::Ok;
+    }
+
+    TStatus NothingFromWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        auto set = input->Head().GetConstraintSet();
+        set.RemoveConstraint(TEmptyConstraintNode::Name());
+        if (!set) {
+            const auto type = input->GetTypeAnn();
+            output = ctx.NewCallable(input->Pos(), GetEmptyCollectionName(type), {ExpandType(input->Pos(), *type, ctx)});
+            return TStatus::Repeat;
+        }
+
+        set.AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        input->SetConstraints(set);
         return TStatus::Ok;
     }
 
@@ -1696,15 +1711,6 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
         return TStatus::Ok;
-    }
-
-    TStatus ToOptionalWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        if (input->Head().GetConstraint<TSortedConstraintNode>()) {
-            output = ctx.ChangeChild(*input, 0U, ctx.NewCallable(input->Pos(), "Unordered", {input->HeadPtr()}));
-            return TStatus::Repeat;
-        }
-
-        return FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
     }
 
     template<bool IsList, bool IsFlat>

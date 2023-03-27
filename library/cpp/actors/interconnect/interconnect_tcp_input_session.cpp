@@ -77,10 +77,12 @@ namespace NActors {
 
         LOG_DEBUG_IC_SESSION("ICIS02", "ReceiveData called");
 
+        bool enoughCpu = true;
         for (int iteration = 0; Socket; ++iteration) {
             if (iteration && limit.CheckExceeded()) {
                 // we have hit processing time limit for this message, send notification to resume processing a bit later
                 Send(SelfId(), new TEvResumeReceiveData);
+                enoughCpu = false;
                 break;
             }
 
@@ -109,6 +111,8 @@ namespace NActors {
                 break;
             }
         }
+
+        SetEnoughCpu(enoughCpu);
 
         // calculate ping time
         auto it = std::min_element(PingQ.begin(), PingQ.end());

@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.values" : "0,1",
                 "storage.location.template" : "/${city}/${code}/"
             }
-        )", {"city", "code"}, 2), yexception, "The limit on the number of paths has been reached: 2 of 2");
+        )", {"city", "code"}, {}, 2), yexception, "The limit on the number of paths has been reached: 2 of 2");
     }
 
     Y_UNIT_TEST(CheckClash) {
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
     }
 
     Y_UNIT_TEST(CheckHiveFormat) {
-        auto generator = CreatePathGenerator({}, {"city", "code", "device_id"}, 1);
+        auto generator = CreatePathGenerator({}, {"city", "code", "device_id"}, {}, 1);
         auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 0);

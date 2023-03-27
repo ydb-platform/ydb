@@ -221,6 +221,7 @@ SRCS(
     schemeshard_build_index__progress.cpp
     schemeshard_validate_ttl.cpp
     operation_queue_timer.h
+    user_attributes.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)

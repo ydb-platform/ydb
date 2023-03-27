@@ -140,6 +140,11 @@ namespace NActors {
             RelaxedStore(&WorkerStats.SafeElapsedTicks, (ui64)RelaxedLoad(&WorkerStats.ElapsedTicks));
             RelaxedStore(&WorkerStats.CpuUs, ThreadCPUTime());
         }
+
+        void IncreaseNotEnoughCpuExecutions() {
+            RelaxedStore(&WorkerStats.NotEnoughCpuExecutions,
+                    (ui64)RelaxedLoad(&WorkerStats.NotEnoughCpuExecutions) + 1);
+        }
 #else
         void GetCurrentStats(TExecutorThreadStats&) const {}
         inline void AddElapsedCycles(ui32, i64) {}
@@ -159,6 +164,7 @@ namespace NActors {
         i64 AddEventProcessingStats(i64, i64, ui32, ui64) { return 0; }
         void UpdateActorsStats(size_t, IExecutorPool*) {}
         void UpdateThreadTime() {}
+        void IncreaseNotEnoughCpuExecutions() {}
 #endif
 
         void Switch(IExecutorPool* executor,

@@ -15,6 +15,7 @@
 #include "y_absl/time/civil_time.h"
 
 #include <cstdlib>
+#include <ostream>
 #include <util/generic/string.h>
 
 #include "y_absl/strings/str_cat.h"
@@ -166,6 +167,31 @@ std::ostream& operator<<(std::ostream& os, CivilMinute m) {
 std::ostream& operator<<(std::ostream& os, CivilSecond s) {
   return os << FormatCivilTime(s);
 }
+
+bool AbslParseFlag(string_view s, CivilSecond* c, TString*) {
+  return ParseLenientCivilTime(s, c);
+}
+bool AbslParseFlag(string_view s, CivilMinute* c, TString*) {
+  return ParseLenientCivilTime(s, c);
+}
+bool AbslParseFlag(string_view s, CivilHour* c, TString*) {
+  return ParseLenientCivilTime(s, c);
+}
+bool AbslParseFlag(string_view s, CivilDay* c, TString*) {
+  return ParseLenientCivilTime(s, c);
+}
+bool AbslParseFlag(string_view s, CivilMonth* c, TString*) {
+  return ParseLenientCivilTime(s, c);
+}
+bool AbslParseFlag(string_view s, CivilYear* c, TString*) {
+  return ParseLenientCivilTime(s, c);
+}
+TString AbslUnparseFlag(CivilSecond c) { return FormatCivilTime(c); }
+TString AbslUnparseFlag(CivilMinute c) { return FormatCivilTime(c); }
+TString AbslUnparseFlag(CivilHour c) { return FormatCivilTime(c); }
+TString AbslUnparseFlag(CivilDay c) { return FormatCivilTime(c); }
+TString AbslUnparseFlag(CivilMonth c) { return FormatCivilTime(c); }
+TString AbslUnparseFlag(CivilYear c) { return FormatCivilTime(c); }
 
 }  // namespace time_internal
 

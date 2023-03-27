@@ -252,7 +252,8 @@ namespace NActors {
             };
             if constexpr (couldBeGot) {
                 if (!Event) {
-                    Event.Reset(TEventType::Load(Buffer.Get()));
+                    static TEventSerializedData empty;
+                    Event.Reset(TEventType::Load(Buffer ? Buffer.Get() : &empty));
                 }
 
                 if (Event) {

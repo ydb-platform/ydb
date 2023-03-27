@@ -433,6 +433,8 @@ namespace NActors {
             }
         }
 
+        SetEnoughCpu(generatedBytes < generateLimit);
+
         if (Socket) {
             WriteData();
         }

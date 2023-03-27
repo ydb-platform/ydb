@@ -37,7 +37,6 @@ TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNo
 
 bool IsDepended(const TExprNode& from, const TExprNode& to);
 bool IsEmpty(const TExprNode& node, const TTypeAnnotationContext& typeCtx);
-bool IsEmptyOptional(const TExprNode& node);
 bool IsEmptyContainer(const TExprNode& node);
 
 const TTypeAnnotationNode* RemoveOptionalType(const TTypeAnnotationNode* type);

@@ -1274,6 +1274,23 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.Unwrap(opt, message, pos.File, pos.Row, pos.Column);
     });
 
+    AddCallable("NothingFrom", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto type = BuildType(node.Head(), *node.GetTypeAnn(), ctx.ProgramBuilder);
+        switch (node.GetTypeAnn()->GetKind()) {
+            case ETypeAnnotationKind::Flow:
+            case ETypeAnnotationKind::Stream:
+                return ctx.ProgramBuilder.EmptyIterator(type);
+            case ETypeAnnotationKind::Optional:
+                return ctx.ProgramBuilder.NewEmptyOptional(type);
+            case ETypeAnnotationKind::List:
+                return ctx.ProgramBuilder.NewEmptyList(AS_TYPE(TListType, type)->GetItemType());
+            case ETypeAnnotationKind::Dict:
+                return ctx.ProgramBuilder.NewDict(type, {});
+            default:
+                ythrow TNodeException(node) << "Nothing from " << *node.GetTypeAnn() << " isn't supported.";
+        }
+    });
+
     AddCallable("Nothing", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto optType = BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.NewEmptyOptional(optType);

@@ -4,6 +4,7 @@
 #include <library/cpp/actors/core/actor.h>
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/console_config.pb.h>
 
 #include <openssl/sha.h>
 
@@ -151,6 +152,12 @@ struct TResolvedConfig {
 TResolvedConfig ResolveAll(NFyaml::TDocument& doc);
 
 /**
+ * Calculates hash of resolved config
+ * Used to ensure that cli resolves config the same as a server
+ */
+size_t Hash(const TResolvedConfig& config);
+
+/**
  * Validates single YAML volatile config schema
  */
 void ValidateVolatileConfig(NFyaml::TDocument& doc);
@@ -159,5 +166,10 @@ void ValidateVolatileConfig(NFyaml::TDocument& doc);
  * Appends volatile configs to the end of selectors list
  */
 void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatileConfig);
+
+/**
+ * Parses config version
+ */
+ui64 GetVersion(const TString& config);
 
 } // namespace NYamlConfig

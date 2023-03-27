@@ -100,7 +100,7 @@ std::shared_ptr<arrow::RecordBatch> TPortionInfo::AssembleInBatch(const TIndexIn
     std::shared_ptr<arrow::Table> portion = Assemble(indexInfo, schema, data);
     auto res = portion->CombineChunks();
     Y_VERIFY(res.ok());
-    return NArrow::ToBatch(portion);
+    return NArrow::ToBatch(*res);
 }
 
 void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted) {

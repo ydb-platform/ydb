@@ -4,6 +4,21 @@
 
 ALLOW vendor/ -> .*
 
+# CONTRIB-2890
+DENY .* -> vendor/gotest.tools/v3;test
+DENY .* -> vendor/github.com/moby/sys/mountinfo;test
+DENY .* -> vendor/github.com/containerd/containerd/mount;test
+DENY .* -> vendor/github.com/containernetworking/cni;test
+DENY .* -> vendor/k8s.io/utils/exec;test
+ALLOW .* -> vendor/k8s.io/cri-api/pkg/apis/runtime/v1
+ALLOW .* -> vendor/k8s.io/cri-api/pkg/apis/runtime/v1alpha2
+ALLOW .* -> vendor/k8s.io/apimachinery/pkg/util/remotecommand
+ALLOW .* -> vendor/github.com/containerd/containerd/pkg/netns
+ALLOW .* -> vendor/github.com/containerd/go-cni
+ALLOW .* -> vendor/k8s.io/kubernetes/pkg/kubelet/cri/streaming
+ALLOW .* -> vendor/golang.org/x/term
+ALLOW .* -> vendor/github.com/creack/pty
+
 # CONTRIB-2858
 ALLOW .* -> vendor/github.com/robfig/cron/v3
 

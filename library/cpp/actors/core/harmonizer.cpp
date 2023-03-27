@@ -116,6 +116,8 @@ struct TPoolInfo {
     NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounterWithSmallWindow;
     ui32 MaxAvgPingUs = 0;
     ui64 LastUpdateTs = 0;
+    ui64 NotEnoughCpuExecutions = 0;
+    ui64 NewNotEnoughCpuExecutions = 0;
 
     TAtomic LastFlags = 0; // 0 - isNeedy; 1 - isStarved; 2 - isHoggish
     TAtomic IncreasingThreadsByNeedyState = 0;
@@ -168,6 +170,7 @@ double TPoolInfo::GetlastSecondPoolConsumed(i16 threadIdx) {
 
 #define UNROLL_HISTORY(history) (history)[0], (history)[1], (history)[2], (history)[3], (history)[4], (history)[5], (history)[6], (history)[7]
 void TPoolInfo::PullStats(ui64 ts) {
+    ui64 notEnoughCpuExecutions = 0;
     for (i16 threadIdx = 0; threadIdx < MaxThreadCount; ++threadIdx) {
         TThreadInfo &threadInfo = ThreadInfo[threadIdx];
         TCpuConsumption cpuConsumption = Pool->GetThreadCpuConsumption(threadIdx);
@@ -175,7 +178,10 @@ void TPoolInfo::PullStats(ui64 ts) {
         LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "consumed", UNROLL_HISTORY(threadInfo.Consumed.History));
         threadInfo.Booked.Register(ts, cpuConsumption.BookedUs);
         LWPROBE(SavedValues, Pool->PoolId, Pool->GetName(), "booked", UNROLL_HISTORY(threadInfo.Booked.History));
+        notEnoughCpuExecutions += cpuConsumption.NotEnoughCpuExecutions;
     }
+    NewNotEnoughCpuExecutions = notEnoughCpuExecutions - NotEnoughCpuExecutions;
+    NotEnoughCpuExecutions = notEnoughCpuExecutions;
 }
 #undef UNROLL_HISTORY
 
@@ -273,7 +279,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             isStarvedPresent = true;
         }
         ui32 currentThreadCount = pool.GetThreadCount();
-        bool isNeedy = pool.IsAvgPingGood() && poolBooked >= currentThreadCount;
+        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && poolBooked >= currentThreadCount;
         if (pool.AvgPingCounter) {
             if (pool.LastUpdateTs + Us2Ts(3'000'000ull) > ts) {
                 isNeedy = false;

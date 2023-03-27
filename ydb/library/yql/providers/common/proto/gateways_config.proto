@@ -63,7 +63,7 @@ message TExplicitDNSRecord {
   optional string Address = 1 [default = ""];
   optional uint32 Port = 2 [default = 443];
   optional string ExpectedIP = 3 [default = ""];
-  optional ProtocolVersion Protocol = 4 [default = ANY]; 
+  optional ProtocolVersion Protocol = 4 [default = ANY];
 }
 
 message TDnsResolverConfig {
@@ -510,6 +510,21 @@ message TSqlCoreConfig {
     repeated string TranslationFlags = 4;
 }
 
+/////////////////////////////// Db Tool ///////////////////////////////
+
+message TUserException {
+    required string Login = 1;
+    optional uint32 ExpireDays = 2 [default = 0]; // 0 - don't delete history at all
+}
+
+message TDbToolConfig {
+    optional uint32 DefaultExpireDays = 1;
+    optional string RobotPattern = 2;
+    repeated string DeleteQueryRunner = 3;
+    repeated TUserException UserException = 4;
+}
+
+
 /////////////////////////////// Root ///////////////////////////////
 
 message TGatewaysConfig {
@@ -532,4 +547,5 @@ message TGatewaysConfig {
     optional TS3GatewayConfig S3 = 17;
     optional THttpGatewayConfig HttpGateway = 18;
     optional TYtOrmGatewayConfig YtOrm = 19;
+    optional TDbToolConfig DbTool = 20;
 }

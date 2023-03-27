@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         }
         UNIT_ASSERT_VALUES_EQUAL(chunkerRes, ser);
 
-        THolder<IEventBase> ev2 = THolder(TEventTo::Load(buffers));
+        THolder<IEventBase> ev2 = THolder(TEventTo::Load(buffers.Get()));
         TEventTo& msg2 = static_cast<TEventTo&>(*ev2);
         UNIT_ASSERT_VALUES_EQUAL(msg2.Record.GetMeta(), msg.Record.GetMeta());
         UNIT_ASSERT_EQUAL(msg2.GetPayload(msg2.Record.GetPayloadId(0)), msg.GetPayload(msg.Record.GetPayloadId(0)));
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
 
         // deserialize
         auto data = MakeIntrusive<TEventSerializedData>(ser1, TEventSerializationInfo{});
-        THolder<TEvMessageWithPayloadPreSerialized> parsedEvent(static_cast<TEvMessageWithPayloadPreSerialized*>(TEvMessageWithPayloadPreSerialized::Load(data)));
+        THolder<TEvMessageWithPayloadPreSerialized> parsedEvent(static_cast<TEvMessageWithPayloadPreSerialized*>(TEvMessageWithPayloadPreSerialized::Load(data.Get())));
         UNIT_ASSERT_VALUES_EQUAL(parsedEvent->PreSerializedData, ""); // this field is empty after deserialization
         auto& record = parsedEvent->GetRecord();
         UNIT_ASSERT_VALUES_EQUAL(record.GetMeta(), msg.GetMeta());

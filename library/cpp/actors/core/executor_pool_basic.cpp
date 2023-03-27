@@ -500,7 +500,7 @@ namespace NActors {
         TThreadCtx& threadCtx = Threads[threadIdx];
         TExecutorThreadStats stats;
         threadCtx.Thread->GetCurrentStats(stats);
-        return {Ts2Us(stats.SafeElapsedTicks), static_cast<double>(stats.CpuUs)};
+        return {Ts2Us(stats.SafeElapsedTicks), static_cast<double>(stats.CpuUs), stats.NotEnoughCpuExecutions};
     }
 
     i16 TBasicExecutorPool::GetBlockingThreadCount() const {

@@ -84,14 +84,18 @@ public:
                     NYql::IssuesFromMessage(response->issues(), opIssues);
                     TStatus st(static_cast<EStatus>(response->status()), std::move(opIssues));
 
-                    promise.SetValue(
-                        TFetchScriptResultsResult(
-                            std::move(st),
-                            TResultSet(std::move(*response->mutable_result_set())),
-                            response->result_set_index(),
-                            response->next_fetch_token()
-                        )
-                    );
+                    if (st.IsSuccess()) {
+                        promise.SetValue(
+                            TFetchScriptResultsResult(
+                                std::move(st),
+                                TResultSet(std::move(*response->mutable_result_set())),
+                                response->result_set_index(),
+                                response->next_fetch_token()
+                            )
+                        );
+                    } else {
+                        promise.SetValue(TFetchScriptResultsResult(std::move(st)));
+                    }
                 } else {
                     TStatus st(std::move(status));
                     promise.SetValue(TFetchScriptResultsResult(std::move(st)));

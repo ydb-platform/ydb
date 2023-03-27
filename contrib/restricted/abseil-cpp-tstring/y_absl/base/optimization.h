@@ -91,6 +91,7 @@
 #define Y_ABSL_CACHELINE_SIZE 64
 #endif
 #endif
+#endif
 
 #ifndef Y_ABSL_CACHELINE_SIZE
 // A reasonable default guess.  Note that overestimates tend to waste more
@@ -141,12 +142,11 @@
 //    the generated machine code.
 // 3) Prefer applying this attribute to individual variables. Avoid
 //    applying it to types. This tends to localize the effect.
+#if defined(__clang__) || defined(__GNUC__)
 #define Y_ABSL_CACHELINE_ALIGNED __attribute__((aligned(Y_ABSL_CACHELINE_SIZE)))
 #elif defined(_MSC_VER)
-#define Y_ABSL_CACHELINE_SIZE 64
 #define Y_ABSL_CACHELINE_ALIGNED __declspec(align(Y_ABSL_CACHELINE_SIZE))
 #else
-#define Y_ABSL_CACHELINE_SIZE 64
 #define Y_ABSL_CACHELINE_ALIGNED
 #endif
 
@@ -181,6 +181,53 @@
 #define Y_ABSL_PREDICT_TRUE(x) (x)
 #endif
 
+// `Y_ABSL_INTERNAL_IMMEDIATE_ABORT_IMPL()` aborts the program in the fastest
+// possible way, with no attempt at logging. One use is to implement hardening
+// aborts with Y_ABSL_OPTION_HARDENED.  Since this is an internal symbol, it
+// should not be used directly outside of Abseil.
+#if Y_ABSL_HAVE_BUILTIN(__builtin_trap) || \
+    (defined(__GNUC__) && !defined(__clang__))
+#define Y_ABSL_INTERNAL_IMMEDIATE_ABORT_IMPL() __builtin_trap()
+#else
+#define Y_ABSL_INTERNAL_IMMEDIATE_ABORT_IMPL() abort()
+#endif
+
+// `Y_ABSL_INTERNAL_UNREACHABLE_IMPL()` is the platform specific directive to
+// indicate that a statement is unreachable, and to allow the compiler to
+// optimize accordingly. Clients should use `Y_ABSL_UNREACHABLE()`, which is
+// defined below.
+#if defined(__cpp_lib_unreachable) && __cpp_lib_unreachable >= 202202L
+#define Y_ABSL_INTERNAL_UNREACHABLE_IMPL() std::unreachable()
+#elif defined(__GNUC__) || Y_ABSL_HAVE_BUILTIN(__builtin_unreachable)
+#define Y_ABSL_INTERNAL_UNREACHABLE_IMPL() __builtin_unreachable()
+#elif Y_ABSL_HAVE_BUILTIN(__builtin_assume)
+#define Y_ABSL_INTERNAL_UNREACHABLE_IMPL() __builtin_assume(false)
+#elif defined(_MSC_VER)
+#define Y_ABSL_INTERNAL_UNREACHABLE_IMPL() __assume(false)
+#else
+#define Y_ABSL_INTERNAL_UNREACHABLE_IMPL()
+#endif
+
+// `Y_ABSL_UNREACHABLE()` is an unreachable statement.  A program which reaches
+// one has undefined behavior, and the compiler may optimize accordingly.
+#if Y_ABSL_OPTION_HARDENED == 1 && defined(NDEBUG)
+// Abort in hardened mode to avoid dangerous undefined behavior.
+#define Y_ABSL_UNREACHABLE()                \
+  do {                                    \
+    Y_ABSL_INTERNAL_IMMEDIATE_ABORT_IMPL(); \
+    Y_ABSL_INTERNAL_UNREACHABLE_IMPL();     \
+  } while (false)
+#else
+// The assert only fires in debug mode to aid in debugging.
+// When NDEBUG is defined, reaching Y_ABSL_UNREACHABLE() is undefined behavior.
+#define Y_ABSL_UNREACHABLE()                       \
+  do {                                           \
+    /* NOLINTNEXTLINE: misc-static-assert */     \
+    assert(false && "Y_ABSL_UNREACHABLE reached"); \
+    Y_ABSL_INTERNAL_UNREACHABLE_IMPL();            \
+  } while (false)
+#endif
+
 // Y_ABSL_ASSUME(cond)
 //
 // Informs the compiler that a condition is always true and that it can assume
@@ -209,18 +256,23 @@
 #define Y_ABSL_ASSUME(cond) assert(cond)
 #elif Y_ABSL_HAVE_BUILTIN(__builtin_assume)
 #define Y_ABSL_ASSUME(cond) __builtin_assume(cond)
+#elif defined(_MSC_VER)
+#define Y_ABSL_ASSUME(cond) __assume(cond)
+#elif defined(__cpp_lib_unreachable) && __cpp_lib_unreachable >= 202202L
+#define Y_ABSL_ASSUME(cond)            \
+  do {                               \
+    if (!(cond)) std::unreachable(); \
+  } while (false)
 #elif defined(__GNUC__) || Y_ABSL_HAVE_BUILTIN(__builtin_unreachable)
 #define Y_ABSL_ASSUME(cond)                 \
   do {                                    \
     if (!(cond)) __builtin_unreachable(); \
-  } while (0)
-#elif defined(_MSC_VER)
-#define Y_ABSL_ASSUME(cond) __assume(cond)
+  } while (false)
 #else
 #define Y_ABSL_ASSUME(cond)               \
   do {                                  \
     static_cast<void>(false && (cond)); \
-  } while (0)
+  } while (false)
 #endif
 
 // Y_ABSL_INTERNAL_UNIQUE_SMALL_NAME(cond)

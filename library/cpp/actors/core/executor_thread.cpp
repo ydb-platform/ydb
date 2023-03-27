@@ -362,7 +362,8 @@ namespace NActors {
                     }
 #undef EXECUTE_MAILBOX
                     hpnow = GetCycleCountFast();
-                    execCycles += hpnow - hpprev;
+                    i64 currentExecCycles = hpnow - hpprev;
+                    execCycles += currentExecCycles;
                     hpprev = hpnow;
                     execCount++;
                     if (execCycles + nonExecCycles > 39000000) { // every 15 ms at 2.6GHz, so 1000 items is 15 sec (solomon interval)
@@ -374,6 +375,11 @@ namespace NActors {
                         execCycles = 0;
                         nonExecCycles = 0;
                         Ctx.UpdateThreadTime();
+                    }
+
+                    if (!TlsThreadContext->IsEnoughCpu) {
+                        Ctx.IncreaseNotEnoughCpuExecutions();
+                        TlsThreadContext->IsEnoughCpu = true;
                     }
                 }
             }

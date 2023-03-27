@@ -151,7 +151,7 @@ public:
 
     inline size_t Save(TFlatBlobDataOutputStream* output, TType value) {
         const auto outValue = static_cast<i64>(value); // TODO: fix out_long(i32)
-        char varIntOut[sizeof(outValue) + 1];
+        char varIntOut[sizeof(outValue) + 1] {};
         auto bytes = out_long(outValue, varIntOut);
         output->Write(varIntOut, bytes);
         return bytes;

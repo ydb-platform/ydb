@@ -24,6 +24,7 @@
 #include <contrib/libs/grpc/include/grpcpp/impl/codegen/status_code_enum.h>
 
 #include <google/protobuf/util/json_util.h>
+#include <google/protobuf/util/time_util.h>
 
 namespace {
 
@@ -238,7 +239,7 @@ public:
         FillRequestMetadata(*CloudEvent.mutable_request_metadata(), ExtraInfo, Request);
 
         FillRequestParameters(Request);
-        FillEventMetadata(Details);
+        FillEventMetadata();
         FillDetails(Details);
 
         FillResponse(CloudEvent, Issues);
@@ -300,33 +301,8 @@ private:
         *CloudEvent.mutable_request_parameters() = PrepareRequestParameters(request);
     }
 
-    template<typename T>
-    void FillEventMetadata(TAuditDetails<T>& details) {
-        google::protobuf::Timestamp createdAt;
-        if (details.Before) {
-            createdAt = details.Before->meta().common().created_at();
-        } else if (details.After) {
-            createdAt = details.After->meta().common().created_at();
-        } else {
-            auto now = TInstant::Now();
-            createdAt.set_seconds(now.Seconds());
-            createdAt.set_nanos(now.NanoSeconds() % 1000000000);
-        }
-        FillEventMetadataImpl(createdAt);
-    }
-
-    template<typename T> requires requires (T t) { t.meta().created_at(); }
-    void FillEventMetadata(TAuditDetails<T>& details) {
-        google::protobuf::Timestamp createdAt;
-        if (details.Before) {
-            createdAt = details.Before->meta().created_at();
-        } else if (details.After) {
-            createdAt = details.After->meta().created_at();
-        } else {
-            auto now = TInstant::Now();
-            createdAt.set_seconds(now.Seconds());
-            createdAt.set_nanos(now.NanoSeconds() % 1000000000);
-        }
+    void FillEventMetadata() {
+        const auto createdAt = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
         FillEventMetadataImpl(createdAt);
     }
 

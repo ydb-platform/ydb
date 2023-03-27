@@ -53,7 +53,6 @@
 #include <atomic>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/macros.h"
 #include "y_absl/synchronization/mutex.h"
 #include "y_absl/time/time.h"
 

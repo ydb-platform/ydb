@@ -103,17 +103,11 @@ Y_ABSL_NAMESPACE_END
 // aborts the program in release mode (when NDEBUG is defined). The
 // implementation should abort the program as quickly as possible and ideally it
 // should not be possible to ignore the abort request.
-#if (Y_ABSL_HAVE_BUILTIN(__builtin_trap) &&         \
-     Y_ABSL_HAVE_BUILTIN(__builtin_unreachable)) || \
-    (defined(__GNUC__) && !defined(__clang__))
-#define Y_ABSL_INTERNAL_HARDENING_ABORT() \
-  do {                                  \
-    __builtin_trap();                   \
-    __builtin_unreachable();            \
+#define Y_ABSL_INTERNAL_HARDENING_ABORT()   \
+  do {                                    \
+    Y_ABSL_INTERNAL_IMMEDIATE_ABORT_IMPL(); \
+    Y_ABSL_INTERNAL_UNREACHABLE_IMPL();     \
   } while (false)
-#else
-#define Y_ABSL_INTERNAL_HARDENING_ABORT() abort()
-#endif
 
 // Y_ABSL_HARDENING_ASSERT()
 //
@@ -143,16 +137,5 @@ Y_ABSL_NAMESPACE_END
 #define Y_ABSL_INTERNAL_CATCH_ANY else if (false)
 #define Y_ABSL_INTERNAL_RETHROW do {} while (false)
 #endif  // Y_ABSL_HAVE_EXCEPTIONS
-
-// `Y_ABSL_INTERNAL_UNREACHABLE` is an unreachable statement.  A program which
-// reaches one has undefined behavior, and the compiler may optimize
-// accordingly.
-#if defined(__GNUC__) || Y_ABSL_HAVE_BUILTIN(__builtin_unreachable)
-#define Y_ABSL_INTERNAL_UNREACHABLE __builtin_unreachable()
-#elif defined(_MSC_VER)
-#define Y_ABSL_INTERNAL_UNREACHABLE __assume(0)
-#else
-#define Y_ABSL_INTERNAL_UNREACHABLE
-#endif
 
 #endif  // Y_ABSL_BASE_MACROS_H_

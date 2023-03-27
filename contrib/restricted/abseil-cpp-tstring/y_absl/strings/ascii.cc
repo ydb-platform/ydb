@@ -157,13 +157,13 @@ Y_ABSL_DLL const char kToUpper[256] = {
 
 void AsciiStrToLower(TString* s) {
   for (auto& ch : *s) {
-    ch = y_absl::ascii_tolower(ch);
+    ch = y_absl::ascii_tolower(static_cast<unsigned char>(ch));
   }
 }
 
 void AsciiStrToUpper(TString* s) {
   for (auto& ch : *s) {
-    ch = y_absl::ascii_toupper(ch);
+    ch = y_absl::ascii_toupper(static_cast<unsigned char>(ch));
   }
 }
 
@@ -183,17 +183,17 @@ void RemoveExtraAsciiWhitespace(TString* str) {
   for (; input_it < input_end; ++input_it) {
     if (is_ws) {
       // Consecutive whitespace?  Keep only the last.
-      is_ws = y_absl::ascii_isspace(*input_it);
+      is_ws = y_absl::ascii_isspace(static_cast<unsigned char>(*input_it));
       if (is_ws) --output_it;
     } else {
-      is_ws = y_absl::ascii_isspace(*input_it);
+      is_ws = y_absl::ascii_isspace(static_cast<unsigned char>(*input_it));
     }
 
     *output_it = *input_it;
     ++output_it;
   }
 
-  str->erase(output_it - &(*str)[0]);
+  str->erase(static_cast<size_t>(output_it - &(*str)[0]));
 }
 
 Y_ABSL_NAMESPACE_END

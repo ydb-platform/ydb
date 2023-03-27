@@ -20,6 +20,14 @@ NO_COMPILER_WARNINGS()
 SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl)
 
 SRCS(
+    crc/crc32c.cc
+    crc/internal/cpu_detect.cc
+    crc/internal/crc.cc
+    crc/internal/crc_cord_state.cc
+    crc/internal/crc_memcpy_fallback.cc
+    crc/internal/crc_memcpy_x86_64.cc
+    crc/internal/crc_non_temporal_memcpy.cc
+    crc/internal/crc_x86_arm_combined.cc
     status/statusor.cc
     strings/ascii.cc
     strings/charconv.cc
@@ -40,6 +48,7 @@ SRCS(
     strings/internal/cordz_handle.cc
     strings/internal/cordz_info.cc
     strings/internal/cordz_sample_token.cc
+    strings/internal/damerau_levenshtein_distance.cc
     strings/internal/escaping.cc
     strings/internal/memutil.cc
     strings/internal/ostringstream.cc
@@ -49,6 +58,7 @@ SRCS(
     strings/internal/str_format/float_conversion.cc
     strings/internal/str_format/output.cc
     strings/internal/str_format/parser.cc
+    strings/internal/stringify_sink.cc
     strings/internal/utf8.cc
     strings/match.cc
     strings/numbers.cc

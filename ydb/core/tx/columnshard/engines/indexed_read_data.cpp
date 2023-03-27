@@ -468,6 +468,47 @@ TIndexedReadData::MergeNotIndexed(std::vector<std::shared_ptr<arrow::RecordBatch
     return merged;
 }
 
+// TODO: better implementation
+static void MergeTooSmallBatches(TVector<TPartialReadResult>& out) {
+    if (out.size() < 10) {
+        return;
+    }
+
+    i64 sumRows = 0;
+    for (auto& result : out) {
+        sumRows += result.ResultBatch->num_rows();
+    }
+    if (sumRows / out.size() > 100) {
+        return;
+    }
+
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+    batches.reserve(out.size());
+    for (auto& batch : out) {
+        batches.push_back(batch.ResultBatch);
+    }
+
+    auto res = arrow::Table::FromRecordBatches(batches);
+    if (!res.ok()) {
+        Y_VERIFY_DEBUG(false, "Cannot make table from batches");
+        return;
+    }
+
+    res = (*res)->CombineChunks();
+    if (!res.ok()) {
+        Y_VERIFY_DEBUG(false, "Cannot combine chunks");
+        return;
+    }
+    auto batch = NArrow::ToBatch(*res);
+
+    TVector<TPartialReadResult> merged;
+    merged.emplace_back(TPartialReadResult{
+        .ResultBatch = std::move(batch),
+        .LastReadKey = std::move(out.back().LastReadKey)
+    });
+    out.swap(merged);
+}
+
 TVector<TPartialReadResult>
 TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules,
                              int64_t maxRowsInBatch) const {
@@ -527,6 +568,8 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
     }
 
     if (ReadMetadata->Program) {
+        MergeTooSmallBatches(out);
+
         for (auto& result : out) {
             auto status = ApplyProgram(result.ResultBatch, *ReadMetadata->Program, NArrow::GetCustomExecContext());
             if (!status.ok()) {

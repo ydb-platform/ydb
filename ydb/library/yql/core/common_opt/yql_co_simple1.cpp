@@ -1117,22 +1117,7 @@ TExprNode::TPtr OptimizeContainerIf(const TExprNode::TPtr& node, TExprContext& c
     if (node->Head().IsCallable("Bool")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content() << " '" << node->Head().Head().Content();
         const auto value = FromString<bool>(node->Head().Head().Content());
-        auto res = value
-            ? ctx.NewCallable(node->Tail().Pos(), IsList ? "AsList" : "Just", {node->TailPtr()})
-            : //TODO: ctx.NewCallable(node->Head().Pos(), IsList ? "List" : "Nothing", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)})
-              ctx.Builder(node->Head().Pos())
-                .Callable(IsList ? "List" : "Nothing")
-                    .Callable(0, IsList ? "ListType" : "OptionalType")
-                        .Callable(0, "TypeOf")
-                            .Add(0, node->TailPtr())
-                        .Seal()
-                    .Seal()
-                .Seal().Build();
-        if (IsList) {
-            res = KeepConstraints(res, *node, ctx);
-        }
-        return res;
-
+        return ctx.WrapByCallableIf(!value, "NothingFrom", ctx.NewCallable(node->Tail().Pos(), IsList ? "AsList" : "Just", {node->TailPtr()}));
     }
     return node;
 }
@@ -1180,7 +1165,7 @@ TExprNode::TPtr OptimizeFlatContainerIf(const TExprNode::TPtr& node, TExprContex
     return node;
 }
 
-template <bool HeadOrTail>
+template <bool HeadOrTail, bool OrderAware = true>
 TExprNode::TPtr OptimizeToOptional(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().IsCallable("ToList")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
@@ -1196,6 +1181,13 @@ TExprNode::TPtr OptimizeToOptional(const TExprNode::TPtr& node, TExprContext& ct
     if (1U == nodeToCheck.ChildrenSize() && nodeToCheck.IsCallable("List")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over empty " << nodeToCheck.Content();
         return ctx.NewCallable(node->Head().Pos(), "Nothing", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+    }
+
+    if constexpr (!OrderAware) {
+        if (node->Head().GetConstraint<TSortedConstraintNode>()) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over sorted collection";
+            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
+        }
     }
 
     return node;
@@ -4559,7 +4551,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["ToOptional"] = std::bind(OptimizeToOptional<true>, _1, _2);
+    map["ToOptional"] = std::bind(OptimizeToOptional<true, false>, _1, _2);
     map["Head"] = std::bind(OptimizeToOptional<true>, _1, _2);
     map["Last"] = std::bind(OptimizeToOptional<false>, _1, _2);
 

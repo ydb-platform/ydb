@@ -16,8 +16,8 @@
 #include "y_absl/strings/internal/cordz_handle.h"
 #include "y_absl/strings/internal/cordz_info.h"
 
-#ifndef Y_ABSL_STRINGS_CORDZ_SAMPLE_TOKEN_H_
-#define Y_ABSL_STRINGS_CORDZ_SAMPLE_TOKEN_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_CORDZ_SAMPLE_TOKEN_H_
+#define Y_ABSL_STRINGS_INTERNAL_CORDZ_SAMPLE_TOKEN_H_
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
@@ -94,4 +94,4 @@ class CordzSampleToken : public CordzSnapshot {
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // Y_ABSL_STRINGS_CORDZ_SAMPLE_TOKEN_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_CORDZ_SAMPLE_TOKEN_H_

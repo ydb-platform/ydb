@@ -67,12 +67,6 @@
 #ifndef Y_ABSL_BASE_OPTIONS_H_
 #define Y_ABSL_BASE_OPTIONS_H_
 
-// Include a standard library header to allow configuration based on the
-// standard library in use.
-#ifdef __cplusplus
-#include <ciso646>
-#endif
-
 // -----------------------------------------------------------------------------
 // Type Compatibility Options
 // -----------------------------------------------------------------------------
@@ -206,7 +200,7 @@
 // allowed.
 
 #define Y_ABSL_OPTION_USE_INLINE_NAMESPACE 1
-#define Y_ABSL_OPTION_INLINE_NAMESPACE_NAME lts_y_20220623
+#define Y_ABSL_OPTION_INLINE_NAMESPACE_NAME lts_y_20230125
 
 // Y_ABSL_OPTION_HARDENED
 //

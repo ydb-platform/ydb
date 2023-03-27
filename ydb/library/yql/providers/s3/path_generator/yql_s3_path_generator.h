@@ -2,8 +2,11 @@
 
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 
+#include <util/generic/map.h>
 #include <util/generic/string.h>
+
 #include <vector>
+
 
 namespace NYql::NPathGenerator {
 
@@ -69,6 +72,6 @@ struct IPathGenerator {
 
 using TPathGeneratorPtr = std::shared_ptr<const IPathGenerator>;
 
-TPathGeneratorPtr CreatePathGenerator(const TString& projection, const std::vector<TString>& partitionedBy, size_t pathsLimit = 2000);
+TPathGeneratorPtr CreatePathGenerator(const TString& projection, const std::vector<TString>& partitionedBy, const TMap<TString, NUdf::EDataSlot>& columns = {}, size_t pathsLimit = 2000);
 
 }

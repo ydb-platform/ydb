@@ -83,13 +83,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             Sleep(TDuration::MilliSeconds(50));
             TAsyncFetchScriptResultsResult future = db.FetchScriptResults(executeScrptsResult.Metadata().ExecutionId);
             results.ConstructInPlace(future.ExtractValueSync());
+            ////////////////////////////////////////////////////////////////////////// tmp return; // YQ-1636
+            if (results->GetStatus() == NYdb::EStatus::INTERNAL_ERROR) {
+                UNIT_ASSERT_STRING_CONTAINS(results->GetIssues().ToOneLineString(), "unsupported source type");
+                return;
+            }
+            ////////////////////////////////////////////////////////////////////////// tmp return; // YQ-1636
             if (!results->IsSuccess()) {
                 UNIT_ASSERT_C(results->GetStatus() == NYdb::EStatus::BAD_REQUEST, results->GetStatus() << ": " << results->GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(results->GetIssues().ToOneLineString(), "Results are not ready");
             }
         } while (!results->HasResultSet());
         TResultSetParser resultSet(results->ExtractResultSet());
-        return;
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
         UNIT_ASSERT(resultSet.TryNextRow());

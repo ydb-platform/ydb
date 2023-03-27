@@ -11811,6 +11811,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BuildTablePath"] = &BuildTablePathWrapper;
         Functions["WithOptionalArgs"] = &WithOptionalArgsWrapper;
         Functions["WithContext"] = &WithContextWrapper;
+        Functions["NothingFrom"] = &NothingFromWrapper;
 
         Functions["DecimalDiv"] = &DecimalBinaryWrapper;
         Functions["DecimalMod"] = &DecimalBinaryWrapper;

@@ -5379,7 +5379,7 @@ namespace {
         ui32 expectedArgs;
         if (name == "count_all") {
             expectedArgs = overState ? 2 : 1;
-        } else if (name == "count" || name == "sum" || name == "avg" || name == "min" || name == "max") {
+        } else if (name == "count" || name == "sum" || name == "avg" || name == "min" || name == "max" || name == "some") {
             expectedArgs = 2;
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
@@ -5454,6 +5454,10 @@ namespace {
                 }
             }
 
+            input->SetTypeAnn(retType);
+        } else if (name == "some") {
+            auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            const TTypeAnnotationNode* retType = itemType;
             input->SetTypeAnn(retType);
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
@@ -7148,13 +7152,26 @@ namespace {
             }
         } else {
             auto children = input->ChildrenList();
-            children.emplace_back(ctx.Expr.NewCallable(input->Pos(), "Uint64", {ctx.Expr.NewAtom(input->Pos(), "0", TNodeFlags::Default)}));
+            children.emplace_back(ctx.Expr.NewCallable(input->Pos(), "Uint64", {ctx.Expr.NewAtom(input->Pos(), 0U)}));
             output = ctx.Expr.ChangeChildren(*input, std::move(children));
             return IGraphTransformer::TStatus::Repeat;
         }
 
         const auto itemType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
         input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(ctx.Expr.MakeType<TListExprType>(itemType)));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus NothingFromWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (const TTypeAnnotationNode* itemType = nullptr; !EnsureNewSeqType<true>(input->Head(), ctx.Expr, &itemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
         return IGraphTransformer::TStatus::Ok;
     }
 

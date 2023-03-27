@@ -1,11 +1,13 @@
 #include "yql_s3_provider_impl.h"
 #include "yql_s3_listing_strategy.h"
 
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
+#include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -606,6 +608,33 @@ private:
         return true;
     }
 
+    TMap<TString, NUdf::EDataSlot> GetDataSlotColumns(const TExprNode& schema, TExprContext& ctx) {
+        TMap<TString, NUdf::EDataSlot> columns;
+        auto types = schema.Child(1);
+        if (!types) {
+            return columns;
+        }
+
+        TExprNode::TPtr holder;
+        if (types->Content() == "SqlTypeFromYson") {
+            auto type = NCommon::ParseTypeFromYson(types->Head().Content(), ctx, ctx.GetPosition(schema.Pos()));
+            holder = ExpandType(schema.Pos(), *type, ctx);
+            types = holder.Get();
+        }
+
+        for (size_t i = 0; i < types->ChildrenSize(); i++) {
+            const auto& column = types->Child(i);
+            const auto& name = column->Child(0);
+            const auto& type = column->Child(1)->Child(0);
+            auto slot = NKikimr::NUdf::FindDataSlot(type->Content());
+            if (!slot) {
+                continue;
+            }
+            columns[TString{name->Content()}] = *slot;
+        }
+        return columns;
+    }
+
     bool LaunchListsForNode(const TS3Read& read, TVector<NThreading::TFuture<NS3Lister::TListResult>>& futures, TExprContext& ctx) {
         const auto& settings = *read.Ref().Child(4);
 
@@ -687,7 +716,7 @@ private:
             config.Columns = partitionedBy;
             config.SchemaTypeNode = schema->ChildPtr(1);
             if (!projection.empty()) {
-                config.Generator = CreatePathGenerator(projection, partitionedBy);
+                config.Generator = CreatePathGenerator(projection, partitionedBy, GetDataSlotColumns(*schema, ctx));
                 if (!ValidateProjection(projectionPos, config.Generator, partitionedBy, ctx)) {
                     return false;
                 }

@@ -26,6 +26,17 @@ index 89f8e4e5c8..2cbec9c65c 100644
 -#endif
 -
  #endif  // TCMALLOC_LIBC_OVERRIDE_H_
+diff --git a/library/cpp/lfalloc/CMakeLists.linux-aarch64.txt b/library/cpp/lfalloc/CMakeLists.linux-aarch64.txt
+index de6f97ec6a..4ea93e519c 100644
+--- a/library/cpp/lfalloc/CMakeLists.linux-aarch64.txt
++++ b/library/cpp/lfalloc/CMakeLists.linux-aarch64.txt
+@@ -19,5 +19,5 @@ target_link_libraries(library-cpp-lfalloc PUBLIC
+   cpp-malloc-api
+ )
+ target_sources(library-cpp-lfalloc PRIVATE
+-  ${CMAKE_SOURCE_DIR}/library/cpp/lfalloc/lf_allocX64.cpp
++  ${CMAKE_SOURCE_DIR}/library/cpp/lfalloc/lf_dummy.cpp
+ )
 diff --git a/library/cpp/lfalloc/CMakeLists.linux-x86_64.txt b/library/cpp/lfalloc/CMakeLists.linux-x86_64.txt
 index de6f97ec6a..4ea93e519c 100644
 --- a/library/cpp/lfalloc/CMakeLists.linux-x86_64.txt

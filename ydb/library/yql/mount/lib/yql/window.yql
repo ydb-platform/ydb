@@ -28,11 +28,11 @@
 # list_type:type function:lambda
 # doesn't support optional values
 # easy function with update/shift
-(let easy_traits_factory_map (lambda '(list_type function_update function_shift function_map) (block '(
+(let easy_traits_factory_map (lambda '(list_type function_update function_shift function_map function_finish) (block '(
   (let init (lambda '(value) (Apply function_map value)))
   (let update (lambda '(value state) (Apply function_update (Apply function_map value) state)))
   (let shift (lambda '(value state) (Apply function_shift (Apply function_map value) state)))
-  (let current (lambda '(state) state))
+  (let current (lambda '(state) (Apply function_finish state)))
   (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
 ))))
 
@@ -112,17 +112,19 @@
 (let count_if_traits_factory_opt (lambda '(list_type) (Apply count_traits_factory list_type (lambda '(value) (Convert (Coalesce value (Bool '0)) 'Uint64)))))
 (let count_all_traits_factory_opt (lambda '(list_type) (Apply count_traits_factory list_type (lambda '(value) (Uint64 '1)))))
 
+(let remove_optional_type (lambda '(type) (MatchType type 'Optional (lambda '() (OptionalItemType type)) (lambda '() type))))
+(let convert_interval_to_decimal (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Decimal '35 '0))))
+(let convert_decimal_to_interval (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval))))
+
 # list_type:type
 # doesn't support optional values
 (let avg_traits_factory_raw (lambda '(list_type) (block '(
-  (let convert_interval_to_decimal (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Decimal '35 '0))))
-  (let convert_decimal_to_interval (lambda '(value) (Unwrap (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval)))))
   (let init (lambda '(value) '((MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double))) (Uint64 '1))))
   (let update (lambda '(value state) '((AggrAdd (Nth state '0) (MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double)))) (Inc (Nth state '1)))))
   (let shift (lambda '(value state) '((- (Nth state '0) value) (Dec (Nth state '1)))))
   (let current (lambda '(state) (MatchType (ListItemType list_type)
                                            'Decimal (lambda '() (Cast (Div (Nth state '0) (Nth state '1)) (ListItemType list_type)))
-                                           'Interval (lambda '() (Apply convert_decimal_to_interval (Div (Nth state '0) (Nth state '1)) ) )
+                                           'Interval (lambda '() (Unwrap (Apply convert_decimal_to_interval (Div (Nth state '0) (Nth state '1)) ) ))
                                            (lambda '() (Div (Nth state '0) (Nth state '1))))))
   (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
 ))))
@@ -531,7 +533,14 @@
 # support optional values
 (let min_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMin one two)))))
 (let max_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMax one two)))))
-(let sum_traits_factory_opt (lambda '(list_type) (Apply easy_traits_factory_map list_type (lambda '(val state) (AggrAdd val state)) (lambda '(val state) (AggrAdd state (Minus val))) (lambda '(x) (WidenIntegral x))  )))
+(let sum_traits_factory_opt (lambda '(list_type) (block '(
+    (let item_type (Apply remove_optional_type (ListItemType list_type)))
+    (return (Apply easy_traits_factory_map list_type 
+        (lambda '(val state) (AggrAdd val state)) 
+        (lambda '(val state) (AggrAdd state (Minus val))) 
+        (lambda '(value) (MatchType item_type 'Interval (lambda '() (Apply convert_interval_to_decimal value)) (lambda '() (WidenIntegral value))))
+        (lambda '(value) (MatchType item_type 'Interval (lambda '() (Apply convert_decimal_to_interval value)) (lambda '() value)))
+))))))
 (let bit_and_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_and_traits_factory_raw)))
 (let bit_or_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_or_traits_factory_raw)))
 (let bit_xor_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_xor_traits_factory_raw)))

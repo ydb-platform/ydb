@@ -1,8 +1,7 @@
 name: PR check
 on: 
   pull_request:
-    types:
-      - opened
+    types: [ opened, edited, reopened ]
     branches:
       - 'main'
     paths:

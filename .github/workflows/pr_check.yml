@@ -6,7 +6,7 @@ on:
     branches:
       - 'main'
     paths:
-      - 'ydb/*'
+      - 'ydb/**'
       
 jobs:
   build_and_test:

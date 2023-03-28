@@ -41,7 +41,7 @@ private:
 
 
 constexpr ui64 INIT_BATCH_ROWS = 1000;
-constexpr i64 DEFAULT_READ_AHEAD_BYTES = 1*1024*1024;
+constexpr i64 DEFAULT_READ_AHEAD_BYTES = 100*1024*1024;
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
 constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
@@ -101,22 +101,36 @@ private:
     }
 
     bool ReadNextBlob() {
-        auto blobRange = ScanIterator->GetNextBlobToRead();
-        if (!blobRange.BlobId.IsValid()) {
-            return false;
+        THashMap<TUnifiedBlobId, std::vector<NBlobCache::TBlobRange>> ranges;
+        while (InFlightReadBytes < MaxReadAheadBytes || !InFlightReads) {
+            auto blobRange = ScanIterator->GetNextBlobToRead();
+            if (!blobRange.BlobId.IsValid()) {
+                break;
+            }
+            ++InFlightReads;
+            InFlightReadBytes += blobRange.Size;
+            ranges[blobRange.BlobId].emplace_back(blobRange);
         }
-
-        auto& externBlobs = ReadMetadataRanges[ReadMetadataIndex]->ExternBlobs;
-        bool fallback = externBlobs && externBlobs->count(blobRange.BlobId);
-
-        NBlobCache::TReadBlobRangeOptions readOpts {
-            .CacheAfterRead = true,
-            .ForceFallback = fallback,
-            .IsBackgroud = false
-        };
-        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, std::move(readOpts)));
-        ++InFlightReads;
-        InFlightReadBytes += blobRange.Size;
+        if (ranges.size()) {
+            auto& externBlobs = ReadMetadataRanges[ReadMetadataIndex]->ExternBlobs;
+            for (auto&& i : ranges) {
+                bool fallback = externBlobs && externBlobs->count(i.first);
+                NBlobCache::TReadBlobRangeOptions readOpts{
+                    .CacheAfterRead = true,
+                    .ForceFallback = fallback,
+                    .IsBackgroud = false
+                };
+                ui32 size = 0;
+                for (auto&& s : i.second) {
+                    size += s.Size;
+                }
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                    "Scan " << ScanActorId << " blobs request:" << i.first << "/" << i.second.size() << "/" << size
+                    << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+                Stats.RequestSent(i.second);
+                Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(i.second), std::move(readOpts)));
+            }
+        }
         return true;
     }
 
@@ -141,10 +155,14 @@ private:
     }
 
     void HandleScan(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " blobs response:"
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
         --InFlightReads;
 
         auto& event = *ev->Get();
         const auto& blobRange = event.BlobRange;
+        Stats.BlobReceived(blobRange, event.FromCache, event.ConstructTime);
 
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
             TString strStatus = NKikimrProto::EReplyStatus_Name(event.Status);
@@ -176,6 +194,10 @@ private:
 
     // Returns true if it was able to produce new batch
     bool ProduceResults() {
+        auto g = Stats.MakeGuard("ProduceResults");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " producing result: start"
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
         Y_VERIFY(!Finished);
         Y_VERIFY(ScanIterator);
 
@@ -237,7 +259,6 @@ private:
             case NKikimrTxDataShard::EScanDataFormat::ARROW: {
                 MakeResult(0);
                 Result->ArrowBatch = batch;
-
                 Rows += batch->num_rows();
                 Bytes += NArrow::GetBatchDataSize(batch);
                 break;
@@ -249,6 +270,9 @@ private:
             Y_VERIFY(numRows == 0, "Got non-empty result batch without last key");
         }
         SendResult(false, false);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " producing result: finished"
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
         return true;
     }
 
@@ -282,14 +306,10 @@ private:
             NextReadMetadata();
         }
 
-        size_t MIN_READY_RESULTS_IN_QUEUE = 3;
+        const size_t MIN_READY_RESULTS_IN_QUEUE = 3;
         if (ScanIterator && ScanIterator->ReadyResultsCount() < MIN_READY_RESULTS_IN_QUEUE) {
             // Make read-ahead requests for the subsequent blobs
-            while (InFlightReadBytes < MaxReadAheadBytes || !InFlightReads) {
-                if (!ReadNextBlob()) {
-                    break;
-                }
-            }
+            ReadNextBlob();
         }
     }
 
@@ -445,6 +465,15 @@ private:
         }
 
         Finished = Result->Finished;
+        if (Finished) {
+            Stats.Finish();
+            ALS_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN) <<
+                "Scanner finished " << ScanActorId << " and sent to " << ComputeActorId
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
+                << " bytes: " << Bytes << " rows: " << Rows << " page faults: " << Result->PageFaults
+                << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
+                << " stats:" << Stats.DebugString();
+        }
 
         Send(ComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); // TODO: FlagSubscribeOnSession ?
         ++InFlightScanDataMessages;
@@ -530,6 +559,113 @@ private:
     i64 InFlightReadBytes = 0;
     i64 InFlightScanDataMessages = 0;
     bool Finished = false;
+
+    class TBlobStats {
+    private:
+        ui64 PartsCount = 0;
+        ui64 Bytes = 0;
+        TDuration ReadingDurationSum;
+        TDuration ReadingDurationMax;
+    public:
+        void Received(const NBlobCache::TBlobRange& br, const TDuration d) {
+            ReadingDurationSum += d;
+            ReadingDurationMax = Max(ReadingDurationMax, d);
+            ++PartsCount;
+            Bytes += br.Size;
+        }
+        TString DebugString() const {
+            TStringBuilder sb;
+            if (PartsCount) {
+                sb << "p_count=" << PartsCount << ";";
+                sb << "bytes=" << Bytes << ";";
+                sb << "d_avg=" << ReadingDurationSum / PartsCount << ";";
+                sb << "d_max=" << ReadingDurationMax << ";";
+            } else {
+                sb << "NO_BLOBS;";
+            }
+            return sb;
+        }
+    };
+
+    class TScanStats {
+    private:
+        THashMap<NBlobCache::TBlobRange, TInstant> StartBlobRequest;
+        const TInstant StartInstant = Now();
+        TInstant FinishInstant = TInstant::Zero();
+        ui32 RequestsCount = 0;
+        ui64 RequestedBytes = 0;
+        TBlobStats CacheBlobs;
+        TBlobStats MissBlobs;
+        THashMap<TString, TDuration> GuardedDurations;
+    public:
+
+        TString DebugString() const {
+            TStringBuilder sb;
+            sb << "SCAN_STATS;";
+            sb << "d=" << FinishInstant - StartInstant << ";";
+            if (RequestsCount) {
+                sb << "req:{count=" << RequestsCount << ";bytes=" << RequestedBytes << ";bytes_avg=" << RequestedBytes / RequestsCount << "};";
+                sb << "cache:{" << CacheBlobs.DebugString() << "};";
+                sb << "miss:{" << MissBlobs.DebugString() << "};";
+            } else {
+                sb << "NO_REQUESTS;";
+            }
+            for (auto&& i : GuardedDurations) {
+                sb << i.first << "=" << i.second << ";";
+            }
+            return sb;
+        }
+
+        class TGuard {
+        private:
+            TScanStats& Owner;
+            const TInstant Start = Now();
+            TString SectionName;
+        public:
+            TGuard(const TString& sectionName, TScanStats& owner)
+                : Owner(owner)
+                , SectionName(sectionName)
+            {
+                
+            }
+
+            ~TGuard() {
+                Owner.GuardedDurations[SectionName] += Now() - Start;
+            }
+        };
+
+        TGuard MakeGuard(const TString& sectionName) {
+            return TGuard(sectionName, *this);
+        }
+
+        void RequestSent(const std::vector<NBlobCache::TBlobRange>& ranges) {
+            ++RequestsCount;
+            const TInstant now = Now();
+            for (auto&& i : ranges) {
+                Y_VERIFY(StartBlobRequest.emplace(i, now).second);
+                RequestedBytes += i.Size;
+            }
+        }
+
+        void BlobReceived(const NBlobCache::TBlobRange& br, const bool fromCache, const TInstant replyInstant) {
+            auto it = StartBlobRequest.find(br);
+            Y_VERIFY(it != StartBlobRequest.end());
+            const TDuration d = replyInstant - it->second;
+            if (fromCache) {
+                CacheBlobs.Received(br, d);
+            } else {
+                MissBlobs.Received(br, d);
+            }
+            StartBlobRequest.erase(it);
+        }
+
+        void Finish() {
+            Y_VERIFY(!FinishInstant);
+            FinishInstant = Now();
+        }
+    };
+
+    TScanStats Stats;
     ui64 Rows = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;

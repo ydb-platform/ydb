@@ -194,12 +194,13 @@ def py_program(unit, py3):
 
 def onpy_srcs(unit, *args):
     """
-        @usage PY_SRCS({| CYTHON_C} { | TOP_LEVEL | NAMESPACE ns} Files...)
+        @usage PY_SRCS({| CYTHONIZE_PY} {| CYTHON_C} { | TOP_LEVEL | NAMESPACE ns} Files...)
 
         PY_SRCS() - is rule to build extended versions of Python interpreters and containing all application code in its executable file. It can be used to collect only the executables but not shared libraries, and, in particular, not to collect the modules that are imported using import directive.
         The main disadvantage is the lack of IDE support; There is also no readline yet.
         The application can be collect from any of the sources from which the C library, and with the help of PY_SRCS .py , .pyx,.proto and .swg files.
         At the same time extensions for Python on C language generating from .pyx and .swg, will be registered in Python's as built-in modules, and sources on .py are stored as static data: when the interpreter starts, the initialization code will add a custom loader of these modules to sys.meta_path.
+        You can compile .py files as Cython sources with CYTHONIZE_PY directive (Use carefully, as build can get too slow). However, with it you won't have profiling info by default. To enable it, add "# cython: profile=True" line to the beginning of every cythonized source.
         By default .pyx files are collected as C++-extensions. To collect them as C (similar to BUILDWITH_CYTHON_C, but with the ability to specify namespace), you must specify the Directive CYTHON_C.
         Building with pyx automatically registers modules, you do not need to call PY_REGISTER for them
         __init__.py never required, but if present (and specified in PY_SRCS), it will be imported when you import package modules with __init__.py Oh.
@@ -439,6 +440,12 @@ def onpy_srcs(unit, *args):
                 cython(cython_args)
                 py_register(unit, mod, py3)
                 process_pyx(filename, path, out_suffix, with_ext)
+
+            if cythonize_py:
+                # Lint checks are not added for cythonized files by default, so we must add it here
+                # as we are doing for regular pys.
+                _23 = 3 if py3 else 2
+                add_python_lint_checks(unit, _23, [path for path, mod in pyxs if path.endswith(".py")] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split())
 
         if py_files2res:
             # Compile original and generated sources into target for proper cython coverage calculation

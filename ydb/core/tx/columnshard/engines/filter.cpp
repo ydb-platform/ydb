@@ -2,6 +2,7 @@
 #include "filter.h"
 #include "indexed_read_data.h"
 #include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/custom_registry.h>
 
 namespace NKikimr::NOlap {
 
@@ -138,8 +139,7 @@ TFilteredBatch FilterPortion(const std::shared_ptr<arrow::RecordBatch>& portion,
     return TFilteredBatch{portion, filter};
 }
 
-TFilteredBatch FilterNotIndexed(const std::shared_ptr<arrow::RecordBatch>& batch, const TReadMetadata& readMetadata)
-{
+TFilteredBatch FilterNotIndexed(const std::shared_ptr<arrow::RecordBatch>& batch, const TReadMetadata& readMetadata) {
     std::vector<bool> less;
     if (readMetadata.LessPredicate) {
         Y_VERIFY(NArrow::HasAllColumns(batch, readMetadata.LessPredicate->Batch->schema()));
@@ -164,6 +164,13 @@ TFilteredBatch FilterNotIndexed(const std::shared_ptr<arrow::RecordBatch>& batch
         return {};
     }
     return TFilteredBatch{batch, filter};
+}
+
+TFilteredBatch EarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch, std::shared_ptr<NSsa::TProgram> ssa) {
+    return TFilteredBatch{
+        .Batch = batch,
+        .Filter = ssa->MakeEarlyFilter(batch, NArrow::GetCustomExecContext())
+    };
 }
 
 void ReplaceDupKeys(std::shared_ptr<arrow::RecordBatch>& batch,

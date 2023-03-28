@@ -113,6 +113,8 @@ ALLOW .* -> vendor/go.temporal.io/sdk
 ALLOW .* -> vendor/go.temporal.io/api
 ALLOW infra/temporal -> vendor/github.com/temporalio/tctl
 ALLOW infra/temporal -> vendor/github.com/temporalio/ui-server/v2
+ALLOW vendor/github.com/temporalio/ui-server -> vendor/github.com/aromanovich/grpc-gateway
+ALLOW vendor/github.com/temporalio/ui-server -> vendor/github.com/aromanovich/gateway
 
 # CONTRIB-2468
 ALLOW .* -> vendor/github.com/DataDog/temporalite

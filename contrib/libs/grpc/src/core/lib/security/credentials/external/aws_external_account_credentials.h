@@ -56,6 +56,7 @@ class AwsExternalAccountCredentials final : public ExternalAccountCredentials {
                                   grpc_error_handle error);
 
   TString audience_;
+  OrphanablePtr<HttpRequest> http_request_;
 
   // Fields of credential source
   TString region_url_;

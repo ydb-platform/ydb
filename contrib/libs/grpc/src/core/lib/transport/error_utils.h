@@ -27,20 +27,6 @@
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/transport/http2_errors.h"
 
-namespace grpc_core {
-
-enum class StreamNetworkState {
-  // Stream was never sent on the wire (e.g., because the transport became
-  // disconnected by the time the call got down to it).
-  kNotSentOnWire,
-  // Stream was sent on the wire but was not seen by the server application
-  // code (e.g., client sent data but then received a GOAWAY with a lower
-  // stream ID).
-  kNotSeenByServer,
-};
-
-}  // namespace grpc_core
-
 /// A utility function to get the status code and message to be returned
 /// to the application.  If not set in the top-level message, looks
 /// through child errors until it finds the first one with these attributes.
@@ -48,7 +34,8 @@ enum class StreamNetworkState {
 /// be populated with the entire error string. If any of the attributes (code,
 /// msg, http_status, error_string) are unneeded, they can be passed as
 /// NULL.
-void grpc_error_get_status(grpc_error_handle error, grpc_millis deadline,
+void grpc_error_get_status(grpc_error_handle error,
+                           grpc_core::Timestamp deadline,
                            grpc_status_code* code, TString* message,
                            grpc_http2_error_code* http_error,
                            const char** error_string);

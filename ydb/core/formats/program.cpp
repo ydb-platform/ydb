@@ -608,10 +608,7 @@ arrow::Status TProgramStep::ApplyAggregates(
     return arrow::Status::OK();
 }
 
-arrow::Status TProgramStep::ApplyFilters(TDatumBatch& batch) const {
-    if (Filters.empty()) {
-        return arrow::Status::OK();
-    }
+arrow::Status TProgramStep::MakeCombinedFilter(TDatumBatch& batch, std::vector<bool>& bits) const {
     std::vector<std::vector<bool>> filters;
     filters.reserve(Filters.size());
     for (auto& colName : Filters) {
@@ -631,11 +628,22 @@ arrow::Status TProgramStep::ApplyFilters(TDatumBatch& batch) const {
         }
     }
 
-    std::vector<bool> bits;
     for (auto& f : filters) {
         bits = NArrow::CombineFilters(std::move(bits), std::move(f));
     }
+    return arrow::Status::OK();
+}
 
+arrow::Status TProgramStep::ApplyFilters(TDatumBatch& batch) const {
+    if (Filters.empty()) {
+        return arrow::Status::OK();
+    }
+
+    std::vector<bool> bits;
+    auto status = MakeCombinedFilter(batch, bits);
+    if (!status.ok()) {
+        return status;
+    }
     if (bits.size()) {
         auto filter = NArrow::MakeFilter(bits);
 
@@ -746,6 +754,35 @@ arrow::Status TProgramStep::Apply(std::shared_ptr<arrow::RecordBatch>& batch, ar
         return arrow::Status::Invalid("Failed to create program result.");
     }
     return arrow::Status::OK();
+}
+
+std::vector<bool> TProgram::MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+                                            arrow::compute::ExecContext* ctx) const
+{
+    try {
+        if (Steps.empty()) {
+            return {};
+        }
+        auto& step = Steps[0];
+        if (step->Filters.empty()) {
+            return {};
+        }
+
+        auto batch = srcBatch;
+        auto rb = TProgramStep::TDatumBatch::FromRecordBatch(batch);
+
+        if (!step->ApplyAssignes(*rb, ctx).ok()) {
+            return {};
+        }
+        std::vector<bool> filter;
+        if (!step->MakeCombinedFilter(*rb, filter).ok()) {
+            return {};
+        }
+        return filter;
+    } catch (const std::exception& ex) {
+        return {};
+    }
+    return {};
 }
 
 }

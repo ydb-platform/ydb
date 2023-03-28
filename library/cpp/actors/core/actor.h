@@ -468,20 +468,24 @@ namespace NActors {
 
         // must be called to wrap any call trasitions from one actor to another
         template<typename TActor, typename TMethod, typename... TArgs>
-        static decltype((std::declval<TActor>().*std::declval<TMethod>())(std::declval<TArgs>()...))
-            InvokeOtherActor(TActor& actor, TMethod&& method, TArgs&&... args) {
-            struct TRecurseContext: TActorContext {
-                TActivationContext* Prev;
+        static std::invoke_result_t<TMethod, TActor, TArgs...> InvokeOtherActor(TActor& actor, TMethod&& method, TArgs&&... args) {
+            struct TRecurseContext : TActorContext {
+                TActivationContext* const Prev;
+
                 TRecurseContext(const TActorId& actorId)
                     : TActorContext(TActivationContext::ActorContextFor(actorId))
-                    , Prev(TlsActivationContext) {
+                    , Prev(TlsActivationContext)
+                {
                     TlsActivationContext = this;
                 }
+
                 ~TRecurseContext() {
+                    Y_VERIFY(TlsActivationContext == this, "TlsActivationContext mismatch; probably InvokeOtherActor was invoked from a coroutine");
                     TlsActivationContext = Prev;
                 }
             } context(actor.SelfId());
-            return (actor.*method)(std::forward<TArgs>(args)...);
+
+            return std::invoke(std::forward<TMethod>(method), actor, std::forward<TArgs>(args)...);
         }
 
         virtual void Registered(TActorSystem* sys, const TActorId& owner);

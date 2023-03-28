@@ -19,14 +19,14 @@
 #include <grpc/event_engine/event_engine.h>
 
 #include "src/core/lib/address_utils/sockaddr_utils.h"
-#error #include "src/core/lib/event_engine/event_engine_factory.h"
+#include "src/core/lib/event_engine/event_engine_factory.h"
 #include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/iomgr/error.h"
 #error #include "src/core/lib/iomgr/event_engine/promise.h"
 #include "src/core/lib/iomgr/event_engine/resolved_address_internal.h"
 #error #include "src/core/lib/iomgr/event_engine/resolver.h"
 #include "src/core/lib/iomgr/resolve_address.h"
-#include "src/core/lib/iomgr/resolve_address_impl.h"
+#error #include "src/core/lib/iomgr/resolve_address_impl.h"
 #include "src/core/lib/iomgr/work_serializer.h"
 #include "src/core/lib/surface/init.h"
 #include "src/core/lib/transport/error_utils.h"
@@ -67,7 +67,7 @@ class EventEngineDNSRequest : DNSRequest {
         default_port_, y_absl::InfiniteFuture());
   }
 
-  // TOOD(hork): implement cancellation; currently it's a no-op
+  // TODO(hork): implement cancellation; currently it's a no-op
   void Orphan() override { Unref(); }
 
  private:

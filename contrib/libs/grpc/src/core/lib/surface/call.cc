@@ -51,9 +51,9 @@
 #include "src/core/lib/iomgr/timer.h"
 #include "src/core/lib/profiling/timers.h"
 #include "src/core/lib/resource_quota/arena.h"
+#include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/slice/slice_split.h"
 #include "src/core/lib/slice/slice_string_helpers.h"
-#include "src/core/lib/slice/slice_utils.h"
 #include "src/core/lib/surface/api_trace.h"
 #include "src/core/lib/surface/call_test_only.h"
 #include "src/core/lib/surface/channel.h"
@@ -211,7 +211,7 @@ struct grpc_call {
   /* Contexts for various subsystems (security, tracing, ...). */
   grpc_call_context_element context[GRPC_CONTEXT_COUNT] = {};
 
-  grpc_millis send_deadline;
+  grpc_core::Timestamp send_deadline;
 
   grpc_core::ManualConstructor<grpc_core::SliceBufferByteStream> sending_stream;
 
@@ -301,6 +301,7 @@ static void add_init_error(grpc_error_handle* composite,
 }
 
 void* grpc_call_arena_alloc(grpc_call* call, size_t size) {
+  grpc_core::ExecCtx exec_ctx;
   return call->arena->Alloc(size);
 }
 
@@ -373,7 +374,7 @@ grpc_error_handle grpc_call_create(grpc_call_create_args* args,
     call->final_op.server.core_server = args->server;
   }
 
-  grpc_millis send_deadline = args->send_deadline;
+  grpc_core::Timestamp send_deadline = args->send_deadline;
   bool immediately_cancel = false;
 
   if (args->parent != nullptr) {
@@ -833,8 +834,9 @@ class PublishToAppEncoder {
     Append(grpc_core::GrpcPreviousRpcAttemptsMetadata::key(), count);
   }
 
-  void Encode(grpc_core::GrpcRetryPushbackMsMetadata, grpc_millis count) {
-    Append(grpc_core::GrpcRetryPushbackMsMetadata::key(), count);
+  void Encode(grpc_core::GrpcRetryPushbackMsMetadata,
+              grpc_core::Duration count) {
+    Append(grpc_core::GrpcRetryPushbackMsMetadata::key(), count.millis());
   }
 
   void Encode(grpc_core::LbTokenMetadata, const grpc_core::Slice& slice) {
@@ -1260,7 +1262,7 @@ static void receiving_initial_metadata_ready(void* bctlp,
     GPR_TIMER_SCOPE("validate_filtered_metadata", 0);
     validate_filtered_metadata(bctl);
 
-    y_absl::optional<grpc_millis> deadline =
+    y_absl::optional<grpc_core::Timestamp> deadline =
         md->get(grpc_core::GrpcTimeoutMetadata());
     if (deadline.has_value() && !call->is_client) {
       call->send_deadline = *deadline;
@@ -1443,8 +1445,11 @@ static grpc_call_error call_start_batch(grpc_call* call, const grpc_op* ops,
           error = GRPC_CALL_ERROR_INVALID_METADATA;
           goto done_with_error;
         }
+        // Ignore any te metadata key value pairs specified.
+        call->send_initial_metadata.Remove(grpc_core::TeMetadata());
         /* TODO(ctiller): just make these the same variable? */
-        if (call->is_client && call->send_deadline != GRPC_MILLIS_INF_FUTURE) {
+        if (call->is_client &&
+            call->send_deadline != grpc_core::Timestamp::InfFuture()) {
           call->send_initial_metadata.Set(grpc_core::GrpcTimeoutMetadata(),
                                           call->send_deadline);
         }
@@ -1570,6 +1575,8 @@ static grpc_call_error call_start_batch(grpc_call* call, const grpc_op* ops,
             grpc_core::GrpcStatusMetadata(),
             op->data.send_status_from_server.status);
 
+        // Ignore any te metadata key value pairs specified.
+        call->send_trailing_metadata.Remove(grpc_core::TeMetadata());
         stream_op_payload->send_trailing_metadata.send_trailing_metadata =
             &call->send_trailing_metadata;
         stream_op_payload->send_trailing_metadata.sent =

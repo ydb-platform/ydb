@@ -985,11 +985,6 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
 
     // Set x-snapshot to switched portions
     if (changes->IsCompaction()) {
-        Y_VERIFY(changes->SrcGranule);
-
-        /// @warning set granule not in split even if tx would be aborted later
-        GranulesInSplit.erase(changes->SrcGranule->Granule);
-
         Y_VERIFY(changes->CompactionInfo);
         for (auto& portionInfo : changes->SwitchedPortions) {
             Y_VERIFY(portionInfo.IsActive());
@@ -1263,6 +1258,16 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
     return true;
 }
 
+void TColumnEngineForLogs::FreeLocks(std::shared_ptr<TColumnEngineChanges> indexChanges) {
+    auto changes = std::static_pointer_cast<TChanges>(indexChanges);
+
+    if (changes->IsCompaction()) {
+        // Set granule not in split. Do not block writes in it.
+        Y_VERIFY(changes->SrcGranule);
+        GranulesInSplit.erase(changes->SrcGranule->Granule);
+    }
+}
+
 bool TColumnEngineForLogs::SetGranule(const TGranuleRecord& rec, bool apply) {
     TMark mark(rec.Mark);
 
@@ -1456,6 +1461,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                 auto& portionInfo = portions.find(portion)->second;
 
                 TPortionInfo outPortion;
+                outPortion.Meta = portionInfo.Meta;
                 outPortion.Records.reserve(columnIds.size());
 
                 for (auto& rec : portionInfo.Records) {
@@ -1464,6 +1470,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                         outPortion.Records.push_back(rec);
                     }
                 }
+                Y_VERIFY(outPortion.Produced());
                 out->Portions.emplace_back(std::move(outPortion));
                 granuleHasDataForSnaphsot = true;
             }

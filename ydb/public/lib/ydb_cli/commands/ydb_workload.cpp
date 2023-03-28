@@ -136,12 +136,12 @@ void TWorkloadCommand::WorkerFn(int taskId, TWorkloadQueryGenPtr workloadGen, co
                 // }
                 break;
             }
+            if (retryCount > 0) {
+                TotalRetries += retryCount;
+                WindowRetryCount += retryCount;
+            }
+            retryCount = -1;
         }
-        if (retryCount > 0) {
-            TotalRetries += retryCount;
-            WindowRetryCount += retryCount;
-        }
-        retryCount = -1;
         if (it != queryInfoList.end()) {
             continue;
         }

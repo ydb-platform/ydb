@@ -21,6 +21,9 @@ TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
             settings.LogicalId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
         } else if (name == SinglePartitionSettingName) {
             settings.SinglePartition = true;
+        } else if (name == WideChannelsSettingName) {
+            settings.WideChannels = true;
+            settings.OutputNarrowType = tuple.Value().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         }
     }
 
@@ -59,6 +62,14 @@ NNodes::TCoNameValueTupleList TDqStageSettings::BuildNode(TExprContext& ctx, TPo
     if (SinglePartition) {
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(SinglePartitionSettingName)
+            .Done());
+    }
+
+    if (WideChannels) {
+        YQL_ENSURE(OutputNarrowType);
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(WideChannelsSettingName)
+            .Value(ExpandType(pos, *OutputNarrowType, ctx))
             .Done());
     }
 

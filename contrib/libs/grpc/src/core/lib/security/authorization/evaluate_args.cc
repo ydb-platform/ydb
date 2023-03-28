@@ -22,7 +22,7 @@
 #include "src/core/lib/address_utils/sockaddr_utils.h"
 #include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/security/credentials/tls/tls_utils.h"
-#include "src/core/lib/slice/slice_utils.h"
+#include "src/core/lib/slice/slice_internal.h"
 
 namespace grpc_core {
 
@@ -88,16 +88,6 @@ y_absl::string_view EvaluateArgs::GetPath() const {
     }
   }
   return y_absl::string_view();
-}
-
-y_absl::string_view EvaluateArgs::GetHost() const {
-  y_absl::string_view host;
-  if (metadata_ != nullptr) {
-    if (auto* host_md = metadata_->get_pointer(HostMetadata())) {
-      host = host_md->as_string_view();
-    }
-  }
-  return host;
 }
 
 y_absl::string_view EvaluateArgs::GetAuthority() const {

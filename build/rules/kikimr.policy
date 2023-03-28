@@ -144,6 +144,7 @@ ALLOW linux-aux-subset-3 -> kikimr/public/sdk/go/ydb.*
 ALLOW linux-ios-android-cygwin -> kikimr/public/sdk/go/ydb.*
 ALLOW mail/logconsumers/actdb_consumer/lbreader -> kikimr/public/sdk/go/ydb.*
 ALLOW mds/perekup -> kikimr/public/sdk/go/ydb.*
+ALLOW mds/baas -> kikimr/public/sdk/go/ydb.*
 ALLOW mds/s3/goose/internal/db/ydb -> kikimr/public/sdk/go/ydb.*
 ALLOW mds/s3/goose/internal/interconnect/logbroker/persqueue -> kikimr/public/sdk/go/ydb.*
 ALLOW mds/s3/goose/internal/interconnect/logbroker/persqueue/gotest -> kikimr/public/sdk/go/ydb.*

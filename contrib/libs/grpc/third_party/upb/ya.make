@@ -2,7 +2,10 @@
 
 LIBRARY()
 
-LICENSE(BSD-3-Clause)
+LICENSE(
+    BSD-3-Clause AND
+    MIT
+)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
@@ -29,6 +32,9 @@ ENDIF()
 SRCS(
     src/core/ext/upb-generated/google/protobuf/descriptor.upb.c
     src/core/ext/upbdefs-generated/google/protobuf/descriptor.upbdefs.c
+    third_party/upb/third_party/utf8_range/naive.c
+    third_party/upb/third_party/utf8_range/range2-neon.c
+    third_party/upb/third_party/utf8_range/range2-sse.c
     third_party/upb/upb/decode.c
     third_party/upb/upb/decode_fast.c
     third_party/upb/upb/def.c

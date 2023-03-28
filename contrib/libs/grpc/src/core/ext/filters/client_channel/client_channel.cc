@@ -63,8 +63,8 @@
 #include "src/core/lib/iomgr/work_serializer.h"
 #include "src/core/lib/profiling/timers.h"
 #include "src/core/lib/resolver/resolver_registry.h"
-#include "src/core/lib/service_config/service_config.h"
 #include "src/core/lib/service_config/service_config_call_data.h"
+#include "src/core/lib/service_config/service_config_impl.h"
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/slice/slice_string_helpers.h"
 #include "src/core/lib/surface/channel.h"
@@ -190,7 +190,7 @@ class ClientChannel::CallData {
 
   grpc_slice path_;  // Request path.
   gpr_cycle_counter call_start_time_;
-  grpc_millis deadline_;
+  Timestamp deadline_;
   Arena* arena_;
   grpc_call_stack* owning_call_;
   CallCombiner* call_combiner_;
@@ -233,6 +233,7 @@ class ClientChannel::CallData {
 
 const grpc_channel_filter ClientChannel::kFilterVtable = {
     ClientChannel::CallData::StartTransportStreamOpBatch,
+    nullptr,
     ClientChannel::StartTransportOp,
     sizeof(ClientChannel::CallData),
     ClientChannel::CallData::Init,
@@ -372,7 +373,7 @@ class DynamicTerminationFilter::CallData {
   ~CallData() { grpc_slice_unref_internal(path_); }
 
   grpc_slice path_;  // Request path.
-  grpc_millis deadline_;
+  Timestamp deadline_;
   Arena* arena_;
   grpc_call_stack* owning_call_;
   CallCombiner* call_combiner_;
@@ -383,6 +384,7 @@ class DynamicTerminationFilter::CallData {
 
 const grpc_channel_filter DynamicTerminationFilter::kFilterVtable = {
     DynamicTerminationFilter::CallData::StartTransportStreamOpBatch,
+    nullptr,
     DynamicTerminationFilter::StartTransportOp,
     sizeof(DynamicTerminationFilter::CallData),
     DynamicTerminationFilter::CallData::Init,
@@ -415,7 +417,7 @@ class ClientChannel::ResolverResultHandler : public Resolver::ResultHandler {
   }
 
   void ReportResult(Resolver::Result result) override
-      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
     chand_->OnResolverResultChangedLocked(std::move(result));
   }
 
@@ -497,7 +499,7 @@ class ClientChannel::SubchannelWrapper : public SubchannelInterface {
   void WatchConnectivityState(
       grpc_connectivity_state initial_state,
       std::unique_ptr<ConnectivityStateWatcherInterface> watcher) override
-      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
     auto& watcher_wrapper = watcher_map_[watcher.get()];
     GPR_ASSERT(watcher_wrapper == nullptr);
     watcher_wrapper = new WatcherWrapper(std::move(watcher),
@@ -510,7 +512,7 @@ class ClientChannel::SubchannelWrapper : public SubchannelInterface {
   }
 
   void CancelConnectivityStateWatch(ConnectivityStateWatcherInterface* watcher)
-      override Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      override Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
     auto it = watcher_map_.find(watcher);
     GPR_ASSERT(it != watcher_map_.end());
     subchannel_->CancelConnectivityStateWatch(health_check_service_name_,
@@ -563,10 +565,10 @@ class ClientChannel::SubchannelWrapper : public SubchannelInterface {
     ~WatcherWrapper() override {
       auto* parent = parent_.release();  // ref owned by lambda
       parent->chand_->work_serializer_->Run(
-          [parent]()
-              Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(parent_->chand_->work_serializer_) {
-                parent->Unref(DEBUG_LOCATION, "WatcherWrapper");
-              },
+          [parent]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(
+              *parent_->chand_->work_serializer_) {
+            parent->Unref(DEBUG_LOCATION, "WatcherWrapper");
+          },
           DEBUG_LOCATION);
     }
 
@@ -579,11 +581,11 @@ class ClientChannel::SubchannelWrapper : public SubchannelInterface {
       }
       Ref().release();  // ref owned by lambda
       parent_->chand_->work_serializer_->Run(
-          [this]()
-              Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(parent_->chand_->work_serializer_) {
-                ApplyUpdateInControlPlaneWorkSerializer();
-                Unref();
-              },
+          [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(
+              *parent_->chand_->work_serializer_) {
+            ApplyUpdateInControlPlaneWorkSerializer();
+            Unref();
+          },
           DEBUG_LOCATION);
     }
 
@@ -605,7 +607,7 @@ class ClientChannel::SubchannelWrapper : public SubchannelInterface {
 
    private:
     void ApplyUpdateInControlPlaneWorkSerializer()
-        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(parent_->chand_->work_serializer_) {
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*parent_->chand_->work_serializer_) {
       if (GRPC_TRACE_FLAG_ENABLED(grpc_client_channel_routing_trace)) {
         gpr_log(GPR_INFO,
                 "chand=%p: processing connectivity change in work serializer "
@@ -665,7 +667,7 @@ class ClientChannel::SubchannelWrapper : public SubchannelInterface {
   // CancelConnectivityStateWatch() with its watcher, we know the
   // corresponding WrapperWatcher to cancel on the underlying subchannel.
   std::map<ConnectivityStateWatcherInterface*, WatcherWrapper*> watcher_map_
-      Y_ABSL_GUARDED_BY(&ClientChannel::work_serializer_);
+      Y_ABSL_GUARDED_BY(*chand_->work_serializer_);
 };
 
 //
@@ -695,7 +697,7 @@ ClientChannel::ExternalConnectivityWatcher::ExternalConnectivityWatcher(
   }
   // Pass the ref from creating the object to Start().
   chand_->work_serializer_->Run(
-      [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
         // The ref is passed to AddWatcherLocked().
         AddWatcherLocked();
       },
@@ -745,7 +747,7 @@ void ClientChannel::ExternalConnectivityWatcher::Notify(
   // automatically remove all watchers in that case.
   if (state != GRPC_CHANNEL_SHUTDOWN) {
     chand_->work_serializer_->Run(
-        [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+        [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
           RemoveWatcherLocked();
         },
         DEBUG_LOCATION);
@@ -761,7 +763,7 @@ void ClientChannel::ExternalConnectivityWatcher::Cancel() {
   ExecCtx::Run(DEBUG_LOCATION, on_complete_, GRPC_ERROR_CANCELLED);
   // Hop back into the work_serializer to clean up.
   chand_->work_serializer_->Run(
-      [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
         RemoveWatcherLocked();
       },
       DEBUG_LOCATION);
@@ -792,7 +794,7 @@ class ClientChannel::ConnectivityWatcherAdder {
         watcher_(std::move(watcher)) {
     GRPC_CHANNEL_STACK_REF(chand_->owning_stack_, "ConnectivityWatcherAdder");
     chand_->work_serializer_->Run(
-        [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+        [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
           AddWatcherLocked();
         },
         DEBUG_LOCATION);
@@ -800,7 +802,7 @@ class ClientChannel::ConnectivityWatcherAdder {
 
  private:
   void AddWatcherLocked()
-      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
     chand_->state_tracker_.AddWatcher(initial_state_, std::move(watcher_));
     GRPC_CHANNEL_STACK_UNREF(chand_->owning_stack_, "ConnectivityWatcherAdder");
     delete this;
@@ -822,7 +824,7 @@ class ClientChannel::ConnectivityWatcherRemover {
       : chand_(chand), watcher_(watcher) {
     GRPC_CHANNEL_STACK_REF(chand_->owning_stack_, "ConnectivityWatcherRemover");
     chand_->work_serializer_->Run(
-        [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+        [this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
           RemoveWatcherLocked();
         },
         DEBUG_LOCATION);
@@ -830,7 +832,7 @@ class ClientChannel::ConnectivityWatcherRemover {
 
  private:
   void RemoveWatcherLocked()
-      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
     chand_->state_tracker_.RemoveWatcher(watcher_);
     GRPC_CHANNEL_STACK_UNREF(chand_->owning_stack_,
                              "ConnectivityWatcherRemover");
@@ -859,7 +861,7 @@ class ClientChannel::ClientChannelControlHelper
 
   RefCountedPtr<SubchannelInterface> CreateSubchannel(
       ServerAddress address, const grpc_channel_args& args) override
-      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
     if (chand_->resolver_ == nullptr) return nullptr;  // Shutting down.
     // Determine health check service name.
     y_absl::optional<TString> health_check_service_name;
@@ -930,7 +932,7 @@ class ClientChannel::ClientChannelControlHelper
   void UpdateState(
       grpc_connectivity_state state, const y_absl::Status& status,
       std::unique_ptr<LoadBalancingPolicy::SubchannelPicker> picker) override
-      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
     if (chand_->resolver_ == nullptr) return;  // Shutting down.
     if (GRPC_TRACE_FLAG_ENABLED(grpc_client_channel_routing_trace)) {
       const char* extra = chand_->disconnect_error_ == GRPC_ERROR_NONE
@@ -948,7 +950,7 @@ class ClientChannel::ClientChannelControlHelper
   }
 
   void RequestReresolution() override
-      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
     if (chand_->resolver_ == nullptr) return;  // Shutting down.
     if (GRPC_TRACE_FLAG_ENABLED(grpc_client_channel_routing_trace)) {
       gpr_log(GPR_INFO, "chand=%p: started name re-resolving", chand_);
@@ -961,7 +963,7 @@ class ClientChannel::ClientChannelControlHelper
   }
 
   void AddTraceEvent(TraceSeverity severity, y_absl::string_view message) override
-      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand_->work_serializer_) {
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand_->work_serializer_) {
     if (chand_->resolver_ == nullptr) return;  // Shutting down.
     if (chand_->channelz_node_ != nullptr) {
       chand_->channelz_node_->AddTraceEvent(
@@ -1034,6 +1036,8 @@ ClientChannel::ClientChannel(grpc_channel_element_args* args,
           ClientChannelFactory::GetFromChannelArgs(args->channel_args)),
       channelz_node_(GetChannelzNode(args->channel_args)),
       interested_parties_(grpc_pollset_set_create()),
+      service_config_parser_index_(
+          internal::ClientChannelServiceConfigParser::ParserIndex()),
       work_serializer_(std::make_shared<WorkSerializer>()),
       state_tracker_("client_channel", GRPC_CHANNEL_IDLE),
       subchannel_pool_(GetSubchannelPool(args->channel_args)) {
@@ -1056,7 +1060,7 @@ ClientChannel::ClientChannel(grpc_channel_element_args* args,
   if (service_config_json == nullptr) service_config_json = "{}";
   *error = GRPC_ERROR_NONE;
   default_service_config_ =
-      ServiceConfig::Create(args->channel_args, service_config_json, error);
+      ServiceConfigImpl::Create(args->channel_args, service_config_json, error);
   if (*error != GRPC_ERROR_NONE) {
     default_service_config_.reset();
     return;
@@ -1081,7 +1085,8 @@ ClientChannel::ClientChannel(grpc_channel_element_args* args,
   }
   // Make sure the URI to resolve is valid, so that we know that
   // resolver creation will succeed later.
-  if (!ResolverRegistry::IsValidTarget(uri_to_resolve_)) {
+  if (!CoreConfiguration::Get().resolver_registry().IsValidTarget(
+          uri_to_resolve_)) {
     *error = GRPC_ERROR_CREATE_FROM_CPP_STRING(
         y_absl::StrCat("the target uri is not valid: ", uri_to_resolve_));
     return;
@@ -1100,7 +1105,9 @@ ClientChannel::ClientChannel(grpc_channel_element_args* args,
   const char* default_authority =
       grpc_channel_args_find_string(channel_args_, GRPC_ARG_DEFAULT_AUTHORITY);
   if (default_authority == nullptr) {
-    default_authority_ = ResolverRegistry::GetDefaultAuthority(server_uri);
+    default_authority_ =
+        CoreConfiguration::Get().resolver_registry().GetDefaultAuthority(
+            server_uri);
   } else {
     default_authority_ = default_authority;
   }
@@ -1148,6 +1155,24 @@ RefCountedPtr<LoadBalancingPolicy::Config> ChooseLbPolicy(
   } else {
     policy_name = grpc_channel_args_find_string(resolver_result.args,
                                                 GRPC_ARG_LB_POLICY_NAME);
+    bool requires_config = false;
+    if (policy_name != nullptr &&
+        (!LoadBalancingPolicyRegistry::LoadBalancingPolicyExists(
+             policy_name, &requires_config) ||
+         requires_config)) {
+      if (requires_config) {
+        gpr_log(GPR_ERROR,
+                "LB policy: %s passed through channel_args must not "
+                "require a config. Using pick_first instead.",
+                policy_name);
+      } else {
+        gpr_log(GPR_ERROR,
+                "LB policy: %s passed through channel_args does not exist. "
+                "Using pick_first instead.",
+                policy_name);
+      }
+      policy_name = "pick_first";
+    }
   }
   // Use pick_first if nothing was specified and we didn't select grpclb
   // above.
@@ -1165,12 +1190,9 @@ RefCountedPtr<LoadBalancingPolicy::Config> ChooseLbPolicy(
   //   already verified that the policy does not require a config.
   // - One of the hard-coded values here, all of which are known to not
   //   require a config.
-  // - A channel arg, in which case the application did something that
-  //   is a misuse of our API.
-  // In the first two cases, these assertions will always be true.  In
-  // the last case, this is probably fine for now.
-  // TODO(roth): If the last case becomes a problem, add better error
-  // handling here.
+  // - A channel arg, in which case we check that the specified policy exists
+  //   and accepts an empty config. If not, we revert to using pick_first
+  //   lb_policy
   GPR_ASSERT(lb_policy_config != nullptr);
   GPR_ASSERT(parse_error == GRPC_ERROR_NONE);
   return lb_policy_config;
@@ -1258,7 +1280,7 @@ void ClientChannel::OnResolverResultChangedLocked(Resolver::Result result) {
     const internal::ClientChannelGlobalParsedConfig* parsed_service_config =
         static_cast<const internal::ClientChannelGlobalParsedConfig*>(
             service_config->GetGlobalParsedConfig(
-                internal::ClientChannelServiceConfigParser::ParserIndex()));
+                service_config_parser_index_));
     // Choose LB policy config.
     RefCountedPtr<LoadBalancingPolicy::Config> lb_policy_config =
         ChooseLbPolicy(result, parsed_service_config);
@@ -1418,21 +1440,19 @@ void ClientChannel::RemoveResolverQueuedCall(ResolverQueuedCall* to_remove,
 
 void ClientChannel::UpdateServiceConfigInControlPlaneLocked(
     RefCountedPtr<ServiceConfig> service_config,
-    RefCountedPtr<ConfigSelector> config_selector, const char* lb_policy_name) {
-  UniquePtr<char> service_config_json(
-      gpr_strdup(service_config->json_string().c_str()));
+    RefCountedPtr<ConfigSelector> config_selector, TString lb_policy_name) {
+  TString service_config_json(service_config->json_string());
   if (GRPC_TRACE_FLAG_ENABLED(grpc_client_channel_routing_trace)) {
     gpr_log(GPR_INFO,
             "chand=%p: resolver returned updated service config: \"%s\"", this,
-            service_config_json.get());
+            service_config_json.c_str());
   }
   // Save service config.
   saved_service_config_ = std::move(service_config);
   // Swap out the data used by GetChannelInfo().
-  UniquePtr<char> lb_policy_name_owned(gpr_strdup(lb_policy_name));
   {
     MutexLock lock(&info_mu_);
-    info_lb_policy_name_ = std::move(lb_policy_name_owned);
+    info_lb_policy_name_ = std::move(lb_policy_name);
     info_service_config_json_ = std::move(service_config_json);
   }
   // Save config selector.
@@ -1522,7 +1542,7 @@ void ClientChannel::CreateResolverLocked() {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_client_channel_routing_trace)) {
     gpr_log(GPR_INFO, "chand=%p: starting name resolution", this);
   }
-  resolver_ = ResolverRegistry::CreateResolver(
+  resolver_ = CoreConfiguration::Get().resolver_registry().CreateResolver(
       uri_to_resolve_.c_str(), channel_args_, interested_parties_,
       work_serializer_, y_absl::make_unique<ResolverResultHandler>(this));
   // Since the validity of the args was checked when the channel was created,
@@ -1661,7 +1681,7 @@ grpc_error_handle ClientChannel::DoPingLocked(grpc_transport_op* op) {
       &result,
       // Complete pick.
       [op](LoadBalancingPolicy::PickResult::Complete* complete_pick)
-          Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&ClientChannel::work_serializer_) {
+          Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*ClientChannel::work_serializer_) {
             SubchannelWrapper* subchannel = static_cast<SubchannelWrapper*>(
                 complete_pick->subchannel.get());
             RefCountedPtr<ConnectedSubchannel> connected_subchannel =
@@ -1753,7 +1773,7 @@ void ClientChannel::StartTransportOp(grpc_channel_element* elem,
   // Pop into control plane work_serializer for remaining ops.
   GRPC_CHANNEL_STACK_REF(chand->owning_stack_, "start_transport_op");
   chand->work_serializer_->Run(
-      [chand, op]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand->work_serializer_) {
+      [chand, op]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand->work_serializer_) {
         chand->StartTransportOpLocked(op);
       },
       DEBUG_LOCATION);
@@ -1764,11 +1784,11 @@ void ClientChannel::GetChannelInfo(grpc_channel_element* elem,
   ClientChannel* chand = static_cast<ClientChannel*>(elem->channel_data);
   MutexLock lock(&chand->info_mu_);
   if (info->lb_policy_name != nullptr) {
-    *info->lb_policy_name = gpr_strdup(chand->info_lb_policy_name_.get());
+    *info->lb_policy_name = gpr_strdup(chand->info_lb_policy_name_.c_str());
   }
   if (info->service_config_json != nullptr) {
     *info->service_config_json =
-        gpr_strdup(chand->info_service_config_json_.get());
+        gpr_strdup(chand->info_service_config_json_.c_str());
   }
 }
 
@@ -1815,7 +1835,7 @@ grpc_connectivity_state ClientChannel::CheckConnectivityState(
   if (out == GRPC_CHANNEL_IDLE && try_to_connect) {
     GRPC_CHANNEL_STACK_REF(owning_stack_, "TryToConnect");
     work_serializer_->Run([this]() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(
-                              work_serializer_) { TryToConnectLocked(); },
+                              *work_serializer_) { TryToConnectLocked(); },
                           DEBUG_LOCATION);
   }
   return out;
@@ -1842,7 +1862,7 @@ ClientChannel::CallData::CallData(grpc_call_element* elem,
     : deadline_state_(elem, args,
                       GPR_LIKELY(chand.deadline_checking_enabled_)
                           ? args.deadline
-                          : GRPC_MILLIS_INF_FUTURE),
+                          : Timestamp::InfFuture()),
       path_(grpc_slice_ref_internal(args.path)),
       call_start_time_(args.start_time),
       deadline_(args.deadline),
@@ -2203,13 +2223,14 @@ grpc_error_handle ClientChannel::CallData::ApplyServiceConfigToCallLocked(
     // Apply our own method params to the call.
     auto* method_params = static_cast<ClientChannelMethodParsedConfig*>(
         service_config_call_data->GetMethodParsedConfig(
-            internal::ClientChannelServiceConfigParser::ParserIndex()));
+            chand->service_config_parser_index_));
     if (method_params != nullptr) {
       // If the deadline from the service config is shorter than the one
       // from the client API, reset the deadline timer.
-      if (chand->deadline_checking_enabled_ && method_params->timeout() != 0) {
-        const grpc_millis per_method_deadline =
-            grpc_cycle_counter_to_millis_round_up(call_start_time_) +
+      if (chand->deadline_checking_enabled_ &&
+          method_params->timeout() != Duration::Zero()) {
+        const Timestamp per_method_deadline =
+            Timestamp::FromCycleCounterRoundUp(call_start_time_) +
             method_params->timeout();
         if (per_method_deadline < deadline_) {
           deadline_ = per_method_deadline;
@@ -2321,7 +2342,7 @@ bool ClientChannel::CallData::CheckResolutionLocked(grpc_call_element* elem,
               auto* chand = static_cast<ClientChannel*>(arg);
               chand->work_serializer_->Run(
                   [chand]()
-                      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(chand->work_serializer_) {
+                      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(*chand->work_serializer_) {
                         chand->CheckConnectivityState(/*try_to_connect=*/true);
                         GRPC_CHANNEL_STACK_UNREF(chand->owning_stack_,
                                                  "CheckResolutionLocked");
@@ -2406,6 +2427,7 @@ class ClientChannel::LoadBalancedCall::Metadata
   explicit Metadata(grpc_metadata_batch* batch) : batch_(batch) {}
 
   void Add(y_absl::string_view key, y_absl::string_view value) override {
+    if (batch_ == nullptr) return;
     // Gross, egregious hack to support legacy grpclb behavior.
     // TODO(ctiller): Use a promise context for this once that plumbing is done.
     if (key == GrpcLbClientStatsMetadata::key()) {
@@ -2426,6 +2448,7 @@ class ClientChannel::LoadBalancedCall::Metadata
 
   std::vector<std::pair<TString, TString>> TestOnlyCopyToVector()
       override {
+    if (batch_ == nullptr) return {};
     Encoder encoder;
     batch_->Encode(&encoder);
     return encoder.Take();
@@ -2433,6 +2456,7 @@ class ClientChannel::LoadBalancedCall::Metadata
 
   y_absl::optional<y_absl::string_view> Lookup(y_absl::string_view key,
                                            TString* buffer) const override {
+    if (batch_ == nullptr) return y_absl::nullopt;
     return batch_->GetStringValue(key, buffer);
   }
 
@@ -2451,7 +2475,8 @@ class ClientChannel::LoadBalancedCall::Metadata
                         TString(value_slice.as_string_view()));
     }
 
-    void Encode(GrpcTimeoutMetadata, grpc_millis) {}
+    void Encode(GrpcTimeoutMetadata,
+                const typename GrpcTimeoutMetadata::ValueType&) {}
     void Encode(HttpPathMetadata, const Slice&) {}
     void Encode(HttpMethodMetadata,
                 const typename HttpMethodMetadata::ValueType&) {}
@@ -2502,7 +2527,8 @@ class ClientChannel::LoadBalancedCall::BackendMetricAccessor
       : lb_call_(lb_call) {}
 
   const BackendMetricData* GetBackendMetricData() override {
-    if (lb_call_->backend_metric_data_ == nullptr) {
+    if (lb_call_->backend_metric_data_ == nullptr &&
+        lb_call_->recv_trailing_metadata_ != nullptr) {
       if (const auto* md = lb_call_->recv_trailing_metadata_->get_pointer(
               XEndpointLoadMetricsBinMetadata())) {
         lb_call_->backend_metric_data_ =
@@ -2572,6 +2598,12 @@ ClientChannel::LoadBalancedCall::~LoadBalancedCall() {
 }
 
 void ClientChannel::LoadBalancedCall::Orphan() {
+  // If the recv_trailing_metadata op was never started, then notify
+  // about call completion here, as best we can.  We assume status
+  // CANCELLED in this case.
+  if (recv_trailing_metadata_ == nullptr) {
+    RecordCallCompletion(y_absl::CancelledError("call cancelled"));
+  }
   // Compute latency and report it to the tracer.
   if (call_attempt_tracer_ != nullptr) {
     gpr_timespec latency =
@@ -2883,22 +2915,7 @@ void ClientChannel::LoadBalancedCall::RecvTrailingMetadataReady(
         status = y_absl::Status(static_cast<y_absl::StatusCode>(code), message);
       }
     }
-    // If we have a tracer, notify it.
-    if (self->call_attempt_tracer_ != nullptr) {
-      self->call_attempt_tracer_->RecordReceivedTrailingMetadata(
-          status, self->recv_trailing_metadata_,
-          *self->transport_stream_stats_);
-    }
-    // If the LB policy requested a callback for trailing metadata, invoke
-    // the callback.
-    if (self->lb_subchannel_call_tracker_ != nullptr) {
-      Metadata trailing_metadata(self->recv_trailing_metadata_);
-      BackendMetricAccessor backend_metric_accessor(self);
-      LoadBalancingPolicy::SubchannelCallTrackerInterface::FinishArgs args = {
-          status, &trailing_metadata, &backend_metric_accessor};
-      self->lb_subchannel_call_tracker_->Finish(args);
-      self->lb_subchannel_call_tracker_.reset();
-    }
+    self->RecordCallCompletion(status);
   }
   // Chain to original callback.
   if (self->failure_error_ != GRPC_ERROR_NONE) {
@@ -2909,6 +2926,25 @@ void ClientChannel::LoadBalancedCall::RecvTrailingMetadataReady(
   }
   Closure::Run(DEBUG_LOCATION, self->original_recv_trailing_metadata_ready_,
                error);
+}
+
+void ClientChannel::LoadBalancedCall::RecordCallCompletion(
+    y_absl::Status status) {
+  // If we have a tracer, notify it.
+  if (call_attempt_tracer_ != nullptr) {
+    call_attempt_tracer_->RecordReceivedTrailingMetadata(
+        status, recv_trailing_metadata_, transport_stream_stats_);
+  }
+  // If the LB policy requested a callback for trailing metadata, invoke
+  // the callback.
+  if (lb_subchannel_call_tracker_ != nullptr) {
+    Metadata trailing_metadata(recv_trailing_metadata_);
+    BackendMetricAccessor backend_metric_accessor(this);
+    LoadBalancingPolicy::SubchannelCallTrackerInterface::FinishArgs args = {
+        status, &trailing_metadata, &backend_metric_accessor};
+    lb_subchannel_call_tracker_->Finish(args);
+    lb_subchannel_call_tracker_.reset();
+  }
 }
 
 void ClientChannel::LoadBalancedCall::CreateSubchannelCall() {

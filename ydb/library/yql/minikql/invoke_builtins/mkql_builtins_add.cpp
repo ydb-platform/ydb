@@ -108,12 +108,12 @@ struct TDateTimeAddT {
         const auto lv = ToScaledDate<TLeft>(left.template Get<TLeft>());
         const auto rv = ToScaledDate<TRight>(right.template Get<TRight>());
         const auto ret = lv + rv;
-        if (IsBadDateTime(ret)) {
+        if (std::is_same<TOutput, NUdf::TDataType<NUdf::TInterval>::TLayout>() ? IsBadInterval(ret) : IsBadDateTime(ret)) {
             return NUdf::TUnboxedValuePod();
         }
 
         auto data = NUdf::TUnboxedValuePod(FromScaledDate<TOutput>(ret));
-        if (Tz) {
+        if constexpr (Tz) {
             data.SetTimezoneId((std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval>::TLayout>() ? right : left).GetTimezoneId());
         }
         return data;
@@ -133,7 +133,7 @@ struct TDateTimeAddT {
         const auto type = Type::getInt128Ty(context);
         const auto zero = ConstantInt::get(type, 0);
 
-        if (Tz) {
+        if constexpr (Tz) {
             const uint64_t init[] = {0ULL, 0xFFFFULL};
             const auto mask = ConstantInt::get(type, APInt(128, 2, init));
             const auto tzid = BinaryOperator::CreateAnd(std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval>::TLayout>() ? right : left, mask, "tzid",  block);

@@ -58,6 +58,8 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });
     REGISTER_SETTING(*this, HashShuffleTasksRatio).Lower(0.5).Upper(5);
     REGISTER_SETTING(*this, HashShuffleMaxTasks).Lower(1).Upper(1000);
+
+    REGISTER_SETTING(*this, UseWideChannels);
 }
 
 } // namespace NYql

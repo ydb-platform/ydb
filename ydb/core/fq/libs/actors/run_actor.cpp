@@ -1064,6 +1064,7 @@ private:
 
         if (Finishing && !result.issues_size()) { // Race between abort and successful finishing. Override with success and provide results to user.
             FinalQueryStatus = FederatedQuery::QueryMeta::COMPLETED;
+            TransientIssues.AddIssues(Issues);
             Issues.Clear();
         }
 
@@ -1700,7 +1701,7 @@ private:
         }
 
         {
-            dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory, 
+            dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory,
                 Params.Config.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetAllowLocalFiles()));
         }
 

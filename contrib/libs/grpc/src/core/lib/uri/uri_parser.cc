@@ -167,6 +167,10 @@ y_absl::Status MakeInvalidURIStatus(y_absl::string_view part_name,
 
 }  // namespace
 
+TString URI::PercentEncodeAuthority(y_absl::string_view str) {
+  return PercentEncode(str, IsAuthorityChar);
+}
+
 TString URI::PercentEncodePath(y_absl::string_view str) {
   return PercentEncode(str, IsPathChar);
 }

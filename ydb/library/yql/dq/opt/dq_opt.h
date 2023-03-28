@@ -12,12 +12,17 @@ struct TDqStageSettings {
     static constexpr TStringBuf LogicalIdSettingName = "_logical_id";
     static constexpr TStringBuf IdSettingName = "_id";
     static constexpr TStringBuf SinglePartitionSettingName = "_single_partition";
+    static constexpr TStringBuf WideChannelsSettingName = "_wide_channels";
 
     ui64 LogicalId = 0;
     TString Id;
     bool SinglePartition = false;
 
+    bool WideChannels = false;
+    const TStructExprType* OutputNarrowType = nullptr;
+
     TDqStageSettings& SetSinglePartition(bool value = true) { SinglePartition = value; return *this; }
+    TDqStageSettings& SetWideChannels(const TStructExprType& narrowType) { WideChannels = true; OutputNarrowType = &narrowType; return *this; }
 
     static TDqStageSettings New(const NNodes::TDqStageBase& node);
 

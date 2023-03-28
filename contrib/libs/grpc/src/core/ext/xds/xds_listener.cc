@@ -37,6 +37,7 @@
 #include "upb/upb.h"
 #include "upb/upb.hpp"
 
+#include "src/core/ext/xds/xds_common_types.h"
 #include "src/core/lib/address_utils/parse_address.h"
 #include "src/core/lib/address_utils/sockaddr_utils.h"
 #include "src/core/lib/gprpp/host_port.h"
@@ -254,12 +255,12 @@ void MaybeLogHttpConnectionManager(
         http_connection_manager_config) {
   if (GRPC_TRACE_FLAG_ENABLED(*context.tracer) &&
       gpr_should_log(GPR_LOG_SEVERITY_DEBUG)) {
-    const upb_msgdef* msg_type =
+    const upb_MessageDef* msg_type =
         envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_getmsgdef(
             context.symtab);
     char buf[10240];
-    upb_text_encode(http_connection_manager_config, msg_type, nullptr, 0, buf,
-                    sizeof(buf));
+    upb_TextEncode(http_connection_manager_config, msg_type, nullptr, 0, buf,
+                   sizeof(buf));
     gpr_log(GPR_DEBUG, "[xds_client %p] HttpConnectionManager: %s",
             context.client, buf);
   }
@@ -294,7 +295,7 @@ grpc_error_handle HttpConnectionManagerParse(
         envoy_config_core_v3_HttpProtocolOptions_max_stream_duration(options);
     if (duration != nullptr) {
       http_connection_manager->http_max_stream_duration =
-          Duration::Parse(duration);
+          ParseDuration(duration);
     }
   }
   // Parse filters.
@@ -431,9 +432,11 @@ grpc_error_handle HttpConnectionManagerParse(
       return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
           "HttpConnectionManager missing config_source for RDS.");
     }
-    if (!envoy_config_core_v3_ConfigSource_has_ads(config_source)) {
+    if (!envoy_config_core_v3_ConfigSource_has_ads(config_source) &&
+        !envoy_config_core_v3_ConfigSource_has_self(config_source)) {
       return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "HttpConnectionManager ConfigSource for RDS does not specify ADS.");
+          "HttpConnectionManager ConfigSource for RDS does not specify ADS "
+          "or SELF.");
     }
     // Get the route_config_name.
     http_connection_manager->route_config_name = UpbStringToStdString(
@@ -448,7 +451,7 @@ grpc_error_handle LdsResourceParseClient(
     const envoy_config_listener_v3_ApiListener* api_listener, bool is_v2,
     XdsListenerResource* lds_update) {
   lds_update->type = XdsListenerResource::ListenerType::kHttpApiListener;
-  const upb_strview encoded_api_listener = google_protobuf_Any_value(
+  const upb_StringView encoded_api_listener = google_protobuf_Any_value(
       envoy_config_listener_v3_ApiListener_api_listener(api_listener));
   const auto* http_connection_manager =
       envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_parse(
@@ -476,7 +479,7 @@ grpc_error_handle DownstreamTlsContextParse(
       envoy_config_core_v3_TransportSocket_typed_config(transport_socket);
   std::vector<grpc_error_handle> errors;
   if (typed_config != nullptr) {
-    const upb_strview encoded_downstream_tls_context =
+    const upb_StringView encoded_downstream_tls_context =
         google_protobuf_Any_value(typed_config);
     auto* downstream_tls_context_proto =
         envoy_extensions_transport_sockets_tls_v3_DownstreamTlsContext_parse(
@@ -662,7 +665,7 @@ grpc_error_handle FilterChainParse(
         errors.push_back(GRPC_ERROR_CREATE_FROM_CPP_STRING(
             y_absl::StrCat("Unsupported filter type ", type_url)));
       } else {
-        const upb_strview encoded_http_connection_manager =
+        const upb_StringView encoded_http_connection_manager =
             google_protobuf_Any_value(typed_config);
         const auto* http_connection_manager =
             envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_parse(
@@ -987,10 +990,10 @@ void MaybeLogListener(const XdsEncodingContext& context,
                       const envoy_config_listener_v3_Listener* listener) {
   if (GRPC_TRACE_FLAG_ENABLED(*context.tracer) &&
       gpr_should_log(GPR_LOG_SEVERITY_DEBUG)) {
-    const upb_msgdef* msg_type =
+    const upb_MessageDef* msg_type =
         envoy_config_listener_v3_Listener_getmsgdef(context.symtab);
     char buf[10240];
-    upb_text_encode(listener, msg_type, nullptr, 0, buf, sizeof(buf));
+    upb_TextEncode(listener, msg_type, nullptr, 0, buf, sizeof(buf));
     gpr_log(GPR_DEBUG, "[xds_client %p] Listener: %s", context.client, buf);
   }
 }

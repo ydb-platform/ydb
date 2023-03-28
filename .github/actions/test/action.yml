@@ -1,0 +1,49 @@
+name: build-and-test
+description: Build YDB and run Tests
+inputs:
+  log_suffix:
+    required: true
+    type: string
+  test_label_regexp:
+    required: false
+    type: string
+  aws_key_id:
+    required: true
+    type: string
+  aws_key_value: 
+    required: trye
+    type: string
+    
+runs:
+  using: "composite"
+  steps:
+  - name: Test
+    shell: bash
+    run: |
+      cd ../build/ydb
+      rm -rf $(pwd)/../../tmp/*
+      rm -rf $(pwd)/../../test_reports/*
+      mkdir -p ../../artifacts
+      rm -rf $(pwd)/../../artifacts/*
+
+      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
+
+      # Sed removes coloring from the output
+      TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$(pwd)/../../test_reports/" \
+        ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
+              --output-junit $(pwd)/../../test_reports/ctest_report.xml \
+              -L '${{inputs.test_label_regexp}}' | \
+        sed -e 's/\x1b\[[0-9;]*m//g' | \
+        tee >(gzip --stdout > ../../artifacts/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz) | \
+        grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
+        tee -a $GITHUB_STEP_SUMMARY
+  - name: Upload S3
+    uses: shallwefootball/s3-upload-action@master
+    if: always()
+    with:
+      aws_key_id: ${{inputs.AWS_KEY_ID }}
+      aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
+      aws_bucket: ydb-tech-ci
+      source_dir: ../artifacts
+      destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
+      endpoint: https://storage.yandexcloud.net

@@ -114,9 +114,9 @@ class XdsClient : public DualRefCounted<XdsClient> {
 
   // Adds and removes drop stats for cluster_name and eds_service_name.
   RefCountedPtr<XdsClusterDropStats> AddClusterDropStats(
-      y_absl::string_view lrs_server, y_absl::string_view cluster_name,
+      const XdsBootstrap::XdsServer& xds_server, y_absl::string_view cluster_name,
       y_absl::string_view eds_service_name);
-  void RemoveClusterDropStats(y_absl::string_view /*lrs_server*/,
+  void RemoveClusterDropStats(const XdsBootstrap::XdsServer& xds_server,
                               y_absl::string_view cluster_name,
                               y_absl::string_view eds_service_name,
                               XdsClusterDropStats* cluster_drop_stats);
@@ -124,11 +124,11 @@ class XdsClient : public DualRefCounted<XdsClient> {
   // Adds and removes locality stats for cluster_name and eds_service_name
   // for the specified locality.
   RefCountedPtr<XdsClusterLocalityStats> AddClusterLocalityStats(
-      y_absl::string_view lrs_server, y_absl::string_view cluster_name,
+      const XdsBootstrap::XdsServer& xds_server, y_absl::string_view cluster_name,
       y_absl::string_view eds_service_name,
       RefCountedPtr<XdsLocalityName> locality);
   void RemoveClusterLocalityStats(
-      y_absl::string_view /*lrs_server*/, y_absl::string_view cluster_name,
+      const XdsBootstrap::XdsServer& xds_server, y_absl::string_view cluster_name,
       y_absl::string_view eds_service_name,
       const RefCountedPtr<XdsLocalityName>& locality,
       XdsClusterLocalityStats* cluster_locality_stats);
@@ -189,12 +189,13 @@ class XdsClient : public DualRefCounted<XdsClient> {
     LrsCallState* lrs_calld() const;
 
     void MaybeStartLrsCall();
-    void StopLrsCall();
+    void StopLrsCallLocked() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
 
     bool HasAdsCall() const;
     bool HasActiveAdsCall() const;
 
-    void StartConnectivityWatchLocked();
+    void StartConnectivityWatchLocked()
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
     void CancelConnectivityWatchLocked();
 
     void SubscribeLocked(const XdsResourceType* type,
@@ -252,7 +253,17 @@ class XdsClient : public DualRefCounted<XdsClient> {
     std::map<RefCountedPtr<XdsLocalityName>, LocalityState,
              XdsLocalityName::Less>
         locality_stats;
-    grpc_millis last_report_time = ExecCtx::Get()->Now();
+    Timestamp last_report_time = ExecCtx::Get()->Now();
+  };
+
+  // Load report data.
+  using LoadReportMap = std::map<
+      std::pair<TString /*cluster_name*/, TString /*eds_service_name*/>,
+      LoadReportState>;
+
+  struct LoadReportServer {
+    RefCountedPtr<ChannelState> channel_state;
+    LoadReportMap load_report_map;
   };
 
   class Notifier;
@@ -275,15 +286,15 @@ class XdsClient : public DualRefCounted<XdsClient> {
       const XdsResourceKey& key);
 
   XdsApi::ClusterLoadReportMap BuildLoadReportSnapshotLocked(
-      bool send_all_clusters, const std::set<TString>& clusters)
-      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+      const XdsBootstrap::XdsServer& xds_server, bool send_all_clusters,
+      const std::set<TString>& clusters) Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   RefCountedPtr<ChannelState> GetOrCreateChannelStateLocked(
       const XdsBootstrap::XdsServer& server) Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   std::unique_ptr<XdsBootstrap> bootstrap_;
   grpc_channel_args* args_;
-  const grpc_millis request_timeout_;
+  const Duration request_timeout_;
   grpc_pollset_set* interested_parties_;
   OrphanablePtr<CertificateProviderStore> certificate_provider_store_;
   XdsApi api_;
@@ -305,11 +316,8 @@ class XdsClient : public DualRefCounted<XdsClient> {
   std::map<TString /*authority*/, AuthorityState> authority_state_map_
       Y_ABSL_GUARDED_BY(mu_);
 
-  // Load report data.
-  std::map<
-      std::pair<TString /*cluster_name*/, TString /*eds_service_name*/>,
-      LoadReportState>
-      load_report_map_ Y_ABSL_GUARDED_BY(mu_);
+  std::map<XdsBootstrap::XdsServer, LoadReportServer>
+      xds_load_report_server_map_ Y_ABSL_GUARDED_BY(mu_);
 
   // Stores started watchers whose resource name was not parsed successfully,
   // waiting to be cancelled or reset in Orphan().

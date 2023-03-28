@@ -16,6 +16,9 @@ using TStatus = NYql::IGraphTransformer::TStatus;
 
 namespace {
 
+// TODO: relocate names to common code for type_ann and dq_opt.cpp
+static constexpr TStringBuf WideChannelsSettingName = "_wide_channels";
+
 const TTypeAnnotationNode* GetDqOutputType(const TDqOutput& output, TExprContext& ctx) {
     auto stageResultTuple = output.Stage().Ref().GetTypeAnn()->Cast<TTupleExprType>();
 
@@ -49,6 +52,34 @@ const TTypeAnnotationNode* GetDqConnectionType(const TDqConnection& node, TExprC
     return GetDqOutputType(node.Output(), ctx);
 }
 
+const TTypeAnnotationNode* GetColumnType(const TDqConnection& node, const TStructExprType& structType, TStringBuf name, TPositionHandle pos, TExprContext& ctx) {
+    if (HasSetting(node.Output().Stage().Settings().Ref(), WideChannelsSettingName)) {
+        auto multiType = node.Output().Stage().Program().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+        ui32 idx;
+        if (!TryFromString(name, idx)) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Expecting integer as column name, but got '" << name << "'"));
+            return nullptr;
+        }
+        if (idx >= multiType->GetSize()) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Column index too big: " << name << " >= " << multiType->GetSize()));
+            return nullptr;
+        }
+
+        return multiType->GetItems()[idx];
+    }
+
+    auto result = structType.FindItemType(name);
+    if (!result) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Missing column '" << name << "'"));
+        return nullptr;
+    }
+
+    return result;
+}
+
 template <typename TStage>
 TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
     if (!EnsureMinMaxArgsCount(*stage, 3, 4, ctx)) {
@@ -67,12 +98,39 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         return TStatus::Error;
     }
 
+    bool useWideChannels = false;
+    const TStructExprType* outputNarrowType = nullptr;
     for (auto& setting: settingsTuple->Children()) {
         if (!EnsureTupleMinSize(*setting, 1, ctx)) {
             return TStatus::Error;
         }
         if (!EnsureAtom(*setting->Child(0), ctx)) {
             return TStatus::Error;
+        }
+
+        TStringBuf name = setting->Head().Content();
+        if (name == WideChannelsSettingName) {
+            if (setting->ChildrenSize() != 2) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Setting " << name << " should contain single value"));
+                return TStatus::Error;
+            }
+            auto value = setting->Child(1);
+            if (!EnsureType(*value, ctx)) {
+                return TStatus::Error;
+            }
+
+            auto valueType  = value->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            if (!EnsureStructType(value->Pos(), *valueType, ctx)) {
+                return TStatus::Error;
+            }
+
+            if constexpr (std::is_same_v<TStage, TDqStage>) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Setting " << name << " is not supported in " << stage->Content()));
+                return TStatus::Error;
+            } else {
+                useWideChannels = true;
+                outputNarrowType = valueType->Cast<TStructExprType>();
+            }
         }
     }
 
@@ -107,6 +165,13 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
                                         << *itemType));
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Persistable required. Atom, type, key, world, datasink, datasource, callable, resource, stream and lambda are not persistable"));
                     return TStatus::Error;
+                }
+            }
+
+            if (TDqConnection::Match(input.Get())) {
+                TDqConnection conn(input);
+                if (HasSetting(conn.Output().Stage().Settings().Ref(), WideChannelsSettingName)) {
+                    argType = conn.Output().Stage().Program().Ref().GetTypeAnn();
                 }
             }
         }
@@ -161,9 +226,39 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         }
     }
 
+    if (useWideChannels) {
+        if (!EnsureWideStreamType(*programLambda, ctx)) {
+            ctx.AddError(TIssue(ctx.GetPosition(programLambda->Pos()),TStringBuilder() << "Wide channel stage requires exactly one output, but got " << programResultTypesTuple.size()));
+            return TStatus::Error;
+        }
+        YQL_ENSURE(programResultTypesTuple.size() == 1);
+        auto multiType = programLambda->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+        if (multiType->GetSize() != outputNarrowType->GetSize()) {
+            ctx.AddError(TIssue(ctx.GetPosition(programLambda->Pos()),TStringBuilder() << "Wide/narrow types has different number of items: " <<
+                multiType->GetSize() << " vs " << outputNarrowType->GetSize()));
+            return TStatus::Error;
+        }
+
+        for (size_t i = 0; i < outputNarrowType->GetSize(); ++i) {
+            auto structItem = outputNarrowType->GetItems()[i];
+            if (!IsSameAnnotation(*structItem->GetItemType(), *(multiType->GetItems()[i]))) {
+                ctx.AddError(TIssue(ctx.GetPosition(programLambda->Pos()),TStringBuilder() << "Wide/narrow types mismatch for column '" <<
+                    structItem->GetName() << "' : " << *(multiType->GetItems()[i]) << " vs " << *structItem->GetItemType()));
+                return TStatus::Error;
+            }
+        }
+
+        programResultTypesTuple[0] = ctx.MakeType<TListExprType>(outputNarrowType);
+    }
+
     TVector<const TTypeAnnotationNode*> stageResultTypes;
     if (TDqStageBase::idx_Outputs < stage->ChildrenSize()) {
         YQL_ENSURE(stage->Child(TDqStageBase::idx_Outputs)->ChildrenSize() != 0, "Stage.Outputs list exists but empty, stage: " << stage->Dump());
+
+        if (useWideChannels) {
+            ctx.AddError(TIssue(ctx.GetPosition(programLambda->Pos()),TStringBuilder() << "Wide channel stage is incompatible with Sink/Transform"));
+            return TStatus::Error;
+        }
 
         auto outputsNumber = programResultTypesTuple.size();
         TVector<TExprNode::TPtr> transforms;
@@ -522,13 +617,12 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
         {
             return TStatus::Error;
         }
-        TMaybe<ui32> colIndex = structType->FindItem(column.Column().StringValue());
-        if (!colIndex) {
-            ctx.AddError(TIssue(ctx.GetPosition(column.Pos()),
-                TStringBuilder() << "Missing sort column: " << column.Column().StringValue()));
+
+        auto colType = GetColumnType(TDqConnection(node), *structType, column.Column().Value(), column.Pos(), ctx);
+        if (!colType) {
             return TStatus::Error;
         }
-        const TTypeAnnotationNode* colType = (structType->GetItems())[*colIndex]->GetItemType();
+
         if (colType->GetKind() == ETypeAnnotationKind::Optional) {
             colType = colType->Cast<TOptionalExprType>()->GetItemType();
         }
@@ -582,12 +676,12 @@ TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx)
         if (!EnsureAtom(*column, ctx)) {
             return TStatus::Error;
         }
-        if (!structType->FindItem(column->Content())) {
-            ctx.AddError(TIssue(ctx.GetPosition(column->Pos()),
-                TStringBuilder() << "Missing key column: " << column->Content()));
+        auto ty = GetColumnType(TDqConnection(input), *structType, column->Content(), column->Pos(), ctx);
+        if (!ty) {
             return TStatus::Error;
         }
-        if (const auto ty = structType->FindItemType(column->Content()); !ty->IsHashable()) {
+
+        if (!ty->IsHashable()) {
             ctx.AddError(TIssue(ctx.GetPosition(column->Pos()),
                 TStringBuilder() << "Non-hashable key column: " << column->Content()));
             return TStatus::Error;

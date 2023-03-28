@@ -16,6 +16,7 @@ SRCS(
     draft/ydb_logstore.proto
     draft/ydb_query.proto
     draft/ydb_console.proto
+    federation_discovery.proto
     persqueue_error_codes_v1.proto
     ydb_auth.proto
     ydb_persqueue_v1.proto

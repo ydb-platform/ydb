@@ -1,0 +1,45 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.FederationDiscovery;
+option java_package = "com.yandex.ydb.federation_discovery";
+option java_outer_classname = "FederationDiscoveryProtos";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+message DatabaseInfo {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        AVAILABLE = 1;
+        READ_ONLY = 2;
+        UNAVAILABLE = 3;
+    }
+
+    string name = 1;
+    string path = 2;
+    string id = 3;
+    string endpoint = 4;
+
+    // for single datacenter databases
+    string location = 5;
+
+    Status status = 6;
+
+    // to determine this database priority on the client side
+    int64 weight = 7;
+}
+
+message ListFederationDatabasesRequest {
+}
+
+message ListFederationDatabasesResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListFederationDatabasesResult {
+    string control_plane_endpoint = 1;
+    repeated DatabaseInfo federation_databases = 2;
+
+    string self_location = 3;
+}

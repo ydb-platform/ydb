@@ -5,6 +5,7 @@ MAVEN_GROUP_ID(com.yandex.ydb)
 GRPC()
 
 SRCS(
+    federation_discovery_v1.proto
     ydb_auth_v1.proto
     ydb_cms_v1.proto
     ydb_coordination_v1.proto

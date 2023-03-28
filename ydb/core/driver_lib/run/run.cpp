@@ -899,7 +899,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 opts.SetKeepAliveEnable(false);
             }
         }
-        
+
         NConsole::SetGRpcLibraryFunction();
 
 #define GET_PATH_TO_FILE(GRPC_CONFIG, PRIMARY_FIELD, SECONDARY_FIELD) \

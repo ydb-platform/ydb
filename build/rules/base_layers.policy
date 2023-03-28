@@ -1,6 +1,0 @@
-ALLOW .* -> base_layers
-
-# This will allow reusing libraries needed for build in the future
-# ALLOW base_layers -> build
-
-DENY base_layers -> .*

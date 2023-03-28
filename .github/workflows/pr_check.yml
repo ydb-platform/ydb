@@ -1,0 +1,10 @@
+name: PR check
+on: 
+  pull_request:
+  
+jobs:
+  build_and_test:
+    uses: ./.github/workflows/build_and_test_ondemand.yml
+    with:
+      test_label_regexp: '(SMALL|MEDIUM)'
+    secrets: inherit

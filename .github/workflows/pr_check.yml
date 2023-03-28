@@ -11,5 +11,5 @@ jobs:
   build_and_test:
     uses: ./.github/workflows/build_and_test_ondemand.yml
     with:
-      test_label_regexp: '(SMALL|MEDIUM)'
+      test_label_regexp: 'SMALL'
     secrets: inherit

@@ -1587,7 +1587,6 @@ billing/frontend/vhost
 pay/console-frontend
 classifieds/nodejs/nodejs-deb
 vh-selfservice
-fintech/dwh
 ui/react-static-version
 ui/npm-serp
 sendr/sendr

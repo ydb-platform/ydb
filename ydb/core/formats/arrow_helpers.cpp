@@ -522,7 +522,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::v
     return out;
 }
 
-// Check if the pertumation doesn't reoder anything
+// Check if the permutation doesn't reorder anything
 bool IsNoOp(const arrow::UInt64Array& permutation) {
     for (i64 i = 0; i < permutation.length(); ++i) {
         if (permutation.Value(i) != (ui64)i) {
@@ -677,7 +677,7 @@ bool HasAllColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
 }
 
 std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared_ptr<arrow::Schema>& schema,
-                                                               size_t reserve) {
+                                                               size_t reserve, const std::map<std::string, ui64>& sizeByColumn) {
     std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders;
     builders.reserve(schema->num_fields());
 
@@ -685,12 +685,19 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
         std::unique_ptr<arrow::ArrayBuilder> builder;
         auto status = arrow::MakeBuilder(arrow::default_memory_pool(), field->type(), &builder);
         Y_VERIFY_OK(status);
-        builders.emplace_back(std::move(builder));
+        if (sizeByColumn.size()) {
+            auto it = sizeByColumn.find(field->name());
+            if (it != sizeByColumn.end()) {
+                Y_VERIFY(NArrow::ReserveData(*builder, it->second));
+            }
+        }
 
         if (reserve) {
-            status = builders.back()->Reserve(reserve);
-            Y_VERIFY_OK(status);
+            Y_VERIFY_OK(builder->Reserve(reserve));
         }
+
+        builders.emplace_back(std::move(builder));
+
     }
     return builders;
 }
@@ -1404,6 +1411,17 @@ bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shar
         res &= arrow::ScalarEquals(*lhs->GetScalar(i).ValueOrDie(), *rhs->GetScalar(i).ValueOrDie());
     }
     return res;
+}
+
+bool ReserveData(arrow::ArrayBuilder& builder, const size_t size) {
+    if (builder.type()->id() == arrow::Type::BINARY) {
+        arrow::BaseBinaryBuilder<arrow::BinaryType>& bBuilder = static_cast<arrow::BaseBinaryBuilder<arrow::BinaryType>&>(builder);
+        return bBuilder.ReserveData(size).ok();
+    } else if (builder.type()->id() == arrow::Type::STRING) {
+        arrow::BaseBinaryBuilder<arrow::StringType>& bBuilder = static_cast<arrow::BaseBinaryBuilder<arrow::StringType>&>(builder);
+        return bBuilder.ReserveData(size).ok();
+    }
+    return true;
 }
 
 }

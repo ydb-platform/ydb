@@ -94,7 +94,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared
                                                                ui32 numShards);
 
 std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared_ptr<arrow::Schema>& schema,
-                                                               size_t reserve = 0);
+    size_t reserve = 0, const std::map<std::string, ui64>& sizeByColumn = {});
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders);
 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size);
@@ -107,9 +107,8 @@ TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
 ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);
 // Return size in bytes *not* including size of bitmap mask
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column);
-
 i64 LowerBound(const std::shared_ptr<arrow::Array>& column, const arrow::Scalar& value, i64 offset = 0);
-
+bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
 enum class ECompareType {
     LESS = 1,
     LESS_OR_EQUAL,

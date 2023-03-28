@@ -98,8 +98,10 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         }
 
         STFUNC(StateFunc) {
-            if (--EventsCounter == 0 && ElapsedTime != nullptr) {
-                *ElapsedTime = Timer.Passed() / TotalEventsAmount;
+            if (--EventsCounter == 0) {
+                if (ElapsedTime != nullptr) {
+                    *ElapsedTime = Timer.Passed() / TotalEventsAmount;
+                }
                 PassAway();
                 return;
             }
@@ -492,6 +494,18 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     Y_UNIT_TEST(SendActivateReceive1Pool7ThreadsUnited) { RunBenchContentedThreads(7, EPoolType::United); }
     Y_UNIT_TEST(SendActivateReceive1Pool8Threads)       { RunBenchContentedThreads(8, EPoolType::Basic);  }
     Y_UNIT_TEST(SendActivateReceive1Pool8ThreadsUnited) { RunBenchContentedThreads(8, EPoolType::United); }
+
+    Y_UNIT_TEST(SendActivateReceiveCSV) {
+        Cerr << "threads, actorPairs, time " << Endl;
+        for (ui32 threads = 1; threads <= 32; threads *= 2) {
+            for (ui32 actorPairs = 1; actorPairs <= 2 * threads; actorPairs++) {
+                auto stats = CountStats([threads, actorPairs] {
+                    return BenchContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common);
+                });
+                Cerr << threads << "," << actorPairs << "," << actorPairs * TotalEventsAmount / stats.Mean * 1e9 << Endl;
+            }
+        }
+    }
 
     Y_UNIT_TEST(SendActivateReceiveWithMailboxNeighbours) {
         TVector<ui32> NeighbourActors = {0, 1, 2, 3, 4, 5, 6, 7, 8, 16, 32, 64, 128, 256};

@@ -373,7 +373,7 @@ template <>
 void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
     const auto txId = ev->Get()->Record.GetTxId();
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TTxOperationReply<TEvDataShard::TEvSchemaChanged> execute"
+        "TTxOperationReply<" <<  ev->GetTypeName() << "> execute"
             << ", at schemeshard: " << context.SS->TabletID()
             << ", send out-of-scope reply, for txId " << txId
     );
@@ -419,38 +419,45 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
     }
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxOperationReply<" << EvReply->GetTypeName() << "> execute"
-                        << ", operationId: " << OperationId
-                        << ", at schemeshard: " << Self->TabletID()
-                        << ", message: " << ISubOperationState::DebugReply(EvReply));
-        if (!Self->Operations.contains(OperationId.GetTxId())) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TTxOperationReply<" << EvReply->GetTypeName() << "> execute "
-                            << ", operationId: " << OperationId
-                            << ", at schemeshard: " << Self->TabletID()
-                            << ", operation unknown");
+
+        auto findActiveSubOperation = [this](const TOperationId& operationId) -> ISubOperation::TPtr {
+            if (auto found = Self->Operations.find(operationId.GetTxId()); found != Self->Operations.cend()) {
+                const auto operation = found->second;
+                const auto subOperationId = operationId.GetSubTxId();
+                if (!operation->DoneParts.contains(subOperationId)) {
+                    return operation->Parts.at(subOperationId);
+                }
+            }
+            return nullptr;
+        };
+
+        ISubOperation::TPtr part = findActiveSubOperation(OperationId);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" <<  EvReply->GetTypeName() << "> execute"
+            << ", operationId: " << OperationId
+            << ", at schemeshard: " << Self->TabletID()
+            << ", message: " << ISubOperationState::DebugReply(EvReply)
+        );
+
+        {
             TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
-            OutOfScopeEventHandler<TEvType>(EvReply, context);
-            return true;
+
+            if (part) {
+                part->HandleReply(EvReply, context);
+
+            } else {
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" <<  EvReply->GetTypeName() << "> execute"
+                    << ", operationId: " << OperationId
+                    << ", at schemeshard: " << Self->TabletID()
+                    << ", unknown operation or suboperation is already done, event is out-of-scope"
+                );
+
+                OutOfScopeEventHandler<TEvType>(EvReply, context);
+            }
         }
-        TOperation::TPtr operation = Self->Operations.at(OperationId.GetTxId());
-        if (operation->DoneParts.contains(OperationId.GetSubTxId())) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TTxOperationReply<" << EvReply->GetTypeName() << "> execute"
-                            << ", operationId: " << OperationId
-                            << ", at schemeshard: " << Self->TabletID()
-                            << ", operation part is already done");
-            TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
-            OutOfScopeEventHandler<TEvType>(EvReply, context);
-            return true;
-        }
-        ISubOperation::TPtr part = operation->Parts.at(ui64(OperationId.GetSubTxId()));
-        TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
-        Y_VERIFY(EvReply);
-        part->HandleReply(EvReply, context);
         OnComplete.ApplyOnExecute(Self, txc, ctx);
         DbChanges.Apply(Self, txc, ctx);
+
         return true;
     }
 

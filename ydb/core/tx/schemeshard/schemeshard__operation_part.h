@@ -163,11 +163,8 @@ class ISubOperationState {
 public:
     virtual ~ISubOperationState() = default;
 
-#define DefaultDebugReply(TEvType, TxType) \
-    static TString DebugReply(TEvType::TPtr& ev);
-
-    SCHEMESHARD_INCOMING_EVENTS(DefaultDebugReply)
-#undef DefaultDebugReply
+    template <EventBasePtr TEvPtr>
+    static TString DebugReply(const TEvPtr& ev);
 
 #define DefaultHandleReply(TEvType, ...) \
     virtual bool HandleReply(TEvType::TPtr& ev, TOperationContext& context);

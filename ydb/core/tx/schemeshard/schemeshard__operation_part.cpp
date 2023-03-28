@@ -55,13 +55,20 @@ struct TDebugEvent<TEvPrivate::TEvUndoTenantUpdate> {
     }
 };
 
-#define DefaultDebugReply(TEvType, ...) \
-    TString ISubOperationState::DebugReply(TEvType::TPtr& ev) { \
-        return TDebugEvent<TEvType>::ToString(ev);              \
-    }
 
-    SCHEMESHARD_INCOMING_EVENTS(DefaultDebugReply)
-#undef DefaultDebugReply
+template <EventBasePtr TEvPtr>
+TString ISubOperationState::DebugReply(const TEvPtr& ev) {
+    using TEvType = typename EventTypeFromTEvPtr<TEvPtr>::type;
+    return TDebugEvent<TEvType>::ToString(ev);
+}
+
+
+#define DefineDebugReply(TEvType, ...) \
+    template TString ISubOperationState::DebugReply(const TEvType::TPtr& ev);
+
+    SCHEMESHARD_INCOMING_EVENTS(DefineDebugReply)
+#undef DefineDebugReply
+
 
 static TString LogMessage(const TString& ev, TOperationContext& context, bool ignore) {
     return TStringBuilder() << (ignore ? "Unexpected" : "Ignore") << " message"

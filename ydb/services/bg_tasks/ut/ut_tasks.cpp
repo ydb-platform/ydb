@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(BGTaskTests) {
             activityId = tActivity->GetActivityTaskId();
             std::shared_ptr<TTestInsertTaskScheduler> tScheduler(new TTestInsertTaskScheduler);
             NBackgroundTasks::TTask newTask(tActivity, tScheduler);
-            runtime.SendAsync(new IEventHandleFat(NBackgroundTasks::MakeServiceId(1), {}, new NBackgroundTasks::TEvAddTask(std::move(newTask))));
+            runtime.SendAsync(new IEventHandle(NBackgroundTasks::MakeServiceId(1), {}, new NBackgroundTasks::TEvAddTask(std::move(newTask))));
         }
         TDispatchOptions rmReady;
         rmReady.CustomFinalCondition = [activityId] {
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(BGTaskTests) {
                 activityId = tActivity->GetActivityTaskId();
                 std::shared_ptr<TTestInsertTaskScheduler> tScheduler(new TTestInsertTaskScheduler);
                 NBackgroundTasks::TTask newTask(tActivity, tScheduler);
-                runtime.SendAsync(new IEventHandleFat(NBackgroundTasks::MakeServiceId(1), {}, new NBackgroundTasks::TEvAddTask(std::move(newTask))));
+                runtime.SendAsync(new IEventHandle(NBackgroundTasks::MakeServiceId(1), {}, new NBackgroundTasks::TEvAddTask(std::move(newTask))));
             }
             TDispatchOptions rmReady;
             rmReady.CustomFinalCondition = [activityId] {

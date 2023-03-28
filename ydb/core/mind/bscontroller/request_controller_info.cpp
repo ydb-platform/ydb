@@ -51,7 +51,7 @@ public:
             }
         }
 
-        Response = std::make_unique<IEventHandleFat>(request->Sender, Self->SelfId(), response.release());
+        Response = std::make_unique<IEventHandle>(request->Sender, Self->SelfId(), response.release());
         return true;
     }
 

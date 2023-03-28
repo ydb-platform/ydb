@@ -47,7 +47,7 @@ namespace NKikimr {
                     VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
 
                 // send request
-                TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandleFat>(Ctx->PDiskCtx->PDiskId, SelfId(),
+                TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),
                     msg.release(), 0, 0, nullptr, Span.GetTraceId()), it->Part.Size);
 
                 Counter++;

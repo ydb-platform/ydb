@@ -1325,7 +1325,7 @@ private:
                 state.RefreshTimer = CreateLongTimer(
                     ctx,
                     SNAPSHOT_TIMEOUT / 2,
-                    new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvRefreshShard(shardId, ++state.RefreshSeqNo)));
+                    new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvRefreshShard(shardId, ++state.RefreshSeqNo)));
 
                 if (state.ShardPosition == ShardList.end()) {
                     // We don't want to read from this shard at this time
@@ -2260,7 +2260,7 @@ private:
         state.RetryTimer = CreateLongTimer(
                 ctx,
                 delay,
-                new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvRetryShard(shardId, state.RetrySeqNo)));
+                new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvRetryShard(shardId, state.RetrySeqNo)));
         return true;
     }
 
@@ -2309,7 +2309,7 @@ private:
         state.RefreshTimer = CreateLongTimer(
             ctx,
             SNAPSHOT_TIMEOUT / 2,
-            new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvRefreshShard(state.ShardId, ++state.RefreshSeqNo)));
+            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvRefreshShard(state.ShardId, ++state.RefreshSeqNo)));
     }
 
     void ScheduleRefreshShardRetry(TShardState& state, const TActorContext& ctx) {
@@ -2317,7 +2317,7 @@ private:
         state.RefreshTimer = CreateLongTimer(
             ctx,
             state.SelectNextRefreshDelay(),
-            new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvRefreshShard(state.ShardId, ++state.RefreshSeqNo)));
+            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvRefreshShard(state.ShardId, ++state.RefreshSeqNo)));
     }
 
     void HandleRefreshShard(TEvPrivate::TEvRefreshShard::TPtr& ev, const TActorContext&) {

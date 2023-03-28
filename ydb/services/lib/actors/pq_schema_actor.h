@@ -425,7 +425,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
     private:
-        THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult> DescribeSchemeResult;
+        THolder<NActors::TEventHandle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DescribeSchemeResult;
     };
 
 }

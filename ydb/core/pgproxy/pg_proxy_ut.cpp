@@ -67,8 +67,7 @@ Y_UNIT_TEST_SUITE(TPGTest) {
         NPG::TEvPGEvents::TEvAuth* authRequest = actorSystem.GrabEdgeEvent<NPG::TEvPGEvents::TEvAuth>(handle);
         UNIT_ASSERT(authRequest);
         UNIT_ASSERT_VALUES_EQUAL(authRequest->InitialMessage->GetClientParams()["user"], "user");
-        auto* ev = new NPG::TEvPGEvents::TEvAuthResponse();        ;
-        actorSystem.Send(ev->PrepareSend(handle->Sender, database));
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, database, new NPG::TEvPGEvents::TEvAuthResponse()));
         TString received = Receive(s);
         UNIT_ASSERT_VALUES_EQUAL(received, "520000000800000000530000001B496E74657276616C5374796C6500706F737467726573005300000012446174655374796C650049534F0053000000197365727665725F656E636F64696E670055544638005300000019696E74656765725F6461746574696D6573006F6E005300000019636C69656E745F656E636F64696E670055544638005A0000000549");
     }

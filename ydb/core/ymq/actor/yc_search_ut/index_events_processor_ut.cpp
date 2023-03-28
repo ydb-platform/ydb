@@ -71,7 +71,7 @@ private:
         }
         ~TTestRunner() {
             if (Processor != nullptr) {
-                auto handle = new IEventHandleFat(ProcessorId, TActorId(), new TEvents::TEvPoisonPill());
+                auto handle = new IEventHandle(ProcessorId, TActorId(), new TEvents::TEvPoisonPill());
                 Parent->Server->GetRuntime()->Send(handle);
             }
         }
@@ -228,7 +228,7 @@ private:
             auto initialCount = Processor->GetReindexCount();
             DispatchOpts.CustomFinalCondition = [initialCount, processor = Processor]() { return processor->GetReindexCount() > initialCount; };
             if (!initialCount) {
-                auto handle = new IEventHandleFat(ProcessorId, TActorId(), new TEvWakeup());
+                auto handle = new IEventHandle(ProcessorId, TActorId(), new TEvWakeup());
                 Parent->Server->GetRuntime()->Send(handle);
             }
             Parent->Server->GetRuntime()->DispatchEvents(DispatchOpts, TDuration::Minutes(1));

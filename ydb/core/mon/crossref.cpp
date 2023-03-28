@@ -43,7 +43,7 @@ public:
 
             const ui64 id = NextRequestId++;
             request.PendingIds.push_back(id);
-            TActivationContext::Schedule(ev->Get()->Deadline, new IEventHandleFat(NActors::TEvents::TSystem::Wakeup, 0, SelfId(), TActorId(), nullptr, id));
+            TActivationContext::Schedule(ev->Get()->Deadline, new IEventHandle(NActors::TEvents::TSystem::Wakeup, 0, SelfId(), TActorId(), nullptr, id));
             RequestsInProgress.emplace(id, ev);
         }
     }

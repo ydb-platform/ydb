@@ -82,7 +82,7 @@ public:
             }, settings)
             .Subscribe([state = std::weak_ptr<int>(State), sharedResult, actorSystem = TActivationContext::ActorSystem(), cookie, selfId = SelfId()](const NThreading::TFuture<NYdb::TStatus>& statusFuture) {
                 if (state.lock()) {
-                    actorSystem->Send(new IEventHandleFat(selfId, selfId, new TEvents::TEvDbResponse(statusFuture.GetValue(), *sharedResult), 0, cookie));
+                    actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbResponse(statusFuture.GetValue(), *sharedResult), 0, cookie));
                 } else {
                     LOG_T_AS(actorSystem, "TDbPoolActor: ProcessQueue " << selfId << " State destroyed");
                 }
@@ -95,7 +95,7 @@ public:
             })
             .Subscribe([state = std::weak_ptr<int>(State), actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), cookie](const NThreading::TFuture<NYdb::TStatus>& statusFuture) {
                 if (state.lock()) {
-                    actorSystem->Send(new IEventHandleFat(selfId, selfId, new TEvents::TEvDbFunctionResponse(statusFuture.GetValue()), 0, cookie));
+                    actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbFunctionResponse(statusFuture.GetValue()), 0, cookie));
                 } else {
                     LOG_T_AS(actorSystem, "TDbPoolActor: ProcessQueue " << selfId << " State destroyed");
                 }
@@ -200,7 +200,7 @@ TDbPool::TDbPool(
 void TDbPool::Cleanup() {
     auto parentId = NActors::TActivationContext::AsActorContext().SelfID;
     for (const auto& actorId : Actors) {
-        NActors::TActivationContext::Send(new IEventHandleFat(actorId, parentId, new NActors::TEvents::TEvPoison()));
+        NActors::TActivationContext::Send(new IEventHandle(actorId, parentId, new NActors::TEvents::TEvPoison()));
     }
 }
 

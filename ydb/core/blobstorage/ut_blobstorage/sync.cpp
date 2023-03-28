@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                 const TVDiskID vdiskId = info->GetVDiskId(i);
                 const TActorId queueId = queues.at(vdiskId);
                 const TActorId edge = runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-                runtime->Send(new IEventHandleFat(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(
+                runtime->Send(new IEventHandle(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(
                     vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead,
                     TEvBlobStorage::TEvVGet::EFlags::ShowInternals, {}, {{id}}).release()), queueId.NodeId());
                 auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge);
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
             const TActorId actorId = info->GetActorId(i);
             if (actorId.NodeId() != suspendedNodeId) {
                 const auto& sender = env.Runtime->AllocateEdgeActor(actorId.NodeId());
-                auto ev = std::make_unique<IEventHandleFat>(actorId, sender, TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
+                auto ev = std::make_unique<IEventHandle>(actorId, sender, TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
                 ev->Rewrite(TEvBlobStorage::EvForwardToSkeleton, actorId);
                 runtime->Send(ev.release(), sender.NodeId());
                 auto res = env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(sender);

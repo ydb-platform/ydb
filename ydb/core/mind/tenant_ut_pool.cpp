@@ -325,11 +325,11 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
         runtime.CreateTenantPool(0);
 
         // Subscribe on root pool and wait until domain pool started
-        runtime.Send(new IEventHandleFat(tenantPoolRoot, sender, new TEvents::TEvSubscribe()));
+        runtime.Send(new IEventHandle(tenantPoolRoot, sender, new TEvents::TEvSubscribe()));
         checker(runtime.GrabEdgeEvent<TEvStatus>(sender), EState::TENANT_ASSIGNED);
 
         // Get status from domain pool
-        runtime.Send(new IEventHandleFat(tenantPool, sender, new TEvTenantPool::TEvGetStatus(true)));
+        runtime.Send(new IEventHandle(tenantPool, sender, new TEvTenantPool::TEvGetStatus(true)));
         checker(runtime.GrabEdgeEvent<TEvStatus>(sender), expected);
     }
 

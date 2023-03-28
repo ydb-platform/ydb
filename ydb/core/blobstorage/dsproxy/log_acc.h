@@ -51,7 +51,7 @@ namespace NKikimr {
             }
             TActorId logger = loggerSettings->LoggerActorId;
             for (auto it = Lines.begin(); it != Lines.end(); ++it) {
-                TActivationContext::Send(new IEventHandleFat(logger, TActorId(), new ::NActors::NLog::TEvLog(it->Priority, it->Component, it->Formatted)));
+                TActivationContext::Send(new IEventHandle(logger, TActorId(), new ::NActors::NLog::TEvLog(it->Priority, it->Component, it->Formatted)));
             }
             Lines.clear();
         }
@@ -97,7 +97,7 @@ namespace NKikimr {
                     } \
                     TStringBuilder logStringBuilder; \
                     logStringBuilder << stream; \
-                    TActivationContext::Send(new IEventHandleFat(mSettings->LoggerActorId, TActorId(), \
+                    TActivationContext::Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), \
                         new ::NActors::NLog::TEvLog(mPriority, mComponent, (TString)logStringBuilder)); \
                 } else { \
                     if (!(isRelease)) { \

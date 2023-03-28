@@ -11,13 +11,13 @@ namespace NKikimr::NMediatorTimeCastTest {
 
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration) {
             auto sender = runtime.AllocateEdgeActor();
-            runtime.Schedule(new IEventHandleFat(sender, sender, new TEvents::TEvWakeup()), duration);
+            runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
             runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
         }
 
         void SendSubscribeRequest(TTestActorRuntime& runtime, const TActorId& sender, ui64 coordinatorId, ui64 cookie = 0) {
             auto request = MakeHolder<TEvMediatorTimecast::TEvSubscribeReadStep>(coordinatorId);
-            runtime.Send(new IEventHandleFat(MakeMediatorTimecastProxyID(), sender, request.Release(), 0, cookie), 0, true);
+            runtime.Send(new IEventHandle(MakeMediatorTimecastProxyID(), sender, request.Release(), 0, cookie), 0, true);
         }
 
         TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr WaitSubscribeResult(TTestActorRuntime& runtime, const TActorId& sender) {
@@ -26,7 +26,7 @@ namespace NKikimr::NMediatorTimeCastTest {
 
         void SendWaitRequest(TTestActorRuntime& runtime, const TActorId& sender, ui64 coordinatorId, ui64 readStep, ui64 cookie = 0) {
             auto request = MakeHolder<TEvMediatorTimecast::TEvWaitReadStep>(coordinatorId, readStep);
-            runtime.Send(new IEventHandleFat(MakeMediatorTimecastProxyID(), sender, request.Release(), 0, cookie), 0, true);
+            runtime.Send(new IEventHandle(MakeMediatorTimecastProxyID(), sender, request.Release(), 0, cookie), 0, true);
         }
 
         TEvMediatorTimecast::TEvNotifyReadStep::TPtr WaitNotifyResult(TTestActorRuntime& runtime, const TActorId& sender) {

@@ -51,7 +51,7 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
         for (auto i = 1; i <= NODES; ++i) {
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(i, "::", "localhost", "localhost", 1234, TNodeLocation()));
         }
-        runtime.Send(new NActors::IEventHandleFat(a, edge, nodesInfo.Release()), 0, true);
+        runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
     }
 
     for (auto i = 1; i <= NODES; ++i) {
@@ -72,7 +72,7 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
             }
         }
         Cerr << "Sending message to " << cc[i % numWorkers] << " from " << aggregatorId <<  " id " << i << "\n";
-        runtime.Send(new NActors::IEventHandleFat(cc[i % numWorkers], aggregatorId, response.Release(), 0, i), 0, true);
+        runtime.Send(new NActors::IEventHandle(cc[i % numWorkers], aggregatorId, response.Release(), 0, i), 0, true);
     }
     {
         TDispatchOptions options;
@@ -124,21 +124,21 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             auto appCounters = AppCounters->MakeDiffForAggr(*AppCountersBaseline);
             AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
 
-            runtime.Send(new IEventHandleFat(aggregatorId, sender, new TEvTabletCounters::TEvTabletAddCounters(
+            runtime.Send(new IEventHandle(aggregatorId, sender, new TEvTabletCounters::TEvTabletAddCounters(
                 CounterEventsInFlight, TabletId, TabletType, TenantPathId, executorCounters, appCounters)));
 
             // force recalc
-            runtime.Send(new IEventHandleFat(aggregatorId, sender, new NActors::TEvents::TEvWakeup()));
+            runtime.Send(new IEventHandle(aggregatorId, sender, new NActors::TEvents::TEvWakeup()));
         }
 
         void ForgetTablet(TTestBasicRuntime& runtime, const TActorId& aggregatorId, const TActorId& sender) {
-            runtime.Send(new IEventHandleFat(
+            runtime.Send(new IEventHandle(
                 aggregatorId,
                 sender,
                 new TEvTabletCounters::TEvTabletCountersForgetTablet(TabletId, TabletType, TenantPathId)));
 
             // force recalc
-            runtime.Send(new IEventHandleFat(aggregatorId, sender, new NActors::TEvents::TEvWakeup()));
+            runtime.Send(new IEventHandle(aggregatorId, sender, new NActors::TEvents::TEvWakeup()));
         }
 
         void SetSimpleCount(const char* name, ui64 count) {
@@ -677,7 +677,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            runtime.Send(new NActors::IEventHandleFat(a, edge, nodesInfo.Release()), 0, true);
+            runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 
         {
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             counter1.SetValue(13);
             counter1.SetType(TLabeledCounterOptions::CT_SIMPLE);
             counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM);
-            runtime.Send(new NActors::IEventHandleFat(cc[0], edge, response.Release(), 0, 1), 0, true);
+            runtime.Send(new NActors::IEventHandle(cc[0], edge, response.Release(), 0, 1), 0, true);
         }
 
         {
@@ -706,7 +706,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             counter1.SetValue(13);
             counter1.SetType(TLabeledCounterOptions::CT_SIMPLE);
             counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM);
-            runtime.Send(new NActors::IEventHandleFat(cc[1], edge, response.Release(), 0, 2), 0, true);
+            runtime.Send(new NActors::IEventHandle(cc[1], edge, response.Release(), 0, 2), 0, true);
         }
 
         {
@@ -721,7 +721,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             counter1.SetValue(13);
             counter1.SetType(TLabeledCounterOptions::CT_SIMPLE);
             counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM);
-            runtime.Send(new NActors::IEventHandleFat(cc[2], edge, response.Release(), 0, 3), 0, true);
+            runtime.Send(new NActors::IEventHandle(cc[2], edge, response.Release(), 0, 3), 0, true);
         }
 
         runtime.DispatchEvents();
@@ -777,7 +777,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            runtime.Send(new NActors::IEventHandleFat(a, edge, nodesInfo.Release()), 0, true);
+            runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 
         {
@@ -791,7 +791,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             counter1.SetValue(13);
             counter1.SetType(TLabeledCounterOptions::CT_SIMPLE);
             counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM);
-            runtime.Send(new NActors::IEventHandleFat(cc[0], edge, response.Release(), 0, 1), 0, true);
+            runtime.Send(new NActors::IEventHandle(cc[0], edge, response.Release(), 0, 1), 0, true);
         }
 
         {
@@ -806,7 +806,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             counter1.SetValue(13);
             counter1.SetType(TLabeledCounterOptions::CT_SIMPLE);
             counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM);
-            runtime.Send(new NActors::IEventHandleFat(cc[1], edge, response.Release(), 0, 2), 0, true);
+            runtime.Send(new NActors::IEventHandle(cc[1], edge, response.Release(), 0, 2), 0, true);
         }
 
         runtime.DispatchEvents();
@@ -853,7 +853,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            runtime.Send(new NActors::IEventHandleFat(a, edge, nodesInfo.Release()), 0, true);
+            runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 
         NPrivate::TDbLabeledCounters PQCounters;

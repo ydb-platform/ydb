@@ -25,7 +25,7 @@ NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, N
     TStringBuf ydbSessionId = request.GetCookie("ydb_session_id");
     TStringBuf authorization = request.GetHeader("Authorization");
     if (!authorization.empty()) {
-        return new NActors::IEventHandleFat(
+        return new NActors::IEventHandle(
             NKikimr::MakeTicketParserID(),
             owner,
             new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
@@ -34,7 +34,7 @@ NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, N
             IEventHandle::FlagTrackDelivery
         );
     } else if (!ydbSessionId.empty()) {
-        return new NActors::IEventHandleFat(
+        return new NActors::IEventHandle(
             NKikimr::MakeTicketParserID(),
             owner,
             new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
@@ -43,7 +43,7 @@ NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, N
             IEventHandle::FlagTrackDelivery
         );
     } else if (NKikimr::AppData()->EnforceUserTokenRequirement && NKikimr::AppData()->DefaultUserSIDs.empty()) {
-        return new NActors::IEventHandleFat(
+        return new NActors::IEventHandle(
             owner,
             owner,
             new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(TString(), {
@@ -53,7 +53,7 @@ NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, N
         );
     } else if (!NKikimr::AppData()->DefaultUserSIDs.empty()) {
         TIntrusivePtr<NACLib::TUserToken> token = new NACLib::TUserToken(NKikimr::AppData()->DefaultUserSIDs);
-        return new NActors::IEventHandleFat(
+        return new NActors::IEventHandle(
             owner,
             owner,
             new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(TString(), token)

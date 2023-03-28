@@ -349,7 +349,7 @@ void TUserActionProcessorFixture::SendCreateSession(ui64 cookie,
                                                      generation,
                                                      step,
                                                      TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::SendSetOffset(ui64 cookie,
@@ -363,7 +363,7 @@ void TUserActionProcessorFixture::SendSetOffset(ui64 cookie,
                                                      sessionId,
                                                      0,
                                                      0);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::SendGetOffset(ui64 cookie,
@@ -371,7 +371,7 @@ void TUserActionProcessorFixture::SendGetOffset(ui64 cookie,
 {
     auto event = MakeHolder<TEvPQ::TEvGetClientOffset>(cookie,
                                                        clientId);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
@@ -459,7 +459,7 @@ void TUserActionProcessorFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseSt
     event->Record.SetStatus(status);
     event->Record.SetCookie(1); // SET_OFFSET_COOKIE
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::WaitProxyResponse(const TProxyResponseMatcher& matcher)
@@ -523,7 +523,7 @@ void TUserActionProcessorFixture::SendDiskStatusResponse()
     result->SetStatus(NKikimrProto::OK);
     result->SetStatusFlags(NKikimrBlobStorage::StatusIsValid);
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::WaitMetaReadRequest()
@@ -568,7 +568,7 @@ void TUserActionProcessorFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe
         read->SetStatus(NKikimrProto::NODATA);
     }
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::WaitInfoRangeRequest()
@@ -613,7 +613,7 @@ void TUserActionProcessorFixture::SendInfoRangeResponse(ui32 partition,
         }
     }
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::WaitDataRangeRequest()
@@ -640,7 +640,7 @@ void TUserActionProcessorFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     //pair->SetValueSize();
     pair->SetCreationUnixTime(0);
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
@@ -663,7 +663,7 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
     body->SetImmediate(immediate);
     event->Record.SetTxId(txId);
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTransactionParams& params)
@@ -734,7 +734,7 @@ void TUserActionProcessorFixture::SendCalcPredicate(ui64 step,
     auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(step, txId);
     event->AddOperation(consumer, begin, end);
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher)
@@ -759,13 +759,13 @@ void TUserActionProcessorFixture::WaitCalcPredicateResult(const TCalcPredicateMa
 void TUserActionProcessorFixture::SendCommitTx(ui64 step, ui64 txId)
 {
     auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::SendRollbackTx(ui64 step, ui64 txId)
 {
     auto event = MakeHolder<TEvPQ::TEvTxRollback>(step, txId);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::WaitCommitTxDone(const TCommitTxDoneMatcher& matcher)
@@ -796,7 +796,7 @@ void TUserActionProcessorFixture::SendChangePartitionConfig(const TVector<TCreat
     }
 
     auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, config);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::WaitPartitionConfigChanged(const TChangePartitionConfigMatcher& matcher)

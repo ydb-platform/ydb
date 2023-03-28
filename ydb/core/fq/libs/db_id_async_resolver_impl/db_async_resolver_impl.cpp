@@ -26,7 +26,7 @@ TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(
     auto promise = NewPromise<NYql::TDbResolverResponse>();
     TDuration timeout = TDuration::Seconds(40);
     auto callback = MakeHolder<NYql::TRichActorFutureCallback<TEvents::TEvEndpointResponse>>(
-        [promise] (TAutoPtr<NActors::TEventHandleFat<TEvents::TEvEndpointResponse>>& event) mutable {
+        [promise] (TAutoPtr<NActors::TEventHandle<TEvents::TEvEndpointResponse>>& event) mutable {
             promise.SetValue(std::move(event->Get()->DbResolverResponse));
         },
         [promise, timeout] () mutable {
@@ -37,7 +37,7 @@ TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(
 
     NActors::TActorId callbackId = ActorSystem->Register(callback.Release());
 
-    ActorSystem->Send(new NActors::IEventHandleFat(Recipient, callbackId,
+    ActorSystem->Send(new NActors::IEventHandle(Recipient, callbackId,
         new TEvents::TEvEndpointRequest(ids, YdbMvpEndpoint, MdbGateway,
             TraceId, MdbTransformHost)));
     return promise.GetFuture();

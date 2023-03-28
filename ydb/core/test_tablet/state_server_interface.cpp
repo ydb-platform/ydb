@@ -169,7 +169,7 @@ namespace NKikimr::NTestShard {
             void ProcessPacket(TStateServerInterfaceActor *self) {
                 Y_VERIFY(!ResponseQ.empty());
                 TResponseInfo& response = ResponseQ.front();
-                TActivationContext::Send(new IEventHandleFat(response.Type, 0, response.Sender, self->SelfId(),
+                TActivationContext::Send(new IEventHandle(response.Type, 0, response.Sender, self->SelfId(),
                     MakeIntrusive<TEventSerializedData>(std::move(ReadBuffer), TEventSerializationInfo{}),
                     response.Cookie));
                 ResponseQ.pop_front();

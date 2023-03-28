@@ -7,7 +7,7 @@ public:
 };
 
 TAutoPtr<NActors::IEventHandle> TActorAutoStart::AfterRegister(const TActorId& self, const TActorId& parentId) {
-    return new IEventHandleFat(self, parentId, new TEventForStart, 0);
+    return new IEventHandle(self, parentId, new TEventForStart, 0);
 }
 
 void TActorAutoStart::ProcessEvent(TEventContext<TEventForStart>& ev) {

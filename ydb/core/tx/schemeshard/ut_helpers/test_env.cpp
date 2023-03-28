@@ -709,7 +709,7 @@ void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &ru
     for (ui64 txId : txIds) {
         Cerr << Endl << "TestWaitNotification wait txId: " << txId << Endl;
         auto ev = new TEvSchemeShard::TEvNotifyTxCompletion(txId);
-        runtime.Send(new IEventHandleFat(subscriberActorId, sender, ev));
+        runtime.Send(new IEventHandle(subscriberActorId, sender, ev));
     }
 
     TAutoPtr<IEventHandle> handle;
@@ -798,7 +798,7 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
 
 void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {
     auto sender = runtime.AllocateEdgeActor();
-    runtime.Schedule(new IEventHandleFat(sender, sender, new TEvents::TEvWakeup()), duration);
+    runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
     runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
 }
 

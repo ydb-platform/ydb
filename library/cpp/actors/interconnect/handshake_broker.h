@@ -12,14 +12,14 @@ namespace NActors {
         TBrokerLeaseHolder(TActorId waiterId, TActorId brokerId)
             : WaiterId(waiterId)
             , BrokerId(brokerId) {
-            if (TActivationContext::Send(new IEventHandleFat(BrokerId, WaiterId, new TEvHandshakeBrokerTake()))) {
+            if (TActivationContext::Send(new IEventHandle(BrokerId, WaiterId, new TEvHandshakeBrokerTake()))) {
                 LeaseRequested = true;
             }
         }
 
         ~TBrokerLeaseHolder() {
             if (LeaseRequested) {
-                TActivationContext::Send(new IEventHandleFat(BrokerId, WaiterId, new TEvHandshakeBrokerFree()));
+                TActivationContext::Send(new IEventHandle(BrokerId, WaiterId, new TEvHandshakeBrokerFree()));
             }
         }
 

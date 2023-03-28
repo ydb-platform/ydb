@@ -63,10 +63,10 @@ namespace NActors {
 
         TInterconnectProxyTCP(const ui32 node, TInterconnectProxyCommon::TPtr common, IActor **dynamicPtr = nullptr);
 
-        STATEFN(StateInit) {
+        STFUNC(StateInit) {
             Bootstrap();
             if (ev->Type != TEvents::TSystem::Bootstrap) { // for dynamic nodes we do not receive Bootstrap event
-                Receive(ev);
+                Receive(ev, ctx);
             }
         }
 
@@ -180,7 +180,7 @@ namespace NActors {
             } else if (DynamicPtr) {
                 PassAwayTimestamp = TActivationContext::Monotonic() + TDuration::Seconds(15);
                 if (!PassAwayScheduled) {
-                    TActivationContext::Schedule(PassAwayTimestamp, new IEventHandleFat(EvPassAwayIfNeeded, 0, SelfId(),
+                    TActivationContext::Schedule(PassAwayTimestamp, new IEventHandle(EvPassAwayIfNeeded, 0, SelfId(),
                         {}, nullptr, 0));
                     PassAwayScheduled = true;
                 }
@@ -205,7 +205,7 @@ namespace NActors {
             if (now >= PassAwayTimestamp) {
                 PassAway();
             } else if (PassAwayTimestamp != TMonotonic::Max()) {
-                TActivationContext::Schedule(PassAwayTimestamp, new IEventHandleFat(EvPassAwayIfNeeded, 0, SelfId(),
+                TActivationContext::Schedule(PassAwayTimestamp, new IEventHandle(EvPassAwayIfNeeded, 0, SelfId(),
                     {}, nullptr, 0));
             } else {
                 PassAwayScheduled = false;
@@ -356,21 +356,6 @@ namespace NActors {
         IActor **DynamicPtr;
 
         void ValidateEvent(TAutoPtr<IEventHandle>& ev, const char* func) {
-            if (SelfId().NodeId() == PeerNodeId) {
-                TString msg = Sprintf("Event Type# 0x%08" PRIx32 " TypeRewrite# 0x%08" PRIx32
-                    " from Sender# %s sent to the proxy for the node itself via Interconnect;"
-                    " THIS IS NOT A BUG IN INTERCONNECT, check the event sender instead",
-                    ev->Type, ev->GetTypeRewrite(), ev->Sender.ToString().data());
-                LOG_ERROR_IC("ICP03", "%s", msg.data());
-                Y_VERIFY_DEBUG(false, "%s", msg.data());
-            }
-
-            Y_VERIFY(ev->GetTypeRewrite() != TEvInterconnect::EvForward || ev->Recipient.NodeId() == PeerNodeId,
-                "Recipient/Proxy NodeId mismatch Recipient# %s Type# 0x%08" PRIx32 " PeerNodeId# %" PRIu32 " Func# %s",
-                ev->Recipient.ToString().data(), ev->Type, PeerNodeId, func);
-        }
-
-        void ValidateEvent(IEventHandle* ev, const char* func) {
             if (SelfId().NodeId() == PeerNodeId) {
                 TString msg = Sprintf("Event Type# 0x%08" PRIx32 " TypeRewrite# 0x%08" PRIx32
                     " from Sender# %s sent to the proxy for the node itself via Interconnect;"

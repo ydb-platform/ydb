@@ -133,7 +133,7 @@ namespace NKikimr::NFlatTxCoordinator {
         }
 
         void SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags, ui64 cookie) {
-            THolder<IEventHandle> ev = MakeHolder<IEventHandleFat>(target, SelfId(), event, flags, cookie);
+            THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, SelfId(), event, flags, cookie);
 
             if (sessionId) {
                 ev->Rewrite(TEvInterconnect::EvForward, sessionId);

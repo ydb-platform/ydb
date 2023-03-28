@@ -68,7 +68,7 @@ namespace NKikimr::NDataShard {
     }
 
     THolder<IEventHandle> TDataShard::TTxReadSet::MakeAck(const TActorContext& ctx) {
-        return THolder(new IEventHandleFat(Ev->Sender, ctx.SelfID,
+        return THolder(new IEventHandle(Ev->Sender, ctx.SelfID,
                                 new TEvTxProcessing::TEvReadSetAck(*Ev->Get(), Self->TabletID())));
     }
 
@@ -81,7 +81,7 @@ namespace NKikimr::NDataShard {
             record.GetTabletSource(),
             Self->TabletID());
         event->Record.SetFlags(NKikimrTx::TEvReadSet::FLAG_NO_DATA | NKikimrTx::TEvReadSet::FLAG_NO_ACK);
-        return THolder(new IEventHandleFat(Ev->Sender, ctx.SelfID, event.Release()));
+        return THolder(new IEventHandle(Ev->Sender, ctx.SelfID, event.Release()));
     }
 
     void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) {

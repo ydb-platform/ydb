@@ -88,7 +88,7 @@ public:
         TimeoutTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
         auto event = new TConfigsProvider::TEvPrivate::TEvNotificationTimeout(Subscription);
         CreateLongTimer(ctx, TDuration::Minutes(10),
-                        new IEventHandleFat(SelfId(), SelfId(), event),
+                        new IEventHandle(SelfId(), SelfId(), event),
                         AppData(ctx)->SystemPoolId,
                         TimeoutTimerCookieHolder.Get());
     }
@@ -210,7 +210,7 @@ public:
         TimeoutTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
         auto event = new TConfigsProvider::TEvPrivate::TEvNotificationTimeout(Subscription);
         CreateLongTimer(ctx, TDuration::Minutes(10),
-                        new IEventHandleFat(SelfId(), SelfId(), event),
+                        new IEventHandle(SelfId(), SelfId(), event),
                         AppData(ctx)->SystemPoolId,
                         TimeoutTimerCookieHolder.Get());
     }

@@ -476,7 +476,7 @@ namespace NKikimr {
                             const ui64 bytes = write->PartsPtr ? write->PartsPtr->ByteSize() : 0;
                             ReplInfo->SstBytesWritten += bytes;
                             // and check if we have to postpone it
-                            TReplQuoter::QuoteMessage(ReplCtx->VCtx->ReplPDiskWriteQuoter, std::make_unique<IEventHandleFat>(
+                            TReplQuoter::QuoteMessage(ReplCtx->VCtx->ReplPDiskWriteQuoter, std::make_unique<IEventHandle>(
                                 ReplCtx->PDiskCtx->PDiskId, SelfId(), msg.release()), bytes);
                         } else {
                             Send(ReplCtx->PDiskCtx->PDiskId, msg.release());
@@ -738,7 +738,7 @@ namespace NKikimr {
                     ReplCtx->MonGroup.ReplHugeBlobBytesRecovered() += front.Data.GetSize();
 
                     const ui64 bytes = front.Data.GetSize();
-                    TReplQuoter::QuoteMessage(ReplCtx->VCtx->ReplPDiskWriteQuoter, std::make_unique<IEventHandleFat>(
+                    TReplQuoter::QuoteMessage(ReplCtx->VCtx->ReplPDiskWriteQuoter, std::make_unique<IEventHandle>(
                         ReplCtx->SkeletonId, SelfId(), new TEvRecoveredHugeBlob(front.Id, std::move(front.Data))),
                         bytes);
 

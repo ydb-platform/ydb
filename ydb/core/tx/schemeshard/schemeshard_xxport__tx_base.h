@@ -20,7 +20,7 @@ protected:
     virtual ~TTxBase() = default;
 
     void Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
-        SendOnComplete.emplace_back(new IEventHandleFat(recipient, Self->SelfId(), ev, flags, cookie));
+        SendOnComplete.emplace_back(new IEventHandle(recipient, Self->SelfId(), ev, flags, cookie));
     }
 
     template <typename TEvent>

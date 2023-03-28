@@ -549,7 +549,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
             ) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
-                IEventHandle::Forward(event, fakeId);
+                event = IEventHandle::Forward(event, fakeId);
         }
         return TTestActorRuntime::EEventAction::PROCESS;
     };
@@ -597,7 +597,7 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
 TIntrusiveConstPtr<NKikimr::TStateStorageInfo> TCmsTestEnv::GetStateStorageInfo() {
     ui32 StateStorageGroup = 0;
     const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup);
-    Send(new IEventHandleFat(proxy, Sender, new TEvStateStorage::TEvListStateStorage()));
+    Send(new IEventHandle(proxy, Sender, new TEvStateStorage::TEvListStateStorage()));
 
     auto reply = GrabEdgeEventRethrow<TEvStateStorage::TEvListStateStorageResult>(Sender);
     const auto &rec = reply->Get()->Info;

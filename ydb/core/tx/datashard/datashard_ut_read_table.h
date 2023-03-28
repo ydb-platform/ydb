@@ -214,7 +214,7 @@ namespace NDataShardReadTableTest {
 
         bool Next() {
             if (!Finished) {
-                Runtime.Send(new IEventHandleFat(Driver, TActorId(), new TReadTableDriver::TEvNext()), 0, true);
+                Runtime.Send(new IEventHandle(Driver, TActorId(), new TReadTableDriver::TEvNext()), 0, true);
                 auto ev = Runtime.GrabEdgeEventRethrow<TReadTableDriver::TEvResult>(Edge);
                 LastResult = ev->Get()->Result;
                 Finished = ev->Get()->Finished;

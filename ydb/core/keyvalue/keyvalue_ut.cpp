@@ -973,7 +973,7 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEvents) {
                 TestLog("Collect!!! ", event->Sender, "->", event->Recipient, " Cookie# ", event->Cookie);
                 if (firstCollect) {
                     TestLog("Drop!");
-                    runtime.Send(new IEventHandleFat(event->Recipient, event->Recipient, new TKikimrEvents::TEvPoisonPill));
+                    runtime.Send(new IEventHandle(event->Recipient, event->Recipient, new TKikimrEvents::TEvPoisonPill));
                     firstCollect = false;
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -991,7 +991,7 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEvents) {
     bool activeZone = false;
     tc.Prepare(INITIAL_TEST_DISPATCH_NAME, setup, activeZone);
     ExecuteWrite(tc, {{"key", "value"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
-    tc.Runtime->Send(new IEventHandleFat(*tabletActor, *tabletActor, new TKikimrEvents::TEvPoisonPill));
+    tc.Runtime->Send(new IEventHandle(*tabletActor, *tabletActor, new TKikimrEvents::TEvPoisonPill));
     TestLog("After the first death");
     ExecuteWrite(tc, {{"key1", "value1"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
     ExecuteWrite(tc, {{"key2", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
@@ -1046,7 +1046,7 @@ Y_UNIT_TEST(TestBlockedEvGetRequest) {
     UNIT_ASSERT(keyValueTabletGeneration);
     auto generation = *keyValueTabletGeneration;
     auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(*keyValueTabletId, generation, TInstant::Max());
-    tc.Runtime->Send(new IEventHandleFat(*dsProxyActor, *tabletActor, ev.release()));
+    tc.Runtime->Send(new IEventHandle(*dsProxyActor, *tabletActor, ev.release()));
 
     // read with the blocked generation should fail and lead to a restart of the key value tablet
     ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_ERROR>(tc, "key", "", 0, 0, 0);
@@ -1076,7 +1076,7 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowI
             if (tabletActor && *tabletActor == event->Recipient && event->GetTypeRewrite() == TEvKeyValue::TEvCollect::EventType) {
                 switch (collectStep++) {
                     case 1: {
-                        runtime.Send(new IEventHandleFat(event->Recipient, event->Recipient, new TKikimrEvents::TEvPoisonPill));
+                        runtime.Send(new IEventHandle(event->Recipient, event->Recipient, new TKikimrEvents::TEvPoisonPill));
                         TestLog("Event drop; Collect; Tablet was poisoned");
                         return TTestActorRuntime::EEventAction::DROP;
                     }
@@ -1100,7 +1100,7 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowI
     bool activeZone = false;
     tc.Prepare(INITIAL_TEST_DISPATCH_NAME, setup, activeZone);
     ExecuteWrite(tc, {{"key", "value"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
-    tc.Runtime->Send(new IEventHandleFat(*tabletActor, *tabletActor, new TKikimrEvents::TEvPoisonPill));
+    tc.Runtime->Send(new IEventHandle(*tabletActor, *tabletActor, new TKikimrEvents::TEvPoisonPill));
     ExecuteWrite(tc, {{"key1", "value1"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
     ExecuteWrite(tc, {{"key2", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
     ExecuteRead(tc, "key", "value", 0, 0, 0);

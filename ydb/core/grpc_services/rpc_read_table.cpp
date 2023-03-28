@@ -581,7 +581,7 @@ private:
             timer = {};
         }
 
-        auto *ev = new IEventHandleFat(SelfId(), SelfId(), new TEvents::TEvWakeup(tag));
+        auto *ev = new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup(tag));
         timer = CreateLongTimer(timeout, ev);
     }
 

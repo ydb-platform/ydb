@@ -734,12 +734,12 @@ NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDy
 
 void AddRangeToCache(const TBlobRange& blobRange, const TString& data) {
     TlsActivationContext->Send(
-        new IEventHandleFat(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data)));
+        new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data)));
 }
 
 void ForgetBlob(const TUnifiedBlobId& blobId) {
     TlsActivationContext->Send(
-        new IEventHandleFat(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvForgetBlob(blobId)));
+        new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvForgetBlob(blobId)));
 }
 
 }

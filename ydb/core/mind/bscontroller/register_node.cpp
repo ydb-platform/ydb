@@ -183,7 +183,7 @@ public:
         result->Record.SetInstanceId(Self->InstanceId);
         result->Record.SetComprehensive(false);
         result->Record.SetAvailDomain(AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID()));
-        Response = std::make_unique<IEventHandleFat>(MakeBlobStorageNodeWardenID(nodeId), Self->SelfId(), result.release(), 0, 0);
+        Response = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), Self->SelfId(), result.release(), 0, 0);
 
         TString error;
         if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error))) {
@@ -308,7 +308,7 @@ public:
         res->Record.SetInstanceId(Self->InstanceId);
         res->Record.SetComprehensive(true);
         res->Record.SetAvailDomain(AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID()));
-        Response = std::make_unique<IEventHandleFat>(request->Sender, Self->SelfId(), res.release(), 0, request->Cookie);
+        Response = std::make_unique<IEventHandle>(request->Sender, Self->SelfId(), res.release(), 0, request->Cookie);
 
         NIceDb::TNiceDb db(txc.DB);
         auto& node = Self->GetNode(nodeId);

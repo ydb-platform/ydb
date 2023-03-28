@@ -90,7 +90,7 @@ private:
 private:
     template<class TEvent>
     void ScheduleWithIncreasingTimeout(const TActorId& recipient, TDuration& timeout, const TDuration& maxTimeout, const TActorContext &ctx) {
-        ctx.ExecutorThread.ActorSystem->Schedule(timeout, new IEventHandleFat(recipient, SelfId(), new TEvent()));
+        ctx.ExecutorThread.ActorSystem->Schedule(timeout, new IEventHandle(recipient, SelfId(), new TEvent()));
         timeout = Min(timeout * 2, maxTimeout);
     }
 

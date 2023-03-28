@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TFolderServiceTest) {
         runtime->Register(folderService);
         auto request = MakeHolder<NCloud::TEvFolderService::TEvListFolderRequest>();
         request->Request.set_id("xxx");
-        runtime->Send(new IEventHandleFat(folderService->SelfId(), sender, request.Release()));
+        runtime->Send(new IEventHandle(folderService->SelfId(), sender, request.Release()));
         auto result = runtime->GrabEdgeEvent<NCloud::TEvFolderService::TEvListFolderResponse>(handle);
         UNIT_ASSERT(result); // error because no service is listening
         UNIT_ASSERT_EQUAL(result->Status.Msg, "failed to connect to all addresses");
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TFolderServiceTest) {
         auto sendEvent = [&] {
             auto request = MakeHolder<NCloud::TEvFolderService::TEvListFolderRequest>();
             request->Request.set_id(badFolderId);
-            runtime->Send(new IEventHandleFat(folderService->SelfId(), sender, request.Release()));
+            runtime->Send(new IEventHandle(folderService->SelfId(), sender, request.Release()));
             result = runtime->GrabEdgeEvent<NCloud::TEvFolderService::TEvListFolderResponse>(handle);
             return result->Status.GRpcStatusCode != 14;
         };
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TFolderServiceTest) {
         // check for found
         request = MakeHolder<NCloud::TEvFolderService::TEvListFolderRequest>();
         request->Request.set_id(goodFolderId);
-        runtime->Send(new IEventHandleFat(folderService->SelfId(), sender, request.Release()));
+        runtime->Send(new IEventHandle(folderService->SelfId(), sender, request.Release()));
         result = runtime->GrabEdgeEvent<NCloud::TEvFolderService::TEvListFolderResponse>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());

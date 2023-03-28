@@ -226,7 +226,7 @@ Y_UNIT_TEST(Partition) {
 
         THttpRequest httpReq(HTTP_METHOD_GET);
         NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, nullptr, "", nullptr);
-        tc.Runtime->Send(new IEventHandleFat(aggregatorId, tc.Edge, new NMon::TEvHttpInfo(monReq)));
+        tc.Runtime->Send(new IEventHandle(aggregatorId, tc.Edge, new NMon::TEvHttpInfo(monReq)));
 
         TAutoPtr<IEventHandle> handle1;
         auto resp = tc.Runtime->GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle1);

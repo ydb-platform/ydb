@@ -79,7 +79,7 @@ namespace NKikimr {
 
         // Postpone event in case of overload
         template<typename TEv>
-        bool PostponeEvent(TAutoPtr<TEventHandleFat<TEv>> &ev);
+        bool PostponeEvent(TAutoPtr<TEventHandle<TEv>> &ev);
 
         static void ToWhiteboard(const TOverloadHandler *this_, NKikimrWhiteboard::TVDiskSatisfactionRank &v);
         ui32 GetIntegralRankPercent() const;

@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(CachingDnsResolver) {
         }
 
         void Sleep(TDuration duration) {
-            Schedule(new IEventHandleFat(Sleeper, Sleeper, new TEvents::TEvWakeup), duration);
+            Schedule(new IEventHandle(Sleeper, Sleeper, new TEvents::TEvWakeup), duration);
             GrabEdgeEventRethrow<TEvents::TEvWakeup>(Sleeper);
         }
 
@@ -272,11 +272,11 @@ Y_UNIT_TEST_SUITE(CachingDnsResolver) {
         }
 
         void SendGetHostByName(const TActorId& sender, const TString& name, int family = AF_UNSPEC) {
-            Send(new IEventHandleFat(Resolver, sender, new TEvDns::TEvGetHostByName(name, family)), 0, true);
+            Send(new IEventHandle(Resolver, sender, new TEvDns::TEvGetHostByName(name, family)), 0, true);
         }
 
         void SendGetAddr(const TActorId& sender, const TString& name, int family = AF_UNSPEC) {
-            Send(new IEventHandleFat(Resolver, sender, new TEvDns::TEvGetAddr(name, family)), 0, true);
+            Send(new IEventHandle(Resolver, sender, new TEvDns::TEvGetAddr(name, family)), 0, true);
         }
 
         TEvDns::TEvGetHostByNameResult::TPtr WaitGetHostByName(const TActorId& sender) {
@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(CachingDnsResolver) {
         runtime.SendGetAddr(sender, "yandex.ru", AF_UNSPEC);
         runtime.ExpectGetAddrSuccess(sender, "2a02:6b8:a::a");
 
-        runtime.Send(new IEventHandleFat(runtime.MockResolver, { }, new TEvents::TEvPoison), 0, true);
+        runtime.Send(new IEventHandle(runtime.MockResolver, { }, new TEvents::TEvPoison), 0, true);
         runtime.SendGetAddr(sender, "foo.ru", AF_UNSPEC);
         runtime.ExpectGetAddrError(sender, ARES_ENOTINITIALIZED);
     }
@@ -640,7 +640,7 @@ Y_UNIT_TEST_SUITE(CachingDnsResolver) {
 
         runtime.SendGetHostByName(sender, "yandex.ru", AF_UNSPEC);
         runtime.SendGetAddr(sender, "yandex.ru", AF_UNSPEC);
-        runtime.Send(new IEventHandleFat(runtime.Resolver, sender, new TEvents::TEvPoison), 0, true);
+        runtime.Send(new IEventHandle(runtime.Resolver, sender, new TEvents::TEvPoison), 0, true);
         runtime.ExpectGetHostByNameError(sender, ARES_ECANCELLED);
         runtime.ExpectGetAddrError(sender, ARES_ECANCELLED);
     }

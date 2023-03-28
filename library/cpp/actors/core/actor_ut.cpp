@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 ctx.RegisterWithSameMailbox(new TDummyActor());
             }
             if (Role == ERole::Leader) {
-                TAutoPtr<IEventHandle> ev = new IEventHandleFat(Receiver, SelfId(), new TEvents::TEvPing());
+                TAutoPtr<IEventHandle> ev = new IEventHandle(Receiver, SelfId(), new TEvents::TEvPing());
                 SpecialSend(ev, ctx);
             }
         }
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             }
 
             if (AllocatesMemory) {
-                SpecialSend(new IEventHandleFat(ev->Sender, SelfId(), new TEvents::TEvPing()), ctx);
+                SpecialSend(new IEventHandle(ev->Sender, SelfId(), new TEvents::TEvPing()), ctx);
             } else {
                 std::swap(*const_cast<TActorId*>(&ev->Sender), *const_cast<TActorId*>(&ev->Recipient));
                 ev->DropRewrite();
@@ -541,14 +541,14 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         {
         }
 
-        bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
+        bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
             *Counter += 1;
             if (ev->Type != TEvents::THelloWorld::Pong) {
-                TAutoPtr<IEventHandle> pingEv = new IEventHandleFat(SelfId(), SelfId(), new TEvents::TEvPing());
+                TAutoPtr<IEventHandle> pingEv = new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPing());
                 SavedEvent = ev;
-                Actor->Receive(pingEv);
+                Actor->Receive(pingEv, ctx);
             } else {
-                Actor->Receive(SavedEvent);
+                Actor->Receive(SavedEvent, ctx);
             }
             return false;
         }
@@ -566,7 +566,7 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
             *Counter += 1;
             if (ev->Type == TEvents::THelloWorld::Ping) {
-                TAutoPtr<IEventHandle> pongEv = new IEventHandleFat(SelfId(), SelfId(), new TEvents::TEvPong());
+                TAutoPtr<IEventHandle> pongEv = new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPong());
                 Send(SelfId(), new TEvents::TEvPong());
                 return false;
             }
@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(TestStateFunc) {
         auto sender = runtime.AllocateEdgeActor();
         auto testActor = runtime.Register(new TTestActorWithExceptionsStateFunc());
         for (ui64 tag = 0; tag < 4; ++tag) {
-            runtime.Send(new IEventHandleFat(testActor, sender, new TEvents::TEvWakeup(tag)), 0, true);
+            runtime.Send(new IEventHandle(testActor, sender, new TEvents::TEvWakeup(tag)), 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Tag, tag);
         }

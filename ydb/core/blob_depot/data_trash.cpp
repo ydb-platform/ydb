@@ -173,7 +173,7 @@ namespace NKikimr::NBlobDepot {
 
             Y_VERIFY(agent.Connection);
             agent.PushCallbacks.emplace(id, std::bind(&TData::OnPushNotifyResult, this, std::placeholders::_1));
-            TActivationContext::Send(new IEventHandleFat(agent.Connection->AgentId, agent.Connection->PipeServerId, ev.release(), 0, id));
+            TActivationContext::Send(new IEventHandle(agent.Connection->AgentId, agent.Connection->PipeServerId, ev.release(), 0, id));
         }
     }
 

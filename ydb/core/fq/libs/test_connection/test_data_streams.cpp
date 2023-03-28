@@ -150,9 +150,9 @@ private:
         DbResolver->ResolveIds(ids).Apply([self=SelfId(), as=TActivationContext::ActorSystem()](const auto& future) {
             try {
                 auto result = future.GetValue();
-                as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvResolveDbResponse(result), 0));
+                as->Send(new IEventHandle(self, self, new TEvPrivate::TEvResolveDbResponse(result), 0));
             } catch (...) {
-                as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvResolveDbResponse(NYql::TDbResolverResponse{{}, false, NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, CurrentExceptionMessage())}}), 0));
+                as->Send(new IEventHandle(self, self, new TEvPrivate::TEvResolveDbResponse(NYql::TDbResolverResponse{{}, false, NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, CurrentExceptionMessage())}}), 0));
             }
         });
     }
@@ -184,9 +184,9 @@ private:
         Gateway->OpenSession(SessionName, {}).Apply([self=SelfId(), as=TActivationContext::ActorSystem()](const auto& future) {
             try {
                 future.TryRethrow();
-                as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvOpenSessionResponse(), 0));
+                as->Send(new IEventHandle(self, self, new TEvPrivate::TEvOpenSessionResponse(), 0));
             } catch (...) {
-                as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvOpenSessionResponse(CurrentExceptionMessage()), 0));
+                as->Send(new IEventHandle(self, self, new TEvPrivate::TEvOpenSessionResponse(CurrentExceptionMessage()), 0));
             }
         });
     }
@@ -206,9 +206,9 @@ private:
         Gateway->ListStreams(SessionName, SessionName, ClusterConfig.GetDatabase(), StructuredToken, 1).Apply([self=SelfId(), as=TActivationContext::ActorSystem()](const auto& future) {
             try {
                 future.TryRethrow();
-                as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvCheckListStreamsResponse(), 0));
+                as->Send(new IEventHandle(self, self, new TEvPrivate::TEvCheckListStreamsResponse(), 0));
             } catch (...) {
-                as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvCheckListStreamsResponse(CurrentExceptionMessage()), 0));
+                as->Send(new IEventHandle(self, self, new TEvPrivate::TEvCheckListStreamsResponse(CurrentExceptionMessage()), 0));
             }
         });
     }

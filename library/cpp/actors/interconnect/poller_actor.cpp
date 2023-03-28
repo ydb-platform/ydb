@@ -104,7 +104,7 @@ namespace NActors {
     protected:
         void Notify(TSocketRecord *record, bool read, bool write) {
             auto issue = [&](const TActorId& recipient) {
-                ActorSystem->Send(new IEventHandleFat(recipient, {}, new TEvPollerReady(record->Socket, read, write)));
+                ActorSystem->Send(new IEventHandle(recipient, {}, new TEvPollerReady(record->Socket, read, write)));
             };
             if (read && record->ReadActorId) {
                 issue(record->ReadActorId);

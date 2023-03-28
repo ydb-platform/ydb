@@ -78,7 +78,7 @@ namespace NKikimr::NTestShard {
                 IssueNextStateServerQuery();
             } else {
                 STLOG(PRI_ERROR, TEST_SHARD, TS05, "state server disconnected", (TabletId, TabletId));
-                TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                 PassAway();
             }
         }
@@ -293,7 +293,7 @@ namespace NKikimr::NTestShard {
                     Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
                 case ::NTestShard::TStateServer::RACE:
-                    TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                     PassAway();
                     return;
 
@@ -328,7 +328,7 @@ namespace NKikimr::NTestShard {
 
                 if (!KeyReadsWaitingForRetry.empty()) {
                     SendRetriesPending = true;
-                    TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandleFat(EvRetryKeyReads, 0, SelfId(),
+                    TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandle(EvRetryKeyReads, 0, SelfId(),
                         {}, nullptr, 0));
                     return;
                 }
@@ -443,7 +443,7 @@ namespace NKikimr::NTestShard {
                     Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
                 case ::NTestShard::TStateServer::RACE:
-                    TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                     PassAway();
                     return;
 
@@ -591,7 +591,7 @@ namespace NKikimr::NTestShard {
         Action();
 
         if (Settings.RestartPeriodsSize() && ev->Get()->InitialCheck) {
-            TActivationContext::Schedule(GenerateRandomInterval(Settings.GetRestartPeriods()), new IEventHandleFat(
+            TActivationContext::Schedule(GenerateRandomInterval(Settings.GetRestartPeriods()), new IEventHandle(
                 TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, 0));
         }
     }

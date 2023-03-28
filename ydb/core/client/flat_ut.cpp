@@ -2764,7 +2764,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         for (auto tabletId : xrange(72075186224037888, 72075186224037893)) {
             cleverServer.GetRuntime()->Send(
-                new IEventHandleFat(MakeTabletResolverID(), TActorId(),
+                new IEventHandle(MakeTabletResolverID(), TActorId(),
                     new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())
                 ));
         }

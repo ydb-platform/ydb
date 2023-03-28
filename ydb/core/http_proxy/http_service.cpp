@@ -70,7 +70,7 @@ namespace NKikimr::NHttpProxy {
         ev->CertificateFile = config.GetCert();
         ev->PrivateKeyFile = config.GetKey();
 
-        ctx.Send(new NActors::IEventHandleFat(MakeHttpServerServiceID(), TActorId(),
+        ctx.Send(new NActors::IEventHandle(MakeHttpServerServiceID(), TActorId(),
                                            ev.Release(), 0, true));
         ctx.Send(MakeHttpServerServiceID(),
                  new NHttp::TEvHttpProxy::TEvRegisterHandler("/", MakeHttpProxyID()));

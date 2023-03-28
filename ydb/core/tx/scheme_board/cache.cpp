@@ -96,9 +96,7 @@ namespace {
     template <typename TRequest, typename TEvRequest, typename TDerived>
     class TDbResolver: public TActorBootstrapped<TDerived> {
         void Handle() {
-            auto req = new TEvRequest(Request.Release());
-            req->PrepareSend(Cache, Sender);
-            TlsActivationContext->Send(req);
+            TlsActivationContext->Send(new IEventHandle(Cache, Sender, new TEvRequest(Request.Release())));
             this->PassAway();
         }
 

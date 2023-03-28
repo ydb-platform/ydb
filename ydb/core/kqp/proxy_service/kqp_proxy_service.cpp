@@ -737,7 +737,7 @@ public:
         } else {
             GetKqpResourceManager()->RequestClusterResourcesInfo(
                 [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                    TAutoPtr<IEventHandle> eh = new IEventHandleFat(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
+                    TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
                     as->Send(eh);
                 });
         }
@@ -1029,7 +1029,7 @@ public:
     void StartQueryTimeout(ui64 requestId, TDuration timeout, NYql::NDqProto::StatusIds::StatusCode status = NYql::NDqProto::StatusIds::TIMEOUT) {
         TActorId timeoutTimer = CreateLongTimer(
             TlsActivationContext->AsActorContext(), timeout,
-            new IEventHandleFat(SelfId(), SelfId(), new TEvPrivate::TEvOnRequestTimeout{requestId, timeout, status, 0})
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvOnRequestTimeout{requestId, timeout, status, 0})
         );
 
         KQP_PROXY_LOG_D("Scheduled timeout timer for requestId: " << requestId << " timeout: " << timeout << " actor id: " << timeoutTimer);

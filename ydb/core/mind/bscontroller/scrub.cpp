@@ -593,7 +593,7 @@ public:
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerScrubStartQuantum>(scrub->VSlotId.NodeId,
             scrub->VSlotId.PDiskId, scrub->VSlotId.VSlotId, scrub->State);
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC13, "sending TEvControllerScrubStartQuantum", (Msg, ev->ToString()));
-        TActivationContext::Send(new IEventHandleFat(MakeBlobStorageNodeWardenID(scrub->VSlotId.NodeId), Self->SelfId(),
+        TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(scrub->VSlotId.NodeId), Self->SelfId(),
             ev.release(), 0, scrub->Cookie));
         SetInProgress(scrub);
         if (!scrub->State) { // scrubbing has just started for this disk
@@ -777,7 +777,7 @@ TBlobStorageController::TScrubState::~TScrubState()
 
 void TBlobStorageController::TScrubState::HandleTimer() {
     Impl->OnTimer(TActivationContext::Now());
-    TActivationContext::Schedule(TDuration::Minutes(1), new IEventHandleFat(Impl->SelfId(), {}, new TEvPrivate::TEvScrub));
+    TActivationContext::Schedule(TDuration::Minutes(1), new IEventHandle(Impl->SelfId(), {}, new TEvPrivate::TEvScrub));
 }
 
 void TBlobStorageController::TScrubState::AddItem(TVSlotId vslotId, std::optional<TString> state,

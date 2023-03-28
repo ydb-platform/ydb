@@ -14,7 +14,7 @@ class TExampleLookupRequestActor : public TActor<TExampleLookupRequestActor> {
 
     void Registered(TActorSystem* sys, const TActorId&) override {
         const auto flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession;
-        sys->Send(new IEventHandleFat(Replica, SelfId(), new TEvExample::TEvReplicaLookup(Key), flags));
+        sys->Send(new IEventHandle(Replica, SelfId(), new TEvExample::TEvReplicaLookup(Key), flags));
     }
 
     void PassAway() override {

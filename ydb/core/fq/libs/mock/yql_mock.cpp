@@ -78,11 +78,11 @@ void InitTest(NActors::TTestActorRuntime* runtime, int httpPort, int grpcPort, c
 
     TActorId mockActorId = runtime->Register(CreateYqlMockActor(grpcPort));
 
-    runtime->Send(new NActors::IEventHandleFat(
+    runtime->Send(new NActors::IEventHandle(
                       httpProxyId, TActorId(),
                       new NHttp::TEvHttpProxy::TEvAddListeningPort(httpPort)), 0, true);
 
-    runtime->Send(new NActors::IEventHandleFat(
+    runtime->Send(new NActors::IEventHandle(
                       httpProxyId, TActorId(),
                       new NHttp::TEvHttpProxy::TEvRegisterHandler("/yql-mock/abc/database", mockActorId)),
                   0, true);

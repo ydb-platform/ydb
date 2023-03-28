@@ -725,7 +725,7 @@ struct TEvKqp {
         NLWTrace::TOrbit Orbit;
     };
 
-    struct TEvCompileResponse : public TEventLight<TEvCompileResponse, TKqpEvents::EvCompileResponse> {
+    struct TEvCompileResponse : public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {
         TEvCompileResponse(const TKqpCompileResult::TConstPtr& compileResult, NLWTrace::TOrbit orbit = {})
             : CompileResult(compileResult)
             , Orbit(std::move(orbit)) {}

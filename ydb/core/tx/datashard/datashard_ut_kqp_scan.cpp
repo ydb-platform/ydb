@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     resp->Record.SetEnough(false);
                     resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
-                    runtime.Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                    runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
 
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 case NKqp::TKqpComputeEvents::EvScanData: {
                     if (scans.contains(ev->Sender)) {
                         if (killedTablets.empty()) { // do only 1 kill per test
-                            runtime.Send(new IEventHandleFat(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet));
+                            runtime.Send(new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet));
                             Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event, kill tablet " << ev->Sender << Endl);
                             Cerr.Flush();
                         }
@@ -215,7 +215,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     resp->Record.SetEnough(false);
                     resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
-                    runtime.Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                    runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
 
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
 
-                    runtime.Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                    runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
 
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
 
-                    runtime.Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                    runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
 
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -578,7 +578,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     resp->Record.SetEnough(false);
                     resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
-                    runtime.Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                    runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
 
@@ -586,7 +586,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 case NKqp::TKqpComputeEvents::EvScanData: {
                     if (scans.contains(ev->Sender)) {
                         if (killedTablets.empty()) { // do only 1 kill per test
-                            runtime.Send(new IEventHandleFat(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet));
+                            runtime.Send(new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet));
                             Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event, kill tablet " << ev->Sender << Endl);
                             Cerr.Flush();
                         }

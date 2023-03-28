@@ -74,7 +74,7 @@ namespace NActors {
 
         if (recpNodeId != NodeId && recpNodeId != 0) {
             // if recipient is not local one - rewrite with forward instruction
-            //Y_VERIFY_DEBUG(!ev->HasEvent() || ev->GetBase()->IsSerializable());
+            Y_VERIFY_DEBUG(!ev->HasEvent() || ev->GetBase()->IsSerializable());
             Y_VERIFY(ev->Recipient == recipient,
                 "Event rewrite from %s to %s would be lost via interconnect",
                 ev->Recipient.ToString().c_str(),
@@ -96,7 +96,7 @@ namespace NActors {
                 }
                 if (target != actorId) {
                     // a race has occured, terminate newly created actor
-                    Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
+                    Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
                 }
             }
             recipient = target;
@@ -122,7 +122,7 @@ namespace NActors {
     bool TActorSystem::GenericSend<&IExecutorPool::SpecificSend>(TAutoPtr<IEventHandle> ev) const;
 
     bool TActorSystem::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie) const {
-        return this->Send(new IEventHandleFat(recipient, DefSelfID, ev, flags, cookie));
+        return this->Send(new IEventHandle(recipient, DefSelfID, ev, flags, cookie));
     }
 
     bool TActorSystem::SpecificSend(TAutoPtr<IEventHandle> ev) const {
@@ -138,14 +138,6 @@ namespace NActors {
             TlsThreadContext->SendingType = previousType;
             return isSent;
         }
-    }
-
-    bool TActorSystem::Send(const TActorId& recipient, IEventHandleLight* ev, ui32 flags, ui64 cookie) const {
-        return this->Send(ev->PrepareSend(recipient, DefSelfID, flags, cookie));
-    }
-
-    bool TActorSystem::Send(const TActorId& recipient, const TActorId& sender, IEventHandleLight* ev, ui32 flags, ui64 cookie) const {
-        return this->Send(ev->PrepareSend(recipient, sender, flags, cookie));
     }
 
     void TActorSystem::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {

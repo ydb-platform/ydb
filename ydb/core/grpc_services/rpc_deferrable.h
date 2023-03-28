@@ -62,13 +62,13 @@ public:
 
         if (OperationTimeout_) {
             OperationTimeoutTimer = CreateLongTimer(ctx, OperationTimeout_,
-                new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagTimeout)),
+                new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagTimeout)),
                 AppData(ctx)->UserPoolId);
         }
 
         if (HasCancel_ && CancelAfter_) {
             CancelAfterTimer = CreateLongTimer(ctx, CancelAfter_,
-                new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagCancel)),
+                new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagCancel)),
                 AppData(ctx)->UserPoolId);
         }
 

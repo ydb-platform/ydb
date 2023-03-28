@@ -215,7 +215,7 @@ public:
 
     virtual TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const TActorId& parentId) override {
         Y_UNUSED(parentId);
-        return new NActors::IEventHandleFat(self, self, new TEvents::TEvBootstrap(), 0);
+        return new NActors::IEventHandle(self, self, new TEvents::TEvBootstrap(), 0);
     }
 
 protected:

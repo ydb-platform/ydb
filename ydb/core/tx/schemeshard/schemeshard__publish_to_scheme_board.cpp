@@ -128,7 +128,7 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
                                << ", txId: " << txId);
 
                 THolder<TEvPrivate::TEvCompletePublication> msg = MakeHolder<TEvPrivate::TEvCompletePublication>(opId, pathId, version);
-                TEvPrivate::TEvCompletePublication::TPtr personalEv = (TEventHandleFat<TEvPrivate::TEvCompletePublication>*) new IEventHandleFat(
+                TEvPrivate::TEvCompletePublication::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompletePublication>*) new IEventHandle(
                     Self->SelfId(), Self->SelfId(), msg.Release());
 
                 TMemoryChanges memChanges;

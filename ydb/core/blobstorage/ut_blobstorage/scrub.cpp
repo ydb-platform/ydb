@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
                 bool done = false;
                 for (;;) {
-                    env.Runtime->Send(new IEventHandleFat(vdiskActorId, sender, new TEvBlobStorage::TEvCaptureVDiskLayout),
+                    env.Runtime->Send(new IEventHandle(vdiskActorId, sender, new TEvBlobStorage::TEvCaptureVDiskLayout),
                         sender.NodeId());
                     auto res = env.WaitForEdgeActorEvent<TLayout>(sender, false);
                     layout.reset(res->Release().Release());
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             const TActorId& sender = env.Runtime->AllocateEdgeActor(queueId.NodeId());
             auto ev = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(vdiskId, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead, {}, {}, fromId, toId, 1000);
-            env.Runtime->Send(new IEventHandleFat(queueId, sender, ev.release()), sender.NodeId());
+            env.Runtime->Send(new IEventHandle(queueId, sender, ev.release()), sender.NodeId());
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(sender);
             auto& r = res->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), NKikimrProto::OK);
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                 auto ev = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId, TInstant::Max(),
                     NKikimrBlobStorage::EGetHandleClass::FastRead, {}, {}, {id});
                 const TActorId& sender = env.Runtime->AllocateEdgeActor(queueId.NodeId());
-                env.Runtime->Send(new IEventHandleFat(queueId, sender, ev.release()), sender.NodeId());
+                env.Runtime->Send(new IEventHandle(queueId, sender, ev.release()), sender.NodeId());
                 auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(sender);
                 auto& r = res->Get()->Record;
                 UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), NKikimrProto::OK);
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             const ui32 partSize = type.PartSize(key);
             const ui32 size = partSize + BlobProtobufHeaderMaxSize;
             if (size + total > 60000000) {
-                env.Runtime->Send(new IEventHandleFat(queueId, edge, ev.release()), edge.NodeId());
+                env.Runtime->Send(new IEventHandle(queueId, edge, ev.release()), edge.NodeId());
                 total = 0;
                 ++numMsgs;
             }
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             ++numBlobs;
         }
         if (ev) {
-            env.Runtime->Send(new IEventHandleFat(queueId, edge, ev.release()), edge.NodeId());
+            env.Runtime->Send(new IEventHandle(queueId, edge, ev.release()), edge.NodeId());
             ++numMsgs;
         }
         while (numMsgs--) {
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
         }
         UNIT_ASSERT(!numBlobs);
 
-        env.Runtime->Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, queueId, edge, nullptr, 0), 1);
+        env.Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, queueId, edge, nullptr, 0), 1);
         env.Runtime->DestroyActor(edge);
     }
 
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                 const ui32 nodeId = vdiskActorId.NodeId();
                 const TActorId& edge = runtime->AllocateEdgeActor(nodeId);
                 const ui64 cookie = RandomNumber<ui64>();
-                runtime->Send(new IEventHandleFat(TEvBlobStorage::EvScrubAwait, 0, vdiskActorId, edge, nullptr, cookie), nodeId);
+                runtime->Send(new IEventHandle(TEvBlobStorage::EvScrubAwait, 0, vdiskActorId, edge, nullptr, cookie), nodeId);
                 auto ev = env.WaitForEdgeActorEvent<TEvScrubNotify>(edge);
                 UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, cookie);
                 passedCheckpoints |= ev->Get()->Checkpoints;
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             for (ui32 i = 1; i < info->GetTotalVDisksNum(); ++i) {
                 const TActorId& actorId = info->GetActorId(i);
                 Cerr << "*** terminating peer disk# " << actorId.ToString() << Endl;
-                runtime->Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0), actorId.NodeId());
+                runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0), actorId.NodeId());
             }
 
             Cerr << "*** blobIdsToValidate.size# " << blobIdsToValidate.size() << Endl;

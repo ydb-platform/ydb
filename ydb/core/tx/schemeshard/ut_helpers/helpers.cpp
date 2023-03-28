@@ -43,7 +43,7 @@ namespace NSchemeShardUT_Private {
     {
         TActorId sender = runtime.AllocateEdgeActor();
         ui64 txId = evRequest->Record.GetTxId();
-        runtime.Send(new IEventHandleFat(proposer, sender, evRequest));
+        runtime.Send(new IEventHandle(proposer, sender, evRequest));
 
         auto evResponse = runtime.GrabEdgeEvent<TEvResponse>(sender);
         UNIT_ASSERT(evResponse);
@@ -343,7 +343,7 @@ namespace NSchemeShardUT_Private {
         entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
         entry.Operation = op;
         entry.ShowPrivatePath = true;
-        runtime.Send(MakeSchemeCacheID(), sender, new TEvRequest(request.Release()));
+        runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvRequest(request.Release())));
 
         auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
         UNIT_ASSERT(ev);
@@ -1624,7 +1624,7 @@ namespace NSchemeShardUT_Private {
                 tx->AddTables()->SetTablePath(path);
             }
             tx->SetTimeoutMs(timeout.MilliSeconds());
-            runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
         }
 
         auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);

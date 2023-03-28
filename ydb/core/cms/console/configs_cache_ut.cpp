@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TConfigsCacheTests) {
         auto edge = runtime.AllocateEdgeActor();
 
         TSaveCallback save = [&runtime, &edge](auto &config) {
-            runtime.Send(new IEventHandleFat(runtime.Sender, edge, new TEvPrivate::TEvSaveConfig(config)));
+            runtime.Send(new IEventHandle(runtime.Sender, edge, new TEvPrivate::TEvSaveConfig(config)));
         };
 
         TLoadCallback load = [](auto&) {};
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(TConfigsCacheTests) {
         auto edge = runtime.AllocateEdgeActor();
 
         TSaveCallback save = [&runtime, &edge](auto &config) {
-            runtime.Send(new IEventHandleFat(runtime.Sender, edge, new TEvPrivate::TEvSaveConfig(config)));
+            runtime.Send(new IEventHandle(runtime.Sender, edge, new TEvPrivate::TEvSaveConfig(config)));
         };
 
         TLoadCallback load = [](auto&) {};
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(TConfigsCacheTests) {
         auto edge = runtime.AllocateEdgeActor();
 
         TSaveCallback save = [&runtime, &edge](auto &config) {
-            runtime.Send(new IEventHandleFat(runtime.Sender, edge, new TEvPrivate::TEvSaveConfig(config)));
+            runtime.Send(new IEventHandle(runtime.Sender, edge, new TEvPrivate::TEvSaveConfig(config)));
         };
 
         TLoadCallback load = [](auto&) {};

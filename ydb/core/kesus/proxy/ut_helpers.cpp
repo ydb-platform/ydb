@@ -42,7 +42,7 @@ void TTestContext::SetupTabletServices() {
 
 void TTestContext::Sleep(ui64 millis) {
     TActorId sender = Runtime->AllocateEdgeActor();
-    Runtime->Schedule(new IEventHandleFat(sender, sender, new TEvents::TEvWakeup()), TDuration::MilliSeconds(millis), 0);
+    Runtime->Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), TDuration::MilliSeconds(millis), 0);
     ExpectEdgeEvent<TEvents::TEvWakeup>(sender, 0);
 }
 
@@ -71,7 +71,7 @@ TActorId TTestContext::GetProxy(ui64 proxyId, ui32 nodeIndex) {
 void TTestContext::SendFromEdge(ui64 proxyId, const TActorId& edge, IEventBase* payload, ui64 cookie) {
     ui32 nodeIndex = edge.NodeId() - Runtime->GetNodeId(0);
     Runtime->Send(
-        new IEventHandleFat(GetProxy(proxyId), edge, payload, 0, cookie),
+        new IEventHandle(GetProxy(proxyId), edge, payload, 0, cookie),
         nodeIndex,
         true);
 }

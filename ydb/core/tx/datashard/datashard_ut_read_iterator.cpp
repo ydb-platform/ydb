@@ -547,7 +547,7 @@ struct TTestHelper {
         if (!handle) {
             return nullptr;
         }
-        std::unique_ptr<TEvDataShard::TEvReadResult> event(IEventHandle::Release<TEvDataShard::TEvReadResult>(handle));
+        std::unique_ptr<TEvDataShard::TEvReadResult> event(handle->Release<TEvDataShard::TEvReadResult>().Release());
         return event;
     }
 

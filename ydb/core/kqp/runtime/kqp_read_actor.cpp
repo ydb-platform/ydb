@@ -81,12 +81,12 @@ class TKqpReadActor : public TActorBootstrapped<TKqpReadActor>, public NYql::NDq
 public:
     struct TResult {
         ui64 ShardId;
-        THolder<TEventHandleFat<TEvDataShard::TEvReadResult>> ReadResult;
+        THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
         TMaybe<NKikimr::NMiniKQL::TUnboxedValueVector> Batch;
         size_t ProcessedRows = 0;
         size_t PackedRows = 0;
 
-        TResult(ui64 shardId, THolder<TEventHandleFat<TEvDataShard::TEvReadResult>> readResult)
+        TResult(ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult)
             : ShardId(shardId)
             , ReadResult(std::move(readResult))
         {
@@ -721,7 +721,7 @@ public:
         }
 
         CA_LOG_D("schedule retry #" << id << " after " << delay);
-        TlsActivationContext->Schedule(delay, new IEventHandleFat(SelfId(), SelfId(), new TEvRetryShard(id, Reads[id].LastSeqNo)));
+        TlsActivationContext->Schedule(delay, new IEventHandle(SelfId(), SelfId(), new TEvRetryShard(id, Reads[id].LastSeqNo)));
     }
 
     void DoRetryRead(ui64 id) {
@@ -914,7 +914,7 @@ public:
             << " seqno = " << ev->Get()->Record.GetSeqNo()
             << " finished = " << ev->Get()->Record.GetFinished());
         CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
-        Results.push({Reads[id].Shard->TabletId, THolder<TEventHandleFat<TEvDataShard::TEvReadResult>>(ev.Release())});
+        Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
         NotifyCA();
     }
 

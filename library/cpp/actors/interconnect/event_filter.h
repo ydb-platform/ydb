@@ -31,7 +31,7 @@ namespace NActors {
             evSpaceIndex[subtype] = routes;
         }
 
-        bool CheckIncomingEvent(const IEventHandleFat& ev, const TScopeId& localScopeId) const {
+        bool CheckIncomingEvent(const IEventHandle& ev, const TScopeId& localScopeId) const {
             TRouteMask routes = 0;
             if (const auto& evSpaceIndex = ScopeRoutes[ev.Type >> 16]) {
                 const ui16 subtype = ev.Type & 65535;

@@ -189,7 +189,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     // Put to init queue
 
     template<typename TEvent>
-    void HandleEnqueue(TAutoPtr<TEventHandleFat<TEvent>> ev) {
+    void HandleEnqueue(TAutoPtr<TEventHandle<TEvent>> ev) {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
                 << " HandleEnqueue# " << ev->Get()->Print(false) << " Marker# DSP17");
         if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
@@ -274,7 +274,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     }
 
     template<typename TEvent>
-    void HandleError(TAutoPtr<TEventHandleFat<TEvent>> ev) {
+    void HandleError(TAutoPtr<TEventHandle<TEvent>> ev) {
         bool full = false;
         if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvBlock> || std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
             full = ev->Get()->IsMonitored;

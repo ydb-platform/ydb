@@ -93,7 +93,7 @@ public:
                     new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
                     NKikimrProto::OK);
             PDisk = nullptr;
-            Runtime->Send(new IEventHandleFat(*PDiskActor, Sender, new TKikimrEvents::TEvPoisonPill));
+            Runtime->Send(new IEventHandle(*PDiskActor, Sender, new TKikimrEvents::TEvPoisonPill));
         }
 
         if (Settings.UsePDiskMock) {
@@ -109,7 +109,7 @@ public:
     }
 
     void Send(IEventBase* ev) {
-        Runtime->Send(new IEventHandleFat(*PDiskActor, Sender, ev));
+        Runtime->Send(new IEventHandle(*PDiskActor, Sender, ev));
     }
 
     NPDisk::TPDisk *GetPDisk() {

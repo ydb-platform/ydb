@@ -134,7 +134,7 @@ namespace NKikimr::NBlobDepot {
 
                     // add node to wait list; also start timer to remove this node from the wait queue
                     NodesWaitingForPushResult.insert(agentId);
-                    TActivationContext::Schedule(info.ExpirationTimestamp, new IEventHandleFat(TEvPrivate::EvCheckWaitingNode,
+                    TActivationContext::Schedule(info.ExpirationTimestamp, new IEventHandle(TEvPrivate::EvCheckWaitingNode,
                         0, SelfId(), {}, nullptr, agentId));
 
                     // issue message to the connected node, if it is
@@ -149,7 +149,7 @@ namespace NKikimr::NBlobDepot {
                         agent.PushCallbacks.emplace(id, [selfId = SelfId()](TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
                             TActivationContext::Send(ev->Forward(selfId));
                         });
-                        TActivationContext::Send(new IEventHandleFat(connection->AgentId, connection->PipeServerId, ev.release(), 0, id));
+                        TActivationContext::Send(new IEventHandle(connection->AgentId, connection->PipeServerId, ev.release(), 0, id));
                     }
                 }
             }
@@ -161,7 +161,7 @@ namespace NKikimr::NBlobDepot {
                 const TMonotonic now = TActivationContext::Monotonic();
                 const auto& info = Self->BlocksManager->Blocks[TabletId].PerAgentInfo[agentId];
                 if (now < info.ExpirationTimestamp) { // node still can write data for this tablet, reschedule timer
-                    TActivationContext::Schedule(info.ExpirationTimestamp, new IEventHandleFat(TEvPrivate::EvCheckWaitingNode,
+                    TActivationContext::Schedule(info.ExpirationTimestamp, new IEventHandle(TEvPrivate::EvCheckWaitingNode,
                         0, SelfId(), {}, nullptr, agentId));
                 } else {
                     NodesWaitingForPushResult.erase(agentId);

@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(Backpressure) {
 
                 case TERM_CLIENT: {
                     const size_t index = RandomNumber(clients.size());
-                    runtime.Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, clients[index], {}, {}, 0), 1);
+                    runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, clients[index], {}, {}, 0), 1);
                     clients.erase(clients.begin() + index);
                     break;
                 }
@@ -78,9 +78,9 @@ Y_UNIT_TEST_SUITE(Backpressure) {
 
         // terminate loader actors and the disk
         for (const TActorId& actorId : std::exchange(clients, {})) {
-            runtime.Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, actorId, {}, {}, 0), 1);
+            runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, {}, 0), 1);
         }
-        runtime.Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, vdiskActorId, {}, {}, 0), 1);
+        runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdiskActorId, {}, {}, 0), 1);
 
         runtime.Stop();
     }

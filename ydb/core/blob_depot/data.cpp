@@ -269,7 +269,7 @@ namespace NKikimr::NBlobDepot {
         value.UncertainWrite = false;
         KeysMadeCertain.push_back(key);
         if (!CommitCertainKeysScheduled) {
-            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandleFat(TEvPrivate::EvCommitCertainKeys, 0,
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvCommitCertainKeys, 0,
                 Self->SelfId(), {}, nullptr, 0));
             CommitCertainKeysScheduled = true;
         }
@@ -304,7 +304,7 @@ namespace NKikimr::NBlobDepot {
                 if (Self->Data->KeysMadeCertain.empty()) {
                     Self->Data->CommitCertainKeysScheduled = false;
                 } else {
-                    TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandleFat(TEvPrivate::EvCommitCertainKeys,
+                    TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvCommitCertainKeys,
                         0, Self->SelfId(), {}, nullptr, 0));
                 }
             }

@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
 
         auto pushEvent = [&](size_t size, int channel) {
             TString payload(size, 'X');
-            auto ev = MakeHolder<IEventHandleFat>(1, 0, TActorId(), TActorId(), MakeIntrusive<TEventSerializedData>(payload, TEventSerializationInfo{}), 0);
+            auto ev = MakeHolder<IEventHandle>(1, 0, TActorId(), TActorId(), MakeIntrusive<TEventSerializedData>(payload, TEventSerializationInfo{}), 0);
             auto& ch = scheduler.GetOutputChannel(channel);
             const bool wasWorking = ch.IsWorking();
             ch.Push(*ev);

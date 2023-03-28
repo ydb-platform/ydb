@@ -49,7 +49,7 @@ void TNodeWarden::StartAggregator(const TActorId& vdiskServiceId, ui32 groupId) 
 void TNodeWarden::StopAggregator(const TActorId& vdiskServiceId) {
     if (RunningVDiskServiceIds.erase(vdiskServiceId)) {
         const TActorId groupStatAggregatorId = MakeGroupStatAggregatorId(vdiskServiceId);
-        TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, groupStatAggregatorId, {}, nullptr, 0));
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, groupStatAggregatorId, {}, nullptr, 0));
         PerAggregatorInfo.erase(groupStatAggregatorId);
     }
 }

@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
                     TInstant::Max());                 // deadline
 
         TActorId nodeWarden = MakeBlobStorageNodeWardenID(runtime->GetNodeId(nodeIdx));
-        runtime->Send(new IEventHandleFat(MakeBlobStorageProxyID(group), edge, event.Release(),
+        runtime->Send(new IEventHandle(MakeBlobStorageProxyID(group), edge, event.Release(),
                                        IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden), nodeIdx);
 
         TEvBlobStorage::TEvCollectGarbageResult::TPtr response = runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvCollectGarbageResult>(edge);

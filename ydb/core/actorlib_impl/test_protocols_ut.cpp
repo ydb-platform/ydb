@@ -715,7 +715,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         msg->Data = writeData;
         msg->Len = strlen(writeData);
         msg->Last = false;
-        runtime.Send(new IEventHandleFat(testerId, tester->Edge, msg), 0);
+        runtime.Send(new IEventHandle(testerId, tester->Edge, msg), 0);
 
         runtime.GrabEdgeEvent<TEvHTTPStreamStatus>(handle);
 
@@ -728,7 +728,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         msg->Data = moreData;
         msg->Len = strlen(moreData);
         msg->Last = true;
-        runtime.Send(new IEventHandleFat(testerId, tester->Edge, msg), 0);
+        runtime.Send(new IEventHandle(testerId, tester->Edge, msg), 0);
 
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
     }

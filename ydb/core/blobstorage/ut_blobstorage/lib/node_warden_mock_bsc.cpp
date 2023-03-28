@@ -158,8 +158,8 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
         if (vdisk.GetDoDestroy() || vdisk.GetDoWipe()) {
             if (vdiskp) {
                 UNIT_ASSERT(vdiskp->Actor);
-                TAutoPtr<IEventHandle> ev = new IEventHandleFat(TEvents::TSystem::Poison, 0, {}, {}, nullptr, 0);
-                InvokeOtherActor(*vdiskp->Actor, &IActor::Receive, ev);
+                TAutoPtr<IEventHandle> ev = new IEventHandle(TEvents::TSystem::Poison, 0, {}, {}, nullptr, 0);
+                InvokeOtherActor(*vdiskp->Actor, &IActor::Receive, ev, TActivationContext::ActorContextFor(vdiskp->Actor->SelfId()));
                 UNIT_ASSERT(!vdiskp->Actor);
             }
             auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeReport>(SelfId().NodeId());

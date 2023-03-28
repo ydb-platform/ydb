@@ -85,7 +85,7 @@ void SetupServices(TTestBasicRuntime& runtime) {
     {
         TActorId edge = runtime.AllocateEdgeActor();
 
-        runtime.Send(new IEventHandleFat(GetNameserviceActorId(), edge, new TEvInterconnect::TEvListNodes));
+        runtime.Send(new IEventHandle(GetNameserviceActorId(), edge, new TEvInterconnect::TEvListNodes));
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
@@ -187,9 +187,9 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
         const TActorId sender = runtime.AllocateEdgeActor(0);
         const TActorId warden = MakeBlobStorageNodeWardenID(runtime.GetNodeId(0));
         Cerr << "=== Breaking pipe ===" << Endl;
-        runtime.Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, clientId, TActorId(), {}, 0));
+        runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, clientId, TActorId(), {}, 0));
         Cerr << "=== Sending put ===" << Endl;
-        runtime.Send(new IEventHandleFat(recip, sender, new TEvBlobStorage::TEvPut(TLogoBlobID(1, 1, 1, 1, 1, 1), "1", TInstant::Max()),
+        runtime.Send(new IEventHandle(recip, sender, new TEvBlobStorage::TEvPut(TLogoBlobID(1, 1, 1, 1, 1, 1), "1", TInstant::Max()),
             IEventHandle::FlagForwardOnNondelivery, 0, &warden), 0, true);
         allowConfiguring = true;
         auto res = runtime.GrabEdgeEvent<TEvBlobStorage::TEvPutResult>(sender);

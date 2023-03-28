@@ -71,16 +71,11 @@ protected:
     }
 
     void SendRequest(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
-        SendEvent(std::make_unique<IEventHandleFat>(recipient, TBase::SelfId(), ev, flags, cookie));
-    }
-
-    void SendRequest(const TActorId& recipient, IEventHandleLight* ev, ui32 flags = 0, ui64 cookie = 0) {
-        ev->PrepareSend(recipient, TBase::SelfId(), flags, cookie);
-        SendEvent(std::unique_ptr<IEventHandle>(ev));
+        SendEvent(std::make_unique<IEventHandle>(recipient, TBase::SelfId(), ev, flags, cookie));
     }
 
     void SendRequestToPipe(const TActorId& pipe, IEventBase* ev, ui64 cookie = 0) {
-        std::unique_ptr<IEventHandle> event = std::make_unique<IEventHandleFat>(pipe, TBase::SelfId(), ev, 0/*flags*/, cookie);
+        std::unique_ptr<IEventHandle> event = std::make_unique<IEventHandle>(pipe, TBase::SelfId(), ev, 0/*flags*/, cookie);
         event->Rewrite(TEvTabletPipe::EvSend, pipe);
         SendEvent(std::move(event));
     }

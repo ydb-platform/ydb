@@ -497,7 +497,7 @@ private:
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
 
         TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
-            new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
+            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
 
         TBase::Become(&TThis::StateWaitResolveTable);
         WaitingResolveReply = true;

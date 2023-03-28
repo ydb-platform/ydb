@@ -120,7 +120,7 @@ private:
         if (!hasErrors || cptr->Retried || cptr->ForceRefresh) {
             auto* compileStatusEv = new TMiniKQLCompileServiceEvents::TEvCompileStatus(cptr->Program, msg->Result);
             compileStatusEv->CompileResolveCookies = std::move(msg->CompileResolveCookies);
-            ctx.ExecutorThread.Send(new IEventHandleFat(cptr->ResponseTo, ctx.SelfID, compileStatusEv,
+            ctx.ExecutorThread.Send(new IEventHandle(cptr->ResponseTo, ctx.SelfID, compileStatusEv,
                 0, cptr->Cookie));
             Compile(ctx);
         } else {

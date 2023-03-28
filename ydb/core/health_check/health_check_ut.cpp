@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        runtime->Send(new IEventHandleFat(NHealthCheck::MakeHealthCheckID(), sender, ev, 0));
+        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, ev, 0));
         NHealthCheck::TEvSelfCheckResult* result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
 
         UNIT_ASSERT(result != nullptr);
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.SetObserverFunc(observerFunc);
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
-        runtime.Send(new IEventHandleFat(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
 
         int groupIssuesCount = 0;
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.SetObserverFunc(observerFunc);
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
-        runtime.Send(new IEventHandleFat(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
 
         int storageIssuesCount = 0;

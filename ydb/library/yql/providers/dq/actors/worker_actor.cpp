@@ -485,7 +485,7 @@ private:
             SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNAVAILABLE, message));
         } else if (ev->Get()->SourceType == TEvPullDataRequest::EventType) {
             TActivationContext::Schedule(TDuration::MilliSeconds(100),
-                new IEventHandleFat(maybeChannel->second.ActorID, SelfId(), new TEvPullDataRequest(INPUT_SIZE), IEventHandle::FlagTrackDelivery)
+                new IEventHandle(maybeChannel->second.ActorID, SelfId(), new TEvPullDataRequest(INPUT_SIZE), IEventHandle::FlagTrackDelivery)
             );
             maybeChannel->second.Retries ++;
             maybeChannel->second.Requested = true;
@@ -493,7 +493,7 @@ private:
         } else {
             // Ping
             TActivationContext::Schedule(TDuration::MilliSeconds(100),
-                new IEventHandleFat(maybeChannel->second.ActorID, SelfId(), new TEvPingRequest(), IEventHandle::FlagTrackDelivery)
+                new IEventHandle(maybeChannel->second.ActorID, SelfId(), new TEvPingRequest(), IEventHandle::FlagTrackDelivery)
             );
             maybeChannel->second.PingRequested = true;
         }

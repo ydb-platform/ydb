@@ -148,18 +148,18 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
         NActors::TActorId proxyId = actorSystem.Register(proxy);
 
         actorSystem.Send(
-            new NActors::IEventHandleFat(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(netDataSourcePort)), 0, true
+            new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(netDataSourcePort)), 0, true
         );
 
         NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
 
-        actorSystem.Send(new NActors::IEventHandleFat(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler(NETWORKS_URI, serverId)), 0, true);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler(NETWORKS_URI, serverId)), 0, true);
 
         TAutoPtr<NActors::IEventHandle> handle;
         NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
         UNIT_ASSERT_EQUAL(request->Request->URL, NETWORKS_URI);
 
-        actorSystem.Send(new NActors::IEventHandleFat(handle->Sender, serverId, MakeHttpResponse(request, sourceResponce)), 0, true);
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, MakeHttpResponse(request, sourceResponce)), 0, true);
         const TActorId sender = actorSystem.AllocateEdgeActor();
 
         size_t iterations = 0;
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
 
             const auto kind = static_cast<ui32>(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem);
             actorSystem.Send(
-                new IEventHandleFat(MakeConfigsDispatcherID(sender.NodeId()), sender,
+                new IEventHandle(MakeConfigsDispatcherID(sender.NodeId()), sender,
                     new TEvConfigsDispatcher::TEvGetConfigRequest(kind)
                 ));
 

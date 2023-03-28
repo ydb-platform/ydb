@@ -12,7 +12,7 @@ namespace NActors {
     class TActorBootstrapped: public TActor<TDerived> {
     protected:
         TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
-            return new IEventHandleFat(TEvents::TSystem::Bootstrap, 0, self, parentId, {}, 0);
+            return new IEventHandle(TEvents::TSystem::Bootstrap, 0, self, parentId, {}, 0);
         }
 
         STFUNC(StateBootstrap) {

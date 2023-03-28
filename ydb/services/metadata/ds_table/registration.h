@@ -36,7 +36,7 @@ public:
     }
 
     void Resend(const TActorIdentity& receiver) {
-        TActivationContext::Send(new IEventHandleFat(receiver, Sender, Event.Release()));
+        TActivationContext::Send(new IEventHandle(receiver, Sender, Event.Release()));
     }
 };
 
@@ -54,7 +54,7 @@ public:
     }
 
     template <class T>
-    bool Add(TEventHandleFat<T>& ev) {
+    bool Add(TEventHandle<T>& ev) {
         return Add(ev.ReleaseBase(), ev.Sender);
     }
 
@@ -104,7 +104,7 @@ public:
     }
 
     template <class T>
-    bool Add(TEventHandleFat<T>& ev, const TString& tag) {
+    bool Add(TEventHandle<T>& ev, const TString& tag) {
         return Add(ev.ReleaseBase(), ev.Sender, tag);
     }
 

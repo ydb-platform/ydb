@@ -57,8 +57,8 @@ namespace NActors {
         THolder<IEventHandle> WaitForEvent(TMonotonic deadline = TMonotonic::Max());
 
         // Wait for specific event set by filter functor. Function returns first event that matches filter. On any other
-        // kind of event processUnexpectedEvent() is called.
         //
+        // kind of event processUnexpectedEvent() is called.
         // Example: WaitForSpecificEvent([](IEventHandle& ev) { return ev.Cookie == 42; });
         template <typename TFunc, typename TCallback, typename = std::enable_if_t<std::is_invocable_v<TCallback, TAutoPtr<IEventHandle>>>>
         THolder<IEventHandle> WaitForSpecificEvent(TFunc&& filter, TCallback processUnexpectedEvent, TMonotonic deadline = TMonotonic::Max()) {
@@ -117,8 +117,7 @@ namespace NActors {
         bool Send(TAutoPtr<IEventHandle> ev);
 
         bool Forward(THolder<IEventHandle>& ev, const TActorId& recipient) {
-            IEventHandle::Forward(ev, recipient);
-            return Send(ev.Release());
+            return Send(IEventHandle::Forward(ev, recipient).Release());
         }
 
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) {
@@ -166,7 +165,7 @@ namespace NActors {
         ~TActorCoro();
 
         TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) override {
-            return new IEventHandleFat(TEvents::TSystem::Bootstrap, 0, self, parent, {}, 0);
+            return new IEventHandle(TEvents::TSystem::Bootstrap, 0, self, parent, {}, 0);
         }
 
     private:

@@ -18,7 +18,7 @@ namespace NActors {
             , Mock(mock)
         {}
 
-        STATEFN(StateFunc) {
+        STFUNC(StateFunc) {
             if (ev->GetTypeRewrite() == TEvents::TSystem::Poison && !Proxy) {
                 PassAway();
             } else {
@@ -32,7 +32,7 @@ namespace NActors {
                     }
                     Y_VERIFY(Proxy);
                 }
-                InvokeOtherActor(*Proxy, &IActor::Receive, ev);
+                InvokeOtherActor(*Proxy, &IActor::Receive, ev, ctx);
             }
         }
     };

@@ -51,7 +51,7 @@ struct TTestBootstrap {
         auto sender = Runtime->AllocateEdgeActor();
         auto req = NHttp::THttpOutgoingRequest::CreateRequestGet("124");
         auto request = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(req);
-        Runtime->Send(new IEventHandleFat(HttpSenderActorId, sender, request.release()));
+        Runtime->Send(new IEventHandle(HttpSenderActorId, sender, request.release()));
     }
 
     template<typename T>
@@ -68,7 +68,7 @@ struct TTestBootstrap {
 
         NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
 
-        Runtime->Send(new IEventHandleFat(
+        Runtime->Send(new IEventHandle(
             HttpSenderActorId,
             HttpProxyActorId,
             new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(event->Request, response.release())));

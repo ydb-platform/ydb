@@ -17,25 +17,14 @@ ui32 TEventHolder::Fill(IEventHandle& ev) {
     EventActuallySerialized = 0;
     Descr.Checksum = 0;
 
-    if (ev.IsEventLight()) {
-        if (ev.IsEventSerializable()) {
-            NActors::IEventHandleLightSerializable& serializable(*NActors::IEventHandleLightSerializable::GetLightSerializable(&ev));
-            EventSerializer = serializable.Serializer;
-            EventSerializedSize = 100;
-        } else {
-            EventSerializedSize = 0;
-        }
+    if (ev.HasBuffer()) {
+        Buffer = ev.ReleaseChainBuffer();
+        EventSerializedSize = Buffer->GetSize();
+    } else if (ev.HasEvent()) {
+        Event.Reset(ev.ReleaseBase());
+        EventSerializedSize = Event->CalculateSerializedSize();
     } else {
-        auto& evFat = *IEventHandleFat::GetFat(&ev);
-        if (evFat.HasBuffer()) {
-            Buffer = evFat.ReleaseChainBuffer();
-            EventSerializedSize = Buffer->GetSize();
-        } else if (evFat.HasEvent()) {
-            Event.Reset(evFat.ReleaseBase());
-            EventSerializedSize = Event->CalculateSerializedSize();
-        } else {
-            EventSerializedSize = 0;
-        }
+        EventSerializedSize = 0;
     }
 
     return EventSerializedSize;

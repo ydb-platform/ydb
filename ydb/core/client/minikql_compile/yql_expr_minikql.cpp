@@ -1607,7 +1607,7 @@ private:
 
     void SendResponseAndDie(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies, const TActorContext& ctx) {
         ctx.ExecutorThread.Send(
-            new IEventHandleFat(
+            new IEventHandle(
                 ResponseTo,
                 ctx.SelfID,
                 new TMiniKQLCompileActorEvents::TEvCompileResult(result, std::move(resolveCookies))

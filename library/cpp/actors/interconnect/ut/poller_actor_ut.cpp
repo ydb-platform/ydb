@@ -253,7 +253,7 @@ public:
 private:
     void RegisterSocket(TTestSocketPtr socket, TActorId readActorId, TActorId writeActorId) {
         auto ev = new TEvPollerRegister{socket, readActorId, writeActorId};
-        ActorSystem_->Send(new IEventHandleFat(PollerId_, TActorId{}, ev));
+        ActorSystem_->Send(new IEventHandle(PollerId_, TActorId{}, ev));
     }
 
 private:

@@ -120,7 +120,7 @@ struct TEnvironmentSetup {
 
     TVector<std::tuple<TString, i32, ui32>> GetNodes() {
         const TActorId edge = Runtime->AllocateEdgeActor();
-        Runtime->Send(new IEventHandleFat(GetNameserviceActorId(), edge, new TEvInterconnect::TEvListNodes));
+        Runtime->Send(new IEventHandle(GetNameserviceActorId(), edge, new TEvInterconnect::TEvListNodes));
         auto response = Runtime->GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(edge);
         TVector<std::tuple<TString, i32, ui32>> res;
         for (const auto& nodeInfo : response->Get()->Nodes) {

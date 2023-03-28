@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
                 auto ev = std::make_unique<TEvBlobStorage::TEvVAssimilate>(info->GetVDiskId(i), lastBlock, lastBarrier,
                     lastBlob);
                 ev->Record.SetIgnoreDecommitState(true);
-                runtime->Send(new IEventHandleFat(vdiskId, client, ev.release()), vdiskId.NodeId());
+                runtime->Send(new IEventHandle(vdiskId, client, ev.release()), vdiskId.NodeId());
                 auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVAssimilateResult>(client);
                 const auto& record = res->Get()->Record;
                 UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);

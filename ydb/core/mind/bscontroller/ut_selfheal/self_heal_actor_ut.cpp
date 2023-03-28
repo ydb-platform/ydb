@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
             RegisterDiskResponders(runtime, info);
             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
             ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::ERROR});
-            runtime.Send(new IEventHandleFat(selfHealId, parentId, ev.release()), 1);
+            runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
             ValidateCmd(parentId, runtime, 0, 1, 0, 0, 0);
         });
     }
@@ -106,8 +106,8 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
             RegisterDiskResponders(runtime, info);
             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
             ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::ERROR, E::REPLICATING});
-            runtime.Send(new IEventHandleFat(selfHealId, parentId, ev.release()), 1);
-            runtime.Schedule(TDuration::Minutes(30), new IEventHandleFat(TEvents::TSystem::Wakeup, 0, parentId, {}, nullptr, 0), nullptr, 1);
+            runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
+            runtime.Schedule(TDuration::Minutes(30), new IEventHandle(TEvents::TSystem::Wakeup, 0, parentId, {}, nullptr, 0), nullptr, 1);
             auto res = runtime.WaitForEdgeActorEvent({parentId});
             UNIT_ASSERT_EQUAL(res->GetTypeRewrite(), TEvents::TSystem::Wakeup);
         });

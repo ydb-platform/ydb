@@ -531,7 +531,7 @@ class TDataShard::TTxCdcStreamScanRun: public TTransactionBase<TDataShard> {
     THolder<IEventHandle> MakeResponse(const TActorContext& ctx,
             NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus status, const TString& error = {}) const
     {
-        return MakeHolder<IEventHandleFat>(Request->Sender, ctx.SelfID, new TEvDataShard::TEvCdcStreamScanResponse(
+        return MakeHolder<IEventHandle>(Request->Sender, ctx.SelfID, new TEvDataShard::TEvCdcStreamScanResponse(
             Request->Get()->Record, Self->TabletID(), status, error
         ));
     }

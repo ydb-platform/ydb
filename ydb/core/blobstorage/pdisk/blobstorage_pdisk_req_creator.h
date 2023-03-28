@@ -166,7 +166,7 @@ private:
     }
 
     template<typename TEv>
-    static TString ToString(const TAutoPtr<NActors::TEventHandleFat<TEv>> &ev) {
+    static TString ToString(const TAutoPtr<NActors::TEventHandle<TEv>> &ev) {
         Y_VERIFY(ev && ev->Get());
         return ev->Get()->ToString();
     }

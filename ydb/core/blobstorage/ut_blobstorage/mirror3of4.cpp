@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(Mirror3of4) {
             auto query = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(info->GetVDiskId(i), TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead);
             query->AddExtremeQuery(id, 0, 0);
-            runtime->Send(new IEventHandleFat(queues[i], edge, query.release()), queues[i].NodeId());
+            runtime->Send(new IEventHandle(queues[i], edge, query.release()), queues[i].NodeId());
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge, false);
             Cerr << res->Get()->ToString() << Endl;
             auto& record = res->Get()->Record;

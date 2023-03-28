@@ -204,8 +204,6 @@ namespace NActors {
         bool SpecificSend(TAutoPtr<IEventHandle> ev) const;
 
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) const;
-        bool Send(const TActorId& recipient, IEventHandleLight* ev, ui32 flags = 0, ui64 cookie = 0) const;
-        bool Send(const TActorId& recipient, const TActorId& sender, IEventHandleLight* ev, ui32 flags = 0, ui64 cookie = 0) const;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.

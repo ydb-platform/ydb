@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             stats->QueryStats.SetEndTimeMs(endTimeUs / 1000);
 
             auto serviceId = MakeSysViewServiceID(runtime->GetNodeId(nodeIdx));
-            runtime->Send(new IEventHandleFat(serviceId, TActorId(), stats.Release()), nodeIdx);
+            runtime->Send(new IEventHandle(serviceId, TActorId(), stats.Release()), nodeIdx);
         };
 
         makeQueryEvent(tenant1Node0, buckets[0], "a", 100);
@@ -820,7 +820,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         ).GetValueSync());
 
         auto serviceToKill = MakeSysViewServiceID(env.GetServer().GetRuntime()->GetNodeId(2));
-        env.GetServer().GetRuntime()->Send(new IEventHandleFat(serviceToKill, TActorId(), new TEvents::TEvPoison()));
+        env.GetServer().GetRuntime()->Send(new IEventHandle(serviceToKill, TActorId(), new TEvents::TEvPoison()));
 
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT

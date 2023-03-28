@@ -18,7 +18,7 @@ public:
             THolder<TEvHive::TEvCreateTablet> evCreateTablet(new TEvHive::TEvCreateTablet());
             evCreateTablet->Record = pendingCreateTablet.CreateTablet;
             BLOG_D("THive::TTxProcessPendingOperations(): retry CreateTablet");
-            TlsActivationContext->Send(new IEventHandleFat(Self->SelfId(), pendingCreateTablet.Sender, evCreateTablet.Release(), 0, pendingCreateTablet.Cookie));
+            TlsActivationContext->Send(new IEventHandle(Self->SelfId(), pendingCreateTablet.Sender, evCreateTablet.Release(), 0, pendingCreateTablet.Cookie));
         }
         for (auto& handle : Self->PendingOperations) {
             TlsActivationContext->Send(handle.Release());

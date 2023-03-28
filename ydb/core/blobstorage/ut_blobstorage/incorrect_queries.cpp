@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
 
         env.WithQueueId(test.Info->GetVDiskInSubgroup(0, blobId.Hash()), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            test.Runtime->Send(new IEventHandleFat(queueId, test.Edge, ev.release()), queueId.NodeId());
+            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId());
             auto handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
             UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvVPutResult);
             TEvBlobStorage::TEvVPutResult *putResult = handle->Get<TEvBlobStorage::TEvVPutResult>();
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
 
         env.WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            test.Runtime->Send(new IEventHandleFat(queueId, test.Edge, ev.release()), queueId.NodeId());
+            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId());
             auto r = test.Runtime->WaitForEdgeActorEvent({test.Edge});
 
             UNIT_ASSERT_EQUAL(r->Type, TEvBlobStorage::EvVGetResult);
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
 
         env.WithQueueId(test.Info->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            test.Runtime->Send(new IEventHandleFat(queueId, test.Edge, ev.release()), queueId.NodeId());
+            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId());
             auto handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
             UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvVMultiPutResult);
             TEvBlobStorage::TEvVMultiPutResult *putResult = handle->Get<TEvBlobStorage::TEvVMultiPutResult>();
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
 
         env.WithQueueId(test.Info->GetVDiskInSubgroup(0, blobs[0].BlobId.Hash()), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            test.Runtime->Send(new IEventHandleFat(queueId, test.Edge, ev.release()), queueId.NodeId());
+            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId());
             auto handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
             UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvVMultiPutResult);
             TEvBlobStorage::TEvVMultiPutResult *putResult = handle->Get<TEvBlobStorage::TEvVMultiPutResult>();
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
 
         env.WithQueueId(test.Info->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            test.Runtime->Send(new IEventHandleFat(queueId, test.Edge, ev.release()), queueId.NodeId());
+            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId());
             auto handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
             UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvVMultiPutResult);
             TEvBlobStorage::TEvVMultiPutResult *putResult = handle->Get<TEvBlobStorage::TEvVMultiPutResult>();
@@ -535,7 +535,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         env.WithQueueId(test.Info->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
             for(int i = 0; i < eventsCount; ++i) {
-                test.Runtime->Send(new IEventHandleFat(queueId, test.Edge, events[i].release()), queueId.NodeId());
+                test.Runtime->Send(new IEventHandle(queueId, test.Edge, events[i].release()), queueId.NodeId());
             }
 
             int okCount = 0;

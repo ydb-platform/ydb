@@ -826,7 +826,7 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
                     switch (ev->GetTypeRewrite()) {
                     case TEvBlobStorage::TEvGetResult::EventType:
                         {
-                            std::unique_ptr<TEventHandleFat<TEvBlobStorage::TEvGetResult>> res(reinterpret_cast<TEventHandleFat<TEvBlobStorage::TEvGetResult>*>(ev.release()));
+                            std::unique_ptr<TEventHandle<TEvBlobStorage::TEvGetResult>> res(reinterpret_cast<TEventHandle<TEvBlobStorage::TEvGetResult>*>(ev.release()));
                             UNIT_ASSERT(res);
                             std::vector<TBlobInfo> response;
                             ui32 responseSz = res->Get()->ResponseSz;
@@ -840,7 +840,7 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
                         break;
                     case TEvBlobStorage::TEvRangeResult::EventType:
                         {
-                            std::unique_ptr<TEventHandleFat<TEvBlobStorage::TEvRangeResult>> res(reinterpret_cast<TEventHandleFat<TEvBlobStorage::TEvRangeResult>*>(ev.release()));
+                            std::unique_ptr<TEventHandle<TEvBlobStorage::TEvRangeResult>> res(reinterpret_cast<TEventHandle<TEvBlobStorage::TEvRangeResult>*>(ev.release()));
                             UNIT_ASSERT(res);
                             TLogoBlobID from = res->Get()->From;
                             TLogoBlobID to = res->Get()->To;
@@ -851,7 +851,7 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
                         break;
                     case TEvBlobStorage::TEvDiscoverResult::EventType:
                         {
-                            std::unique_ptr<TEventHandleFat<TEvBlobStorage::TEvDiscoverResult>> res(reinterpret_cast<TEventHandleFat<TEvBlobStorage::TEvDiscoverResult>*>(ev.release()));
+                            std::unique_ptr<TEventHandle<TEvBlobStorage::TEvDiscoverResult>> res(reinterpret_cast<TEventHandle<TEvBlobStorage::TEvDiscoverResult>*>(ev.release()));
                             UNIT_ASSERT(res);
                             UNIT_ASSERT(res->Get());
                             TEvDiscoverArgs args = *requests[res->Cookie]->Get<TEvDiscoverArgs>();

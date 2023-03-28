@@ -112,8 +112,8 @@ namespace NActors {
         Y_FAIL("TInterconnectSessionTCP::PassAway() can't be called directly");
     }
 
-    void TInterconnectSessionTCP::Forward(TAutoPtr<IEventHandle>& ev) {
-        Proxy->ValidateEvent(ev.Get(), "Forward");
+    void TInterconnectSessionTCP::Forward(STATEFN_SIG) {
+        Proxy->ValidateEvent(ev, "Forward");
 
         LOG_DEBUG_IC_SESSION("ICS02", "send event from: %s to: %s", ev->Sender.ToString().data(), ev->Recipient.ToString().data());
         ++MessagesGot;
@@ -126,7 +126,7 @@ namespace NActors {
         auto& oChannel = ChannelScheduler->GetOutputChannel(evChannel);
         const bool wasWorking = oChannel.IsWorking();
 
-        const auto [dataSize, event] = oChannel.Push(*ev.Get());
+        const auto [dataSize, event] = oChannel.Push(*ev);
         LWTRACK(ForwardEvent, event->Orbit, Proxy->PeerNodeId, event->Descr.Type, event->Descr.Flags, LWACTORID(event->Descr.Recipient), LWACTORID(event->Descr.Sender), event->Descr.Cookie, event->EventSerializedSize);
 
         TotalOutputQueueSize += dataSize;
@@ -167,7 +167,7 @@ namespace NActors {
         } else if (!RamInQueue) {
             Y_VERIFY_DEBUG(NumEventsInReadyChannels == 1);
             RamInQueue = new TEvRam(true);
-            auto *ev = new IEventHandleFat(SelfId(), {}, RamInQueue);
+            auto *ev = new IEventHandle(SelfId(), {}, RamInQueue);
             const TDuration batchPeriod = Proxy->Common->Settings.BatchPeriod;
             if (batchPeriod != TDuration()) {
                 TActivationContext::Schedule(batchPeriod, ev);
@@ -179,7 +179,7 @@ namespace NActors {
         }
     }
 
-    void TInterconnectSessionTCP::Subscribe(TAutoPtr<IEventHandle>& ev) {
+    void TInterconnectSessionTCP::Subscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", ev->Sender.ToString().data());
         const auto [it, inserted] = Subscribers.emplace(ev->Sender, ev->Cookie);
         if (inserted) {
@@ -190,7 +190,7 @@ namespace NActors {
         Send(ev->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, ev->Cookie);
     }
 
-    void TInterconnectSessionTCP::Unsubscribe(TEvents::TEvUnsubscribe::TPtr ev) {
+    void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data());
         Proxy->Metrics->SubSubscribersCount( Subscribers.erase(ev->Sender));
     }

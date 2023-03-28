@@ -106,7 +106,7 @@ void SenderThread(TMutex& lock, TActorSystem *as, ui32 nodeId, ui32 queueId, ui3
     const TActorId target = MakeResponderServiceId(nodeId);
     for (ui32 i = 0; i < count; ++i) {
         const ui32 flags = IEventHandle::FlagTrackDelivery;
-        as->Send(new IEventHandleFat(TEvents::THelloWorld::Ping, flags, target, sender, nullptr, ((ui64)queueId << 32) | i));
+        as->Send(new IEventHandle(TEvents::THelloWorld::Ping, flags, target, sender, nullptr, ((ui64)queueId << 32) | i));
     }
 }
 

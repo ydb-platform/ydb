@@ -121,7 +121,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             TCoroTx::FinishTx();
-            TActivationContext::Send(new IEventHandleFat(TEvPrivate::EvTxComplete, 0, SelfId(), {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvTxComplete, 0, SelfId(), {}, nullptr, 0));
         }
 
         void ScanRange(TKey from, TKey to, TScanFlags flags, bool issueGets) {

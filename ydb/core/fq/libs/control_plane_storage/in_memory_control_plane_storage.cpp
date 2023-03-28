@@ -300,7 +300,7 @@ private:
         CPS_LOG_I("GetTaskRequest");
         Fq::Private::GetTaskResult result;
         auto event = std::make_unique<TEvControlPlaneStorage::TEvGetTaskResponse>(result);
-        NActors::TActivationContext::ActorSystem()->Send(new IEventHandleFat(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
+        NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
     }
 
     void Handle(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev)
@@ -330,7 +330,7 @@ private:
 
         TResult result = {};
         auto event = std::make_unique<TEvResult>(result);
-        NActors::TActivationContext::ActorSystem()->Send(new IEventHandleFat(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
+        NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
     }
 
     template<typename TRequest, typename TResult, typename TEvResult, typename TAuditDetails>
@@ -340,7 +340,7 @@ private:
         TResult result = {};
         TAuditDetails auditDetails = {};
         auto event = std::make_unique<TEvResult>(result, auditDetails);
-        NActors::TActivationContext::ActorSystem()->Send(new IEventHandleFat(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
+        NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
     }
 
     NYql::TIssues ValidateCreateQueryRequest(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev)

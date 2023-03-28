@@ -176,7 +176,7 @@ namespace NActors {
                         NProfiling::TMemoryTagScope::Reset(ActorSystem->MemProfActivityBase + activityType);
                     }
 
-                    actor->Receive(ev);
+                    actor->Receive(ev, ctx);
 
                     size_t dyingActorsCnt = DyingActors.size();
                     Ctx.UpdateActorsStats(dyingActorsCnt);
@@ -202,7 +202,7 @@ namespace NActors {
                 } else {
                     actorType = nullptr;
 
-                    TAutoPtr<IEventHandle> nonDelivered = IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown);
+                    TAutoPtr<IEventHandle> nonDelivered = IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown);
                     if (nonDelivered.Get()) {
                         ActorSystem->Send(nonDelivered);
                     } else {

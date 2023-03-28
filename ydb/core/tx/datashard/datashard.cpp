@@ -2104,7 +2104,7 @@ void TDataShard::SendWithConfirmedReadOnlyLease(
         TSendState(const TActorId& sessionId, const TActorId& target, const TActorId& src, IEventBase* event, ui64 cookie)
         {
             const ui32 flags = 0;
-            Ev = MakeHolder<IEventHandleFat>(target, src, event, flags, cookie);
+            Ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie);
 
             if (sessionId) {
                 Ev->Rewrite(TEvInterconnect::EvForward, sessionId);
@@ -3869,7 +3869,7 @@ void SendViaSession(const TActorId& sessionId,
                     ui32 flags,
                     ui64 cookie)
 {
-    THolder<IEventHandle> ev = MakeHolder<IEventHandleFat>(target, src, event, flags, cookie);
+    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie);
 
     if (sessionId) {
         ev->Rewrite(TEvInterconnect::EvForward, sessionId);

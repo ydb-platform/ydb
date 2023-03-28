@@ -28,7 +28,7 @@ namespace NActors {
      */
     template<typename TCallback>
     static void InvokeIoCallback(TCallback&& callback, ui32 poolId, IActor::EActivityType activityType) {
-        if (!TActivationContext::Send(new IEventHandleFat(MakeIoDispatcherActorId(), TActorId(),
+        if (!TActivationContext::Send(new IEventHandle(MakeIoDispatcherActorId(), TActorId(),
                 new TEvInvokeQuery(callback)))) {
             TActivationContext::Register(CreateExecuteLaterActor(std::move(callback), activityType), TActorId(),
                 TMailboxType::HTSwap, poolId);

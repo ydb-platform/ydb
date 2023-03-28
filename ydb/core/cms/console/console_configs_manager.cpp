@@ -608,7 +608,7 @@ void TConfigsManager::ScheduleSubscriptionsCleanup(const TActorContext &ctx)
     auto *event = new TConfigsManager::TEvPrivate::TEvCleanupSubscriptions;
     SubscriptionsCleanupTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
     CreateLongTimer(ctx, TDuration::Minutes(5),
-                    new IEventHandleFat(SelfId(), SelfId(), event),
+                    new IEventHandle(SelfId(), SelfId(), event),
                     AppData(ctx)->SystemPoolId,
                     SubscriptionsCleanupTimerCookieHolder.Get());
 }
@@ -622,7 +622,7 @@ void TConfigsManager::ScheduleLogCleanup(const TActorContext &ctx)
 {
     LogCleanupTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
     CreateLongTimer(ctx, TDuration::Minutes(15),
-                    new IEventHandleFat(SelfId(), SelfId(), new TEvPrivate::TEvCleanupLog),
+                    new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvCleanupLog),
                     AppData(ctx)->SystemPoolId,
                     LogCleanupTimerCookieHolder.Get());
 }

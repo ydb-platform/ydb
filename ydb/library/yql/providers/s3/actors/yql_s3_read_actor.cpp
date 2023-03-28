@@ -842,10 +842,10 @@ private:
     static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, const TString& requestId, IHTTPGateway::TResult&& result, size_t pathInd, const TString path) {
         switch (result.index()) {
         case 0U:
-            actorSystem->Send(new IEventHandleFat(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::get<IHTTPGateway::TContent>(std::move(result)), requestId, pathInd, path)));
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::get<IHTTPGateway::TContent>(std::move(result)), requestId, pathInd, path)));
             return;
         case 1U:
-            actorSystem->Send(new IEventHandleFat(selfId, TActorId(), new TEvPrivate::TEvReadError(std::get<TIssues>(std::move(result)), requestId, pathInd, path)));
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadError(std::get<TIssues>(std::move(result)), requestId, pathInd, path)));
             return;
         default:
             break;
@@ -1079,15 +1079,15 @@ struct TRetryStuff {
 };
 
 void OnDownloadStart(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, long httpResponseCode) {
-    actorSystem->Send(new IEventHandleFat(self, parent, new TEvPrivate::TEvReadStarted(httpResponseCode)));
+    actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadStarted(httpResponseCode)));
 }
 
 void OnNewData(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, IHTTPGateway::TCountedContent&& data) {
-    actorSystem->Send(new IEventHandleFat(self, parent, new TEvPrivate::TEvDataPart(std::move(data))));
+    actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvDataPart(std::move(data))));
 }
 
 void OnDownloadFinished(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, TIssues issues) {
-    actorSystem->Send(new IEventHandleFat(self, parent, new TEvPrivate::TEvReadFinished(pathIndex, std::move(issues))));
+    actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadFinished(pathIndex, std::move(issues))));
 }
 
 void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) {
@@ -1340,7 +1340,7 @@ public:
                 --cntBlocksInFly;
             }
             Send(ParentActorId, new TEvPrivate::TEvNextBlock(batch, PathIndex, [actorSystem, selfId]() {
-                actorSystem->Send(new IEventHandleFat(selfId, TActorId{}, new TEvPrivate::TEvBlockProcessed()));
+                actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvBlockProcessed()));
             }, TakeIngressDelta(), TakeCpuTimeDelta()));
         }
         while (cntBlocksInFly--) {
@@ -1387,7 +1387,7 @@ public:
 
         auto future = ArrowReader->GetSchema(fileDesc);
         future.Subscribe([actorSystem, selfId](const NThreading::TFuture<IArrowReader::TSchemaResponse>&) {
-            actorSystem->Send(new IEventHandleFat(selfId, selfId, new TEvPrivate::TEvFutureResolved()));
+            actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvFutureResolved()));
         });
 
         CpuTime += GetCpuTimeDelta();
@@ -1409,7 +1409,7 @@ public:
 
             auto future = ArrowReader->ReadRowGroup(fileDesc, group, columnIndices);
             future.Subscribe([actorSystem, selfId](const NThreading::TFuture<std::shared_ptr<arrow::Table>>&){
-                actorSystem->Send(new IEventHandleFat(selfId, selfId, new TEvPrivate::TEvFutureResolved()));
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvFutureResolved()));
             });
 
             CpuTime += GetCpuTimeDelta();
@@ -1461,10 +1461,10 @@ public:
     static void OnResult(TActorSystem* actorSystem, TActorId selfId, TEvPrivate::TReadRange range, ui64 cookie, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U:
-            actorSystem->Send(new IEventHandleFat(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::get<IHTTPGateway::TContent>(std::move(result))), 0, cookie));
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::get<IHTTPGateway::TContent>(std::move(result))), 0, cookie));
             return;
         case 1U:
-            actorSystem->Send(new IEventHandleFat(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::get<TIssues>(std::move(result))), 0, cookie));
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::get<TIssues>(std::move(result))), 0, cookie));
             return;
         default:
             break;
@@ -1756,7 +1756,7 @@ public:
                 }
                 Send(ParentActorId, new TEvPrivate::TEvNextRecordBatch(
                     ConvertArrowColumns(batch, columnConverters), PathIndex, [actorSystem, selfId]() {
-                        actorSystem->Send(new IEventHandleFat(selfId, TActorId{}, new TEvPrivate::TEvBlockProcessed()));
+                        actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvBlockProcessed()));
                     }, TakeIngressDelta(), TakeCpuTimeDelta()
                 ));
             }
@@ -1870,7 +1870,7 @@ public:
         }
 
         if (!RetryStuff->IsCancelled() && RetryStuff->NextRetryDelay && RetryStuff->SizeLimit > 0ULL) {
-            GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandleFat(ParentActorId, SelfActorId, new TEvPrivate::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize))));
+            GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvPrivate::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize))));
             InputBuffer.clear();
             if (DeferredDataParts.size()) {
                 if (DeferredQueueSize) {

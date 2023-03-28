@@ -826,7 +826,7 @@ void TCacheTest::MigrationUndo() {
 
 void SimulateSleep(TTestContext& context, TDuration duration) {
     auto sender = context.AllocateEdgeActor();
-    context.Schedule(new IEventHandleFat(sender, sender, new TEvents::TEvWakeup()), duration);
+    context.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
     context.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
 }
 

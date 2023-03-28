@@ -76,7 +76,7 @@ public:
         ScanActorId = ctx.SelfID;
 
         TimeoutActorId = CreateLongTimer(ctx, Deadline - TInstant::Now(),
-            new IEventHandleFat(SelfId(), SelfId(), new TEvents::TEvWakeup));
+            new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup));
 
         Y_VERIFY(!ScanIterator);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan();

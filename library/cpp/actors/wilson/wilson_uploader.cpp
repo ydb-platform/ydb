@@ -160,7 +160,7 @@ namespace NWilson {
             template<typename T>
             void ScheduleWakeup(T&& deadline) {
                 if (!WakeupScheduled) {
-                    TActivationContext::Schedule(deadline, new IEventHandleFat(TEvents::TSystem::Wakeup, 0, SelfId(), {},
+                    TActivationContext::Schedule(deadline, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {},
                         nullptr, 0));
                     WakeupScheduled = true;
                 }

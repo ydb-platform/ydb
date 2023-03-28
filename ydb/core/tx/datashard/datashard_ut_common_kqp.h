@@ -85,7 +85,7 @@ namespace NKqpHelpers {
             THolder<NKqp::TEvKqp::TEvQueryRequest> request)
     {
         runtime.Send(
-            new IEventHandleFat(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()),
+            new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()),
             0, /* via actor system */ true);
     }
 

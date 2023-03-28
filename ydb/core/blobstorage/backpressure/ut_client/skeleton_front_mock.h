@@ -110,7 +110,7 @@ public:
             if (Operations.empty()) {
                 Schedule(TDuration::MicroSeconds((999 + cost) / 1000), new TEvProcessQueue);
             }
-            Operations.push_back(TOperation{clientId, messageId, cost, std::make_unique<IEventHandleFat>(ev->Sender,
+            Operations.push_back(TOperation{clientId, messageId, cost, std::make_unique<IEventHandle>(ev->Sender,
                 SelfId(), reply.release(), IEventHandle::MakeFlags(ev->GetChannel(), 0), ev->Cookie), ev->Sender});
         } else {
             reply->Record.SetStatus(feedback.first.Status == NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId

@@ -7,7 +7,7 @@ namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
 
-    TData::TResolveResultAccumulator::TResolveResultAccumulator(TEventHandleFat<TEvBlobDepot::TEvResolve>& ev)
+    TData::TResolveResultAccumulator::TResolveResultAccumulator(TEventHandle<TEvBlobDepot::TEvResolve>& ev)
         : Sender(ev.Sender)
         , Recipient(ev.Recipient)
         , Cookie(ev.Cookie)
@@ -23,7 +23,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TResolveResultAccumulator::Send(NKikimrProto::EReplyStatus status, std::optional<TString> errorReason) {
         auto sendResult = [&](std::unique_ptr<TEvBlobDepot::TEvResolveResult> ev) {
-            auto handle = std::make_unique<IEventHandleFat>(Sender, Recipient, ev.release(), 0, Cookie);
+            auto handle = std::make_unique<IEventHandle>(Sender, Recipient, ev.release(), 0, Cookie);
             if (InterconnectSession) {
                 handle->Rewrite(TEvInterconnect::EvForward, InterconnectSession);
             }

@@ -107,13 +107,13 @@ Y_UNIT_TEST_SUITE(TTabletResolver) {
 
     THolder<TEvTabletResolver::TEvForwardResult> DoResolveTablet(TTestBasicRuntime& runtime, ui64 tabletId) {
         const TActorId edge = runtime.AllocateEdgeActor();
-        runtime.Send(new IEventHandleFat(MakeTabletResolverID(), edge, new TEvTabletResolver::TEvForward(tabletId, nullptr)));
+        runtime.Send(new IEventHandle(MakeTabletResolverID(), edge, new TEvTabletResolver::TEvForward(tabletId, nullptr)));
         auto ev = runtime.GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(edge);
         return std::move(ev->Release());
     }
 
     void DoSendNodeProblem(TTestBasicRuntime& runtime, ui32 nodeId, ui64 problemEpoch) {
-        runtime.Send(new IEventHandleFat(MakeTabletResolverID(), TActorId(), new TEvTabletResolver::TEvNodeProblem(nodeId, problemEpoch)));
+        runtime.Send(new IEventHandle(MakeTabletResolverID(), TActorId(), new TEvTabletResolver::TEvNodeProblem(nodeId, problemEpoch)));
     }
 
     Y_UNIT_TEST(NodeProblem) {

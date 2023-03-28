@@ -961,7 +961,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
         // Get list of nodes to reveal IC ports.
 
-        Send(new IEventHandleFat(GetNameserviceActorId(), Sender, new TEvInterconnect::TEvListNodes));
+        Send(new IEventHandle(GetNameserviceActorId(), Sender, new TEvInterconnect::TEvListNodes));
         TAutoPtr<IEventHandle> handle;
         auto reply1 = GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handle);
 
@@ -1153,7 +1153,7 @@ void CheckTenantPoolStatus(TTenantTestRuntime &runtime, ui32 domain,
                            THashMap<TString, NKikimrTenantPool::TSlotStatus> status,
                            ui32 nodeId)
 {
-    runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(nodeId), domain),
+    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeId), domain),
                                   runtime.Sender,
                                   new TEvTenantPool::TEvGetStatus));
     TAutoPtr<IEventHandle> handle;

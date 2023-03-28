@@ -375,7 +375,7 @@ private:
             << " schedule after " << retryDelay);
 
         state->RetryTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), retryDelay,
-            new IEventHandleFat(SelfId(), SelfId(), TEvPrivate::TEvRetryShard::CostsProblem(state->GetShardId()).Release()));
+            new IEventHandle(SelfId(), SelfId(), TEvPrivate::TEvRetryShard::CostsProblem(state->GetShardId()).Release()));
     }
 
     void StartCostsRequest(TShardCostsState::TPtr state) {
@@ -972,7 +972,7 @@ private:
             << " schedule after " << retryDelay);
 
         state->RetryTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), retryDelay,
-            new IEventHandleFat(SelfId(), SelfId(), new TEvPrivate::TEvRetryShard(state->TabletId, state->Generation)));
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvRetryShard(state->TabletId, state->Generation)));
     }
 
     bool IsQuotingEnabled() const {

@@ -277,7 +277,7 @@ private:
                 AuditServiceSensors->ReportCloudIdResolvedRetry();
                 LOG_YQ_AUDIT_SERVICE_ERROR("Folder resolve error. Retry with delay " << *delay << ", EventId: " << *EventId << " cloud id resolve error. "
                     << "Status " << status.GRpcStatusCode << " " << status.Msg << " details: " << status.Details);
-                NActors::TActivationContext::Schedule(*delay, new IEventHandleFat(NKikimr::NFolderService::FolderServiceActorId(), Base::SelfId(), CreateRequest().release()));
+                NActors::TActivationContext::Schedule(*delay, new IEventHandle(NKikimr::NFolderService::FolderServiceActorId(), Base::SelfId(), CreateRequest().release()));
                 return;
             }
             AuditServiceSensors->ReportCloudIdResolvedError();

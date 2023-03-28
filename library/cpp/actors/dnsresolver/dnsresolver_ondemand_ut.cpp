@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(OnDemandDnsResolver) {
         runtime.Initialize();
         auto sender = runtime.AllocateEdgeActor();
         auto resolver = runtime.Register(CreateOnDemandDnsResolver());
-        runtime.Send(new IEventHandleFat(resolver, sender, new TEvDns::TEvGetHostByName("localhost", AF_UNSPEC)),
+        runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetHostByName("localhost", AF_UNSPEC)),
                 0, true);
         auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetHostByNameResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, 0, ev->Get()->ErrorText);

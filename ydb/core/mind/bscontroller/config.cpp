@@ -31,7 +31,7 @@ namespace NKikimr::NBsController {
                         record.SetNodeID(nodeId);
                         record.SetInstanceId(Self->InstanceId);
                         record.SetAvailDomain(AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID()));
-                        outbox.push_back(std::make_unique<IEventHandleFat>(MakeBlobStorageNodeWardenID(nodeId),
+                        outbox.push_back(std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId),
                             Self->SelfId(), event.Release()));
                     }
                 }
@@ -473,11 +473,11 @@ namespace NKikimr::NBsController {
             }
 
             if (ev->Created || ev->Deleted) {
-                state.Outbox.push_back(std::make_unique<IEventHandleFat>(StatProcessorActorId, SelfId(), ev.Release()));
+                state.Outbox.push_back(std::make_unique<IEventHandle>(StatProcessorActorId, SelfId(), ev.Release()));
             }
             if (sh->GroupsToUpdate) {
                 FillInSelfHealGroups(*sh, &state);
-                state.Outbox.push_back(std::make_unique<IEventHandleFat>(SelfHealId, SelfId(), sh.Release()));
+                state.Outbox.push_back(std::make_unique<IEventHandle>(SelfHealId, SelfId(), sh.Release()));
             }
         }
 

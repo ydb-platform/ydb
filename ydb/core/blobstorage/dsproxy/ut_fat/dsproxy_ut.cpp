@@ -3428,7 +3428,7 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
     TEvBlobStorage::TEvPut::TPtr GetPut(TLogoBlobID id, const TString &data) {
         std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(id, data,
                 TInstant::Max(), HandleClass, Tactic);
-        return static_cast<TEventHandleFat<TEvBlobStorage::TEvPut>*>(new IEventHandleFat(SelfId(), SelfId(), put.release()));
+        return static_cast<TEventHandle<TEvBlobStorage::TEvPut>*>(new IEventHandle(SelfId(), SelfId(), put.release()));
     }
 
     TEvBlobStorage::TEvPut::ETactic Tactic = TEvBlobStorage::TEvPut::TacticDefault;

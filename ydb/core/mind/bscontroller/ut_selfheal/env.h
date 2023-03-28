@@ -52,11 +52,11 @@ struct TEnvironmentSetup {
     }
 
     template<typename TEvent>
-    TAutoPtr<TEventHandleFat<TEvent>> WaitForEdgeActorEvent(const TActorId& actorId, bool termOnCapture = true) {
+    TAutoPtr<TEventHandle<TEvent>> WaitForEdgeActorEvent(const TActorId& actorId, bool termOnCapture = true) {
         for (;;) {
             auto ev = Runtime->WaitForEdgeActorEvent({actorId});
             if (ev->GetTypeRewrite() == TEvent::EventType) {
-                TAutoPtr<TEventHandleFat<TEvent>> res = reinterpret_cast<TEventHandleFat<TEvent>*>(ev.release());
+                TAutoPtr<TEventHandle<TEvent>> res = reinterpret_cast<TEventHandle<TEvent>*>(ev.release());
                 if (termOnCapture) {
                     Runtime->DestroyActor(actorId);
                 }
@@ -76,7 +76,7 @@ struct TEnvironmentSetup {
 
     std::map<ui32, std::tuple<TString, i32>> GetNodeMap() {
         const TActorId edge = Runtime->AllocateEdgeActor(NodeId);
-        Runtime->Send(new IEventHandleFat(GetNameserviceActorId(), edge, new TEvInterconnect::TEvListNodes), NodeId);
+        Runtime->Send(new IEventHandle(GetNameserviceActorId(), edge, new TEvInterconnect::TEvListNodes), NodeId);
         auto response = WaitForEdgeActorEvent<TEvInterconnect::TEvNodesInfo>(edge);
         std::map<ui32, std::tuple<TString, i32>> res;
         for (const auto& nodeInfo : response->Get()->Nodes) {
@@ -199,7 +199,7 @@ struct TEnvironmentSetup {
         for (ui32 nodeId : Runtime->GetNodes()) {
             const TActorId wardenId = MakeBlobStorageNodeWardenID(nodeId);
             const TActorId edge = Runtime->AllocateEdgeActor(nodeId);
-            Runtime->Send(new IEventHandleFat(wardenId, edge, new TEvCheckState(EState::CONNECTED)), nodeId);
+            Runtime->Send(new IEventHandle(wardenId, edge, new TEvCheckState(EState::CONNECTED)), nodeId);
             edges.push_back(edge);
         }
         for (TActorId edge : edges) {
@@ -210,7 +210,7 @@ struct TEnvironmentSetup {
 
     void Wait(TDuration timeout) {
         const TActorId edge = Runtime->AllocateEdgeActor(NodeId);
-        Runtime->Send(new IEventHandleFat(TimerActor, edge, new TEvArmTimer(timeout)), NodeId);
+        Runtime->Send(new IEventHandle(TimerActor, edge, new TEvArmTimer(timeout)), NodeId);
         WaitForEdgeActorEvent<TEvents::TEvWakeup>(edge);
     }
 

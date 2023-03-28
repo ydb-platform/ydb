@@ -1,2 +1,0 @@
-(this["webpackJsonpydb-embedded-ui"]=this["webpackJsonpydb-embedded-ui"]||[]).push([[81],{1358:function(e,d,s){"use strict";s.r(d),d.default=s.p+"static/media/403.6367e52f.svg"}}]);
-//# sourceMappingURL=81.5cf3d67d.chunk.js.map

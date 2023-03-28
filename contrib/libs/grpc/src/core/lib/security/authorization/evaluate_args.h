@@ -57,7 +57,6 @@ class EvaluateArgs {
       : metadata_(metadata), channel_args_(channel_args) {}
 
   y_absl::string_view GetPath() const;
-  y_absl::string_view GetHost() const;
   y_absl::string_view GetAuthority() const;
   y_absl::string_view GetMethod() const;
   // Returns metadata value(s) for the specified key.

@@ -63,6 +63,7 @@ class URI {
   URI(URI&&) = default;
   URI& operator=(URI&&) = default;
 
+  static TString PercentEncodeAuthority(y_absl::string_view str);
   static TString PercentEncodePath(y_absl::string_view str);
 
   static TString PercentDecode(y_absl::string_view str);

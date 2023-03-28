@@ -21,11 +21,13 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <map>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 
 #include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/gprpp/ref_counted.h"
+#include "src/core/lib/gprpp/sync.h"
 
 namespace grpc_core {
 namespace internal {
@@ -62,16 +64,20 @@ class ServerRetryThrottleData : public RefCounted<ServerRetryThrottleData> {
 /// Global map of server name to retry throttle data.
 class ServerRetryThrottleMap {
  public:
-  /// Initializes global map of failure data for each server name.
-  static void Init();
-  /// Shuts down global map of failure data for each server name.
-  static void Shutdown();
+  static ServerRetryThrottleMap* Get();
 
   /// Returns the failure data for \a server_name, creating a new entry if
   /// needed.
-  static RefCountedPtr<ServerRetryThrottleData> GetDataForServer(
+  RefCountedPtr<ServerRetryThrottleData> GetDataForServer(
       const TString& server_name, intptr_t max_milli_tokens,
       intptr_t milli_token_ratio);
+
+ private:
+  using StringToDataMap =
+      std::map<TString, RefCountedPtr<ServerRetryThrottleData>>;
+
+  Mutex mu_;
+  StringToDataMap map_ Y_ABSL_GUARDED_BY(mu_);
 };
 
 }  // namespace internal

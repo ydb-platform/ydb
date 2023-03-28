@@ -25,6 +25,9 @@ target_link_libraries(grpc-third_party-upb PUBLIC
 target_sources(grpc-third_party-upb PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/google/protobuf/descriptor.upb.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/protobuf/descriptor.upbdefs.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/naive.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/range2-neon.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/range2-sse.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/decode.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/decode_fast.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/def.c

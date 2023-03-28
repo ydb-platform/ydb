@@ -85,8 +85,6 @@ const char* GetStatusIntPropertyUrl(StatusIntProperty key) {
       return TYPE_URL(TYPE_INT_TAG "channel_connectivity_state");
     case StatusIntProperty::kLbPolicyDrop:
       return TYPE_URL(TYPE_INT_TAG "lb_policy_drop");
-    case StatusIntProperty::kStreamNetworkState:
-      return TYPE_URL(TYPE_INT_TAG "stream_network_state");
   }
   GPR_UNREACHABLE_CODE(return "unknown");
 }
@@ -338,32 +336,34 @@ TString StatusToString(const y_absl::Status& status) {
 
 namespace internal {
 
-google_rpc_Status* StatusToProto(const y_absl::Status& status, upb_arena* arena) {
+google_rpc_Status* StatusToProto(const y_absl::Status& status, upb_Arena* arena) {
   google_rpc_Status* msg = google_rpc_Status_new(arena);
   google_rpc_Status_set_code(msg, int32_t(status.code()));
   google_rpc_Status_set_message(
-      msg, upb_strview_make(status.message().data(), status.message().size()));
+      msg, upb_StringView_FromDataAndSize(status.message().data(),
+                                          status.message().size()));
   status.ForEachPayload([&](y_absl::string_view type_url,
                             const y_absl::Cord& payload) {
     google_protobuf_Any* any = google_rpc_Status_add_details(msg, arena);
     char* type_url_buf =
-        reinterpret_cast<char*>(upb_arena_malloc(arena, type_url.size()));
+        reinterpret_cast<char*>(upb_Arena_Malloc(arena, type_url.size()));
     memcpy(type_url_buf, type_url.data(), type_url.size());
     google_protobuf_Any_set_type_url(
-        any, upb_strview_make(type_url_buf, type_url.size()));
+        any, upb_StringView_FromDataAndSize(type_url_buf, type_url.size()));
     y_absl::optional<y_absl::string_view> v_view = payload.TryFlat();
     if (v_view.has_value()) {
       google_protobuf_Any_set_value(
-          any, upb_strview_make(v_view->data(), v_view->size()));
+          any, upb_StringView_FromDataAndSize(v_view->data(), v_view->size()));
     } else {
       char* buf =
-          reinterpret_cast<char*>(upb_arena_malloc(arena, payload.size()));
+          reinterpret_cast<char*>(upb_Arena_Malloc(arena, payload.size()));
       char* cur = buf;
       for (y_absl::string_view chunk : payload.Chunks()) {
         memcpy(cur, chunk.data(), chunk.size());
         cur += chunk.size();
       }
-      google_protobuf_Any_set_value(any, upb_strview_make(buf, payload.size()));
+      google_protobuf_Any_set_value(
+          any, upb_StringView_FromDataAndSize(buf, payload.size()));
     }
   });
   return msg;
@@ -371,15 +371,15 @@ google_rpc_Status* StatusToProto(const y_absl::Status& status, upb_arena* arena)
 
 y_absl::Status StatusFromProto(google_rpc_Status* msg) {
   int32_t code = google_rpc_Status_code(msg);
-  upb_strview message = google_rpc_Status_message(msg);
+  upb_StringView message = google_rpc_Status_message(msg);
   y_absl::Status status(static_cast<y_absl::StatusCode>(code),
                       y_absl::string_view(message.data, message.size));
   size_t detail_len;
   const google_protobuf_Any* const* details =
       google_rpc_Status_details(msg, &detail_len);
   for (size_t i = 0; i < detail_len; i++) {
-    upb_strview type_url = google_protobuf_Any_type_url(details[i]);
-    upb_strview value = google_protobuf_Any_value(details[i]);
+    upb_StringView type_url = google_protobuf_Any_type_url(details[i]);
+    upb_StringView value = google_protobuf_Any_value(details[i]);
     status.SetPayload(y_absl::string_view(type_url.data, type_url.size),
                       y_absl::Cord(y_absl::string_view(value.data, value.size)));
   }

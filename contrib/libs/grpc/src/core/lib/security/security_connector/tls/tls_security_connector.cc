@@ -34,6 +34,7 @@
 #include <grpc/support/string_util.h>
 
 #include "src/core/lib/gprpp/host_port.h"
+#include "src/core/lib/promise/promise.h"
 #include "src/core/lib/security/credentials/tls/tls_credentials.h"
 #include "src/core/lib/security/security_connector/ssl_utils.h"
 #include "src/core/lib/security/transport/security_handshaker.h"
@@ -262,6 +263,12 @@ TlsChannelSecurityConnector::TlsChannelSecurityConnector(
       overridden_target_name_(
           overridden_target_name == nullptr ? "" : overridden_target_name),
       ssl_session_cache_(ssl_session_cache) {
+  const TString& tls_session_key_log_file_path =
+      options_->tls_session_key_log_file_path();
+  if (!tls_session_key_log_file_path.empty()) {
+    tls_session_key_logger_ =
+        tsi::TlsSessionKeyLoggerCache::Get(tls_session_key_log_file_path);
+  }
   if (ssl_session_cache_ != nullptr) {
     tsi_ssl_session_cache_ref(ssl_session_cache_);
   }
@@ -402,20 +409,14 @@ int TlsChannelSecurityConnector::cmp(
   return 0;
 }
 
-bool TlsChannelSecurityConnector::check_call_host(
-    y_absl::string_view host, grpc_auth_context* auth_context,
-    grpc_closure* /*on_call_host_checked*/, grpc_error_handle* error) {
+ArenaPromise<y_absl::Status> TlsChannelSecurityConnector::CheckCallHost(
+    y_absl::string_view host, grpc_auth_context* auth_context) {
   if (options_->check_call_host()) {
-    return grpc_ssl_check_call_host(host, target_name_.c_str(),
-                                    overridden_target_name_.c_str(),
-                                    auth_context, error);
+    return Immediate(SslCheckCallHost(host, target_name_.c_str(),
+                                      overridden_target_name_.c_str(),
+                                      auth_context));
   }
-  return true;
-}
-
-void TlsChannelSecurityConnector::cancel_check_call_host(
-    grpc_closure* /*on_call_host_checked*/, grpc_error_handle error) {
-  GRPC_ERROR_UNREF(error);
+  return ImmediateOkStatus();
 }
 
 void TlsChannelSecurityConnector::TlsChannelCertificateWatcher::
@@ -537,7 +538,8 @@ TlsChannelSecurityConnector::UpdateHandshakerFactoryLocked() {
       skip_server_certificate_verification,
       grpc_get_tsi_tls_version(options_->min_tls_version()),
       grpc_get_tsi_tls_version(options_->max_tls_version()), ssl_session_cache_,
-      options_->crl_directory().c_str(), &client_handshaker_factory_);
+      tls_session_key_logger_.get(), options_->crl_directory().c_str(),
+      &client_handshaker_factory_);
   /* Free memory. */
   if (pem_key_cert_pair != nullptr) {
     grpc_tsi_ssl_pem_key_cert_pairs_destroy(pem_key_cert_pair, 1);
@@ -572,6 +574,12 @@ TlsServerSecurityConnector::TlsServerSecurityConnector(
     : grpc_server_security_connector(GRPC_SSL_URL_SCHEME,
                                      std::move(server_creds)),
       options_(std::move(options)) {
+  const TString& tls_session_key_log_file_path =
+      options_->tls_session_key_log_file_path();
+  if (!tls_session_key_log_file_path.empty()) {
+    tls_session_key_logger_ =
+        tsi::TlsSessionKeyLoggerCache::Get(tls_session_key_log_file_path);
+  }
   // Create a watcher.
   auto watcher_ptr = y_absl::make_unique<TlsServerCertificateWatcher>(this);
   certificate_watcher_ = watcher_ptr.get();
@@ -805,7 +813,8 @@ TlsServerSecurityConnector::UpdateHandshakerFactoryLocked() {
       options_->cert_request_type(),
       grpc_get_tsi_tls_version(options_->min_tls_version()),
       grpc_get_tsi_tls_version(options_->max_tls_version()),
-      options_->crl_directory().c_str(), &server_handshaker_factory_);
+      tls_session_key_logger_.get(), options_->crl_directory().c_str(),
+      &server_handshaker_factory_);
   /* Free memory. */
   grpc_tsi_ssl_pem_key_cert_pairs_destroy(pem_key_cert_pairs,
                                           num_key_cert_pairs);

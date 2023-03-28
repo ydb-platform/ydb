@@ -31,18 +31,19 @@ class grpc_google_iam_credentials : public grpc_call_credentials {
   grpc_google_iam_credentials(const char* token,
                               const char* authority_selector);
 
-  bool get_request_metadata(grpc_polling_entity* pollent,
-                            grpc_auth_metadata_context context,
-                            grpc_core::CredentialsMetadataArray* md_array,
-                            grpc_closure* on_request_metadata,
-                            grpc_error_handle* error) override;
+  grpc_core::ArenaPromise<y_absl::StatusOr<grpc_core::ClientInitialMetadata>>
+  GetRequestMetadata(grpc_core::ClientInitialMetadata initial_metadata,
+                     const GetRequestMetadataArgs* args) override;
 
-  void cancel_get_request_metadata(
-      grpc_core::CredentialsMetadataArray* md_array,
-      grpc_error_handle error) override;
   TString debug_string() override { return debug_string_; }
 
  private:
+  int cmp_impl(const grpc_call_credentials* other) const override {
+    // TODO(yashykt): Check if we can do something better here
+    return grpc_core::QsortCompare(
+        static_cast<const grpc_call_credentials*>(this), other);
+  }
+
   const y_absl::optional<grpc_core::Slice> token_;
   const grpc_core::Slice authority_selector_;
   const TString debug_string_;

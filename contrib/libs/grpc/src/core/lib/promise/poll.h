@@ -37,6 +37,12 @@ struct Pending {
 template <typename T>
 using Poll = y_absl::variant<Pending, T>;
 
+template <typename T, typename U>
+Poll<T> poll_cast(Poll<U> poll) {
+  if (y_absl::holds_alternative<Pending>(poll)) return Pending{};
+  return std::move(y_absl::get<U>(poll));
+}
+
 // Variant of Poll that serves as a ready value
 static constexpr size_t kPollReadyIdx = 1;
 

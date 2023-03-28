@@ -45,13 +45,13 @@ class FileWatcherCertificateProviderFactory
 
     const TString& root_cert_file() const { return root_cert_file_; }
 
-    grpc_millis refresh_interval_ms() const { return refresh_interval_ms_; }
+    Duration refresh_interval() const { return refresh_interval_; }
 
    private:
     TString identity_cert_file_;
     TString private_key_file_;
     TString root_cert_file_;
-    grpc_millis refresh_interval_ms_;
+    Duration refresh_interval_;
   };
 
   const char* name() const override;

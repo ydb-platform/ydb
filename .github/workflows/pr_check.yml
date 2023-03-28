@@ -1,7 +1,13 @@
 name: PR check
 on: 
   pull_request:
-  
+    types:
+      - opened
+    branches:
+      - 'main'
+    paths:
+      - 'ydb/*'
+      
 jobs:
   build_and_test:
     uses: ./.github/workflows/build_and_test_ondemand.yml

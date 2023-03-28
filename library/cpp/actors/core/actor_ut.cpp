@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         {}
 
         void Bootstrap(const TActorContext &ctx) {
-            if (!Receiver) {
+            if (!Receiver && Role == ERole::Leader) {
                 this->Receiver = SelfId();
             } else {
                 EventsCounter /= 2; // We want to measure CPU requirement for one-way send
@@ -88,6 +88,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         }
 
         void SpecialSend(TAutoPtr<IEventHandle> ev, const TActorContext &ctx) {
+            --EventsCounter;
             if (SendingType == ESendingType::Lazy) {
                 ctx.Send<ESendingType::Lazy>(ev);
             } else if (SendingType == ESendingType::Tail) {
@@ -97,14 +98,21 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             }
         }
 
-        STFUNC(StateFunc) {
-            if (--EventsCounter == 0) {
+        bool CheckWorkIsDone() {
+            if (EventsCounter == 0) {
                 if (ElapsedTime != nullptr) {
                     *ElapsedTime = Timer.Passed() / TotalEventsAmount;
                 }
                 PassAway();
-                return;
+                Cerr << "-";
+                return true;
             }
+            return false;
+        }
+
+        STFUNC(StateFunc) {
+            if (CheckWorkIsDone())
+                return;
 
             if (AllocatesMemory) {
                 SpecialSend(new IEventHandle(ev->Sender, SelfId(), new TEvents::TEvPing()), ctx);
@@ -113,6 +121,8 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 ev->DropRewrite();
                 SpecialSend(ev, ctx);
             }
+
+            CheckWorkIsDone();
         }
 
     private:
@@ -502,7 +512,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 auto stats = CountStats([threads, actorPairs] {
                     return BenchContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common);
                 });
-                Cerr << threads << "," << actorPairs << "," << actorPairs * TotalEventsAmount / stats.Mean * 1e9 << Endl;
+                Cerr << threads << "," << actorPairs << "," << actorPairs * 1e9 / stats.Mean << Endl;
             }
         }
     }

@@ -192,6 +192,7 @@ classifieds/infra/yt-exporters
 classifieds/infra/zookeeper-ui
 classifieds/infra/zoonavigator
 classifieds/kafka-push-server
+classifieds/mobile
 classifieds/mobile-antirobot-ios
 classifieds/mobile-autoru-client-android
 classifieds/mobile-autoru-client-ios

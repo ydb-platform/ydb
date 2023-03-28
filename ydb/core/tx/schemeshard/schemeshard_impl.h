@@ -875,12 +875,8 @@ public:
     struct TTxLogin;
     NTabletFlatExecutor::ITransaction* CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev);
 
-
-    template<class T> struct TTxOperationReply;
-#define DeclareCreateTxOperationReply(TEvType, TxType) \
-        NTabletFlatExecutor::ITransaction* CreateTxOperationReply(TOperationId id, TEvType::TPtr& ev);
-    SCHEMESHARD_INCOMING_EVENTS(DeclareCreateTxOperationReply)
-#undef DeclareCreateTxOperationReply
+    template <EventBasePtr TEvPtr>
+    NTabletFlatExecutor::ITransaction* CreateTxOperationReply(TOperationId id, TEvPtr& ev);
 
     void PublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths, const TActorContext& ctx);
     void PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, const TActorContext& ctx);

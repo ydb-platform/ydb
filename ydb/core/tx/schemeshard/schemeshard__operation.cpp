@@ -385,75 +385,84 @@ void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::
 
 
 template <class TEvType>
-struct TSchemeShard::TTxOperationReply {};
+struct TTxTypeFrom;
 
-#define DefineTTxOperationReply(TEvType, TxType) \
-    template<> \
-    struct TSchemeShard::TTxOperationReply<TEvType>: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> { \
-        TOperationId OperationId; \
-        TEvType::TPtr EvReply; \
-        TSideEffects OnComplete; \
-        TMemoryChanges MemChanges; \
-        TStorageChanges DbChanges; \
-\
-        TTxType GetTxType() const override { return TxType; } \
-\
-        TTxOperationReply(TSchemeShard* self, TOperationId id, TEvType::TPtr& ev) \
-            : TBase(self) \
-            , OperationId(id) \
-            , EvReply(ev) \
-        { \
-            Y_VERIFY(TEvType::EventType != TEvPrivate::TEvOperationPlan::EventType); \
-            Y_VERIFY(TEvType::EventType != TEvTxProcessing::TEvPlanStep::EventType); \
-        } \
-\
-        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override { \
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, \
-                        "TTxOperationReply<" #TEvType "> execute" \
-                            << ", operationId: " << OperationId \
-                            << ", at schemeshard: " << Self->TabletID() \
-                            << ", message: " << ISubOperationState::DebugReply(EvReply)); \
-            if (!Self->Operations.contains(OperationId.GetTxId())) { \
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, \
-                            "TTxOperationReply<" #TEvType "> execute" \
-                               << ", operationId: " << OperationId \
-                               << ", at schemeshard: " << Self->TabletID() \
-                               << ", operation unknown"); \
-                TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges}; \
-                OutOfScopeEventHandler<TEvType>(EvReply, context); \
-                return true; \
-            } \
-            TOperation::TPtr operation = Self->Operations.at(OperationId.GetTxId()); \
-            if (operation->DoneParts.contains(OperationId.GetSubTxId())) { \
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, \
-                            "TTxOperationReply<" #TEvType "> execute" \
-                               << ", operationId: " << OperationId \
-                               << ", at schemeshard: " << Self->TabletID() \
-                               << ", operation part is already done"); \
-                TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges}; \
-                OutOfScopeEventHandler<TEvType>(EvReply, context); \
-                return true; \
-            } \
-            ISubOperation::TPtr part = operation->Parts.at(ui64(OperationId.GetSubTxId())); \
-            TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges}; \
-            Y_VERIFY(EvReply); \
-            part->HandleReply(EvReply, context); \
-            OnComplete.ApplyOnExecute(Self, txc, ctx); \
-            DbChanges.Apply(Self, txc, ctx); \
-            return true; \
-        } \
-        \
-        void Complete(const TActorContext& ctx) override { \
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" #TEvType "> complete" \
-                << ", operationId: " << OperationId \
-                << ", at schemeshard: " << Self->TabletID() \
-            ); \
-            OnComplete.ApplyOnComplete(Self, ctx); \
-        } \
+#define DefineTxTypeFromSpecialization(TEvType, TxTypeValue)  \
+    template <> \
+    struct TTxTypeFrom<TEvType> { \
+        static constexpr TTxType TxType = TxTypeValue; \
     };
 
-    SCHEMESHARD_INCOMING_EVENTS(DefineTTxOperationReply)
-#undef DefineTxOperationReply
+    SCHEMESHARD_INCOMING_EVENTS(DefineTxTypeFromSpecialization)
+#undef DefineTxTypeFromSpecialization
+
+
+template <class TEvType>
+struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    TOperationId OperationId;
+    typename TEvType::TPtr EvReply;
+    TSideEffects OnComplete;
+    TMemoryChanges MemChanges;
+    TStorageChanges DbChanges;
+
+    TTxType GetTxType() const override {
+        return TTxTypeFrom<TEvType>::TxType;
+    }
+
+    TTxOperationReply(TSchemeShard* self, TOperationId id, typename TEvType::TPtr& ev)
+        : TBase(self)
+        , OperationId(id)
+        , EvReply(ev)
+    {
+        Y_VERIFY(TEvType::EventType != TEvPrivate::TEvOperationPlan::EventType);
+        Y_VERIFY(TEvType::EventType != TEvTxProcessing::TEvPlanStep::EventType);
+    }
+
+    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxOperationReply<" << EvReply->GetTypeName() << "> execute"
+                        << ", operationId: " << OperationId
+                        << ", at schemeshard: " << Self->TabletID()
+                        << ", message: " << ISubOperationState::DebugReply(EvReply));
+        if (!Self->Operations.contains(OperationId.GetTxId())) {
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TTxOperationReply<" << EvReply->GetTypeName() << "> execute "
+                            << ", operationId: " << OperationId
+                            << ", at schemeshard: " << Self->TabletID()
+                            << ", operation unknown");
+            TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+            OutOfScopeEventHandler<TEvType>(EvReply, context);
+            return true;
+        }
+        TOperation::TPtr operation = Self->Operations.at(OperationId.GetTxId());
+        if (operation->DoneParts.contains(OperationId.GetSubTxId())) {
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TTxOperationReply<" << EvReply->GetTypeName() << "> execute"
+                            << ", operationId: " << OperationId
+                            << ", at schemeshard: " << Self->TabletID()
+                            << ", operation part is already done");
+            TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+            OutOfScopeEventHandler<TEvType>(EvReply, context);
+            return true;
+        }
+        ISubOperation::TPtr part = operation->Parts.at(ui64(OperationId.GetSubTxId()));
+        TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+        Y_VERIFY(EvReply);
+        part->HandleReply(EvReply, context);
+        OnComplete.ApplyOnExecute(Self, txc, ctx);
+        DbChanges.Apply(Self, txc, ctx);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" << EvReply->GetTypeName() << "> complete"
+            << ", operationId: " << OperationId
+            << ", at schemeshard: " << Self->TabletID()
+        );
+        OnComplete.ApplyOnComplete(Self, ctx);
+    }
+};
+
 
 struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvTxProcessing::TEvPlanStep::TPtr Ev;
@@ -554,13 +563,18 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationProgress(TOper
     return new TTxOperationProgress(this, opId);
 }
 
-#define DefineCreateTxOperationReply(TEvType, TxType)          \
-    NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, TEvType::TPtr& ev) { \
-        return new TTxOperationReply<TEvType>(this, id, ev);    \
-    }
+template <EventBasePtr TEvPtr>
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, TEvPtr& ev) {
+    using TEvType = typename EventTypeFromTEvPtr<TEvPtr>::type;
+    return new TTxOperationReply<TEvType>(this, id, ev);
+}
 
-    SCHEMESHARD_INCOMING_EVENTS(DefineCreateTxOperationReply)
-#undef DefineTxOperationReply
+#define DefineCreateTxOperationReplyFunc(TEvType, ...) \
+    template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, TEvType::TPtr& ev);
+
+    SCHEMESHARD_INCOMING_EVENTS(DefineCreateTxOperationReplyFunc)
+#undef DefineCreateTxOperationReplyFunc
+
 
 TString JoinPath(const TString& workingDir, const TString& name) {
     Y_VERIFY(!name.StartsWith('/') && !name.EndsWith('/'));

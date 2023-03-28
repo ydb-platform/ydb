@@ -66,13 +66,6 @@ jobs:
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
-    - name: Add comment to PR
-      if: github.event_name == 'pull_request'
-      uses: thollander/actions-comment-pull-request@v2
-      with:
-        comment_tag: test-results
-        message: |
-          Here are the test results
 
   release-runner:
     name: Release self-hosted YC runner if provided on-demand

@@ -51,6 +51,22 @@ ALLOW tools/jsv8 -> contrib/deprecated/v8
 ALLOW travel/rasp/library/python/hemi -> contrib/deprecated/v8
 ALLOW yweb/robot/indexer -> contrib/deprecated/v8
 
+# clickhouse_data_streams_compat is a lib with some outdated/removed interfaces/classes from CH.
+# Is should be deleted when all code in arcadia migrates to new CH interfaces/classes.
+ALLOW yt/chyt/server -> contrib/deprecated/clickhouse_data_streams_compat
+ALLOW metrika/core/libs/sqxxl -> contrib/deprecated/clickhouse_data_streams_compat
+ALLOW metrika/core/libs/cloud -> contrib/deprecated/clickhouse_data_streams_compat
+ALLOW metrika/core/libs/traficsource -> contrib/deprecated/clickhouse_data_streams_compat
+ALLOW metrika/core/libs/logbroker-persqueue-import -> contrib/deprecated/clickhouse_data_streams_compat
+ALLOW metrika/core/programs/mobile-logs-api-export-server/tests/functional/yt-uploader -> contrib/deprecated/clickhouse_data_streams_compat
+ALLOW metrika/core/programs/visits4d-leader/bin -> contrib/deprecated/clickhouse_data_streams_compat
+ALLOW metrika/core/libs/metrikatraficsource -> contrib/deprecated/clickhouse_data_streams_compat
+ALLOW yql/udfs/common/clickhouse -> contrib/deprecated/clickhouse_data_streams_compat
+ALLOW kikimr/kikhouse_new/lib -> contrib/deprecated/clickhouse_data_streams_compat
+
+ALLOW metrika/core/libs -> contrib/deprecated/mysqlxx
+ALLOW metrika/core/programs -> contrib/deprecated/mysqlxx
+
 # Default policies:
 #
 # Do not restrict contrib

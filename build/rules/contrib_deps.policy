@@ -85,5 +85,9 @@ ALLOW contrib/tests -> .*
 # It should not be used outside of ClickHouse build.
 ALLOW contrib/clickhouse -> library/cpp/re2_st
 DENY .* -> library/cpp/re2_st
+# clickhouse_h3_compat is another pseudo-library for ClickHouse, which is used to map
+# it's master version unstable H3 API to our stable H3 v3.x.
+ALLOW contrib/clickhouse -> library/cpp/clickhouse_h3_compat
+DENY .* -> library/cpp/clickhouse_h3_compat
 
 DENY contrib -> .*

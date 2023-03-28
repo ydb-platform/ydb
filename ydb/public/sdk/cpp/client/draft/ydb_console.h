@@ -96,6 +96,8 @@ public:
 
     // Remove specific volatile config or all of them
     TAsyncStatus RemoveVolatileConfig(
+        const TString& cluster,
+        ui64 version,
         const TVector<ui64>& ids,
         const TClusterConfigSettings& settings = {});
 

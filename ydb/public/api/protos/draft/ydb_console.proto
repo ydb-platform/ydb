@@ -46,7 +46,9 @@ message GetConfigResponse {
 
 message RemoveVolatileConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    repeated uint64 ids = 2;
+    optional uint64 version = 2;
+    optional string cluster = 3;
+    repeated uint64 ids = 4;
 }
 
 message RemoveVolatileConfigResponse {

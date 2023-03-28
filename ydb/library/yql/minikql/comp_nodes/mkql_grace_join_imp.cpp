@@ -70,14 +70,14 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     }
 
-    ui64 nullsBitmapIdx = NumberOfKeyColumns / sizeof(ui64);
+    ui64 nullsBitmapIdx = NumberOfKeyColumns / (sizeof(ui64) * 8);
     ui64 remBits = (nullsBitmapIdx + 1) * sizeof(ui64) * 8 - NumberOfKeyColumns;
 
     TempTuple[nullsBitmapIdx] <<= (remBits);
     TempTuple[nullsBitmapIdx] >>= (remBits);
 
     nullsBitmapIdx++;
-    while ( nullsBitmapIdx * sizeof(ui64) <= NumberOfColumns ) {
+    while ( nullsBitmapIdx * sizeof(ui64) * 8 <= NumberOfColumns ) {
         TempTuple[nullsBitmapIdx] = 0;
         nullsBitmapIdx++;
     }

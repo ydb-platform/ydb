@@ -1976,7 +1976,6 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
     return jt;
 }
 
-
 void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
     TSet<TString> important;
     for (const auto& importantUser : Config.GetPartitionConfig().GetImportantClientId()) {
@@ -2004,7 +2003,6 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
         }
     }
 }
-
 
 void TPartition::Handle(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
     PushBackDistrTx(ev->Release());
@@ -3726,11 +3724,11 @@ void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContex
 void TPartition::HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx) {
     Y_VERIFY(cookie == SET_OFFSET_COOKIE);
 
+
     if (ChangeConfig) {
         EndChangePartitionConfig(ChangeConfig->Config,
                                  ChangeConfig->TopicConverter,
                                  ctx);
-        ChangeConfig = nullptr;
     }
 
     for (auto& user : AffectedUsers) {
@@ -3743,13 +3741,17 @@ void TPartition::HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx) 
             userInfo.Step = actual->Step;
             userInfo.Offset = actual->Offset;
             userInfo.ReadRuleGeneration = actual->ReadRuleGeneration;
+            userInfo.ReadFromTimestamp = actual->ReadFromTimestamp;
+            userInfo.HasReadRule = true;
 
-            if (PendingHasReadRule.contains(user)) {
-                userInfo.HasReadRule = true;
+            if (userInfo.Important != actual->Important) {
+                if (userInfo.LabeledCounters) {
+                    ScheduleDropPartitionLabeledCounters(userInfo.LabeledCounters->GetGroup());
+                }
+                userInfo.SetImportant(actual->Important);
             }
-
-            if (auto p = PendingReadFromTimestamp.find(user); p != PendingReadFromTimestamp.end()) {
-                userInfo.ReadFromTimestamp = p->second;
+            if (userInfo.Important && userInfo.Offset < (i64)StartOffset) {
+                userInfo.Offset = StartOffset;
             }
 
             if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
@@ -3759,13 +3761,12 @@ void TPartition::HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx) 
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_HIT].Increment(1);
             }
         } else {
-            UsersInfoStorage->Remove(user, ctx);
-        }
-    }
+            auto ui = UsersInfoStorage->GetIfExists(user);
+            if (ui && ui->LabeledCounters) {
+                ScheduleDropPartitionLabeledCounters(ui->LabeledCounters->GetGroup());
+            }
 
-    for (auto& [consumer, important] : PendingSetImportant) {
-        if (auto* userInfo = UsersInfoStorage->GetIfExists(consumer); userInfo) {
-            userInfo->SetImportant(important);
+            UsersInfoStorage->Remove(user, ctx);
         }
     }
 
@@ -3776,13 +3777,16 @@ void TPartition::HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx) 
     PendingUsersInfo.clear();
     Replies.clear();
     AffectedUsers.clear();
-    PendingReadFromTimestamp.clear();
-    PendingSetImportant.clear();
-    PendingHasReadRule.clear();
 
     UsersInfoWriteInProgress = false;
 
     TxIdHasChanged = false;
+
+    if (ChangeConfig) {
+        ReportCounters(ctx);
+        ChangeConfig = nullptr;
+    }
+
 
     ProcessTxsAndUserActs(ctx);
 }
@@ -3908,6 +3912,7 @@ void TPartition::ProcessDistrTxs(const TActorContext& ctx)
 bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
                                   const TActorContext& ctx)
 {
+    Y_UNUSED(ctx);
     bool predicate = true;
 
     for (auto& operation : tx.Operations) {
@@ -3924,7 +3929,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
         }
 
         bool isAffectedConsumer = AffectedUsers.contains(consumer);
-        TUserInfo& userInfo = GetOrCreatePendingUser(consumer, ctx);
+        TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
         if (operation.GetBegin() > operation.GetEnd()) {
             // BAD_REQUEST
@@ -3977,7 +3982,7 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
         Y_VERIFY(t.Predicate.Defined() && *t.Predicate);
 
         for (auto& operation : t.Tx->Operations) {
-            TUserInfo& userInfo = GetOrCreatePendingUser(operation.GetConsumer(), ctx);
+            TUserInfoBase& userInfo = GetOrCreatePendingUser(operation.GetConsumer());
 
             Y_VERIFY(userInfo.Offset == (i64)operation.GetBegin());
 
@@ -4041,64 +4046,45 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxRollback& event,
 void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
                                             const TActorContext& ctx)
 {
-    InitPendingUserInfoForImportantClients(config, ctx);
-
     TSet<TString> hasReadRule;
 
     for (auto& [consumer, info] : UsersInfoStorage->GetAll()) {
-        PendingReadFromTimestamp[consumer] = TInstant::Zero();
-
         hasReadRule.insert(consumer);
+    }
+
+    TSet<TString> important;
+    for (const auto& importantUser : config.GetPartitionConfig().GetImportantClientId()) {
+        important.insert(importantUser);
     }
 
     for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
         const auto& consumer = config.GetReadRules(i);
-        auto& userInfo = GetOrCreatePendingUser(consumer, ctx, 0);
+        auto& userInfo = GetOrCreatePendingUser(consumer, 0);
+
+        TInstant ts = i < config.ReadFromTimestampsMsSize() ? TInstant::MilliSeconds(config.GetReadFromTimestampsMs(i)) : TInstant::Zero();
+        if (!ts) {
+            ts += TDuration::MilliSeconds(1);
+        }
+        userInfo.ReadFromTimestamp = ts;
+        userInfo.Important = important.contains(consumer);
 
         ui64 rrGen = i < config.ReadRuleGenerationsSize() ? config.GetReadRuleGenerations(i) : 0;
         if (userInfo.ReadRuleGeneration != rrGen) {
             TEvPQ::TEvSetClientInfo act(0, consumer, 0, "", 0, 0,
                                         TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE, rrGen);
 
-            userInfo.Session = "";
-            userInfo.Offset = 0;
-            if (userInfo.Important) {
-                userInfo.Offset = StartOffset;
-            }
-            userInfo.Step = userInfo.Generation = 0;
-
             ProcessUserAct(act, ctx);
         }
-
-        userInfo.HasReadRule = true;
         hasReadRule.erase(consumer);
-
-        TInstant ts = i < config.ReadFromTimestampsMsSize() ? TInstant::MilliSeconds(config.GetReadFromTimestampsMs(i)) : TInstant::Zero();
-        if (!ts) {
-            ts += TDuration::MilliSeconds(1);
-        }
-        if (!userInfo.ReadFromTimestamp || userInfo.ReadFromTimestamp > ts) {
-            PendingReadFromTimestamp[consumer] = ts;
-        }
-
-        PendingHasReadRule.insert(consumer);
     }
 
     for (auto& consumer : hasReadRule) {
-        auto& userInfo = GetOrCreatePendingUser(consumer, ctx);
+        GetOrCreatePendingUser(consumer);
         TEvPQ::TEvSetClientInfo act(0, consumer,
                                     0, "", 0, 0, TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0);
 
-        ScheduleDropPartitionLabeledCounters(userInfo.LabeledCounters->GetGroup());
-
-        userInfo.Session = "";
-        userInfo.Offset = 0;
-        userInfo.Step = userInfo.Generation = 0;
-
         ProcessUserAct(act, ctx);
     }
-
-    ReportCounters(ctx);
 }
 
 void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
@@ -4124,10 +4110,6 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
         userInfo.ReadQuota.UpdateConfig(readQuota.GetBurstSize(), readQuota.GetSpeedInBytesPerSecond());
     }
 
-    if (CurrentStateFunc() != &TThis::StateInit) {
-        InitUserInfoForImportantClients(ctx);
-    }
-
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         if (Mirrorer) {
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
@@ -4145,7 +4127,6 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
     if (SendChangeConfigReply) {
         SchedulePartitionConfigChanged();
     }
-    ReportCounters(ctx);
 }
 
 TString TPartition::GetKeyConfig() const
@@ -4165,41 +4146,6 @@ void TPartition::ResendPendingEvents(const TActorContext& ctx)
     while (!PendingEvents.empty()) {
         ctx.Schedule(TDuration::Zero(), PendingEvents.front().release());
         PendingEvents.pop_front();
-    }
-}
-
-void TPartition::InitPendingUserInfoForImportantClients(const NKikimrPQ::TPQTabletConfig& config,
-                                                        const TActorContext& ctx) {
-    TSet<TString> important;
-
-    for (const auto& consumer : config.GetPartitionConfig().GetImportantClientId()) {
-        important.insert(consumer);
-
-        TUserInfo* userInfo = GetPendingUserIfExists(consumer);
-
-        if (userInfo && !userInfo->Important && userInfo->LabeledCounters) {
-            ScheduleDropPartitionLabeledCounters(userInfo->LabeledCounters->GetGroup());
-            PendingSetImportant[consumer] = true;
-            continue;
-        }
-
-        if (!userInfo) {
-            userInfo = &GetOrCreatePendingUser(consumer, ctx, 0);
-            PendingSetImportant[consumer] = true;
-        }
-
-        if (userInfo->Offset < (i64)StartOffset) {
-            userInfo->Offset = StartOffset;
-        }
-
-        //ReadTimestampForOffset(consumer, *userInfo, ctx);
-    }
-
-    for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
-        if (!important.contains(consumer) && userInfo.Important && userInfo.LabeledCounters) {
-            ScheduleDropPartitionLabeledCounters(userInfo.LabeledCounters->GetGroup());
-            PendingSetImportant[consumer] = false;
-        }
     }
 }
 
@@ -4254,6 +4200,8 @@ void TPartition::ProcessImmediateTxs(const TActorContext& ctx)
 void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
                                     const TActorContext& ctx)
 {
+    Y_UNUSED(ctx);
+
     Y_VERIFY(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_VERIFY(tx.HasData());
 
@@ -4271,7 +4219,7 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
             return;
         }
 
-        TUserInfo& userInfo = GetOrCreatePendingUser(user, ctx);
+        TUserInfoBase& userInfo = GetOrCreatePendingUser(user);
 
         if (operation.GetBegin() > operation.GetEnd()) {
             ScheduleReplyPropose(tx,
@@ -4332,7 +4280,7 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
         }
     }
 
-    TUserInfo& userInfo = GetOrCreatePendingUser(user, ctx);
+    TUserInfoBase& userInfo = GetOrCreatePendingUser(user);
 
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
         LOG_DEBUG_S(
@@ -4347,7 +4295,8 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
     }
 
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && act.SessionId == userInfo.Session) { //this is retry of current request, answer ok
-        auto ts = GetTime(userInfo, userInfo.Offset);
+        auto *ui = UsersInfoStorage->GetIfExists(userInfo.User);
+        auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
 
         ScheduleReplyGetClientOffsetOk(act.Cookie,
                                        userInfo.Offset,
@@ -4432,7 +4381,7 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
 }
 
 void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
-                                           TUserInfo& userInfo,
+                                           TUserInfoBase& userInfo,
                                            const TActorContext& ctx)
 {
     const TString& user = act.ClientId;
@@ -4457,7 +4406,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
                 "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition << " user " << user
                     << " drop done"
         );
-
         PendingUsersInfo.erase(user);
     } else if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
         LOG_DEBUG_S(
@@ -4470,7 +4418,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.Session = "";
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
-        userInfo.ReadScheduled = false;
 
         if (userInfo.Important) {
             userInfo.Offset = StartOffset;
@@ -4478,7 +4425,8 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
     } else {
         if (setSession || dropSession) {
             offset = userInfo.Offset;
-            auto ts = GetTime(userInfo, offset);
+            auto *ui = UsersInfoStorage->GetIfExists(userInfo.User);
+            auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
 
             ScheduleReplyGetClientOffsetOk(act.Cookie,
                                            offset,
@@ -4644,11 +4592,12 @@ void TPartition::AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request)
         TKeyPrefix ikeyDeprecated(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkUserDeprecated);
         ikeyDeprecated.Append(user.c_str(), user.size());
 
-        if (TUserInfo* userInfo = GetPendingUserIfExists(user)) {
+        if (TUserInfoBase* userInfo = GetPendingUserIfExists(user)) {
+            auto *ui = UsersInfoStorage->GetIfExists(user);
             AddCmdWrite(request,
                         ikey, ikeyDeprecated,
                         userInfo->Offset, userInfo->Generation, userInfo->Step, userInfo->Session,
-                        userInfo->ReadOffsetRewindSum,
+                        ui ? ui->ReadOffsetRewindSum : 0,
                         userInfo->ReadRuleGeneration);
         } else {
             AddCmdDeleteRange(request,
@@ -4674,25 +4623,25 @@ void TPartition::AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request)
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
-TUserInfo& TPartition::GetOrCreatePendingUser(const TString& user,
-                                              const TActorContext& ctx,
-                                              TMaybe<ui64> readRuleGeneration)
+TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
+                                                  TMaybe<ui64> readRuleGeneration)
 {
-    TUserInfo* userInfo = UsersInfoStorage->GetIfExists(user);
+    TUserInfoBase* userInfo = nullptr;
 
     auto i = PendingUsersInfo.find(user);
     if (i == PendingUsersInfo.end()) {
+        auto ui = UsersInfoStorage->GetIfExists(user);
         auto [p, _] = PendingUsersInfo.emplace(user, UsersInfoStorage->CreateUserInfo(user,
-                                                                                      ctx,
                                                                                       readRuleGeneration));
 
-        if (userInfo) {
-            p->second.Session = userInfo->Session;
-            p->second.Generation = userInfo->Generation;
-            p->second.Step = userInfo->Step;
-            p->second.Offset = userInfo->Offset;
-            p->second.ReadRuleGeneration = userInfo->ReadRuleGeneration;
-            p->second.ReadScheduled = userInfo->ReadScheduled;
+        if (ui) {
+            p->second.Session = ui->Session;
+            p->second.Generation = ui->Generation;
+            p->second.Step = ui->Step;
+            p->second.Offset = ui->Offset;
+            p->second.ReadRuleGeneration = ui->ReadRuleGeneration;
+            p->second.Important = ui->Important;
+            p->second.ReadFromTimestamp = ui->ReadFromTimestamp;
         }
 
         userInfo = &p->second;
@@ -4705,7 +4654,7 @@ TUserInfo& TPartition::GetOrCreatePendingUser(const TString& user,
     return *userInfo;
 }
 
-TUserInfo* TPartition::GetPendingUserIfExists(const TString& user)
+TUserInfoBase* TPartition::GetPendingUserIfExists(const TString& user)
 {
     if (auto i = PendingUsersInfo.find(user); i != PendingUsersInfo.end()) {
         return &i->second;

@@ -288,12 +288,15 @@ void CheckLabeledCountersResponse(TTestContext& tc, ui32 count, TVector<TString>
 
     THashSet<TString> groups;
 
+    Cerr << "NEW ANS:\n";
     for (ui32 i = 0; i < result->Record.LabeledCountersByGroupSize(); ++i) {
         auto& c = result->Record.GetLabeledCountersByGroup(i);
         groups.insert(c.GetGroup());
+        Cerr << "ANS GROUP " << c.GetGroup() << "\n";
     }
     UNIT_ASSERT_VALUES_EQUAL(groups.size(), count);
     for (auto& g : mustHave) {
+        Cerr << "CHECKING GROUP " << g << "\n";
         UNIT_ASSERT(groups.contains(g));
     }
 }
@@ -365,29 +368,21 @@ Y_UNIT_TEST(ImportantFlagSwitching) {
         CheckLabeledCountersResponse(tc, 11, MakeTopics({"user/1", "user2/1"}));
 
         PQTabletPrepare({}, {{"user", true}, {"user2", false}}, tc);
-        {
+        for (ui32 i = 0 ; i < 2; ++i){
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
             tc.Runtime->DispatchEvents(options);
         }
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
+
         CheckLabeledCountersResponse(tc, 12, MakeTopics({"user/1", "user2/0"}));
 
         PQTabletPrepare({}, {{"user", true}}, tc);
-        {
+        for (ui32 i = 0 ; i < 2; ++i){
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
             tc.Runtime->DispatchEvents(options);
         }
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
+
         CheckLabeledCountersResponse(tc, 8, MakeTopics({"user/1"}));
     });
 }

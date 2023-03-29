@@ -47,13 +47,22 @@ struct TReadSpeedLimiterHolder {
     TTabletCountersBase Baseline;
 };
 
-struct TUserInfo {
-    THolder<TReadSpeedLimiterHolder> ReadSpeedLimiter;
+struct TUserInfoBase {
+    TString User;
+    ui64 ReadRuleGeneration = 0;
 
     TString Session = "";
     ui32 Generation = 0;
     ui32 Step = 0;
     i64 Offset = 0;
+
+    bool Important = false;
+    TInstant ReadFromTimestamp;
+};
+
+struct TUserInfo: public TUserInfoBase {
+    THolder<TReadSpeedLimiterHolder> ReadSpeedLimiter;
+
     TInstant WriteTimestamp;
     TInstant CreateTimestamp;
     TInstant ReadTimestamp;
@@ -70,12 +79,8 @@ struct TUserInfo {
     //When client will commit to new position, timestamps for this offset could be in cache - not insane client should read data before commit
     std::deque<std::pair<ui64, std::pair<TInstant, TInstant>>> Cache;
 
-    bool Important = false;
-    TInstant ReadFromTimestamp;
     bool HasReadRule = false;
     THolder<TUserLabeledCounters> LabeledCounters;
-    TString User;
-    ui64 ReadRuleGeneration = 0;
     NPersQueue::TTopicConverterPtr TopicConverter;
 
     std::deque<std::pair<TReadInfo, ui64>> ReadRequests;
@@ -169,11 +174,8 @@ struct TUserInfo {
         const TString& dbPath, bool meterRead,
         ui64 burst = 1'000'000'000, ui64 speed = 1'000'000'000
     )
-        : ReadSpeedLimiter(std::move(readSpeedLimiter))
-        , Session(session)
-        , Generation(gen)
-        , Step(step)
-        , Offset(offset)
+        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, important, readFromTimestamp}
+        , ReadSpeedLimiter(std::move(readSpeedLimiter))
         , WriteTimestamp(TAppData::TimeProvider->Now())
         , CreateTimestamp(TAppData::TimeProvider->Now())
         , ReadTimestamp(TAppData::TimeProvider->Now())
@@ -183,11 +185,7 @@ struct TUserInfo {
         , ReadCreateTimestamp(TAppData::TimeProvider->Now())
         , ReadOffsetRewindSum(readOffsetRewindSum)
         , ReadScheduled(false)
-        , Important(important)
-        , ReadFromTimestamp(readFromTimestamp)
         , HasReadRule(false)
-        , User(user)
-        , ReadRuleGeneration(readRuleGeneration)
         , TopicConverter(topicConverter)
         , ReadQuota(burst, speed, TAppData::TimeProvider->Now())
         , Counter(nullptr)
@@ -397,8 +395,7 @@ public:
 
     THashMap<TString, TUserInfo>& GetAll();
 
-    TUserInfo CreateUserInfo(const TString& user,
-                             const TActorContext& ctx,
+    TUserInfoBase CreateUserInfo(const TString& user,
                              TMaybe<ui64> readRuleGeneration = {}) const;
     TUserInfo& Create(
         const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString &session,

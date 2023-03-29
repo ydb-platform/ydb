@@ -538,16 +538,16 @@ namespace NActors {
             return Send(recipient, ev.release(), flags, cookie, std::move(traceId));
         }
 
-        bool Forward(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) {
+        static bool Forward(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) {
             return TActivationContext::Forward(ev, recipient);
         }
 
-        bool Forward(THolder<IEventHandle>& ev, const TActorId& recipient) {
+        static bool Forward(THolder<IEventHandle>& ev, const TActorId& recipient) {
             return TActivationContext::Forward(ev, recipient);
         }
 
         template <typename TEventHandle>
-        bool Forward(TAutoPtr<TEventHandle>& ev, const TActorId& recipient) const {
+        static bool Forward(TAutoPtr<TEventHandle>& ev, const TActorId& recipient) {
             TAutoPtr<IEventHandle> evi(ev.Release());
             return Forward(evi, recipient);
         }

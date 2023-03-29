@@ -4,8 +4,8 @@ on:
     types: [ opened, edited, reopened ]
     branches:
       - 'main'
-    paths:
-      - 'ydb/**'
+    paths-ignore:
+      - 'ydb/docs/**'
       
 jobs:
   build_and_test:

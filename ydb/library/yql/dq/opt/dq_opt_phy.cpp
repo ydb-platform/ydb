@@ -1536,6 +1536,74 @@ TExprBase GetSortDirection(TExprBase& sortDirections, size_t index) {
 }
 } // End of anonymous namespace
 
+TExprBase DqBuildTopStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    if (!node.Maybe<TCoTop>().Input().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    const auto top = node.Cast<TCoTop>();
+    const auto dqUnion = top.Input().Cast<TDqCnUnionAll>();
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    if (!CanPushDqExpr(top.Count(), dqUnion) || !CanPushDqExpr(top.KeySelectorLambda(), dqUnion)) {
+        return node;
+    }
+
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTopSort::idx_Input, std::move(connToPushableStage)));
+    }
+
+    const auto result = dqUnion.Output().Stage().Program().Body();
+
+    const auto sortKeySelector = top.KeySelectorLambda();
+    const auto sortDirections = top.SortDirections();
+    const auto lambda = Build<TCoLambda>(ctx, top.Pos())
+            .Args({"stream"})
+            .Body<TCoTop>()
+                .Input("stream")
+                .KeySelectorLambda(ctx.DeepCopyLambda(top.KeySelectorLambda().Ref()))
+                .SortDirections(sortDirections)
+                .Count(top.Count())
+                .Build()
+            .Done();
+
+    const auto stage = dqUnion.Output().Stage().Cast<TDqStage>();
+    const auto newStage = DqPushLambdaToStage(stage, dqUnion.Output().Index(), lambda, {}, ctx, optCtx);
+    if (!newStage) {
+        return node;
+    }
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage<TDqStage>()
+                .Inputs()
+                    .Add<TDqCnUnionAll>()
+                        .Output()
+                            .Stage(newStage.Cast())
+                            .Index(dqUnion.Output().Index())
+                            .Build()
+                        .Build()
+                    .Build()
+                .Program()
+                    .Args({"stream"})
+                    .Body<TCoTop>()
+                        .Input("stream")
+                        .KeySelectorLambda(ctx.DeepCopyLambda(top.KeySelectorLambda().Ref()))
+                        .SortDirections(top.SortDirections())
+                        .Count(top.Count())
+                        .Build()
+                    .Build()
+                .Settings(TDqStageSettings().BuildNode(ctx, top.Pos()))
+                .Build()
+            .Index().Build(0U)
+            .Build()
+        .Done();
+}
+
 TExprBase DqBuildTopSortStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {

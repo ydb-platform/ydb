@@ -331,7 +331,7 @@ void THarmonizer::PullStats(ui64 ts) {
 }
 
 Y_FORCE_INLINE bool IsStarved(double consumed, double booked) {
-    return consumed < booked * 0.7;
+    return Max(consumed, booked) > 0.1 && consumed < booked * 0.7;
 }
 
 Y_FORCE_INLINE bool IsHoggish(double booked, ui16 currentThreadCount) {
@@ -397,6 +397,9 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         AtomicSet(pool.PotentialMaxThreadCount, Min(pool.MaxThreadCount, budgetInt));
     }
     double overbooked = consumed - booked;
+    if (overbooked < 0) {
+        isStarvedPresent = false;
+    }
     if (isStarvedPresent) {
         // last_starved_at_consumed_value = сумма по всем пулам consumed;
         // TODO(cthulhu): использовать как лимит планвно устремлять этот лимит к total,
@@ -412,7 +415,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
                 TPoolInfo &pool = Pools[poolIdx];
                 i64 threadCount = pool.GetThreadCount();
                 while (threadCount > pool.DefaultThreadCount) {
-                    pool.SetThreadCount(threadCount - 1);
+                    pool.SetThreadCount(--threadCount);
                     AtomicIncrement(pool.DecreasingThreadsByStarvedState);
                     overbooked--;
                     LWPROBE(HarmonizeOperation, poolIdx, pool.Pool->GetName(), "decrease", threadCount - 1, pool.DefaultThreadCount, pool.MaxThreadCount);

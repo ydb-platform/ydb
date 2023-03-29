@@ -2959,7 +2959,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     resp->Record.SetEnough(false);
                     resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
-                    runtime->Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                    runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             }
@@ -3025,7 +3025,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     resp->Record.SetEnough(false);
                     resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
-                    runtime->Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                    runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             }
@@ -3088,7 +3088,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     resp->Record.SetEnough(false);
                     resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
-                    runtime->Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                    runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             }
@@ -3170,7 +3170,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     resp->Record.SetEnough(false);
                     resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
-                    runtime->Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                    runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             }
@@ -3245,7 +3245,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     resp->Record.SetEnough(false);
                     resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(100);
-                    runtime->Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                    runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
 
@@ -3261,7 +3261,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                             Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event");
                             Cerr.Flush();
                             auto resp = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(msg->Generation);
-                            runtime->Send(new IEventHandleFat(ev->Recipient, ev->Sender, resp.release()));
+                            runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, resp.release()));
                         } else {
                             prevIsFinished = msg->Finished;
                         }

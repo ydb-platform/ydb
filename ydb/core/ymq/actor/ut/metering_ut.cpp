@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(Metering) {
         AddRequestToQueue(requests, "5.45.215.192", 100, 200, 200);
 
         for (auto& req : requests) {
-            runtime->Send(new IEventHandleFat(
+            runtime->Send(new IEventHandle(
                 MakeSqsMeteringServiceID(), runtime->AllocateEdgeActor(), req.Release()
             ));
         }
@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(Metering) {
         }
 
         for (auto& req : requests) {
-            runtime->Send(new IEventHandleFat(
+            runtime->Send(new IEventHandle(
                 MakeSqsMeteringServiceID(), runtime->AllocateEdgeActor(), req.Release()
             ));
         }
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(Metering) {
             auto classifierUpdateRequest = MakeHolder<NNetClassifier::TEvNetClassifier::TEvClassifierUpdate>();
             classifierUpdateRequest->Classifier = classifier;
             classifierUpdateRequest->NetDataUpdateTimestamp = TInstant::Now();
-            runtime->Send(new IEventHandleFat(
+            runtime->Send(new IEventHandle(
                 MakeSqsMeteringServiceID(), runtime->AllocateEdgeActor(), classifierUpdateRequest.Release()
             ));
         }
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(Metering) {
             AddRequestToQueue(requests, "2a0d:d6c0:bbbb:bbbb:bbbb:bbbb:bbbb:bbbb", 100, 200, 200);
         }
         for (auto& req : requests) {
-            runtime->Send(new IEventHandleFat(
+            runtime->Send(new IEventHandle(
                 MakeSqsMeteringServiceID(), runtime->AllocateEdgeActor(), req.Release()
             ));
         }
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(Metering) {
             auto classifierUpdateRequest = MakeHolder<NNetClassifier::TEvNetClassifier::TEvClassifierUpdate>();
             classifierUpdateRequest->Classifier = classifier;
             classifierUpdateRequest->NetDataUpdateTimestamp = TInstant::Now();
-            runtime->Send(new IEventHandleFat(
+            runtime->Send(new IEventHandle(
                 MakeSqsMeteringServiceID(), runtime->AllocateEdgeActor(), classifierUpdateRequest.Release()
             ));
         }
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(Metering) {
             AddToExpectedRecords(expectedRecords, requests.back()->Data, TProcessedRequestsAggregator::ENetworkClass::cloud);
         }
         for (auto& req : requests) {
-            runtime->Send(new IEventHandleFat(
+            runtime->Send(new IEventHandle(
                 MakeSqsMeteringServiceID(), runtime->AllocateEdgeActor(), req.Release()
             ));
         }

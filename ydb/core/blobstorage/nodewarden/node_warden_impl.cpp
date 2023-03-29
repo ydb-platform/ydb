@@ -42,14 +42,14 @@ void TNodeWarden::StartInvalidGroupProxy() {
 void TNodeWarden::StopInvalidGroupProxy() {
     ui32 groupId = Max<ui32>();
     STLOG(PRI_DEBUG, BS_NODE, NW15, "StopInvalidGroupProxy", (GroupId, groupId));
-    TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, MakeBlobStorageProxyID(groupId), {}, nullptr, 0));
+    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, MakeBlobStorageProxyID(groupId), {}, nullptr, 0));
 }
 
 void TNodeWarden::PassAway() {
     STLOG(PRI_DEBUG, BS_NODE, NW25, "PassAway");
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
     StopInvalidGroupProxy();
-    TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
+    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
     return TActorBootstrapped::PassAway();
 }
 
@@ -120,7 +120,7 @@ void TNodeWarden::Bootstrap() {
     Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(LocalNodeId));
 
     if (Cfg->IsCacheEnabled()) {
-        TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandleFat(TEvPrivate::EvReadCache, 0, SelfId(), {}, nullptr, 0));
+        TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvReadCache, 0, SelfId(), {}, nullptr, 0));
     }
 
     StartInvalidGroupProxy();
@@ -192,7 +192,7 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     switch (msg.Status) {
         case NKikimrProto::NOTREADY: {
             const ui64 round = NextLocalPDiskInitOwnerRound();
-            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandleFat(MakeBlobStoragePDiskID(LocalNodeId,
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(MakeBlobStoragePDiskID(LocalNodeId,
                 msg.PDiskId), SelfId(), new NPDisk::TEvSlay(msg.VDiskId, round, msg.PDiskId, msg.VSlotId)));
             it->second = round;
             break;

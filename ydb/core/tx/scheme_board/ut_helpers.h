@@ -36,20 +36,7 @@ public:
         ui32 senderNodeIndex = 0,
         bool viaActorSystem = false
     ) {
-        TTestBasicRuntime::Send(new IEventHandleFat(recipient, sender, ev, flags, cookie), senderNodeIndex, viaActorSystem);
-    }
-
-    void Send(
-        const TActorId& recipient,
-        const TActorId& sender,
-        IEventHandleLight* ev,
-        ui32 flags = 0,
-        ui64 cookie = 0,
-        ui32 senderNodeIndex = 0,
-        bool viaActorSystem = false
-    ) {
-        ev->PrepareSend(recipient, sender, flags, cookie);
-        TTestBasicRuntime::Send(ev, senderNodeIndex, viaActorSystem);
+        TTestBasicRuntime::Send(new IEventHandle(recipient, sender, ev, flags, cookie), senderNodeIndex, viaActorSystem);
     }
 
     void WaitForEvent(ui32 eventType) {

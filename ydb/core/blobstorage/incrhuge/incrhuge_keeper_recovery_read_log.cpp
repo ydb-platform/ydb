@@ -32,7 +32,7 @@ namespace NKikimr {
 
         private:
             TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
-                return new IEventHandleFat(self, parentId, new TEvents::TEvBootstrap);
+                return new IEventHandle(self, parentId, new TEvents::TEvBootstrap);
             }
 
             void Handle(TEvents::TEvBootstrap::TPtr& ev, const TActorContext& ctx) {

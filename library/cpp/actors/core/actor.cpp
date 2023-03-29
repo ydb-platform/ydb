@@ -16,22 +16,6 @@ namespace NActors {
         return SelfActorId.Send(recipient, ev, flags, cookie, std::move(traceId));
     }
 
-    bool IActor::Send(const TActorId& recipient, IEventHandleLight* ev) const noexcept {
-        return SelfActorId.Send(recipient, ev);
-    }
-
-    bool IActor::Send(const TActorId& recipient, IEventHandleLight* ev, ui32 flags) const noexcept {
-        return SelfActorId.Send(recipient, ev, flags);
-    }
-
-    bool IActor::Send(const TActorId& recipient, IEventHandleLight* ev, ui32 flags, ui64 cookie) const noexcept {
-        return SelfActorId.Send(recipient, ev, flags, cookie);
-    }
-
-    bool IActor::Send(const TActorId& recipient, IEventHandleLight* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const noexcept {
-        return SelfActorId.Send(recipient, ev, flags, cookie, std::move(traceId));
-    }
-
     void TActivationContext::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
         TlsActivationContext->ExecutorThread.Schedule(deadline, ev, cookie);
     }
@@ -45,15 +29,15 @@ namespace NActors {
     }
 
     void TActorIdentity::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
-        return TActivationContext::Schedule(deadline, new IEventHandleFat(*this, {}, ev), cookie);
+        return TActivationContext::Schedule(deadline, new IEventHandle(*this, {}, ev), cookie);
     }
 
     void TActorIdentity::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
-        return TActivationContext::Schedule(deadline, new IEventHandleFat(*this, {}, ev), cookie);
+        return TActivationContext::Schedule(deadline, new IEventHandle(*this, {}, ev), cookie);
     }
 
     void TActorIdentity::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const {
-        return TActivationContext::Schedule(delta, new IEventHandleFat(*this, {}, ev), cookie);
+        return TActivationContext::Schedule(delta, new IEventHandle(*this, {}, ev), cookie);
     }
 
     TActorId TActivationContext::RegisterWithSameMailbox(IActor* actor, TActorId parentId) {
@@ -91,27 +75,27 @@ namespace NActors {
     }
 
     void TActorContext::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
-        ExecutorThread.Schedule(deadline, new IEventHandleFat(SelfID, TActorId(), ev), cookie);
+        ExecutorThread.Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie);
     }
 
     void TActorContext::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
-        ExecutorThread.Schedule(deadline, new IEventHandleFat(SelfID, TActorId(), ev), cookie);
+        ExecutorThread.Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie);
     }
 
     void TActorContext::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const {
-        ExecutorThread.Schedule(delta, new IEventHandleFat(SelfID, TActorId(), ev), cookie);
+        ExecutorThread.Schedule(delta, new IEventHandle(SelfID, TActorId(), ev), cookie);
     }
 
     void IActor::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const noexcept {
-        TlsActivationContext->ExecutorThread.Schedule(deadline, new IEventHandleFat(SelfActorId, TActorId(), ev), cookie);
+        TlsActivationContext->ExecutorThread.Schedule(deadline, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
     }
 
     void IActor::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const noexcept {
-        TlsActivationContext->ExecutorThread.Schedule(deadline, new IEventHandleFat(SelfActorId, TActorId(), ev), cookie);
+        TlsActivationContext->ExecutorThread.Schedule(deadline, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
     }
 
     void IActor::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const noexcept {
-        TlsActivationContext->ExecutorThread.Schedule(delta, new IEventHandleFat(SelfActorId, TActorId(), ev), cookie);
+        TlsActivationContext->ExecutorThread.Schedule(delta, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
     }
 
     TInstant TActivationContext::Now() {
@@ -161,7 +145,7 @@ namespace NActors {
         (actor->*StateFunc)(ev, TActivationContext::AsActorContext());
     }
 
-    void TActorVirtualBehaviour::Receive(IActor* actor, std::unique_ptr<IEventHandleFat> ev) {
+    void TActorVirtualBehaviour::Receive(IActor* actor, std::unique_ptr<IEventHandle> ev) {
         Y_VERIFY(!!ev && ev->GetBase());
         ev->GetBase()->Execute(actor, std::move(ev));
     }

@@ -196,7 +196,7 @@ namespace NKikimr {
             TActorId queueId = queues.QueueForEvent(*event);
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Send to queueId# " << queueId
                 << " " << TypeName<TEvent>() << "# " << event->ToString() << " cookie# " << cookie);
-            TActivationContext::Send(new IEventHandleFat(queueId, actor.SelfId(), event.release(), 0, cookie, nullptr, std::move(traceId)));
+            TActivationContext::Send(new IEventHandle(queueId, actor.SelfId(), event.release(), 0, cookie, nullptr, std::move(traceId)));
             return queueId;
         }
 

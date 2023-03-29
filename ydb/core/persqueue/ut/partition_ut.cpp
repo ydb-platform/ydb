@@ -341,7 +341,7 @@ void TPartitionFixture::SendCreateSession(ui64 cookie,
                                                      generation,
                                                      step,
                                                      TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendSetOffset(ui64 cookie,
@@ -355,7 +355,7 @@ void TPartitionFixture::SendSetOffset(ui64 cookie,
                                                      sessionId,
                                                      0,
                                                      0);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendGetOffset(ui64 cookie,
@@ -363,7 +363,7 @@ void TPartitionFixture::SendGetOffset(ui64 cookie,
 {
     auto event = MakeHolder<TEvPQ::TEvGetClientOffset>(cookie,
                                                        clientId);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
@@ -463,7 +463,7 @@ void TPartitionFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus statu
     event->Record.SetStatus(status);
     event->Record.SetCookie(1); // SET_OFFSET_COOKIE
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendSubDomainStatus(bool subDomainOutOfSpace)
@@ -471,13 +471,13 @@ void TPartitionFixture::SendSubDomainStatus(bool subDomainOutOfSpace)
     auto event = MakeHolder<TEvPQ::TEvSubDomainStatus>();
     event->Record.SetSubDomainOutOfSpace(subDomainOutOfSpace);
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendReserveBytes(const ui64 cookie, const ui32 size, const TString& ownerCookie, const ui64 messageNo, bool lastRequest)
 {
     auto event = MakeHolder<TEvPQ::TEvReserveBytes>(cookie, size, ownerCookie, messageNo, lastRequest);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data, bool ignoreQuotaDeadline)
@@ -502,13 +502,13 @@ void TPartitionFixture::SendWrite(const ui64 cookie, const ui64 messageNo, const
     msgs.push_back(msg);
 
     auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), false);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force)
 {
     auto event = MakeHolder<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitProxyResponse(const TProxyResponseMatcher& matcher)
@@ -581,7 +581,7 @@ void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
         read->SetValue(out);
     }
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitDiskStatusRequest()
@@ -601,7 +601,7 @@ void TPartitionFixture::SendDiskStatusResponse()
     result->SetStatus(NKikimrProto::OK);
     result->SetStatusFlags(NKikimrBlobStorage::StatusIsValid);
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitMetaReadRequest()
@@ -646,7 +646,7 @@ void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txI
         read->SetStatus(NKikimrProto::NODATA);
     }
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitInfoRangeRequest()
@@ -691,7 +691,7 @@ void TPartitionFixture::SendInfoRangeResponse(ui32 partition,
         }
     }
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitDataRangeRequest()
@@ -718,7 +718,7 @@ void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     //pair->SetValueSize();
     pair->SetCreationUnixTime(0);
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
@@ -741,7 +741,7 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
     body->SetImmediate(immediate);
     event->Record.SetTxId(txId);
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher)
@@ -769,7 +769,7 @@ void TPartitionFixture::SendCalcPredicate(ui64 step,
     auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(step, txId);
     event->AddOperation(consumer, begin, end);
 
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher)
@@ -794,13 +794,13 @@ void TPartitionFixture::WaitCalcPredicateResult(const TCalcPredicateMatcher& mat
 void TPartitionFixture::SendCommitTx(ui64 step, ui64 txId)
 {
     auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendRollbackTx(ui64 step, ui64 txId)
 {
     auto event = MakeHolder<TEvPQ::TEvTxRollback>(step, txId);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitCommitTxDone(const TCommitTxDoneMatcher& matcher)
@@ -823,7 +823,7 @@ void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
 {
     auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakeConfig(config.Version,
                                                                                         config.Consumers));
-    Ctx->Runtime->SingleSys()->Send(new IEventHandleFat(ActorId, Ctx->Edge, event.Release()));
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitPartitionConfigChanged(const TChangePartitionConfigMatcher& matcher)

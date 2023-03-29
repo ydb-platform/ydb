@@ -223,7 +223,7 @@ public:
 
 private:
     void Yield() {
-        Send(new IEventHandleFat(EvResume, 0, SelfActorId, {}, nullptr, 0));
+        Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
         WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; }, &TStorageStatsCoroCalculatorImpl::ProcessUnexpectedEvent);
     }
 

@@ -204,8 +204,6 @@ namespace NActors {
         bool SpecificSend(TAutoPtr<IEventHandle> ev) const;
 
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) const;
-        bool Send(const TActorId& recipient, IEventHandleLight* ev, ui32 flags = 0, ui64 cookie = 0) const;
-        bool Send(const TActorId& recipient, const TActorId& sender, IEventHandleLight* ev, ui32 flags = 0, ui64 cookie = 0) const;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -300,6 +298,8 @@ namespace NActors {
         }
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
+
+        THarmonizerStats GetHarmonizerStats() const;
 
         std::optional<ui32> GetPoolThreadsCount(const ui32 poolId) const {
             if (!SystemSetup) {

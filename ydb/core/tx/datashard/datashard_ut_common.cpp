@@ -778,7 +778,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                     break;
                 //Cerr << ">>> imm to " << shard << Endl;
                 UNIT_ASSERT(ShardActors.contains(shard));
-                THolder<IEventHandle> handle(new IEventHandleFat(ShardActors[shard], Tester.Sender, immEvent.Release()));
+                THolder<IEventHandle> handle(new IEventHandle(ShardActors[shard], Tester.Sender, immEvent.Release()));
                 runtime.Send(handle.Release());
                 immEvents.pop_front();
                 ++prevTxId;
@@ -968,7 +968,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
 
                 //tx->AddProposeShardResult(shard, event);
                 if (event->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA) {
-                    Tester.Runtime.Send(new IEventHandleFat(handle->Sender, Tester.Sender, new TEvStreamDataAck));
+                    Tester.Runtime.Send(new IEventHandle(handle->Sender, Tester.Sender, new TEvStreamDataAck));
                     tx->AddPlanStepShardResult(shard, event, false);
                 } else {
                     UNIT_ASSERT(event->IsComplete());
@@ -985,7 +985,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                 ev->Record.SetMessageSizeLimit(1 << 30);
                 ev->Record.SetReservedMessages(10);
                 ev->Record.SetRowLimit(1 << 20);
-                Tester.Runtime.Send(new IEventHandleFat(handle->Sender, Tester.Sender, ev.Release()));
+                Tester.Runtime.Send(new IEventHandle(handle->Sender, Tester.Sender, ev.Release()));
                 break;
             }
         }
@@ -1089,7 +1089,7 @@ static ui64 RunSchemeTx(
         sender = runtime.AllocateEdgeActor();
     }
 
-    runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), expectedStatus);
 
@@ -1222,7 +1222,7 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server
     auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
-    runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
 
     return *reply->MutableRecord();
@@ -1308,7 +1308,7 @@ void SendCreateVolatileSnapshot(
         tx->AddTables()->SetTablePath(path);
     }
     tx->SetTimeoutMs(timeout.MilliSeconds());
-    runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
 }
 
 TRowVersion GrabCreateVolatileSnapshotResult(
@@ -1360,7 +1360,7 @@ bool RefreshVolatileSnapshot(
         }
         tx->SetSnapshotStep(snapshot.Step);
         tx->SetSnapshotTxId(snapshot.TxId);
-        runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     }
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
@@ -1386,7 +1386,7 @@ bool DiscardVolatileSnapshot(
         }
         tx->SetSnapshotStep(snapshot.Step);
         tx->SetSnapshotTxId(snapshot.TxId);
-        runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     }
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
@@ -1445,7 +1445,7 @@ TRowVersion CommitWrites(
             tx->AddTables()->SetTablePath(path);
         }
         tx->SetWriteTxId(writeTxId);
-        runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     }
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
@@ -1577,7 +1577,7 @@ ui64 AsyncAlterAddIndex(
     auto &settings = server->GetSettings();
     auto sender = runtime.AllocateEdgeActor();
 
-    runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, new TEvTxUserProxy::TEvAllocateTxId()));
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, new TEvTxUserProxy::TEvAllocateTxId()));
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvAllocateTxIdResult>(sender);
     const auto txId = ev->Get()->TxId;
 
@@ -1614,7 +1614,7 @@ void CancelAddIndex(Tests::TServer::TPtr server, const TString& dbName, ui64 bui
     auto &settings = server->GetSettings();
     auto sender = runtime.AllocateEdgeActor();
 
-    runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, new TEvTxUserProxy::TEvAllocateTxId()));
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, new TEvTxUserProxy::TEvAllocateTxId()));
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvAllocateTxIdResult>(sender);
     const auto txId = ev->Get()->TxId;
 
@@ -1713,7 +1713,7 @@ void SimulateSleep(Tests::TServer::TPtr server, TDuration duration) {
 
 void SimulateSleep(TTestActorRuntime& runtime, TDuration duration) {
     auto sender = runtime.AllocateEdgeActor();
-    runtime.Schedule(new IEventHandleFat(sender, sender, new TEvents::TEvWakeup()), duration);
+    runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
     runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
 }
 
@@ -1759,7 +1759,7 @@ void SendSQL(Tests::TServer::TPtr server,
 {
     auto &runtime = *server->GetRuntime();
     auto request = MakeSQLRequest(sql, dml);
-    runtime.Send(new IEventHandleFat(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
+    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
 }
 
 void ExecSQL(Tests::TServer::TPtr server,
@@ -1772,7 +1772,7 @@ void ExecSQL(Tests::TServer::TPtr server,
     TAutoPtr<IEventHandle> handle;
 
     auto request = MakeSQLRequest(sql, dml);
-    runtime.Send(new IEventHandleFat(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
+    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
 }
@@ -2035,7 +2035,7 @@ void ResumeReadShardedTable(
         TReadShardedTableState& state)
 {
     auto& runtime = *server->GetRuntime();
-    runtime.Send(new IEventHandleFat(state.Worker, TActorId(), new TReadTableImpl::TEvResume()), 0, true);
+    runtime.Send(new IEventHandle(state.Worker, TActorId(), new TReadTableImpl::TEvResume()), 0, true);
     auto ev = runtime.GrabEdgeEventRethrow<TReadTableImpl::TEvResult>(state.Sender);
     state.Result = ev->Get()->Result;
 }

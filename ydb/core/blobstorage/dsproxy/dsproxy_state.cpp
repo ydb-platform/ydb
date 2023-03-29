@@ -46,7 +46,7 @@ namespace NKikimr {
         Become(&TThis::StateEstablishingSessionsTimeout);
         ++*NodeMon->EstablishingSessionsTimeout;
         InEstablishingSessionsTimeout = true;
-        TActivationContext::Schedule(TDuration::Minutes(5), new IEventHandleFat(Ev5min, 0, SelfId(), {}, nullptr, ++Cookie5min));
+        TActivationContext::Schedule(TDuration::Minutes(5), new IEventHandle(Ev5min, 0, SelfId(), {}, nullptr, ++Cookie5min));
         ProcessInitQueue();
     }
 
@@ -69,7 +69,7 @@ namespace NKikimr {
         Become(&TThis::StateUnconfiguredTimeout);
         ++*NodeMon->UnconfiguredTimeout;
         InUnconfiguredTimeout = true;
-        TActivationContext::Schedule(TDuration::Minutes(5), new IEventHandleFat(Ev5min, 0, SelfId(), {}, nullptr, ++Cookie5min));
+        TActivationContext::Schedule(TDuration::Minutes(5), new IEventHandle(Ev5min, 0, SelfId(), {}, nullptr, ++Cookie5min));
         ProcessInitQueue();
     }
 
@@ -230,10 +230,10 @@ namespace NKikimr {
             }
             Become(&TThis::StateEjected);
         } else {
-            StopPutBatchingEvent = static_cast<TEventHandleFat<TEvStopBatchingPutRequests>*>(
-                    new IEventHandleFat(SelfId(), SelfId(), new TEvStopBatchingPutRequests));
-            StopGetBatchingEvent = static_cast<TEventHandleFat<TEvStopBatchingGetRequests>*>(
-                    new IEventHandleFat(SelfId(), SelfId(), new TEvStopBatchingGetRequests));
+            StopPutBatchingEvent = static_cast<TEventHandle<TEvStopBatchingPutRequests>*>(
+                    new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingPutRequests));
+            StopGetBatchingEvent = static_cast<TEventHandle<TEvStopBatchingGetRequests>*>(
+                    new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingGetRequests));
             ApplyGroupInfo(std::exchange(Info, {}), std::exchange(StoragePoolCounters, {}));
         }
     }
@@ -251,7 +251,7 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::PassAway() {
         for (const TActorId actorId : ActiveRequests) {
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
         }
         if (Sessions) { // may be null if not properly configured yet
             Sessions->Poison();
@@ -276,7 +276,7 @@ namespace NKikimr {
         UnconfiguredBufferSize = 0;
         for (std::unique_ptr<IEventHandle>& ev : std::exchange(InitQueue, {})) {
             TAutoPtr<IEventHandle> x(ev.release());
-            Receive(x);
+            Receive(x, TActivationContext::ActorContextFor(SelfId()));
         }
     }
 

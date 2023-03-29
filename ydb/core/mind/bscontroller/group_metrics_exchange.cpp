@@ -3,7 +3,7 @@
 namespace NKikimr::NBsController {
 
     class TBlobStorageController::TTxGroupMetricsExchange : public TTransactionBase<TBlobStorageController> {
-        std::unique_ptr<TEventHandleFat<TEvBlobStorage::TEvControllerGroupMetricsExchange>> Ev;
+        std::unique_ptr<TEventHandle<TEvBlobStorage::TEvControllerGroupMetricsExchange>> Ev;
         std::unique_ptr<TEvBlobStorage::TEvControllerGroupMetricsExchange> Response;
 
     public:

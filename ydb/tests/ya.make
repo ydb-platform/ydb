@@ -1,9 +1,0 @@
-RECURSE(
-    functional
-    library
-    library/sqs
-    oss
-    perf
-    supp
-    tools
-)

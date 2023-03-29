@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
             100000 /* writeScore */, 80000 /* deleteScore */, 0 /* readScore */);
         env.ActorSystem->Register(actor);
 //        usleep(1 * 1000 * 1000);
-//        env.ActorSystem->Send(new IEventHandleFat(env.KeeperId, id, new TEvIncrHugeControlDefrag(0.8)));
+//        env.ActorSystem->Send(new IEventHandle(env.KeeperId, id, new TEvIncrHugeControlDefrag(0.8)));
         event.WaitI();
         usleep(50 * 1000 * 1000); // wait for defragment
         env.Stop();

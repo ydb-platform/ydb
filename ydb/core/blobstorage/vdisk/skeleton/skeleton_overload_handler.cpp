@@ -19,7 +19,7 @@ namespace NKikimr {
             TItem() = default;
 
             template<typename T>
-            TItem(TAutoPtr<TEventHandleFat<T>> ev)
+            TItem(TAutoPtr<TEventHandle<T>> ev)
                 : Ev(ev.Release())
                 , Span(TWilson::VDiskInternals, std::move(Ev->TraceId), "VDisk.Skeleton.EmergencyQueue")
             {
@@ -240,7 +240,7 @@ namespace NKikimr {
     }
 
     template <class TEv>
-    inline bool TOverloadHandler::PostponeEvent(TAutoPtr<TEventHandleFat<TEv>> &ev) {
+    inline bool TOverloadHandler::PostponeEvent(TAutoPtr<TEventHandle<TEv>> &ev) {
         if (DynamicPDiskWeightsManager->StopPuts() || !EmergencyQueue->Empty()) {
             EmergencyQueue->Push(ev);
             return true;

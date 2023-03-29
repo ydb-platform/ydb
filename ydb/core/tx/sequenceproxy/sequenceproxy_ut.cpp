@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
 #if 0
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration) {
             auto sender = runtime.AllocateEdgeActor();
-            runtime.Schedule(new IEventHandleFat(sender, sender, new TEvents::TEvWakeup()), duration);
+            runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
             runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
         }
 #endif
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             auto* op = tx->MutableSequence();
             bool parseResult = ::google::protobuf::TextFormat::ParseFromString(scheme, op);
             UNIT_ASSERT_C(parseResult, "protobuf parsing failed");
-            runtime.Send(new IEventHandleFat(MakeTxProxyID(), edge, request.Release()));
+            runtime.Send(new IEventHandle(MakeTxProxyID(), edge, request.Release()));
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(edge);
             auto* msg = ev->Get();
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
 
         void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
             auto request = MakeHolder<TEvSequenceProxy::TEvNextVal>(path);
-            runtime.Send(new IEventHandleFat(MakeSequenceProxyServiceID(), sender, request.Release()));
+            runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
         }
 
         i64 WaitNextValResult(TTestActorRuntime& runtime, const TActorId& sender, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {

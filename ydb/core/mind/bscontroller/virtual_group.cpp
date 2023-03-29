@@ -210,7 +210,7 @@ namespace NKikimr::NBsController {
                 Callback(*group);
                 group->CalculateGroupStatus();
                 TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
+                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update",
                         (VirtualGroupId, Machine->GroupId), (Error, error));
                     State->Rollback();
@@ -225,7 +225,7 @@ namespace NKikimr::NBsController {
                 if (State) {
                     State->ApplyConfigUpdates();
                 }
-                TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Bootstrap, 0, Machine->SelfId(), {}, nullptr, 0));
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Bootstrap, 0, Machine->SelfId(), {}, nullptr, 0));
             }
         };
 
@@ -513,8 +513,8 @@ namespace NKikimr::NBsController {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
                 Action(*State);
                 TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
-                    STLOG(PRI_INFO, BS_CONTROLLER, BSCVGxx, "failed to commit update", (Error, error));
+                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
+                    STLOG(PRI_INFO, BS_CONTROLLER, BSCVG09, "failed to commit update", (Error, error));
                     State->Rollback();
                     State.reset();
                 }
@@ -540,7 +540,7 @@ namespace NKikimr::NBsController {
                     group->Topology = std::make_shared<TBlobStorageGroupInfo::TTopology>(group->Topology->GType, 0, 0, 0);
                 }
 
-                STLOG(PRI_INFO, BS_CONTROLLER, BSCVGxx, "decommission update processed", (Status, Status),
+                STLOG(PRI_INFO, BS_CONTROLLER, BSCVG10, "decommission update processed", (Status, Status),
                     (ErrorReason, ErrorReason));
             }
 
@@ -552,7 +552,7 @@ namespace NKikimr::NBsController {
                 if (ErrorReason) {
                     ev->Record.SetErrorReason(ErrorReason);
                 }
-                auto reply = std::make_unique<IEventHandleFat>(Ev->Sender, Self->SelfId(), ev.release(), 0, Ev->Cookie);
+                auto reply = std::make_unique<IEventHandle>(Ev->Sender, Self->SelfId(), ev.release(), 0, Ev->Cookie);
                 if (Ev->InterconnectSession) {
                     reply->Rewrite(TEvInterconnect::EvForward, Ev->InterconnectSession);
                 }
@@ -560,7 +560,7 @@ namespace NKikimr::NBsController {
             }
         };
 
-        STLOG(PRI_INFO, BS_CONTROLLER, BSCVGxx, "TEvControllerGroupDecommittedNotify received", (Msg, ev->Get()->Record));
+        STLOG(PRI_INFO, BS_CONTROLLER, BSCVG11, "TEvControllerGroupDecommittedNotify received", (Msg, ev->Get()->Record));
         Execute(new TTxDecommitGroup(this, ev));
     }
 

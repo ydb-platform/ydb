@@ -63,7 +63,7 @@ public:
             Edge = Runtime->AllocateEdgeActor();
         }
 
-        Runtime->Send(new IEventHandleFat(Wrapper, *Edge, ev));
+        Runtime->Send(new IEventHandle(Wrapper, *Edge, ev));
         return Runtime->GrabEdgeEvent<TEvResponse>(*Edge);
     }
 

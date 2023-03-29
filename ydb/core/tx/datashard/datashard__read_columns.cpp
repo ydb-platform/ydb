@@ -152,8 +152,8 @@ public:
             Result->Record.SetErrorDescription("Scan aborted");
         }
 
-        TlsActivationContext->Send(new IEventHandleFat(ReplyTo, TActorId(), Result.Release()));
-        TlsActivationContext->Send(new IEventHandleFat(DatashardActorId, TActorId(), new TDataShard::TEvPrivate::TEvScanStats(Rows, Bytes)));
+        TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), Result.Release()));
+        TlsActivationContext->Send(new IEventHandle(DatashardActorId, TActorId(), new TDataShard::TEvPrivate::TEvScanStats(Rows, Bytes)));
 
         return this;
     }

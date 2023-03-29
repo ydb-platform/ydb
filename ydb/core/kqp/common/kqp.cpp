@@ -40,7 +40,7 @@ void TKqpShutdownController::Stop() {
     if (!EnableGraceful)
         return;
 
-    ActorSystem_->Send(new NActors::IEventHandleFat(KqpProxyActorId_, {}, new TEvKqp::TEvInitiateShutdownRequest(ShutdownState_)));
+    ActorSystem_->Send(new NActors::IEventHandle(KqpProxyActorId_, {}, new TEvKqp::TEvInitiateShutdownRequest(ShutdownState_)));
     auto timeout = TDuration::MilliSeconds(TableServiceConfig.GetShutdownSettings().GetShutdownTimeoutMs());
     auto startedAt = TInstant::Now();
     auto spent = (TInstant::Now() - startedAt).SecondsFloat();

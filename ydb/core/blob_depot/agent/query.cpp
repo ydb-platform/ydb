@@ -74,7 +74,7 @@ namespace NKikimr::NBlobDepot {
             PendingEventQ.pop_front();
             if (!PendingEventQ.empty() && TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1)) {
                 if (!ProcessPendingEventInFlight) {
-                    TActivationContext::Send(new IEventHandleFat(TEvPrivate::EvProcessPendingEvent, 0, SelfId(), {}, nullptr, 0));
+                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessPendingEvent, 0, SelfId(), {}, nullptr, 0));
                     ProcessPendingEventInFlight = true;
                 }
                 break;
@@ -118,7 +118,7 @@ namespace NKikimr::NBlobDepot {
             PendingEventQ.erase(PendingEventQ.begin(), it);
         }
 
-        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandleFat(TEvPrivate::EvPendingEventQueueWatchdog, 0,
+        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvPendingEventQueueWatchdog, 0,
             SelfId(), {}, nullptr, 0));
     }
 
@@ -136,7 +136,7 @@ namespace NKikimr::NBlobDepot {
                 break;
             }
         }
-        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandleFat(TEvPrivate::EvQueryWatchdog, 0, SelfId(),
+        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvQueryWatchdog, 0, SelfId(),
             {}, nullptr, 0));
     }
 

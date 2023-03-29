@@ -1267,7 +1267,7 @@ Y_UNIT_TEST(TestDelayedTxWaitsForWriteActiveTxOnly) {
         auto &tx = *req->Record.MutableTransaction()->MutableReadTableTransaction();
         tx.SetPath("/Root/table-2");
 
-        runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, req));
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, req));
         runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvStreamQuotaRequest>(handle);
     }
 
@@ -1343,7 +1343,7 @@ Y_UNIT_TEST(TestOnlyDataTxLagCausesRejects) {
         req->Record.SetStreamResponse(true);
         auto &tx = *req->Record.MutableTransaction()->MutableReadTableTransaction();
         tx.SetPath("/Root/table-1");
-        runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, req));
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, req));
         runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvStreamQuotaRequest>(handle);
     }
 
@@ -1475,7 +1475,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
     // Schedule a simple timer to simulate some time passing
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        runtime.Schedule(new IEventHandleFat(sender4, sender4, new TEvents::TEvWakeup()), TDuration::Seconds(1));
+        runtime.Schedule(new IEventHandle(sender4, sender4, new TEvents::TEvWakeup()), TDuration::Seconds(1));
         runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender4);
     }
 
@@ -2615,7 +2615,7 @@ Y_UNIT_TEST(TestPlannedCancelSplit) {
                 msg->GetTxId(),
                 NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED);
             Cerr << "Sending error result from " << actors[1] << " to " << target << Endl;
-            runtime.Send(new IEventHandleFat(target, actors[1], result), 0, /* via actor system */ true);
+            runtime.Send(new IEventHandle(target, actors[1], result), 0, /* via actor system */ true);
             event.Reset(); // drop this propose event
         }
     }
@@ -2938,7 +2938,7 @@ namespace {
         tx.AddColumns("key");
         tx.AddColumns("value");
 
-        runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     }
 
 }
@@ -4406,7 +4406,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
         Cerr << "!!! Setting up wakeup spam" << Endl;
         auto senderWakeupSpam = runtime.AllocateEdgeActor();
         for (int i = 1; i <= 10; ++i) {
-            runtime.Schedule(new IEventHandleFat(senderWakeupSpam, senderWakeupSpam, new TEvents::TEvWakeup()), TDuration::MicroSeconds(i * 250));
+            runtime.Schedule(new IEventHandle(senderWakeupSpam, senderWakeupSpam, new TEvents::TEvWakeup()), TDuration::MicroSeconds(i * 250));
         }
     }
 
@@ -4484,7 +4484,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
         Cerr << "!!! Setting up wakeup spam" << Endl;
         auto senderWakeupSpam = runtime.AllocateEdgeActor();
         for (int i = 1; i <= 10; ++i) {
-            runtime.Schedule(new IEventHandleFat(senderWakeupSpam, senderWakeupSpam, new TEvents::TEvWakeup()), TDuration::MicroSeconds(i * 250));
+            runtime.Schedule(new IEventHandle(senderWakeupSpam, senderWakeupSpam, new TEvents::TEvWakeup()), TDuration::MicroSeconds(i * 250));
         }
     }
 
@@ -4563,7 +4563,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
         Cerr << "!!! Setting up wakeup spam" << Endl;
         auto senderWakeupSpam = runtime.AllocateEdgeActor();
         for (int i = 1; i <= 10; ++i) {
-            runtime.Schedule(new IEventHandleFat(senderWakeupSpam, senderWakeupSpam, new TEvents::TEvWakeup()), TDuration::MicroSeconds(i * 250));
+            runtime.Schedule(new IEventHandle(senderWakeupSpam, senderWakeupSpam, new TEvents::TEvWakeup()), TDuration::MicroSeconds(i * 250));
         }
     }
 
@@ -4683,7 +4683,7 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
                                 update->Record.SetMediator(mediatorId);
                                 update->Record.SetBucket(bucket);
                                 update->Record.SetTimeBarrier(passedStep);
-                                runtime.Send(new IEventHandleFat(ev->GetRecipientRewrite(), ev->GetRecipientRewrite(), update), nodeIndex, /* viaActorSystem */ true);
+                                runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->GetRecipientRewrite(), update), nodeIndex, /* viaActorSystem */ true);
                             }
                         }
                     }
@@ -4997,7 +4997,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
         auto proxy = ev->Recipient;
         ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
         auto res = ev->Get<TEvBlobStorage::TEvPut>()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", groupId);
-        runtime.Send(new IEventHandleFat(ev->Sender, proxy, res.release()), 1, true);
+        runtime.Send(new IEventHandle(ev->Sender, proxy, res.release()), 1, true);
     }
     capturedCommits.clear();
 

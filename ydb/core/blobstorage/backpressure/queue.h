@@ -55,7 +55,7 @@ class TBlobStorageQueue {
         TTrackableList<TItem>::iterator Iterator;
 
         template<typename TEvent>
-        TItem(TAutoPtr<TEventHandleFat<TEvent>>& event, TInstant deadline,
+        TItem(TAutoPtr<TEventHandle<TEvent>>& event, TInstant deadline,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes,
                 const TBSProxyContextPtr& bspctx, ui32 interconnectChannel,

@@ -393,7 +393,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             char* data = buffer.GetContiguousSpanMut().data();
             Decrypt(data, data, 0, buffer.size(), item.BlobId, *Info);
 
-            ev->Bunch.emplace_back(new IEventHandleFat(
+            ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
                 item.Recipient,
                 put = new TEvBlobStorage::TEvPut(item.BlobId, std::move(buffer), Deadline, HandleClass, Tactic),

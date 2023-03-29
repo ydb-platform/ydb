@@ -18,7 +18,7 @@ public:
     }
 
     TTestActor()
-        : TActor(TActorCallback<TTestActor>::TFatReceiveFunc(nullptr))
+        : TActor(nullptr)
     { }
 };
 

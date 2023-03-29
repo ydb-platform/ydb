@@ -538,6 +538,8 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
         extractorRoots.push_back(extractorArgs[*rowIndex]);
     }
 
+    auto outputStructType = GetSeqItemType(*Node->GetTypeAnn()).Cast<TStructExprType>();
+
     auto resolveStatus = TypesCtx.ArrowResolver->AreTypesSupported(Ctx.GetPosition(Node->Pos()), allKeyTypes, Ctx);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     if (resolveStatus != IArrowResolver::OK) {
@@ -546,6 +548,8 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
 
     for (ui32 index = 0; index < AggregatedColumns->ChildrenSize(); ++index) {
         auto trait = AggregatedColumns->Child(index)->ChildPtr(1);
+        TVector<const TTypeAnnotationNode*> allTypes;
+
         if (!overState && trait->Child(0)->Content() == "count_all") {
             // 0 columns
             aggs.push_back(Ctx.Builder(Node->Pos())
@@ -560,15 +564,7 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
             // 1 column
             auto root = trait->Child(2)->TailPtr();
             auto rowArg = &trait->Child(2)->Head().Head();
-
-            TVector<const TTypeAnnotationNode*> allTypes;
-            allTypes.push_back(root->GetTypeAnn());
-
-            auto resolveStatus = TypesCtx.ArrowResolver->AreTypesSupported(Ctx.GetPosition(Node->Pos()), allKeyTypes, Ctx);
-            YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
-            if (resolveStatus != IArrowResolver::OK) {
-                return nullptr;
-            }
+            allTypes.push_back(root->GetTypeAnn());            
 
             auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
                 Y_UNUSED(ctx);
@@ -606,6 +602,15 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
             }
 
             extractorRoots.push_back(root);
+        }
+
+        auto outPos = outputStructType->FindItem(FinalColumnNames[index]->Content());
+        YQL_ENSURE(outPos);
+        allTypes.push_back(outputStructType->GetItems()[*outPos]->GetItemType());
+        auto resolveStatus = TypesCtx.ArrowResolver->AreTypesSupported(Ctx.GetPosition(Node->Pos()), allTypes, Ctx);
+        YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+        if (resolveStatus != IArrowResolver::OK) {
+            return nullptr;
         }
 
         outputColumns.push_back(TString(FinalColumnNames[index]->Content()));

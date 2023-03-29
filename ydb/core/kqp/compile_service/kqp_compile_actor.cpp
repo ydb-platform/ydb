@@ -85,7 +85,7 @@ public:
             << ", text: \"" << EscapeC(Query.Text) << "\""
             << ", startTime: " << StartTime);
 
-        TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandleFat(SelfId(), SelfId(),
+        TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
             new TEvents::TEvWakeup()));
 
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, "");

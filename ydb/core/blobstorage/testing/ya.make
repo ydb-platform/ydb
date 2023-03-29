@@ -1,3 +1,0 @@
-RECURSE(
-    group_overseer
-)

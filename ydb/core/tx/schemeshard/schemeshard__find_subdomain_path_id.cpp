@@ -85,7 +85,7 @@ public:
             // Wait up to a large delay, so requests from shards spread over time
             auto delay = TDuration::MicroSeconds(RandomNumber(MaxFindSubDomainPathIdDelay.MicroSeconds()));
             Timer = CreateLongTimer(TActivationContext::AsActorContext(), delay,
-                new IEventHandleFat(SelfId(), SelfId(), new TEvents::TEvWakeup));
+                new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup));
             Become(&TThis::StateSleep);
         } else {
             DelayNextRequest = true;

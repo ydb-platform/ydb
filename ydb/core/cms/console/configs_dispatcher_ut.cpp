@@ -245,7 +245,7 @@ TActorId AddSubscriber(TTenantTestRuntime &runtime, TVector<ui32> kinds, bool ho
 NKikimrConfig::TAppConfig GetConfig(TTenantTestRuntime &runtime, TVector<ui32> kinds, bool cache = true)
 {
     TAutoPtr<IEventHandle> handle;
-    runtime.Send(new IEventHandleFat(MakeConfigsDispatcherID(runtime.GetNodeId(0)),
+    runtime.Send(new IEventHandle(MakeConfigsDispatcherID(runtime.GetNodeId(0)),
                                   runtime.Sender,
                                   new TEvConfigsDispatcher::TEvGetConfigRequest(kinds, cache)));
     return *runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetConfigResponse>(handle)->Config;
@@ -254,18 +254,18 @@ NKikimrConfig::TAppConfig GetConfig(TTenantTestRuntime &runtime, TVector<ui32> k
 void HoldSubscriber(TTenantTestRuntime &runtime, TActorId aid)
 {
     TAutoPtr<IEventHandle> handle;
-    runtime.Send(new IEventHandleFat(aid, runtime.Sender, new TEvPrivate::TEvHoldResponse(true)));
+    runtime.Send(new IEventHandle(aid, runtime.Sender, new TEvPrivate::TEvHoldResponse(true)));
     runtime.GrabEdgeEventRethrow<TEvPrivate::TEvComplete>(handle);
 }
 
 void UnholdSubscriber(TTenantTestRuntime &runtime, TActorId aid)
 {
-    runtime.Send(new IEventHandleFat(aid, runtime.Sender, new TEvPrivate::TEvHoldResponse(false)));
+    runtime.Send(new IEventHandle(aid, runtime.Sender, new TEvPrivate::TEvHoldResponse(false)));
 }
 
 void SetSubscriptions(TTenantTestRuntime &runtime, TActorId aid, TVector<ui32> kinds)
 {
-    runtime.Send(new IEventHandleFat(aid, runtime.Sender, new TEvPrivate::TEvSetSubscription(kinds)));
+    runtime.Send(new IEventHandle(aid, runtime.Sender, new TEvPrivate::TEvSetSubscription(kinds)));
 }
 
 } // anonymous namespace

@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
     private:
         STFUNC(StateFunc) {
-            ctx.Send(IEventHandleFat::GetFat(ev)->InterconnectSession, new TEvents::TEvPoisonPill);
+            ctx.Send(ev->InterconnectSession, new TEvents::TEvPoisonPill);
         }
     };
 
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
 
         TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId& parentId) noexcept override {
-            return new IEventHandleFat(self, parentId, new TEvents::TEvBootstrap, 0);
+            return new IEventHandle(self, parentId, new TEvents::TEvBootstrap, 0);
         }
 
         void OnStart(const NActors::TActorContext &ctx) noexcept {
@@ -107,13 +107,12 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         unsigned Responses;
     };
 
-    TAutoPtr<IEventHandle> GetSerialized(const TAutoPtr<IEventHandle>& e) {
-        auto* ev = IEventHandleFat::GetFat(e.Get());
+    TAutoPtr<IEventHandle> GetSerialized(const TAutoPtr<IEventHandle>& ev) {
         NActors::TAllocChunkSerializer chunker;
         ev->GetBase()->SerializeToArcadiaStream(&chunker);
         auto Data = chunker.Release(ev->GetBase()->CreateSerializationInfo());
         TAutoPtr<IEventHandle> serev =
-            new IEventHandleFat(ev->GetBase()->Type(), ev->Flags,
+            new IEventHandle(ev->GetBase()->Type(), ev->Flags,
                              ev->Recipient, ev->Sender,
                              std::move(Data), ev->Cookie);
         return serev;
@@ -127,7 +126,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         const auto edge = runtime.AllocateEdgeActor(0);
         const auto wall = runtime.Register(new TWall, 1);
 
-        runtime.Send(new IEventHandleFat(wall, edge, new TEvents::TEvPing, 7 << IEventHandle::ChannelShift, 13), 0);
+        runtime.Send(new IEventHandle(wall, edge, new TEvents::TEvPing, 7 << IEventHandle::ChannelShift, 13), 0);
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvents::TEvPong>(handle);
         UNIT_ASSERT_EQUAL(handle->Cookie, 13);
@@ -171,7 +170,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         TTestBasicRuntime runtime(2);
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(0);
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
 
         TAutoPtr<IEventHandle> handle;
         {
@@ -179,7 +178,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
             UNIT_ASSERT_EQUAL(event->NodeId, runtime.GetNodeId(1));
         }
 
-        runtime.Send(new IEventHandleFat(handle->Sender, edge, new TEvents::TEvPoisonPill), 0, true);
+        runtime.Send(new IEventHandle(handle->Sender, edge, new TEvents::TEvPoisonPill), 0, true);
 
         {
             const auto event = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeDisconnected>(handle);
@@ -197,7 +196,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         for (auto i = 0U; i < blob.size(); ++i)
              const_cast<TString::value_type*>(blob.data())[i] = TString::value_type(i % 256);
 
-        runtime.Send(new IEventHandleFat(edge, edge, new TEvents::TEvBlob(blob), 0, 13), 0);
+        runtime.Send(new IEventHandle(edge, edge, new TEvents::TEvBlob(blob), 0, 13), 0);
 
         TAutoPtr<IEventHandle> handle;
         const auto event = runtime.GrabEdgeEvent<TEvents::TEvBlob>(handle);
@@ -219,7 +218,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         for (int count = 0; count < 100; ++count) {
             NActors::TAllocChunkSerializer chunker;
             TAutoPtr<IEventHandle> raw =
-                new IEventHandleFat(edge, edge, new TEvents::TEvBlob(blob), 0, 13);
+                new IEventHandle(edge, edge, new TEvents::TEvBlob(blob), 0, 13);
             TAutoPtr<IEventHandle> serev = GetSerialized(raw);
 
             runtime.Send(serev.Release(), 0);
@@ -239,13 +238,13 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
         const TString blob(10000000, '#');
 
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(0, 1), edge0, new TEvInterconnect::TEvConnectNode), 0, true);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1), edge0, new TEvInterconnect::TEvConnectNode), 0, true);
 
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
 
-        runtime.Send(new IEventHandleFat(edge1, edge0, new TEvents::TEvBlob(blob), IEventHandle::FlagTrackDelivery, 777), 0, true);
-        runtime.Send(new IEventHandleFat(handle->Sender, edge0, new TEvents::TEvPoisonPill), 0, true);
+        runtime.Send(new IEventHandle(edge1, edge0, new TEvents::TEvBlob(blob), IEventHandle::FlagTrackDelivery, 777), 0, true);
+        runtime.Send(new IEventHandle(handle->Sender, edge0, new TEvents::TEvPoisonPill), 0, true);
         const auto event = runtime.GrabEdgeEvent<TEvents::TEvUndelivered>(handle);
         UNIT_ASSERT_EQUAL(handle->Cookie, 777);
         UNIT_ASSERT_EQUAL(event->SourceType, TEvents::TEvBlob::EventType);
@@ -258,7 +257,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         const auto edge = runtime.AllocateEdgeActor(0);
         const auto wall = runtime.Register(new TKiller, 1);
 
-        runtime.Send(new IEventHandleFat(wall, edge, new TEvents::TEvPing, IEventHandle::FlagSubscribeOnSession), 0);
+        runtime.Send(new IEventHandle(wall, edge, new TEvents::TEvPing, IEventHandle::FlagSubscribeOnSession), 0);
         {
             TAutoPtr<IEventHandle> handle;
             const auto event = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
@@ -288,21 +287,21 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         const auto edge = runtime.AllocateEdgeActor(0);
         const auto wall = runtime.Register(new TWall, 1);
 
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
 
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
         const auto session = handle->Sender;
 
-        runtime.Send(new IEventHandleFat(wall, edge, new TEvents::TEvPing), 0, true);
+        runtime.Send(new IEventHandle(wall, edge, new TEvents::TEvPing), 0, true);
         runtime.GrabEdgeEvent<TEvents::TEvPong>(handle);
 
         ShutDown(s, SHUT_RDWR);
 
-        runtime.Send(new IEventHandleFat(wall, edge, new TEvents::TEvPing), 0, true);
+        runtime.Send(new IEventHandle(wall, edge, new TEvents::TEvPing), 0, true);
         runtime.GrabEdgeEvent<TEvents::TEvPong>(handle);
 
-        runtime.Send(new IEventHandleFat(session, edge, new TEvents::TEvPoisonPill));
+        runtime.Send(new IEventHandle(session, edge, new TEvents::TEvPoisonPill));
         runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeDisconnected>(handle);
         UNIT_ASSERT_EQUAL(handle->Sender, session);
     }
@@ -315,30 +314,30 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
         TAutoPtr<IEventHandle> handle;
 
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(1, 0), edge1, new TEvInterconnect::TEvConnectNode), 1, true);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(1, 0), edge1, new TEvInterconnect::TEvConnectNode), 1, true);
 
         {
             const auto event = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
             UNIT_ASSERT_EQUAL(event->NodeId, runtime.GetNodeId(0));
         }
 
-        runtime.Send(new IEventHandleFat(handle->Sender, edge0, new TEvents::TEvUnsubscribe), 1, true);
+        runtime.Send(new IEventHandle(handle->Sender, edge0, new TEvents::TEvUnsubscribe), 1, true);
 
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(1, 2), edge1, new TEvents::TEvSubscribe), 1, true);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(1, 2), edge1, new TEvents::TEvSubscribe), 1, true);
 
         {
             const auto event = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
             UNIT_ASSERT_EQUAL(event->NodeId, runtime.GetNodeId(2));
         }
 
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(0, 1), edge0, new TEvInterconnect::TEvConnectNode), 0, true);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1), edge0, new TEvInterconnect::TEvConnectNode), 0, true);
 
         {
             const auto event = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
             UNIT_ASSERT_EQUAL(event->NodeId, runtime.GetNodeId(1));
         }
 
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(0, 2), edge0, new TEvents::TEvSubscribe), 0, true);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 2), edge0, new TEvents::TEvSubscribe), 0, true);
 
         {
             const auto event = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
@@ -346,8 +345,8 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
 
 
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(0, 1), edge0, new TEvents::TEvUnsubscribe), 0, true);
-        runtime.Send(new IEventHandleFat(handle->Sender, edge0, new TEvents::TEvPoisonPill));
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1), edge0, new TEvents::TEvUnsubscribe), 0, true);
+        runtime.Send(new IEventHandle(handle->Sender, edge0, new TEvents::TEvPoisonPill));
 
         {
             const auto event = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeDisconnected>(handle);
@@ -370,12 +369,12 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         const auto edge = runtime.AllocateEdgeActor(0);
         const auto wall = runtime.Register(new TWall, 1);
 
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
 
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
 
-        runtime.Send(new IEventHandleFat(wall, edge, new TEvents::TEvPing), 0, true);
+        runtime.Send(new IEventHandle(wall, edge, new TEvents::TEvPing), 0, true);
         runtime.GrabEdgeEvent<TEvents::TEvPong>(handle);
 
         runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev){
@@ -402,7 +401,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                  TString::value_type(i);
 
         TAutoPtr<IEventHandle> ev =
-            new IEventHandleFat(edge, edge, new TEvents::TEvBlob(blob), 0, 69);
+            new IEventHandle(edge, edge, new TEvents::TEvBlob(blob), 0, 69);
         runtime.Send(ev.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
@@ -423,7 +422,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                  TString::value_type(i);
 
         TAutoPtr<IEventHandle> ev =
-            new IEventHandleFat(edge, edge, new TEvents::TEvBlob(blob), 0, 69);
+            new IEventHandle(edge, edge, new TEvents::TEvBlob(blob), 0, 69);
         TAutoPtr<IEventHandle> serev = GetSerialized(ev);
         runtime.Send(serev.Release(), 0);
 
@@ -445,7 +444,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                  const_cast<TString::value_type*>(blob.data())[i] =
                      '0' + (i % 10);
             TAutoPtr<IEventHandle> ev =
-                new IEventHandleFat(edge, edge, new TEvents::TEvBlob(blob), 0, s);
+                new IEventHandle(edge, edge, new TEvents::TEvBlob(blob), 0, s);
             runtime.Send(ev.Release(), 0);
             TAutoPtr<IEventHandle> handle;
             const auto event = runtime.GrabEdgeEvent<TEvents::TEvBlob>(handle);
@@ -466,7 +465,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                  const_cast<TString::value_type*>(blob.data())[i] =
                      '0' + (i % 10);
             TAutoPtr<IEventHandle> ev =
-                new IEventHandleFat(edge, edge, new TEvents::TEvBlob(blob), 0, s);
+                new IEventHandle(edge, edge, new TEvents::TEvBlob(blob), 0, s);
             TAutoPtr<IEventHandle> serev = GetSerialized(ev);
             runtime.Send(serev.Release(), 0);
             TAutoPtr<IEventHandle> handle;
@@ -488,7 +487,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                  const_cast<TString::value_type*>(blob.data())[i] =
                      '0' + (i % 10);
             TAutoPtr<IEventHandle> ev =
-                new IEventHandleFat(edge, edge, new TEvents::TEvBlob(blob), 0, s);
+                new IEventHandle(edge, edge, new TEvents::TEvBlob(blob), 0, s);
             TAutoPtr<IEventHandle> serev = GetSerialized(ev);
             TAutoPtr<IEventHandle> handle;
 
@@ -509,7 +508,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(0);
 
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(0, 1),
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1),
                                       edge,
                                       new TEvInterconnect::TEvConnectNode),
                      0, true);
@@ -517,7 +516,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
 
-        runtime.Send(new IEventHandleFat(TActorId(runtime.GetNodeId(1), "null"),
+        runtime.Send(new IEventHandle(TActorId(runtime.GetNodeId(1), "null"),
                                       edge,
                                       new TEvents::TEvPing,
                                       IEventHandle::FlagTrackDelivery, 13),
@@ -539,7 +538,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
             for (ui64 i = 0U; i < blob.size() / sizeof(ui64); ++i)
                  reinterpret_cast<ui64*>(const_cast<TString::value_type*>(blob.data()))[i] = i;
 
-            runtime.Send(new IEventHandleFat(edge, edge, new TEvents::TEvBlob(blob), 0, s), 0);
+            runtime.Send(new IEventHandle(edge, edge, new TEvents::TEvBlob(blob), 0, s), 0);
             TAutoPtr<IEventHandle> handle;
             const auto event = runtime.GrabEdgeEvent<TEvents::TEvBlob>(handle);
             UNIT_ASSERT_EQUAL(handle->Cookie, s);
@@ -560,7 +559,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                      const_cast<TString::value_type*>(blob.data()))[i] = i;
 
             TAutoPtr<IEventHandle> ev =
-                new IEventHandleFat(edge, edge, new TEvents::TEvBlob(blob), 0, s);
+                new IEventHandle(edge, edge, new TEvents::TEvBlob(blob), 0, s);
             TAutoPtr<IEventHandle> serev = GetSerialized(ev);
             runtime.Send(serev.Release(), 0, true);
             TAutoPtr<IEventHandle> handle;
@@ -576,7 +575,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         const auto edge = runtime.AllocateEdgeActor(0);
         const auto wall = runtime.Register(new TWall, 1);
 
-        runtime.Send(new IEventHandleFat(wall, edge, new TEvents::TEvPing, IEventHandle::FlagUseSubChannel, 113), 0);
+        runtime.Send(new IEventHandle(wall, edge, new TEvents::TEvPing, IEventHandle::FlagUseSubChannel, 113), 0);
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvents::TEvPong>(handle);
         UNIT_ASSERT_EQUAL(handle->Cookie, 113);
@@ -598,7 +597,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
             const auto src = runtime.AllocateEdgeActor(0);
 
-            runtime.Send(new IEventHandleFat(edge, src, new TEvents::TEvBlob(blob), IEventHandle::FlagUseSubChannel, i), 0);
+            runtime.Send(new IEventHandle(edge, src, new TEvents::TEvBlob(blob), IEventHandle::FlagUseSubChannel, i), 0);
 
             TAutoPtr<IEventHandle> handle;
             const auto event = runtime.GrabEdgeEvent<TEvents::TEvBlob>(handle);
@@ -622,7 +621,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
         auto sentTraceId = NWilson::TTraceId::NewTraceId(15, 4095);
 
-        runtime.Send(new IEventHandleFat(edge, edge,
+        runtime.Send(new IEventHandle(edge, edge,
                                       new TEvents::TEvBlob(blob),
                                       0, 13, nullptr, sentTraceId.Clone()),
                      0);
@@ -641,7 +640,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         auto event = new TEvResolveAddress;
         event->Address = "localhost";
         event->Port = 80;
-        runtime.Send(new IEventHandleFat(GetNameserviceActorId(), edge, event), 0);
+        runtime.Send(new IEventHandle(GetNameserviceActorId(), edge, event), 0);
         TAutoPtr<IEventHandle> handle;
         const auto reply = runtime.GrabEdgeEvent<TEvAddressInfo>(handle);
         UNIT_ASSERT_VALUES_EQUAL(NAddr::PrintHostAndPort(*reply->Address),
@@ -689,7 +688,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                     msg->Record.SetMeta(meta);
                     msg->Record.AddPayloadId(msg->AddPayload(TRope(rope1)));
                     msg->Record.AddPayloadId(msg->AddPayload(TRope(rope2)));
-                    runtime.Send(new IEventHandleFat(edge, TActorId(), msg.Release()), 0);
+                    runtime.Send(new IEventHandle(edge, TActorId(), msg.Release()), 0);
                 }
 
                 TAutoPtr<IEventHandle> handle;
@@ -734,7 +733,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         runtime.Initialize(TAppPrepare().Unwrap());
 
         const auto edge = runtime.AllocateEdgeActor(0);
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
 
         TAutoPtr<IEventHandle> handle;
         {
@@ -846,7 +845,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         runtime.Initialize(TAppPrepare().Unwrap());
 
         const auto edge = runtime.AllocateEdgeActor(0);
-        runtime.Send(new IEventHandleFat(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
 
         TAutoPtr<IEventHandle> handle;
         {

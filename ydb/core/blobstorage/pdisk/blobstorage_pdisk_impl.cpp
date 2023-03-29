@@ -734,7 +734,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                                 << " Send CutLog to# " << OwnerData[chunkOwner].CutLogId.ToString().data()
                                 << " ownerId#" << ui32(chunkOwner)
                                 << " cutLog# " << cutLog->ToString());
-                        ActorSystem->Send(new IEventHandleFat(OwnerData[chunkOwner].CutLogId, PDiskActor, cutLog.Release(),
+                        ActorSystem->Send(new IEventHandle(OwnerData[chunkOwner].CutLogId, PDiskActor, cutLog.Release(),
                                     IEventHandle::FlagTrackDelivery, 0));
                         OwnerData[chunkOwner].AskedToCutLogAt = now;
                     } else {
@@ -777,7 +777,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                                 << " cutLog# " << cutLog->ToString()
                                 << " LogChunks# " << str.Str());
                     }
-                    ActorSystem->Send(new IEventHandleFat(OwnerData[ownerFilter].CutLogId, PDiskActor, cutLog.Release(),
+                    ActorSystem->Send(new IEventHandle(OwnerData[ownerFilter].CutLogId, PDiskActor, cutLog.Release(),
                                 IEventHandle::FlagTrackDelivery, 0));
                     OwnerData[ownerFilter].AskedToCutLogAt = now;
                 } else {

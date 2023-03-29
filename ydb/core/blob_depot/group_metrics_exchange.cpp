@@ -20,7 +20,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
-        TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandleFat(TEvPrivate::EvDoGroupMetricsExchange, 0,
+        TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandle(TEvPrivate::EvDoGroupMetricsExchange, 0,
             SelfId(), {}, nullptr, 0));
     }
 
@@ -145,7 +145,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         if (reschedule) {
-            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandleFat(TEvPrivate::EvUpdateThroughputs, 0,
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvUpdateThroughputs, 0,
                 SelfId(), {}, nullptr, 0));
         }
     }

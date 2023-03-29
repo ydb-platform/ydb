@@ -54,7 +54,7 @@ Y_UNIT_TEST(TestGroupsBalancer) {
     WaitPartition("session8", tc, 0, "session2", "topic1", pipe2);
     WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
 
-    tc.Runtime->Send(new IEventHandleFat(pipe2, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
+    tc.Runtime->Send(new IEventHandle(pipe2, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
 
     WaitPartition("session8", tc, 0, "", "", TActorId());
     WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
@@ -115,7 +115,7 @@ Y_UNIT_TEST(TestGroupsBalancer3) {
     WaitPartition("session", tc, 0, "", "", TActorId());
     WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
 
-    tc.Runtime->Send(new IEventHandleFat(pipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
+    tc.Runtime->Send(new IEventHandle(pipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
 
     TActorId pipe2 = RegisterReadSession("session1", tc);
     Y_UNUSED(pipe2);
@@ -294,7 +294,7 @@ Y_UNIT_TEST(TestCreateBalancer) {
 
         PQBalancerPrepare(TOPIC_NAME, {{1,{1,2}}, {2,{1,3}}}, ssId, tc);
 
-        tc.Runtime->Send(new IEventHandleFat(pipe1, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
+        tc.Runtime->Send(new IEventHandle(pipe1, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
 
 
 //        PQBalancerPrepare(TOPIC_NAME, {{2,1}}, tc); //TODO: not supported yet
@@ -311,7 +311,7 @@ Y_UNIT_TEST(TestCreateBalancer) {
         Y_UNUSED(pipe2);
         WaitPartition("session2", tc, 1, "session1", "topic1", pipe);
         WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
-        tc.Runtime->Send(new IEventHandleFat(pipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
+        tc.Runtime->Send(new IEventHandle(pipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvServerDisconnected));
@@ -585,7 +585,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
 
         Y_VERIFY(!result); //no answer yet, waiting of dying of old ownership session
 
-        tc.Runtime->Send(new IEventHandleFat(newPipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and old session
+        tc.Runtime->Send(new IEventHandle(newPipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and old session
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvServerDisconnected));

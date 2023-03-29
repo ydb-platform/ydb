@@ -95,8 +95,8 @@ struct TTestState {
     {
         std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(blob.Id, blob.Data, TInstant::Max(),
                 handleClass, tactic);
-        return static_cast<TEventHandleFat<TEvBlobStorage::TEvPut>*>(
-                new IEventHandleFat(EdgeActor, EdgeActor, put.release()));
+        return static_cast<TEventHandle<TEvBlobStorage::TEvPut>*>(
+                new IEventHandle(EdgeActor, EdgeActor, put.release()));
     }
 
     template <typename TIter, typename TPutIter>
@@ -126,8 +126,8 @@ struct TTestState {
         }
         std::unique_ptr<TEvBlobStorage::TEvGet> get = std::make_unique<TEvBlobStorage::TEvGet>(queries, blobs.size(), TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead, mustRestore, false);
-        return static_cast<TEventHandleFat<TEvBlobStorage::TEvGet>*>(
-                new IEventHandleFat(EdgeActor, EdgeActor, get.release()));
+        return static_cast<TEventHandle<TEvBlobStorage::TEvGet>*>(
+                new IEventHandle(EdgeActor, EdgeActor, get.release()));
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -135,8 +135,8 @@ struct TTestState {
     ////////////////////////////////////////////////////////////////////////////
     template <typename TEvent>
     typename TEvent::TPtr CreateEventPtr(TActorId recipient, TActorId sender, TEvent *ev, ui64 cookie) {
-        TAutoPtr<IEventHandle> handle = new IEventHandleFat(recipient, sender, ev, 0, cookie);
-        return static_cast<TEventHandleFat<TEvent>*>(handle.Release());
+        TAutoPtr<IEventHandle> handle = new IEventHandle(recipient, sender, ev, 0, cookie);
+        return static_cast<TEventHandle<TEvent>*>(handle.Release());
     }
 
     template <typename TEvent>
@@ -149,7 +149,7 @@ struct TTestState {
         TAutoPtr<IEventHandle> handle;
         auto ev = Runtime.GrabEdgeEventRethrow<TEvent>(handle);
         UNIT_ASSERT(ev);
-        return static_cast<TEventHandleFat<TEvent>*>(handle.Release());
+        return static_cast<TEventHandle<TEvent>*>(handle.Release());
     }
 
     template <typename TEventPtr, typename ...TArgs>

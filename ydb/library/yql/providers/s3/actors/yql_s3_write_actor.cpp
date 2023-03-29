@@ -235,25 +235,25 @@ private:
             TS3Result s3Result(std::get<IHTTPGateway::TContent>(std::move(result)).Extract());
             const auto& root = s3Result.GetRootNode();
             if (s3Result.IsError) {
-                actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
             } else if (root.Name() != "InitiateMultipartUploadResult")
-                actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected response on create upload: " << root.Name() << ", request id: [" << requestId << "]")));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected response on create upload: " << root.Name() << ", request id: [" << requestId << "]")));
             else {
                 const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
-                actorSystem->Send(new IEventHandleFat(selfId, selfId, new TEvPrivate::TEvUploadStarted(root.Node("s3:UploadId", false, nss).Value<TString>())));
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadStarted(root.Node("s3:UploadId", false, nss).Value<TString>())));
             }
             break;
         } catch (const std::exception& ex) {
-            actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Error on parse create upload response: " << ex.what()  << ", request id: [" << requestId << "]")));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Error on parse create upload response: " << ex.what()  << ", request id: [" << requestId << "]")));
             break;
         }
         case 1U: {
             auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Upload error, request id: [" << requestId << "], ", std::get<TIssues>(std::move(result)));
-            actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(std::move(issues))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(std::move(issues))));
             break;
         }
         default:
-            actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected variant index " << result.index() << " on create upload response." << ", request id: [" << requestId << "]")));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected variant index " << result.index() << " on create upload response." << ", request id: [" << requestId << "]")));
             break;
         }
     }
@@ -263,14 +263,14 @@ private:
         case 0U: {
             const auto& str = std::get<IHTTPGateway::TContent>(response).Headers;
             if (const NHttp::THeaders headers(str.substr(str.rfind("HTTP/"))); headers.Has("Etag"))
-                actorSystem->Send(new IEventHandleFat(selfId, selfId, new TEvPrivate::TEvUploadPartFinished(size, index, TString(headers.Get("Etag")))));
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadPartFinished(size, index, TString(headers.Get("Etag")))));
             else {
                 TS3Result s3Result(std::get<IHTTPGateway::TContent>(std::move(response)).Extract());
                 if (s3Result.IsError && s3Result.Parsed) {
-                    actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << "Upload failed: " << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
+                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << "Upload failed: " << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
                 } else {
                     constexpr size_t BODY_MAX_SIZE = 1_KB;
-                    actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                         TStringBuilder() << "Unexpected response"
                             << ". Headers: " << str
                             << ". Body: \"" << TStringBuf(s3Result.Body).Trunc(BODY_MAX_SIZE)
@@ -282,7 +282,7 @@ private:
             break;
         case 1U: {
             auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "PartUpload error, request id: [" << requestId << "], ", std::get<TIssues>(std::move(response)));
-            actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(std::move(issues))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(std::move(issues))));
             break;
         }
         }
@@ -294,23 +294,23 @@ private:
             TS3Result s3Result(std::get<IHTTPGateway::TContent>(std::move(result)).Extract());
             const auto& root = s3Result.GetRootNode();
             if (s3Result.IsError) {
-                actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
             } else if (root.Name() != "CompleteMultipartUploadResult")
-                actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected response on finish upload: " << root.Name() << ", request id: [" << requestId << "]")));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected response on finish upload: " << root.Name() << ", request id: [" << requestId << "]")));
             else
-                actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
             break;
         } catch (const std::exception& ex) {
-            actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Error on parse finish upload response: " << ex.what() << ", request id: [" << requestId << "]")));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Error on parse finish upload response: " << ex.what() << ", request id: [" << requestId << "]")));
             break;
         }
         case 1U: {
             auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Multipart error, request id: [" << requestId << "], ", std::get<TIssues>(std::move(result)));
-            actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(std::move(issues))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(std::move(issues))));
             break;
         }
         default:
-            actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected variant index " << result.index() << " on finish upload response." << ", request id: [" << requestId << "]")));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected variant index " << result.index() << " on finish upload response." << ", request id: [" << requestId << "]")));
             break;
         }
     }
@@ -323,22 +323,22 @@ private:
                 TString errorCode;
                 TString message;
                 if (ParseS3ErrorResponse(errorText, errorCode, message)) {
-                    actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(content.HttpResponseCode, errorCode, TStringBuilder{} << message << ", request id: [" << requestId << "]")));
+                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(content.HttpResponseCode, errorCode, TStringBuilder{} << message << ", request id: [" << requestId << "]")));
                 } else {
-                    actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(content.HttpResponseCode, TStringBuilder{} << errorText << ", request id: [" << requestId << "]")));
+                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(content.HttpResponseCode, TStringBuilder{} << errorText << ", request id: [" << requestId << "]")));
                 }
             } else {
-                actorSystem->Send(new IEventHandleFat(selfId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
-                actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
             }
             break;
         case 1U: {
             auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "UploadFinish error, request id: [" << requestId << "], ", std::get<TIssues>(std::move(result)));
-            actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(std::move(issues))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(std::move(issues))));
             break;
         }
         default:
-            actorSystem->Send(new IEventHandleFat(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected variant index " << result.index() << " on finish upload response." << ", request id: [" << requestId << "]")));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected variant index " << result.index() << " on finish upload response." << ", request id: [" << requestId << "]")));
             break;
         }
     }

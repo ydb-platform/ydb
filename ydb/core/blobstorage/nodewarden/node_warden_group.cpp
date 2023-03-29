@@ -116,7 +116,7 @@ namespace NKikimr::NStorage {
         }
 
         if (group.GroupResolver && !group.GetGroupRequestPending) {
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
             group.GroupResolver = {};
         }
 
@@ -155,7 +155,7 @@ namespace NKikimr::NStorage {
 
                     if (ep.GetLifeCyclePhase() == TBlobStorageGroupInfo::ELCP_IN_TRANSITION) {
                         // re-request group configuration for this group after some timeout
-                        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandleFat(TEvPrivate::EvGetGroup, 0,
+                        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvGetGroup, 0,
                             SelfId(), {}, nullptr, groupId));
                     }
                 }
@@ -251,10 +251,10 @@ namespace NKikimr::NStorage {
                     TGroupRecord& group = Groups[groupId];
                     STLOG(PRI_DEBUG, BS_NODE, NW99, "destroying group", (GroupId, groupId), (ProxyId, group.ProxyId));
                     if (group.ProxyId) {
-                        TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, group.ProxyId, {}, nullptr, 0));
+                        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.ProxyId, {}, nullptr, 0));
                     }
                     if (group.GroupResolver) {
-                        TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+                        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
                     }
                     Groups.erase(groupId);
 

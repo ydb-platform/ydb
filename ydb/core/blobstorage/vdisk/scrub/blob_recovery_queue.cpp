@@ -19,7 +19,7 @@ namespace NKikimr {
 
     void TBlobRecoveryActor::StopQueues() {
         for (const auto& [vdiskId, queue] : Queues) {
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, queue.QueueActorId, {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, queue.QueueActorId, {}, nullptr, 0));
         }
     }
 

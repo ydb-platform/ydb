@@ -123,7 +123,6 @@ void TMergingSortedInputStream::Init() {
     Y_VERIFY(First);
     First = false;
     size_t totalRows = 0;
-
     for (size_t i = 0; i < SourceBatches.size(); ++i) {
         auto& batch = SourceBatches[i];
         if (batch) {
@@ -135,11 +134,18 @@ void TMergingSortedInputStream::Init() {
             continue;
         }
 
+        for (i32 i = 0; i < batch->num_columns(); ++i) {
+            ColumnSize[batch->column_name(i)] += NArrow::GetArrayDataSize(batch->column(i));
+        }
+
         totalRows += batch->num_rows();
         Cursors[i] = TSortCursorImpl(batch, Description, i);
     }
 
     ExpectedBatchSize = MaxBatchSize ? std::min(totalRows, MaxBatchSize) : totalRows;
+    if (MaxBatchSize && MaxBatchSize < totalRows) {
+        ColumnSize.clear();
+    }
 
     Queue = TSortingHeap(Cursors, Description->NotNull);
 
@@ -176,7 +182,7 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
         }
         return batch;
     } else {
-        auto builders = NArrow::MakeBuilders(Header, ExpectedBatchSize);
+        auto builders = NArrow::MakeBuilders(Header, ExpectedBatchSize, ColumnSize);
         if (builders.empty()) {
             return {};
         }

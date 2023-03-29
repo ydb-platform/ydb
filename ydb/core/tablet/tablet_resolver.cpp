@@ -313,8 +313,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         if (endpoint.first) {
             ctx.Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch));
             if (!!msg->Ev) {
-                IEventHandle::Forward(msg->Ev, msg->SelectActor(endpoint.second, endpoint.first));
-                ctx.ExecutorThread.Send(msg->Ev);
+                ctx.ExecutorThread.Send(IEventHandle::Forward(msg->Ev, msg->SelectActor(endpoint.second, endpoint.first)));
             }
             return true;
         } else {

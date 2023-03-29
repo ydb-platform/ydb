@@ -92,7 +92,7 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     } else if (noGroup) {
         const TActorId errorProxy = StartEjectedProxy(id);
         TActivationContext::Forward(ev, errorProxy);
-        TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
         return;
     } else if (TGroupRecord& group = Groups[id]; !group.ProxyId) {
         if (TGroupID(id).ConfigurationType() == EGroupConfigurationType::Virtual) {

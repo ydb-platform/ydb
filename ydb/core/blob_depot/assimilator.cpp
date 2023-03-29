@@ -66,7 +66,7 @@ namespace NKikimr::NBlobDepot {
                 }
             }
             Self->Data->CommitTrash(this);
-            TActivationContext::Send(new IEventHandleFat(NotifyEventType, 0, ParentId, {}, nullptr, Cookie));
+            TActivationContext::Send(new IEventHandle(NotifyEventType, 0, ParentId, {}, nullptr, Cookie));
         }
     };
 
@@ -323,7 +323,7 @@ namespace NKikimr::NBlobDepot {
 
             if (timeout) { // timeout hit, reschedule work
                 if (!ResumeScanDataForCopyingInFlight) {
-                    TActivationContext::Send(new IEventHandleFat(TEvPrivate::EvResumeScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
+                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvResumeScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
                     ResumeScanDataForCopyingInFlight = true;
                 }
                 break;
@@ -514,7 +514,7 @@ namespace NKikimr::NBlobDepot {
             PassAway();
         } else {
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
-            TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandleFat(TEvPrivate::EvResume, 0, SelfId(), {}, nullptr, 0));
+            TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvResume, 0, SelfId(), {}, nullptr, 0));
         }
     }
 

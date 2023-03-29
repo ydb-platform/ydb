@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.Initialize(MakeEgg());
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor(sender));
-        runtime.Send(new IEventHandleFat(actorId, sender, new TEvents::TEvWakeup));
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup));
     }
 
     Y_UNIT_TEST(TestDie) {
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.Initialize(MakeEgg());
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor);
-        runtime.Send(new IEventHandleFat(actorId, sender, new TEvents::TEvPoisonPill));
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPoisonPill));
     }
 
     Y_UNIT_TEST(TestStateSwitch) {
@@ -100,9 +100,9 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         TActorId sender = runtime.AllocateEdgeActor();
         auto actor = new TMyActor;
         TActorId actorId = runtime.Register(actor);
-        runtime.Send(new IEventHandleFat(actorId, sender, new TEvents::TEvPing));
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
         UNIT_ASSERT_EQUAL(actor->IsStateChanged(), false);
-        runtime.Send(new IEventHandleFat(actorId, sender, new TEvents::TEvPong));
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPong));
         UNIT_ASSERT_EQUAL(actor->IsStateChanged(), true);
     }
 
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.Initialize(MakeEgg());
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor);
-        runtime.Send(new IEventHandleFat(actorId, sender, new TEvents::TEvPing));
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
         auto events = runtime.CaptureEvents();
         bool passed = false;
         for (const auto& event : events) {
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor);
-        runtime.Send(new IEventHandleFat(actorId, sender, new TEvents::TEvPing));
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
         auto scheduledEvents = runtime.CaptureScheduledEvents();
         UNIT_ASSERT_EQUAL_C(scheduledEvents.size(), 1, "check scheduled count");
         UNIT_ASSERT_C(scheduledEvents.begin()->Deadline == (runtime.GetCurrentTime() + TDuration::Seconds(1)), "scheduled delay check");
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         TActorId sender = runtime.AllocateEdgeActor();
         auto actor = new TMyActor;
         TActorId actorId = runtime.Register(actor);
-        runtime.Send(new IEventHandleFat(actorId, sender, new TEvents::TEvWakeup));
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup));
         auto events = runtime.CaptureEvents();
         bool passed = false;
         for (const auto& event : events) {
@@ -255,7 +255,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                     with_lock(*syncMutex) {
                         Sleep(TDuration::MilliSeconds(100));
                         CurrentTime = actorSystem->Timestamp();
-                        actorSystem->Send(new IEventHandleFat(sender, selfID, new TEvents::TEvPong()));
+                        actorSystem->Send(new IEventHandle(sender, selfID, new TEvents::TEvPong()));
                     }
                 });
 
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             TActorId sender = runtime.AllocateEdgeActor();
             auto myActor = new TMyActor(&syncMutex);
             TActorId actorId = runtime.Register(myActor);
-            runtime.Send(new IEventHandleFat(actorId, sender, new TEvents::TEvPing));
+            runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
             runtime.DispatchEvents();
             auto events = runtime.CaptureEvents();
             UNIT_ASSERT_EQUAL_C(events.size(), 1, "check sent count");
@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         TActorId sender = runtime.AllocateEdgeActor();
         auto myActor = new TMyActor;
         TActorId actorId = runtime.Register(myActor);
-        runtime.Send(new IEventHandleFat(actorId, sender, new TEvents::TEvPing));
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
         runtime.DispatchEvents();
         auto events = runtime.CaptureEvents();
         UNIT_ASSERT_EQUAL_C(events.size(), 1, "check sent count");
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                 TProducerActor* actor = (TProducerActor*)(param);
                 for (ui32 i = 0; i < actor->Count; ++i) {
                     for (const auto& recip : actor->Recipents) {
-                        actor->ActorSystem->Send(new IEventHandleFat(recip, actor->SelfId, new TEvCounter(i)));
+                        actor->ActorSystem->Send(new IEventHandle(recip, actor->SelfId, new TEvCounter(i)));
                         if ((i % (1 + rand() % 100)) == 0) {
                             Sleep(TDuration::MilliSeconds(1 + rand() % 10));
                         }
@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             auto producerActor = new TProducerActor(count, consumerIds);
             TActorId producerId = runtime.Register(producerActor);
-            runtime.Send(new IEventHandleFat(producerId, sender, new TEvents::TEvPing));
+            runtime.Send(new IEventHandle(producerId, sender, new TEvents::TEvPing));
             runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                 Y_UNUSED(runtime);
                 Y_UNUSED(event);
@@ -521,11 +521,11 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         TMyActor* myActor = new TMyActor;
         TActorId actorId = runtime.Register(myActor);
         runtime.EnableScheduleForActor(actorId);
-        runtime.Send(new IEventHandleFat(actorId, sender, new TEvents::TEvBootstrap()));
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvBootstrap()));
         TAutoPtr<IEventHandle> handle;
         UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(handle));
-        runtime.Send(new IEventHandleFat(actorId, TActorId(), new TEvents::TEvPing()));
-        runtime.Schedule(new IEventHandleFat(sender, TActorId(), new TEvents::TEvWakeup()),
+        runtime.Send(new IEventHandle(actorId, TActorId(), new TEvents::TEvPing()));
+        runtime.Schedule(new IEventHandle(sender, TActorId(), new TEvents::TEvWakeup()),
             TDuration::MilliSeconds(1000000));
         do {
             runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(handle);

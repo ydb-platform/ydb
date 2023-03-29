@@ -12,7 +12,7 @@ void CheckAddTenant(TTenantTestRuntime &runtime, const TString &tenant, TEvLocal
     limit.SetCPU(cpu);
     limit.SetMemory(memory);
     limit.SetNetwork(network);
-    runtime.Send(new IEventHandleFat(MakeLocalID(runtime.GetNodeId(0)),
+    runtime.Send(new IEventHandle(MakeLocalID(runtime.GetNodeId(0)),
                                   runtime.Sender,
                                   new TEvLocal::TEvAddTenant(tenant, limit)));
     TAutoPtr<IEventHandle> handle;
@@ -41,7 +41,7 @@ void CheckAlterTenant(TTenantTestRuntime &runtime, const TString &tenant, TEvLoc
     limit.SetCPU(cpu);
     limit.SetMemory(memory);
     limit.SetNetwork(network);
-    runtime.Send(new IEventHandleFat(MakeLocalID(runtime.GetNodeId(0)),
+    runtime.Send(new IEventHandle(MakeLocalID(runtime.GetNodeId(0)),
                                   runtime.Sender,
                                   new TEvLocal::TEvAlterTenant(tenant, limit)));
     TAutoPtr<IEventHandle> handle;
@@ -96,15 +96,15 @@ Y_UNIT_TEST_SUITE(TLocalTests) {
         limit.SetMemory(1);
         limit.SetNetwork(1);
 
-        runtime.Send(new IEventHandleFat(MakeLocalID(runtime.GetNodeId(0)),
+        runtime.Send(new IEventHandle(MakeLocalID(runtime.GetNodeId(0)),
                                       runtime.Sender,
                                       new TEvLocal::TEvAddTenant(TENANT1_1_NAME, limit)));
         runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(handle);
 
-        runtime.Send(new IEventHandleFat(MakeLocalID(runtime.GetNodeId(0)),
+        runtime.Send(new IEventHandle(MakeLocalID(runtime.GetNodeId(0)),
                                       runtime.Sender,
                                       new TEvLocal::TEvAddTenant(TENANT1_1_NAME, limit)));
-        runtime.Send(new IEventHandleFat(MakeLocalID(runtime.GetNodeId(0)),
+        runtime.Send(new IEventHandle(MakeLocalID(runtime.GetNodeId(0)),
                                       runtime.Sender,
                                       new TEvLocal::TEvAddTenant(TENANT1_2_NAME, limit)));
         runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(handle);
@@ -140,17 +140,17 @@ Y_UNIT_TEST_SUITE(TLocalTests) {
         limit.SetMemory(1);
         limit.SetNetwork(1);
 
-        runtime.Send(new IEventHandleFat(MakeLocalID(runtime.GetNodeId(0)),
+        runtime.Send(new IEventHandle(MakeLocalID(runtime.GetNodeId(0)),
                                       runtime.Sender,
                                       new TEvLocal::TEvAddTenant(TENANT1_1_NAME, limit)));
         runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(handle);
 
-        runtime.Send(new IEventHandleFat(MakeLocalID(runtime.GetNodeId(0)),
+        runtime.Send(new IEventHandle(MakeLocalID(runtime.GetNodeId(0)),
                                       runtime.Sender,
                                       new TEvLocal::TEvAddTenant(TENANT1_2_NAME, limit)));
         runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(handle);
 
-        runtime.Send(new IEventHandleFat(MakeLocalID(runtime.GetNodeId(0)),
+        runtime.Send(new IEventHandle(MakeLocalID(runtime.GetNodeId(0)),
                                       runtime.Sender,
                                       new TEvLocal::TEvRemoveTenant(TENANT1_1_NAME)));
 

@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         ui32 nodeId = sender.NodeId();
         TActorId nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
         ui64 cookie = 6543210;
-        runtime.Send(new IEventHandleFat(proxy, sender,
+        runtime.Send(new IEventHandle(proxy, sender,
             new TEvBlobStorage::TEvPut(logoBlobId, data, TInstant::Max()),
             IEventHandle::FlagForwardOnNondelivery, cookie, &nodeWarden), sender.NodeId() - runtime.GetNodeId(0));
 
@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         ui32 nodeId = sender.NodeId();
         TActorId nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
         ui64 cookie = 6543210;
-        runtime.Send(new IEventHandleFat(proxy, sender,
+        runtime.Send(new IEventHandle(proxy, sender,
             new TEvBlobStorage::TEvGet(logoBlobId, 0, 0, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::LowRead),
             IEventHandle::FlagForwardOnNondelivery, cookie, &nodeWarden), sender.NodeId() - runtime.GetNodeId(0));
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 TEvBlobStorage::TEvVGet::EFlags::None,
                 cookie,
                 {id});
-        runtime.Send(new IEventHandleFat(vDiskActor, sender, x.release()), sender.NodeId() - runtime.GetNodeId(0));
+        runtime.Send(new IEventHandle(vDiskActor, sender, x.release()), sender.NodeId() - runtime.GetNodeId(0));
 
         TAutoPtr<IEventHandle> handle;
         auto vgetResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGetResult>(handle);
@@ -402,7 +402,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         // TODO: the proxy just should not be there, check that instead!
         TActorId proxy = MakeBlobStorageProxyID(groupId);
-        runtime.Send(new IEventHandleFat(proxy, sender1, new TEvents::TEvPoisonPill()), 1);
+        runtime.Send(new IEventHandle(proxy, sender1, new TEvents::TEvPoisonPill()), 1);
 
         Put(runtime, sender1, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");
         Get(runtime, sender0, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");
@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         // TODO: the proxy just should not be there, check that instead!
         TActorId proxy = MakeBlobStorageProxyID(groupId);
-        runtime.Send(new IEventHandleFat(proxy, sender1, new TEvents::TEvPoisonPill()), 1);
+        runtime.Send(new IEventHandle(proxy, sender1, new TEvents::TEvPoisonPill()), 1);
 
         Put(runtime, sender1, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");
         Get(runtime, sender1, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");

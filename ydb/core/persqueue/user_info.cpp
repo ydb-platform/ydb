@@ -192,24 +192,18 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
     bool meterRead = userServiceType.empty() || userServiceType == defaultServiceType;
 
 
-    return {
+    return { 
         ctx, StreamCountersSubgroup, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicConverter, Partition,
         session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
         meterRead, burst, speed
     };
 }
 
-TUserInfo TUsersInfoStorage::CreateUserInfo(const TString& user,
-                                            const TActorContext& ctx,
+TUserInfoBase TUsersInfoStorage::CreateUserInfo(const TString& user,
                                             TMaybe<ui64> readRuleGeneration) const
 {
-    return CreateUserInfo(ctx,
-                          user,
-                          readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration,
-                          false,
-                          "",
-                          0, 0, 0, 0,
-                          TInstant::Zero());
+    return TUserInfoBase{user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration,
+                          "", 0, 0, 0, false, {}};
 }
 
 TUserInfo& TUsersInfoStorage::Create(

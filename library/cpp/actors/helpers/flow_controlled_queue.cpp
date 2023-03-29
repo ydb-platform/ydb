@@ -102,7 +102,7 @@ class TFlowControlledRequestQueue : public IActorCallback {
             Subscribed = true;
         }
 
-        TActivationContext::Send(new IEventHandleFat(Target, reqActorId, IEventHandleFat::GetFat(ev.Get())->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, ev->Cookie));
+        TActivationContext::Send(new IEventHandle(Target, reqActorId, ev.Get()->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, ev->Cookie));
     }
 
     void PumpQueue() {
@@ -123,7 +123,7 @@ class TFlowControlledRequestQueue : public IActorCallback {
             if (reqActor) {
                 if (reqActor->Flags & IEventHandle::FlagSubscribeOnSession) {
                     TActivationContext::Send(
-                        new IEventHandleFat(reqActor->Source, TActorId(), new TEvInterconnect::TEvNodeDisconnected(nodeid), 0, reqActor->Cookie)
+                        new IEventHandle(reqActor->Source, TActorId(), new TEvInterconnect::TEvNodeDisconnected(nodeid), 0, reqActor->Cookie)
                     );
                 }
                 reqActor->PassAway();
@@ -136,7 +136,7 @@ class TFlowControlledRequestQueue : public IActorCallback {
             const auto reason = TEvents::TEvUndelivered::Disconnected;
             if (ev->Flags & IEventHandle::FlagTrackDelivery) {
                 TActivationContext::Send(
-                    new IEventHandleFat(ev->Sender, ev->Recipient, new TEvents::TEvUndelivered(ev->GetTypeRewrite(), reason), 0, ev->Cookie)
+                    new IEventHandle(ev->Sender, ev->Recipient, new TEvents::TEvUndelivered(ev->GetTypeRewrite(), reason), 0, ev->Cookie)
                 );
             }
         }
@@ -175,8 +175,7 @@ public:
         auto it = Find(RegisteredRequests, reqActor);
         if (it == RegisteredRequests.end())
             return;
-        IEventHandle::Forward(ev, reqActor->Source);
-        TActivationContext::Send(ev);
+        TActivationContext::Send(ev->Forward(reqActor->Source).Release());
         const TDuration reqLatency = reqActor->AccumulatedLatency();
         if (reqLatency < MinimalSeenLatency)
             MinimalSeenLatency = reqLatency;

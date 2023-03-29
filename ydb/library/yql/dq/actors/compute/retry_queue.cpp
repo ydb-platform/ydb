@@ -57,7 +57,7 @@ void TRetryEventsQueue::Retry() {
 void TRetryEventsQueue::Connect() {
     auto connectEvent = MakeHolder<NActors::TEvInterconnect::TEvConnectNode>();
     NActors::TActivationContext::Send(
-        new NActors::IEventHandleFat(NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId()), SenderId, connectEvent.Release(), 0, 0));
+        new NActors::IEventHandle(NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId()), SenderId, connectEvent.Release(), 0, 0));
 }
 
 void TRetryEventsQueue::Unsubscribe() {
@@ -65,7 +65,7 @@ void TRetryEventsQueue::Unsubscribe() {
         Connected = false;
         auto unsubscribeEvent = MakeHolder<NActors::TEvents::TEvUnsubscribe>();
         NActors::TActivationContext::Send(
-            new NActors::IEventHandleFat(NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId()), SenderId, unsubscribeEvent.Release(), 0, 0));
+            new NActors::IEventHandle(NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId()), SenderId, unsubscribeEvent.Release(), 0, 0));
     }
 }
 
@@ -93,7 +93,7 @@ void TRetryEventsQueue::ScheduleRetry() {
             RetryState.ConstructInPlace();
         }
         auto ev = MakeHolder<TEvRetryQueuePrivate::TEvRetry>(EventQueueId);
-        NActors::TActivationContext::Schedule(RetryState->GetNextDelay(), new NActors::IEventHandleFat(SelfId, SelfId, ev.Release()));
+        NActors::TActivationContext::Schedule(RetryState->GetNextDelay(), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
     }
 }
 

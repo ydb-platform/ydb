@@ -334,31 +334,7 @@ namespace NActors {
         TEventSerializationInfo serializationInfo{
             .IsExtendedFormat = bool(descr.Flags & IEventHandle::FlagExtendedFormat),
         };
-        auto es = GetEventSpace(descr.Type);
-        if (es < TEventFactories::EventFactories.size() && TEventFactories::EventFactories[es] != nullptr) {
-            const auto& estvec(*TEventFactories::EventFactories[es]);
-            auto est = GetEventSubType(descr.Type);
-            if (est < estvec.size() && estvec[est] != nullptr) {
-                IEventFactory* factory = estvec[est];
-                TAutoPtr<IEventHandle> ev = factory->Construct({
-                    .Session = SessionId,
-                    .Type = descr.Type,
-                    .Flags = descr.Flags,
-                    .Recipient = descr.Recipient,
-                    .Sender = descr.Sender,
-                    .Cookie = descr.Cookie,
-                    .OriginScopeId = Params.PeerScopeId,
-                    .TraceId = std::move(descr.TraceId),
-                    .Data = std::move(data),
-                });
-                if (ev) {
-                    TActivationContext::Send(ev);
-                }
-                return;
-            }
-        }
-
-        auto ev = std::make_unique<IEventHandleFat>(SessionId,
+        auto ev = std::make_unique<IEventHandle>(SessionId,
             descr.Type,
             descr.Flags & ~IEventHandle::FlagExtendedFormat,
             descr.Recipient,

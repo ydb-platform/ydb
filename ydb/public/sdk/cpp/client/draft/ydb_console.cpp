@@ -35,8 +35,12 @@ public:
             TRpcRequestSettings::Make(settings));
     }
 
-    TAsyncStatus RemoveVolatileConfig(const TVector<ui64>& ids, const TClusterConfigSettings& settings = {}) {
+    TAsyncStatus RemoveVolatileConfig(const TString& cluster, ui64 version, const TVector<ui64>& ids, const TClusterConfigSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Console::RemoveVolatileConfigRequest>(settings);
+
+        request.set_cluster(cluster);
+        request.set_version(version);
+
         for (auto& id: ids) {
             request.add_ids(id);
         }
@@ -171,9 +175,11 @@ TAsyncStatus TConsoleClient::AddVolatileConfig(
 }
 
 TAsyncStatus TConsoleClient::RemoveVolatileConfig(
+    const TString& cluster,
+    ui64 version,
     const TVector<ui64>& ids,
     const TClusterConfigSettings& settings) {
-    return Impl_->RemoveVolatileConfig(ids, settings);
+    return Impl_->RemoveVolatileConfig(cluster, version, ids, settings);
 }
 
 TAsyncGetConfigResult TConsoleClient::GetConfig(const TClusterConfigSettings& settings) {

@@ -974,7 +974,7 @@ void TSideEffects::DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTrans
         TOperationContext context{ss, txc, ctx, *this, memChanges, dbChanges};
 
         THolder<TEvPrivate::TEvCompleteBarrier> msg = MakeHolder<TEvPrivate::TEvCompleteBarrier>(txId, name);
-        TEvPrivate::TEvCompleteBarrier::TPtr personalEv = (TEventHandleFat<TEvPrivate::TEvCompleteBarrier>*) new IEventHandleFat(
+        TEvPrivate::TEvCompleteBarrier::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompleteBarrier>*) new IEventHandle(
                     context.SS->SelfId(), context.SS->SelfId(), msg.Release());
 
         for (auto& partId: blockedParts) {

@@ -82,7 +82,7 @@ private:
     })
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
-        return new IEventHandleFat(self, parentId, new TEvents::TEvBootstrap(), 0);
+        return new IEventHandle(self, parentId, new TEvents::TEvBootstrap(), 0);
     }
 
     void Bootstrap() {
@@ -105,7 +105,7 @@ private:
 
         FreeOnDeadline();
 
-        TActivationContext::Schedule(TDuration::MilliSeconds(800), new IEventHandleFat(SelfId(), SelfId(), new TEvents::TEvWakeup(), 0));
+        TActivationContext::Schedule(TDuration::MilliSeconds(800), new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup(), 0));
     }
 
     void DoPassAway() override {

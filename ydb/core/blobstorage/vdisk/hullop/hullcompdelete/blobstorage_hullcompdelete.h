@@ -217,7 +217,7 @@ namespace NKikimr {
                     ctx.Send(hugeKeeperId, new TEvHullFreeHugeSlots(std::move(item.RemovedHugeBlobs),
                         item.RecordLsn, item.Signature));
                     if (item.ChunksToForget) {
-                        TActivationContext::Send(new IEventHandleFat(pdiskCtx->PDiskId, skeletonId, new NPDisk::TEvChunkForget(
+                        TActivationContext::Send(new IEventHandle(pdiskCtx->PDiskId, skeletonId, new NPDisk::TEvChunkForget(
                             pdiskCtx->Dsk->Owner, pdiskCtx->Dsk->OwnerRound, std::move(item.ChunksToForget))));
                     }
                     ReleaseQueue.pop_front();
@@ -242,7 +242,7 @@ namespace NKikimr {
 
         // implemented in blobstorage_hull.h
         ~TDelayedCompactionDeleterNotifier() {
-            ActorSystem->Send(new IEventHandleFat(Info->GetActorId(), TActorId(), new TEvHullReleaseSnapshot(Cookie)));
+            ActorSystem->Send(new IEventHandle(Info->GetActorId(), TActorId(), new TEvHullReleaseSnapshot(Cookie)));
         }
     };
 

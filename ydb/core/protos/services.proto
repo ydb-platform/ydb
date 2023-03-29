@@ -978,5 +978,6 @@ message TActivity {
         DISCOVERY_CACHE_ACTOR = 608;
         REPLICATION_SERVICE = 609;
         KQP_SOURCE_READ_ACTOR = 610;
+        FEDERATION_DISCOVERY = 611;
     };
 };

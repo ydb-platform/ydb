@@ -119,11 +119,11 @@ public:
 
 private:
     static void SendError(TActorId self, NActors::TActorSystem* as, const TString& errorMessage, const TString& requestId) {
-        as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvDiscoveryResponse(errorMessage, requestId), 0));
+        as->Send(new IEventHandle(self, self, new TEvPrivate::TEvDiscoveryResponse(errorMessage, requestId), 0));
     }
 
     static void SendOk(TActorId self, NActors::TActorSystem* as, const TString& requestId) {
-        as->Send(new IEventHandleFat(self, self, new TEvPrivate::TEvDiscoveryResponse(requestId), 0));
+        as->Send(new IEventHandle(self, self, new TEvPrivate::TEvDiscoveryResponse(requestId), 0));
     }
 
     static void DiscoveryCallback(NYql::IHTTPGateway::TResult&& result, TActorId self, const TString& requestId, NActors::TActorSystem* as) {

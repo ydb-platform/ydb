@@ -18,7 +18,7 @@ public:
 private:
     void DoSendReply(const NKikimrClient::TSqsResponse& resp) override {
         const TActorId sender = TActivationContext::AsActorContext().SelfID;
-        TActivationContext::Send(new IEventHandleFat(BatchActor_, sender, new TSqsEvents::TEvSqsResponse(resp), 0, Cookie_));
+        TActivationContext::Send(new IEventHandle(BatchActor_, sender, new TSqsEvents::TEvSqsResponse(resp), 0, Cookie_));
     }
 
 private:

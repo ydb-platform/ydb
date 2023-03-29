@@ -3485,7 +3485,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
             if (Debug) {
                 Cerr << "See follower detach, waking up" << Endl;
             }
-            ctx.Send(new IEventHandleFat(Edge, Edge, new TEvents::TEvWakeup()), 0, true);
+            ctx.Send(new IEventHandle(Edge, Edge, new TEvents::TEvWakeup()), 0, true);
             Detached = true;
         }
 
@@ -3509,7 +3509,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
                 if (Debug) {
                     Cerr << "...killing the follower tablet" << Endl;
                 }
-                ctx.Send(new IEventHandleFat(FollowerTabletActor, LeaderTabletActor, new TEvents::TEvPoison()), 0, true);
+                ctx.Send(new IEventHandle(FollowerTabletActor, LeaderTabletActor, new TEvents::TEvPoison()), 0, true);
             }
         }
 

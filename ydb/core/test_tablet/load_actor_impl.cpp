@@ -24,14 +24,14 @@ namespace NKikimr::NTestShard {
     void TLoadActor::PassAway() {
         Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
         if (ValidationActorId) {
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, ValidationActorId, SelfId(), nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ValidationActorId, SelfId(), nullptr, 0));
         }
         TActorBootstrapped::PassAway();
     }
 
     void TLoadActor::HandleWakeup() {
         STLOG(PRI_NOTICE, TEST_SHARD, TS00, "voluntary restart", (TabletId, TabletId));
-        TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, Tablet, TabletActorId, nullptr, 0));
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Tablet, TabletActorId, nullptr, 0));
     }
 
     void TLoadActor::Action() {
@@ -57,7 +57,7 @@ namespace NKikimr::NTestShard {
             if (WritesInFlight.size() < Settings.GetMaxInFlight()) { // write until there is space in inflight
                 IssueWrite();
                 if (WritesInFlight.size() < Settings.GetMaxInFlight()) {
-                    TActivationContext::Send(new IEventHandleFat(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
+                    TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
                 }
             }
             if (BytesOfData > Settings.GetMaxDataBytes()) { // delete some data if needed
@@ -70,7 +70,7 @@ namespace NKikimr::NTestShard {
         if (ev->Get()->Connected) {
             RunValidation(true);
         } else {
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
             PassAway();
         }
     }
@@ -148,7 +148,7 @@ namespace NKikimr::NTestShard {
     }
 
     void TTestShard::PassAway() {
-        TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, ActivityActorId, {}, {}, 0));
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ActivityActorId, {}, {}, 0));
         TKeyValueFlat::PassAway();
     }
 

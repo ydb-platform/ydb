@@ -31,7 +31,7 @@ using std::shared_ptr;
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
 
-IEventHandleLight* CreateNavigateForPath(const TString& path) {
+IEventBase* CreateNavigateForPath(const TString& path) {
     auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
     request->DatabaseName = path;

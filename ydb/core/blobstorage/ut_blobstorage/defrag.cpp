@@ -77,7 +77,7 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
         // trigger compaction
         {
             const auto& sender = env.Runtime->AllocateEdgeActor(actorId.NodeId());
-            auto ev = std::make_unique<IEventHandleFat>(actorId, sender, TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
+            auto ev = std::make_unique<IEventHandle>(actorId, sender, TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
             ev->Rewrite(TEvBlobStorage::EvForwardToSkeleton, actorId);
             env.Runtime->Send(ev.release(), sender.NodeId());
             auto res = env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(sender);

@@ -45,7 +45,7 @@ bool TKesusTablet::ScheduleSelfCheck(const TActorContext& ctx) {
     TDuration sessionGraceTimeout = Max(Min(SessionGracePeriod, MAX_SESSION_GRACE_PERIOD), selfCheckPeriod + MIN_SESSION_GRACE_PERIOD);
     TInstant deadline = ctx.Now() + sessionGraceTimeout;
     CreateLongTimer(ctx, selfCheckPeriod,
-        new IEventHandleFat(SelfId(), SelfId(),
+        new IEventHandle(SelfId(), SelfId(),
             new TEvPrivate::TEvSelfCheckStart(deadline)),
         AppData(ctx)->SystemPoolId);
     return true;
@@ -59,7 +59,7 @@ void TKesusTablet::Handle(TEvPrivate::TEvSelfCheckStart::TPtr& ev) {
     TInstant now = ctx.Now();
     TDuration timeout = msg->Deadline > now ? msg->Deadline - now : TDuration::Zero();
     CreateLongTimer(ctx, timeout,
-        new IEventHandleFat(SelfId(), SelfId(),
+        new IEventHandle(SelfId(), SelfId(),
             new TEvPrivate::TEvSelfCheckTimeout(cookie.Get())),
         AppData(ctx)->SystemPoolId,
         cookie.Get());

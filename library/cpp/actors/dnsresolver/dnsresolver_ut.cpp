@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(DnsResolver) {
         runtime.Initialize();
         auto sender = runtime.AllocateEdgeActor();
         auto resolver = runtime.Register(CreateSimpleDnsResolver());
-        runtime.Send(new IEventHandleFat(resolver, sender, new TEvDns::TEvGetHostByName("localhost", AF_UNSPEC)),
+        runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetHostByName("localhost", AF_UNSPEC)),
                 0, true);
         auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetHostByNameResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, 0, ev->Get()->ErrorText);
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(DnsResolver) {
         runtime.Initialize();
         auto sender = runtime.AllocateEdgeActor();
         auto resolver = runtime.Register(CreateSimpleDnsResolver());
-        runtime.Send(new IEventHandleFat(resolver, sender, new TEvDns::TEvGetHostByName("yandex.ru", AF_UNSPEC)),
+        runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetHostByName("yandex.ru", AF_UNSPEC)),
                 0, true);
         auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetHostByNameResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, 0, ev->Get()->ErrorText);
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(DnsResolver) {
         auto sender = runtime.AllocateEdgeActor();
         auto resolver = runtime.Register(CreateSimpleDnsResolver());
 
-        runtime.Send(new IEventHandleFat(resolver, sender, new TEvDns::TEvGetAddr("yandex.ru", AF_UNSPEC)),
+        runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetAddr("yandex.ru", AF_UNSPEC)),
                 0, true);
         auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetAddrResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, 0, ev->Get()->ErrorText);
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(DnsResolver) {
         options.Attempts = 2;
         options.Servers.emplace_back(TStringBuilder() << "127.0.0.1:" << server.Port);
         auto resolver = runtime.Register(CreateSimpleDnsResolver(options));
-        runtime.Send(new IEventHandleFat(resolver, sender, new TEvDns::TEvGetHostByName("timeout.yandex.ru", AF_INET)),
+        runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetHostByName("timeout.yandex.ru", AF_INET)),
                 0, true);
         auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetHostByNameResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, ARES_ETIMEOUT, ev->Get()->ErrorText);
@@ -88,9 +88,9 @@ Y_UNIT_TEST_SUITE(DnsResolver) {
         options.Attempts = 5;
         options.Servers.emplace_back(TStringBuilder() << "127.0.0.1:" << server.Port);
         auto resolver = runtime.Register(CreateSimpleDnsResolver(options));
-        runtime.Send(new IEventHandleFat(resolver, sender, new TEvDns::TEvGetHostByName("timeout.yandex.ru", AF_INET)),
+        runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetHostByName("timeout.yandex.ru", AF_INET)),
                 0, true);
-        runtime.Send(new IEventHandleFat(resolver, sender, new TEvents::TEvPoison), 0, true);
+        runtime.Send(new IEventHandle(resolver, sender, new TEvents::TEvPoison), 0, true);
         auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetHostByNameResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, ARES_ECANCELLED, ev->Get()->ErrorText);
     }

@@ -32,7 +32,7 @@ public:
     template<typename T>
     static void FinalizeAndSend(std::unique_ptr<T> ptr, const TActorContext& ctx, const TActorId& recipient) {
         T* const p = ptr.get();
-        p->FinalizeAndSend(ctx, std::make_unique<IEventHandleFat>(recipient, ctx.SelfID, ptr.release()));
+        p->FinalizeAndSend(ctx, std::make_unique<IEventHandle>(recipient, ctx.SelfID, ptr.release()));
     }
 
     void Bootstrap(const TActorContext& ctx) {

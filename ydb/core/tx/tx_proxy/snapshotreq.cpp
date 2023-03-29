@@ -157,7 +157,7 @@ public:
 
         // Schedule execution timeout
         {
-            THolder<IEventHandle> wakeupEv = MakeHolder<IEventHandleFat>(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup());
+            THolder<IEventHandle> wakeupEv = MakeHolder<IEventHandle>(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup());
             ExecTimeoutCookieHolder.Reset(ISchedulerCookie::Make2Way());
 
             CreateLongTimer(ctx, ExecTimeoutPeriod, wakeupEv, AppData(ctx)->SystemPoolId, ExecTimeoutCookieHolder.Get());
@@ -1190,7 +1190,7 @@ public:
 
         // Schedule execution timeout
         {
-            THolder<IEventHandle> wakeupEv = MakeHolder<IEventHandleFat>(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup());
+            THolder<IEventHandle> wakeupEv = MakeHolder<IEventHandle>(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup());
             ExecTimeoutCookieHolder.Reset(ISchedulerCookie::Make2Way());
 
             CreateLongTimer(ctx, ExecTimeoutPeriod, wakeupEv, AppData(ctx)->SystemPoolId, ExecTimeoutCookieHolder.Get());

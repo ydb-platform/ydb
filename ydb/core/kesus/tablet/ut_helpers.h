@@ -58,7 +58,7 @@ struct TTestContext {
     void ExpectNoEdgeEvent(const TActorId& actor, TDuration duration) {
         auto edge = Runtime->AllocateEdgeActor();
         Runtime->EnableScheduleForActor(edge);
-        Runtime->Schedule(new IEventHandleFat(edge, edge, new TEvent()), duration);
+        Runtime->Schedule(new IEventHandle(edge, edge, new TEvent()), duration);
         auto event = Runtime->GrabEdgeEvent<TEvent>({actor, edge});
         UNIT_ASSERT_VALUES_UNEQUAL_C(event->Recipient, actor, "Unexpected event " << event->Get()->ToString());
     }

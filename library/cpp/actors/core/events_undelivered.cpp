@@ -38,68 +38,20 @@ namespace NActors {
         return new TEvUndelivered(sourceType, reason);
     }
 
-    TAutoPtr<IEventHandle> IEventHandle::ForwardOnNondelivery(TAutoPtr<IEventHandle>& ev, ui32 reason, bool unsure) {
-        std::unique_ptr<IEventHandle> tev(ev.Release());
-        TAutoPtr<IEventHandle> fw = ForwardOnNondelivery(tev, reason, unsure);
-        if (tev) {
-            // we don't want to delete original event handle here
-            ev = tev.release();
-        }
-        return fw;
-    }
-
-    TAutoPtr<IEventHandle> IEventHandle::ForwardOnNondelivery(std::unique_ptr<IEventHandle>& ev, ui32 reason, bool unsure) {
-        if (ev->IsEventFat()) {
-            std::unique_ptr<IEventHandleFat> evf(IEventHandleFat::GetFat(ev.release()));
-            std::unique_ptr<IEventHandle> fw = IEventHandleFat::ForwardOnNondelivery(evf, reason, unsure);
-            if (evf) {
-                ev = std::unique_ptr<IEventHandle>(evf.release());
-            }
-            return fw.release();
-        }
-        if (ev->IsEventLight()) {
-            std::unique_ptr<IEventHandleLight> evl(IEventHandleLight::GetLight(ev.release()));
-            std::unique_ptr<IEventHandle> fw = IEventHandleLight::ForwardOnNondelivery(evl, reason, unsure);
-            if (evl) {
-                ev = std::unique_ptr<IEventHandle>(evl.release());
-            }
-            return fw.release();
-        }
-        return {};
-    }
-
-    std::unique_ptr<IEventHandle> IEventHandleFat::ForwardOnNondelivery(std::unique_ptr<IEventHandleFat>& ev, ui32 reason, bool unsure) {
-        if (ev->ForwardOnNondeliveryFlag) {
+    std::unique_ptr<IEventHandle> IEventHandle::ForwardOnNondelivery(std::unique_ptr<IEventHandle>&& ev, ui32 reason, bool unsure) {
+        if (ev->Flags & FlagForwardOnNondelivery) {
             const ui32 updatedFlags = ev->Flags & ~(FlagForwardOnNondelivery | FlagSubscribeOnSession);
             const TActorId recp = ev->OnNondeliveryHolder ? ev->OnNondeliveryHolder->Recipient : TActorId();
 
             if (ev->Event)
-                return std::unique_ptr<IEventHandle>(new IEventHandleFat(recp, ev->Sender, ev->Event.Release(), updatedFlags, ev->Cookie, &ev->Recipient, std::move(ev->TraceId)));
+                return std::unique_ptr<IEventHandle>(new IEventHandle(recp, ev->Sender, ev->Event.Release(), updatedFlags, ev->Cookie, &ev->Recipient, std::move(ev->TraceId)));
             else
-                return std::unique_ptr<IEventHandle>(new IEventHandleFat(ev->Type, updatedFlags, recp, ev->Sender, ev->Buffer, ev->Cookie, &ev->Recipient, std::move(ev->TraceId)));
+                return std::unique_ptr<IEventHandle>(new IEventHandle(ev->Type, updatedFlags, recp, ev->Sender, ev->Buffer, ev->Cookie, &ev->Recipient, std::move(ev->TraceId)));
         }
 
-        if (ev->TrackDelivery) {
+        if (ev->Flags & FlagTrackDelivery) {
             const ui32 updatedFlags = ev->Flags & ~(FlagTrackDelivery | FlagSubscribeOnSession | FlagGenerateUnsureUndelivered);
-            return std::unique_ptr<IEventHandle>(new IEventHandleFat(ev->Sender, ev->Recipient, new TEvents::TEvUndelivered(ev->Type, reason, unsure), updatedFlags,
-                ev->Cookie, nullptr, std::move(ev->TraceId)));
-        }
-        return {};
-    }
-
-    std::unique_ptr<IEventHandle> IEventHandleLight::ForwardOnNondelivery(std::unique_ptr<IEventHandleLight>& ev, ui32 reason, bool unsure) {
-        if (ev->ForwardOnNondeliveryFlag) {
-            ev->ForwardOnNondeliveryFlag = false;
-            ev->SubscribeOnSession = false;
-            auto recpt = ev->Recipient;
-            ev->Recipient = ev->OnNondeliveryHolder ? ev->OnNondeliveryHolder->Recipient : TActorId();
-            ev->OnNondeliveryHolder = MakeHolder<TOnNondelivery>(recpt);
-            return std::unique_ptr<IEventHandle>(ev.release());
-        }
-
-        if (ev->TrackDelivery) {
-            const ui32 updatedFlags = ev->Flags & ~(FlagTrackDelivery | FlagSubscribeOnSession | FlagGenerateUnsureUndelivered);
-            return std::unique_ptr<IEventHandle>(new IEventHandleFat(ev->Sender, ev->Recipient, new TEvents::TEvUndelivered(ev->Type, reason, unsure), updatedFlags,
+            return std::unique_ptr<IEventHandle>(new IEventHandle(ev->Sender, ev->Recipient, new TEvents::TEvUndelivered(ev->Type, reason, unsure), updatedFlags,
                 ev->Cookie, nullptr, std::move(ev->TraceId)));
         }
         return {};

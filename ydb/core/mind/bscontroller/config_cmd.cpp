@@ -340,7 +340,7 @@ namespace NKikimr::NBsController {
                     STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, state->UniqueId));
                     state->ApplyConfigUpdates();
                 }
-                TActivationContext::Send(new IEventHandleFat(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
                 Self->UpdatePDisksCounters();
             }
         };

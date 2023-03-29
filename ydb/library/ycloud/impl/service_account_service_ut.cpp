@@ -71,13 +71,13 @@ Y_UNIT_TEST_SUITE_F(TServiceAccountServiceTest, TServiceAccountServiceFixture) {
     Y_UNIT_TEST(Get) {
         TAutoPtr<IEventHandle> handle;
         // check for not found
-        Runtime->Send(new IEventHandleFat(ServiceAccountService->SelfId(), SenderActorId, CreateRequest<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>("bad1")));
+        Runtime->Send(new IEventHandle(ServiceAccountService->SelfId(), SenderActorId, CreateRequest<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>("bad1")));
         auto result = Runtime->GrabEdgeEvent<NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT_EQUAL(result->Status.Msg, "Not Found");
 
         // check for found
-        Runtime->Send(new IEventHandleFat(ServiceAccountService->SelfId(), SenderActorId, CreateRequest<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>("Service1")));
+        Runtime->Send(new IEventHandle(ServiceAccountService->SelfId(), SenderActorId, CreateRequest<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>("Service1")));
         result = Runtime->GrabEdgeEvent<NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(handle);
 
         UNIT_ASSERT(result);
@@ -88,13 +88,13 @@ Y_UNIT_TEST_SUITE_F(TServiceAccountServiceTest, TServiceAccountServiceFixture) {
     Y_UNIT_TEST(IssueToken) {
         TAutoPtr<IEventHandle> handle;
         // check for not found
-        Runtime->Send(new IEventHandleFat(ServiceAccountService->SelfId(), SenderActorId, CreateRequest<NCloud::TEvServiceAccountService::TEvIssueTokenRequest>("bad1")));
+        Runtime->Send(new IEventHandle(ServiceAccountService->SelfId(), SenderActorId, CreateRequest<NCloud::TEvServiceAccountService::TEvIssueTokenRequest>("bad1")));
         auto result = Runtime->GrabEdgeEvent<NCloud::TEvServiceAccountService::TEvIssueTokenResponse>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT_EQUAL(result->Status.GRpcStatusCode, grpc::StatusCode::UNAUTHENTICATED);
 
         // check for found
-        Runtime->Send(new IEventHandleFat(ServiceAccountService->SelfId(), SenderActorId, CreateRequest<NCloud::TEvServiceAccountService::TEvIssueTokenRequest>("Service1")));
+        Runtime->Send(new IEventHandle(ServiceAccountService->SelfId(), SenderActorId, CreateRequest<NCloud::TEvServiceAccountService::TEvIssueTokenRequest>("Service1")));
         result = Runtime->GrabEdgeEvent<NCloud::TEvServiceAccountService::TEvIssueTokenResponse>(handle);
 
         UNIT_ASSERT(result);

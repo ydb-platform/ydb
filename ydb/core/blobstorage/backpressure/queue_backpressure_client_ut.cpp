@@ -38,7 +38,7 @@ public:
 
     template<typename TPtr>
     void HandleFw(TPtr& ev, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(new IEventHandleFat(VDiskId, ctx.SelfID, ev->Release().Release(), 0, ev->Cookie));
+        ctx.ExecutorThread.Send(new IEventHandle(VDiskId, ctx.SelfID, ev->Release().Release(), 0, ev->Cookie));
     }
 
     template<typename TPtr>
@@ -293,7 +293,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageQueueTest) {
         TVector<std::pair<ui64, ui64>> sequence;
         auto filterFunc = [&](IEventHandle& ev, const TActorContext& /*ctx*/) {
             if (ev.GetTypeRewrite() == TEvBlobStorage::TEvVGet::EventType) {
-                TEventHandleFat<TEvBlobStorage::TEvVGet>& evv = reinterpret_cast<TEventHandleFat<TEvBlobStorage::TEvVGet>&>(ev);
+                TEventHandle<TEvBlobStorage::TEvVGet>& evv = reinterpret_cast<TEventHandle<TEvBlobStorage::TEvVGet>&>(ev);
                 const auto& record = evv.Get()->Record;
                 const auto& msgQoS = record.GetMsgQoS();
                 const auto& id = msgQoS.GetMsgId();
@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageQueueTest) {
                                                                        TEvBlobStorage::TEvVGet::EFlags::None,
                                                                        {},
                                                                        {TLogoBlobID(1, 1, 1, 0, 10, i)});
-            runtime.Send(std::make_unique<IEventHandleFat>(runtime.GetQueueActorId(), runtime.GetProxyActorId(), req.release()));
+            runtime.Send(std::make_unique<IEventHandle>(runtime.GetQueueActorId(), runtime.GetProxyActorId(), req.release()));
         }
         runtime.WaitCompleted();
         runtime.Stop();

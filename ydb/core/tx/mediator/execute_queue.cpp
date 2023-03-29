@@ -188,7 +188,7 @@ namespace NTxMediator {
 
         TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId& parentId) override {
             Y_UNUSED(parentId);
-            return new IEventHandleFat(self, self, new TEvents::TEvBootstrap());
+            return new IEventHandle(self, self, new TEvents::TEvBootstrap());
         }
 
         STFUNC(StateWork) {

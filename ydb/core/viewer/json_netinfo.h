@@ -155,7 +155,7 @@ public:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (ev->Get()->Request->ResultSet.size() == 1 && ev->Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             TString path = CanonizePath(ev->Get()->Request->ResultSet.begin()->Path);
-            NavigateResult[path].reset(ev.Release());
+            NavigateResult[path].reset(ev->Release().Release());
         }
         RequestDone();
     }

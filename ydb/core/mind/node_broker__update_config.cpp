@@ -39,7 +39,7 @@ public:
         }
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
-        Response = new IEventHandleFat(Notification->Sender, Self->SelfId(), resp.Release(),
+        Response = new IEventHandle(Notification->Sender, Self->SelfId(), resp.Release(),
                                     0, Notification->Cookie);
 
         return true;
@@ -54,7 +54,7 @@ public:
 
         auto resp = MakeHolder<TEvNodeBroker::TEvSetConfigResponse>();
         resp->Record.MutableStatus()->SetCode(NKikimrNodeBroker::TStatus::OK);
-        Response = new IEventHandleFat(Request->Sender, Self->SelfId(), resp.Release(),
+        Response = new IEventHandle(Request->Sender, Self->SelfId(), resp.Release(),
                                     0, Request->Cookie);
 
         return true;

@@ -22,7 +22,7 @@ public:
         auto* actorSystem = ctx.ExecutorThread.ActorSystem;
 
         auto callback = MakeHolder<NActors::TActorFutureCallback<NActors::TEvInterconnect::TEvNodesInfo>>(
-            [replyTo, actorSystem] (TAutoPtr<NActors::TEventHandleFat<NActors::TEvInterconnect::TEvNodesInfo>>& event) {
+            [replyTo, actorSystem] (TAutoPtr<NActors::TEventHandle<NActors::TEvInterconnect::TEvNodesInfo>>& event) {
                 auto response = MakeHolder<TEvRoutesResponse>();
                 for (const auto& node: event->Get()->Nodes) {
                     auto* n = response->Record.MutableResponse()->AddNodes();
@@ -37,7 +37,7 @@ public:
 
         auto callbackId = ctx.Register(callback.Release());
 
-        ctx.Send(new NActors::IEventHandleFat(NActors::GetNameserviceActorId(), callbackId, localRequest.Release()));
+        ctx.Send(new NActors::IEventHandle(NActors::GetNameserviceActorId(), callbackId, localRequest.Release()));
     }
 };
 

@@ -82,7 +82,7 @@ private:
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
     template <typename TEvent>
-    void Handle(TAutoPtr<TEventHandleFat<TEvent>>& event, const TActorContext& ctx) {
+    void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
             TGRpcRequestProxyHandleMethods::Handle(event, ctx);
@@ -115,7 +115,7 @@ private:
     // returns true and defer event if no updates for given database
     // otherwice returns false and leave event untouched
     template <typename TEvent>
-    bool DeferAndStartUpdate(const TString& database, TAutoPtr<TEventHandleFat<TEvent>>& ev, IRequestProxyCtx* reqCtx) {
+    bool DeferAndStartUpdate(const TString& database, TAutoPtr<TEventHandle<TEvent>>& ev, IRequestProxyCtx* reqCtx) {
         std::deque<TEventReqHolder>& queue = DeferredEvents[database];
         if (queue.size() >= MAX_DEFERRED_EVENTS_PER_DATABASE) {
             return false;
@@ -130,7 +130,7 @@ private:
     }
 
     template <typename TEvent>
-    void PreHandle(TAutoPtr<TEventHandleFat<TEvent>>& event, const TActorContext& ctx) {
+    void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
 
         LogRequest(event);

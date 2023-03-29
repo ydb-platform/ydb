@@ -8,7 +8,7 @@ template <class TEvent>
 class TEventContext {
 private:
     TEvent* Event;
-    std::unique_ptr<IEventHandleFat> Handle;
+    std::unique_ptr<IEventHandle> Handle;
 public:
     const TEvent* operator->() const {
         return Event;
@@ -16,7 +16,7 @@ public:
     const IEventHandle& GetHandle() const {
         return *Handle;
     }
-    TEventContext(std::unique_ptr<IEventHandleFat> handle)
+    TEventContext(std::unique_ptr<IEventHandle> handle)
         : Handle(std::move(handle))
     {
         Y_VERIFY_DEBUG(dynamic_cast<TEvent*>(Handle->GetBase()));
@@ -28,7 +28,7 @@ public:
 template <class TEvent, class TExpectedActor>
 class IEventForActor: public IEventBase {
 protected:
-    virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandleFat> eventPtr) override {
+    virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) override {
         Y_VERIFY_DEBUG(dynamic_cast<TExpectedActor*>(actor));
         auto* actorCorrect = static_cast<TExpectedActor*>(actor);
         TEventContext<TEvent> context(std::move(eventPtr));
@@ -41,7 +41,7 @@ public:
 template <class TBaseEvent, class TEvent, class TExpectedObject>
 class IEventForAnything: public TBaseEvent {
 protected:
-    virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandleFat> eventPtr) override {
+    virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) override {
         auto* objImpl = dynamic_cast<TExpectedObject*>(actor);
         if (!objImpl) {
             return false;

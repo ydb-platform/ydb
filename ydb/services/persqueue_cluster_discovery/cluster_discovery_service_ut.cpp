@@ -316,7 +316,7 @@ public:
 
         TActorId clientId = ActorSystem().AllocateEdgeActor();
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(MonPort()) + path);
-        ActorSystem().Send(new NActors::IEventHandleFat(HttpProxyId_, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+        ActorSystem().Send(new NActors::IEventHandle(HttpProxyId_, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
 
         return ActorSystem().GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(clientId);
     }
@@ -408,7 +408,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             const TActorId sender = actorSystem.AllocateEdgeActor();
 
             actorSystem.Send(
-                new IEventHandleFat(NNetClassifier::MakeNetClassifierID(), sender,
+                new IEventHandle(NNetClassifier::MakeNetClassifierID(), sender,
                     new NNetClassifier::TEvNetClassifier::TEvSubscribe()
             ));
 
@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             const TActorId sender = actorSystem.AllocateEdgeActor();
 
             actorSystem.Send(
-                new IEventHandleFat(NPQ::NClusterTracker::MakeClusterTrackerID(), sender,
+                new IEventHandle(NPQ::NClusterTracker::MakeClusterTrackerID(), sender,
                     new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe()
             ));
 
@@ -605,7 +605,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             const TActorId sender = actorSystem.AllocateEdgeActor();
 
             actorSystem.Send(
-                new IEventHandleFat(NNetClassifier::MakeNetClassifierID(), sender,
+                new IEventHandle(NNetClassifier::MakeNetClassifierID(), sender,
                     new NNetClassifier::TEvNetClassifier::TEvSubscribe()
             ));
 

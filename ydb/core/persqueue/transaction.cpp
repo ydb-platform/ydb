@@ -227,10 +227,10 @@ void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
     }
     tx.MutableOperations()->Add(Operations.begin(), Operations.end());
     if (SelfDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) {
-        tx.SetSelfPredicate(SelfDecision);
+        tx.SetSelfPredicate(SelfDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
     }
     if (ParticipantsDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) {
-        tx.SetAggrPredicate(ParticipantsDecision);
+        tx.SetAggrPredicate(ParticipantsDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
     }
 }
 

@@ -47,9 +47,9 @@ namespace NActors {
                 if (ev->GetTypeRewrite() == TTimeout::EventType) {
                     Promise_.SetException(std::make_exception_ptr(yexception() << "ask timeout"));
                 } else if (!ExpectedEventType_ || ev->GetTypeRewrite() == ExpectedEventType_) {
-                    Promise_.SetValue(IEventHandleFat::GetFat(ev.Get())->ReleaseBase());
+                    Promise_.SetValue(ev.Get()->ReleaseBase());
                 } else {
-                    Promise_.SetException(std::make_exception_ptr(yexception() << "received unexpected response " << IEventHandleFat::GetFat(ev.Get())->GetBase()->ToString()));
+                    Promise_.SetException(std::make_exception_ptr(yexception() << "received unexpected response " << ev.Get()->GetBase()->ToString()));
                 }
 
                 PassAway();

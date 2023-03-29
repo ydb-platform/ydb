@@ -1287,7 +1287,7 @@ tkey = 100, key = 4
             auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), status);
             UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Record.GetErrorDescription(), error);
-            runtime.Send(new IEventHandleFat(eraser, sender, new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(eraser, sender, new TEvents::TEvPoisonPill()));
 
             runtime.SetObserverFunc(prevObserver);
         };
@@ -1400,12 +1400,12 @@ tkey = 100, key = 4
         auto badRequest = [&](TEvResponse::ProtoRecordType::EStatus status, const TString& error, TRequestMaker maker) {
             const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, tableId, indexes));
 
-            runtime.Send(new IEventHandleFat(eraser, sender, maker()), 0, true);
+            runtime.Send(new IEventHandle(eraser, sender, maker()), 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), status);
             UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Record.GetErrorDescription(), error);
 
-            runtime.Send(new IEventHandleFat(eraser, sender, new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(eraser, sender, new TEvents::TEvPoisonPill()));
         };
 
         badRequest(TEvResponse::ProtoRecordType::BAD_REQUEST, "Unknown condition", []() -> IEventBase* {

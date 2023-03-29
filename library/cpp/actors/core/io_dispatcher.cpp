@@ -116,7 +116,7 @@ namespace NActors {
                     bool sendNotify;
                     if (!Actor.TaskQueue.Dequeue(tasks, &sendNotify)) {
                         if (sendNotify) {
-                            ActorSystem->Send(new IEventHandleFat(EvNotifyThreadStopped, 0, Actor.SelfId(), TActorId(),
+                            ActorSystem->Send(new IEventHandle(EvNotifyThreadStopped, 0, Actor.SelfId(), TActorId(),
                                 nullptr, TThread::CurrentThreadId()));
                         }
                         break;

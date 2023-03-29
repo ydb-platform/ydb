@@ -74,7 +74,7 @@ public:
         TMonotonic signalTime = now + delta;
         ui64 semirandomNumber = parentId.LocalId();
         const TActorId timerActorID = ctx.ExecutorThread.ActorSystem->Register(new TLongTimer(now, signalTime, ev, cookie), TMailboxType::HTSwap, poolId, semirandomNumber, parentId);
-        ctx.ExecutorThread.Schedule(TDuration::Seconds(ThresholdSec), new IEventHandleFat(timerActorID, timerActorID, new TEvents::TEvWakeup()));
+        ctx.ExecutorThread.Schedule(TDuration::Seconds(ThresholdSec), new IEventHandle(timerActorID, timerActorID, new TEvents::TEvWakeup()));
 
         return timerActorID;
     }
@@ -93,7 +93,7 @@ public:
         TMonotonic now = TActivationContext::Monotonic();
         TMonotonic signalTime = now + delta;
         const TActorId timerActorID = TActivationContext::Register(new TLongTimer(now, signalTime, ev, cookie), TActorId(), TMailboxType::HTSwap, poolId);
-        TActivationContext::Schedule(TDuration::Seconds(ThresholdSec), new IEventHandleFat(timerActorID, timerActorID, new TEvents::TEvWakeup()));
+        TActivationContext::Schedule(TDuration::Seconds(ThresholdSec), new IEventHandle(timerActorID, timerActorID, new TEvents::TEvWakeup()));
 
         return timerActorID;
     }

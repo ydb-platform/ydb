@@ -9,17 +9,16 @@ void TResolveClientProtocol::ProtocolFunc(
     switch (ev->GetTypeRewrite()) {
 
     case TEvAddressInfo::EventType:
-        Y_VERIFY(ev->IsEventFat());
-        Y_VERIFY(IEventHandleFat::GetFat(ev)->Get<TEvAddressInfo>() != nullptr);
-        Y_VERIFY(IEventHandleFat::GetFat(ev)->Get<TEvAddressInfo>()->Address.Get() != nullptr);
+        Y_VERIFY(ev->Get<TEvAddressInfo>() != nullptr);
+        Y_VERIFY(ev->Get<TEvAddressInfo>()->Address.Get() != nullptr);
 
         MemLogPrintF("TResolveClientProtocol received address info");
 
-        CatchHostAddress(ctx, std::move(IEventHandleFat::GetFat(ev)->Get<TEvAddressInfo>()->Address));
+        CatchHostAddress(ctx, std::move(ev->Get<TEvAddressInfo>()->Address));
         break;
 
     case TEvResolveError::EventType:
-        CatchResolveError(ctx, std::move(IEventHandleFat::GetFat(ev)->Get<TEvResolveError>()->Explain));
+        CatchResolveError(ctx, std::move(ev->Get<TEvResolveError>()->Explain));
         break;
 
     default:

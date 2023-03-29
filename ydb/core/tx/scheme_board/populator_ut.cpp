@@ -96,7 +96,7 @@ public:
                 auto it = ReplicaPopulators.find(ev->Recipient);
                 if (DropFirstAcks && it != ReplicaPopulators.end() && !it->second) {
                     it->second = true;
-                    runtime.Send(new IEventHandleFat(ev->Recipient, ev->Sender, new TEvInterconnect::TEvNodeDisconnected(ev->Sender.NodeId())));
+                    runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, new TEvInterconnect::TEvNodeDisconnected(ev->Sender.NodeId())));
 
                     return TTestContext::EEventAction::DROP;
                 }

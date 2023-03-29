@@ -718,7 +718,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev)
 void TLongTxServiceActor::SendViaSession(const TActorId& sessionId, const TActorId& recipient,
         IEventBase* event, ui32 flags, ui64 cookie)
 {
-    auto ev = MakeHolder<IEventHandleFat>(recipient, SelfId(), event, flags, cookie);
+    auto ev = MakeHolder<IEventHandle>(recipient, SelfId(), event, flags, cookie);
     if (sessionId) {
         ev->Rewrite(TEvInterconnect::EvForward, sessionId);
     }
@@ -785,20 +785,13 @@ void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THold
     THolder<IEventHandle> pendingEv;
     auto target = MakeLongTxServiceID(nodeId);
     auto flags = IEventHandle::FlagTrackDelivery;
-    if (ev->IsEventFat()) {
-        auto* evf = IEventHandleFat::GetFat(ev);
-        if (evf->HasBuffer()) {
-            auto type = evf->GetTypeRewrite();
-            auto buffer = evf->ReleaseChainBuffer();
-            pendingEv.Reset(new IEventHandleFat(type, flags, target, SelfId(), std::move(buffer), cookie));
-        } else {
-            auto event = evf->ReleaseBase();
-            pendingEv.Reset(new IEventHandleFat(target, SelfId(), event.Release(), flags, cookie));
-        }
+    if (ev->HasBuffer()) {
+        auto type = ev->GetTypeRewrite();
+        auto buffer = ev->ReleaseChainBuffer();
+        pendingEv.Reset(new IEventHandle(type, flags, target, SelfId(), std::move(buffer), cookie));
     } else {
-        auto* evl = IEventHandleLight::GetLight(ev);
-        evl->PrepareSend(target, SelfId(), flags);
-        pendingEv = std::move(ev);
+        auto event = ev->ReleaseBase();
+        pendingEv.Reset(new IEventHandle(target, SelfId(), event.Release(), flags, cookie));
     }
     Y_VERIFY(pendingEv->Recipient.NodeId() == nodeId);
 

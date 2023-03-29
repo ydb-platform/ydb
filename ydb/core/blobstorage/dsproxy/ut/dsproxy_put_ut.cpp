@@ -355,8 +355,8 @@ struct TTestPutAllOk {
             for (auto &blobId : BlobIds) {
                 std::unique_ptr<TEvBlobStorage::TEvPut> vPut(new TEvBlobStorage::TEvPut(blobId, Data, TInstant::Max(),
                         NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault));
-                events.emplace_back(static_cast<TEventHandleFat<TEvBlobStorage::TEvPut> *>(
-                        new IEventHandleFat(TActorId(),  TActorId(), vPut.release())));
+                events.emplace_back(static_cast<TEventHandle<TEvBlobStorage::TEvPut> *>(
+                        new IEventHandle(TActorId(),  TActorId(), vPut.release())));
             }
 
             TMaybe<TPutImpl> putImpl;

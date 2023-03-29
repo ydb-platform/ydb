@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
         TActorId sender = runtime->AllocateEdgeActor();
         {
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceForbid, 1)
                     }, TDuration::Max())));
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Deadline);
         }
         {
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1)
                     }, TDuration::Max())));
@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         }
 
         {
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 1000), 1)
                     }, TDuration::Max())));
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
             // test static quter queues processing
             size_t cnt = 100;
             for (size_t i = 0; i < cnt; ++i) {
-                runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+                runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                     new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                         TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(2, 50), 1)
                         }, TDuration::Max()), 0, 300 + i));
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         {
             auto resId = TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 1);
 
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, resId, 1)
                     }, TDuration::Max())));
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
             THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
 
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, resId, 1000, true)
                     }, TDuration::Seconds(1))));
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
             reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
 
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, resId, 1000)
                     }, TDuration::Seconds(1))));
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
             reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Deadline);
 
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, resId, 1000, true)
                     }, TDuration::Seconds(1))));
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
             const TInstant start = TInstant::Now();
             size_t sent = 0;
             while (TInstant::Now() - start < testDuration) {
-                runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+                runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                                                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { resLeaf }, waitDuration), 0, 0));
                 ++sent;
                 if ((sent & 3) != 0) {
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
         TActorId sender = runtime->AllocateEdgeActor();
         {
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceForbid, 1),
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Deadline);
         }
         {
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         }
 
         {
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 1000), 1),
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
@@ -310,17 +310,17 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
         TActorId sender = runtime->AllocateEdgeActor();
         {
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 10), 20)
                     }, TDuration::Seconds(3))));
 
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 10), 20)
                     }, TDuration::Seconds(3))));
 
-            runtime->Send(new IEventHandleFat(MakeQuoterServiceID(), sender,
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 10), 20)
                     }, TDuration::Seconds(3))));

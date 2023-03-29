@@ -370,7 +370,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
         ctx.ExecutorThread.ActorSystem->Schedule(
             Min(sleepDuration, BootDelayedUntil - now),
-            new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter));
+            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter));
         Become(&TThis::StateSleep);
         return false;
     }
@@ -413,7 +413,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             const auto sleepDuration = TDuration::MicroSeconds(wx / 2 + wx * (SelfSeed % 0x10000) / 0x20000);
 
             Become(&TThis::StateSleep);
-            ctx.ExecutorThread.ActorSystem->Schedule(sleepDuration, new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter));
+            ctx.ExecutorThread.ActorSystem->Schedule(sleepDuration, new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter));
             return;
         } else if (!CheckBootPermitted(undelivered, disconnected, ctx)) {
             return;
@@ -568,7 +568,7 @@ public:
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId &selfId, const TActorId &parentId) override {
         Y_UNUSED(parentId);
-        return new IEventHandleFat(selfId, selfId, new TEvents::TEvBootstrap());
+        return new IEventHandle(selfId, selfId, new TEvents::TEvBootstrap());
     }
 
     STFUNC(StateBoot) {

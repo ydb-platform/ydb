@@ -326,7 +326,7 @@ namespace NKikimr {
                 Cerr << "!Reboot " << TabletId << " (actor " << targetActorId << ") on event " << eventType << " !\n";
 
             // Wait for the tablet to boot or to become deleted
-            runtime.Send(new IEventHandleFat(targetActorId, TActorId(), new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(targetActorId, TActorId(), new TEvents::TEvPoisonPill()));
             TDispatchOptions rebootOptions;
             rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
             rebootOptions.CustomFinalCondition = [this]() -> bool {
@@ -397,7 +397,7 @@ namespace NKikimr {
 
             // Replace the event with PoisonPill in order to kill PipeClient or PipeServer
             TActorId targetActorId = event->GetRecipientRewrite();
-            runtime.Send(new IEventHandleFat(targetActorId, TActorId(), new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(targetActorId, TActorId(), new TEvents::TEvPoisonPill()));
 
             return TTestActorRuntime::EEventAction::DROP;
         }
@@ -574,7 +574,7 @@ namespace NKikimr {
 
     TActorId ResolveTablet(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex, bool sysTablet) {
         auto sender = runtime.AllocateEdgeActor(nodeIndex);
-        runtime.Send(new IEventHandleFat(MakeTabletResolverID(), sender,
+        runtime.Send(new IEventHandle(MakeTabletResolverID(), sender,
             new TEvTabletResolver::TEvForward(tabletId, nullptr)),
             nodeIndex, true);
         auto ev = runtime.GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(sender);
@@ -587,13 +587,13 @@ namespace NKikimr {
     }
 
     void ForwardToTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId& sender, IEventBase *ev, ui32 nodeIndex, bool sysTablet) {
-        runtime.Send(new IEventHandleFat(MakeTabletResolverID(), sender,
-            new TEvTabletResolver::TEvForward(tabletId, new IEventHandleFat(TActorId(), sender, ev), { },
+        runtime.Send(new IEventHandle(MakeTabletResolverID(), sender,
+            new TEvTabletResolver::TEvForward(tabletId, new IEventHandle(TActorId(), sender, ev), { },
                 sysTablet ? TEvTabletResolver::TEvForward::EActor::SysTablet : TEvTabletResolver::TEvForward::EActor::Tablet)), nodeIndex);
     }
 
     void InvalidateTabletResolverCache(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) {
-        runtime.Send(new IEventHandleFat(MakeTabletResolverID(), TActorId(),
+        runtime.Send(new IEventHandle(MakeTabletResolverID(), TActorId(),
             new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())), nodeIndex);
     }
 
@@ -709,7 +709,7 @@ namespace NKikimr {
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
 
         //get NodesInfo, nodes hostname and port are interested
-        runtime.Send(new IEventHandleFat(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
+        runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
         auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
@@ -1045,7 +1045,7 @@ namespace NKikimr {
 
     ui64 GetFreePDiskSize(TTestActorRuntime& runtime, const TActorId& sender) {
         TActorId pdiskServiceId = MakeBlobStoragePDiskID(runtime.GetNodeId(0), 0);
-        runtime.Send(new IEventHandleFat(pdiskServiceId, sender, nullptr));
+        runtime.Send(new IEventHandle(pdiskServiceId, sender, nullptr));
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
         UNIT_ASSERT(event);
@@ -1071,7 +1071,7 @@ namespace NKikimr {
     }
 
     void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex) {
-        runtime.Schedule(new IEventHandleFat(sender, sender, new TEvents::TEvWakeup()), delay, nodeIndex);
+        runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), delay, nodeIndex);
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
     }

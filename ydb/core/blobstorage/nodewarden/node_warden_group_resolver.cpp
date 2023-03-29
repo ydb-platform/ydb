@@ -98,7 +98,7 @@ namespace NKikimr::NStorage {
                 }
             }
             for (TActorId actorId : std::exchange(Ctx.NodeIdsWaitQueue, {})) { // notify waiting actors
-                TActivationContext::Send(new IEventHandleFat(TEvPrivate::EvNodeIdsObtained, 0, actorId, {}, {}, 0));
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvNodeIdsObtained, 0, actorId, {}, {}, 0));
             }
             HandleNodeIdsObtained();
         }

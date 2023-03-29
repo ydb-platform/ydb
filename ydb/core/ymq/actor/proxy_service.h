@@ -35,7 +35,7 @@ struct TReplierToSenderActorCallback : public IReplyCallback {
         RLOG_SQS_REQ_TRACE(Request->Get()->Record.GetRequestId(), "Sending sqs response: " << response);
         const TActorId selfId = TActivationContext::AsActorContext().SelfID;
         TActivationContext::Send(
-            new IEventHandleFat(
+            new IEventHandle(
                 Request->Sender,
                 selfId,
                 new TSqsEvents::TEvSqsResponse(std::move(response))));

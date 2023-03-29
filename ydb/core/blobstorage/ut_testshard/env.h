@@ -143,7 +143,7 @@ struct TEnvironmentSetup {
         });
 
         auto res = Runtime->WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerConfigResponse>(edge)->Get()->Record.GetResponse();
-        Runtime->Send(new IEventHandleFat(clientId, edge, new NKikimr::TEvTabletPipe::TEvShutdown()), edge.NodeId());
+        Runtime->Send(new IEventHandle(clientId, edge, new NKikimr::TEvTabletPipe::TEvShutdown()), edge.NodeId());
         return res;
     }
 

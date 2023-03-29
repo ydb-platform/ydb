@@ -25,7 +25,7 @@ namespace NActors {
     }
 
     TAutoPtr<IEventHandle> TInterconnectListenerTCP::AfterRegister(const TActorId& self, const TActorId& parentId) {
-        return new IEventHandleFat(self, parentId, new TEvents::TEvBootstrap, 0);
+        return new IEventHandle(self, parentId, new TEvents::TEvBootstrap, 0);
     }
 
     void TInterconnectListenerTCP::Die(const TActorContext& ctx) {

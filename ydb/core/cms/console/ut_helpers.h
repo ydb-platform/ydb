@@ -238,7 +238,7 @@ inline void ChangeTenant(TTenantTestRuntime &runtime,
                          ui32 nodeIdx = 0,
                          bool wait = true)
 {
-    runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)),
+    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)),
                                   runtime.Sender,
                                   new TEvTenantPool::TEvTakeOwnership));
 
@@ -249,7 +249,7 @@ inline void ChangeTenant(TTenantTestRuntime &runtime,
     request->Record.SetSlotId("slot");
     request->Record.SetAssignedTenant(tenant);
     request->Record.SetLabel("slot-1");
-    runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)),
+    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)),
                                   runtime.Sender,
                                   request));
 

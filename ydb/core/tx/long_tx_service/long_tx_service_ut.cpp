@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration) {
             auto sender = runtime.AllocateEdgeActor();
-            runtime.Schedule(new IEventHandleFat(sender, sender, new TEvents::TEvWakeup()), duration);
+            runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
             runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
         }
 
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         // Begin a new transaction at node 1
         {
             runtime.Send(
-                new IEventHandleFat(service1, sender1,
+                new IEventHandle(service1, sender1,
                     new TEvLongTxService::TEvBeginTx("/dc-1",
                         NKikimrLongTxService::TEvBeginTx::MODE_WRITE_ONLY)),
                 0, true);
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         // Issue an empty attach message at node 2
         {
             runtime.Send(
-                new IEventHandleFat(service2, sender2,
+                new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvAttachColumnShardWrites(txId)),
                 1, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAttachColumnShardWritesResult>(sender2);
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         // Commit this transaction at node 2
         {
             runtime.Send(
-                new IEventHandleFat(service2, sender2,
+                new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvCommitTx(txId)),
                 1, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvCommitTxResult>(sender2);
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         // Rollback this transaction at node 2
         {
             runtime.Send(
-                new IEventHandleFat(service2, sender2,
+                new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvRollbackTx(txId)),
                 1, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvRollbackTxResult>(sender2);
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                     if (node1 != node2) {
                         auto proxy = runtime.GetInterconnectProxy(0, 1);
                         runtime.Send(
-                            new IEventHandleFat(proxy, {}, new TEvInterconnect::TEvDisconnect()),
+                            new IEventHandle(proxy, {}, new TEvInterconnect::TEvDisconnect()),
                             0, true);
                         return TTestBasicRuntime::EEventAction::DROP;
                     }
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         // Rollback this transaction at node 2
         {
             runtime.Send(
-                new IEventHandleFat(service2, sender2,
+                new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvRollbackTx(txId)),
                 1, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvRollbackTxResult>(sender2);
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             auto badTxId = txId;
             badTxId.NodeId = runtime.GetNodeId(1) + 1;
             runtime.Send(
-                new IEventHandleFat(service2, sender2,
+                new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvCommitTx(badTxId)),
                 1, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvCommitTxResult>(sender2);
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         // Send an acquire read snapshot for node 1
         {
             runtime.Send(
-                new IEventHandleFat(service1, sender1,
+                new IEventHandle(service1, sender1,
                     new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1")),
                 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         // Begin a new read-only transaction at node 1
         {
             runtime.Send(
-                new IEventHandleFat(service1, sender1,
+                new IEventHandle(service1, sender1,
                     new TEvLongTxService::TEvBeginTx("/dc-1",
                         NKikimrLongTxService::TEvBeginTx::MODE_READ_ONLY)),
                 0, true);
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         // Begin a new read-write transaction at node 1
         {
             runtime.Send(
-                new IEventHandleFat(service1, sender1,
+                new IEventHandle(service1, sender1,
                     new TEvLongTxService::TEvBeginTx("/dc-1",
                         NKikimrLongTxService::TEvBeginTx::MODE_READ_WRITE)),
                 0, true);
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         {
             runtime.Send(
-                new IEventHandleFat(service1, sender1,
+                new IEventHandle(service1, sender1,
                     new TEvLongTxService::TEvSubscribeLock(987, node1)),
                 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender1);
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         {
             runtime.Send(
-                new IEventHandleFat(service2, sender2,
+                new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvSubscribeLock(987, node1)),
                 1, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender2);
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         {
             runtime.Send(
-                new IEventHandleFat(service1, sender1,
+                new IEventHandle(service1, sender1,
                     new TEvLongTxService::TEvSubscribeLock(123, node1)),
                 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender1);
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         {
             runtime.Send(
-                new IEventHandleFat(service2, sender2,
+                new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvSubscribeLock(123, node1)),
                 1, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender2);
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                         ++disconnectCount;
                         auto proxy = runtime.GetInterconnectProxy(0, 1);
                         runtime.Send(
-                            new IEventHandleFat(proxy, {}, new TEvInterconnect::TEvDisconnect()),
+                            new IEventHandle(proxy, {}, new TEvInterconnect::TEvDisconnect()),
                             0, true);
                         // Advance time on each disconnect, so timeout happens faster
                         runtime.AdvanceCurrentTime(TDuration::Seconds(5));
@@ -343,7 +343,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         // We should eventually get an unavailable result
         {
             runtime.Send(
-                new IEventHandleFat(service2, sender2,
+                new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvSubscribeLock(234, node1)),
                 1, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender2);

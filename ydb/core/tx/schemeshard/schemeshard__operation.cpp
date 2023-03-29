@@ -338,62 +338,138 @@ struct TSchemeShard::TTxOperationProgress: public NTabletFlatExecutor::TTransact
 };
 
 
+//NOTE: There is certain time frame between initial event handling at TSchemeShard::Handle(*)
+// and actual event processing at TTxOperationReply*::Execute() method.
+// While TSchemeShard::Handle() tries to determine suboperation/operation part it should
+// route event processing to, TTxOperationReply*::Execute() checks if those operation
+// and suboperation are still exist and active.
+// And it is perfectly ok if (sub)operation will manage to change their state within that
+// time frame between TSchemeShard::Handle(*) and TTxOperationReply*::Execute().
+// And it is generally ok if in that situation TTxOperationReply*::Execute() will skip
+// to do anything with an incoming event.
+//
+// Generally, but not in all cases.
+//
+// There could be communication patterns that require other party to receive reaction
+// from schemeshard (ack or reply) unconditionally, no matter what, possibly out-of-scope
+// of any (sub)operation that initiated communication in the first place.
+//
+// Right now there is the case with DataShard's TEvDataShard::TEvSchemaChanged event.
+// See below.
+//
 template <class TEvType>
-struct TSchemeShard::TTxOperationReply {};
+void OutOfScopeEventHandler(const typename TEvType::TPtr&, TOperationContext&) {
+    // Do nothing by default
+}
 
-#define DefineTTxOperationReply(TEvType, TxType) \
-    template<> \
-    struct TSchemeShard::TTxOperationReply<TEvType>: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> { \
-        TOperationId OperationId; \
-        TEvType::TPtr EvReply; \
-        TSideEffects OnComplete; \
-        TMemoryChanges MemChanges; \
-        TStorageChanges DbChanges; \
-\
-        TTxType GetTxType() const override { return TxType; } \
-\
-        TTxOperationReply(TSchemeShard* self, TOperationId id, TEvType::TPtr& ev) \
-            : TBase(self) \
-            , OperationId(id) \
-            , EvReply(ev) \
-        { \
-            Y_VERIFY(TEvType::EventType != TEvPrivate::TEvOperationPlan::EventType); \
-            Y_VERIFY(TEvType::EventType != TEvTxProcessing::TEvPlanStep::EventType); \
-        } \
-\
-        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override { \
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, \
-                        "TTxOperationReply<" #TEvType "> execute " \
-                            << ", operationId: " << OperationId \
-                            << ", at schemeshard: " << Self->TabletID() \
-                            << ", message: " << ISubOperationState::DebugReply(EvReply)); \
-            if (!Self->Operations.contains(OperationId.GetTxId())) { \
-                return true; \
-            } \
-            TOperation::TPtr operation = Self->Operations.at(OperationId.GetTxId()); \
-            if (operation->DoneParts.contains(OperationId.GetSubTxId())) { \
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, \
-                            "TTxOperationReply<" #TEvType "> execute " \
-                               << ", operation already done" \
-                               << ", operationId: " << OperationId \
-                               << ", at schemeshard: " << Self->TabletID()); \
-                return true; \
-            } \
-            ISubOperation::TPtr part = operation->Parts.at(ui64(OperationId.GetSubTxId())); \
-            TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges}; \
-            Y_VERIFY(EvReply); \
-            part->HandleReply(EvReply, context); \
-            OnComplete.ApplyOnExecute(Self, txc, ctx); \
-            DbChanges.Apply(Self, txc, ctx); \
-            return true; \
-        } \
-        void Complete(const TActorContext& ctx) override { \
-            OnComplete.ApplyOnComplete(Self, ctx); \
-        } \
+// DataShard should receive reply on any single TEvDataShard::TEvSchemaChanged it will send
+// to schemeshard even if that particular DataShard goes offline and back online right at
+// perfect peculiar moments during (sub)operations.
+// Not serving reply to a TEvDataShard::TEvSchemaChanged will leave Datashard
+// in some transitional state which, for example, will prevent it from being stopped
+// and deleted until schemeshard or datashard restart.
+//
+template <>
+void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
+    const auto txId = ev->Get()->Record.GetTxId();
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "TTxOperationReply<" <<  ev->GetTypeName() << "> execute"
+            << ", at schemeshard: " << context.SS->TabletID()
+            << ", send out-of-scope reply, for txId " << txId
+    );
+    const TActorId ackTo = ev->Get()->GetSource();
+
+    auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>(txId);
+    context.OnComplete.Send(ackTo, event.Release());
+}
+
+
+template <class TEvType>
+struct TTxTypeFrom;
+
+#define DefineTxTypeFromSpecialization(TEvType, TxTypeValue)  \
+    template <> \
+    struct TTxTypeFrom<TEvType> { \
+        static constexpr TTxType TxType = TxTypeValue; \
     };
 
-    SCHEMESHARD_INCOMING_EVENTS(DefineTTxOperationReply)
-#undef DefineTxOperationReply
+    SCHEMESHARD_INCOMING_EVENTS(DefineTxTypeFromSpecialization)
+#undef DefineTxTypeFromSpecialization
+
+
+template <class TEvType>
+struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    TOperationId OperationId;
+    typename TEvType::TPtr EvReply;
+    TSideEffects OnComplete;
+    TMemoryChanges MemChanges;
+    TStorageChanges DbChanges;
+
+    TTxType GetTxType() const override {
+        return TTxTypeFrom<TEvType>::TxType;
+    }
+
+    TTxOperationReply(TSchemeShard* self, TOperationId id, typename TEvType::TPtr& ev)
+        : TBase(self)
+        , OperationId(id)
+        , EvReply(ev)
+    {
+        Y_VERIFY(TEvType::EventType != TEvPrivate::TEvOperationPlan::EventType);
+        Y_VERIFY(TEvType::EventType != TEvTxProcessing::TEvPlanStep::EventType);
+    }
+
+    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
+
+        auto findActiveSubOperation = [this](const TOperationId& operationId) -> ISubOperation::TPtr {
+            if (auto found = Self->Operations.find(operationId.GetTxId()); found != Self->Operations.cend()) {
+                const auto operation = found->second;
+                const auto subOperationId = operationId.GetSubTxId();
+                if (!operation->DoneParts.contains(subOperationId)) {
+                    return operation->Parts.at(subOperationId);
+                }
+            }
+            return nullptr;
+        };
+
+        ISubOperation::TPtr part = findActiveSubOperation(OperationId);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" <<  EvReply->GetTypeName() << "> execute"
+            << ", operationId: " << OperationId
+            << ", at schemeshard: " << Self->TabletID()
+            << ", message: " << ISubOperationState::DebugReply(EvReply)
+        );
+
+        {
+            TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+
+            if (part) {
+                part->HandleReply(EvReply, context);
+
+            } else {
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" <<  EvReply->GetTypeName() << "> execute"
+                    << ", operationId: " << OperationId
+                    << ", at schemeshard: " << Self->TabletID()
+                    << ", unknown operation or suboperation is already done, event is out-of-scope"
+                );
+
+                OutOfScopeEventHandler<TEvType>(EvReply, context);
+            }
+        }
+        OnComplete.ApplyOnExecute(Self, txc, ctx);
+        DbChanges.Apply(Self, txc, ctx);
+
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" << EvReply->GetTypeName() << "> complete"
+            << ", operationId: " << OperationId
+            << ", at schemeshard: " << Self->TabletID()
+        );
+        OnComplete.ApplyOnComplete(Self, ctx);
+    }
+};
+
 
 struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvTxProcessing::TEvPlanStep::TPtr Ev;
@@ -454,7 +530,7 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
                 THolder<TEvPrivate::TEvOperationPlan> msg = MakeHolder<TEvPrivate::TEvOperationPlan>(ui64(step), ui64(txId));
-                TEvPrivate::TEvOperationPlan::TPtr personalEv = (TEventHandleFat<TEvPrivate::TEvOperationPlan>*) new IEventHandleFat(
+                TEvPrivate::TEvOperationPlan::TPtr personalEv = (TEventHandle<TEvPrivate::TEvOperationPlan>*) new IEventHandle(
                             context.SS->SelfId(), context.SS->SelfId(), msg.Release());
 
                 operation->Parts.at(partIdx)->HandleReply(personalEv, context);
@@ -494,13 +570,18 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationProgress(TOper
     return new TTxOperationProgress(this, opId);
 }
 
-#define DefineCreateTxOperationReply(TEvType, TxType)          \
-    NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, TEvType::TPtr& ev) { \
-        return new TTxOperationReply<TEvType>(this, id, ev);    \
-    }
+template <EventBasePtr TEvPtr>
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, TEvPtr& ev) {
+    using TEvType = typename EventTypeFromTEvPtr<TEvPtr>::type;
+    return new TTxOperationReply<TEvType>(this, id, ev);
+}
 
-    SCHEMESHARD_INCOMING_EVENTS(DefineCreateTxOperationReply)
-#undef DefineTxOperationReply
+#define DefineCreateTxOperationReplyFunc(TEvType, ...) \
+    template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, TEvType::TPtr& ev);
+
+    SCHEMESHARD_INCOMING_EVENTS(DefineCreateTxOperationReplyFunc)
+#undef DefineCreateTxOperationReplyFunc
+
 
 TString JoinPath(const TString& workingDir, const TString& name) {
     Y_VERIFY(!name.StartsWith('/') && !name.EndsWith('/'));

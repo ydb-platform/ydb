@@ -40,6 +40,13 @@ namespace NActors {
             }
         }
 
+        THarmonizerStats GetHarmonizerStats() const {
+            if (Harmonizer) {
+                return Harmonizer->GetStats();
+            }
+            return {};
+        }
+
     private:
         IExecutorPool* CreateExecutorPool(ui32 poolId);
     };

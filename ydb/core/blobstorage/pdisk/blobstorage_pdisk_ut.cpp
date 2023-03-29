@@ -433,8 +433,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
                 NKikimrProto::OK);
 
-        TEvents::TEvUndelivered::TPtr ev = reinterpret_cast<TEventHandleFat<TEvents::TEvUndelivered>*>(
-            new IEventHandleFat(
+        TEvents::TEvUndelivered::TPtr ev = reinterpret_cast<TEventHandle<TEvents::TEvUndelivered>*>(
+            new IEventHandle(
                 testCtx.Sender, testCtx.Sender,
                 new TEvents::TEvUndelivered(0, 0)
             )

@@ -210,7 +210,7 @@ private:
         const bool promote = (i64)MaxCacheDataSize && ev->Get()->ReadOptions.CacheAfterRead;
         const bool fallback = ev->Get()->ReadOptions.ForceFallback;
 
-        LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " fallback: " << (ui32)fallback);
+        LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " fallback: " << (ui32)fallback << " sender:" << ev->Sender);
 
         TReadItem readItem(ev->Get()->ReadOptions, blobRange);
         HandleSingleRangeRead(std::move(readItem), ev->Sender, ctx);
@@ -226,9 +226,10 @@ private:
         if (it != Cache.End()) {
             Hits->Inc();
             HitsBytes->Add(blobRange.Size);
-            return SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), ctx);
+            return SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), ctx, true);
         }
 
+        LOG_S_DEBUG("Miss cache: " << blobRange << " sender:" << sender);
         Misses->Inc();
 
         // Prevent full cache flushing by exported blobs. Decrease propability of caching depending on cache size.
@@ -403,7 +404,7 @@ private:
 
         ReadsInQueue->Set(ReadQueue.size());
 
-        // We might need to free some space to accomodate the results of new reads
+        // We might need to free some space to accommodate the results of new reads
         Evict(ctx);
 
         std::vector<ui64> tabletReads;
@@ -463,10 +464,10 @@ private:
     }
 
     void SendResult(const TActorId& to, const TBlobRange& blobRange, NKikimrProto::EReplyStatus status,
-                    const TString& data, const TActorContext& ctx) {
+                    const TString& data, const TActorContext& ctx, const bool fromCache = false) {
         LOG_S_DEBUG("Send result: " << blobRange << " to: " << to << " status: " << status);
 
-        ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data));
+        ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, fromCache));
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev, const TActorContext& ctx) {
@@ -733,12 +734,12 @@ NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDy
 
 void AddRangeToCache(const TBlobRange& blobRange, const TString& data) {
     TlsActivationContext->Send(
-        new IEventHandleFat(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data)));
+        new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data)));
 }
 
 void ForgetBlob(const TUnifiedBlobId& blobId) {
     TlsActivationContext->Send(
-        new IEventHandleFat(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvForgetBlob(blobId)));
+        new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvForgetBlob(blobId)));
 }
 
 }

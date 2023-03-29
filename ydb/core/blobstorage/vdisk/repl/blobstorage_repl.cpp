@@ -419,7 +419,7 @@ namespace NKikimr {
                     ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
                     ReplCtx->MonGroup.ReplItemsRemaining() = 0;
                     ReplCtx->MonGroup.ReplItemsDone() = 0;
-                    TActivationContext::Send(new IEventHandleFat(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
+                    TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
                         SelfId(), nullptr, 0));
                 }
             } else {

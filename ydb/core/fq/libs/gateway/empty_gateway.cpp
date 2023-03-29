@@ -66,7 +66,7 @@ public:
         auto event = MakeHolder<TEvents::TEvGraphParams>(params);
         event->IsEvaluation = FromString<bool>(queryParams.Value("Evaluation", "false")) || FromString<bool>(queryParams.Value("Precompute", "false"));
         event->Result = result;
-        NActors::TActivationContext::Send(new NActors::IEventHandleFat(RunActorId, {}, event.Release()));
+        NActors::TActivationContext::Send(new NActors::IEventHandle(RunActorId, {}, event.Release()));
 
         return result;
     }

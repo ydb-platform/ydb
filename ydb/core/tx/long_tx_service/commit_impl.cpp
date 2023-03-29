@@ -109,7 +109,7 @@ namespace NLongTxService {
                 ++data.NumRetries;
                 if (ToRetry.empty()) {
                     TimeoutTimerActorId = CreateLongTimer(TDuration::MilliSeconds(TRetryData::RetryDelayMs),
-                        new IEventHandleFat(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
+                        new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
                 }
                 ToRetry.insert(tabletId);
                 return true;
@@ -413,7 +413,7 @@ namespace NLongTxService {
 
                 if (ToRetry.empty()) {
                     TimeoutTimerActorId = CreateLongTimer(TDuration::MilliSeconds(TRetryData::RetryDelayMs),
-                        new IEventHandleFat(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
+                        new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
                 }
                 ToRetry.insert(tabletId);
                 return true;

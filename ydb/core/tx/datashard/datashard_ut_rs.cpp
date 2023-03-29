@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         // Fill some data. Later we will copy data from shards 2 and 3 to shard 1.
         {
             auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) VALUES (0x50000000,1),(0x80000001,1),(0x80000002,1),(0x80000003,1),(0x80000004,1),(0x80000005,1),(0x80000006,1),(0x80000007,1),(0x80000008,1),(0x80000009,1)");
-            runtime.Send(new IEventHandleFat(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
+            runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
             runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
         }
 
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             runtime.SetObserverFunc(captureRS);
 
             auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1` WHERE key = 0x50000000");
-            runtime.Send(new IEventHandleFat(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
+            runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
             // Wait until both parts of tx are finished on the second shard.
             TDispatchOptions options;
             options.FinalEvents.emplace_back(IsTxResultComplete(), 2);
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         {
             for (auto i = 1; i < 10; ++i) {
                 auto request = MakeSQLRequest(Sprintf("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1` WHERE key = %" PRIu32, i + 0x80000000));
-                runtime.Send(new IEventHandleFat(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
+                runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
             }
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvTxProcessing::EvReadSetAck, 9);

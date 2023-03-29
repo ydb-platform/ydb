@@ -133,7 +133,7 @@ public:
 
     void PassAway() override {
         if (StorageStatsCalculatorId) {
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, StorageStatsCalculatorId, {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, StorageStatsCalculatorId, {}, nullptr, 0));
         }
 
         TActorBootstrapped::PassAway();

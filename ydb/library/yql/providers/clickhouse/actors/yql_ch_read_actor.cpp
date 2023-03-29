@@ -82,10 +82,10 @@ private:
     static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U:
-            actorSystem->Send(new IEventHandleFat(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::get<IHTTPGateway::TContent>(std::move(result)))));
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::get<IHTTPGateway::TContent>(std::move(result)))));
             return;
         case 1U:
-            actorSystem->Send(new IEventHandleFat(selfId, TActorId(), new TEvPrivate::TEvReadError(std::get<TIssues>(std::move(result)))));
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadError(std::get<TIssues>(std::move(result)))));
             return;
         default:
             break;

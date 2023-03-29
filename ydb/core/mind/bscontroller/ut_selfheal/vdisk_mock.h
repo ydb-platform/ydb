@@ -52,7 +52,7 @@ public:
     }
 
     void StopActor() {
-        TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, GetActorId(), {}, {}, 0));
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, GetActorId(), {}, {}, 0));
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_NODE, "[%u] VDiskId# %s destroyed", NodeId, VDiskId.ToString().data());
     }
 

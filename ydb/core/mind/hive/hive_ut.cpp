@@ -316,7 +316,7 @@ namespace {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
 
-        runtime.Send(new IEventHandleFat(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
+        runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     void SendToLocal(TTestActorRuntime &runtime, ui32 nodeIndex, IEventBase* event) {
         TActorId local = MakeLocalID(runtime.GetNodeId(nodeIndex));
-        runtime.Send(new IEventHandleFat(local, TActorId(), event), nodeIndex);
+        runtime.Send(new IEventHandle(local, TActorId(), event), nodeIndex);
     }
 
     void SendKillLocal(TTestActorRuntime &runtime, ui32 nodeIndex) {
@@ -955,7 +955,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             TAutoPtr<IEventHandle> handle;
             TActorId whiteboard = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
-            runtime.Send(new IEventHandleFat(whiteboard, senderA, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest()));
+            runtime.Send(new IEventHandle(whiteboard, senderA, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest()));
             NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse* wbResponse = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse>(handle);
             for (const NKikimrWhiteboard::TTabletStateInfo& tabletInfo : wbResponse->Record.GetTabletStateInfo()) {
                 if (tablets.count(tabletInfo.GetTabletId()) == 0) {
@@ -2279,7 +2279,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0, &pipeConfig);
         runtime.SendToPipe(hiveTablet, sender, new TEvInterconnect::TEvNodeDisconnected(runtime.GetNodeId(0)));
         //TActorId local = MakeLocalID(runtime.GetNodeId(0));
-        //runtime.Send(new IEventHandleFat(local, sender, new TEvTabletPipe::TEvClientDestroyed(hiveTablet, TActorId(), TActorId())), 0);
+        //runtime.Send(new IEventHandle(local, sender, new TEvTabletPipe::TEvClientDestroyed(hiveTablet, TActorId(), TActorId())), 0);
         SendKillLocal(runtime, 0);
         runtime.Register(CreateTabletKiller(hiveTablet));
         {
@@ -2869,7 +2869,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TActorId senderA = runtime.AllocateEdgeActor();
         for (int i = 0; i < NODES; ++i) {
             TActorId whiteboard = NNodeWhiteboard::MakeNodeWhiteboardServiceId(runtime.GetNodeId(i));
-            runtime.Send(new IEventHandleFat(whiteboard, senderA, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest()));
+            runtime.Send(new IEventHandle(whiteboard, senderA, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest()));
             TAutoPtr<IEventHandle> handle;
             NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse* response = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse>(handle);
             for (const NKikimrWhiteboard::TTabletStateInfo& tabletInfo : response->Record.GetTabletStateInfo()) {
@@ -4557,7 +4557,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         TActorId disconnecter = runtime.AllocateEdgeActor(0);
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
-        runtime.Send(new IEventHandleFat(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
+        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
 
         // Tablet should boot when the locking node disconnects
         WaitForTabletIsUp(runtime, tabletId, 0);
@@ -4602,7 +4602,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         TActorId disconnecter = runtime.AllocateEdgeActor(0);
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
-        runtime.Send(new IEventHandleFat(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
+        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
 
         // Tablet should boot when timeout expires
         WaitForTabletIsUp(runtime, tabletId, 0);
@@ -4740,7 +4740,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         } while (TInstant::Now() <= deadline);
 
-        runtime.Send(new IEventHandleFat(pipeClient, TActorId(), new TEvents::TEvPoisonPill()));
+        runtime.Send(new IEventHandle(pipeClient, TActorId(), new TEvents::TEvPoisonPill()));
         UNIT_ASSERT_C(!res, "Unexpected successful tablet connection");
     }
 
@@ -4766,7 +4766,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // disconnect the node
         TActorId disconnecter = runtime.AllocateEdgeActor(0);
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
-        runtime.Send(new IEventHandleFat(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
+        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
 
         // reconnect the lock
         SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 500, true);
@@ -4821,7 +4821,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // disconnect the node
         TActorId disconnecter = runtime.AllocateEdgeActor(0);
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
-        runtime.Send(new IEventHandleFat(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
+        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
 
         // wait for the lost lock notification
         VerifyLockTabletExecutionLost(runtime, tabletId, owner);

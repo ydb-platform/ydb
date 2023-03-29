@@ -74,7 +74,7 @@ void RefreshToken(const TString& token, const TString& database, const TActorCon
 }
 
 void TRefreshTokenImpl::ReplyUnauthenticated(const TString&) {
-    TActivationContext::Send(new IEventHandleFat(From_, TActorId(),
+    TActivationContext::Send(new IEventHandle(From_, TActorId(),
         new TGRpcRequestProxy::TEvRefreshTokenResponse
             { false, nullptr, false, IssueManager_.GetIssues()}));
 }

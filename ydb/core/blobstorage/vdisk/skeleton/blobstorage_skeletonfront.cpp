@@ -578,7 +578,7 @@ namespace NKikimr {
                         TEvBlobStorage::TEvVWindowChange::DropConnection));
 
                     // small hack for older versions of BS_QUEUE that do not support DropConnection flag
-                    ctx.Send(new IEventHandleFat(winp->ActorId, serviceId, new TEvents::TEvUndelivered(0,
+                    ctx.Send(new IEventHandle(winp->ActorId, serviceId, new TEvents::TEvUndelivered(0,
                         TEvents::TEvUndelivered::ReasonActorUnknown)));
                 };
                 QueueBackpressure->ForEachWindow(callback);
@@ -1677,7 +1677,7 @@ namespace NKikimr {
         }
 
         void HandleCommenceRepl(const TActorContext& /*ctx*/) {
-            TActivationContext::Send(new IEventHandleFat(TEvBlobStorage::EvCommenceRepl, 0, SkeletonId, SelfId(), nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, SkeletonId, SelfId(), nullptr, 0));
         }
 
         void Handle(TEvReportScrubStatus::TPtr ev, const TActorContext& ctx) {
@@ -1852,7 +1852,7 @@ namespace NKikimr {
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVPut>;
 
         template<typename TEventType>
-        void CheckExecute(TAutoPtr<TEventHandleFat<TEventType>>& ev, const TActorContext& ctx) {
+        void CheckExecute(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
             if constexpr (IsPatchEvent<TEventType>) {
                 HandlePatchEvent(ev);
             } else if constexpr (IsWithoutQoS<TEventType>) {
@@ -1874,7 +1874,7 @@ namespace NKikimr {
         static constexpr bool IsWithoutVDiskId = std::is_same_v<TEv, Decayed>;
 
         template <typename TEventType>
-        void Check(TAutoPtr<TEventHandleFat<TEventType>>& ev, const TActorContext& ctx) {
+        void Check(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
             const auto& record = ev->Get()->Record;
             bool isSameVDisk = true;
             if constexpr (!IsWithoutVDiskId<TEventType>) {
@@ -1891,7 +1891,7 @@ namespace NKikimr {
         }
 
         template<typename TEv>
-        void ValidateEvent(TAutoPtr<TEventHandleFat<TEv>>& ev, const TActorContext& ctx) {
+        void ValidateEvent(TAutoPtr<TEventHandle<TEv>>& ev, const TActorContext& ctx) {
             TString errorReason;
             bool isQueryValid = Validate(ev->Get(), errorReason);
             if (!isQueryValid) {
@@ -1959,7 +1959,7 @@ namespace NKikimr {
 #define HFuncStatus(TEvType, status, errorReason, now, wstatus) \
     case TEvType::EventType: \
     { \
-        TEvType::TPtr x(static_cast<TEventHandleFat<TEvType>*>(ev.release())); \
+        TEvType::TPtr x(static_cast<TEventHandle<TEvType>*>(ev.release())); \
         Reply(x, ctx, status, errorReason, now, wstatus); \
         break; \
     }

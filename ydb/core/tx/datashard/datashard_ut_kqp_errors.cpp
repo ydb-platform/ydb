@@ -234,7 +234,7 @@ Y_UNIT_TEST(ProposeRequestUndelivered) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto forwardEvent = ev.Get()->Get<TEvPipeCache::TEvForward>();
             if (forwardEvent->Ev->Type() == TEvDataShard::TEvProposeTransaction::EventType) {
-                rt.Send(new IEventHandleFat(ev->Sender, ev->Recipient,
+                rt.Send(new IEventHandle(ev->Sender, ev->Recipient,
                     new TEvPipeCache::TEvDeliveryProblem(forwardEvent->TabletId, /* NotDelivered */ true)));
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -283,7 +283,7 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
                 if (ev->Sender.NodeId() == executer.NodeId()) {
                     ++droppedEvents;
                     // Cerr << "-- send undelivery to " << ev->Recipient << ", executer: " << executer << Endl;
-                    rt.Send(new IEventHandleFat(executer, ev->Sender,
+                    rt.Send(new IEventHandle(executer, ev->Sender,
                         new TEvPipeCache::TEvDeliveryProblem(msg->GetOrigin(), /* NotDelivered */ false)));
                     return TTestActorRuntime::EEventAction::DROP;
                 }

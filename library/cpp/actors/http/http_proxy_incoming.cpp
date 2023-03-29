@@ -59,7 +59,7 @@ public:
     }
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) override {
-        return new IEventHandleFat(self, parent, new TEvents::TEvBootstrap());
+        return new IEventHandle(self, parent, new TEvents::TEvBootstrap());
     }
 
     void Die(const TActorContext& ctx) override {

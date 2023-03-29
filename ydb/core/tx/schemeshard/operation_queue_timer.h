@@ -76,7 +76,7 @@ private:
         When = this->Now() + delta;
         auto ctx = TActivationContext::ActorContextFor(TActorBase::SelfId());
         LongTimerId = CreateLongTimer(ctx, delta,
-            new IEventHandleFat(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue),
+            new IEventHandle(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue),
             AppData(ctx)->UserPoolId);
 
         LOG_DEBUG_S(ctx, ServiceId,

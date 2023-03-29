@@ -15,7 +15,7 @@ void TCommonRetriesState::ResetRetry() {
     AllowInstantRetry = true;
     LastRetryDelay = {};
     if (RetryTimer) {
-        TlsActivationContext->Send(new IEventHandleFat(RetryTimer, RetryTimer, new TEvents::TEvPoison));
+        TlsActivationContext->Send(new IEventHandle(RetryTimer, RetryTimer, new TEvents::TEvPoison));
         RetryTimer = {};
     }
     ResolveAttempt = 0;

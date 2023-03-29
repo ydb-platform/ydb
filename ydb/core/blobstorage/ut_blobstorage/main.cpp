@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(DonorMode) {
                 for (ui32 i = 0; i < donors.size() - 1; ++i) {
                     const TActorId& vdiskActorId = donors[i];
                     const TActorId& edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-                    runtime->Send(new IEventHandleFat(vdiskActorId, edge, new TEvBlobStorage::TEvVStatus(),
+                    runtime->Send(new IEventHandle(vdiskActorId, edge, new TEvBlobStorage::TEvVStatus(),
                         IEventHandle::FlagTrackDelivery), 1);
                     auto r = runtime->WaitForEdgeActorEvent({edge});
                     runtime->DestroyActor(edge);

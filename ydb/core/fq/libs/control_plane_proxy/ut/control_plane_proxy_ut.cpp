@@ -116,7 +116,7 @@ struct TTestBootstrap {
         proto.mutable_content()->set_name("my_query_name");
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateQueryRequest>("", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
         if (processCreateRateLimiterResource) {
             auto req = RateLimiterGrab->GetRequest();
@@ -130,14 +130,14 @@ struct TTestBootstrap {
     }
 
     void SendCreateRateLimiterResourceSuccess(const TActorId& id, const TString& rateLimiter = "rate_limiter") {
-        Runtime->Send(new IEventHandleFat(id, id, new TEvRateLimiter::TEvCreateResourceResponse(rateLimiter, NYql::TIssues())));
+        Runtime->Send(new IEventHandle(id, id, new TEvRateLimiter::TEvCreateResourceResponse(rateLimiter, NYql::TIssues())));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
     void SendCreateRateLimiterResourceError(const TActorId& id) {
         NYql::TIssues issues;
         issues.AddIssue("Trololo");
-        Runtime->Send(new IEventHandleFat(id, id, new TEvRateLimiter::TEvCreateResourceResponse(issues)));
+        Runtime->Send(new IEventHandle(id, id, new TEvRateLimiter::TEvCreateResourceResponse(issues)));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -147,7 +147,7 @@ struct TTestBootstrap {
         FederatedQuery::ListQueriesRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvListQueriesRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -157,7 +157,7 @@ struct TTestBootstrap {
         FederatedQuery::DescribeQueryRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeQueryRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -167,7 +167,7 @@ struct TTestBootstrap {
         FederatedQuery::GetQueryStatusRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvGetQueryStatusRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -177,7 +177,7 @@ struct TTestBootstrap {
         FederatedQuery::ModifyQueryRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyQueryRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -187,7 +187,7 @@ struct TTestBootstrap {
         FederatedQuery::DeleteQueryRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteQueryRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -197,7 +197,7 @@ struct TTestBootstrap {
         FederatedQuery::ControlQueryRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvControlQueryRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -207,7 +207,7 @@ struct TTestBootstrap {
         FederatedQuery::GetResultDataRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvGetResultDataRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -218,7 +218,7 @@ struct TTestBootstrap {
         proto.set_query_id("my_query_id");
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvListJobsRequest>("", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -228,7 +228,7 @@ struct TTestBootstrap {
         FederatedQuery::DescribeJobRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeJobRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -246,7 +246,7 @@ struct TTestBootstrap {
         }
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateConnectionRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -256,7 +256,7 @@ struct TTestBootstrap {
         FederatedQuery::ListConnectionsRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvListConnectionsRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -266,7 +266,7 @@ struct TTestBootstrap {
         FederatedQuery::DescribeConnectionRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeConnectionRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -284,7 +284,7 @@ struct TTestBootstrap {
         }
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyConnectionRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -294,7 +294,7 @@ struct TTestBootstrap {
         FederatedQuery::DeleteConnectionRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteConnectionRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -311,7 +311,7 @@ struct TTestBootstrap {
         }
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvTestConnectionRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -321,7 +321,7 @@ struct TTestBootstrap {
         FederatedQuery::CreateBindingRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateBindingRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -331,7 +331,7 @@ struct TTestBootstrap {
         FederatedQuery::ListBindingsRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvListBindingsRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -341,7 +341,7 @@ struct TTestBootstrap {
         FederatedQuery::DescribeBindingRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeBindingRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -351,7 +351,7 @@ struct TTestBootstrap {
         FederatedQuery::ModifyBindingRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyBindingRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -361,7 +361,7 @@ struct TTestBootstrap {
         FederatedQuery::DeleteBindingRequest proto;
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteBindingRequest>("my_folder", proto, user, "", permissions);
-        Runtime->Send(new IEventHandleFat(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 

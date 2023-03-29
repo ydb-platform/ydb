@@ -111,7 +111,7 @@ struct TTestBootstrap : public TTestActorRuntime {
             TDuration::Seconds(3),
             TDuration::Seconds(1)
         ).Release());
-        Send(new IEventHandleFat(CheckpointCoordinator, {}, new NYql::NDqs::TEvReadyState(std::move(GraphState))));
+        Send(new IEventHandle(CheckpointCoordinator, {}, new NYql::NDqs::TEvReadyState(std::move(GraphState))));
 
         EnableScheduleForActor(CheckpointCoordinator);
     }
@@ -122,21 +122,21 @@ struct TTestBootstrap : public TTestActorRuntime {
 namespace NFq {
 
 void MockRegisterCoordinatorResponseEvent(TTestBootstrap& bootstrap, NYql::TIssues issues = NYql::TIssues()) {
-    bootstrap.Send(new IEventHandleFat(
+    bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         bootstrap.StorageProxy,
         new TEvCheckpointStorage::TEvRegisterCoordinatorResponse(std::move(issues))));
 }
 
 void MockCheckpointsMetadataResponse(TTestBootstrap& bootstrap, NYql::TIssues issues = NYql::TIssues()) {
-    bootstrap.Send(new IEventHandleFat(
+    bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         bootstrap.StorageProxy,
         new TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse(TVector<TCheckpointMetadata>(), std::move(issues))));
 }
 
 void MockCreateCheckpointResponse(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) {
-    bootstrap.Send(new IEventHandleFat(
+    bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         bootstrap.StorageProxy,
         new TEvCheckpointStorage::TEvCreateCheckpointResponse(checkpointId, std::move(issues), "42")));
@@ -147,7 +147,7 @@ void MockNodeStateSavedEvent(TTestBootstrap& bootstrap, TCheckpointId& checkpoin
     ev->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
     ev->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
     ev->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::OK);
-    bootstrap.Send(new IEventHandleFat(
+    bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         sender,
         ev.release()));
@@ -158,28 +158,28 @@ void MockNodeStateSaveFailedEvent(TTestBootstrap& bootstrap, TCheckpointId& chec
     ev->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
     ev->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
     ev->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::STORAGE_ERROR);
-    bootstrap.Send(new IEventHandleFat(
+    bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         sender,
         ev.release()));
 }
 
 void MockSetCheckpointPendingCommitStatusResponse(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) {
-    bootstrap.Send(new IEventHandleFat(
+    bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         bootstrap.StorageProxy,
         new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse(checkpointId, std::move(issues))));
 }
 
 void MockChangesCommittedEvent(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, TActorId& sender) {
-    bootstrap.Send(new IEventHandleFat(
+    bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         sender,
         new NYql::NDq::TEvDqCompute::TEvStateCommitted(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, bootstrap.ActorToTask[sender])));
 }
 
 void MockCompleteCheckpointResponse(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) {
-    bootstrap.Send(new IEventHandleFat(
+    bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         bootstrap.StorageProxy,
         new TEvCheckpointStorage::TEvCompleteCheckpointResponse(checkpointId, std::move(issues))));

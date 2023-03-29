@@ -187,10 +187,10 @@ public:
     TActorId GetPipeEdgeActor();
 
     void SendProxyRequest(const TString& resourceName);
-    THolder<TEventHandleFat<TEvQuota::TEvProxySession>> ProxyRequest(const TString& resourceName, TEvQuota::TEvProxySession::EResult = TEvQuota::TEvProxySession::Success);
+    THolder<TEventHandle<TEvQuota::TEvProxySession>> ProxyRequest(const TString& resourceName, TEvQuota::TEvProxySession::EResult = TEvQuota::TEvProxySession::Success);
 
     void SendProxyStats(TDeque<TEvQuota::TProxyStat> stats);
-    THolder<TEventHandleFat<TEvQuota::TEvProxyUpdate>> GetProxyUpdate();
+    THolder<TEventHandle<TEvQuota::TEvProxyUpdate>> GetProxyUpdate();
 
     void SendCloseSession(const TString& resource, ui64 resourceId);
 

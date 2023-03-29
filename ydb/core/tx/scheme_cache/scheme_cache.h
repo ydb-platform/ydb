@@ -449,7 +449,7 @@ struct TEvTxProxySchemeCache {
 
 private:
     template <typename TDerived, ui32 EventType, typename TRequest>
-    struct TEvBasic : public TEventLight<TDerived, EventType> {
+    struct TEvBasic : public TEventLocal<TDerived, EventType> {
         TAutoPtr<TRequest> Request;
 
         TEvBasic(TAutoPtr<TRequest> request)

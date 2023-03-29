@@ -91,7 +91,7 @@ SubmitTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
                                                type,
                                                priority,
                                                cookie);
-    runtime.Send(new IEventHandleFat(broker, sender, event.Release()));
+    runtime.Send(new IEventHandle(broker, sender, event.Release()));
 }
 
 static void
@@ -104,7 +104,7 @@ UpdateTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
                                                {{cpu, memory}},
                                                type, priority, resubmit);
 
-    runtime.Send(new IEventHandleFat(broker, sender, event.Release()));
+    runtime.Send(new IEventHandle(broker, sender, event.Release()));
 }
 
 static void
@@ -114,7 +114,7 @@ UpdateTaskCookie(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
     TAutoPtr<TEvResourceBroker::TEvUpdateTaskCookie> event
         = new TEvResourceBroker::TEvUpdateTaskCookie(id, cookie);
 
-    runtime.Send(new IEventHandleFat(broker, sender, event.Release()));
+    runtime.Send(new IEventHandle(broker, sender, event.Release()));
 }
 
 static void
@@ -123,7 +123,7 @@ RemoveTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id
     TAutoPtr<TEvResourceBroker::TEvRemoveTask> event
         = new TEvResourceBroker::TEvRemoveTask(id);
 
-    runtime.Send(new IEventHandleFat(broker, sender, event.Release()));
+    runtime.Send(new IEventHandle(broker, sender, event.Release()));
 }
 
 static void
@@ -132,7 +132,7 @@ FinishTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id
     TAutoPtr<TEvResourceBroker::TEvFinishTask> event
         = new TEvResourceBroker::TEvFinishTask(id);
 
-    runtime.Send(new IEventHandleFat(broker, sender, event.Release()));
+    runtime.Send(new IEventHandle(broker, sender, event.Release()));
 }
 
 static ui64
@@ -176,7 +176,7 @@ static void CheckConfigure(TTestActorRuntime &runtime, TActorId broker, TActorId
 {
     TAutoPtr<TEvResourceBroker::TEvConfigure> event = new TEvResourceBroker::TEvConfigure;
     event->Record.CopyFrom(config);
-    runtime.Send(new IEventHandleFat(broker, sender, event.Release()));
+    runtime.Send(new IEventHandle(broker, sender, event.Release()));
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvResourceBroker::TEvConfigureResult>(handle);
@@ -187,7 +187,7 @@ static void CheckConfigure(TTestActorRuntime &runtime, TActorId broker, TActorId
 
 static
 TIntrusivePtr<IResourceBroker> GetInstantResourceBroker(TTestActorRuntime &runtime, TActorId broker, TActorId sender) {
-    runtime.Send(new IEventHandleFat(broker, sender, new TEvResourceBroker::TEvResourceBrokerRequest));
+    runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvResourceBrokerRequest));
     auto answer = runtime.GrabEdgeEvent<TEvResourceBroker::TEvResourceBrokerResponse>(sender);
     return answer->Get()->ResourceBroker;
 }
@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         config.MutableQueues(1)->SetWeight(50);
         TAutoPtr<TEvResourceBroker::TEvConfigure> event1 = new TEvResourceBroker::TEvConfigure;
         event1->Record.CopyFrom(config);
-        runtime.Send(new IEventHandleFat(brokerId, sender, event1.Release()));
+        runtime.Send(new IEventHandle(brokerId, sender, event1.Release()));
 
         WaitForResourceAllocation(runtime, 2);
         WaitForResourceAllocation(runtime, 3);
@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         // Remove task-1 and task-2.
         now += TDuration::Seconds(1);
         runtime.UpdateCurrentTime(now);
-        runtime.Send(new IEventHandleFat(brokerId, sender1, new TEvResourceBroker::TEvNotifyActorDied));
+        runtime.Send(new IEventHandle(brokerId, sender1, new TEvResourceBroker::TEvNotifyActorDied));
 
         // Get resources for task-4.
         WaitForResourceAllocation(runtime, 4);

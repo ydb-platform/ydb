@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         // drop link between 2 nodes
         {
             ctx.Runtime->Send(
-                new IEventHandleFat(
+                new IEventHandle(
                     ctx.Runtime->GetInterconnectProxy(0, 1),
                     TActorId(),
                     new TEvInterconnect::TEvDisconnect()),
@@ -2266,7 +2266,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         WaitAllocation(edgeAndSession2.first, 5);
 
         // Kill pipe and then session must be deactivated on kesus.
-        ctx.Runtime->Send(new IEventHandleFat(edgeAndSession2.second, edgeAndSession2.first, new TEvents::TEvPoisonPill()));
+        ctx.Runtime->Send(new IEventHandle(edgeAndSession2.second, edgeAndSession2.first, new TEvents::TEvPoisonPill()));
         WaitAllocation(edgeAndSession1.first, 10); // Now first session is the only active session and it receives all resource.
     }
 }

@@ -45,7 +45,7 @@ namespace NKikimr::NTestShard {
                 Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
             case ::NTestShard::TStateServer::RACE:
-                TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                 PassAway();
                 return;
 

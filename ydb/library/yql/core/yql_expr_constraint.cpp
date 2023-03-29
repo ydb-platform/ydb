@@ -2886,6 +2886,7 @@ private:
                 columns.emplace_back(child->Content());
             }
             input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
+            input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
         }
         return TStatus::Ok;
     }

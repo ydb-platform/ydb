@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
                 TLogoBlobID patchedBlobId(1, 1, diffIdx + 1, 0, size, 0);
                 std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> ev = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(
                         originalBlobId, patchedBlobId, info->GetVDiskId(0), 0, TInstant::Max(), 0);
-                runtime->Send(new IEventHandleFat(queueId, edge, ev.release()), queueId.NodeId());
+                runtime->Send(new IEventHandle(queueId, edge, ev.release()), queueId.NodeId());
             }
             for (ui32 diffIdx = 0; diffIdx < diffCount; ++diffIdx) {
                 auto r = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPatchResult>(edge, false);

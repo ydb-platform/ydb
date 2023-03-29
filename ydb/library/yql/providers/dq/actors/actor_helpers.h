@@ -19,7 +19,7 @@ enum EExecutorPoolType {
 
 template <typename EventType>
 struct TRichActorFutureCallback : public TRichActor<TRichActorFutureCallback<EventType>> {
-    using TCallback = std::function<void(TAutoPtr<NActors::TEventHandleFat<EventType>>&)>;
+    using TCallback = std::function<void(TAutoPtr<NActors::TEventHandle<EventType>>&)>;
     using TFailure = std::function<void(void)>;
     using TBase = TRichActor<TRichActorFutureCallback<EventType>>;
 
@@ -64,7 +64,7 @@ private:
     }
 
     TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId& self, const NActors::TActorId& parentId) override {
-        return new NActors::IEventHandleFat(self, parentId, new NActors::TEvents::TEvBootstrap, 0);
+        return new NActors::IEventHandle(self, parentId, new NActors::TEvents::TEvBootstrap, 0);
     }
 
     void OnFailure() {

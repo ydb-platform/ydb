@@ -35,6 +35,7 @@ private:
     bool First = true;
     bool Finished = false;
     ui64 ExpectedBatchSize = 0; /// May be smaller or equal to max_block_size. To do 'reserve' for columns.
+    std::map<std::string, ui64> ColumnSize;
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> SourceBatches;
     std::shared_ptr<TReplaceKey> PrevKey;

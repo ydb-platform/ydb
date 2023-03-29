@@ -60,7 +60,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandleFat(TEvPrivate::EvKickSpaceMonitor, 0,
+        TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvKickSpaceMonitor, 0,
             Self->SelfId(), {}, nullptr, 0));
     }
 

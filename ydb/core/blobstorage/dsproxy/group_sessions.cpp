@@ -94,7 +94,7 @@ void TGroupSessions::Poison() {
     for (const auto& domain : GroupQueues->FailDomains) {
         for (const auto& vdisk : domain.VDisks) {
             vdisk.Queues.ForEachQueue([](const auto& queue) {
-                TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, queue.ActorId, {}, nullptr, 0));
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, queue.ActorId, {}, nullptr, 0));
             });
         }
     }

@@ -120,7 +120,7 @@ namespace NActors {
             LOG_DEBUG_IC("ICR03", "Host: %s, RESOLVED address", Host.c_str());
             auto reply = new TEvAddressInfo;
             reply->Address = std::move(addr);
-            TActivationContext::Send(new IEventHandleFat(ReplyTo, ReplyFrom, reply));
+            TActivationContext::Send(new IEventHandle(ReplyTo, ReplyFrom, reply));
             PassAway();
         }
 
@@ -129,7 +129,7 @@ namespace NActors {
             auto reply = std::make_unique<TEvLocalNodeInfo>();
             reply->NodeId = *NodeId;
             reply->Addresses = std::move(addresses);
-            TActivationContext::Send(new IEventHandleFat(ReplyTo, ReplyFrom, reply.release()));
+            TActivationContext::Send(new IEventHandle(ReplyTo, ReplyFrom, reply.release()));
             PassAway();
         }
 
@@ -138,7 +138,7 @@ namespace NActors {
             auto *event = new TEvResolveError;
             event->Explain = errorText;
             event->Host = Host;
-            TActivationContext::Send(new IEventHandleFat(ReplyTo, ReplyFrom, event));
+            TActivationContext::Send(new IEventHandle(ReplyTo, ReplyFrom, event));
             PassAway();
         }
 

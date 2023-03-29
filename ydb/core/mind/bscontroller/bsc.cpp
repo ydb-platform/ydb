@@ -172,16 +172,16 @@ void TBlobStorageController::Handle(TEvents::TEvPoisonPill::TPtr&) {
     Become(&TThis::StateBroken);
     for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId}) {
         if (const TActorId actorId = std::exchange(*ptr, {})) {
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }
     }
     for (const auto& [id, info] : GroupMap) {
         if (auto& actorId = info->VirtualGroupSetupMachineId) {
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             actorId = {};
         }
     }
-    TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, Tablet(), SelfId(), nullptr, 0));
+    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Tablet(), SelfId(), nullptr, 0));
 }
 
 void TBlobStorageController::NotifyNodesAwaitingKeysForGroups(ui32 groupId) {

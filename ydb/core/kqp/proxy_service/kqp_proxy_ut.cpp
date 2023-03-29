@@ -49,7 +49,7 @@ TVector<NKikimrKqp::TKqpProxyNodeResources> Transform(TVector<TSimpleResource> d
 }
 
 TString CreateSession(TTestActorRuntime* runtime, const TActorId& kqpProxy, const TActorId& sender) {
-    runtime->Send(new IEventHandleFat(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
+    runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
     auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
     auto record = reply->Get()->Record;
     UNIT_ASSERT_VALUES_EQUAL(record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             ev->Record.MutableRequest()->SetKeepSession(true);
             ev->Record.MutableRequest()->SetTimeoutMs(10);
 
-            runtime->Send(new IEventHandleFat(kqpProxy, sender, ev.Release()));
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.Release()));
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvProcessResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         ev->Record.MutableRequest()->SetKeepSession(true);
         ev->Record.MutableRequest()->SetTimeoutMs(10);
 
-        runtime->Send(new IEventHandleFat(kqpProxy, sender, ev.Release()));
+        runtime->Send(new IEventHandle(kqpProxy, sender, ev.Release()));
         TAutoPtr<IEventHandle> handle;
         auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvProcessResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
             ev->Record.MutableRequest()->SetQuery(queryText);
-            runtime->Send(new IEventHandleFat(kqpProxy, sender, ev.release()));
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             ev->Record.MutableRequest()->SetKeepSession(true);
             ev->Record.MutableRequest()->SetTimeoutMs(5000);
 
-            runtime->Send(new IEventHandleFat(kqpProxy, sender, ev.release()));
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             ev->Record.MutableRequest()->SetQuery("SELECT 1; COMMIT;");
             ev->Record.MutableRequest()->SetKeepSession(true);
 
-            runtime->Send(new IEventHandleFat(kqpProxy1, sender, ev.Release()));
+            runtime->Send(new IEventHandle(kqpProxy1, sender, ev.Release()));
 
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvProcessResponse>(handle);
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
                 ev->Record.MutableRequest()->SetKeepSession(true);
                 ev->Record.MutableRequest()->SetTimeoutMs(1);
 
-                runtime->Send(new IEventHandleFat(kqpProxy1, sender, ev.Release()));
+                runtime->Send(new IEventHandle(kqpProxy1, sender, ev.Release()));
 
                 TAutoPtr<IEventHandle> handle;
                 auto reply = runtime->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvProcessResponse>(handle);
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
                 auto ev = MakeHolder<NKqp::TEvKqp::TEvPingSessionRequest>();
                 ev->Record.MutableRequest()->SetSessionId(sessionId);
                 ev->Record.MutableRequest()->SetTimeoutMs(1);
-                runtime->Send(new IEventHandleFat(kqpProxy1, sender, ev.Release()));
+                runtime->Send(new IEventHandle(kqpProxy1, sender, ev.Release()));
 
                 TAutoPtr<IEventHandle> handle;
                 auto reply = runtime->GrabEdgeEventsRethrow<TEvKqp::TEvPingSessionResponse, TEvKqp::TEvProcessResponse>(handle);

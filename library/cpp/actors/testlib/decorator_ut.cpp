@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
 
         virtual ~TDyingChecker() {
             Write("TDyingChecker::~TDyingChecker");
-            TActivationContext::Send(new IEventHandleFat(MasterId, SelfId(), new TEvents::TEvPing()));
+            TActivationContext::Send(new IEventHandle(MasterId, SelfId(), new TEvents::TEvPing()));
         }
 
         bool DoBeforeReceiving(TAutoPtr<IEventHandle> &/*ev*/, const TActorContext &/*ctx*/) override {
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
                 return true;
             }
             Write("TFizzBuzzToFooBar::DoBeforeSending");
-            TEventHandleFat<TEvWords> *handle = reinterpret_cast<TEventHandleFat<TEvWords>*>(ev.Get());
+            TEventHandle<TEvWords> *handle = reinterpret_cast<TEventHandle<TEvWords>*>(ev.Get());
             UNIT_ASSERT(handle);
             TEvWords *event = handle->Get();
             TVector<TString> &words = event->Words;
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
                 return true;
             }
             Write("TWordEraser::DoBeforeSending");
-            TEventHandleFat<TEvWords> *handle = reinterpret_cast<TEventHandleFat<TEvWords>*>(ev.Get());
+            TEventHandle<TEvWords> *handle = reinterpret_cast<TEventHandle<TEvWords>*>(ev.Get());
             UNIT_ASSERT(handle);
             TEvWords *event = handle->Get();
             TVector<TString> &words = event->Words;
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
                 return true;
             }
             Write("TWithoutWordsDroper::DoBeforeSending");
-            TEventHandleFat<TEvWords> *handle = reinterpret_cast<TEventHandleFat<TEvWords>*>(ev.Get());
+            TEventHandle<TEvWords> *handle = reinterpret_cast<TEventHandle<TEvWords>*>(ev.Get());
             UNIT_ASSERT(handle);
             TEvWords *event = handle->Get();
             return bool(event->Words);
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         }
 
         STATEFN(State) {
-            TEventHandleFat<TEvWords> *handle = reinterpret_cast<TEventHandleFat<TEvWords>*>(ev.Get());
+            TEventHandle<TEvWords> *handle = reinterpret_cast<TEventHandle<TEvWords>*>(ev.Get());
             UNIT_ASSERT(handle);
             UNIT_ASSERT(handle->Sender == MasterId);
             TEvWords *event = handle->Get();

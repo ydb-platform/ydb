@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             sender = runtime.AllocateEdgeActor();
         }
 
-        runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
         auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
         Cerr << (TStringBuilder() << "scheme op " << ev->Get()->Record.ShortDebugString()) << Endl;
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), expectedStatus);
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
         request->Record.MutableDescribePath()->SetPath(path);
         request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
-        runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
         auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
 
         return *reply->MutableRecord();
@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         ev->Record.MutableRequest()->SetQuery(queryText);
         ev->Record.MutableRequest()->SetKeepSession(false);
         ActorIdToProto(sender, ev->Record.MutableRequestActorId());
-        runtime->Send(new IEventHandleFat(kqpProxy, sender, ev.release()));
+        runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
     };
 
     void CollectKeysTo(TVector<ui64>* collectedKeys, TTestActorRuntime* runtime, TActorId sender) {
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
                 resp->Record.SetEnough(false);
                 resp->Record.SetSeqNo(record.GetSeqNo());
-                runtime->Send(new IEventHandleFat(ev->Sender, sender, resp.Release()));
+                runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                 return true;
             }
 

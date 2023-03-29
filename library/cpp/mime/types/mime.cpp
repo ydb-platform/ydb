@@ -101,6 +101,8 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_WEBMANIFEST, "application/manifest+json\0", "webmanifest\0"},
     {MIME_CBOR, "application/cbor\0application/x-amz-cbor-1.1\0", "cbor\0"},
     {MIME_CSV, "text/csv\0", "csv\0"},
+    {MIME_VIDEO_MP4, "video/mp4\0", "mp4\0"},
+    {MIME_VIDEO_AVI, "video/x-msvideo\0", "avi\0"},
     {MIME_MAX, nullptr, nullptr},
 
     // Additional records
@@ -253,4 +255,7 @@ const char* MimeNames[MIME_MAX] = {
     "ttf",     // MIME_TTF             // 45
     "webmanifest", // MIME_WEBMANIFEST // 46
     "cbor",    // MIME_CBOR            // 47
+    "csv",     // MIME_CSV             // 48
+    "mp4",     // MIME_VIDEO_MP4       // 49
+    "avi",     // MIME_VIDEO_AVI       // 50
 };

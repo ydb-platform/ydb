@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
 
             env.WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](const TActorId& queueId) {
                 const TActorId edge = runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-                runtime->Send(new IEventHandleFat(queueId, edge, new TEvBlobStorage::TEvVBlock(tabletId, 1, vdiskId,
+                runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVBlock(tabletId, 1, vdiskId,
                     TInstant::Max(), guid)), edge.NodeId());
                 auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVBlockResult>(edge);
                 status = res->Get()->Record.GetStatus();
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
 
         auto issue = [&](ui32 begin, ui32 end, ui64 guid) {
             for (ui32 i = begin; i < end; ++i) {
-                env.Runtime->Send(new IEventHandleFat(queues[i], edge, new TEvBlobStorage::TEvVBlock(tabletId, generation,
+                env.Runtime->Send(new IEventHandle(queues[i], edge, new TEvBlobStorage::TEvVBlock(tabletId, generation,
                     info->GetVDiskId(i), TInstant::Max(), guid)), edge.NodeId());
                 ++responsesPending;
             }
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
 
         auto issue = [&](ui32 begin, ui32 end, ui64 guid) {
             for (ui32 i = begin; i < end; ++i) {
-                env.Runtime->Send(new IEventHandleFat(queues[i], edge, new TEvBlobStorage::TEvVBlock(tabletId, generation,
+                env.Runtime->Send(new IEventHandle(queues[i], edge, new TEvBlobStorage::TEvVBlock(tabletId, generation,
                     info->GetVDiskId(i), TInstant::Max(), guid)), edge.NodeId());
             }
         };

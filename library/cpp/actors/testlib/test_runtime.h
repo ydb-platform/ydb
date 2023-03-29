@@ -260,7 +260,7 @@ namespace NActors {
         bool DispatchEvents(const TDispatchOptions& options = TDispatchOptions());
         bool DispatchEvents(const TDispatchOptions& options, TDuration simTimeout);
         bool DispatchEvents(const TDispatchOptions& options, TInstant simDeadline);
-        void Send(const TActorId& recipient, const TActorId& sender, TAutoPtr<IEventHandleLight> ev, ui32 senderNodeIndex = 0, bool viaActorSystem = false);
+        void Send(const TActorId& recipient, const TActorId& sender, TAutoPtr<IEventBase> ev, ui32 senderNodeIndex = 0, bool viaActorSystem = false);
         void Send(TAutoPtr<IEventHandle> ev, ui32 senderNodeIndex = 0, bool viaActorSystem = false);
         void SendAsync(TAutoPtr<IEventHandle> ev, ui32 senderNodeIndex = 0);
         void Schedule(TAutoPtr<IEventHandle> ev, const TDuration& duration, ui32 nodeIndex = 0);
@@ -371,7 +371,7 @@ namespace NActors {
             std::function<bool(const TEvent&)> truth = [](const TEvent&) { return true; };
             GrabEdgeEventIf(handle, truth, simTimeout);
             if (handle) {
-                return THolder<TEvent>(IEventHandle::Release<TEvent>(handle));
+                return THolder<TEvent>(handle->Release<TEvent>());
             }
             return {};
         }

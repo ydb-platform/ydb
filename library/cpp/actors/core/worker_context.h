@@ -104,7 +104,7 @@ namespace NActors {
             i64 ts = deliveredTs > scheduleTs ? deliveredTs - scheduleTs : 0;
             double usec = NHPTimer::GetSeconds(ts) * 1000000.0;
             Stats->ActivationTimeHistogram.Add(usec);
-            Stats->WorstActivationTimeUs = Max(Stats->WorstActivationTimeUs, (ui64)usec);
+            RelaxedStore(&Stats->WorstActivationTimeUs, Max(Stats->WorstActivationTimeUs, (ui64)usec));
             return usec;
         }
 

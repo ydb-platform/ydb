@@ -34,7 +34,7 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
             break;
     }
 
-    auto event = std::make_unique<IEventHandleFat>(recipient, ctx.SelfID, ev, IEventHandle::MakeFlags(channel, 0), cookie);
+    auto event = std::make_unique<IEventHandle>(recipient, ctx.SelfID, ev, IEventHandle::MakeFlags(channel, 0), cookie);
     if (TEvVResultBase *base = dynamic_cast<TEvVResultBase *>(ev)) {
         base->FinalizeAndSend(ctx, std::move(event));
     } else {

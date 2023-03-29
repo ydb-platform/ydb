@@ -41,9 +41,9 @@ namespace NActors {
     }
 
     THolder<IEventHandle> TActorCoroImpl::WaitForEvent(TMonotonic deadline) {
-        IEventHandleFat *timeoutEv = nullptr;
+        IEventHandle *timeoutEv = nullptr;
         if (deadline != TMonotonic::Max()) {
-            TActivationContext::Schedule(deadline, timeoutEv = new IEventHandleFat(TEvents::TSystem::CoroTimeout, 0,
+            TActivationContext::Schedule(deadline, timeoutEv = new IEventHandle(TEvents::TSystem::CoroTimeout, 0,
                 SelfActorId, {}, nullptr, 0));
         }
 

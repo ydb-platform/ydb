@@ -455,7 +455,7 @@ protected:
         if (!PostponedEvents.empty()) {
             TAutoPtr<IEventHandle> event = std::move(PostponedEvents.front());
             PostponedEvents.pop_front();
-            StateConnected(event);
+            StateConnected(event, TActivationContext::AsActorContext());
         }
     }
 
@@ -771,14 +771,14 @@ protected:
         return true;
     }
 
-    LIGHTFN(StateAccepting) {
+    STATEFN(StateAccepting) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleAccepting);
             hFunc(TEvPollerRegisterResult, HandleAccepting);
         }
     }
 
-    LIGHTFN(StateConnected) {
+    STATEFN(StateConnected) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleConnected);
             hFunc(TEvPollerRegisterResult, HandleConnected);

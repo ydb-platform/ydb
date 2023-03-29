@@ -39,7 +39,7 @@ ui64 RunSchemeTx(
         sender = runtime.AllocateEdgeActor();
     }
 
-    runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), expectedStatus);
 
@@ -119,7 +119,7 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server
     auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
-    runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
 
     return *reply->MutableRecord();
@@ -281,7 +281,7 @@ struct TTestHelper {
         if (!handle) {
             return nullptr;
         }
-        return std::unique_ptr<TEvDataShard::TEvReadResult>(IEventHandle::Release<TEvDataShard::TEvReadResult>(handle));
+        return std::unique_ptr<TEvDataShard::TEvReadResult>(handle->Release<TEvDataShard::TEvReadResult>().Release());
     }
 
     std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(TEvDataShard::TEvRead* request)
@@ -345,7 +345,7 @@ struct TTestHelper {
             auto response = IEventHandle::Release<TEvLoad::TEvLoadTestFinished>(handle);
             UNIT_ASSERT(response->ErrorReason.Empty());
 
-            return std::unique_ptr<TEvLoad::TEvLoadTestFinished>(response);
+            return std::unique_ptr<TEvLoad::TEvLoadTestFinished>(response.Release());
         }
     }
 

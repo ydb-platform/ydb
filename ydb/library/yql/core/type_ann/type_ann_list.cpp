@@ -21,6 +21,32 @@ namespace {
         return x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList;
     };
 
+    bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx) {
+        if (!EnsureStructType(input->Pos(), *originalExtractorType, ctx)) {
+            return false;
+        }
+
+        auto structType = originalExtractorType->Cast<TStructExprType>();
+        if (structType->GetSize() != 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected struct with one member"));
+            return false;
+        }
+
+        input->SetTypeAnn(structType->GetItems()[0]->GetItemType());
+        if (isMany) {
+            if (input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                    TStringBuilder() << "Expected optional state"));
+                return false;
+            }
+
+            input->SetTypeAnn(input->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType());
+        }
+
+        return true;
+    }
+
     TExprNode::TPtr RewriteMultiAggregate(const TExprNode& node, TExprContext& ctx) {
         auto exprLambda = node.Child(1);
         const TStructExprType* structType = nullptr;
@@ -5299,7 +5325,14 @@ namespace {
                 }
             }
 
-            input->SetTypeAnn(retType);
+            if (hasOriginalType) {
+                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();                
+                if (!ApplyOriginalType(input, isMany, originalExtractorType, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else {
+                input->SetTypeAnn(retType);
+            }
         } else if (name == "avg") {
             const TTypeAnnotationNode* retType;
             if (!overState) {
@@ -5313,27 +5346,9 @@ namespace {
             }
 
             if (hasOriginalType) {
-                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                if (!EnsureStructType(input->Pos(), *originalExtractorType, ctx.Expr)) {
+                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();                
+                if (!ApplyOriginalType(input, isMany, originalExtractorType, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
-                }
-
-                auto structType = originalExtractorType->Cast<TStructExprType>();
-                if (structType->GetSize() != 1) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Expected struct with one member"));
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                input->SetTypeAnn(structType->GetItems()[0]->GetItemType());
-                if (isMany) {
-                    if (input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                            TStringBuilder() << "Expected optional state"));
-                        return IGraphTransformer::TStatus::Error;
-                    }
-
-                    input->SetTypeAnn(input->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType());
                 }
             } else {
                 input->SetTypeAnn(retType);

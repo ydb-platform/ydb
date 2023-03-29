@@ -170,14 +170,14 @@ struct TEnvironmentSetup {
     }
 
     template<typename TEvent>
-    TAutoPtr<TEventHandleFat<TEvent>> WaitForEdgeActorEvent(const TActorId& actorId, bool termOnCapture = true,
+    TAutoPtr<TEventHandle<TEvent>> WaitForEdgeActorEvent(const TActorId& actorId, bool termOnCapture = true,
             TInstant deadline = TInstant::Max()) {
         std::set<TActorId> ids{actorId};
 
         TActorId wakeup;
         if (deadline != TInstant::Max()) {
             wakeup = Runtime->AllocateEdgeActor(actorId.NodeId(), __FILE__, __LINE__);
-            Runtime->Schedule(deadline, new IEventHandleFat(TEvents::TSystem::Wakeup, 0, wakeup, {}, nullptr, 0), nullptr,
+            Runtime->Schedule(deadline, new IEventHandle(TEvents::TSystem::Wakeup, 0, wakeup, {}, nullptr, 0), nullptr,
                 wakeup.NodeId());
             ids.insert(wakeup);
         }
@@ -188,7 +188,7 @@ struct TEnvironmentSetup {
                 Runtime->DestroyActor(wakeup);
                 return nullptr;
             } else if (ev->GetTypeRewrite() == TEvent::EventType) {
-                TAutoPtr<TEventHandleFat<TEvent>> res = reinterpret_cast<TEventHandleFat<TEvent>*>(ev.release());
+                TAutoPtr<TEventHandle<TEvent>> res = reinterpret_cast<TEventHandle<TEvent>*>(ev.release());
                 if (termOnCapture) {
                     Runtime->DestroyActor(actorId);
                 }
@@ -507,7 +507,7 @@ struct TEnvironmentSetup {
         const ui32 nodeId = actorId.NodeId();
         const TActorId& edge = Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
         for (;;) {
-            Runtime->Send(new IEventHandleFat(actorId, edge, new TEvBlobStorage::TEvVStatus(vdiskId),
+            Runtime->Send(new IEventHandle(actorId, edge, new TEvBlobStorage::TEvVStatus(vdiskId),
                 IEventHandle::FlagTrackDelivery), nodeId);
             auto r = Runtime->WaitForEdgeActorEvent({edge});
             if (auto *msg = r->CastAsLocal<TEvBlobStorage::TEvVStatusResult>(); msg && msg->Record.GetReplicated()) {
@@ -521,7 +521,7 @@ struct TEnvironmentSetup {
     void CompactVDisk(const TActorId& actorId, bool freshOnly = false) {
         const TActorId& edge = Runtime->AllocateEdgeActor(actorId.NodeId());
         for (;;) {
-            Runtime->Send(new IEventHandleFat(actorId, edge, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, freshOnly ?
+            Runtime->Send(new IEventHandle(actorId, edge, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, freshOnly ?
                 TEvCompactVDisk::EMode::FRESH_ONLY : TEvCompactVDisk::EMode::FULL)), actorId.NodeId());
             auto res = Runtime->WaitForEdgeActorEvent({edge});
             if (res->GetTypeRewrite() == TEvents::TSystem::Undelivered) {
@@ -541,7 +541,7 @@ struct TEnvironmentSetup {
 
     TString Dump(const TActorId& vdiskActorId, const TVDiskID& vdiskId) {
         const TActorId& edge = Runtime->AllocateEdgeActor(vdiskActorId.NodeId(), __FILE__, __LINE__);
-        Runtime->Send(new IEventHandleFat(vdiskActorId, edge, new TEvBlobStorage::TEvVDbStat(vdiskId,
+        Runtime->Send(new IEventHandle(vdiskActorId, edge, new TEvBlobStorage::TEvVDbStat(vdiskId,
             NKikimrBlobStorage::EDbStatAction::DumpDb, NKikimrBlobStorage::EDbStatType::StatLogoBlobs,
             true)), edge.NodeId());
         return WaitForEdgeActorEvent<TEvBlobStorage::TEvVDbStatResult>(edge)->Get()->Record.GetData();
@@ -550,14 +550,14 @@ struct TEnvironmentSetup {
     void WithQueueId(const TVDiskID& vdiskId, NKikimrBlobStorage::EVDiskQueueId queue, std::function<void(TActorId)> action) {
         const TActorId& queueId = CreateQueueActor(vdiskId, queue, 1000);
         action(queueId);
-        Runtime->Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), queueId.NodeId());
+        Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), queueId.NodeId());
     }
 
     void CheckBlob(const TActorId& vdiskActorId, const TVDiskID& vdiskId, const TLogoBlobID& blobId, const TString& part,
             NKikimrProto::EReplyStatus status = NKikimrProto::OK) {
         WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) {
             const TActorId& edge = Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            Runtime->Send(new IEventHandleFat(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId,
+            Runtime->Send(new IEventHandle(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId,
                 TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::None,
                 Nothing(), {{blobId, 1u, ui32(part.size() - 2)}}).release()), queueId.NodeId());
             auto r = WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge, false);
@@ -572,7 +572,7 @@ struct TEnvironmentSetup {
                 }
             }
 
-            Runtime->Send(new IEventHandleFat(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(vdiskId,
+            Runtime->Send(new IEventHandle(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(vdiskId,
                 TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::None,
                 Nothing(), {{blobId.FullID(), 0, 0}}).release()), queueId.NodeId());
             r = WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge);
@@ -591,7 +591,7 @@ struct TEnvironmentSetup {
     void PutBlob(const TVDiskID& vdiskId, const TLogoBlobID& blobId, const TString& part) {
         WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             const TActorId& edge = Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            Runtime->Send(new IEventHandleFat(queueId, edge, new TEvBlobStorage::TEvVPut(blobId, TRope(part), vdiskId, false, nullptr,
+            Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVPut(blobId, TRope(part), vdiskId, false, nullptr,
                 TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog)), queueId.NodeId());
             auto r = WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
 
@@ -610,7 +610,7 @@ struct TEnvironmentSetup {
                 if (!CommencedReplication.insert(serviceId).second) {
                     continue;
                 }
-                while (!Runtime->Send(new IEventHandleFat(TEvBlobStorage::EvCommenceRepl, 0, serviceId, {}, nullptr, 0), serviceId.NodeId())) {
+                while (!Runtime->Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, serviceId, {}, nullptr, 0), serviceId.NodeId())) {
                     Sim(TDuration::Seconds(1)); // VDisk may be not created yet
                 }
                 WaitForVDiskRepl(serviceId, info->GetVDiskId(i));
@@ -629,7 +629,7 @@ struct TEnvironmentSetup {
             for (const auto& [vdiskId, queueId] : queues) {
                 const ui32 nodeId = queueId.NodeId();
                 const TActorId& edge = Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
-                Runtime->Send(new IEventHandleFat(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
+                Runtime->Send(new IEventHandle(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
                     vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead,
                     TEvBlobStorage::TEvVGet::EFlags::ShowInternals, {}, {blobId.FullID()}).release()), nodeId);
                 auto ev = WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge);
@@ -646,7 +646,7 @@ struct TEnvironmentSetup {
             Sim(TDuration::Seconds(10));
         }
         for (const auto& [vdiskId, queueId] : queues) {
-            Runtime->Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), queueId.NodeId());
+            Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), queueId.NodeId());
         }
     }
 
@@ -727,7 +727,7 @@ struct TEnvironmentSetup {
             const TActorId& edge = Runtime->AllocateEdgeActor(actorId.NodeId(), __FILE__, __LINE__);
             auto ev = std::make_unique<TEvBlobStorage::TEvVStatus>(vdiskId);
             TString request = ev->ToString();
-            Runtime->Send(new IEventHandleFat(actorId, edge, ev.release(), IEventHandle::FlagTrackDelivery), edge.NodeId());
+            Runtime->Send(new IEventHandle(actorId, edge, ev.release(), IEventHandle::FlagTrackDelivery), edge.NodeId());
             auto res = Runtime->WaitForEdgeActorEvent({edge});
             if (auto *msg = res->CastAsLocal<TEvBlobStorage::TEvVStatusResult>()) {
                 const auto& record = msg->Record;
@@ -743,7 +743,7 @@ struct TEnvironmentSetup {
             // sleep for a while
             {
                 const TActorId& edge = Runtime->AllocateEdgeActor(actorId.NodeId(), __FILE__, __LINE__);
-                Runtime->Schedule(TDuration::Minutes(1), new IEventHandleFat(TEvents::TSystem::Wakeup, 0, edge, {}, nullptr, 0), nullptr, edge.NodeId());
+                Runtime->Schedule(TDuration::Minutes(1), new IEventHandle(TEvents::TSystem::Wakeup, 0, edge, {}, nullptr, 0), nullptr, edge.NodeId());
                 WaitForEdgeActorEvent<TEvents::TEvWakeup>(edge);
             }
         }
@@ -754,7 +754,7 @@ struct TEnvironmentSetup {
         const TActorId& edge = Runtime->AllocateEdgeActor(actorId.NodeId(), __FILE__, __LINE__);
         for (;;) {
             std::unique_ptr<typename std::invoke_result_t<TFactory>::element_type> ev(factory());
-            Runtime->Send(new IEventHandleFat(actorId, edge, ev.release(), IEventHandle::FlagTrackDelivery), edge.NodeId());
+            Runtime->Send(new IEventHandle(actorId, edge, ev.release(), IEventHandle::FlagTrackDelivery), edge.NodeId());
             auto res = Runtime->WaitForEdgeActorEvent({edge});
             if (auto *msg = res->CastAsLocal<TEvents::TEvUndelivered>()) {
                 UNIT_ASSERT(checkUndelivered);
@@ -762,7 +762,7 @@ struct TEnvironmentSetup {
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(res->Type, TResult::EventType);
                 Runtime->DestroyActor(edge);
-                return std::unique_ptr<TResult>(IEventHandle::Release<TResult>(res));
+                return std::unique_ptr<TResult>(static_cast<TResult*>(res->ReleaseBase().Release()));
             }
         }
     }

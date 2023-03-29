@@ -1,9 +1,0 @@
-PROTO_LIBRARY()
-
-SRCS(
-    merge.proto
-)
-
-EXCLUDE_TAGS(GO_PROTO)
-
-END()

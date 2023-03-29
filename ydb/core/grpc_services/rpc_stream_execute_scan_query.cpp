@@ -396,7 +396,7 @@ private:
     void SetTimeoutTimer(TDuration timeout, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Set stream timeout timer for " << timeout);
 
-        auto *ev = new IEventHandleFat(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup(EWakeupTag::TimeoutTag));
+        auto *ev = new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup(EWakeupTag::TimeoutTag));
         TimeoutTimerCookieHolder_.Reset(ISchedulerCookie::Make2Way());
         CreateLongTimer(ctx, timeout, ev, 0, TimeoutTimerCookieHolder_.Get());
     }

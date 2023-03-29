@@ -9,6 +9,7 @@
 add_subdirectory(auth)
 add_subdirectory(bg_tasks)
 add_subdirectory(cms)
+add_subdirectory(console)
 add_subdirectory(datastreams)
 add_subdirectory(discovery)
 add_subdirectory(ext_index)

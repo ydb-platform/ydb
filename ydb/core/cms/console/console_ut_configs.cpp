@@ -652,6 +652,66 @@ NKikimrConsole::TConfigItem ITEM_TENANT2_TYPE2_LOG_2;
 NKikimrConsole::TConfigItem ITEM_DOMAIN_TENANT_POOL_1;
 NKikimrConsole::TConfigItem ITEM_DOMAIN_TENANT_POOL_2;
 
+const TString YAML_CONFIG_1 = R"(
+---
+cluster: ""
+version: 1
+---
+config:
+  log_config:
+    cluster_name: cluster1
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+
+const TString YAML_CONFIG_2 = R"(
+---
+cluster: ""
+version: 2
+---
+config:
+  log_config:
+    cluster_name: cluster2
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+
+const TString VOLATILE_YAML_CONFIG_1_1 = R"(
+- description: test 4
+  selector:
+    tenant: /slice
+  config:
+    yaml_config_enabled: true
+    cms_config:
+      sentinel_config:
+        enable: false
+)";
+
+const size_t VOLATILE_YAML_CONFIG_1_1_HASH = THash<TString>{}(VOLATILE_YAML_CONFIG_1_1);
+
+const TString VOLATILE_YAML_CONFIG_1_2 = R"(
+- description: test 5
+  selector:
+    tenant: /slice/test
+  config:
+    yaml_config_enabled: false
+    cms_config:
+      sentinel_config:
+        enable: true
+)";
+
+const size_t VOLATILE_YAML_CONFIG_1_2_HASH = THash<TString>{}(VOLATILE_YAML_CONFIG_1_2);
+
 void InitializeTestConfigItems()
 {
     ITEM_DOMAIN_LOG_1
@@ -3657,7 +3717,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         }
     }
 
-    Y_UNIT_TEST(TestSubscriptionClientDeadCausesSupscriptionDeregistration) {
+    Y_UNIT_TEST(TestSubscriptionClientDeadCausesSubscriptionDeregistration) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -3740,6 +3800,376 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification2->Get()->Record.GetGeneration(), 2);
         UNIT_ASSERT_VALUES_EQUAL(notification2->Get()->Record.GetConfig().ShortDebugString(), config2.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(TestNoYamlWithoutFlag) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        InitializeTestConfigItems();
+
+        TActorId edgeId = runtime.AllocateEdgeActor(1);
+
+        auto subscriber = NConsole::CreateConfigsSubscriber(
+            edgeId,
+            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+            NKikimrConfig::TAppConfig(),
+            0,
+            false);
+        runtime.Register(subscriber, 1);
+
+       TDispatchOptions options1;
+        options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        runtime.DispatchEvents(options1);
+
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_1));
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableLogConfig()->SetClusterName("cluster-1");
+
+        auto item = config.MutableVersion()->AddItems();
+        item->SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
+        item->SetId(1);
+        item->SetGeneration(1);
+
+        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
+
+        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+
+        ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-2");
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_2));
+
+        config.MutableLogConfig()->SetClusterName("cluster-2");
+        item = config.MutableVersion()->AddItems();
+        item->SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
+        item->SetId(2);
+        item->SetGeneration(1);
+
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.HasYamlConfig(), false);
+    }
+
+    Y_UNIT_TEST(TestComplexYamlConfigChanges) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        InitializeTestConfigItems();
+
+        TActorId edgeId = runtime.AllocateEdgeActor(1);
+
+        auto subscriber = NConsole::CreateConfigsSubscriber(
+            edgeId,
+            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+            NKikimrConfig::TAppConfig(),
+            0,
+            true);
+        runtime.Register(subscriber, 1);
+
+        TDispatchOptions options1;
+        options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        runtime.DispatchEvents(options1);
+
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_1));
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableLogConfig()->SetClusterName("cluster-1");
+
+        auto item = config.MutableVersion()->AddItems();
+        item->SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
+        item->SetId(1);
+        item->SetGeneration(1);
+
+        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
+
+        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+
+        CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
+
+        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+        CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
+
+        ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-2");
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_2));
+
+        config.MutableLogConfig()->SetClusterName("cluster-2");
+        item = config.MutableVersion()->AddItems();
+        item->SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
+        item->SetId(2);
+        item->SetGeneration(1);
+
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
+
+        CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 1, VOLATILE_YAML_CONFIG_1_2);
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[1].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
+
+        CheckRemoveVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0);
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
+
+        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_2);
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_2);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 0);
+    }
+
+    Y_UNIT_TEST(TestNoYamlResend) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        InitializeTestConfigItems();
+
+        ui32 nodeId = runtime.GetNodeId(0);
+        ui32 generation = 1;
+        TActorId edgeId = runtime.Sender;
+
+        auto *event = new TEvConsole::TEvConfigSubscriptionRequest;
+        event->Record.SetGeneration(generation);
+        event->Record.MutableOptions()->SetNodeId(nodeId);
+        event->Record.MutableOptions()->SetHost("host1");
+        event->Record.MutableOptions()->SetTenant("tenant-1");
+        event->Record.MutableOptions()->SetNodeType("type1");
+        event->Record.SetServeYaml(true);
+        event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
+        runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
+
+        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 1, VOLATILE_YAML_CONFIG_1_2);
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_1));
+
+        NKikimrConfig::TAppConfig config1;
+        config1.MutableLogConfig()->SetClusterName("cluster-1");
+
+        auto item = config1.MutableVersion()->AddItems();
+        item->SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
+        item->SetId(1);
+        item->SetGeneration(1);
+
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config1.ShortDebugString());
+        UNIT_ASSERT(!notification->Get()->Record.HasYamlConfig());
+        UNIT_ASSERT(notification->Get()->Record.GetYamlConfigNotChanged());
+        for (auto &volatileConfig : notification->Get()->Record.GetVolatileConfigs()) {
+            UNIT_ASSERT(volatileConfig.HasId());
+            UNIT_ASSERT(!volatileConfig.HasConfig());
+            UNIT_ASSERT(volatileConfig.GetNotChanged());
+        }
+    }
+
+    Y_UNIT_TEST(TestSubscribeAfterConfigApply) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        InitializeTestConfigItems();
+
+        ui32 nodeId = runtime.GetNodeId(0);
+        ui32 generation = 1;
+        TActorId edgeId = runtime.Sender;
+
+        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+
+        CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
+
+        CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 1, VOLATILE_YAML_CONFIG_1_2);
+
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_1));
+
+        NKikimrConfig::TAppConfig config1;
+        config1.MutableLogConfig()->SetClusterName("cluster-1");
+
+        auto item = config1.MutableVersion()->AddItems();
+        item->SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
+        item->SetId(1);
+        item->SetGeneration(1);
+
+        auto *event = new TEvConsole::TEvConfigSubscriptionRequest;
+        event->Record.SetGeneration(generation);
+        event->Record.MutableOptions()->SetNodeId(nodeId);
+        event->Record.MutableOptions()->SetHost("host1");
+        event->Record.MutableOptions()->SetTenant("tenant-1");
+        event->Record.MutableOptions()->SetNodeType("type1");
+        event->Record.SetServeYaml(true);
+        event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
+        runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
+
+        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config1.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[1].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
+    }
+
+    Y_UNIT_TEST(TestSubscribeAfterConfigApplyWithKnownConfig) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        InitializeTestConfigItems();
+
+        ui32 nodeId = runtime.GetNodeId(0);
+        ui32 generation = 1;
+        TActorId edgeId = runtime.Sender;
+
+        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+
+        CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
+
+        CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 1, VOLATILE_YAML_CONFIG_1_2);
+
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_1));
+
+        NKikimrConfig::TAppConfig config1;
+        config1.MutableLogConfig()->SetClusterName("cluster-1");
+
+        auto item = config1.MutableVersion()->AddItems();
+        item->SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
+        item->SetId(1);
+        item->SetGeneration(1);
+
+        auto prepareConfigSubscriptionRequest = [&](){
+            auto *event = new TEvConsole::TEvConfigSubscriptionRequest;
+            event->Record.SetGeneration(generation);
+            event->Record.MutableOptions()->SetNodeId(nodeId);
+            event->Record.MutableOptions()->SetHost("host1");
+            event->Record.MutableOptions()->SetTenant("tenant-1");
+            event->Record.MutableOptions()->SetNodeType("type1");
+            event->Record.SetServeYaml(true);
+            event->Record.SetYamlVersion(1);
+            event->Record.MutableKnownVersion()->CopyFrom(config1.GetVersion());
+            return event;
+        };
+
+        auto *event = prepareConfigSubscriptionRequest();
+        auto *volatileYamlVersion = event->Record.AddVolatileYamlVersion();
+        volatileYamlVersion->SetId(0);
+        volatileYamlVersion->SetHash(VOLATILE_YAML_CONFIG_1_1_HASH);
+        volatileYamlVersion = event->Record.AddVolatileYamlVersion();
+        volatileYamlVersion->SetId(1);
+        volatileYamlVersion->SetHash(VOLATILE_YAML_CONFIG_1_2_HASH);
+        event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
+        runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
+
+        // Nothing changed so no notification
+
+        generation = 2;
+
+        event = prepareConfigSubscriptionRequest();
+        volatileYamlVersion = event->Record.AddVolatileYamlVersion();
+        volatileYamlVersion->SetId(0);
+        volatileYamlVersion->SetHash(VOLATILE_YAML_CONFIG_1_1_HASH);
+        runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
+
+        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().GetVersion().ShortDebugString(), config1.GetVersion().ShortDebugString());
+        UNIT_ASSERT(!notification->Get()->Record.HasYamlConfig());
+        UNIT_ASSERT(notification->Get()->Record.GetYamlConfigNotChanged());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
+        UNIT_ASSERT(notification->Get()->Record.GetVolatileConfigs()[0].GetNotChanged());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[1].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
+
+        generation = 3;
+
+        event = prepareConfigSubscriptionRequest();
+        volatileYamlVersion = event->Record.AddVolatileYamlVersion();
+        volatileYamlVersion->SetId(1);
+        volatileYamlVersion->SetHash(VOLATILE_YAML_CONFIG_1_2_HASH);
+        runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
+
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().GetVersion().ShortDebugString(), config1.GetVersion().ShortDebugString());
+        UNIT_ASSERT(!notification->Get()->Record.HasYamlConfig());
+        UNIT_ASSERT(notification->Get()->Record.GetYamlConfigNotChanged());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
+        UNIT_ASSERT(notification->Get()->Record.GetVolatileConfigs()[1].GetNotChanged());
+
+        generation = 4;
+
+        event = prepareConfigSubscriptionRequest();
+        volatileYamlVersion = event->Record.AddVolatileYamlVersion();
+        volatileYamlVersion->SetId(0);
+        volatileYamlVersion->SetHash(VOLATILE_YAML_CONFIG_1_1_HASH);
+        volatileYamlVersion = event->Record.AddVolatileYamlVersion();
+        volatileYamlVersion->SetId(1);
+        volatileYamlVersion->SetHash(VOLATILE_YAML_CONFIG_1_2_HASH);
+        volatileYamlVersion = event->Record.AddVolatileYamlVersion();
+        volatileYamlVersion->SetId(2);
+        volatileYamlVersion->SetHash(VOLATILE_YAML_CONFIG_1_2_HASH);
+        runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
+
+        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().GetVersion().ShortDebugString(), config1.GetVersion().ShortDebugString());
+        UNIT_ASSERT(!notification->Get()->Record.HasYamlConfig());
+        UNIT_ASSERT(notification->Get()->Record.GetYamlConfigNotChanged());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
+        UNIT_ASSERT(notification->Get()->Record.GetVolatileConfigs()[0].GetNotChanged());
+        UNIT_ASSERT(notification->Get()->Record.GetVolatileConfigs()[1].GetNotChanged());
     }
 }
 

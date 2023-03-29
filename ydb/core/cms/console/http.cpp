@@ -90,7 +90,7 @@ void OutputConfigHTML(IOutputStream &os, const NKikimrConfig::TAppConfig &config
                                 }
                                 break;
                             default:
-                                os << "<unsupported value type>";
+                                os << "&lt;unsupported value type&gt;";
                             }
                         }
                     }

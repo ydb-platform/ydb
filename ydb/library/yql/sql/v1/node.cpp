@@ -1246,10 +1246,10 @@ TAstNode* IAggregation::Translate(TContext& ctx) const {
     return nullptr;
 }
 
-std::pair<TNodePtr, bool> IAggregation::AggregationTraits(const TNodePtr& type, bool overState, bool many, TContext& ctx) const {
+std::pair<TNodePtr, bool> IAggregation::AggregationTraits(const TNodePtr& type, bool overState, bool many, bool allowAggApply, TContext& ctx) const {
     const bool distinct = AggMode == EAggregateMode::Distinct;
     const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
-    auto apply = GetApply(listType, many, ctx);
+    auto apply = GetApply(listType, many, allowAggApply, ctx);
     if (!apply) {
         return { nullptr, false };
     }
@@ -1287,7 +1287,7 @@ std::vector<ui32> IAggregation::GetFactoryColumnIndices() const {
 
 TNodePtr IAggregation::WindowTraits(const TNodePtr& type, TContext& ctx) const {
     YQL_ENSURE(AggMode == EAggregateMode::OverWindow, "Windows traits is unavailable");
-    return Q(Y(Q(Name), GetApply(type, false, ctx)));
+    return Q(Y(Q(Name), GetApply(type, false, false, ctx)));
 }
 
 ISource::ISource(TPosition pos)
@@ -1818,8 +1818,9 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
     auto aggrArgs = Y();
     const bool overState = GroupBySuffix == "CombineState" || GroupBySuffix == "MergeState" ||
         GroupBySuffix == "MergeFinalize" || GroupBySuffix == "MergeManyFinalize";
+    const bool allowAggApply = !LegacyHoppingWindowSpec && !SessionWindow && !HoppingWindow;
     for (const auto& aggr: Aggregations) {
-        auto res = aggr->AggregationTraits(listType, overState, GroupBySuffix == "MergeManyFinalize", ctx);
+        auto res = aggr->AggregationTraits(listType, overState, GroupBySuffix == "MergeManyFinalize", allowAggApply, ctx);
         if (!res.second) {
            return { nullptr, false };
         }

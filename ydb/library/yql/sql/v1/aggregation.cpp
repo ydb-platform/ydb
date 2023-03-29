@@ -123,14 +123,14 @@ protected:
         return BuildLambda(Pos, Y("row"), Y("PersistableRepr", many ? Y("Unwrap", Expr) : Expr));
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const override {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const override {
         auto extractor = GetExtractor(many, ctx);
         if (!extractor) {
             return nullptr;
         }
 
         if (!Multi) {
-            if (!DynamicFactory && !AggApplyName.empty()) {
+            if (!DynamicFactory && allowAggApply && !AggApplyName.empty()) {
                 return Y("AggApply", Q(AggApplyName), Y("ListItemType", type), extractor);
             }
 
@@ -303,8 +303,9 @@ private:
         return BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Payload) : Payload);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         auto apply = Y("Apply", Factory, type,
             BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Key) : Key),
             BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Payload) : Payload));
@@ -403,8 +404,9 @@ private:
         return BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Payload) : Payload);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         return Y("Apply", Factory, type,
             BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Payload) : Payload),
             BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Predicate) : Predicate));
@@ -489,8 +491,9 @@ private:
         return BuildLambda(Pos, Y("row"), many ? Y("Unwrap", One) : One);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         auto tuple = Q(Y(One, Two));
         return Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", tuple) : tuple));
     }
@@ -583,8 +586,9 @@ private:
         return new THistogramAggregationFactory(Pos, Name, Func, AggMode);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         auto apply = Y("Apply", Factory, type,
             BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr),
             BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Weight) : Weight));
@@ -662,8 +666,9 @@ private:
         return new TLinearHistogramAggregationFactory(Pos, Name, Func, AggMode);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         return Y("Apply", Factory, type,
             BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr),
             BinSize, Minimum, Maximum);
@@ -758,8 +763,9 @@ private:
         return new TPercentileFactory(Pos, Name, Func, AggMode);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         TNodePtr percentiles(Percentiles.cbegin()->second);
 
         if (Percentiles.size() > 1U) {
@@ -777,7 +783,7 @@ private:
         apply = L(apply, FactoryPercentile);
     }
 
-    std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, TContext& ctx) const final {
+    std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, bool allowAggApply, TContext& ctx) const final {
         if (Percentiles.empty())
             return { TNodePtr(), true };
 
@@ -792,7 +798,7 @@ private:
 
         const bool distinct = AggMode == EAggregateMode::Distinct;
         const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
-        auto apply = GetApply(listType, many, ctx);
+        auto apply = GetApply(listType, many, allowAggApply, ctx);
         if (!apply) {
             return { TNodePtr(), false };
         }
@@ -892,8 +898,9 @@ private:
         return new TTopFreqFactory(Pos, Name, Func, AggMode);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         TPair topFreqs(TopFreqs.cbegin()->second);
 
         if (TopFreqs.size() > 1U) {
@@ -912,7 +919,7 @@ private:
         apply = L(apply, TopFreqFactoryParams.first, TopFreqFactoryParams.second);
     }
 
-    std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, TContext& ctx) const final {
+    std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, bool allowAggApply, TContext& ctx) const final {
         if (TopFreqs.empty())
             return { TNodePtr(), true };
 
@@ -927,7 +934,7 @@ private:
 
         const bool distinct = AggMode == EAggregateMode::Distinct;
         const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
-        auto apply = GetApply(listType, many, ctx);
+        auto apply = GetApply(listType, many, allowAggApply, ctx);
         if (!apply) {
             return { nullptr, false };
         }
@@ -1017,8 +1024,9 @@ private:
         return new TTopAggregationFactory(Pos, Name, Func, AggMode);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         TNodePtr apply;
         if (HasKey) {
             apply = Y("Apply", Factory, type,
@@ -1132,8 +1140,9 @@ private:
         return new TCountDistinctEstimateAggregationFactory(Pos, Name, Func, AggMode);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr));
         AddFactoryArguments(apply);
         return apply;
@@ -1206,8 +1215,9 @@ private:
         return new TListAggregationFactory(Pos, Name, Func, AggMode);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr));
         AddFactoryArguments(apply);
         return apply;
@@ -1264,8 +1274,9 @@ private:
         return new TUserDefinedAggregationFactory(Pos, Name, Func, AggMode);
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr));
         AddFactoryArguments(apply);
         return apply;
@@ -1355,9 +1366,10 @@ public:
         return nullptr;
     }
 
-    TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const final {
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(many);
         Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
         return Y(AggMode == EAggregateMode::OverWindow ? "PgWindowTraits" : "PgAggregationTraits",
             Q(PgFunc), Y("ListItemType", type), Lambda);
     }

@@ -782,7 +782,7 @@ namespace NSQLTranslationV1 {
 
         virtual bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) = 0;
 
-        virtual std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, TContext& ctx) const;
+        virtual std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, bool allowAggApply, TContext& ctx) const;
 
         virtual TNodePtr AggregationTraitsFactory() const = 0;
 
@@ -800,7 +800,7 @@ namespace NSQLTranslationV1 {
         virtual void Join(IAggregation* aggr);
 
     private:
-        virtual TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const = 0;
+        virtual TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const = 0;
 
     protected:
         IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);

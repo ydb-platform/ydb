@@ -104,7 +104,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                     *ElapsedTime = Timer.Passed() / TotalEventsAmount;
                 }
                 PassAway();
-                Cerr << "-";
                 return true;
             }
             return false;
@@ -506,13 +505,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     Y_UNIT_TEST(SendActivateReceive1Pool8ThreadsUnited) { RunBenchContentedThreads(8, EPoolType::United); }
 
     Y_UNIT_TEST(SendActivateReceiveCSV) {
-        Cerr << "threads, actorPairs, time " << Endl;
+        Cout << "threads,actorPairs,msgs_per_sec" << Endl;
         for (ui32 threads = 1; threads <= 32; threads *= 2) {
-            for (ui32 actorPairs = 1; actorPairs <= 2 * threads; actorPairs++) {
+            for (ui32 actorPairs = 1; actorPairs <= 2 * 32; actorPairs *= 2) {
                 auto stats = CountStats([threads, actorPairs] {
                     return BenchContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common);
-                });
-                Cerr << threads << "," << actorPairs << "," << actorPairs * 1e9 / stats.Mean << Endl;
+                }, 3);
+                Cout << threads << "," << actorPairs << "," << actorPairs * 1e9 / stats.Mean << Endl;
             }
         }
     }

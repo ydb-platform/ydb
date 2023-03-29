@@ -734,6 +734,7 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareAvgOverInput(TTupleTy
     case NUdf::EDataSlot::Int8:
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, i8>>(filterColumn, argColumn, avgRetType);
     case NUdf::EDataSlot::Uint8:
+    case NUdf::EDataSlot::Bool:
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, ui8>>(filterColumn, argColumn, avgRetType);
     case NUdf::EDataSlot::Int16:
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, i16>>(filterColumn, argColumn, avgRetType);

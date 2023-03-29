@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from ydb import Driver, DriverConfig, SessionPool
+from ydb.public.sdk.python3.ydb import Driver, DriverConfig, SessionPool
 
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory

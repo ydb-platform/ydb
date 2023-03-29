@@ -29,8 +29,6 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
     config.Opts->AddLongOption("explain", "Explain query").Optional().StoreTrue(&Explain);
     config.Opts->AddLongOption("show-response-metadata", ResponseHeadersHelp).Optional().StoreTrue(&ShowHeaders);
 
-    AddParametersOption(config, "script");
-
     AddFormats(config, {
         EOutputFormat::Pretty,
         EOutputFormat::JsonUnicode,
@@ -38,6 +36,8 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
         EOutputFormat::JsonBase64,
         EOutputFormat::JsonBase64Array
     });
+
+    AddParametersOption(config);
 
     AddInputFormats(config, {
         EOutputFormat::JsonUnicode,
@@ -52,6 +52,8 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
         EOutputFormat::NoFraming,
         EOutputFormat::NewlineDelimited
     });
+
+    AddParametersStdinOption(config, "script");
 
     config.SetFreeArgsNum(0);
 

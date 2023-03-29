@@ -75,7 +75,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     }
 }
 
-void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config, const TString& requestString, const TString& clarification) {
+void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config, const TString& clarification) {
     TStringStream descr;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     descr << "Query parameter[s].";
@@ -87,27 +87,9 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
         << "Escaping depends on operating system.";
     config.Opts->AddLongOption('p', "param", descr.Str())
         .RequiredArgument("$name=value").AppendTo(&ParameterOptions);
-    descr.Clear();
-    descr << "Batching mode for stdin parameters processing. Available options:\n  " 
-        << colors.BoldColor() << "iterative" << colors.OldColor() 
-        << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
-        "when no framing specified in \"stdin-format\")\n  "
-        << colors.BoldColor() << "full" << colors.OldColor() 
-        << "\n    Executes " << requestString << " once, with all parameter sets wrapped in json list, when EOF is reached on stdin\n  "
-        << colors.BoldColor() << "adaptive" << colors.OldColor()
-        << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches batch-limit, "
-        "or the waiting time reaches batch-max-delay."
-        "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
     config.Opts->AddLongOption("param-file", "File name with parameter names and values "
         "in json format. You may specify this option repeatedly.")
         .RequiredArgument("PATH").AppendTo(&ParameterFiles);
-    config.Opts->AddLongOption("stdin-par", "Parameter name on stdin, required/applicable when stdin-format implies values only.")
-            .RequiredArgument("STRING").AppendTo(&StdinParameters);
-    config.Opts->AddLongOption("batch", descr.Str()).RequiredArgument("STRING").StoreResult(&BatchMode);
-    config.Opts->AddLongOption("batch-limit", "Maximum size of list for adaptive batching mode").RequiredArgument("INT")
-            .StoreResult(&BatchLimit).DefaultValue(1000);
-    config.Opts->AddLongOption("batch-max-delay", "Maximum delay to process first item in the list for adaptive batching mode")
-            .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(TDuration::Seconds(1));
 
     AddOptionExamples(
         "param",
@@ -130,6 +112,28 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
             .EndExample()
         .Build()
     );
+}
+
+void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& config, const TString& requestString) {
+    TStringStream descr;
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    descr << "Batching mode for stdin parameters processing. Available options:\n  " 
+        << colors.BoldColor() << "iterative" << colors.OldColor() 
+        << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
+        "when no framing specified in \"stdin-format\")\n  "
+        << colors.BoldColor() << "full" << colors.OldColor() 
+        << "\n    Executes " << requestString << " once, with all parameter sets wrapped in json list, when EOF is reached on stdin\n  "
+        << colors.BoldColor() << "adaptive" << colors.OldColor()
+        << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches batch-limit, "
+        "or the waiting time reaches batch-max-delay."
+        "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
+    config.Opts->AddLongOption("stdin-par", "Parameter name on stdin, required/applicable when stdin-format implies values only.")
+            .RequiredArgument("STRING").AppendTo(&StdinParameters);
+    config.Opts->AddLongOption("batch", descr.Str()).RequiredArgument("STRING").StoreResult(&BatchMode);
+    config.Opts->AddLongOption("batch-limit", "Maximum size of list for adaptive batching mode").RequiredArgument("INT")
+            .StoreResult(&BatchLimit).DefaultValue(1000);
+    config.Opts->AddLongOption("batch-max-delay", "Maximum delay to process first item in the list for adaptive batching mode")
+            .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(TDuration::Seconds(1));
 }
 
 void TCommandWithParameters::AddParams(const std::map<TString, TType>& paramTypes, EOutputFormat inputFormat, TParamsBuilder& paramBuilder) {

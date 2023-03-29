@@ -28,7 +28,8 @@ bool IsStdinInteractive();
 class TCommandWithParameters : public TCommandWithExamples {
 protected:
     void ParseParameters(TClientCommand::TConfig& config);
-    void AddParametersOption(TClientCommand::TConfig& config, const TString& requestString, const TString& clarification = "");
+    void AddParametersOption(TClientCommand::TConfig& config, const TString& clarification = "");
+    void AddParametersStdinOption(TClientCommand::TConfig& config, const TString& requestString);
     bool GetNextParams(const std::map<TString, TType>& paramTypes, EOutputFormat inputFormat, EOutputFormat encodingFormat,
                                 EOutputFormat framingFormat, THolder<TParamsBuilder>& paramBuilder);
 

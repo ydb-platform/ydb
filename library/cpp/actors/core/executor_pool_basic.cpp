@@ -337,7 +337,7 @@ namespace NActors {
         poolStats.DefaultThreadCount = DefaultThreadCount;
         poolStats.MaxThreadCount = MaxThreadCount;
         if (Harmonizer) {
-            TPoolHarmonizedStats stats = Harmonizer->GetPoolStats(PoolId);
+            TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
             poolStats.IsNeedy = stats.IsNeedy;
             poolStats.IsStarved = stats.IsStarved;
             poolStats.IsHoggish = stats.IsHoggish;
@@ -345,6 +345,10 @@ namespace NActors {
             poolStats.DecreasingThreadsByStarvedState = stats.DecreasingThreadsByStarvedState;
             poolStats.DecreasingThreadsByHoggishState = stats.DecreasingThreadsByHoggishState;
             poolStats.PotentialMaxThreadCount = stats.PotentialMaxThreadCount;
+            poolStats.MaxConsumedCpuUs = stats.MaxConsumedCpu;
+            poolStats.MinConsumedCpuUs = stats.MinConsumedCpu;
+            poolStats.MaxBookedCpuUs = stats.MaxBookedCpu;
+            poolStats.MinBookedCpuUs = stats.MinBookedCpu;
         }
 
         statsCopy.resize(PoolThreads + 1);

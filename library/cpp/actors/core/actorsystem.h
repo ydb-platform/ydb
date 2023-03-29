@@ -299,6 +299,8 @@ namespace NActors {
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
 
+        THarmonizerStats GetHarmonizerStats() const;
+
         std::optional<ui32> GetPoolThreadsCount(const ui32 poolId) const {
             if (!SystemSetup) {
                 return {};

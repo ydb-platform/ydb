@@ -218,6 +218,11 @@ namespace NActors {
         CpuManager->GetPoolStats(poolId, poolStats, statsCopy);
     }
 
+    THarmonizerStats TActorSystem::GetHarmonizerStats() const {
+        return CpuManager->GetHarmonizerStats();
+
+    }
+
     void TActorSystem::Start() {
         Y_VERIFY(StartExecuted == false);
         StartExecuted = true;

@@ -63,6 +63,10 @@ namespace NActors {
         ui64 IncreasingThreadsByNeedyState = 0;
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
+        i64 MaxConsumedCpuUs = 0;
+        i64 MinConsumedCpuUs = 0;
+        i64 MaxBookedCpuUs = 0;
+        i64 MinBookedCpuUs = 0;
         i16 WrongWakenedThreadCount = 0;
         i16 CurrentThreadCount = 0;
         i16 PotentialMaxThreadCount = 0;

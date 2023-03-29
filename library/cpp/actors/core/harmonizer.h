@@ -6,14 +6,25 @@
 namespace NActors {
     class IExecutorPool;
 
-    struct TPoolHarmonizedStats {
+    struct TPoolHarmonizerStats {
         ui64 IncreasingThreadsByNeedyState = 0;
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
+        i64 MaxConsumedCpu = 0.0;
+        i64 MinConsumedCpu = 0.0;
+        i64 MaxBookedCpu = 0.0;
+        i64 MinBookedCpu = 0.0;
         i16 PotentialMaxThreadCount = 0;
         bool IsNeedy = false;
         bool IsStarved = false;
         bool IsHoggish = false;
+    };
+
+    struct THarmonizerStats {
+        i64 MaxConsumedCpu = 0.0;
+        i64 MinConsumedCpu = 0.0;
+        i64 MaxBookedCpu = 0.0;
+        i64 MinBookedCpu = 0.0;
     };
 
     // Pool cpu harmonizer
@@ -24,7 +35,8 @@ namespace NActors {
         virtual void DeclareEmergency(ui64 ts) = 0;
         virtual void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo = nullptr) = 0;
         virtual void Enable(bool enable) = 0;
-        virtual TPoolHarmonizedStats GetPoolStats(i16 poolId) const = 0;
+        virtual TPoolHarmonizerStats GetPoolStats(i16 poolId) const = 0;
+        virtual THarmonizerStats GetStats() const = 0;
     };
 
     IHarmonizer* MakeHarmonizer(ui64 ts);

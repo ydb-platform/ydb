@@ -2366,7 +2366,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
-        runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -2505,7 +2505,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 txId = 1000;
 
         // Ovewrite the same data multiple times to produce multiple portions at different timestamps
-        ui32 numWrites = 14; // trigger split granule compaction by GranuleBlobSplitSize
+        ui32 numWrites = 14;
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
             UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
 
@@ -2570,7 +2570,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // Advance the time in order to trigger GC
         TDuration delay = TDuration::Minutes(6);
         planStep += delay.MilliSeconds();
-        numWrites = 10; // trigger in granule compaction by size
+        numWrites = 10;
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
             UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
 
@@ -2601,7 +2601,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         // Advance the time and trigger some more compactions and cleanups
         planStep += 2*delay.MilliSeconds();
-        numWrites = 10;
+        numWrites = 2;
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
             UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
 

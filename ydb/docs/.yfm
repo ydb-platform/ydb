@@ -13,6 +13,9 @@ docs-viewer:
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
   
   logo-options:
+    url:
+      en: https://ydb.tech/
+      default: https://ydb.tech/{lang}
     src: https://storage.yandexcloud.net/docs-external/ydb/assets/Logo-YDB.svg
     src-mobile: https://storage.yandexcloud.net/docs-external/ydb/assets/Logo-YDB.svg
     img-has:

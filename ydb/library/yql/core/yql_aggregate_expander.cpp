@@ -1474,12 +1474,15 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
         }
 
         if (!isDistinct) {
-            if (IsDepended(traits->Child(2)->Tail(), traits->Child(2)->Head().Head())) {
-                return node.Ptr();
-            }
-
             if (traits->Head().Content() == "count") {
                 initVal = traits->Child(2)->TailPtr();
+                if (initVal->GetTypeAnn()->IsOptionalOrNull()) {
+                    if (IsDepended(traits->Child(2)->Tail(), traits->Child(2)->Head().Head())) {
+                        return node.Ptr();
+                    }
+                } else {
+                    initVal = nullptr;
+                }
             }
         }
     } else {

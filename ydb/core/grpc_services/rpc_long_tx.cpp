@@ -68,17 +68,23 @@ public:
 class TFullSplitData {
 private:
     ui32 ShardsCount = 0;
-    THashMap<ui64, TShardInfo> ShardsInfo;
-
+    THashMap<ui64, std::vector<TShardInfo>> ShardsInfo;
+    YDB_ACCESSOR_DEF(TString, ErrorString);
 public:
-    TString ErrorString;
-
     TFullSplitData(const ui32 shardsCount, TString errString = {})
         : ShardsCount(shardsCount)
         , ErrorString(errString)
     {}
 
-    const THashMap<ui64, TShardInfo>& GetShardsInfo() const {
+    ui32 GetShardRequestsCount() const {
+        ui32 result = 0;
+        for (auto&& i : ShardsInfo) {
+            result += i.second.size();
+        }
+        return result;
+    }
+
+    const THashMap<ui64, std::vector<TShardInfo>>& GetShardsInfo() const {
         return ShardsInfo;
     }
 
@@ -87,7 +93,7 @@ public:
     }
 
     void AddShardInfo(const ui64 tabletId, TShardInfo&& info) {
-        ShardsInfo.emplace(tabletId, std::move(info));
+        ShardsInfo[tabletId].emplace_back(std::move(info));
     }
 };
 
@@ -100,13 +106,19 @@ TFullSplitData SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
     auto& descSharding = description.GetSharding();
 
     TVector<ui64> tabletIds(descSharding.GetColumnShards().begin(), descSharding.GetColumnShards().end());
-    ui32 numShards = tabletIds.size();
+    const ui32 numShards = tabletIds.size();
     Y_VERIFY(numShards);
     TFullSplitData result(numShards);
 
     if (numShards == 1) {
-        TShardInfo splitInfo(NArrow::SerializeBatchNoCompression(batch), batch->num_rows());
-        result.AddShardInfo(tabletIds[0], std::move(splitInfo));
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        if (!NArrow::SplitBySize(batch, batches, NColumnShard::TLimits::MAX_BLOB_SIZE)) {
+            return result.SetErrorString("cannot split batch in according to limits");
+        }
+        for (auto&& b : batches) {
+            TShardInfo splitInfo(NArrow::SerializeBatchNoCompression(b), b->num_rows());
+            result.AddShardInfo(tabletIds[0], std::move(splitInfo));
+        }
         return result;
     }
 
@@ -116,10 +128,9 @@ TFullSplitData SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
         rowSharding = sharding->MakeSharding(batch);
     }
     if (rowSharding.empty()) {
-        result.ErrorString = "empty "
+        return result.SetErrorString("empty "
             + NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction_Name(descSharding.GetHashSharding().GetFunction())
-            + " sharding (" + (sharding ? sharding->DebugString() : "no sharding object") + ")";
-        return result;
+            + " sharding (" + (sharding ? sharding->DebugString() : "no sharding object") + ")");
     }
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> sharded = NArrow::ShardingSplit(batch, rowSharding, numShards);
@@ -128,8 +139,14 @@ TFullSplitData SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
     THashMap<ui64, TString> out;
     for (size_t i = 0; i < sharded.size(); ++i) {
         if (sharded[i]) {
-            TShardInfo splitInfo(NArrow::SerializeBatchNoCompression(sharded[i]), sharded[i]->num_rows());
-            result.AddShardInfo(tabletIds[i], std::move(splitInfo));
+            std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+            if (!NArrow::SplitBySize(sharded[i], batches, NColumnShard::TLimits::GetBlobSizeForSplit())) {
+                return result.SetErrorString("cannot split batch in according to limits");
+            }
+            for (auto&& b : batches) {
+                TShardInfo splitInfo(NArrow::SerializeBatchNoCompression(b), b->num_rows());
+                result.AddShardInfo(tabletIds[i], std::move(splitInfo));
+            }
         }
     }
 
@@ -380,11 +397,13 @@ class TWriteIdForShard {
 private:
     YDB_READONLY(ui64, ShardId, 0);
     YDB_READONLY(ui64, WriteId, 0);
+    YDB_READONLY(ui64, WritePartId, 0);
 public:
     TWriteIdForShard() = default;
-    TWriteIdForShard(const ui64 shardId, const ui64 writeId)
+    TWriteIdForShard(const ui64 shardId, const ui64 writeId, const ui32 writePartId)
         : ShardId(shardId)
         , WriteId(writeId)
+        , WritePartId(writePartId)
     {
 
     }
@@ -430,8 +449,8 @@ public:
         WriteIds.resize(WritesCount.Val());
     }
 
-    void OnSuccess(const ui64 shardId, const ui64 writeId) {
-        WriteIds[WritesIndex.Inc() - 1] = TWriteIdForShard(shardId, writeId);
+    void OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId) {
+        WriteIds[WritesIndex.Inc() - 1] = TWriteIdForShard(shardId, writeId, writePartId);
         if (!WritesCount.Dec()) {
             auto req = MakeHolder<TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId);
             for (auto&& i : WriteIds) {
@@ -454,6 +473,7 @@ private:
     static const constexpr ui32 OverloadedDelayMs = 200;
 
     const ui64 ShardId;
+    const ui64 WritePartIdx;
     const ui64 TableId;
     const TString DedupId;
     const TString Data;
@@ -479,8 +499,9 @@ public:
     }
 
     TShardWriter(const ui64 shardId, const ui64 tableId, const TString& dedupId, const TString& data,
-        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController)
+        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx)
         : ShardId(shardId)
+        , WritePartIdx(writePartIdx)
         , TableId(tableId)
         , DedupId(dedupId)
         , Data(data)
@@ -501,7 +522,8 @@ public:
     }
 
     void Bootstrap() {
-        SendToTablet(MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, Data));
+        auto ev = MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, Data, WritePartIdx);
+        SendToTablet(std::move(ev));
         Become(&TShardWriter::StateMain);
     }
 
@@ -526,7 +548,7 @@ public:
             return;
         }
 
-        ExternalController->OnSuccess(ShardId, msg->Record.GetWriteId());
+        ExternalController->OnSuccess(ShardId, msg->Record.GetWriteId(), WritePartIdx);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -556,7 +578,8 @@ public:
             Schedule(OverloadTimeout(), new TEvents::TEvWakeup());
         } else {
             ++NumRetries;
-            SendToTablet(MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, Data));
+            auto ev = MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, Data, WritePartIdx);
+            SendToTablet(std::move(ev));
         }
         return true;
     }
@@ -646,24 +669,27 @@ protected:
             IndexReady = true;
         }
         Y_VERIFY(!InternalController);
+        ui32 writeIdx = 0;
         if (sharding.HasRandomSharding()) {
             InternalController = std::make_shared<TWritersController>(1, this->SelfId(), LongTxId);
             const ui64 shard = sharding.GetColumnShards(RandomNumber<ui32>(sharding.ColumnShardsSize()));
-            this->Register(new TShardWriter(shard, tableId, DedupId, GetSerializedData(), ActorSpan, InternalController));
+            this->Register(new TShardWriter(shard, tableId, DedupId, GetSerializedData(), ActorSpan, InternalController, ++writeIdx));
         } else if (sharding.HasHashSharding()) {
             const TFullSplitData batches = HasDeserializedBatch() ?
                 SplitData(GetDeserializedBatch(), description) :
                 SplitData(GetSerializedData(), description);
-            if (batches.GetShardsInfo().empty()) {
-                return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Input data sharding error: " + batches.ErrorString);
+            if (batches.GetErrorString()) {
+                return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Input data sharding error: " + batches.GetErrorString());
             }
-            InternalController = std::make_shared<TWritersController>(batches.GetShardsInfo().size(), this->SelfId(), LongTxId);
+            InternalController = std::make_shared<TWritersController>(batches.GetShardRequestsCount(), this->SelfId(), LongTxId);
             ui32 sumBytes = 0;
             ui32 rowsCount = 0;
-            for (auto& [shard, info] : batches.GetShardsInfo()) {
-                sumBytes += info.GetData().size();
-                rowsCount += info.GetRowsCount();
-                this->Register(new TShardWriter(shard, tableId, DedupId, info.GetData(), ActorSpan, InternalController));
+            for (auto& [shard, infos] : batches.GetShardsInfo()) {
+                for (auto&& info : infos) {
+                    sumBytes += info.GetData().size();
+                    rowsCount += info.GetRowsCount();
+                    this->Register(new TShardWriter(shard, tableId, DedupId, info.GetData(), ActorSpan, InternalController, ++writeIdx));
+                }
             }
             pSpan.Attribute("affected_shards_count", (long)batches.GetShardsInfo().size());
             pSpan.Attribute("bytes", (long)sumBytes);

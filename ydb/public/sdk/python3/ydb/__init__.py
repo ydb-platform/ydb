@@ -69,11 +69,10 @@ def construct_credentials_from_environ(tracer=None):
         iam_channel_credentials = {}
         if root_certificates_file is not None:
             iam_channel_credentials = {
-                "root_certificates": read_bytes(root_certificates_file)
+                "root_certificates": read_bytes(root_certificates_file)  # noqa
             }
         return ydb.iam.ServiceAccountCredentials.from_file(
             os.getenv("SA_KEY_FILE"),
             iam_channel_credentials=iam_channel_credentials,
             iam_endpoint=os.getenv("IAM_ENDPOINT", "iam.api.cloud.yandex.net:443"),
         )
-

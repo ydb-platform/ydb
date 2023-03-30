@@ -485,6 +485,14 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
     if (auto maybeOlapOperation = operation.Maybe<TKqpOlapOperationBase>()) {
         CompileOlapProgramImpl(maybeOlapOperation.Cast().Input(), ctx);
         if (auto maybeFilter = operation.Maybe<TKqpOlapFilter>()) {
+            // On the first level of filters we apply fast and light filters: <, >, !=, == etc.
+            // On the second level we apply high-cost filters (LIKE operation) on top of filtered data from the 1st level.
+            if (maybeFilter.Cast().Input().Maybe<TKqpOlapFilter>()) {
+                // The 2nd level of filters use the result of 1st level as input.
+                // We create an empty projection to run first level apply.
+                // Because real execution of filters is done on Projection and GroupBy steps.
+                ctx.CreateProjection();
+            }
             CompileFilter(maybeFilter.Cast(), ctx);
         } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
             CompileAggregates(maybeAgg.Cast(), ctx);

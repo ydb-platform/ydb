@@ -1318,6 +1318,63 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+#if SSA_RUNTIME_VERSION >= 2U
+    Y_UNIT_TEST(PredicatePushdown_DifferentLvlOfFilters) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        EnableDebugLogging(kikimr);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        std::vector< std::pair<TString, TString> > secondLvlFilters = {
+            { R"(`uid` LIKE "%30000%")", "TableFullScan" },
+            { R"(`uid` NOT LIKE "%30000%")", "TableFullScan" },
+            { R"(`uid` LIKE "uid%")", "TableFullScan" },
+            { R"(`uid` LIKE "%001")", "TableFullScan" },
+            { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" }, // We have filter (Size >= 6)
+        };
+        std::string query = R"(
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
+                `level` >= 1 AND
+        )";
+
+        for (auto filter : secondLvlFilters) {
+            auto it = tableClient.StreamExecuteScanQuery(query + filter.first, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto result = CollectStreamResult(it);
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+
+            auto readNode = FindPlanNodeByKv(plan, "Node Type", filter.second);
+            UNIT_ASSERT(readNode.IsDefined());
+
+            auto& operators = readNode.GetMapSafe().at("Operators").GetArraySafe();
+            for (auto& op : operators) {
+                if (op.GetMapSafe().at("Name") == "TableFullScan") {
+                    UNIT_ASSERT(op.GetMapSafe().at("SsaProgram").IsDefined());
+                    auto ssa = op.GetMapSafe().at("SsaProgram").GetStringRobust();
+                    int filterCmdCount = 0;
+                    std::string::size_type pos = 0;
+                    std::string filterCmd = R"("Filter":{)";
+                    while ((pos = ssa.find(filterCmd, pos)) != std::string::npos) {
+                        ++filterCmdCount;
+                        pos += filterCmd.size();
+                    }
+                    UNIT_ASSERT_EQUAL(filterCmdCount, 2);
+                }
+            }
+        }
+    }
+#endif
+
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

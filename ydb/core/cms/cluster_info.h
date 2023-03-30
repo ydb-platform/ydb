@@ -1,24 +1,32 @@
 #pragma once
 
 #include "defs.h"
+
 #include "config.h"
 #include "downtime.h"
+#include "node_checkers.h"
 #include "services.h"
 
-#include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/actors/core/actor.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/console.pb.h>
 
+#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
+
+#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/interconnect/interconnect.h>
+
+#include <util/datetime/base.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
 #include <util/generic/set.h>
-#include "util/generic/ptr.h"
+#include <util/generic/vector.h>
 
 namespace NKikimr::NCms {
 
@@ -455,8 +463,8 @@ struct TBSGroupInfo {
 };
 
 /**
- * Structure to hold info and state for a state storage. It helps to 
- * avoid the situation when we quickly unlock one state stotage node and 
+ * Structure to hold info and state for a state storage. It helps to
+ * avoid the situation when we quickly unlock one state stotage node and
  * immediately lock another node from different ring
  */
 class TStateStorageRingInfo : public TThrRefBase {
@@ -464,13 +472,13 @@ public:
 
     /**
      * Ok:          we can allow to restart nodes;
-     * 
-     * Locked:      all nodes are up. We restarted some nodes before and waiting 
+     *
+     * Locked:      all nodes are up. We restarted some nodes before and waiting
      *              some timeout to allow restart nodes from other ring.
      *              But, we still can restart nodes from this ring;
-     * 
-     * Disabled:    Disabled ring (see state storage config). The ring 
-     *              affects permissions of other rings, but this ring 
+     *
+     * Disabled:    Disabled ring (see state storage config). The ring
+     *              affects permissions of other rings, but this ring
      *              can be disabled without considering the others;
      *
      * Restart:     has some restarting or down nodes. We can still restart
@@ -490,7 +498,7 @@ public:
 
     TStateStorageRingInfo &operator=(const TStateStorageRingInfo &other) = default;
     TStateStorageRingInfo &operator=(TStateStorageRingInfo &&other) = default;
-    
+
     static TString RingStateToString(RingState state) {
         switch (state) {
             case Unknown:
@@ -519,7 +527,7 @@ public:
         IsDisabled = true;
     }
 
-    RingState CountState(TInstant now, 
+    RingState CountState(TInstant now,
                          TDuration retryTime,
                          TDuration duration) const;
 
@@ -530,6 +538,103 @@ public:
     TVector<TNodeInfoPtr> Replicas;
 };
 using TStateStorageRingInfoPtr = TIntrusivePtr<TStateStorageRingInfo>;
+
+
+
+enum EOperationType {
+    OPERATION_TYPE_UNKNOWN = 0,
+    OPERATION_TYPE_LOCK_DISK = 1,
+    OPERATION_TYPE_LOCK_NODE = 2,
+    OPERATION_TYPE_ROLLBACK_POINT = 3,
+};
+
+class TOperationBase {
+public:
+    const EOperationType Type;
+
+    explicit TOperationBase(EOperationType type)
+        : Type(type)
+    {
+    }
+    virtual ~TOperationBase() = default;
+
+    virtual void Do() = 0;
+    virtual void Undo() = 0;
+};
+
+class TLockNodeOperation : public TOperationBase {
+public:
+    const ui32 NodeId;
+
+private:
+
+    TSimpleSharedPtr<TNodesStateBase> NodesState;
+
+public:
+
+    TLockNodeOperation(ui32 nodeId, TSimpleSharedPtr<TNodesStateBase> nodesState)
+        : TOperationBase(OPERATION_TYPE_LOCK_NODE)
+        , NodeId(nodeId)
+        , NodesState(nodesState)
+    {
+    }
+    ~TLockNodeOperation() = default;
+
+    void Do() override final {
+        NodesState->LockNode(NodeId);
+    }
+
+    void Undo() override final {
+        NodesState->UnlockNode(NodeId);
+    }
+
+};
+
+class TLogRollbackPoint : public TOperationBase {
+public:
+    TLogRollbackPoint() : TOperationBase(OPERATION_TYPE_ROLLBACK_POINT)
+    {
+    }
+
+    void Do() override final {
+        return;
+    }
+
+    void Undo() override final {
+        return;
+    }
+
+};
+
+class TOperationLogManager {
+private:
+    TVector<TSimpleSharedPtr<TOperationBase>> Log;
+
+public:
+    void PushRollbackPoint() {
+        Log.push_back(TSimpleSharedPtr<TOperationBase>(new TLogRollbackPoint()));
+    }
+
+    void AddNodeLockOperation(ui32 nodeId, TSimpleSharedPtr<TNodesStateBase> nodesState) {
+        Log.push_back(TSimpleSharedPtr<TOperationBase>(new TLockNodeOperation(nodeId, nodesState)));
+        Log[Log.size() - 1]->Do();
+    }
+
+    void RollbackOperations() {
+        for (auto operation : Log) {
+            if (operation->Type == OPERATION_TYPE_ROLLBACK_POINT) {
+                Log.pop_back();
+                break;
+            }
+
+            operation->Undo();
+            Log.pop_back();
+        }
+    }
+
+    void ApplyAction(const NKikimrCms::TAction &action,
+                     TClusterInfoPtr clusterState);
+};
 
 /**
  * Main class to hold current cluster state.
@@ -548,6 +653,20 @@ public:
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;
 
+    using TenantNodesCheckers = THashMap<TString, TSimpleSharedPtr<TNodesStateBase>>;
+
+    friend TOperationLogManager;
+
+    TenantNodesCheckers TenantNodesChecker;
+    TSimpleSharedPtr<TClusterNodesState> ClusterNodes = TSimpleSharedPtr<TClusterNodesState>(new TClusterNodesState(0, 0));
+
+    TOperationLogManager LogManager;
+    TOperationLogManager ScheduledLogManager;
+
+    void ApplyActionToOperationLog(const NKikimrCms::TAction &action);
+    void ApplyActionWithoutLog(const NKikimrCms::TAction &action);
+    void ApplyNodeLimits(ui32 clusterLimit, ui32 clusterRatioLimit, ui32 tenantLimit, ui32 tenantRatioLimit);
+
     TClusterInfo() = default;
     TClusterInfo(const TClusterInfo &other) = default;
     TClusterInfo(TClusterInfo &&other) = default;
@@ -557,14 +676,16 @@ public:
 
     void ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info);
 
+    void GenerateTenantNodesCheckers();
+
     bool IsStateStorageReplicaNode(ui32 nodeId) {
         return StateStorageReplicas.contains(nodeId);
     }
-    
+
     bool IsStateStorageinfoReceived() {
         return StateStorageInfoReceived;
     }
-    
+
     ui32 GetRingId(ui32 nodeId) {
         Y_VERIFY(IsStateStorageReplicaNode(nodeId));
         return StateStorageNodeToRingId[nodeId];
@@ -804,6 +925,7 @@ public:
     void RollbackLocks(ui64 point);
     ui64 PushRollbackPoint()
     {
+        LogManager.PushRollbackPoint();
         return ++RollbackPoint;
     }
 

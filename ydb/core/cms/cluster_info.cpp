@@ -1,9 +1,17 @@
 #include "cluster_info.h"
+#include "node_checkers.h"
 #include "cms_state.h"
 
+#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/log.h>
+
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
+
+#include <util/datetime/base.h>
+#include <util/generic/ptr.h>
 #include <util/string/builder.h>
 #include <util/system/hostname.h>
-#include <util/datetime/base.h>
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
 #error log macro definition clash
@@ -298,9 +306,9 @@ void TVDiskInfo::MigrateOldInfo(const TLockableItem &old)
     }
 }
 
-TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now, 
+TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now,
                                                                    TDuration retryTime,
-                                                                   TDuration duration) const 
+                                                                   TDuration duration) const
 {
     if (IsDisabled) {
         return Disabled;
@@ -369,7 +377,7 @@ void TClusterInfo::AddNode(const TEvInterconnect::TNodeInfo &info, const TActorC
             break;
         }
     }
-
+    ClusterNodes->AddNode(node->NodeId);
     HostNameToNodeId.emplace(node->Host, node->NodeId);
     LockableItems[node->ItemName()] = node;
 }
@@ -383,6 +391,8 @@ void TClusterInfo::SetNodeState(ui32 nodeId, NKikimrCms::EState state, const NKi
     node.State = state;
     node.StartTime = TInstant::MilliSeconds(info.GetStartTime());
     node.Version = info.GetVersion();
+
+    ClusterNodes->UpdateNode(nodeId, state);
 
     node.Services = TServices();
     for (const auto& role : info.GetRoles()) {
@@ -403,6 +413,9 @@ void TClusterInfo::ClearNode(ui32 nodeId)
         Tablets.erase(tablet);
     node.Tablets.clear();
     node.State = NKikimrCms::DOWN;
+    node.HasTenantInfo = false;
+
+    ClusterNodes->UpdateNode(node.NodeId, NKikimrCms::DOWN);
 }
 
 void TClusterInfo::ApplyInitialNodeTenants(const TActorContext& ctx, const THashMap<ui32, TString>& nodeTenants)
@@ -624,6 +637,50 @@ static TServices MakeServices(const NKikimrCms::TAction &action) {
     return services;
 }
 
+void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
+{
+    if (ActionRequiresHost(action) && !HasNode(action.GetHost())) {
+        return;
+    }
+
+    switch (action.GetType()) {
+    case TAction::RESTART_SERVICES:
+    case TAction::SHUTDOWN_HOST:
+        if (auto nodes = NodePtrs(action.GetHost(), MakeServices(action))) {
+            for (const auto node : nodes) {
+                ClusterNodes->LockNode(node->NodeId);
+                if (node->Tenant) {
+                    TenantNodesChecker[node->Tenant]->LockNode(node->NodeId);
+                }
+            }
+        }
+        break;
+    case TAction::REPLACE_DEVICES:
+        for (const auto &device : action.GetDevices()) {
+            if (HasPDisk(device)) {
+                auto pdisk = &PDiskRef(device);
+                ClusterNodes->LockNode(pdisk->NodeId);
+            } else if (HasVDisk(device)) {
+                auto vdisk = &VDiskRef(device);
+                ClusterNodes->LockNode(vdisk->NodeId);
+            }
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
+void TClusterInfo::ApplyNodeLimits(ui32 clusterLimit, ui32 clusterRatioLimit, ui32 tenantLimit, ui32 tenantRatioLimit)
+{
+    ClusterNodes->ApplyLimits(clusterLimit, clusterRatioLimit);
+
+    for (auto &[_, tenantChecker] : TenantNodesChecker) {
+        tenantChecker->ApplyLimits(tenantLimit, tenantRatioLimit);
+    }
+}
+
 TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &action,
                                                     const TActorContext *ctx)
 {
@@ -708,6 +765,8 @@ ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorConte
         }
     }
 
+    ApplyActionWithoutLog(permission.Action);
+
     return locks;
 }
 
@@ -716,6 +775,7 @@ ui64 TClusterInfo::AddExternalLocks(const TNotificationInfo &notification, const
     ui64 locks = 0;
     for (const auto &action : notification.Notification.GetActions()) {
         auto items = FindLockedItems(action, ctx);
+        ApplyActionWithoutLog(action);
 
         for (auto item : items) {
             if (ctx)
@@ -762,6 +822,8 @@ void TClusterInfo::UpdateDowntimes(TDowntimes &downtimes, const TActorContext &c
 ui64 TClusterInfo::AddTempLocks(const NKikimrCms::TAction &action, const TActorContext *ctx)
 {
     auto items = FindLockedItems(action, ctx);
+
+    LogManager.ApplyAction(action, this);
 
     for (auto item : items)
         item->TempLocks.push_back({RollbackPoint, action});
@@ -810,6 +872,8 @@ void TClusterInfo::RollbackLocks(ui64 point)
     for (auto &entry : LockableItems)
         entry.second->RollbackLocks(point);
     RollbackPoint = point - 1;
+
+    LogManager.RollbackOperations();
 }
 
 void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
@@ -824,7 +888,7 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
 void TClusterInfo::ApplySysTabletsInfo(const NKikimrConfig::TBootstrap& config) {
     for (ui32 i = 0; i < config.TabletSize(); ++i) {
         const auto &tablet = config.GetTablet(i);
- 
+
         for (ui32 j = 0; j < tablet.NodeSize(); ++j) {
             ui32 nodeId = tablet.GetNode(j);
             TabletTypeToNodes[tablet.GetType()].push_back(nodeId);
@@ -850,6 +914,17 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
         }
 
         StateStorageRings.push_back(ringInfo);
+    }
+}
+
+void TClusterInfo::GenerateTenantNodesCheckers() {
+    for (auto &[nodeId, nodeInfo] : Nodes) {
+        if (nodeInfo->Tenant) {
+            if (!TenantNodesChecker.contains(nodeInfo->Tenant))
+                TenantNodesChecker[nodeInfo->Tenant] = TSimpleSharedPtr<TNodesStateBase>(new TTenantState(nodeInfo->Tenant, 0, 0));
+
+            TenantNodesChecker[nodeInfo->Tenant]->UpdateNode(nodeId, nodeInfo->State);
+        }
     }
 }
 
@@ -915,4 +990,37 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
     }
 }
 
+void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
+                                      TClusterInfoPtr clusterState)
+{
+    switch (action.GetType()) {
+    case NKikimrCms::TAction::RESTART_SERVICES:
+    case NKikimrCms::TAction::SHUTDOWN_HOST:
+        if (auto nodes = clusterState->NodePtrs(action.GetHost(), MakeServices(action))) {
+            for (const auto node : nodes) {
+                AddNodeLockOperation(node->NodeId, clusterState->ClusterNodes);
+
+                if (node->Tenant) {
+                    AddNodeLockOperation(node->NodeId, clusterState->TenantNodesChecker[node->Tenant]);
+                }
+            }
+        }
+        break;
+    case NKikimrCms::TAction::REPLACE_DEVICES:
+        for (const auto &device : action.GetDevices()) {
+            if (clusterState->HasPDisk(device)) {
+                auto pdisk = &clusterState->PDisk(device);
+                AddNodeLockOperation(pdisk->NodeId, clusterState->ClusterNodes);
+
+            } else if (clusterState->HasVDisk(device)) {
+                auto vdisk = &clusterState->VDisk(device);
+                AddNodeLockOperation(vdisk->NodeId, clusterState->ClusterNodes);
+            }
+        }
+        break;
+
+    default:
+        break;
+    }
+}
 } // namespace NKikimr::NCms

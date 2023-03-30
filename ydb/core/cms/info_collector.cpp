@@ -121,6 +121,8 @@ private:
     bool BootstrapConfigReceived;
     bool BaseConfigReceived;
     bool StateStorageInfoReceived;
+
+    THashSet<ui32> UndeliveredNodes;
     THashMap<ui32, TSet<ui32>> NodeEvents; // nodeId -> expected events
     THashMap<TPDiskID, TPDiskStateInfo, TPDiskIDHash> PDiskInfo;
     THashMap<TVDiskID, TVDiskStateInfo> VDiskInfo;
@@ -148,6 +150,12 @@ void TInfoCollector::ReplyAndDie() {
 
     if (StateStorageInfoReceived) {
         Info->ApplyStateStorageInfo(Info->StateStorageInfo);
+    }
+
+    // It is also necessary to mark the disks,
+    // and to do this we must wait for the base config
+    for (const auto &nodeId : UndeliveredNodes) {
+        Info->ClearNode(nodeId);
     }
 
     Send(Client, std::move(ev));
@@ -484,7 +492,7 @@ void TInfoCollector::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     if (msg.SourceType == TEvTenantPool::EvGetStatus && msg.Reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
         ResponseProcessed(nodeId, TEvTenantPool::EvTenantPoolStatus);
     } else {
-        Info->ClearNode(nodeId);
+        UndeliveredNodes.insert(nodeId);
         NodeEvents[nodeId].clear();
     }
 

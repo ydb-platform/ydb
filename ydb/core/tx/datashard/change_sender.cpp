@@ -70,13 +70,16 @@ class TChangeSender: public TActor<TChangeSender> {
 
         if (!IsActive()) {
             std::move(records.begin(), records.end(), std::back_inserter(Enqueued));
-            return;
+        } else {
+            Handle(std::move(records));
         }
+    }
 
+    void Handle(TVector<TEnqueuedRecord>&& enqueued) {
         THashMap<TActorId, TVector<TEnqueuedRecord>> forward;
         TVector<ui64> remove;
 
-        for (auto& record : records) {
+        for (auto& record : enqueued) {
             auto it = Senders.find(record.PathId);
             if (it != Senders.end()) {
                 forward[it->second.ActorId].push_back(std::move(record));
@@ -154,7 +157,7 @@ class TChangeSender: public TActor<TChangeSender> {
         }
 
         if (Enqueued) {
-            Send(SelfId(), new TEvChangeExchange::TEvEnqueueRecords(std::move(Enqueued)));
+            Handle(std::move(Enqueued));
         }
     }
 

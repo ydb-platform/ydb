@@ -113,7 +113,7 @@ namespace NTabletFlatExecutor {
 
         void SendEv(const TActorId &to, IEventBase *ev)
         {
-            Env.Send(new IEventHandleFat(to, Edge, ev));
+            Env.Send(new IEventHandle(to, Edge, ev));
         }
 
         static NTabletPipe::TClientConfig PipeCfgRetries()

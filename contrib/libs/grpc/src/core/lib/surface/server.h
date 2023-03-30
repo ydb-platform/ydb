@@ -176,8 +176,8 @@ class Server : public InternallyRefCounted<Server>,
     RegisteredMethod* server_registered_method = nullptr;
     uint32_t flags;
     bool has_host;
-    ExternallyManagedSlice method;
-    ExternallyManagedSlice host;
+    Slice method;
+    Slice host;
   };
 
   class RequestMatcherInterface;
@@ -295,7 +295,7 @@ class Server : public InternallyRefCounted<Server>,
 
     y_absl::optional<Slice> path_;
     y_absl::optional<Slice> host_;
-    grpc_millis deadline_ = GRPC_MILLIS_INF_FUTURE;
+    Timestamp deadline_ = Timestamp::InfFuture();
 
     grpc_completion_queue* cq_new_ = nullptr;
 

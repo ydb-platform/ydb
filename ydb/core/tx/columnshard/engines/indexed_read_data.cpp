@@ -95,7 +95,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
             }
             continue;
         }
-#if 1
+#if 0 // optimization
         auto deduped = SliceSortedBatches(slices, description);
         for (auto& batch : deduped) {
             if (batch && batch->num_rows()) {
@@ -240,6 +240,7 @@ void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& co
 
 std::shared_ptr<arrow::RecordBatch> TIndexedReadData::AssembleIndexedBatch(ui32 batchNo) {
     auto& portionInfo = Portion(batchNo);
+    Y_VERIFY(portionInfo.Produced());
 
     auto batch = portionInfo.AssembleInBatch(ReadMetadata->IndexInfo, ReadMetadata->LoadSchema, Data);
     Y_VERIFY(batch);
@@ -257,6 +258,15 @@ std::shared_ptr<arrow::RecordBatch> TIndexedReadData::AssembleIndexedBatch(ui32 
         Y_VERIFY(filtered.Valid());
         filtered.ApplyFilter();
     }
+#if 1 // optimization
+    if (filtered.Batch && ReadMetadata->Program && portionInfo.AllowEarlyFilter()) {
+        filtered = NOlap::EarlyFilter(filtered.Batch, ReadMetadata->Program);
+    }
+    if (filtered.Batch) {
+        Y_VERIFY(filtered.Valid());
+        filtered.ApplyFilter();
+    }
+#endif
     return filtered.Batch;
 }
 
@@ -420,7 +430,7 @@ std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::
             auto deduped = SpecialMergeSorted(inGranule, IndexInfo(), SortReplaceDescription, BatchesToDedup);
             out.emplace_back(std::move(deduped));
 #else
-            out.push_back();
+            out.push_back({});
             out.back().emplace_back(CombineSortedBatches(inGranule, SortReplaceDescription));
 #endif
         } else {

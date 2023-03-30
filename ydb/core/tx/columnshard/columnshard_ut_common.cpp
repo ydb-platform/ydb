@@ -78,7 +78,7 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 writeId, ui64 tableId,
                const TString& data, std::shared_ptr<arrow::Schema> schema) {
     const TString dedupId = ToString(writeId);
-    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, metaShard, writeId, tableId, dedupId, data);
+    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, metaShard, writeId, tableId, dedupId, data, 1);
     if (schema) {
         write->SetArrowSchema(NArrow::SerializeSchema(*schema));
     }
@@ -97,7 +97,7 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
                               ui64 tableId, const TString& dedupId, const TString& data,
                               std::shared_ptr<arrow::Schema> schema)
 {
-    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, dedupId, data);
+    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, dedupId, data, 1);
     if (schema) {
         write->SetArrowSchema(NArrow::SerializeSchema(*schema));
     }

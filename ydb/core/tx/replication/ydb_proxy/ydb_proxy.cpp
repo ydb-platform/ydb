@@ -83,7 +83,7 @@ private:
             std::lock_guard<std::mutex> lock(RWActorSystem);
 
             if (ActorSystem) {
-                ActorSystem->Send(new IEventHandleFat(recipient, Self, ev, 0, cookie));
+                ActorSystem->Send(new IEventHandle(recipient, Self, ev, 0, cookie));
             }
         }
 

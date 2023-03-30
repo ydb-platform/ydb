@@ -35,6 +35,7 @@ public:
         AddHandler(0, &TDqJoin::Match, HNDL(JoinToIndexLookup));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
+        AddHandler(0, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(0, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverExtend));
@@ -45,6 +46,7 @@ public:
         AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<false>));
         AddHandler(0, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<false>));
         AddHandler(0, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<false>));
+        AddHandler(0, &TCoTop::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
 
         AddHandler(1, &TCoFlatMap::Match, HNDL(PushExtractedPredicateToReadTable));

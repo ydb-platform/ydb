@@ -55,7 +55,7 @@ public:
                     if (slot->IsBeingDeleted()) {
                         const size_t num = const_cast<TPDiskInfo&>(*slot->PDisk).VSlotsOnPDisk.erase(slot->VSlotId.VSlotId);
                         Y_VERIFY(num);
-                        State->VSlots.DeleteExistingEntry(slot->VSlotId);
+                        State->DeleteDestroyedVSlot(slot);
                     }
                     break;
 

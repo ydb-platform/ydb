@@ -152,7 +152,7 @@ private:
     }
 
     static void Reply(const IEventBase* request, TAutoPtr<IEventHandle> response, const TActorContext& ctx) {
-        AuditLog(request, IEventHandleFat::GetFat(response)->GetBase(), ctx);
+        AuditLog(request, response->GetBase(), ctx);
         ctx.Send(response);
     }
 

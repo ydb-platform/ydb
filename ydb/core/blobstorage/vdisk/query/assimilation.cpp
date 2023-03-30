@@ -208,7 +208,7 @@ namespace NKikimr {
 
                 Process(iter);
                 if (iter.NeedConstraintCheck() && TDuration::Seconds(timer.Passed()) >= MaxQuantumTime) {
-                    TActivationContext::Send(new IEventHandleFat(EvResume, 0, SelfId(), {}, nullptr, 0));
+                    TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), {}, nullptr, 0));
                     return false; // has to restart
                 }
             }
@@ -226,7 +226,7 @@ namespace NKikimr {
         }
 
         void PassAway() override {
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::ActorDied, 0, ParentId, SelfId(), nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::ActorDied, 0, ParentId, SelfId(), nullptr, 0));
             TActorBootstrapped::PassAway();
         }
 

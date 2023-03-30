@@ -1798,6 +1798,7 @@ message TAppConfig {
     optional TAuditConfig AuditConfig = 61;
     optional TClientCertificateAuthorization ClientCertificateAuthorization = 62;
     optional TExternalIndexConfig ExternalIndexConfig = 63;
+    optional bool YamlConfigEnabled = 64;
 
     optional NFq.NConfig.TConfig YandexQueryConfig = 50; // TODO: remove after migration to FederatedQueryConfig
 

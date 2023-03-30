@@ -74,7 +74,7 @@ public:
     template <TProtobufEventWithTransportMeta T>
     void Send(THolder<T> ev, ui64 cookie = 0) {
         if (LocalRecipient) {
-            NActors::TActivationContext::Send(new NActors::IEventHandleFat(RecipientId, SenderId, ev.Release(), cookie));
+            NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), cookie));
             return;
         }
 
@@ -87,7 +87,7 @@ public:
     }
 
     template <TProtobufEventWithTransportMeta T>
-    bool OnEventReceived(const TAutoPtr<NActors::TEventHandleFat<T>>& ev) {
+    bool OnEventReceived(const TAutoPtr<NActors::TEventHandle<T>>& ev) {
         return OnEventReceived(ev->Get());
     }
 
@@ -160,7 +160,7 @@ private:
             THolder<T> ev = MakeHolder<T>();
             ev->Record = Event->Record;
             ev->Record.MutableTransportMeta()->SetConfirmedSeqNo(confirmedSeqNo);
-            return MakeHolder<NActors::IEventHandleFat>(Recipient, Sender, ev.Release(), 0, Cookie);
+            return MakeHolder<NActors::IEventHandle>(Recipient, Sender, ev.Release(), 0, Cookie);
         }
 
     private:

@@ -424,7 +424,7 @@ inline IEventHandle *CreateEventForBSProxy(TActorId sender, TActorId recipient, 
     std::unique_ptr<IEventBase> ptr(ev);
     const ui32 flags = NActors::IEventHandle::FlagTrackDelivery | NActors::IEventHandle::FlagForwardOnNondelivery;
     const TActorId nw = MakeBlobStorageNodeWardenID(sender.NodeId());
-    auto *res = new IEventHandleFat(recipient, sender, ptr.get(), flags, cookie, &nw, std::move(traceId));
+    auto *res = new IEventHandle(recipient, sender, ptr.get(), flags, cookie, &nw, std::move(traceId));
     ptr.release();
     return res;
 }

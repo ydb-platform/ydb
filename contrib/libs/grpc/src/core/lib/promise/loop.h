@@ -20,6 +20,7 @@
 #include <new>
 #include <type_traits>
 
+#include "y_absl/status/statusor.h"
 #include "y_absl/types/variant.h"
 
 #include "src/core/lib/promise/detail/promise_factory.h"
@@ -44,20 +45,44 @@ struct LoopTraits;
 template <typename T>
 struct LoopTraits<LoopCtl<T>> {
   using Result = T;
+  static LoopCtl<T> ToLoopCtl(LoopCtl<T> value) { return value; }
+};
+
+template <typename T>
+struct LoopTraits<y_absl::StatusOr<LoopCtl<T>>> {
+  using Result = y_absl::StatusOr<T>;
+  static LoopCtl<Result> ToLoopCtl(y_absl::StatusOr<LoopCtl<T>> value) {
+    if (!value.ok()) return value.status();
+    const auto& inner = *value;
+    if (y_absl::holds_alternative<Continue>(inner)) return Continue{};
+    return y_absl::get<T>(inner);
+  }
+};
+
+template <>
+struct LoopTraits<y_absl::StatusOr<LoopCtl<y_absl::Status>>> {
+  using Result = y_absl::Status;
+  static LoopCtl<Result> ToLoopCtl(
+      y_absl::StatusOr<LoopCtl<y_absl::Status>> value) {
+    if (!value.ok()) return value.status();
+    const auto& inner = *value;
+    if (y_absl::holds_alternative<Continue>(inner)) return Continue{};
+    return y_absl::get<y_absl::Status>(inner);
+  }
 };
 
 template <typename F>
 class Loop {
  private:
   using Factory = promise_detail::PromiseFactory<void, F>;
-  using Promise = decltype(std::declval<Factory>().Repeated());
-  using PromiseResult = typename Promise::Result;
+  using PromiseType = decltype(std::declval<Factory>().Repeated());
+  using PromiseResult = typename PromiseType::Result;
 
  public:
   using Result = typename LoopTraits<PromiseResult>::Result;
 
   explicit Loop(F f) : factory_(std::move(f)), promise_(factory_.Repeated()) {}
-  ~Loop() { promise_.~Promise(); }
+  ~Loop() { promise_.~PromiseType(); }
 
   Loop(Loop&& loop) noexcept
       : factory_(std::move(loop.factory_)),
@@ -74,13 +99,14 @@ class Loop {
       if (auto* p = y_absl::get_if<kPollReadyIdx>(&promise_result)) {
         //  - then if it's Continue, destroy the promise and recreate a new one
         //  from our factory.
-        if (y_absl::holds_alternative<Continue>(*p)) {
-          promise_.~Promise();
-          new (&promise_) Promise(factory_.Repeated());
+        auto lc = LoopTraits<PromiseResult>::ToLoopCtl(*p);
+        if (y_absl::holds_alternative<Continue>(lc)) {
+          promise_.~PromiseType();
+          new (&promise_) PromiseType(factory_.Repeated());
           continue;
         }
         //  - otherwise there's our result... return it out.
-        return y_absl::get<Result>(*p);
+        return y_absl::get<Result>(lc);
       } else {
         // Otherwise the inner promise was pending, so we are pending.
         return Pending();
@@ -90,7 +116,7 @@ class Loop {
 
  private:
   GPR_NO_UNIQUE_ADDRESS Factory factory_;
-  GPR_NO_UNIQUE_ADDRESS union { GPR_NO_UNIQUE_ADDRESS Promise promise_; };
+  GPR_NO_UNIQUE_ADDRESS union { GPR_NO_UNIQUE_ADDRESS PromiseType promise_; };
 };
 
 }  // namespace promise_detail

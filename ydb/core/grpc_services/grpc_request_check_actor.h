@@ -79,7 +79,7 @@ public:
         const TActorId& owner,
         const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
         TIntrusivePtr<TSecurityObject> securityObject,
-        TAutoPtr<TEventHandleFat<TEvent>> request,
+        TAutoPtr<TEventHandle<TEvent>> request,
         IGRpcProxyCounters::TPtr counters,
         bool skipCheckConnectRigths,
         const IFacilityProvider* facilityProvider)
@@ -386,12 +386,12 @@ private:
         HandleAndDie(Request_);
     }
 
-    void HandleAndDie(TAutoPtr<TEventHandleFat<TEvProxyRuntimeEvent>>& event) {
+    void HandleAndDie(TAutoPtr<TEventHandle<TEvProxyRuntimeEvent>>& event) {
         event->Release().Release()->Pass(*this);
         TBase::PassAway();
     }
 
-    void HandleAndDie(TAutoPtr<TEventHandleFat<TEvListEndpointsRequest>>&) {
+    void HandleAndDie(TAutoPtr<TEventHandle<TEvListEndpointsRequest>>&) {
         ReplyBackAndDie();
     }
 
@@ -473,7 +473,7 @@ private:
     }
 
     const TActorId Owner_;
-    TAutoPtr<TEventHandleFat<TEvent>> Request_;
+    TAutoPtr<TEventHandle<TEvent>> Request_;
     IGRpcProxyCounters::TPtr Counters_;
     TIntrusivePtr<TSecurityObject> SecurityObject_;
     TString CheckedDatabaseName_;
@@ -509,7 +509,7 @@ IActor* CreateGrpcRequestCheckActor(
     const TActorId& owner,
     const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
     TIntrusivePtr<TSecurityObject> securityObject,
-    TAutoPtr<TEventHandleFat<TEvent>> request,
+    TAutoPtr<TEventHandle<TEvent>> request,
     IGRpcProxyCounters::TPtr counters,
     bool skipCheckConnectRigths,
     const IFacilityProvider* facilityProvider) {

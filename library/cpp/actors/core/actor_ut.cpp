@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         {}
 
         void Bootstrap(const TActorContext &ctx) {
-            if (!Receiver) {
+            if (!Receiver && Role == ERole::Leader) {
                 this->Receiver = SelfId();
             } else {
                 EventsCounter /= 2; // We want to measure CPU requirement for one-way send
@@ -82,12 +82,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 ctx.RegisterWithSameMailbox(new TDummyActor());
             }
             if (Role == ERole::Leader) {
-                TAutoPtr<IEventHandle> ev = new IEventHandleFat(Receiver, SelfId(), new TEvents::TEvPing());
+                TAutoPtr<IEventHandle> ev = new IEventHandle(Receiver, SelfId(), new TEvents::TEvPing());
                 SpecialSend(ev, ctx);
             }
         }
 
         void SpecialSend(TAutoPtr<IEventHandle> ev, const TActorContext &ctx) {
+            --EventsCounter;
             if (SendingType == ESendingType::Lazy) {
                 ctx.Send<ESendingType::Lazy>(ev);
             } else if (SendingType == ESendingType::Tail) {
@@ -97,20 +98,30 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             }
         }
 
-        STFUNC(StateFunc) {
-            if (--EventsCounter == 0 && ElapsedTime != nullptr) {
-                *ElapsedTime = Timer.Passed() / TotalEventsAmount;
+        bool CheckWorkIsDone() {
+            if (EventsCounter == 0) {
+                if (ElapsedTime != nullptr) {
+                    *ElapsedTime = Timer.Passed() / TotalEventsAmount;
+                }
                 PassAway();
-                return;
+                return true;
             }
+            return false;
+        }
+
+        STFUNC(StateFunc) {
+            if (CheckWorkIsDone())
+                return;
 
             if (AllocatesMemory) {
-                SpecialSend(new IEventHandleFat(ev->Sender, SelfId(), new TEvents::TEvPing()), ctx);
+                SpecialSend(new IEventHandle(ev->Sender, SelfId(), new TEvents::TEvPing()), ctx);
             } else {
                 std::swap(*const_cast<TActorId*>(&ev->Sender), *const_cast<TActorId*>(&ev->Recipient));
                 ev->DropRewrite();
                 SpecialSend(ev, ctx);
             }
+
+            CheckWorkIsDone();
         }
 
     private:
@@ -493,6 +504,18 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     Y_UNIT_TEST(SendActivateReceive1Pool8Threads)       { RunBenchContentedThreads(8, EPoolType::Basic);  }
     Y_UNIT_TEST(SendActivateReceive1Pool8ThreadsUnited) { RunBenchContentedThreads(8, EPoolType::United); }
 
+    Y_UNIT_TEST(SendActivateReceiveCSV) {
+        Cout << "threads,actorPairs,msgs_per_sec" << Endl;
+        for (ui32 threads = 1; threads <= 32; threads *= 2) {
+            for (ui32 actorPairs = 1; actorPairs <= 2 * 32; actorPairs *= 2) {
+                auto stats = CountStats([threads, actorPairs] {
+                    return BenchContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common);
+                }, 3);
+                Cout << threads << "," << actorPairs << "," << actorPairs * 1e9 / stats.Mean << Endl;
+            }
+        }
+    }
+
     Y_UNIT_TEST(SendActivateReceiveWithMailboxNeighbours) {
         TVector<ui32> NeighbourActors = {0, 1, 2, 3, 4, 5, 6, 7, 8, 16, 32, 64, 128, 256};
         for (const auto& neighbour : NeighbourActors) {
@@ -541,14 +564,14 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         {
         }
 
-        bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
+        bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
             *Counter += 1;
             if (ev->Type != TEvents::THelloWorld::Pong) {
-                TAutoPtr<IEventHandle> pingEv = new IEventHandleFat(SelfId(), SelfId(), new TEvents::TEvPing());
+                TAutoPtr<IEventHandle> pingEv = new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPing());
                 SavedEvent = ev;
-                Actor->Receive(pingEv);
+                Actor->Receive(pingEv, ctx);
             } else {
-                Actor->Receive(SavedEvent);
+                Actor->Receive(SavedEvent, ctx);
             }
             return false;
         }
@@ -566,7 +589,7 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
             *Counter += 1;
             if (ev->Type == TEvents::THelloWorld::Ping) {
-                TAutoPtr<IEventHandle> pongEv = new IEventHandleFat(SelfId(), SelfId(), new TEvents::TEvPong());
+                TAutoPtr<IEventHandle> pongEv = new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPong());
                 Send(SelfId(), new TEvents::TEvPong());
                 return false;
             }
@@ -701,7 +724,7 @@ Y_UNIT_TEST_SUITE(TestStateFunc) {
         auto sender = runtime.AllocateEdgeActor();
         auto testActor = runtime.Register(new TTestActorWithExceptionsStateFunc());
         for (ui64 tag = 0; tag < 4; ++tag) {
-            runtime.Send(new IEventHandleFat(testActor, sender, new TEvents::TEvWakeup(tag)), 0, true);
+            runtime.Send(new IEventHandle(testActor, sender, new TEvents::TEvWakeup(tag)), 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Tag, tag);
         }

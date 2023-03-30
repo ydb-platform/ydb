@@ -2471,7 +2471,7 @@ public:
             Self->SubActors.emplace_back(waitActor);
         }
         // TODO: pass arguments as post data json
-        ctx.Send(new IEventHandleFat(Self->SelfId(), waitActorId, new TEvHive::TEvInitMigration()));
+        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvInitMigration()));
         return true;
     }
 
@@ -2543,7 +2543,7 @@ public:
         waitActor = new TQueryMigrationWaitActor(Source, Self);
         waitActorId = ctx.RegisterWithSameMailbox(waitActor);
         Self->SubActors.emplace_back(waitActor);
-        ctx.Send(new IEventHandleFat(Self->SelfId(), waitActorId, new TEvHive::TEvQueryMigration()));
+        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvQueryMigration()));
         return true;
     }
 

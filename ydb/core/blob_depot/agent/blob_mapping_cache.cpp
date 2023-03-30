@@ -116,9 +116,11 @@ namespace NKikimr::NBlobDepot {
         const ui64 id = Agent.NextOtherRequestId++;
         const bool inserted1 = entry.PendingQueries.emplace(id, mustRestoreFirst).second;
         Y_VERIFY(inserted1);
-        auto cancelCallback = [&entry, id] {
-            const size_t numErased = entry.PendingQueries.erase(id);
-            Y_VERIFY(numErased);
+        auto cancelCallback = [&entry, id, self = weak_from_this()] {
+            if (!self.expired()) {
+                const size_t numErased = entry.PendingQueries.erase(id);
+                Y_VERIFY(numErased);
+            }
         };
         Agent.RegisterRequest(id, query, std::move(context), std::move(cancelCallback), false);
 

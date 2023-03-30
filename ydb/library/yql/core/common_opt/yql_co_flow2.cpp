@@ -2180,6 +2180,15 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return ctx.ChangeChildren(node->Head(), std::move(children));
         }
 
+        if (node->Head().IsCallable({
+            "Collect", "LazyList", "ForwardList","Iterator","FromFlow","ToFlow","AssumeUnique","AssumeDistinct",
+            "FilterNullMembers","SkipNullMembers","FilterNullElements","SkipNullElements",
+            "ExpandMap","WideMap","WideFilter","NarrowMap","NarrowFlatMap","NarrowMultiMap"
+        })) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            return ctx.SwapWithHead(*node);
+        }
+
         if (node->Head().IsCallable("TopSort")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.RenameNode(node->Head(), "Top");

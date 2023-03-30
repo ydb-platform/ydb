@@ -1,5 +1,0 @@
-RECURSE(
-    ydbd
-    ydb
-    dstool
-)

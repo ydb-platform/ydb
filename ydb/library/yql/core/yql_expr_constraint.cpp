@@ -167,7 +167,7 @@ public:
         Functions["ListIf"] = &TCallableConstraintTransformer::PassOrEmptyWrap<true, false>;
         Functions["FlatListIf"] = &TCallableConstraintTransformer::PassOrEmptyWrap<true, true>;
         Functions["EmptyIterator"] = &TCallableConstraintTransformer::FromEmpty;
-        Functions["NothingFrom"] = &TCallableConstraintTransformer::NothingFromWrap;
+        Functions["EmptyFrom"] = &TCallableConstraintTransformer::EmptyFromWrap;
         Functions["List"] = &TCallableConstraintTransformer::ListWrap;
         Functions["Dict"] = &TCallableConstraintTransformer::DictWrap;
         Functions["EmptyList"] = &TCallableConstraintTransformer::FromEmpty;
@@ -314,7 +314,7 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus NothingFromWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+    TStatus EmptyFromWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         auto set = input->Head().GetConstraintSet();
         set.RemoveConstraint(TEmptyConstraintNode::Name());
         if (!set) {
@@ -2886,6 +2886,7 @@ private:
                 columns.emplace_back(child->Content());
             }
             input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
+            input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
         }
         return TStatus::Ok;
     }

@@ -52,7 +52,7 @@ public:
         TActorId txProxy = MakeTxProxyID();
         TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<TEvTxUserProxy::TEvInvalidateTable> ev(new TEvTxUserProxy::TEvInvalidateTable(tableId));
-        runtime->Send(new IEventHandleFat(txProxy, sender, ev.Release()));
+        runtime->Send(new IEventHandle(txProxy, sender, ev.Release()));
         TAutoPtr<IEventHandle> handle;
         auto readSchemeStringResult = runtime->GrabEdgeEventRethrow<TEvTxUserProxy::TEvInvalidateTableResult>(handle);
         Y_UNUSED(readSchemeStringResult);

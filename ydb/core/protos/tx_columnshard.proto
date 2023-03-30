@@ -66,6 +66,7 @@ message TEvWrite {
     optional bytes Data = 6;
     optional TMetadata Meta = 7;
     optional NKikimrLongTxService.TLongTxId LongTxId = 8;
+    optional uint32 WritePartId = 9 [default = 0];
 }
 
 message TEvWriteResult {

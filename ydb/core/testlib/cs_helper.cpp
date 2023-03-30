@@ -24,7 +24,7 @@ void THelperSchemaless::CreateTestOlapStore(TActorId sender, TString scheme) {
     op->SetWorkingDir(ROOT_PATH);
     op->MutableCreateColumnStore()->CopyFrom(store);
 
-    Server.GetRuntime()->Send(new IEventHandleFat(MakeTxProxyID(), sender, request.release()));
+    Server.GetRuntime()->Send(new IEventHandle(MakeTxProxyID(), sender, request.release()));
     auto ev = Server.GetRuntime()->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
     ui64 txId = ev->Get()->Record.GetTxId();
     WaitForSchemeOperation(sender, txId);
@@ -46,7 +46,7 @@ void THelperSchemaless::CreateTestOlapTable(TActorId sender, TString storeOrDirN
     op->SetWorkingDir(workingDir);
     op->MutableCreateColumnTable()->CopyFrom(table);
 
-    Server.GetRuntime()->Send(new IEventHandleFat(MakeTxProxyID(), sender, request.release()));
+    Server.GetRuntime()->Send(new IEventHandle(MakeTxProxyID(), sender, request.release()));
     auto ev = Server.GetRuntime()->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
     ui64 txId = ev->Get()->Record.GetTxId();
     auto status = ev->Get()->Record.GetStatus();

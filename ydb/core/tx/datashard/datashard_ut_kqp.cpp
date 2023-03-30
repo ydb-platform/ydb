@@ -109,7 +109,7 @@ private:
                             StartedScans++;
                             if (StartedScans == 3 && !ActionDone && Counter <= 0 && !Reason) {
                                 auto edge = rt.AllocateEdgeActor(0);
-                                rt.Send(new IEventHandleFat(rt.GetInterconnectProxy(0, 1), edge,
+                                rt.Send(new IEventHandle(rt.GetInterconnectProxy(0, 1), edge,
                                     new TEvInterconnect::TEvPoisonSession), 0, true);
                                 ActionDone = true;
                             }
@@ -124,13 +124,13 @@ private:
 
                         if (Reason) {
                             auto evUndelivered = new TEvents::TEvUndelivered(event->GetTypeRewrite(), *Reason);
-                            auto handle = new IEventHandleFat(event->Sender, TActorId(), evUndelivered, 0, event->Cookie);
+                            auto handle = new IEventHandle(event->Sender, TActorId(), evUndelivered, 0, event->Cookie);
                             rt.Send(handle, 0, true);
                             ActionDone = true;
                         } else {
                             if (Counter <= 0 && StartedScans == 3 && !ActionDone) {
                                 auto edge = rt.AllocateEdgeActor(0);
-                                rt.Send(new IEventHandleFat(rt.GetInterconnectProxy(0, 1), edge,
+                                rt.Send(new IEventHandle(rt.GetInterconnectProxy(0, 1), edge,
                                     new TEvInterconnect::TEvPoisonSession), 0, true);
                                 ActionDone = true;
                             }

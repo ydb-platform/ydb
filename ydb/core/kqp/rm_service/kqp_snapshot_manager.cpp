@@ -24,7 +24,7 @@ public:
     {}
 
     void Bootstrap() {
-        auto *ev = new IEventHandleFat(this->SelfId(), this->SelfId(), new TEvents::TEvPoison());
+        auto *ev = new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvPoison());
         RequestTimeoutCookieHolder_.Reset(ISchedulerCookie::Make2Way());
         CreateLongTimer(TlsActivationContext->AsActorContext(), RequestTimeout, ev, 0, RequestTimeoutCookieHolder_.Get());
 

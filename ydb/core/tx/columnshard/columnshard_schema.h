@@ -142,11 +142,12 @@ struct Schema : NIceDb::Schema {
     };
 
     struct LongTxWrites : Table<6> {
-        struct WriteId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct WriteId: Column<1, NScheme::NTypeIds::Uint64> {};
         struct LongTxId : Column<2, NScheme::NTypeIds::String> {};
+        struct WritePartId: Column<3, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<WriteId>;
-        using TColumns = TableColumns<WriteId, LongTxId>;
+        using TColumns = TableColumns<WriteId, LongTxId, WritePartId>;
     };
 
     struct BlobsToKeep : Table<7> {
@@ -398,13 +399,14 @@ struct Schema : NIceDb::Schema {
         db.Table<TableInfo>().Key(pathId).Delete();
     }
 
-    static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const NLongTxService::TLongTxId& longTxId) {
+    static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId) {
         NKikimrLongTxService::TLongTxId proto;
         longTxId.ToProto(&proto);
         TString serialized;
         Y_VERIFY(proto.SerializeToString(&serialized));
         db.Table<LongTxWrites>().Key((ui64)writeId).Update(
-            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized));
+            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized),
+            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId));
     }
 
     static void EraseLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId) {

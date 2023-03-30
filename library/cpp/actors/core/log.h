@@ -316,7 +316,7 @@ namespace NActors {
     {
         const NLog::TSettings *mSettings = ctx.LoggerSettings();
         TLoggerActor::Throttle(*mSettings);
-        ctx.Send(new IEventHandleFat(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str))));
+        ctx.Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str))));
     }
 
     template <typename TCtx, typename... TArgs>

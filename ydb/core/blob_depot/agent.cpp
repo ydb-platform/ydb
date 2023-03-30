@@ -106,7 +106,7 @@ namespace NKikimr::NBlobDepot {
                 blockActorsPending.push_back(actorId);
             }
 
-            auto r = std::make_unique<IEventHandleFat>(ev->Sender, ev->Recipient, reply.release(), 0, id);
+            auto r = std::make_unique<IEventHandle>(ev->Sender, ev->Recipient, reply.release(), 0, id);
             if (ev->InterconnectSession) {
                 r->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
             }
@@ -117,7 +117,7 @@ namespace NKikimr::NBlobDepot {
                 for (const TActorId& actorId : m) {
                     auto clone = std::make_unique<TEvBlobDepot::TEvPushNotifyResult>();
                     clone->Record.CopyFrom(ev->Get()->Record);
-                    TActivationContext::Send(new IEventHandleFat(actorId, sender, clone.release()));
+                    TActivationContext::Send(new IEventHandle(actorId, sender, clone.release()));
                 }
                 Data->OnPushNotifyResult(ev);
             });
@@ -229,7 +229,7 @@ namespace NKikimr::NBlobDepot {
                     for (auto& ev : std::exchange(info.PostponeQ, {})) {
                         TActivationContext::Send(ev.release());
                     }
-                    TActivationContext::Send(new IEventHandleFat(TEvPrivate::EvProcessRegisterAgentQ, 0, SelfId(), {}, nullptr, 0));
+                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessRegisterAgentQ, 0, SelfId(), {}, nullptr, 0));
                 }
             }
         }

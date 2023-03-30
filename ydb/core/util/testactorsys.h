@@ -415,15 +415,9 @@ public:
         nodeId = nodeId ? nodeId : CurrentNodeId;
         Y_VERIFY(nodeId);
         if (ev) {
-            if (ev->IsEventLight()) {
-                if (ev->GetTypeRewrite() == ev->Type && !EventName.count(ev->Type)) {
-                    EventName.emplace(ev->Type, TypeName(*ev));
-                }
-            } else {
-                auto* evf = IEventHandleFat::GetFat(ev.Get());
-                if (evf && evf->HasEvent() && evf->GetTypeRewrite() == evf->Type && !EventName.count(evf->Type)) {
-                    EventName.emplace(evf->Type, TypeName(*evf->GetBase()));
-                }
+            auto* evf = ev.Get();
+            if (evf && evf->HasEvent() && evf->GetTypeRewrite() == evf->Type && !EventName.count(evf->Type)) {
+                EventName.emplace(evf->Type, TypeName(*evf->GetBase()));
             }
         }
         std::unique_ptr<IEventHandle> evPtr(ev.Release());
@@ -527,7 +521,7 @@ public:
                 const ui32 type = ev->GetTypeRewrite();
 
                 THPTimer timer;
-                actor->Receive(ev);
+                actor->Receive(ev, TActivationContext::AsActorContext());
                 const TDuration timing = TDuration::Seconds(timer.Passed());
 
                 const auto it = ActorName.find(actor);
@@ -622,13 +616,13 @@ public:
     }
 
     template<typename TEvent>
-    std::unique_ptr<TEventHandleFat<TEvent>> WaitForEdgeActorEvent(const TActorId& edgeActorId, bool termOnCapture = true) {
+    std::unique_ptr<TEventHandle<TEvent>> WaitForEdgeActorEvent(const TActorId& edgeActorId, bool termOnCapture = true) {
         auto ev = WaitForEdgeActorEvent({edgeActorId});
         Y_VERIFY(ev->GetTypeRewrite() == TEvent::EventType, "unexpected Event# 0x%08" PRIx32, ev->GetTypeRewrite());
         if (termOnCapture) {
             DestroyActor(edgeActorId);
         }
-        return std::unique_ptr<TEventHandleFat<TEvent>>(reinterpret_cast<TEventHandleFat<TEvent>*>(ev.release()));
+        return std::unique_ptr<TEventHandle<TEvent>>(reinterpret_cast<TEventHandle<TEvent>*>(ev.release()));
     }
 
     void DestroyActor(TActorId actorId) {

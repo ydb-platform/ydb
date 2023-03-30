@@ -16,7 +16,7 @@ struct TEvTimer : TEventLocal<TEvTimer, EvTimer> {
     std::unique_ptr<IEventHandle> HitEvent;
 
     TEvTimer(const IEventHandle& ev)
-        : HitEvent(new IEventHandleFat(TEvents::TSystem::Wakeup, 0, ev.Sender, TActorId(), {}, ev.Cookie))
+        : HitEvent(new IEventHandle(TEvents::TSystem::Wakeup, 0, ev.Sender, TActorId(), {}, ev.Cookie))
     {}
 
     void Hit() {

@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
             auto event = new TEvDataShard::TEvProposeTransaction;
             event->Record = proposeRecord;
             ActorIdToProto(sender, event->Record.MutableSource());
-            runtime.Send(new IEventHandleFat(shardActorId, sender, event), 0, true);
+            runtime.Send(new IEventHandle(shardActorId, sender, event), 0, true);
         }
 
         Cerr << "Waiting for propose echo reply..." << Endl;

@@ -278,21 +278,21 @@ protected:
         ReportEventElapsedTime();
     }
 
-    STATEFN(BaseStateFuncBody) {
+    STFUNC(BaseStateFuncBody) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvResumeExecution, HandleExecuteBase);
             hFunc(TEvDqCompute::TEvChannelsInfo, HandleExecuteBase);
             hFunc(TEvDq::TEvAbortExecution, HandleExecuteBase);
             hFunc(NActors::TEvents::TEvWakeup, HandleExecuteBase);
             hFunc(NActors::TEvents::TEvUndelivered, HandleExecuteBase);
-            fFunc(TEvDqCompute::TEvChannelData::EventType, Channels->Receive);
-            fFunc(TEvDqCompute::TEvChannelDataAck::EventType, Channels->Receive);
+            FFunc(TEvDqCompute::TEvChannelData::EventType, Channels->Receive);
+            FFunc(TEvDqCompute::TEvChannelDataAck::EventType, Channels->Receive);
             hFunc(TEvDqCompute::TEvRun, HandleExecuteBase);
             hFunc(TEvDqCompute::TEvStateRequest, HandleExecuteBase);
             hFunc(TEvDqCompute::TEvNewCheckpointCoordinator, HandleExecuteBase);
-            fFunc(TEvDqCompute::TEvInjectCheckpoint::EventType, Checkpoints->Receive);
-            fFunc(TEvDqCompute::TEvCommitState::EventType, Checkpoints->Receive);
-            fFunc(TEvDqCompute::TEvRestoreFromCheckpoint::EventType, Checkpoints->Receive);
+            FFunc(TEvDqCompute::TEvInjectCheckpoint::EventType, Checkpoints->Receive);
+            FFunc(TEvDqCompute::TEvCommitState::EventType, Checkpoints->Receive);
+            FFunc(TEvDqCompute::TEvRestoreFromCheckpoint::EventType, Checkpoints->Receive);
             hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleExecuteBase);
             hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleExecuteBase);
             hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
@@ -497,15 +497,15 @@ protected:
         }
 
         if (Channels) {
-            TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandleFat(Channels->SelfId(), this->SelfId(),
+            TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Channels->SelfId(), this->SelfId(),
                 new NActors::TEvents::TEvPoison);
-            Channels->Receive(handle);
+            Channels->Receive(handle, NActors::TActivationContext::AsActorContext());
         }
 
         if (Checkpoints) {
-            TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandleFat(Checkpoints->SelfId(), this->SelfId(),
+            TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), this->SelfId(),
                 new NActors::TEvents::TEvPoison);
-            Checkpoints->Receive(handle);
+            Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext());
         }
 
         {
@@ -1193,7 +1193,7 @@ protected:
         // Event from coordinator should be processed to confirm seq no.
         TAutoPtr<NActors::IEventHandle> iev(ev.Release());
         if (Checkpoints) {
-            Checkpoints->Receive(iev);
+            Checkpoints->Receive(iev, NActors::TActivationContext::AsActorContext());
         }
     }
 
@@ -1218,8 +1218,8 @@ protected:
             Checkpoints->Init(this->SelfId(), this->RegisterWithSameMailbox(Checkpoints));
             Channels->SetCheckpointsSupport();
         }
-        TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandleFat(Checkpoints->SelfId(), ev->Sender, ev->Release().Release());
-        Checkpoints->Receive(handle);
+        TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), ev->Sender, ev->Release().Release());
+        Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext());
     }
 
     void HandleExecuteBase(TEvDq::TEvAbortExecution::TPtr& ev) {
@@ -1251,14 +1251,14 @@ protected:
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TAutoPtr<NActors::IEventHandle> iev(ev.Release());
         if (Checkpoints) {
-            Checkpoints->Receive(iev);
+            Checkpoints->Receive(iev, NActors::TActivationContext::AsActorContext());
         }
     }
 
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
         TAutoPtr<NActors::IEventHandle> iev(ev.Release());
         if (Checkpoints) {
-            Checkpoints->Receive(iev);
+            Checkpoints->Receive(iev, NActors::TActivationContext::AsActorContext());
         }
     }
 

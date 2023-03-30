@@ -2128,7 +2128,7 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
         return ctx.NewCallable(node->Pos(), multimap, {node->HeadPtr(), ctx.DeepCopyLambda(lambda, body.ChildrenList())});
     }
 
-    if (body.IsCallable("If") && 3U == body.ChildrenSize() && 1U == body.Tail().ChildrenSize() && body.Tail().IsCallable({"List", "Nothing", "NothingFrom"}) && (
+    if (body.IsCallable("If") && 3U == body.ChildrenSize() && 1U == body.Tail().ChildrenSize() && body.Tail().IsCallable({"List", "Nothing", "EmptyFrom"}) && (
         (1U == body.Child(1)->ChildrenSize() && body.Child(1)->IsCallable({"AsList", "Just"})) ||
         (2U == body.Child(1)->ChildrenSize() && body.Child(1)->IsCallable("List")))) {
         const bool haveSharedCallables = HaveSharedNodes(body.HeadPtr(), body.Child(1)->TailPtr(),
@@ -2344,7 +2344,7 @@ template <bool Flat, bool List>
 TExprNode::TPtr ExpandContainerIf(const TExprNode::TPtr& input, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
     auto item = Flat ? input->TailPtr() : ctx.NewCallable(input->Tail().Pos(), List ? "AsList" : "Just", {input->TailPtr()});
-    auto none = ctx.NewCallable(input->Tail().Pos(), "NothingFrom", {item});
+    auto none = ctx.NewCallable(input->Tail().Pos(), "EmptyFrom", {item});
     return ctx.NewCallable(input->Pos(), "If", {input->HeadPtr(), std::move(item), std::move(none)});
 }
 
@@ -5473,7 +5473,7 @@ TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext&
     const auto& lambda = node->Tail();
     const auto& body = lambda.Tail();
 
-    if (body.IsCallable("If") && 1U == body.Tail().ChildrenSize() && body.Tail().IsCallable({"List", "Nothing", "NothingFrom"})) {
+    if (body.IsCallable("If") && 1U == body.Tail().ChildrenSize() && body.Tail().IsCallable({"List", "Nothing", "EmptyFrom"})) {
         const auto width = lambda.Head().ChildrenSize();
         if (auto shared = FindSharedNode(body.ChildPtr(1), body.HeadPtr(),
             [&lambda] (const TExprNode::TPtr& node) {

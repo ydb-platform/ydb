@@ -809,12 +809,12 @@ public:
 
     void Handle(TEvents::TEvSubscribe::TPtr &ev, const TActorContext &ctx) {
         for (auto &pr : DomainTenantPools)
-            ctx.Send(new IEventHandleFat(pr.second, ev->Sender, new TEvents::TEvSubscribe()));
+            ctx.Send(new IEventHandle(pr.second, ev->Sender, new TEvents::TEvSubscribe()));
     }
 
     void Handle(TEvents::TEvUnsubscribe::TPtr &ev, const TActorContext &ctx) {
         for (auto &pr : DomainTenantPools)
-            ctx.Send(new IEventHandleFat(pr.second, ev->Sender, new TEvents::TEvUnsubscribe()));
+            ctx.Send(new IEventHandle(pr.second, ev->Sender, new TEvents::TEvUnsubscribe()));
     }
 
     void Handle(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {

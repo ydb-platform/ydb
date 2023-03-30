@@ -39,7 +39,7 @@ public:
 
     void Complete(const TActorContext&) override {
         if (Failed) {
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, Self->SelfId(), {}, {}, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->SelfId(), {}, {}, 0));
         } else {
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXIS03, "TTxInitScheme Complete");
             Self->Execute(Self->CreateTxMigrate());

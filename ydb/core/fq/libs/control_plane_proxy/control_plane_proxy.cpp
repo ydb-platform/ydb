@@ -316,7 +316,7 @@ public:
             if (delay) {
                 Counters->Retry->Inc();
                 CPP_LOG_E("Folder resolve error. Retry with delay " << *delay << ", " << errorMessage);
-                TActivationContext::Schedule(*delay, new IEventHandleFat(NKikimr::NFolderService::FolderServiceActorId(), static_cast<const TActorId&>(SelfId()), CreateRequest().release()));
+                TActivationContext::Schedule(*delay, new IEventHandle(NKikimr::NFolderService::FolderServiceActorId(), static_cast<const TActorId&>(SelfId()), CreateRequest().release()));
                 return;
             }
             Counters->Error->Inc();

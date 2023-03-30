@@ -85,7 +85,7 @@ public:
     }
 
     void Send(IEventBase *ev) {
-        Runtime->Send(new IEventHandleFat(CollectorId, Sender, ev));
+        Runtime->Send(new IEventHandle(CollectorId, Sender, ev));
     }
 
     TActorId GetTabletActorId() {

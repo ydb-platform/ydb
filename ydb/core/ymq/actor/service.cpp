@@ -42,8 +42,8 @@
 LWTRACE_USING(SQS_PROVIDER);
 
 template <>
-struct THash<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> : THash<const NActors::TEventHandleFat<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest>*> {
-    using TParent = THash<const NActors::TEventHandleFat<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest>*>;
+struct THash<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> : THash<const NActors::TEventHandle<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest>*> {
+    using TParent = THash<const NActors::TEventHandle<NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest>*>;
     using TParent::operator();
     size_t operator()(const NKikimr::NSQS::TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ptr) const {
         return TParent::operator()(ptr.Get());
@@ -113,10 +113,10 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
             StopLocalLeaderIfNeeded(LEADER_DESTROY_REASON_TABLET_ON_ANOTHER_NODE);
         }
     }
-    
+
     void LocalLeaderWayMoved() const {
         if (LocalLeader_) {
-            TActivationContext::Send(new IEventHandleFat(LocalLeader_, SelfId(), new TSqsEvents::TEvForceReloadState()));
+            TActivationContext::Send(new IEventHandle(LocalLeader_, SelfId(), new TSqsEvents::TEvForceReloadState()));
         }
     }
 
@@ -149,7 +149,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
             Counters_ = Counters_->GetCountersForNotLeaderNode();
             LWPROBE(DestroyLeader, UserName_, QueueName_, reason);
             LOG_SQS_INFO("Stop local leader [" << UserName_ << "/" << QueueName_ << "] actor " << LocalLeader_);
-            TActivationContext::Send(new IEventHandleFat(LocalLeader_, SelfId(), new TEvPoisonPill()));
+            TActivationContext::Send(new IEventHandle(LocalLeader_, SelfId(), new TEvPoisonPill()));
             LocalLeader_ = TActorId();
             if (FolderId_) {
                 Y_VERIFY(FolderCounters_);

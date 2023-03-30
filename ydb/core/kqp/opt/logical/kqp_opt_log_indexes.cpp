@@ -94,7 +94,7 @@ bool IsKeySelectorPkPrefix(NNodes::TCoLambda keySelector, const TKikimrTableDesc
     return true;
 }
 
-bool CanPushTopSort(const TCoTopSort& node, const TKikimrTableDescription& tableDesc, TVector<TString>* columns) {
+bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& tableDesc, TVector<TString>* columns) {
     return IsKeySelectorPkPrefix(node.KeySelectorLambda(), tableDesc, columns);
 }
 
@@ -292,13 +292,13 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
 // through TKqlLookupTable.
 // The simplest way is to match TopSort or Take over TKqlReadTableIndex.
 TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!node.Maybe<TCoTopSort>()) {
+    if (!node.Maybe<TCoTopBase>()) {
         return node;
     }
 
-    auto topSort = node.Maybe<TCoTopSort>().Cast();
+    const auto topBase = node.Maybe<TCoTopBase>().Cast();
 
-    if (auto maybeReadTableIndex = topSort.Input().Maybe<TKqlReadTableIndex>()) {
+    if (auto maybeReadTableIndex = topBase.Input().Maybe<TKqlReadTableIndex>()) {
         auto readTableIndex = maybeReadTableIndex.Cast();
 
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
@@ -307,28 +307,30 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
 
         TVector<TString> sortByColumns;
 
-        if (!CanPushTopSort(topSort, indexDesc, &sortByColumns)) {
+        if (!CanPushTopSort(topBase, indexDesc, &sortByColumns)) {
             return node;
         }
 
-        auto filter = [&ctx, &node, &topSort](const TExprBase& in) mutable {
-            auto newTopSort = Build<TCoTopSort>(ctx, node.Pos())
+        auto filter = [&ctx, &node, &topBase](const TExprBase& in) mutable {
+            auto newTop = Build<TCoTopBase>(ctx, node.Pos())
+                .CallableName(node.Ref().Content())
                 .Input(in)
-                .KeySelectorLambda(ctx.DeepCopyLambda(topSort.KeySelectorLambda().Ref()))
-                .SortDirections(topSort.SortDirections())
-                .Count(topSort.Count())
+                .KeySelectorLambda(ctx.DeepCopyLambda(topBase.KeySelectorLambda().Ref()))
+                .SortDirections(topBase.SortDirections())
+                .Count(topBase.Count())
                 .Done();
-            return TExprBase(newTopSort);
+            return TExprBase(newTop);
         };
 
         auto lookup = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, indexMeta,
             kqpCtx.IsScanQuery(), sortByColumns, filter);
 
-        return Build<TCoTopSort>(ctx, node.Pos())
+        return Build<TCoTopBase>(ctx, node.Pos())
+            .CallableName(node.Ref().Content())
             .Input(lookup)
-            .KeySelectorLambda(ctx.DeepCopyLambda(topSort.KeySelectorLambda().Ref()))
-            .SortDirections(topSort.SortDirections())
-            .Count(topSort.Count())
+            .KeySelectorLambda(ctx.DeepCopyLambda(topBase.KeySelectorLambda().Ref()))
+            .SortDirections(topBase.SortDirections())
+            .Count(topBase.Count())
             .Done();
     }
 

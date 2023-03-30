@@ -15,6 +15,18 @@ Options:
   {-f|--file} PATH         [Required] Script file
   --explain                Explain query (default: 0)
   --show-response-metadata Show response metadata for ydb call (default: 0)
+  --format STRING          Output format. Available options:
+                             pretty
+                               Human readable output
+                             json-unicode
+                               Output in json format, binary strings are encoded with unicode characters. Every row is a separate json on a separate line.
+                             json-unicode-array
+                               Output in json format, binary strings are encoded with unicode characters. Every resultset is a json array of rows. Every row is a separate json on a separate line.
+                             json-base64
+                               Output in json format, binary strings are encoded with base64. Every row is a separate json on a separate line.
+                             json-base64-array
+                               Output in json format, binary strings are encoded with base64. Every resultset is a json array of rows. Every row is a separate json on a separate line.
+                           Default: "pretty".
   {-p|--param} $name=value Query parameter[s].
                            Several parameter options can be specified.
                            To change input format use --input-format option.
@@ -32,29 +44,6 @@ Options:
                            How to pass in linux: --param '$values=[{"key":1,"value":"one"},{"key":2,"value":"two"}]'
 
   --param-file PATH        File name with parameter names and values in json format. You may specify this option repeatedly.
-  --stdin-par STRING       Parameter name on stdin, required/applicable when stdin-format implies values only.
-  --batch STRING           Batching mode for stdin parameters processing. Available options:
-                             iterative
-                               Executes script for each parameter set (exactly one execution when no framing specified in "stdin-format")
-                             full
-                               Executes script once, with all parameter sets wrapped in json list, when EOF is reached on stdin
-                             adaptive
-                               Executes script with a json list of parameter sets every time when its number reaches batch-limit, or the waiting time reaches batch-max-delay.
-                           Default: "iterative".
-  --batch-limit INT        Maximum size of list for adaptive batching mode (default: 1000)
-  --batch-max-delay VAL    Maximum delay to process first item in the list for adaptive batching mode (default: "1.000000s")
-  --format STRING          Output format. Available options:
-                             pretty
-                               Human readable output
-                             json-unicode
-                               Output in json format, binary strings are encoded with unicode characters. Every row is a separate json on a separate line.
-                             json-unicode-array
-                               Output in json format, binary strings are encoded with unicode characters. Every resultset is a json array of rows. Every row is a separate json on a separate line.
-                             json-base64
-                               Output in json format, binary strings are encoded with base64. Every row is a separate json on a separate line.
-                             json-base64-array
-                               Output in json format, binary strings are encoded with base64. Every resultset is a json array of rows. Every row is a separate json on a separate line.
-                           Default: "pretty".
   --input-format STRING    Input format. Available options:
                              json-unicode
                                Input in json format, binary strings are decoded with unicode characters
@@ -76,6 +65,17 @@ Options:
                              newline-delimited
                                Newline character delimits parameter sets on stdin and triggers processing in accordance to "batch" option
                            Default: "no-framing".
+  --stdin-par STRING       Parameter name on stdin, required/applicable when stdin-format implies values only.
+  --batch STRING           Batching mode for stdin parameters processing. Available options:
+                             iterative
+                               Executes script for each parameter set (exactly one execution when no framing specified in "stdin-format")
+                             full
+                               Executes script once, with all parameter sets wrapped in json list, when EOF is reached on stdin
+                             adaptive
+                               Executes script with a json list of parameter sets every time when its number reaches batch-limit, or the waiting time reaches batch-max-delay.
+                           Default: "iterative".
+  --batch-limit INT        Maximum size of list for adaptive batching mode (default: 1000)
+  --batch-max-delay VAL    Maximum delay to process first item in the list for adaptive batching mode (default: "1.000000s")
 
 Examples:
   1) Execute script text

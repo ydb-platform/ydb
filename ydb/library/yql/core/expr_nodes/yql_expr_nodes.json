@@ -373,9 +373,9 @@
             "Match": {"Type": "Callable", "Name": "UnorderedSubquery"}
         },
         {
-            "Name": "TCoNothingFrom",
+            "Name": "TCoEmptyFrom",
             "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "NothingFrom"}
+            "Match": {"Type": "Callable", "Name": "EmptyFrom"}
         },
         {
             "Name": "TCoConditionalValueBase",
@@ -1548,7 +1548,6 @@
             "Name": "TCoTopBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
-            "Builder": {"Generate": "None"},
             "Children": [
                 {"Index": 1, "Name": "Count", "Type": "TExprBase"},
                 {"Index": 2, "Name": "SortDirections",    "Type": "TExprBase"},

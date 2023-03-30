@@ -112,7 +112,7 @@ void TExecutorBuilder::SendToQueueLeader() {
 
     RLOG_SQS_DEBUG("Sending execute request for query(idx=" << QueryId_ << ") to queue leader");
 
-    TActivationContext::Send(new IEventHandleFat(QueueLeaderActor_, Parent_, ev.Release()));
+    TActivationContext::Send(new IEventHandle(QueueLeaderActor_, Parent_, ev.Release()));
 }
 
 TMiniKqlExecutionActor::TMiniKqlExecutionActor(

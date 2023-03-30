@@ -186,7 +186,7 @@ public:
     }
 
     void Handle(TEvents::TEvPoison::TPtr ev) {
-        TActivationContext::Send(new IEventHandleFat(EvFinished, 0, ev->Sender, SelfId(), {}, 0));
+        TActivationContext::Send(new IEventHandle(EvFinished, 0, ev->Sender, SelfId(), {}, 0));
         PassAway();
     }
 

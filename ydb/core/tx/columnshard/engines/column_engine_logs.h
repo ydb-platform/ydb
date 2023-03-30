@@ -258,6 +258,7 @@ public:
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) override;
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) override;
+    void FreeLocks(std::shared_ptr<TColumnEngineChanges> changes) override;
     void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) override;
     void UpdateCompactionLimits(const TCompactionLimits& limits) override { Limits = limits; }
     const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
@@ -293,15 +294,6 @@ private:
 
         ui64 PathId() const { return Record.PathId; }
         bool Empty() const { return Portions.empty(); }
-
-        bool AllActive() const {
-            for (auto& [_, portionInfo] : Portions) {
-                if (!portionInfo.IsActive()) {
-                    return false;
-                }
-            }
-            return true;
-        }
     };
 
     TIndexInfo IndexInfo;

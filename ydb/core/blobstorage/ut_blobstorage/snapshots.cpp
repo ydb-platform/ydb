@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(SnapshotTesting) {
                 const TLogoBlobID id(tabletId, generation, step, channel, len, 0, 1);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(id, TRope(data), vdiskId, false, nullptr, TInstant::Max(),
                     NKikimrBlobStorage::EPutHandleClass::TabletLog);
-                runtime->Send(new IEventHandleFat(queue, edge, ev.release()), queue.NodeId());
+                runtime->Send(new IEventHandle(queue, edge, ev.release()), queue.NodeId());
                 if (putToBlobs) {
                     blobs.emplace(id, std::move(data));
                 }
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(SnapshotTesting) {
             Cerr << "doCompact" << Endl;
             const TInstant begin = runtime->GetClock();
 
-            auto ev = std::make_unique<IEventHandleFat>(vdiskActorId, edge, TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
+            auto ev = std::make_unique<IEventHandle>(vdiskActorId, edge, TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
             ev->Rewrite(TEvBlobStorage::EvForwardToSkeleton, vdiskActorId);
             runtime->Send(ev.release(), edge.NodeId());
             env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(edge, false);
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(SnapshotTesting) {
                 if (snapshotId) {
                     ev->Record.SetSnapshotId(*snapshotId);
                 }
-                runtime->Send(new IEventHandleFat(queue, edge, ev.release()), queue.NodeId());
+                runtime->Send(new IEventHandle(queue, edge, ev.release()), queue.NodeId());
                 { // check result
                     auto ev = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge, false);
                     const auto& record = ev->Get()->Record;
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(SnapshotTesting) {
 
             auto ev = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(tabletId, generation, step, channel, true,
                 generation, step, false, nullptr, nullptr, vdiskId, TInstant::Max());
-            runtime->Send(new IEventHandleFat(queue, edge, ev.release()), queue.NodeId());
+            runtime->Send(new IEventHandle(queue, edge, ev.release()), queue.NodeId());
             { // check result
                 auto ev = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVCollectGarbageResult>(edge, false);
                 const auto& record = ev->Get()->Record;

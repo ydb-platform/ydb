@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         // check for not found
         auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
         request->Request.set_iam_token("bad1");
-        setup.GetRuntime()->Send(new IEventHandleFat(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
+        setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
         auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponse>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(result->Status.Msg, "Permission Denied");
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         // check for found
         request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
         request->Request.set_iam_token("good1");
-        setup.GetRuntime()->Send(new IEventHandleFat(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
+        setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
         result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponse>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
         request->Request.set_iam_token("token");
         request->RequestId = "trololo";
-        setup.GetRuntime()->Send(new IEventHandleFat(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
+        setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
         auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponse>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());

@@ -77,7 +77,7 @@ bool TKesusTablet::ScheduleSessionTimeout(TSessionInfo* session, const TActorCon
     TDuration timeout = TDuration::MilliSeconds(session->TimeoutMillis) + gracePeriod;
     session->TimeoutCookie.Reset(ISchedulerCookie::Make3Way());
     CreateLongTimer(ctx, timeout,
-        new IEventHandleFat(SelfId(), SelfId(),
+        new IEventHandle(SelfId(), SelfId(),
             new TEvPrivate::TEvSessionTimeout(session->Id, session->TimeoutCookie.Get())),
         AppData(ctx)->SystemPoolId,
         session->TimeoutCookie.Get());

@@ -156,7 +156,7 @@ private:
     }
 
     static void OnRespond(TActorSystem* ass, const TActorId& selfId, const ::NYdb::NClickhouseInternal::TAsyncScanResult& result) {
-        ass->Send(new IEventHandleFat(selfId, TActorId(), new TEvPrivate::TEvScanResult(const_cast<::NYdb::NClickhouseInternal::TAsyncScanResult&>(result).ExtractValueSync())));
+        ass->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvScanResult(const_cast<::NYdb::NClickhouseInternal::TAsyncScanResult&>(result).ExtractValueSync())));
     }
 
     void Handle(TEvPrivate::TEvScanResult::TPtr& result) {
@@ -195,7 +195,7 @@ private:
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, res.GetIssues(), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         } else {
             WakeUpTime = TMonotonic::Now() + Min(TDuration::Seconds(3), TDuration::MilliSeconds(0x30U * (1U << ++Retried)));
-            ActorSystem->Schedule(WakeUpTime, new IEventHandleFat(SelfId(), TActorId(), new TEvPrivate::TEvRetryTime));
+            ActorSystem->Schedule(WakeUpTime, new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvRetryTime));
         }
     }
 

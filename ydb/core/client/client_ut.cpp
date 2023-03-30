@@ -2098,14 +2098,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10)));
-            runtime.Send(new IEventHandleFat(leaderId, edge, reqWrite.Release()));
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
         }
 
         {
-            runtime.Send(new IEventHandleFat(leaderTablet, edge, new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
@@ -2113,7 +2113,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandleFat(followerId, edge, reqRead.Release()));
+            runtime.Send(new IEventHandle(followerId, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2157,7 +2157,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
             Y_UNUSED(leaderId);
 
-            runtime.Send(new IEventHandleFat(leaderTablet, edge, new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
@@ -2228,7 +2228,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10)));
-            runtime.Send(new IEventHandleFat(leaderId, edge, reqWrite.Release()));
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2237,7 +2237,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandleFat(followerId, edge, reqRead.Release()));
+            runtime.Send(new IEventHandle(followerId, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2256,14 +2256,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             // Kill leader
-            runtime.Send(new IEventHandleFat(leaderTablet, edge, new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
 
         {
             // Kill follower
-            runtime.Send(new IEventHandleFat(followerTablet, edge, new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(followerTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
@@ -2289,7 +2289,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             // Read row from offline follower
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandleFat(followerId2, edge, reqRead.Release()));
+            runtime.Send(new IEventHandle(followerId2, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2375,7 +2375,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10)));
-            runtime.Send(new IEventHandleFat(leaderId, edge, reqWrite.Release()));
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2384,7 +2384,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandleFat(followerId, edge, reqRead.Release()));
+            runtime.Send(new IEventHandle(followerId, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2399,14 +2399,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             // Kill leader
-            runtime.Send(new IEventHandleFat(leaderTablet, edge, new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
 
         {
             // Kill follower
-            runtime.Send(new IEventHandleFat(followerTablet, edge, new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(followerTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
@@ -2432,7 +2432,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             // Read row from offline follower (unconfirmed commit must be ignored)
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandleFat(followerId2, edge, reqRead.Release()));
+            runtime.Send(new IEventHandle(followerId2, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2453,7 +2453,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             // Kill follower 2
-            runtime.Send(new IEventHandleFat(followerTablet2, edge, new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(followerTablet2, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
@@ -2479,7 +2479,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             // Read row from offline follower
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandleFat(followerId3, edge, reqRead.Release()));
+            runtime.Send(new IEventHandle(followerId3, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2531,7 +2531,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, key, value));
-            runtime.Send(new IEventHandleFat(leaderId, leaderEdge, reqWrite.Release()));
+            runtime.Send(new IEventHandle(leaderId, leaderEdge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(leaderEdge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2556,7 +2556,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(readQuery, key));
-            runtime.Send(new IEventHandleFat(followerId, followerEdge, reqRead.Release()), 1);
+            runtime.Send(new IEventHandle(followerId, followerEdge, reqRead.Release()), 1);
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(followerEdge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2591,7 +2591,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                     Cerr << "... dropping TEvFollowerDetach" << Endl;
                     ++detachCounter;
                     runtime.Send(
-                        new IEventHandleFat(
+                        new IEventHandle(
                             runtime.GetInterconnectProxy(0, 1),
                             { },
                             new TEvInterconnect::TEvDisconnect()),
@@ -2626,7 +2626,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             // Kill follower
             Cerr << "... killing follower " << followerTablet << Endl;
-            runtime.Send(new IEventHandleFat(followerTablet, followerEdge, new TEvents::TEvPoisonPill()), 1);
+            runtime.Send(new IEventHandle(followerTablet, followerEdge, new TEvents::TEvPoisonPill()), 1);
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(followerEdge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
@@ -2692,7 +2692,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TActorId edge = runtime.AllocateEdgeActor();
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, key, value));
-            runtime.Send(new IEventHandleFat(leaderId, edge, reqWrite.Release()));
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
             return edge;
         };
 
@@ -2843,7 +2843,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         for (int i = 0; i < 350; ++i) {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(i + 10)));
-            runtime.Send(new IEventHandleFat(leaderId, edge, reqWrite.Release()));
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2859,7 +2859,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         for (int i = 0; i < 350; ++i) {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(i + 10)));
-            runtime.Send(new IEventHandleFat(leaderId, edge, reqWrite.Release()));
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);

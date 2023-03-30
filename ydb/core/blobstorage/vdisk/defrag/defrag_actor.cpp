@@ -159,7 +159,7 @@ namespace NKikimr {
             Y_VERIFY(ev->Sender == PlannerId);
             PlannerId = {};
             if (ev->Get()->ChunksToDefrag) {
-                ctx.Send(new IEventHandleFat(DefragActorId, SelfId(), ev->ReleaseBase().Release()));
+                ctx.Send(new IEventHandle(DefragActorId, SelfId(), ev->ReleaseBase().Release()));
             } else {
                 ctx.Schedule(GeneratePause(), new TEvents::TEvWakeup);
             }
@@ -171,7 +171,7 @@ namespace NKikimr {
 
         void Die(const TActorContext& ctx) override {
             if (PlannerId) {
-                ctx.Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, PlannerId, {}, nullptr, 0));
+                ctx.Send(new IEventHandle(TEvents::TSystem::Poison, 0, PlannerId, {}, nullptr, 0));
             }
             TActorBootstrapped::Die(ctx);
         }

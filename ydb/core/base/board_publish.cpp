@@ -141,7 +141,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
         if (ResolveGone(ev)) {
             const TActorId proxyId = MakeStateStorageProxyID(StateStorageGroupId);
             const ui32 flags = IEventHandle::FlagTrackDelivery;
-            TAutoPtr<IEventHandle> x = new IEventHandleFat(proxyId, SelfId(), new TEvStateStorage::TEvResolveBoard(Path), flags);
+            TAutoPtr<IEventHandle> x = new IEventHandle(proxyId, SelfId(), new TEvStateStorage::TEvResolveBoard(Path), flags);
             TActivationContext::Schedule(TDuration::MilliSeconds(50), x.Release());
 
             Become(&TThis::StateResolve);

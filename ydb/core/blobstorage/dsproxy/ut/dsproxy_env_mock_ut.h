@@ -88,7 +88,7 @@ struct TDSProxyEnv {
 
         FakeProxyActorId = runtime.AllocateEdgeActor(0);
         TAutoPtr <IEventHandle> handle;
-        runtime.Send(new IEventHandleFat(RealProxyActorId, FakeProxyActorId, new TEvRequestProxySessionsState));
+        runtime.Send(new IEventHandle(RealProxyActorId, FakeProxyActorId, new TEvRequestProxySessionsState));
         auto queues = runtime.GrabEdgeEventRethrow<TEvProxySessionsState>(handle);
         GroupQueues = queues->GroupQueues;
         NodeLayoutInfo = nullptr;
@@ -150,7 +150,7 @@ inline void SetupRuntime(TTestActorRuntime& runtime) {
 
     runtime.SetEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvBlobStorage::EvVCheckReadiness) {
-            runtime.Send(new IEventHandleFat(
+            runtime.Send(new IEventHandle(
                     ev->Sender, ev->Recipient, new TEvBlobStorage::TEvVCheckReadinessResult(NKikimrProto::OK), 0,
                     ev->Cookie), 0, true);
             return true;

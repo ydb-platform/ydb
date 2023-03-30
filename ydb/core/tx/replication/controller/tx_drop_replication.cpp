@@ -51,7 +51,7 @@ public:
             ev->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
             ev->Record.SetOrigin(Self->TabletID());
             ev->Record.SetStatus(NKikimrReplication::TEvDropReplicationResult::NOT_FOUND);
-            Result = MakeHolder<IEventHandleFat>(PubEv->Sender, ctx.SelfID, ev.Release());
+            Result = MakeHolder<IEventHandle>(PubEv->Sender, ctx.SelfID, ev.Release());
 
             return true;
         }
@@ -123,7 +123,7 @@ public:
             ev->Record.MutableOperationId()->SetPartId(op->OperationId.second);
             ev->Record.SetOrigin(Self->TabletID());
             ev->Record.SetStatus(NKikimrReplication::TEvDropReplicationResult::SUCCESS);
-            Result = MakeHolder<IEventHandleFat>(op->Sender, ctx.SelfID, ev.Release());
+            Result = MakeHolder<IEventHandle>(op->Sender, ctx.SelfID, ev.Release());
         }
 
         Self->Remove(rid);

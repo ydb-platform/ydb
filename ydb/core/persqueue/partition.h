@@ -241,7 +241,7 @@ private:
     void ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
                         const TActorContext& ctx);
     void EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
-                                   TUserInfo& userInfo,
+                                   TUserInfoBase& userInfo,
                                    const TActorContext& ctx);
 
     void ScheduleReplyOk(const ui64 dst);
@@ -269,8 +269,8 @@ private:
     void AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
                            const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated);
 
-    TUserInfo& GetOrCreatePendingUser(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration = {});
-    TUserInfo* GetPendingUserIfExists(const TString& user);
+    TUserInfoBase& GetOrCreatePendingUser(const TString& user, TMaybe<ui64> readRuleGeneration = {});
+    TUserInfoBase* GetPendingUserIfExists(const TString& user);
 
     THolder<TEvPQ::TEvProxyResponse> MakeReplyOk(const ui64 dst);
     THolder<TEvPQ::TEvProxyResponse> MakeReplyGetClientOffsetOk(const ui64 dst,
@@ -585,10 +585,7 @@ private:
     std::deque<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>> ImmediateTxs;
     std::deque<TTransaction> DistrTxs;
     THashMap<TString, size_t> UserActCount;
-    THashMap<TString, TUserInfo> PendingUsersInfo;
-    THashMap<TString, TInstant> PendingReadFromTimestamp;
-    THashMap<TString, bool> PendingSetImportant;
-    THashSet<TString> PendingHasReadRule;
+    THashMap<TString, TUserInfoBase> PendingUsersInfo;
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
     THashSet<TString> AffectedUsers;
     bool UsersInfoWriteInProgress = false;

@@ -203,7 +203,7 @@ public:
                 HttpGateway, ModuleResolverState, Counters));
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
-        TlsActivationContext->Send(new IEventHandleFat(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
+        TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
                     nullptr, std::move(ev->TraceId)));
         Become(&TKqpSessionActor::ExecuteState);
     }

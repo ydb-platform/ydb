@@ -204,7 +204,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        SchemeCacheResponse.Reset(ev.Release());
+        SchemeCacheResponse.Reset(ev->Release().Release());
 
         const auto* response = SchemeCacheResponse.Get()->Request.Get();
 

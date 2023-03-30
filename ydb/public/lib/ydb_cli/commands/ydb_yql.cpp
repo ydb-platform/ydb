@@ -21,8 +21,6 @@ void TCommandYql::Config(TConfig& config) {
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
     config.Opts->AddLongOption('s', "script", "Text of script to execute").RequiredArgument("[String]").StoreResult(&Script);
     config.Opts->AddLongOption('f', "file", "Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
-  
-    AddParametersOption(config, "script");
 
     AddFormats(config, {
         EOutputFormat::Pretty,
@@ -33,6 +31,8 @@ void TCommandYql::Config(TConfig& config) {
         EOutputFormat::Csv,
         EOutputFormat::Tsv
     });
+
+    AddParametersOption(config);
 
     AddInputFormats(config, {
         EOutputFormat::JsonUnicode,
@@ -47,6 +47,8 @@ void TCommandYql::Config(TConfig& config) {
         EOutputFormat::NoFraming,
         EOutputFormat::NewlineDelimited
     });
+
+    AddParametersStdinOption(config, "script");
 
     CheckExamples(config);
 

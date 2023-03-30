@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TSelfPingTest) {
         const TActorId actorId = runtime->Register(actor);
         Y_UNUSED(actorId);
 
-        //runtime.Send(new IEventHandleFat(actorId, sender, new TEvSelfPing::TEvPing(0.0)));
+        //runtime.Send(new IEventHandle(actorId, sender, new TEvSelfPing::TEvPing(0.0)));
 
         // TODO check after events are handled
         //Sleep(TDuration::Seconds(1));

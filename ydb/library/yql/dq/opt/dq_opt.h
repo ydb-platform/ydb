@@ -12,12 +12,17 @@ struct TDqStageSettings {
     static constexpr TStringBuf LogicalIdSettingName = "_logical_id";
     static constexpr TStringBuf IdSettingName = "_id";
     static constexpr TStringBuf SinglePartitionSettingName = "_single_partition";
+    static constexpr TStringBuf WideChannelsSettingName = "_wide_channels";
 
     ui64 LogicalId = 0;
     TString Id;
     bool SinglePartition = false;
 
+    bool WideChannels = false;
+    const TStructExprType* OutputNarrowType = nullptr;
+
     TDqStageSettings& SetSinglePartition(bool value = true) { SinglePartition = value; return *this; }
+    TDqStageSettings& SetWideChannels(const TStructExprType& narrowType) { WideChannels = true; OutputNarrowType = &narrowType; return *this; }
 
     static TDqStageSettings New(const NNodes::TDqStageBase& node);
 
@@ -47,7 +52,7 @@ bool IsSingleConsumerConnection(const NNodes::TDqConnection& node, const TParent
 
 ui32 GetStageOutputsCount(const NNodes::TDqStageBase& stage);
 
-void FindDqConnections(const NNodes::TExprBase& node, TVector<NNodes::TDqConnection>&, bool&);
+void FindDqConnections(const NNodes::TExprBase& node, TVector<NNodes::TDqConnection>& connections, bool& isPure);
 bool IsDqPureExpr(const NNodes::TExprBase& node, bool isPrecomputePure = true);
 bool IsDqSelfContainedExpr(const NNodes::TExprBase& node);
 bool IsDqDependsOnStage(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage);

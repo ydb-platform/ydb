@@ -78,7 +78,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         ev->AddExtremeQuery(id, 0, 0);
         const TActorId& queueId = queues[i];
         const TActorId& edge = env.Runtime->AllocateEdgeActor(queueId.NodeId());
-        env.Runtime->Send(new IEventHandleFat(queueId, edge, ev.release()), queueId.NodeId());
+        env.Runtime->Send(new IEventHandle(queueId, edge, ev.release()), queueId.NodeId());
         const bool inserted = edges.insert(edge).second;
         Y_VERIFY(inserted);
     }
@@ -148,7 +148,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
             auto query = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(groupInfo->GetVDiskId(i), TKeyBarrier::First(),
                 TKeyBarrier::Inf(), nullptr, true);
             const TActorId& edge = env.Runtime->AllocateEdgeActor(queueId.NodeId());
-            env.Runtime->Send(new IEventHandleFat(queueId, edge, query.release()), edge.NodeId());
+            env.Runtime->Send(new IEventHandle(queueId, edge, query.release()), edge.NodeId());
             const bool inserted = edges.insert(edge).second;
             Y_VERIFY(inserted);
         }
@@ -208,7 +208,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
 
     filterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
         if (ev->Type == TEvBlobStorage::EvVGet && states[ev->Recipient.NodeId() - 1] == EState::OFFLINE) {
-            env.Runtime->Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected).Release(), nodeId);
+            env.Runtime->Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::Disconnected).release(), nodeId);
             return false;
         }
         return true;

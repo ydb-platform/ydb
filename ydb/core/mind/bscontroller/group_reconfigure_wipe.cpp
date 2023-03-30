@@ -72,7 +72,7 @@ public:
                 const auto& node = nodeId;
                 const auto& record = msg->Record;
                 STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXGRW07, "Sending update", (NodeId, node), (Message, record));
-                TActivationContext::Send(new IEventHandleFat(MakeBlobStorageNodeWardenID(nodeId), Self->SelfId(), msg.Release()));
+                TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), Self->SelfId(), msg.Release()));
             }
         }
 
@@ -81,7 +81,7 @@ public:
         auto& record = Event->Get()->Record;
         STLOG(Status == NKikimrProto::OK ? PRI_DEBUG : PRI_ERROR, BS_CONTROLLER, BSCTXGRW06, "TTxGroupReconfigureWipe complete",
             (Status, Status), (Request, record), (Response, response->Record));
-        TActivationContext::Send(new IEventHandleFat(Event->Sender, Self->SelfId(), response.Release(), 0, Event->Cookie));
+        TActivationContext::Send(new IEventHandle(Event->Sender, Self->SelfId(), response.Release(), 0, Event->Cookie));
     }
 };
 

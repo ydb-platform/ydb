@@ -227,7 +227,7 @@ void MakeConsumerReplaces(
 class TDqReplaceStageConsumersTransformer : public TSyncTransformerBase {
 public:
     explicit TDqReplaceStageConsumersTransformer(bool allowDependantConsumers)
-        : AllowDependantConsumers(allowDependantConsumers) {}
+        : AllowDependantConsumers_(allowDependantConsumers) {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_CLOG(TRACE, CoreDq) << "[DQ/Build/TransformConsumers] " << NCommon::ExprToPrettyString(ctx, *input);
@@ -296,7 +296,7 @@ public:
 
         TNodeOnNodeOwnedMap replaces;
         for (const auto& [stage, info] : consumersMap) {
-            MakeConsumerReplaces(TDqStage(stage), info, AllowDependantConsumers, replaces, ctx);
+            MakeConsumerReplaces(TDqStage(stage), info, AllowDependantConsumers_, replaces, ctx);
         }
 
         if (replaces.empty()) {
@@ -312,7 +312,7 @@ public:
     }
 
 private:
-    const bool AllowDependantConsumers;
+    const bool AllowDependantConsumers_;
 };
 
 class TDqBuildPhysicalStagesTransformer : public TSyncTransformerBase {
@@ -384,9 +384,252 @@ public:
     }
 };
 
+bool CanRebuildForWideChannelOutput(const TDqOutput& output) {
+    ui32 index = FromString<ui32>(output.Index().Value());
+    if (index != 0) {
+        // stage has multiple outputs
+        return false;
+    }
+
+    auto stage = output.Stage().Cast<TDqPhyStage>();
+    auto stageSettings = TDqStageSettings::Parse(stage);
+    if (stageSettings.WideChannels) {
+        return false;
+    }
+
+    auto stageOutputType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
+    if (stageOutputType->GetSize() != 1 || stage.Outputs().IsValid()) {
+        return false;
+    }
+
+    return true;
+}
+
+bool CanRebuildForWideChannelOutput(const TDqConnection& conn) {
+    if (conn.Maybe<TDqCnResult>() || conn.Maybe<TDqCnValue>()) {
+        return false;
+    }
+
+    ui32 index = FromString<ui32>(conn.Output().Index().Value());
+    if (index != 0) {
+        // stage has multiple outputs
+        return false;
+    }
+
+    auto stage = conn.Output().Stage().Cast<TDqPhyStage>();
+    auto stageSettings = TDqStageSettings::Parse(stage);
+    if (stageSettings.WideChannels) {
+        return false;
+    }
+
+    auto stageOutputType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
+    if (stageOutputType->GetSize() != 1 || stage.Outputs().IsValid()) {
+        return false;
+    }
+
+    return true;
+}
+
+const TStructExprType* GetStageOutputItemType(const TDqPhyStage& stage) {
+    const TTupleExprType* stageType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
+    YQL_ENSURE(stageType->GetSize() == 1);
+    return stageType->GetItems()[0]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+}
+
+TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx) {
+    TVector<TCoArgument> newArgs;
+    newArgs.reserve(stage.Inputs().Size());
+    TNodeOnNodeOwnedMap argsMap;
+
+    YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
+
+    bool needRebuild = false;
+    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+        TCoArgument arg = stage.Program().Args().Arg(i);
+
+        auto newArg = TCoArgument(ctx.NewArgument(arg.Pos(), arg.Name()));
+        newArgs.emplace_back(newArg);
+
+        auto maybeConn = stage.Inputs().Item(i).Maybe<TDqConnection>();
+
+        if (maybeConn && CanRebuildForWideChannelOutput(maybeConn.Cast().Output())) {
+            needRebuild = true;
+            auto itemType = arg.Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
+
+            // input will actually be wide stream - need to convert it back to stream
+            auto argReplace = ctx.Builder(arg.Pos())
+                .Callable("FromFlow")
+                    .Callable(0, "NarrowMap")
+                        .Callable(0, "ToFlow")
+                            .Add(0, newArg.Ptr())
+                        .Seal()    
+                        .Lambda(1)
+                            .Params("fields", itemType->GetSize())
+                            .Callable("AsStruct")
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    ui32 i = 0U;
+                                    for (const auto& item : itemType->GetItems()) {
+                                        parent.List(i)
+                                            .Atom(0, item->GetName())
+                                            .Arg(1, "fields", i)
+                                        .Seal();
+                                        ++i;
+                                    }
+                                    return parent;
+                                })
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+
+            argsMap.emplace(arg.Raw(), argReplace);
+        } else {
+            argsMap.emplace(arg.Raw(), newArg.Ptr());
+        }
+    }
+
+    if (!needRebuild) {
+        return stage;
+    }
+
+    return Build<TDqPhyStage>(ctx, stage.Pos())
+        .InitFrom(stage)
+        .Program()
+            .Args(newArgs)
+            .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
+        .Build()
+        .Done();
+}
+
+TDqPhyStage RebuildStageOutputAsWide(const TDqPhyStage& stage, const TStructExprType& outputItemType, TExprContext& ctx) {
+    // convert stream to wide stream
+    auto resultStream = ctx.Builder(stage.Program().Body().Pos())
+        .Callable("FromFlow")
+            .Callable(0, "ExpandMap")
+                .Callable(0, "ToFlow")
+                    .Add(0, stage.Program().Body().Ptr())
+                .Seal()
+                .Lambda(1)
+                    .Param("item")
+                    .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
+                        ui32 i = 0U;
+                        for (const auto& item : outputItemType.GetItems()) {
+                            lambda.Callable(i++, "Member")
+                                .Arg(0, "item")
+                                .Atom(1, item->GetName())
+                            .Seal();
+                        }
+                        return lambda;
+                    })
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return Build<TDqPhyStage>(ctx, stage.Pos())
+        .InitFrom(stage)
+        .Program()
+            .Args(stage.Program().Args())
+            .Body(resultStream)
+        .Build()
+        .Settings(TDqStageSettings::New(stage).SetWideChannels(outputItemType).BuildNode(ctx, stage.Pos()))
+        .Done();
+}
+
+TDqPhyStage RebuildStageAsWide(const TDqPhyStage& stage, TExprContext& ctx) {
+    const TStructExprType* outputItemType = GetStageOutputItemType(stage);
+    return RebuildStageOutputAsWide(RebuildStageInputsAsWide(stage, ctx), *outputItemType, ctx);
+}
+
+IGraphTransformer::TStatus DqEnableWideChannels(TExprNode::TPtr input, TExprNode::TPtr& output,
+    TExprContext& ctx)
+{
+    output = input;
+    TNodeOnNodeOwnedMap replaces;
+    TNodeSet processedStages;
+    VisitExpr(input, [&replaces, &processedStages, &ctx](const TExprNode::TPtr& node) {
+        if (node->IsLambda()) {
+            return false;
+        }
+
+        TExprBase expr{node};
+        auto maybeConn = expr.Maybe<TDqConnection>();
+        if (maybeConn && CanRebuildForWideChannelOutput(maybeConn.Cast())) {
+            auto conn = maybeConn.Cast();
+            processedStages.insert(conn.Output().Stage().Raw());
+            auto newStage = RebuildStageAsWide(conn.Output().Stage().Cast<TDqPhyStage>(), ctx);
+            auto outputItemType = GetStageOutputItemType(conn.Output().Stage().Cast<TDqPhyStage>());
+
+            if (conn.Maybe<TDqCnHashShuffle>()) {
+                auto shuffle = conn.Maybe<TDqCnHashShuffle>().Cast();
+                auto builder = Build<TCoAtomList>(ctx, shuffle.KeyColumns().Pos());
+                for (auto key : shuffle.KeyColumns()) {
+                    ui32 idx = *outputItemType->FindItem(key.Value());
+                    builder.Add<TCoAtom>().Build(ToString(idx));
+                }
+
+                replaces[conn.Raw()] = Build<TDqCnHashShuffle>(ctx, conn.Pos())
+                    .Output<TDqOutput>()
+                        .InitFrom(conn.Output())
+                        .Stage(newStage)
+                    .Build()
+                    .KeyColumns(builder.Build().Value())
+                    .Done().Ptr();
+            } else if (conn.Maybe<TDqCnMerge>()) {
+                auto merge = conn.Maybe<TDqCnMerge>().Cast();
+                auto builder = Build<TDqSortColumnList>(ctx, merge.SortColumns().Pos());
+                for (auto sortColumn : merge.SortColumns()) {
+                    ui32 idx = *outputItemType->FindItem(sortColumn.Column().Value());
+                    builder.Add<TDqSortColumn>()
+                        .Column<TCoAtom>().Build(ToString(idx))
+                        .SortDirection(sortColumn.SortDirection())
+                        .Build();
+                }
+
+                replaces[conn.Raw()] = Build<TDqCnMerge>(ctx, conn.Pos())
+                    .Output<TDqOutput>()
+                        .InitFrom(conn.Output())
+                        .Stage(newStage)
+                    .Build()
+                    .SortColumns(builder.Build().Value())
+                    .Done().Ptr();    
+            } else {
+                auto newOutput = Build<TDqOutput>(ctx, conn.Output().Pos())
+                    .InitFrom(conn.Output())
+                    .Stage(newStage)
+                    .Done();
+                replaces[conn.Raw()] = ctx.ChangeChild(conn.Ref(), TDqConnection::idx_Output, newOutput.Ptr());
+            }
+        } else if (expr.Maybe<TDqPhyStage>()) {
+            auto stage = expr.Maybe<TDqPhyStage>().Cast();
+            if (!processedStages.contains(stage.Raw())) {
+                processedStages.insert(stage.Raw());
+                auto newStage = RebuildStageInputsAsWide(stage, ctx);
+                if (newStage.Raw() != stage.Raw()) {
+                    replaces[stage.Raw()] = newStage.Ptr();
+                }
+            }
+        }
+
+        return true;
+    });
+
+    if (replaces.empty()) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    YQL_CLOG(INFO, CoreDq) << "[DQ/Build/EnableWideChannels] " << "Enabled wide channels for " << replaces.size() << " stages";
+    TOptimizeExprSettings settings{nullptr};
+    settings.VisitLambdas = false;
+    auto status = RemapExpr(input, output, replaces, ctx, settings);
+    YQL_CLOG(TRACE, CoreDq) << "[DQ/Build/EnableWideChannels] " << "Dump: " << NCommon::ExprToPrettyString(ctx, *output);
+    return status;
+}
+
 } // namespace
 
-TAutoPtr<IGraphTransformer> CreateDqBuildPhyStagesTransformer(bool allowDependantConsumers) {
+TAutoPtr<IGraphTransformer> CreateDqBuildPhyStagesTransformer(bool allowDependantConsumers, bool useWideChannels) {
     TVector<TTransformStage> transformers;
 
     transformers.push_back(TTransformStage(CreateFunctorTransformer(
@@ -405,6 +648,15 @@ TAutoPtr<IGraphTransformer> CreateDqBuildPhyStagesTransformer(bool allowDependan
         new TDqBuildPhysicalStagesTransformer(),
         "BuildPhysicalStages",
         TIssuesIds::DEFAULT_ERROR));
+
+    if (useWideChannels) {
+        transformers.push_back(TTransformStage(CreateFunctorTransformer(
+            [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                return DqEnableWideChannels(input, output, ctx);
+            }),
+            "EnableWideChannels",
+            TIssuesIds::DEFAULT_ERROR));
+    }
 
     return CreateCompositeGraphTransformer(transformers, false);
 }

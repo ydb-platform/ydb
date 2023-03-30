@@ -31,7 +31,7 @@ namespace NKikimr::NBsController {
                         record.SetNodeID(nodeId);
                         record.SetInstanceId(Self->InstanceId);
                         record.SetAvailDomain(AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID()));
-                        outbox.push_back(std::make_unique<IEventHandleFat>(MakeBlobStorageNodeWardenID(nodeId),
+                        outbox.push_back(std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId),
                             Self->SelfId(), event.Release()));
                     }
                 }
@@ -337,7 +337,7 @@ namespace NKikimr::NBsController {
                 }
                 for (const auto& [vslotId, vslot] : std::exchange(pdiskInfo->VSlotsOnPDisk, {})) {
                     Y_VERIFY(vslot->IsBeingDeleted());
-                    state.VSlots.DeleteExistingEntry(TVSlotId(pdiskId, vslotId));
+                    state.DeleteDestroyedVSlot(vslot);
                 }
                 state.PDisks.DeleteExistingEntry(pdiskId);
             }
@@ -473,11 +473,11 @@ namespace NKikimr::NBsController {
             }
 
             if (ev->Created || ev->Deleted) {
-                state.Outbox.push_back(std::make_unique<IEventHandleFat>(StatProcessorActorId, SelfId(), ev.Release()));
+                state.Outbox.push_back(std::make_unique<IEventHandle>(StatProcessorActorId, SelfId(), ev.Release()));
             }
             if (sh->GroupsToUpdate) {
                 FillInSelfHealGroups(*sh, &state);
-                state.Outbox.push_back(std::make_unique<IEventHandleFat>(SelfHealId, SelfId(), sh.Release()));
+                state.Outbox.push_back(std::make_unique<IEventHandle>(SelfHealId, SelfId(), sh.Release()));
             }
         }
 
@@ -571,7 +571,7 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void TBlobStorageController::TConfigState::DestroyVSlot(const TVSlotId vslotId, const TVSlotInfo *ensureAcceptorSlot) {
+        void TBlobStorageController::TConfigState::DestroyVSlot(TVSlotId vslotId, const TVSlotInfo *ensureAcceptorSlot) {
             // obtain mutable slot pointer
             TVSlotInfo *mutableSlot = VSlots.FindForUpdate(vslotId);
             Y_VERIFY(mutableSlot);
@@ -621,10 +621,19 @@ namespace NKikimr::NBsController {
                 Y_VERIFY(erased);
                 VSlots.DeleteExistingEntry(vslotId); // this slot hasn't been created yet and can be deleted safely
             } else {
-                const TGroupInfo *group = Groups.Find(mutableSlot->GroupId);
+                TGroupInfo *group = Groups.FindForUpdate(mutableSlot->GroupId);
                 Y_VERIFY(group);
+                group->VSlotsBeingDeleted.insert(vslotId);
                 mutableSlot->ScheduleForDeletion(group->StoragePoolId);
             }
+        }
+
+        void TBlobStorageController::TConfigState::DeleteDestroyedVSlot(const TVSlotInfo *vslot) {
+            if (TGroupInfo *group = Groups.FindForUpdate(vslot->GroupId)) {
+                const size_t num = group->VSlotsBeingDeleted.erase(vslot->VSlotId);
+                Y_VERIFY(num);
+            }
+            VSlots.DeleteExistingEntry(vslot->VSlotId);
         }
 
         void TBlobStorageController::TConfigState::CheckConsistency() const {

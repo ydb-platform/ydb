@@ -2512,6 +2512,7 @@ void TSchemeShard::PersistRemovePersQueueGroup(NIceDb::TNiceDb& db, TPathId path
     }
 
     db.Table<Schema::PersQueueGroups>().Key(pathId.LocalPathId).Delete();
+    db.Table<Schema::PersQueueGroupStats>().Key(pathId.LocalPathId).Delete();
 }
 
 void TSchemeShard::PersistAddPersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId pathId, const TTopicInfo::TPtr alterData) {

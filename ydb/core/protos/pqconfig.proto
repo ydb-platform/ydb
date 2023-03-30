@@ -757,6 +757,8 @@ message TPQClusterDiscoveryConfig {
     optional uint32 TimedCountersUpdateIntervalSeconds = 2 [default = 15];
     optional NKikimrNetClassifier.TNetData CloudNetData = 3;
     optional uint64 RequestInflightLimit = 4;
+    optional string ControlPlaneEndpoint = 5;
+    optional string FederationPathPrefix = 6;
 }
 
 message TYdsNextToken {

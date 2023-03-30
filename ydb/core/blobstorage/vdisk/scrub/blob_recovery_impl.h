@@ -69,7 +69,7 @@ namespace NKikimr {
             std::unique_ptr<TEvRecoverBlobResult> Result; // pending response message
             ui32 NumUnrespondedBlobs = 0; // number of blobs with UNKNOWN status
 
-            TInFlightContext(ui64 requestId, TEventHandleFat<TEvRecoverBlob>& ev)
+            TInFlightContext(ui64 requestId, TEventHandle<TEvRecoverBlob>& ev)
                 : RequestId(requestId)
                 , Sender(ev.Sender)
                 , Cookie(ev.Cookie)

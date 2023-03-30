@@ -41,7 +41,12 @@ jclass FindNativeConnectionHelper(
 // Calls Java method NativeConnectionHelper.tryEstablishConnection
 void TryEstablishConnection(JNIEnv* env, jobject application,
                             y_absl::string_view pkg, y_absl::string_view cls,
+                            y_absl::string_view action_name,
                             y_absl::string_view conn_id);
+
+// Calls Java method NativeConnectionHelper.isSignatureMatch.
+// Will also return false if failed to invoke Java.
+bool IsSignatureMatch(JNIEnv* env, jobject context, int uid1, int uid2);
 
 }  // namespace grpc_binder
 

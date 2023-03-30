@@ -772,6 +772,10 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
                 changes->PortionsToDrop.push_back(info);
                 dropPortions.insert(portion);
             }
+
+            if (affectedRecords > maxRecords) {
+                break;
+            }
         }
 
         if (affectedRecords > maxRecords) {
@@ -788,22 +792,30 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
     }
 
     // Add stale portions of alive paths
-    THashSet<ui64> activeCleanupGranules;
+    THashSet<ui64> cleanGranules;
     for (ui64 granule : CleanupGranules) {
         auto spg = Granules.find(granule)->second;
         Y_VERIFY(spg);
+
+        bool isClean = true;
         for (auto& [portion, info] : spg->Portions) {
-            if (dropPortions.count(portion)) {
+            if (info.IsActive() || dropPortions.count(portion)) {
                 continue;
             }
 
-            if (!info.IsActive()) {
-                activeCleanupGranules.insert(granule);
-                if (info.XSnapshot() < snapshot) {
-                    affectedRecords += info.NumRecords();
-                    changes->PortionsToDrop.push_back(info);
-                }
+            isClean = false;
+            if (info.XSnapshot() < snapshot) {
+                affectedRecords += info.NumRecords();
+                changes->PortionsToDrop.push_back(info);
             }
+
+            if (affectedRecords > maxRecords) {
+                break;
+            }
+        }
+
+        if (isClean) {
+            cleanGranules.insert(granule);
         }
 
         if (affectedRecords > maxRecords) {
@@ -811,7 +823,10 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
             break;
         }
     }
-    CleanupGranules.swap(activeCleanupGranules);
+
+    for (ui64 granule : cleanGranules) {
+        CleanupGranules.erase(granule);
+    }
 
     return changes;
 }
@@ -985,11 +1000,6 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
 
     // Set x-snapshot to switched portions
     if (changes->IsCompaction()) {
-        Y_VERIFY(changes->SrcGranule);
-
-        /// @warning set granule not in split even if tx would be aborted later
-        GranulesInSplit.erase(changes->SrcGranule->Granule);
-
         Y_VERIFY(changes->CompactionInfo);
         for (auto& portionInfo : changes->SwitchedPortions) {
             Y_VERIFY(portionInfo.IsActive());
@@ -1015,15 +1025,6 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
         Y_VERIFY(changes->CompactionInfo);
         for (auto& portionInfo : changes->SwitchedPortions) {
             CleanupGranules.insert(portionInfo.Granule());
-        }
-    } else if (changes->IsCleanup()) {
-        for (auto& portionInfo : changes->PortionsToDrop) {
-            ui64 granule = portionInfo.Granule();
-            auto& meta = Granules[granule];
-            Y_VERIFY(meta);
-            if (meta->AllActive()) {
-                CleanupGranules.erase(granule);
-            }
         }
     }
 
@@ -1263,6 +1264,16 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
     return true;
 }
 
+void TColumnEngineForLogs::FreeLocks(std::shared_ptr<TColumnEngineChanges> indexChanges) {
+    auto changes = std::static_pointer_cast<TChanges>(indexChanges);
+
+    if (changes->IsCompaction()) {
+        // Set granule not in split. Do not block writes in it.
+        Y_VERIFY(changes->SrcGranule);
+        GranulesInSplit.erase(changes->SrcGranule->Granule);
+    }
+}
+
 bool TColumnEngineForLogs::SetGranule(const TGranuleRecord& rec, bool apply) {
     TMark mark(rec.Mark);
 
@@ -1365,7 +1376,7 @@ bool TColumnEngineForLogs::CanInsert(const TChanges& changes, const TSnapshot& c
         Y_VERIFY(!portionInfo.Empty());
         ui64 granule = portionInfo.Granule();
         if (GranulesInSplit.count(granule)) {
-            LOG_S_DEBUG("Cannot insert into splitting granule " << granule << " at tablet " << TabletId);
+            LOG_S_NOTICE("Cannot insert into splitting granule " << granule << " at tablet " << TabletId);
             return false;
         }
     }
@@ -1456,6 +1467,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                 auto& portionInfo = portions.find(portion)->second;
 
                 TPortionInfo outPortion;
+                outPortion.Meta = portionInfo.Meta;
                 outPortion.Records.reserve(columnIds.size());
 
                 for (auto& rec : portionInfo.Records) {
@@ -1464,6 +1476,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                         outPortion.Records.push_back(rec);
                     }
                 }
+                Y_VERIFY(outPortion.Produced());
                 out->Portions.emplace_back(std::move(outPortion));
                 granuleHasDataForSnaphsot = true;
             }

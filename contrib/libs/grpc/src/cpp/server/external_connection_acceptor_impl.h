@@ -53,7 +53,7 @@ class ExternalConnectionAcceptorImpl
 
   ServerCredentials* GetCredentials() { return creds_.get(); }
 
-  void SetToChannelArgs(::grpc::ChannelArguments* args);
+  void SetToChannelArgs(grpc::ChannelArguments* args);
 
  private:
   const TString name_;

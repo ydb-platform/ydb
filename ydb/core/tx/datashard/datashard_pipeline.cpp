@@ -1132,7 +1132,7 @@ void TPipeline::ProcessDisconnected(ui32 nodeId)
     for (auto &pr : ActiveOps) {
         if (pr.second->HasProcessDisconnectsFlag()) {
             auto *ev = new TDataShard::TEvPrivate::TEvNodeDisconnected(nodeId);
-            pr.second->AddInputEvent(new IEventHandleFat(Self->SelfId(), Self->SelfId(), ev));
+            pr.second->AddInputEvent(new IEventHandle(Self->SelfId(), Self->SelfId(), ev));
             AddCandidateOp(pr.second);
         }
     }

@@ -20,9 +20,14 @@ namespace NLongTxService {
         static constexpr ui32 MaxPlanRetriesPerShard = 1000;    // ~5 min
         static constexpr ui32 RetryDelayMs = 300;
 
-        ui64 WriteId = 0;
+        std::vector<ui64> WriteIds;
         TString TxBody;
         ui32 NumRetries = 0;
+        ui32 WritePartId = 0;
+
+        TString GetWriteIdsStr() const {
+            return JoinSeq(", ", WriteIds);
+        }
     };
 
     class TLongTxServiceActor::TCommitActor : public TActorBootstrapped<TCommitActor> {
@@ -30,7 +35,7 @@ namespace NLongTxService {
         struct TParams {
             TLongTxId TxId;
             TString DatabaseName;
-            THashMap<ui64, ui64> ColumnShardWrites;
+            THashMap<ui64, TTransaction::TShardWriteIds> ColumnShardWrites;
         };
 
     public:
@@ -83,13 +88,16 @@ namespace NLongTxService {
         void PrepareTransaction() {
             for (const auto& pr : Params.ColumnShardWrites) {
                 const ui64 tabletId = pr.first;
-                const ui64 writeId = pr.second;
                 NKikimrTxColumnShard::TCommitTxBody tx;
-                tx.AddWriteIds(writeId);
+                std::vector<ui64> writeIds;
+                for (auto&& wId : pr.second) {
+                    tx.AddWriteIds(wId);
+                    writeIds.emplace_back(wId);
+                }
                 TString txBody;
                 Y_VERIFY(tx.SerializeToString(&txBody));
 
-                WaitingShards.emplace(tabletId, TRetryData{writeId, txBody, 0});
+                WaitingShards.emplace(tabletId, TRetryData{ writeIds, txBody, 0 });
                 SendPrepareTransaction(tabletId);
             }
             Become(&TThis::StatePrepare);
@@ -109,13 +117,13 @@ namespace NLongTxService {
                 ++data.NumRetries;
                 if (ToRetry.empty()) {
                     TimeoutTimerActorId = CreateLongTimer(TDuration::MilliSeconds(TRetryData::RetryDelayMs),
-                        new IEventHandleFat(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
+                        new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
                 }
                 ToRetry.insert(tabletId);
                 return true;
             }
 
-            TXLOG_DEBUG("Sending TEvProposeTransaction to ColumnShard# " << tabletId << " WriteId# " << data.WriteId);
+            TXLOG_DEBUG("Sending TEvProposeTransaction to ColumnShard# " << tabletId << " WriteId# " << data.GetWriteIdsStr());
 
             SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_COMMIT,
@@ -413,7 +421,7 @@ namespace NLongTxService {
 
                 if (ToRetry.empty()) {
                     TimeoutTimerActorId = CreateLongTimer(TDuration::MilliSeconds(TRetryData::RetryDelayMs),
-                        new IEventHandleFat(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
+                        new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
                 }
                 ToRetry.insert(tabletId);
                 return true;

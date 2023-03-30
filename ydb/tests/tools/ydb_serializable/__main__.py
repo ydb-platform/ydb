@@ -4,6 +4,7 @@ import time
 import signal
 import multiprocessing
 from argparse import ArgumentParser
+import asyncio
 from ydb.tests.tools.ydb_serializable.lib import (
     DatabaseChecker,
     DatabaseCheckerOptions,
@@ -23,6 +24,7 @@ def main():
     parser.add_argument('-rw', dest='nreadwriters', type=int, default=100, help='Number of coroutines with point-key read/writes, default 100')
     parser.add_argument('-rt', dest='nreadtablers', type=int, default=100, help='Number of coroutines with read-table transactions, default 100')
     parser.add_argument('-rr', dest='nrangereaders', type=int, default=100, help='Number of coroutines with range-key reads, default 100')
+    parser.add_argument('-rwr', dest='nrwrs', type=int, default=0, help='Number of coroutines with read-write-read txs, default 0')
     parser.add_argument('--keys', dest='numkeys', type=int, default=40, help='Number of distinct keys in a table, default 40')
     parser.add_argument('--shards', dest='numshards', type=int, default=4, help='Number of shards for a table, default 4')
     parser.add_argument('--seconds', type=float, default=2.0, help='Minimum number of seconds per iteration, default 2 seconds')
@@ -32,6 +34,8 @@ def main():
     parser.add_argument('--rt-snapshot', dest='read_table_snapshot', action='store_true', default=None, help='Use server-side snapshots for read-table transactions')
     parser.add_argument('--ignore-rt', dest='ignore_read_table', action='store_true', help='Ignore read-table results (e.g. for interference only, legacy option)')
     parser.add_argument('--processes', type=int, default=1, help='Number of processes to fork into, default is 1')
+    parser.add_argument('--print-unique-errors', dest='print_unique_errors', action='store_const', const=1, default=0, help='Print unique errors that happen during execution')
+    parser.add_argument('--print-unique-traceback', dest='print_unique_errors', action='store_const', const=2, help='Print traceback for unique errors that happen during execution')
     args = parser.parse_args()
 
     logger = DummyLogger()
@@ -41,6 +45,7 @@ def main():
     options.shards = args.numshards
     options.readers = args.nreaders
     options.writers = args.nwriters
+    options.rwrs = args.nrwrs
     options.readwriters = args.nreadwriters
     options.readtablers = args.nreadtablers
     options.rangereaders = args.nrangereaders
@@ -48,6 +53,20 @@ def main():
     options.read_table_ranges = args.read_table_ranges
     options.ignore_read_table = args.ignore_read_table
     options.read_table_snapshot = args.read_table_snapshot
+
+    async def async_run_single():
+        iterations = args.iterations
+
+        async with DatabaseChecker(args.endpoint, args.database, path=args.path, logger=logger, print_unique_errors=args.print_unique_errors) as checker:
+            while iterations is None or iterations > 0:
+                try:
+                    await checker.async_run(options)
+                except SerializabilityError as e:
+                    e.history.write_to_file(os.path.join(args.output_path, os.path.basename(e.table) + '_history.json'))
+                    raise
+
+                if iterations is not None:
+                    iterations -= 1
 
     def run_single():
         def handler(signum, frame, sys=sys, logger=logger):
@@ -57,18 +76,7 @@ def main():
         signal.signal(signal.SIGINT, handler)
         signal.signal(signal.SIGTERM, handler)
 
-        iterations = args.iterations
-
-        with DatabaseChecker(args.endpoint, args.database, path=args.path, logger=logger) as checker:
-            while iterations is None or iterations > 0:
-                try:
-                    checker.run(options)
-                except SerializabilityError as e:
-                    e.history.write_to_file(os.path.join(args.output_path, os.path.basename(e.table) + '_history.json'))
-                    raise
-
-                if iterations is not None:
-                    iterations -= 1
+        asyncio.run(async_run_single())
 
     def run_multiple():
         def handler(signum, frame, sys=sys, logger=logger):

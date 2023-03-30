@@ -570,7 +570,7 @@ public:
         const NPDisk::TEvYardControl &evControl = *ev->Get();
         switch (evControl.Action) {
         case TEvYardControl::PDiskStart:
-            ControledStartResult = MakeHolder<IEventHandleFat>(ev->Sender, SelfId(),
+            ControledStartResult = MakeHolder<IEventHandle>(ev->Sender, SelfId(),
                     new TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
         break;
         default:
@@ -729,7 +729,7 @@ public:
             Y_VERIFY(mainKey);
             MainKey = *mainKey;
             StartPDiskThread();
-            ControledStartResult = MakeHolder<IEventHandleFat>(ev->Sender, SelfId(),
+            ControledStartResult = MakeHolder<IEventHandle>(ev->Sender, SelfId(),
                     new TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
             break;
         }

@@ -9,7 +9,7 @@ namespace NKikimr::NBlobDepot {
             NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvPushMetrics(bytesRead, bytesWritten));
         }
 
-        TActivationContext::Schedule(TDuration::MilliSeconds(2500), new IEventHandleFat(TEvPrivate::EvPushMetrics, 0, SelfId(),
+        TActivationContext::Schedule(TDuration::MilliSeconds(2500), new IEventHandle(TEvPrivate::EvPushMetrics, 0, SelfId(),
             {}, nullptr, 0));
     }
 

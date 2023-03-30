@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
                 auto setPartitioning = MakeHolder<TEvSysView::TEvSetPartitioning>(domainKey, id, "");
                 setPartitioning->ShardIndices.push_back(TShardIdx(ownerId * 3 + pathId, 0));
                 setPartitioning->ShardIndices.push_back(TShardIdx(ownerId * 3 + pathId, 1));
-                runtime.Send(new IEventHandleFat(collectorId, TActorId(), setPartitioning.Release()));
+                runtime.Send(new IEventHandle(collectorId, TActorId(), setPartitioning.Release()));
             }
         }
 
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
             auto checkIt = check.begin();
 
             while (true) {
-                runtime.Send(new IEventHandleFat(collectorId, sender, get.Release()));
+                runtime.Send(new IEventHandle(collectorId, sender, get.Release()));
 
                 TAutoPtr<IEventHandle> handle;
                 auto result = runtime.GrabEdgeEvent<TEvSysView::TEvGetPartitionStatsResult>(handle);
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
         record.SetDomainKeyOwnerId(domainKey.OwnerId);
         record.SetDomainKeyPathId(domainKey.LocalPathId);
 
-        runtime.Send(new IEventHandleFat(collectorId, sender, get.Release()));
+        runtime.Send(new IEventHandle(collectorId, sender, get.Release()));
 
         TAutoPtr<IEventHandle> handle;
         auto result = runtime.GrabEdgeEvent<TEvSysView::TEvGetPartitionStatsResult>(handle);

@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(Donor) {
                     for (const auto& id : writer->Data) {
                         auto ev = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(info->GetVDiskId(i), TInstant::Max(),
                             NKikimrBlobStorage::FastRead, {}, {}, {id});
-                        runtime.Send(new IEventHandleFat(queueId, edge, ev.release()), queueId.NodeId());
+                        runtime.Send(new IEventHandle(queueId, edge, ev.release()), queueId.NodeId());
                         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge, false);
                         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
                         for (const auto& item : res->Get()->Record.GetResult()) {
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(Donor) {
                             }
                         }
                     }
-                    runtime.Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), queueId.NodeId());
+                    runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), queueId.NodeId());
                 }
                 for (const auto& id : writer->Data) {
                     UNIT_ASSERT(parts[id] >= 6);
@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE(Donor) {
                 resumePending = true;
             } else {
                 if (resumePending) {
-                    runtime.Send(new IEventHandleFat(TEvents::TSystem::Bootstrap, 0, writerId, {}, nullptr, 0), 1);
+                    runtime.Send(new IEventHandle(TEvents::TSystem::Bootstrap, 0, writerId, {}, nullptr, 0), 1);
                     resumePending = false;
                     env.Sim(TDuration::MilliSeconds(RandomNumber(1000u)));
                 }
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(Donor) {
 
         env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvDropDonor) {
-                env.Runtime->Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected).Release(), nodeId);
+                env.Runtime->Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::Disconnected).release(), nodeId);
                 return false;
             }
             return true;

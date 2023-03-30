@@ -161,7 +161,7 @@ public:
         icb->RegisterSharedControl(MaxInFlightDataSize, "BlobCache.MaxInFlightDataSize");
         icb->RegisterSharedControl(MaxFallbackDataSize, "BlobCache.MaxFallbackDataSize");
 
-        LOG_S_DEBUG("MaxCacheDataSize: " << (i64)MaxCacheDataSize
+        LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize
             << " MaxFallbackDataSize: " << (i64)MaxFallbackDataSize
             << " InFlightDataSize: " << (i64)InFlightDataSize);
 
@@ -210,7 +210,7 @@ private:
         const bool promote = (i64)MaxCacheDataSize && ev->Get()->ReadOptions.CacheAfterRead;
         const bool fallback = ev->Get()->ReadOptions.ForceFallback;
 
-        LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " fallback: " << (ui32)fallback);
+        LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " fallback: " << (ui32)fallback << " sender:" << ev->Sender);
 
         TReadItem readItem(ev->Get()->ReadOptions, blobRange);
         HandleSingleRangeRead(std::move(readItem), ev->Sender, ctx);
@@ -226,9 +226,10 @@ private:
         if (it != Cache.End()) {
             Hits->Inc();
             HitsBytes->Add(blobRange.Size);
-            return SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), ctx);
+            return SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), ctx, true);
         }
 
+        LOG_S_DEBUG("Miss cache: " << blobRange << " sender:" << sender);
         Misses->Inc();
 
         // Prevent full cache flushing by exported blobs. Decrease propability of caching depending on cache size.
@@ -295,7 +296,7 @@ private:
     void Handle(TEvBlobCache::TEvForgetBlob::TPtr& ev, const TActorContext&) {
         const TUnifiedBlobId& blobId = ev->Get()->BlobId;
 
-        LOG_S_DEBUG("Forgetting blob: " << blobId);
+        LOG_S_INFO("Forgetting blob: " << blobId);
 
         Forgets->Inc();
 
@@ -403,7 +404,7 @@ private:
 
         ReadsInQueue->Set(ReadQueue.size());
 
-        // We might need to free some space to accomodate the results of new reads
+        // We might need to free some space to accommodate the results of new reads
         Evict(ctx);
 
         std::vector<ui64> tabletReads;
@@ -463,10 +464,10 @@ private:
     }
 
     void SendResult(const TActorId& to, const TBlobRange& blobRange, NKikimrProto::EReplyStatus status,
-                    const TString& data, const TActorContext& ctx) {
+                    const TString& data, const TActorContext& ctx, const bool fromCache = false) {
         LOG_S_DEBUG("Send result: " << blobRange << " to: " << to << " status: " << status);
 
-        ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data));
+        ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, fromCache));
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev, const TActorContext& ctx) {
@@ -550,7 +551,7 @@ private:
         Y_VERIFY(!blobRanges.empty());
         ui64 tabletId = blobRanges.front().BlobId.GetTabletId();
 
-        LOG_S_DEBUG("Sending read from Tablet: " << tabletId
+        LOG_S_INFO("Sending read from Tablet: " << tabletId
             << " ranges: " << JoinStrings(blobRanges.begin(), blobRanges.end(), " ")
             << " cookie: " << cookie);
 
@@ -583,7 +584,7 @@ private:
             auto cookieIt = CookieToRange.find(readCookie);
             if (cookieIt == CookieToRange.end()) {
                 // This might only happen in case fo race between response and pipe close
-                LOG_S_INFO("Unknown read result cookie: " << readCookie);
+                LOG_S_NOTICE("Unknown read result cookie: " << readCookie);
                 return;
             }
 
@@ -623,12 +624,12 @@ private:
         const auto& record = ev->Get()->Record;
         ui64 tabletId = record.GetTabletId();
         ui64 readCookie = ev->Cookie;
-        LOG_S_DEBUG("Got read result from tablet: " << tabletId);
+        LOG_S_INFO("Got read result from tablet: " << tabletId);
 
         auto cookieIt = CookieToRange.find(readCookie);
         if (cookieIt == CookieToRange.end()) {
             // This might only happen in case fo race between response and pipe close
-            LOG_S_INFO("Unknown read result cookie: " << readCookie);
+            LOG_S_NOTICE("Unknown read result cookie: " << readCookie);
             return;
         }
 
@@ -733,12 +734,12 @@ NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDy
 
 void AddRangeToCache(const TBlobRange& blobRange, const TString& data) {
     TlsActivationContext->Send(
-        new IEventHandleFat(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data)));
+        new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data)));
 }
 
 void ForgetBlob(const TUnifiedBlobId& blobId) {
     TlsActivationContext->Send(
-        new IEventHandleFat(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvForgetBlob(blobId)));
+        new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvForgetBlob(blobId)));
 }
 
 }

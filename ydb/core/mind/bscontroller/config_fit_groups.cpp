@@ -252,6 +252,13 @@ namespace NKikimr {
                                 }
                             }
                         }
+                        for (const auto& vslotId : groupInfo->VSlotsBeingDeleted) {
+                            const TVSlotInfo *vslot = State.VSlots.Find(vslotId);
+                            const TVDiskIdShort& vdiskId = vslot->GetShortVDiskId();
+                            if (group[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk] == TPDiskId()) {
+                                forbid.insert(vslotId.ComprisingPDiskId());
+                            }
+                        }
                         if ((replacedSlots.empty() && sanitizingRequest) ||
                                 (State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1 && hasMissingSlots)) {
                             auto result = SanitizeGroup(groupId, group, std::move(forbid), requiredSpace, AllowUnusableDisks);

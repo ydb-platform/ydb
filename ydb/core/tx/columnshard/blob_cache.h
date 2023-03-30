@@ -79,11 +79,14 @@ struct TEvBlobCache {
         TBlobRange BlobRange;
         NKikimrProto::EReplyStatus Status;
         TString Data;
+        const bool FromCache = false;
+        const TInstant ConstructTime = Now();
 
-        TEvReadBlobRangeResult(const TBlobRange& blobRange, NKikimrProto::EReplyStatus status, const TString& data)
+        TEvReadBlobRangeResult(const TBlobRange& blobRange, NKikimrProto::EReplyStatus status, const TString& data, const bool fromCache = false)
             : BlobRange(blobRange)
             , Status(status)
             , Data(data)
+            , FromCache(fromCache)
         {}
     };
 

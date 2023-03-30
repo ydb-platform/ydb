@@ -499,7 +499,7 @@ void CheckResolveNode(TTestActorRuntime &runtime,
                       const TString &addr)
 {
     TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId);
-    runtime.Send(new IEventHandleFat(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvLocalNodeInfo>(handle);
@@ -514,7 +514,7 @@ void CheckResolveUnknownNode(TTestActorRuntime &runtime,
                              ui32 nodeId)
 {
     TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId);
-    runtime.Send(new IEventHandleFat(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvLocalNodeInfo>(handle);
@@ -531,7 +531,7 @@ void GetNameserverNodesList(TTestActorRuntime &runtime,
 {
     ui32 maxStaticNodeId = runtime.GetAppData().DynamicNameserviceConfig->MaxStaticNodeId;
     TAutoPtr<TEvInterconnect::TEvListNodes> event = new TEvInterconnect::TEvListNodes;
-    runtime.Send(new IEventHandleFat(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handle);
@@ -608,7 +608,7 @@ void CheckGetNode(TTestActorRuntime &runtime,
                   bool exists)
 {
     TAutoPtr<TEvInterconnect::TEvGetNode> event = new TEvInterconnect::TEvGetNode(nodeId);
-    runtime.Send(new IEventHandleFat(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodeInfo>(handle);

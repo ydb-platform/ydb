@@ -8,7 +8,7 @@ namespace NKikimr::NBlobDepot {
     using TData = TBlobDepot::TData;
 
     void TData::StartLoad() {
-        Self->Execute(std::make_unique<TCoroTx>(Self, Self->Token, [&] {
+        Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Self->Token}}, [&] {
             bool progress = false;
 
             TString trash;

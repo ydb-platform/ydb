@@ -356,8 +356,6 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
 
-    AddParametersOption(config, "query", "(for data & scan queries)");
-
     AddFormats(config, {
         EOutputFormat::Pretty,
         EOutputFormat::JsonUnicode,
@@ -367,6 +365,8 @@ void TCommandExecuteQuery::Config(TConfig& config) {
         EOutputFormat::Csv,
         EOutputFormat::Tsv
     });
+
+    AddParametersOption(config, "(for data & scan queries)");
 
     AddInputFormats(config, {
         EOutputFormat::JsonUnicode,
@@ -381,6 +381,8 @@ void TCommandExecuteQuery::Config(TConfig& config) {
         EOutputFormat::NoFraming,
         EOutputFormat::NewlineDelimited
     });
+
+    AddParametersStdinOption(config, "query");
 
     CheckExamples(config);
 

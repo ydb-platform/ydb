@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         pdisk->SetPDiskGuid(guid);
         pdisk->SetPDiskCategory(pDiskCategory);
         pdisk->SetEntityStatus(NKikimrBlobStorage::CREATE);
-        runtime.Send(new IEventHandleFat(MakeBlobStorageNodeWardenID(nodeId), TActorId(), ev.release()));
+        runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), TActorId(), ev.release()));
 
         return pdiskId;
     }
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         ui32 nodeId = sender.NodeId();
         TActorId nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
         ui64 cookie = 6543210;
-        runtime.Send(new IEventHandleFat(proxy, sender,
+        runtime.Send(new IEventHandle(proxy, sender,
             new TEvBlobStorage::TEvPut(logoBlobId, data, TInstant::Max()),
             IEventHandle::FlagForwardOnNondelivery, cookie, &nodeWarden), sender.NodeId() - runtime.GetNodeId(0));
 
@@ -364,7 +364,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         TActorId recipient = MakeBlobStorageProxyID(groupId);
         TActorId nodeWarden = MakeBlobStorageNodeWardenID(sender.NodeId());
-        return runtime.Send(new IEventHandleFat(recipient, sender, ev,
+        return runtime.Send(new IEventHandle(recipient, sender, ev,
             flags, cookie, &nodeWarden, {}), sender.NodeId() - runtime.GetNodeId(0));
     }
 
@@ -669,7 +669,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         ui32 nodeId = runtime.GetNodeId(0);
         TActorId pDiskActorId = MakeBlobStoragePDiskID(nodeId, pDiskId);
         for (;;) {
-            runtime.Send(new IEventHandleFat(pDiskActorId, sender0, new NPDisk::TEvYardInit(1, vDiskId, guid)), 0);
+            runtime.Send(new IEventHandle(pDiskActorId, sender0, new NPDisk::TEvYardInit(1, vDiskId, guid)), 0);
             TAutoPtr<IEventHandle> handle;
             if (auto initResult = runtime.GrabEdgeEventRethrow<NPDisk::TEvYardInitResult>(handle, TDuration::Seconds(1))) {
                 UNIT_ASSERT(initResult);
@@ -687,7 +687,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         THttpRequest HttpRequest;
         NMonitoring::TMonService2HttpRequest monService2HttpRequest(nullptr, &HttpRequest, nullptr, nullptr, path,
                 nullptr);
-        runtime.Send(new IEventHandleFat(nodeWarden, edge, new NMon::TEvHttpInfo(monService2HttpRequest)), 0);
+        runtime.Send(new IEventHandle(nodeWarden, edge, new NMon::TEvHttpInfo(monService2HttpRequest)), 0);
         auto httpInfoRes = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(edge, TDuration::Seconds(1));
         UNIT_ASSERT(httpInfoRes && httpInfoRes->Get());
         TStringStream out;

@@ -105,19 +105,19 @@ namespace {
         {}
 
         void WriteLog() {
-            Runtime.Send(new IEventHandleFat{LoggerActor, {}, new TEvLog(TInstant::Zero(), TLevel{EPrio::Emerg}, 0, "foo")});
+            Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(TInstant::Zero(), TLevel{EPrio::Emerg}, 0, "foo")});
         }
 
         void WriteLog(TInstant ts, EPrio prio = EPrio::Emerg, TString msg = "foo") {
-            Runtime.Send(new IEventHandleFat{LoggerActor, {}, new TEvLog(ts, TLevel{prio}, 0, msg)});
+            Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(ts, TLevel{prio}, 0, msg)});
         }
 
         void FlushLogBuffer() {
-            Runtime.Send(new IEventHandleFat{LoggerActor, {}, new TFlushLogBuffer()});
+            Runtime.Send(new IEventHandle{LoggerActor, {}, new TFlushLogBuffer()});
         }
 
         void Wakeup() {
-            Runtime.Send(new IEventHandleFat{LoggerActor, {}, new TEvents::TEvWakeup});
+            Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvents::TEvWakeup});
         }
 
         TIntrusivePtr<TDynamicCounters> Counters{MakeIntrusive<TDynamicCounters>()};

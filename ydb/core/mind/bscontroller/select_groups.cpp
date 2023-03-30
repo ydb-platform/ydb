@@ -68,7 +68,7 @@ public:
             Self->ProcessSelectGroupsQueueItem(it);
         } else {
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXSG04, "TEvControllerSelectGroups finished", (Result, result->Record));
-            Response = std::make_unique<IEventHandleFat>(request->Sender, Self->SelfId(), result.Release(), 0, request->Cookie);
+            Response = std::make_unique<IEventHandle>(request->Sender, Self->SelfId(), result.Release(), 0, request->Cookie);
 
             const TDuration passed = TDuration::Seconds(timer.Passed());
             Self->TabletCounters->Percentile()[NBlobStorageController::COUNTER_PERCENTILE_SELECT_GROUPS].IncrementFor(passed.MicroSeconds());

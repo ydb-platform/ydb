@@ -326,7 +326,7 @@ void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev
         NextFollowerAttempt();
 
         TActivationContext::Schedule(TDuration::MilliSeconds(100),
-                new IEventHandleFat(SelfId(), SelfId(),
+                new IEventHandle(SelfId(), SelfId(),
                     new TEvTabletBase::TEvFollowerRetry(++FollowerInfo.RetryRound),
                     0, FollowerInfo.FollowerAttempt)
         );
@@ -1857,14 +1857,14 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
 
 TAutoPtr<IEventHandle> TTablet::AfterRegister(const TActorId &self, const TActorId& parentId) {
     Y_UNUSED(parentId);
-    return new IEventHandleFat(self, self, new TEvents::TEvBootstrap());
+    return new IEventHandle(self, self, new TEvents::TEvBootstrap());
 }
 
 void TTablet::RetryFollowerBootstrapOrWait() {
     if (FollowerInfo.RetryRound) {
         ReportTabletStateChange(TTabletStateInfo::ResolveLeader);
 
-        TActivationContext::Schedule(TDuration::MilliSeconds(2000), new IEventHandleFat(
+        TActivationContext::Schedule(TDuration::MilliSeconds(2000), new IEventHandle(
             SelfId(), SelfId(),
             new TEvTabletBase::TEvFollowerRetry(++FollowerInfo.RetryRound),
             0, FollowerInfo.FollowerAttempt));

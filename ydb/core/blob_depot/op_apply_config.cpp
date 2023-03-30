@@ -57,7 +57,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         auto responseEvent = std::make_unique<TEvBlobDepot::TEvApplyConfigResult>(TabletID(), ev->Get()->Record.GetTxId());
-        auto response = std::make_unique<IEventHandleFat>(ev->Sender, SelfId(), responseEvent.release(), 0, ev->Cookie);
+        auto response = std::make_unique<IEventHandle>(ev->Sender, SelfId(), responseEvent.release(), 0, ev->Cookie);
         Execute(std::make_unique<TTxApplyConfig>(this, *ev->Get(), std::move(response), ev->InterconnectSession));
     }
 

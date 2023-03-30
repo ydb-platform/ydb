@@ -96,11 +96,15 @@ def test_local():
     with open('ydb_database.txt') as r:
         database = r.read()
 
-    checker = DatabaseChecker(endpoint, database)
-    options = DatabaseCheckerOptions()
+    async def async_wrapper():
+        async with DatabaseChecker(endpoint, database) as checker:
+            options = DatabaseCheckerOptions()
 
-    options.read_table_ranges = False
-    checker.run(options)
+            options.read_table_ranges = False
+            await checker.async_run(options)
 
-    options.read_table_ranges = True
-    checker.run(options)
+            options.read_table_ranges = True
+            await checker.async_run(options)
+
+    import asyncio
+    asyncio.run(async_wrapper())

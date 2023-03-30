@@ -99,13 +99,13 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
                 UNIT_ASSERT(desc.GetPathDescription().GetDomainDescription().HasSecurityState());
 
                 const auto& secState = desc.GetPathDescription().GetDomainDescription().GetSecurityState();
-                Server.GetRuntime()->Send(new IEventHandleFat(MakeTicketParserID(), Sender,
+                Server.GetRuntime()->Send(new IEventHandle(MakeTicketParserID(), Sender,
                     new TEvTicketParser::TEvUpdateLoginSecurityState(secState)));
             }
         }
 
         void SendAsync(const TActorId& recipient, IEventBase* ev) {
-            Server.GetRuntime()->Send(new IEventHandleFat(recipient, Sender, ev));
+            Server.GetRuntime()->Send(new IEventHandle(recipient, Sender, ev));
         }
 
         template <typename TEvResponse>

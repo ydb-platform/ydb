@@ -160,7 +160,7 @@ namespace NKikimr {
                     << " dataSize# " << Ev->Data.size()
                     << " duration# %s" << (finishTime - startTime));
 
-            ctx.Send(new IEventHandleFat(SkeletonId, ParentId, Ev.release()));
+            ctx.Send(new IEventHandle(SkeletonId, ParentId, Ev.release()));
             PassAway();
         }
 

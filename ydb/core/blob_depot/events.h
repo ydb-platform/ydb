@@ -87,10 +87,10 @@ namespace NKikimr {
         template<> struct TResponseFor<TEvResolve>        { using Type = TEvResolveResult; };
 
         template<typename TRequestEvent, typename... TArgs>
-        static auto MakeResponseFor(TEventHandleFat<TRequestEvent>& ev, TArgs&&... args) {
+        static auto MakeResponseFor(TEventHandle<TRequestEvent>& ev, TArgs&&... args) {
             auto event = std::make_unique<typename TResponseFor<TRequestEvent>::Type>(std::forward<TArgs>(args)...);
             auto *record = &event->Record;
-            auto handle = std::make_unique<IEventHandleFat>(ev.Sender, ev.Recipient, event.release(), 0, ev.Cookie);
+            auto handle = std::make_unique<IEventHandle>(ev.Sender, ev.Recipient, event.release(), 0, ev.Cookie);
             if (ev.InterconnectSession) {
                 handle->Rewrite(TEvInterconnect::EvForward, ev.InterconnectSession);
             }

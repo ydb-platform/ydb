@@ -5,12 +5,23 @@
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/wcache.h>
 
-#include <linux/fs.h>
 #include <regex>
+
+#ifdef RWF_APPEND
+static constexpr ui64 RWFAppendCheck = (ui64)RWF_APPEND;
+#define NEED_CHECK
+#undef RWF_APPEND
+#endif
+
+#include <linux/fs.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifdef NEED_CHECK
+static_assert(RWFAppendCheck == (ui64)RWF_APPEND);
+#endif
 
 namespace NKikimr {
 

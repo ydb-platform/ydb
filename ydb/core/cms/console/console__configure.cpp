@@ -594,7 +594,7 @@ public:
         Y_VERIFY(Response);
 
         if (!Self->PendingConfigModifications.IsEmpty()) {
-            TAutoPtr<IEventHandle> ev = new IEventHandleFat(Request->Sender,
+            TAutoPtr<IEventHandle> ev = new IEventHandle(Request->Sender,
                                                          Self->SelfId(),
                                                          Response.Release(), 0,
                                                          Request->Cookie);

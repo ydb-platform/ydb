@@ -82,7 +82,7 @@ ITransaction *TCms::CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationReques
     response->Record.MutableConfigId()->CopyFrom(rec.GetConfigId());
 
     return new TTxUpdateConfig(this, rec.GetConfig().GetCmsConfig(),
-                               new IEventHandleFat(ev->Sender, ev->Recipient,
+                               new IEventHandle(ev->Sender, ev->Recipient,
                                                 response.Release(), 0, ev->Cookie),
                                rec.GetSubscriptionId());
 }
@@ -93,7 +93,7 @@ ITransaction *TCms::CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev)
         = new TEvCms::TEvSetConfigResponse;
     response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
     return new TTxUpdateConfig(this, ev->Get()->Record.GetConfig(),
-                               new IEventHandleFat(ev->Sender, ev->Recipient,
+                               new IEventHandle(ev->Sender, ev->Recipient,
                                                 response.Release(), 0, ev->Cookie),
                                ConfigSubscriptionId);
 }

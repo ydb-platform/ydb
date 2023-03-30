@@ -649,7 +649,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
 
 Y_UNIT_TEST_SUITE(TConsoleTests) {
     void RestartTenantPool(TTenantTestRuntime& runtime) {
-        runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(0), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
 
@@ -819,13 +819,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     }
 
     void RunTestRestartConsoleAndPools(TTenantTestRuntime& runtime) {
-        runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(1), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(1), 0),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
-        runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(2), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(2), 0),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
-        runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(3), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(3), 0),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
 

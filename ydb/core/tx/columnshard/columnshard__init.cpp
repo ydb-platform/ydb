@@ -270,12 +270,13 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             return false;
 
         while (!rowset.EndOfSet()) {
-            const TWriteId writeId = TWriteId{rowset.GetValue<Schema::LongTxWrites::WriteId>()};
+            const TWriteId writeId = TWriteId{ rowset.GetValue<Schema::LongTxWrites::WriteId>() };
+            const ui32 writePartId = rowset.GetValue<Schema::LongTxWrites::WritePartId>();
             NKikimrLongTxService::TLongTxId proto;
             Y_VERIFY(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));
             const auto longTxId = NLongTxService::TLongTxId::FromProto(proto);
 
-            Self->LoadLongTxWrite(writeId, longTxId);
+            Self->LoadLongTxWrite(writeId, writePartId, longTxId);
 
             if (!rowset.Next())
                 return false;

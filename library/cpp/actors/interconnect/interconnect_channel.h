@@ -59,12 +59,10 @@ namespace NActors {
             TEventHolder& event = Pool.Allocate(Queue);
             const ui32 bytes = event.Fill(ev) + (Params.UseExtendedTraceFmt ? sizeof(TEventDescr2) : sizeof(TEventDescr1));
             OutputQueueSize += bytes;
-            if (ev.IsEventFat()) {
-                if (event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue")) {
-                    event.Span
-                        .Attribute("OutputQueueItems", static_cast<i64>(Queue.size()))
-                        .Attribute("OutputQueueSize", static_cast<i64>(OutputQueueSize));
-                }
+            if (event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue")) {
+                event.Span
+                    .Attribute("OutputQueueItems", static_cast<i64>(Queue.size()))
+                    .Attribute("OutputQueueSize", static_cast<i64>(OutputQueueSize));
             }
             return std::make_pair(bytes, &event);
         }

@@ -78,7 +78,7 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
         if (targetNode) {
             LOG_D("Try to retry to another node, nodeId: " << *targetNode << ", requestId: " << requestId);
             auto anotherTarget = MakeKqpNodeServiceID(*targetNode);
-            TlsActivationContext->Send(std::make_unique<NActors::IEventHandleFat>(anotherTarget, ExecuterId, ev.Release(),
+            TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(anotherTarget, ExecuterId, ev.Release(),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, requestId,  nullptr, ExecuterSpan.GetTraceId()));
             requestData.RetryNumber++;
             return true;
@@ -93,7 +93,7 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
 
     requestData.RetryNumber++;
 
-    TlsActivationContext->Send(std::make_unique<NActors::IEventHandleFat>(target, ExecuterId, ev.Release(),
+    TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.Release(),
         requestData.flag, requestId,  nullptr, ExecuterSpan.GetTraceId()));
     return true;
 }
@@ -175,7 +175,7 @@ void TKqpPlanner::ProcessTasksForScanExecuter() {
             "Not enough resources to execute query locally and no information about other nodes (estimation: "
             + ToString(LocalRunMemoryEst) + ";" + GetEstimationsInfo() + ")");
 
-        TlsActivationContext->Send(std::make_unique<IEventHandleFat>(ExecuterId, ExecuterId, ev.Release()));
+        TlsActivationContext->Send(std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release()));
         return;
     }
 
@@ -230,7 +230,7 @@ void TKqpPlanner::ProcessTasksForScanExecuter() {
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             "Not enough resources to execute query");
 
-        TlsActivationContext->Send(std::make_unique<IEventHandleFat>(ExecuterId, ExecuterId, ev.Release()));
+        TlsActivationContext->Send(std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release()));
     }
 
     if (ExecuterSpan) {

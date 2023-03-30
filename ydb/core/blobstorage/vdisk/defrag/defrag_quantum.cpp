@@ -86,7 +86,7 @@ namespace NKikimr {
                 try {
                     ev = WaitForSpecificEvent<TEvDefragRewritten>(&TDefragQuantum::ProcessUnexpectedEvent);
                 } catch (const TExPoison&) {
-                    Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, rewriterActorId, {}, nullptr, 0));
+                    Send(new IEventHandle(TEvents::TSystem::Poison, 0, rewriterActorId, {}, nullptr, 0));
                     throw;
                 }
                 stat.RewrittenRecs = ev->Get()->RewrittenRecs;
@@ -107,7 +107,7 @@ namespace NKikimr {
         }
 
         void Yield() {
-            Send(new IEventHandleFat(EvResume, 0, SelfActorId, {}, nullptr, 0));
+            Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
             WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; }, &TDefragQuantum::ProcessUnexpectedEvent);
         }
 

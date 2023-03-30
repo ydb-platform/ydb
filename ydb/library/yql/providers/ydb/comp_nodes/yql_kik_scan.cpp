@@ -136,12 +136,12 @@ using TBaseComputation = TMutableComputationNode<TKikScan<Async>>;
             void OnRespond(const NYdb::NClickhouseInternal::TAsyncScanResult& result) {
                 if (const auto& res = result.GetValueSync(); res.GetStatus() == NYdb::EStatus::SUCCESS) {
                     ProcessResult(res);
-                    ActorSystem->Send(new NActors::IEventHandleFat(CurrentActorId, NActors::TActorId(), new NDq::TEvDqCompute::TEvResumeExecution()));
+                    ActorSystem->Send(new NActors::IEventHandle(CurrentActorId, NActors::TActorId(), new NDq::TEvDqCompute::TEvResumeExecution()));
                 } else if (!IsRetriable(res.GetStatus()) || Retried > MaxRetries) {
                     ProcessError(res);
-                    ActorSystem->Send(new NActors::IEventHandleFat(CurrentActorId, NActors::TActorId(), new NDq::TEvDqCompute::TEvResumeExecution()));
+                    ActorSystem->Send(new NActors::IEventHandle(CurrentActorId, NActors::TActorId(), new NDq::TEvDqCompute::TEvResumeExecution()));
                 } else {
-                    ActorSystem->Schedule(ProcessRetry(), new NActors::IEventHandleFat(CurrentActorId, NActors::TActorId(), new NDq::TEvDqCompute::TEvResumeExecution()));
+                    ActorSystem->Schedule(ProcessRetry(), new NActors::IEventHandle(CurrentActorId, NActors::TActorId(), new NDq::TEvDqCompute::TEvResumeExecution()));
                 }
             }
 

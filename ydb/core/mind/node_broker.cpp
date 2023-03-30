@@ -274,7 +274,7 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
     if (now >= Epoch.End) {
         ctx.Schedule(TDuration::Zero(), new TEvPrivate::TEvUpdateEpoch);
     } else {
-        auto *ev = new IEventHandleFat(SelfId(), SelfId(), new TEvPrivate::TEvUpdateEpoch);
+        auto *ev = new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvUpdateEpoch);
         EpochTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
         CreateLongTimer(ctx, Epoch.End - now, ev, AppData(ctx)->SystemPoolId,
                         EpochTimerCookieHolder.Get());
@@ -284,10 +284,10 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
     }
 }
 
-void TNodeBroker::ProcessEnqueuedEvents(const TActorContext&)
+void TNodeBroker::ProcessEnqueuedEvents(const TActorContext& ctx)
 {
     for (auto &ev : EnqueuedEvents)
-        Receive(ev);
+        Receive(ev, ctx);
     EnqueuedEvents.clear();
 }
 

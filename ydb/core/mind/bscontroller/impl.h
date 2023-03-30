@@ -514,6 +514,7 @@ public:
 
         bool Down = false; // is group are down right now (not selectable)
         TVector<TIndirectReferable<TVSlotInfo>::TPtr> VDisksInGroup;
+        THashSet<TVSlotId> VSlotsBeingDeleted;
         TGroupLatencyStats LatencyStats;
         TBoxStoragePoolId StoragePoolId;
         mutable TStorageStatusFlags StatusFlags;
@@ -1625,12 +1626,12 @@ private:
         }
         for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId}) {
             if (const TActorId actorId = std::exchange(*ptr, {})) {
-                TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
         }
         for (const auto& [id, info] : GroupMap) {
             if (const auto& actorId = info->VirtualGroupSetupMachineId) {
-                TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
         }
         return TActor::PassAway();
@@ -1850,7 +1851,7 @@ public:
     }
 
     void PushProcessIncomingEvent() {
-        TActivationContext::Send(new IEventHandleFat(TEvPrivate::EvProcessIncomingEvent, 0, SelfId(), {}, nullptr, 0));
+        TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessIncomingEvent, 0, SelfId(), {}, nullptr, 0));
     }
 
     void ProcessIncomingEvent() {

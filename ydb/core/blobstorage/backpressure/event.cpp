@@ -74,7 +74,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
         Y_VERIFY(status);
 
         // send it to disk
-        ctx.ExecutorThread.Send(new IEventHandleFat(Type, flags, remoteVDisk, ctx.SelfID,
+        ctx.ExecutorThread.Send(new IEventHandle(Type, flags, remoteVDisk, ctx.SelfID,
             MakeIntrusive<TEventSerializedData>(*Buffer, std::move(buf)), queueCookie, nullptr, std::move(traceId)));
     }
 }

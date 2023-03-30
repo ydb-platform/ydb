@@ -359,6 +359,7 @@ private:
 
     struct TLongTxWriteInfo {
         ui64 WriteId;
+        ui32 WritePartId;
         NLongTxService::TLongTxId LongTxId;
         ui64 PreparedTxId = 0;
     };
@@ -415,7 +416,8 @@ private:
     THashMap<ui32, TSchemaPreset> SchemaPresets;
     THashMap<ui64, TTableInfo> Tables;
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
-    THashMap<TULID, TLongTxWriteInfo*> LongTxWritesByUniqueId;
+    using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
+    THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
     TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
     TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
     THashSet<ui64> PathsToDrop;
@@ -456,10 +458,10 @@ private:
         return PrimaryIndex && PrimaryIndex->HasOverloadedGranules();
     }
 
-    TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId);
-    TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId);
+    TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);
+    TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId);
     void AddLongTxWrite(TWriteId writeId, ui64 txId);
-    void LoadLongTxWrite(TWriteId writeId, const NLongTxService::TLongTxId& longTxId);
+    void LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId);
     bool RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId = 0);
     bool RemoveTx(NTable::TDatabase& database, ui64 txId);
     void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);

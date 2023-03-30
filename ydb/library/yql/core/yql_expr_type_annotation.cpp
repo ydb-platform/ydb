@@ -2742,6 +2742,30 @@ bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& typ
     return true;
 }
 
+bool EnsureWideStreamType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected wide stream type, but got lambda"));
+        return false;
+    }
+
+    if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Stream || node.GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Multi) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected wide stream type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
+    return true;
+}
+
+bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Stream || type.Cast<TStreamExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Multi) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected wide stream type, but got: " << type));
+        return false;
+    }
+
+    return true;
+}
+
 bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
     if (!EnsureWideFlowType(node, ctx)) {
         return false;
@@ -5398,9 +5422,9 @@ const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, boo
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto name = input->Child(0)->Content();
-    if (name == "count" || name == "count_all" || name == "sum" || name == "min" || name == "max" || name == "some") {
+    if (name == "count" || name == "count_all" || name == "min" || name == "max" || name == "some") {
         return input->GetTypeAnn();
-    } else if (name == "avg") {
+    } else if (name == "avg" || name == "sum") {
         auto itemType = input->Content().StartsWith("AggBlock") ?
             input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType() :
             input->Child(2)->GetTypeAnn();
@@ -5418,11 +5442,26 @@ const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& in
         auto lambdaTypeSlot = lambdaType->GetSlot();
         const TTypeAnnotationNode* stateValueType;
         if (IsDataTypeDecimal(lambdaTypeSlot)) {
+            if (name == "sum") {
+                return input->GetTypeAnn();
+            }
+            
             const auto decimalType = lambdaType->Cast<TDataExprParamsType>();
             stateValueType = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, "35", decimalType->GetParamTwo());
         } else if (IsDataTypeInterval(lambdaTypeSlot)) {
             stateValueType = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, "35", "0");
+            if (name == "sum") {
+                if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+                    return ctx.MakeType<TOptionalExprType>(stateValueType);
+                } else {
+                    return stateValueType;
+                }
+            }
         } else {
+            if (name == "sum") {
+                return input->GetTypeAnn();
+            }
+
             stateValueType = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Double);
         }
 
@@ -5455,8 +5494,11 @@ bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inp
         } else if (IsDataTypeDecimal(lambdaTypeSlot)) {
             const auto decimalType = lambdaType->Cast<TDataExprParamsType>();
             sumResultType = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, "35", decimalType->GetParamTwo());
-        } else if (IsDataTypeFloat(lambdaTypeSlot) || IsDataTypeInterval(lambdaTypeSlot)) {
+        } else if (IsDataTypeFloat(lambdaTypeSlot)) {
             sumResultType = ctx.MakeType<TDataExprType>(lambdaTypeSlot);
+        } else if (IsDataTypeInterval(lambdaTypeSlot)) {
+            sumResultType = ctx.MakeType<TDataExprType>(lambdaTypeSlot);
+            isOptional = true;
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
                 TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
@@ -5485,8 +5527,11 @@ bool GetAvgResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inp
     if(IsDataOrOptionalOfData(&inputType, isOptional, lambdaType)) {
         auto lambdaTypeSlot = lambdaType->GetSlot();
         const TTypeAnnotationNode *avgResultType = nullptr;
-        if (IsDataTypeNumeric(lambdaTypeSlot)) {
+        if (IsDataTypeNumeric(lambdaTypeSlot) || lambdaTypeSlot == EDataSlot::Bool) {
             avgResultType = ctx.MakeType<TDataExprType>(EDataSlot::Double);
+            if (isOptional) {
+                avgResultType = ctx.MakeType<TOptionalExprType>(avgResultType);
+            }
         } else if (IsDataTypeDecimal(lambdaTypeSlot)) {
             avgResultType = &inputType;
         } else if (IsDataTypeInterval(lambdaTypeSlot)) {
@@ -5494,11 +5539,7 @@ bool GetAvgResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inp
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
                 TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (isOptional) {
-            avgResultType = ctx.MakeType<TOptionalExprType>(avgResultType);
+            return false;
         }
 
         retType = avgResultType;

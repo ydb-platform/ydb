@@ -594,7 +594,7 @@ public:
         LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, "Schedule Snapshot request");
         auto ev = MakeHolder<TEvPrivate::TEvTakeResourcesSnapshot>();
         ev->Callback = std::move(callback);
-        TAutoPtr<IEventHandle> handle = new IEventHandleFat(SelfId(), SelfId(), ev.Release());
+        TAutoPtr<IEventHandle> handle = new IEventHandle(SelfId(), SelfId(), ev.Release());
         ActorSystem->Send(handle);
     }
 

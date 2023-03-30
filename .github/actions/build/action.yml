@@ -1,0 +1,38 @@
+name: Build
+description: Build YDB
+inputs:
+  sanitizer:
+    required: false
+    type: string
+    
+runs:
+  using: "composite"
+  steps:
+  - name: Configure for sanitizer
+    shell: bash
+    if: startsWith(inputs.sanitizer,'sanitize=')
+    run: |
+      mkdir -p ../build
+      patch -p1 < ydb/deploy/patches/0001-sanitizer-build.patch
+      cd ../build
+      rm -rf *
+      cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
+        -DCMAKE_CXX_FLAGS="-f${{ inputs.sanitizer }} -fno-omit-frame-pointer" \
+        -DCMAKE_C_FLAGS="-f${{ inputs.sanitizer }} -fno-omit-frame-pointer" \
+        ../ydb
+  - name: Configure
+    shell: bash
+    if: false == startsWith(inputs.sanitizer,'sanitize=')
+    run: |
+      mkdir -p ../build
+      cd ../build
+      rm -rf *
+      cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
+  - name: Build
+    shell: bash
+    run: |
+      ccache -z
+      cd ../build
+      ninja
+      ccache -s

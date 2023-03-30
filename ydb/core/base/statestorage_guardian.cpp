@@ -528,7 +528,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         } else {
             TActivationContext::Schedule(
                 delay,
-                new IEventHandleFat(proxyActorID, SelfId(), new TEvStateStorage::TEvResolveReplicas(tabletId), IEventHandle::FlagTrackDelivery)
+                new IEventHandle(proxyActorID, SelfId(), new TEvStateStorage::TEvResolveReplicas(tabletId), IEventHandle::FlagTrackDelivery)
             );
         }
 

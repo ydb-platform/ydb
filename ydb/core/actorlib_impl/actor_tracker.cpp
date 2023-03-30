@@ -181,7 +181,7 @@ namespace NActors {
 
     TAutoPtr<IEventHandle> TTrackedActorBase::AfterRegister(const TActorId& self, const TActorId& parent) {
         // send TEvBootstrap event locally
-        return new IEventHandleFat(self, parent, new TEvents::TEvBootstrap);
+        return new IEventHandle(self, parent, new TEvents::TEvBootstrap);
     }
 
     void TTrackedActorBase::InitialReceiveFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {

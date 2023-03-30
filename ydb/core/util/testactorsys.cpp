@@ -118,7 +118,7 @@ void TTestActorSystem::SendToPipe(ui64 tabletId, const TActorId& sender, IEventB
     WrapInActorContext(sender, [&] { // perform action in sender's context
         const TActorId clientId = Register(NKikimr::NTabletPipe::CreateClient(sender, tabletId, pipeConfig));
         NTabletPipe::SendData(sender, clientId, payload, cookie);
-        Send(new IEventHandleFat(clientId, sender, new NKikimr::TEvTabletPipe::TEvShutdown()));
+        Send(new IEventHandle(clientId, sender, new NKikimr::TEvTabletPipe::TEvShutdown()));
     });
 }
 

@@ -52,8 +52,7 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::ForwardToBlobRecoveryActor(TAutoPtr<IEventHandle> ev) {
-        IEventHandle::Forward(ev, BlobRecoveryActorId);
-        Send(ev);
+        Send(IEventHandle::Forward(ev, BlobRecoveryActorId));
     }
 
     void TScrubCoroImpl::Run() {
@@ -89,7 +88,7 @@ namespace NKikimr {
         } catch (const TExPoison&) { // poison pill from the skeleton
             STLOGX(GetActorContext(), PRI_DEBUG, BS_VDISK_SCRUB, VDS25, VDISKP(LogPrefix, "caught TExPoison"));
         }
-        Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, std::exchange(BlobRecoveryActorId, {}), {}, nullptr, 0));
+        Send(new IEventHandle(TEvents::TSystem::Poison, 0, std::exchange(BlobRecoveryActorId, {}), {}, nullptr, 0));
     }
 
     void TScrubCoroImpl::RequestState() {

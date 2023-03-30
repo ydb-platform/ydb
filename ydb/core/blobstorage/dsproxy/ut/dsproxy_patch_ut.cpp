@@ -270,7 +270,7 @@ NKikimrProto::EReplyStatus GetVMovedPatchResultStatus(EMovedPatchCase movedCase)
 
 template <typename THandle, typename TEventHolder>
 void SendByHandle(TTestBasicRuntime &runtime, const THandle &oldHandle, TEventHolder &&ev) {
-    auto handle = std::make_unique<IEventHandleFat>(oldHandle->Sender, oldHandle->Recipient, ev.release(), oldHandle->Flags, oldHandle->Cookie);
+    auto handle = std::make_unique<IEventHandle>(oldHandle->Sender, oldHandle->Recipient, ev.release(), oldHandle->Flags, oldHandle->Cookie);
     runtime.Send(handle.release());
 }
 
@@ -520,8 +520,8 @@ TEvBlobStorage::TEvPatch::TPtr CreatePatch(TTestBasicRuntime &runtime, const TDS
     std::unique_ptr<TEvBlobStorage::TEvPatch> patch = std::make_unique<TEvBlobStorage::TEvPatch>(
             args.OriginalGroupId, args.OriginalId, args.PatchedId, args.MaskForCookieBruteForcing, std::move(diffs),
             args.Diffs.size(), deadline);
-    TEvBlobStorage::TEvPatch::TPtr ev(static_cast<TEventHandleFat<TEvBlobStorage::TEvPatch>*>(
-            new IEventHandleFat(env.FakeProxyActorId, env.FakeProxyActorId, patch.release())));
+    TEvBlobStorage::TEvPatch::TPtr ev(static_cast<TEventHandle<TEvBlobStorage::TEvPatch>*>(
+            new IEventHandle(env.FakeProxyActorId, env.FakeProxyActorId, patch.release())));
     return ev;
 }
 

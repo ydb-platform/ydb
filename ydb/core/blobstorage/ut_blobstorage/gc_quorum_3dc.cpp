@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(Mirror3dc) {
 
                     const TActorId queueId = queueIds[i];
                     const TActorId edge = getEdgeActor(queueId.NodeId());
-                    runtime->Send(new IEventHandleFat(queueId, edge, query.release()), edge.NodeId());
+                    runtime->Send(new IEventHandle(queueId, edge, query.release()), edge.NodeId());
                     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge, false);
 
                     const auto& record = res->Get()->Record;
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(Mirror3dc) {
                 const TActorId queueId = queueIds[diskIdx];
                 const TActorId edge = getEdgeActor(queueId.NodeId());
                 const TLogoBlobID& id = ids[j];
-                runtime->Send(new IEventHandleFat(queueId, edge, new TEvBlobStorage::TEvVCollectGarbage(id.TabletID(),
+                runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVCollectGarbage(id.TabletID(),
                     id.Generation(), 0, id.Channel(), true, id.Generation(), id.Step(), false, nullptr, nullptr, vdiskId,
                     TInstant::Max())), edge.NodeId());
                 ++waitQueue[edge];

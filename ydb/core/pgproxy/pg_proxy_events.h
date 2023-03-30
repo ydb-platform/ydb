@@ -39,7 +39,7 @@ struct TEvPGEvents {
 
     using TDataRow = std::vector<TString>;
 
-    struct TEvConnectionOpened : NActors::TEventLight<TEvConnectionOpened, EvConnectionOpened> {
+    struct TEvConnectionOpened : NActors::TEventLocal<TEvConnectionOpened, EvConnectionOpened> {
         std::shared_ptr<TPGInitial> Message;
 
         TEvConnectionOpened(std::shared_ptr<TPGInitial> message)
@@ -47,10 +47,10 @@ struct TEvPGEvents {
         {}
     };
 
-    struct TEvConnectionClosed : NActors::TEventLight<TEvConnectionClosed, EvConnectionClosed> {
+    struct TEvConnectionClosed : NActors::TEventLocal<TEvConnectionClosed, EvConnectionClosed> {
     };
 
-    struct TEvAuth : NActors::TEventLight<TEvAuth, EvAuth> {
+    struct TEvAuth : NActors::TEventLocal<TEvAuth, EvAuth> {
         std::shared_ptr<TPGInitial> InitialMessage;
         std::unique_ptr<TPGPasswordMessage> PasswordMessage;
 
@@ -64,7 +64,7 @@ struct TEvPGEvents {
         {}
     };
 
-    struct TEvAuthResponse : NActors::TEventLight<TEvAuthResponse, EvAuthResponse> {
+    struct TEvAuthResponse : NActors::TEventLocal<TEvAuthResponse, EvAuthResponse> {
         TString Error;
     };
 
@@ -81,7 +81,7 @@ struct TEvPGEvents {
     // -> TEvQuery
     // <- TEvErrorResponse
 
-    struct TEvQuery : NActors::TEventLight<TEvQuery, EvQuery> {
+    struct TEvQuery : NActors::TEventLocal<TEvQuery, EvQuery> {
         std::unique_ptr<TPGQuery> Message;
 
         TEvQuery(std::unique_ptr<TPGQuery> message)
@@ -89,7 +89,7 @@ struct TEvPGEvents {
         {}
     };
 
-    struct TEvQueryResponse : NActors::TEventLight<TEvQueryResponse, EvQueryResponse> {
+    struct TEvQueryResponse : NActors::TEventLocal<TEvQueryResponse, EvQueryResponse> {
         std::vector<TRowDescriptionField> DataFields;
         std::vector<TDataRow> DataRows;
         std::vector<std::pair<char, TString>> ErrorFields;
@@ -124,7 +124,7 @@ struct TEvPGEvents {
         R = "scanner_yyerror"
         */
 
-    struct TEvParseResponse : NActors::TEventLight<TEvParseResponse, EvParseResponse> {
+    struct TEvParseResponse : NActors::TEventLocal<TEvParseResponse, EvParseResponse> {
         std::unique_ptr<TPGParse> OriginalMessage;
 
         TEvParseResponse(std::unique_ptr<TPGParse> originalMessage)
@@ -132,7 +132,7 @@ struct TEvPGEvents {
         {}
     };
 
-    struct TEvParse : NActors::TEventLight<TEvParse, EvParse> {
+    struct TEvParse : NActors::TEventLocal<TEvParse, EvParse> {
         std::unique_ptr<TPGParse> Message;
 
         TEvParse(std::unique_ptr<TPGParse> message)
@@ -144,7 +144,7 @@ struct TEvPGEvents {
         }
     };
 
-    struct TEvBindResponse : NActors::TEventLight<TEvBindResponse, EvBindResponse> {
+    struct TEvBindResponse : NActors::TEventLocal<TEvBindResponse, EvBindResponse> {
         std::unique_ptr<TPGBind> OriginalMessage;
 
         TEvBindResponse(std::unique_ptr<TPGBind> originalMessage)
@@ -152,7 +152,7 @@ struct TEvPGEvents {
         {}
     };
 
-    struct TEvBind : NActors::TEventLight<TEvBind, EvBind> {
+    struct TEvBind : NActors::TEventLocal<TEvBind, EvBind> {
         std::unique_ptr<TPGBind> Message;
 
         TEvBind(std::unique_ptr<TPGBind> message)
@@ -164,7 +164,7 @@ struct TEvPGEvents {
         }
     };
 
-    struct TEvDescribe : NActors::TEventLight<TEvDescribe, EvDescribe> {
+    struct TEvDescribe : NActors::TEventLocal<TEvDescribe, EvDescribe> {
         std::unique_ptr<TPGDescribe> Message;
 
         TEvDescribe(std::unique_ptr<TPGDescribe> message)
@@ -172,12 +172,12 @@ struct TEvPGEvents {
         {}
     };
 
-    struct TEvDescribeResponse : NActors::TEventLight<TEvDescribeResponse, EvDescribeResponse> {
+    struct TEvDescribeResponse : NActors::TEventLocal<TEvDescribeResponse, EvDescribeResponse> {
         std::vector<TRowDescriptionField> DataFields;
         std::vector<std::pair<char, TString>> ErrorFields;
     };
 
-    struct TEvExecute : NActors::TEventLight<TEvExecute, EvExecute> {
+    struct TEvExecute : NActors::TEventLocal<TEvExecute, EvExecute> {
         std::unique_ptr<TPGExecute> Message;
 
         TEvExecute(std::unique_ptr<TPGExecute> message)
@@ -185,7 +185,7 @@ struct TEvPGEvents {
         {}
     };
 
-    struct TEvExecuteResponse : NActors::TEventLight<TEvExecuteResponse, EvExecuteResponse> {
+    struct TEvExecuteResponse : NActors::TEventLocal<TEvExecuteResponse, EvExecuteResponse> {
         std::vector<TDataRow> DataRows;
         std::vector<std::pair<char, TString>> ErrorFields;
     };

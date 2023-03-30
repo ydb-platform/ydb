@@ -1,5 +1,6 @@
 #pragma once
 #include "switch_type.h"
+#include "size_calcer.h"
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -90,11 +91,11 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::v
                                                                     const std::shared_ptr<TSortDescription>& description,
                                                                     size_t maxBatchRows = 0);
 std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                               const std::vector<ui32>& sharding,
-                                                               ui32 numShards);
+    const std::vector<ui32>& sharding,
+    ui32 numShards);
 
 std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared_ptr<arrow::Schema>& schema,
-                                                               size_t reserve = 0);
+    size_t reserve = 0, const std::map<std::string, ui64>& sizeByColumn = {});
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders);
 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size);
@@ -103,13 +104,8 @@ std::shared_ptr<arrow::BooleanArray> MakeFilter(const std::vector<bool>& bits);
 std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2);
 std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2, size_t& count);
 TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
-// Return size in bytes including size of bitmap mask
-ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);
-// Return size in bytes *not* including size of bitmap mask
-ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column);
-
 i64 LowerBound(const std::shared_ptr<arrow::Array>& column, const arrow::Scalar& value, i64 offset = 0);
-
+bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
 enum class ECompareType {
     LESS = 1,
     LESS_OR_EQUAL,
@@ -183,39 +179,11 @@ private:
     }
 
 public:
-    static bool NeedDataConversion(const NScheme::TTypeInfo& colType) {
-        switch (colType.GetTypeId()) {
-            case NScheme::NTypeIds::DyNumber:
-            case NScheme::NTypeIds::JsonDocument:
-            case NScheme::NTypeIds::Decimal:
-                return true;
-            default:
-                break;
-        }
-        return false;
-    }
+    static bool NeedDataConversion(const NScheme::TTypeInfo& colType);
 
-    static bool NeedInplaceConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
-        switch (expectedType.GetTypeId()) {
-            case NScheme::NTypeIds::Timestamp:
-                return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int64;
-            case NScheme::NTypeIds::Date:
-                return typeInRequest.GetTypeId() == NScheme::NTypeIds::Uint16;
-            default:
-                break;
-        }
-        return false;
-    }
+    static bool NeedInplaceConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType);
 
-    static bool NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
-        switch (expectedType.GetTypeId()) {
-            case NScheme::NTypeIds::JsonDocument:
-                return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
-            default:
-                break;
-        }
-        return false;
-    }
+    static bool NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType);
 
     TArrowToYdbConverter(const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter)
         : YdbSchema(ydbSchema)

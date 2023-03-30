@@ -97,7 +97,7 @@ private:
     }
 
     template <typename TEvent>
-    void PreHandle(TAutoPtr<TEventHandleFat<TEvent>>& event, const TActorContext& ctx) {
+    void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
 
         LogRequest(event);

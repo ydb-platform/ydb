@@ -255,7 +255,7 @@ private:
         }
         YQL_CLOG(WARN, ProviderDq) << "Send TEvAllocateWorkersRequest to " << NDqs::NExecutionHelpers::PrettyPrintWorkerInfo(node.WorkerInfo, 0);
         if (backoff) {
-            TActivationContext::Schedule(backoff, new IEventHandleFat(
+            TActivationContext::Schedule(backoff, new IEventHandle(
                 MakeWorkerManagerActorID(nodeId), SelfId(), request.Release(),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered,
                 node.ResourceId));

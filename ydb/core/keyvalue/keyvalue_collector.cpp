@@ -190,7 +190,7 @@ public:
             (Status, status), (BackoffMs, backoffMs), (RetryingImmediately, (backoffMs ? "no" : "yes")));
         if (backoffMs) {
             const TDuration &timeout = TDuration::MilliSeconds(backoffMs);
-            TActivationContext::Schedule(timeout, new IEventHandleFat(TEvents::TEvWakeup::EventType, 0, SelfId(), SelfId(), nullptr, 0));
+            TActivationContext::Schedule(timeout, new IEventHandle(TEvents::TEvWakeup::EventType, 0, SelfId(), SelfId(), nullptr, 0));
         } else {
             SendTheRequest();
         }

@@ -9,6 +9,19 @@
 
 namespace NKikimr::NSchemeShard {
 
+// Concept for TEventBase::TPtr
+template <class TEvPtr>
+concept EventBasePtr = requires { typename TEvPtr::TValueType; } && std::is_base_of_v<IEventHandle, typename TEvPtr::TValueType>;
+
+// Deduce TEventType from its own TEventType::TPtr.
+template <EventBasePtr TEvPtr>
+struct EventTypeFromTEvPtr {
+    // TEventType::TPtr is TAutoPtr<TEventHandle*<TEventType>>.
+    // Retrieve TEventType through return type of TEventHandle*::Get().
+    using type = typename std::remove_pointer<decltype(std::declval<typename TEvPtr::TValueType>().Get())>::type;
+    // It would help if TEventHandle* had an explicit type alias to wrapped TEventType
+};
+
 struct TSchemeLimits {
     // Used for backward compatability in case of old databases without explicit limits
     static constexpr ui64 MaxPathsCompat = 200*1000;

@@ -168,7 +168,7 @@ protected:
     void Subscribe(NYdb::TAsyncStatus& status, std::shared_ptr<TVector<NYdb::TResultSet>> resultSets = nullptr) {
         status.Subscribe(
             [actorSystem = NActors::TActivationContext::ActorSystem(), selfId = this->SelfId(), resultSets] (const NYdb::TAsyncStatus& status) mutable {
-                actorSystem->Send(new IEventHandleFat(selfId, selfId, new TEvControlPlaneStorageInternal::TEvDbRequestResult(status, std::move(resultSets))));
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvControlPlaneStorageInternal::TEvDbRequestResult(status, std::move(resultSets))));
             }
         );
     }

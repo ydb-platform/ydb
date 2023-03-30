@@ -976,7 +976,7 @@ void TCms::ScheduleLogCleanup(const TActorContext &ctx)
 {
     LogCleanupTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
     CreateLongTimer(ctx, TDuration::Minutes(10),
-                    new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvCleanupLog),
+                    new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvCleanupLog),
                     AppData(ctx)->SystemPoolId,
                     LogCleanupTimerCookieHolder.Get());
 }
@@ -1042,7 +1042,7 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
 
     WalleCleanupTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
     CreateLongTimer(ctx, State->Config.DefaultWalleCleanupPeriod,
-                    new IEventHandleFat(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvCleanupWalle),
+                    new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvCleanupWalle),
                     AppData(ctx)->SystemPoolId,
                     WalleCleanupTimerCookieHolder.Get());
 }
@@ -1196,7 +1196,7 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
               TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
-        auto handle = new IEventHandleFat(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxRemovePermissions(std::move(ids), std::move(ev->Release()), handle), ctx);
     } else {
         Reply(ev, std::move(resp), ctx);
@@ -1268,7 +1268,7 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
               TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
-        auto handle = new IEventHandleFat(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxRemoveRequest(id, std::move(ev->Release()), handle), ctx);
     } else {
         Reply(ev, std::move(resp), ctx);
@@ -1418,7 +1418,7 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
         auto row = db.Table<Schema::NodeTenant>().Key(nodeId);
         row.Update(NIceDb::TUpdate<Schema::NodeTenant::Tenant>(tenant));
 
-        LOG_NOTICE(ctx, NKikimrServices::CMS,
+        LOG_TRACE(ctx, NKikimrServices::CMS,
                   "Persist node %" PRIu32 " tenant '%s'",
                   nodeId, tenant.data());
     }
@@ -1686,7 +1686,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         if (ok)
             AcceptPermissions(resp->Record, reqId, user, ctx);
 
-        auto handle = new IEventHandleFat(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
     }
 }
@@ -1749,7 +1749,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         if (ok)
             AcceptPermissions(resp->Record, scheduled.RequestId, user, ctx, true);
 
-        auto handle = new IEventHandleFat(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
     }
 }
@@ -1949,7 +1949,7 @@ void TCms::Handle(TEvCms::TEvStoreWalleTask::TPtr &ev, const TActorContext &ctx)
 {
     auto event = ev->Get();
 
-    auto handle = new IEventHandleFat(ev->Sender, SelfId(), new TEvCms::TEvWalleTaskStored(event->Task.TaskId), 0, ev->Cookie);
+    auto handle = new IEventHandle(ev->Sender, SelfId(), new TEvCms::TEvWalleTaskStored(event->Task.TaskId), 0, ev->Cookie);
     Execute(CreateTxStoreWalleTask(event->Task, std::move(ev->Release()), handle), ctx);
 }
 
@@ -1960,7 +1960,7 @@ void TCms::Handle(TEvCms::TEvRemoveWalleTask::TPtr &ev, const TActorContext &ctx
 
     if (State->WalleTasks.contains(id)) {
         auto &task = State->WalleTasks.find(id)->second;
-        auto handle = new IEventHandleFat(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         if (State->ScheduledRequests.contains(task.RequestId)) {
             Execute(CreateTxRemoveRequest(task.RequestId, std::move(ev->Release()), handle), ctx);
         } else {

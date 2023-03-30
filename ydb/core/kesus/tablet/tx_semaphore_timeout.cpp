@@ -89,7 +89,7 @@ bool TKesusTablet::ScheduleWaiterTimeout(ui64 semaphoreId, TSemaphoreWaiterInfo*
     TDuration timeout = TDuration::MilliSeconds(waiter->TimeoutMillis);
     waiter->TimeoutCookie.Reset(ISchedulerCookie::Make3Way());
     CreateLongTimer(ctx, timeout,
-        new IEventHandleFat(SelfId(), SelfId(),
+        new IEventHandle(SelfId(), SelfId(),
             new TEvPrivate::TEvAcquireSemaphoreTimeout(waiter->SessionId, semaphoreId, waiter->TimeoutCookie.Get())),
         AppData(ctx)->SystemPoolId,
         waiter->TimeoutCookie.Get());

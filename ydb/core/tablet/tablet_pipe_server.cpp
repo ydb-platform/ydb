@@ -81,7 +81,7 @@ namespace NTabletPipe {
                 ? MakeIntrusive<TEventSerializedData>(TRope(msg.GetPayload(0)), std::move(serializationInfo))
                 : MakeIntrusive<TEventSerializedData>(record.GetBuffer(), std::move(serializationInfo));
 
-            auto result = std::make_unique<IEventHandleFat>(
+            auto result = std::make_unique<IEventHandle>(
                     ev->InterconnectSession,
                     record.GetType(),
                     0,
@@ -113,11 +113,11 @@ namespace NTabletPipe {
 
             THolder<IEventHandle> result;
             if (msg->HasEvent()) {
-                result = MakeHolder<IEventHandleFat>(ctx.SelfID, originalSender,
+                result = MakeHolder<IEventHandle>(ctx.SelfID, originalSender,
                         msg->ReleaseEvent().Release(), 0, ev->Cookie, nullptr,
                         std::move(ev->TraceId));
             } else {
-                result = MakeHolder<IEventHandleFat>(
+                result = MakeHolder<IEventHandle>(
                         msg->Type, 0, ctx.SelfID, originalSender,
                         msg->ReleaseBuffer(), ev->Cookie, nullptr,
                         std::move(ev->TraceId));
@@ -143,18 +143,12 @@ namespace NTabletPipe {
             }
 
             IEventHandle* result;
-            if (ev->IsEventLight()) {
-                result = ev.Release();
-                IEventHandleLight::GetLight(result)->PrepareSend(ctx.SelfID, originalSender, 0, ev->Cookie);
+            if (ev->HasEvent()) {
+                result = new IEventHandle(ctx.SelfID, originalSender, ev->ReleaseBase().Release(), 0, ev->Cookie, nullptr,
+                        std::move(ev->TraceId));
             } else {
-                auto* fatEv = IEventHandleFat::GetFat(ev);
-                if (fatEv->HasEvent()) {
-                    result = new IEventHandleFat(ctx.SelfID, originalSender, fatEv->ReleaseBase().Release(), 0, ev->Cookie, nullptr,
-                            std::move(fatEv->TraceId));
-                } else {
-                    result = new IEventHandleFat(ev->Type, 0, ctx.SelfID, originalSender, fatEv->ReleaseChainBuffer(), ev->Cookie,
-                            nullptr, std::move(fatEv->TraceId));
-                }
+                result = new IEventHandle(ev->Type, 0, ctx.SelfID, originalSender, ev->ReleaseChainBuffer(), ev->Cookie,
+                        nullptr, std::move(ev->TraceId));
             }
 
             result->Rewrite(ev->Type, RecipientId);
@@ -245,7 +239,7 @@ namespace NTabletPipe {
         }
 
         void SendToClient(const TActorContext& ctx, TAutoPtr<IEventBase> msg, ui32 flags = 0, ui64 cookie = 0) {
-            TAutoPtr<IEventHandle> ev = new IEventHandleFat(ClientId, ctx.SelfID, msg.Release(), flags, cookie);
+            TAutoPtr<IEventHandle> ev = new IEventHandle(ClientId, ctx.SelfID, msg.Release(), flags, cookie);
 
             if (InterconnectSession) {
                 ev->Rewrite(TEvInterconnect::EvForward, InterconnectSession);

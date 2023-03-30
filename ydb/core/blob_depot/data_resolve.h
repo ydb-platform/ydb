@@ -14,7 +14,7 @@ namespace NKikimr::NBlobDepot {
         std::vector<bool> KeysToFilterOut;
 
     public:
-        TResolveResultAccumulator(TEventHandleFat<TEvBlobDepot::TEvResolve>& ev);
+        TResolveResultAccumulator(TEventHandle<TEvBlobDepot::TEvResolve>& ev);
 
         void AddItem(NKikimrBlobDepot::TEvResolveResult::TResolvedKey&& item, const NKikimrBlobDepot::TBlobDepotConfig& config);
         void Send(NKikimrProto::EReplyStatus status, std::optional<TString> errorReason);

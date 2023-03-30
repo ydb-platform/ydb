@@ -328,7 +328,7 @@ namespace NDnsResolver {
                     }
                     result->Status = status;
 
-                    reqCtx->ActorSystem->Send(new IEventHandleFat(reqCtx->Sender, reqCtx->SelfId, result.Release(), 0, reqCtx->Cookie));
+                    reqCtx->ActorSystem->Send(new IEventHandle(reqCtx->Sender, reqCtx->SelfId, result.Release(), 0, reqCtx->Cookie));
                     break;
                 }
 
@@ -356,7 +356,7 @@ namespace NDnsResolver {
                     }
                     result->Status = status;
 
-                    reqCtx->ActorSystem->Send(new IEventHandleFat(reqCtx->Sender, reqCtx->SelfId, result.Release(), 0, reqCtx->Cookie));
+                    reqCtx->ActorSystem->Send(new IEventHandle(reqCtx->Sender, reqCtx->SelfId, result.Release(), 0, reqCtx->Cookie));
                     break;
                 }
             }

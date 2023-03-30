@@ -76,7 +76,7 @@ namespace NKikimr {
         decltype(std::declval<TEvVResult>().Record) ExecuteQuery(std::unique_ptr<IEventBase> query,
                 NKikimrBlobStorage::EVDiskQueueId queueId) {
             const TActorId& edge = Runtime->AllocateEdgeActor(NodeId);
-            Runtime->Send(new IEventHandleFat(QueueIds.at(queueId), edge, query.release()), NodeId);
+            Runtime->Send(new IEventHandle(QueueIds.at(queueId), edge, query.release()), NodeId);
             auto ev = Runtime->WaitForEdgeActorEvent({edge});
             Runtime->DestroyActor(edge);
             auto *msg = ev->CastAsLocal<TEvVResult>();

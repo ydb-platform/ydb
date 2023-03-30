@@ -249,7 +249,7 @@ private:
         const auto& ctx = TActivationContext::AsActorContext();
         LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
             "Forwarding resolve result from SchemeCache: " << KesusPath.Quote());
-        Send(Owner, new TEvPrivate::TEvResolveResult(KesusPath, THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(ev.Release())));
+        Send(Owner, new TEvPrivate::TEvResolveResult(KesusPath, THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(ev->Release().Release())));
         PassAway();
     }
 

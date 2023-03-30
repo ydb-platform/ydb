@@ -496,7 +496,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
             // the client received the EvConnectResult
             runtime.SetObserverFunc([clientId, sender](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                 if (event->Type == TEvTabletPipe::EvConnect) {
-                    runtime.Send(new IEventHandleFat(clientId, sender, new TEvents::TEvPoisonPill()), 0);
+                    runtime.Send(new IEventHandle(clientId, sender, new TEvents::TEvPoisonPill()), 0);
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
@@ -853,13 +853,13 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
         Y_VERIFY(proxy);
-        runtime.Send(new IEventHandleFat(proxy, sender1, new TEvInterconnect::TEvConnectNode), 0);
+        runtime.Send(new IEventHandle(proxy, sender1, new TEvInterconnect::TEvConnectNode), 0);
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
         auto sessionId = handle->Sender;
         Cout << "SessionId: " << sessionId << "\n";
 
-        runtime.Send(new IEventHandleFat(sessionId, sender1, new TEvents::TEvPoisonPill), 0);
+        runtime.Send(new IEventHandle(sessionId, sender1, new TEvents::TEvPoisonPill), 0);
         {
             TDispatchOptions options;
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
@@ -1045,7 +1045,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TActorId edge2 = runtime.AllocateEdgeActor(1);
 
         // Make an event that is from edge1 to edge2, but rewritten for edge1
-        auto event = new IEventHandleFat(edge2, edge1, new TEvents::TEvWakeup());
+        auto event = new IEventHandle(edge2, edge1, new TEvents::TEvWakeup());
         event->Rewrite(TEvents::TSystem::Wakeup, edge1);
 
         // We send this event from node 1, which should be delivered to edge1
@@ -1089,7 +1089,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
 
         void SendViaSession(const TActorId &sessionId, const TActorContext &ctx, const TActorId &recipient, TAutoPtr<IEventBase> msg, ui32 flags = 0, ui64 cookie = 0) {
-            TAutoPtr<IEventHandle> ev = new IEventHandleFat(recipient, ctx.SelfID, msg.Release(), flags, cookie);
+            TAutoPtr<IEventHandle> ev = new IEventHandle(recipient, ctx.SelfID, msg.Release(), flags, cookie);
 
             if (sessionId) {
                 ev->Rewrite(TEvInterconnect::EvForward, sessionId);

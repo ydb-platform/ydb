@@ -25,7 +25,7 @@ namespace NKikimr::NStorage {
 
         if (vdisk.RuntimeData) {
             vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
-            TActivationContext::Send(new IEventHandleFat(TEvents::TSystem::Poison, 0, vdisk.GetVDiskServiceId(), {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.GetVDiskServiceId(), {}, nullptr, 0));
             vdisk.RuntimeData.reset();
         }
 

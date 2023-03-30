@@ -135,7 +135,7 @@ namespace NKikimr {
                 }
             }
             if (when != TInstant::Max()) {
-                GetActorSystem()->Schedule(when, new IEventHandleFat(EvGenerateRestoreCorruptedBlobQuery, 0, SelfActorId,
+                GetActorSystem()->Schedule(when, new IEventHandle(EvGenerateRestoreCorruptedBlobQuery, 0, SelfActorId,
                     {}, nullptr, 0));
                 GenerateRestoreCorruptedBlobQueryScheduled = true;
             }

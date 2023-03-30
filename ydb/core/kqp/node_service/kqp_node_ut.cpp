@@ -193,19 +193,19 @@ public:
             task->AddOutputs()->AddChannels();
         }
 
-        Runtime->Send(new IEventHandleFat(KqpNodeActorId, requester, ev.Release()));
+        Runtime->Send(new IEventHandle(KqpNodeActorId, requester, ev.Release()));
     }
 
     void SendFinishTask(const TActorId& computeActorId, ui64 txId, ui64 taskId, bool success = true,
         const TString& message = "")
     {
         auto ev = new TEvKqpNode::TEvFinishKqpTask(txId, taskId, success, NYql::TIssues({NYql::TIssue(message)}));
-        Runtime->Send(new IEventHandleFat(KqpNodeActorId, computeActorId, ev));
+        Runtime->Send(new IEventHandle(KqpNodeActorId, computeActorId, ev));
     }
 
     void DispatchKqpNodePostponedEvents(const TActorId& edge) {
         auto ev = new NConsole::TEvConsole::TEvConfigNotificationRequest;
-        Runtime->Send(new IEventHandleFat(KqpNodeActorId, edge, ev), 0, true);
+        Runtime->Send(new IEventHandle(KqpNodeActorId, edge, ev), 0, true);
         Runtime->GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge);
     }
 
@@ -612,7 +612,7 @@ void KqpNode::ExecuterLost() {
         DispatchKqpNodePostponedEvents(sender1);
     }
 
-    Runtime->Send(new IEventHandleFat(KqpNodeActorId, {},
+    Runtime->Send(new IEventHandle(KqpNodeActorId, {},
                                    new TEvents::TEvUndelivered(
                                        TEvKqpNode::TEvStartKqpTasksResponse::EventType,
                                        TEvents::TEvUndelivered::EReason::ReasonActorUnknown),
@@ -666,7 +666,7 @@ void KqpNode::TerminateTx() {
         auto cancelEvent = MakeHolder<TEvKqpNode::TEvCancelKqpTasksRequest>();
         cancelEvent->Record.SetTxId(1);
         cancelEvent->Record.SetReason("terminate");
-        Runtime->Send(new IEventHandleFat(KqpNodeActorId, executer, cancelEvent.Release()));
+        Runtime->Send(new IEventHandle(KqpNodeActorId, executer, cancelEvent.Release()));
 
         for (auto&[taskId, computeActor] : CompFactory->Task2Actor) {
             auto abortEvent = Runtime->GrabEdgeEvent<TEvKqp::TEvAbortExecution>(computeActor.ActorId);

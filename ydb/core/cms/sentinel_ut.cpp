@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
                 pdisk.SetState(state);
             }
 
-            Send(new IEventHandleFat(Sentinel, TActorId(), new TEvSentinel::TEvUpdateState));
+            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateState));
         }
 
     public:
@@ -398,7 +398,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
                             NCms::TCms::AddHostState(State->ClusterInfo, *entry.second, resp->Record, State->ClusterInfo->GetTimestamp());
                         }
                     }
-                    Send(new IEventHandleFat(event->Sender, TActorId(), resp.Release()));
+                    Send(new IEventHandle(event->Sender, TActorId(), resp.Release()));
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
                 default:

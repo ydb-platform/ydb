@@ -12,6 +12,7 @@ namespace NKikimr::NBlobDepot {
 
         TBlobDepot* const Self;
         std::weak_ptr<TToken> Token;
+        std::shared_ptr<TToken> ActorToken = std::make_shared<TToken>();
         std::vector<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs;
         THashSet<TLogoBlobID> ResolutionErrors;
         TEvBlobDepot::TEvResolve::TPtr Ev;
@@ -47,7 +48,7 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT42, "TResolveDecommitActor::Bootstrap", (Id, Self->GetLogId()),
                 (Sender, Ev->Sender), (Cookie, Ev->Cookie));
 
-            Self->Execute(std::make_unique<TCoroTx>(Self, Token, std::bind(&TThis::TxPrepare, this)));
+            Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Token, ActorToken}}, std::bind(&TThis::TxPrepare, this)));
             ++TxInFlight;
             Become(&TThis::StateFunc);
         }
@@ -79,22 +80,21 @@ namespace NKikimr::NBlobDepot {
                             // adjust minId to skip already assimilated items in range query
                             if (minId < Self->Data->LastAssimilatedBlobId) {
                                 if (item.GetMustRestoreFirst()) {
-                                    InvokeOtherActor(*this, &TThis::ScanRange, TKey(minId),
-                                        TKey(*Self->Data->LastAssimilatedBlobId), EScanFlags::INCLUDE_BEGIN,
-                                        true /*issueGets*/);
+                                    ScanRange(TKey(minId), TKey(*Self->Data->LastAssimilatedBlobId),
+                                        EScanFlags::INCLUDE_BEGIN, true /*issueGets*/);
                                 }
                                 minId = *Self->Data->LastAssimilatedBlobId;
                             }
 
                             // prepare the range first -- we must have it loaded in memory
-                            InvokeOtherActor(*this, &TThis::ScanRange, TKey(minId), TKey(maxId),
-                                EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END, false /*issueGets*/);
+                            ScanRange(TKey(minId), TKey(maxId), EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END,
+                                false /*issueGets*/);
 
                             // issue scan query
-                            InvokeOtherActor(*this, &TThis::IssueRange, tabletId, minId, maxId, item.GetMustRestoreFirst());
+                            IssueRange(tabletId, minId, maxId, item.GetMustRestoreFirst());
                         } else if (item.GetMustRestoreFirst()) {
-                            InvokeOtherActor(*this, &TThis::ScanRange, TKey(minId), TKey(maxId),
-                                EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END, true /*issueGets*/);
+                            ScanRange(TKey(minId), TKey(maxId), EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END,
+                                true /*issueGets*/);
                         }
 
                         break;
@@ -109,7 +109,7 @@ namespace NKikimr::NBlobDepot {
                         const bool doGet = (!value && Self->Data->LastAssimilatedBlobId < key.GetBlobId()) // value not yet assimilated
                             || (value && value->GoingToAssimilate && item.GetMustRestoreFirst()); // value has no local data yet
                         if (doGet) {
-                            InvokeOtherActor(*this, &TThis::IssueGet, key.GetBlobId(), item.GetMustRestoreFirst());
+                            IssueGet(key.GetBlobId(), item.GetMustRestoreFirst());
                         }
                         break;
                     }
@@ -121,7 +121,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             TCoroTx::FinishTx();
-            TActivationContext::Send(new IEventHandleFat(TEvPrivate::EvTxComplete, 0, SelfId(), {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvTxComplete, 0, SelfId(), {}, nullptr, 0));
         }
 
         void ScanRange(TKey from, TKey to, TScanFlags flags, bool issueGets) {
@@ -309,7 +309,7 @@ namespace NKikimr::NBlobDepot {
                 (Cookie, Ev->Cookie), (ResolutionErrors.size, ResolutionErrors.size()),
                 (DecommitBlobs.size, DecommitBlobs.size()));
 
-            Self->Execute(std::make_unique<TCoroTx>(Self, Token, [self = Self, decommitBlobs = std::move(DecommitBlobs),
+            Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Token}}, [self = Self, decommitBlobs = std::move(DecommitBlobs),
                     ev = Ev, resolutionErrors = std::move(ResolutionErrors)]() mutable {
                 ui32 numItemsProcessed = 0;
                 for (const auto& blob : decommitBlobs) {

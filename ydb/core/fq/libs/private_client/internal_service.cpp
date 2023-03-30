@@ -66,9 +66,9 @@ private:
             .NodesHealthCheck(std::move(ev->Get()->Request))
             .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const NThreading::TFuture<TNodesHealthCheckResult>& future) {
                 try {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvHealthCheckResponse(future.GetValue()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvHealthCheckResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvHealthCheckResponse(CurrentExceptionMessage()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvHealthCheckResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }
@@ -79,9 +79,9 @@ private:
             .GetTask(std::move(ev->Get()->Request))
             .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const NThreading::TFuture<TGetTaskResult>& future) {
                 try {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvGetTaskResponse(future.GetValue()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvGetTaskResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvGetTaskResponse(CurrentExceptionMessage()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvGetTaskResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }
@@ -92,9 +92,9 @@ private:
             .PingTask(std::move(ev->Get()->Request))
             .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const NThreading::TFuture<TPingTaskResult>& future) {
                 try {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvPingTaskResponse(future.GetValue()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvPingTaskResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvPingTaskResponse(CurrentExceptionMessage()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvPingTaskResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }
@@ -105,9 +105,9 @@ private:
             .WriteTaskResult(std::move(ev->Get()->Request))
             .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const auto& future) {
                 try {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvWriteResultResponse(future.GetValue()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvWriteResultResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvWriteResultResponse(CurrentExceptionMessage()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvWriteResultResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }
@@ -118,9 +118,9 @@ private:
             .CreateRateLimiterResource(std::move(ev->Get()->Request))
             .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const NThreading::TFuture<TCreateRateLimiterResourceResult>& future) {
                 try {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvCreateRateLimiterResourceResponse(future.GetValue()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvCreateRateLimiterResourceResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvCreateRateLimiterResourceResponse(CurrentExceptionMessage()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvCreateRateLimiterResourceResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }
@@ -131,9 +131,9 @@ private:
             .DeleteRateLimiterResource(std::move(ev->Get()->Request))
             .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const NThreading::TFuture<TDeleteRateLimiterResourceResult>& future) {
                 try {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(future.GetValue()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
-                    actorSystem->Send(new NActors::IEventHandleFat(senderId, selfId, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(CurrentExceptionMessage()), 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }

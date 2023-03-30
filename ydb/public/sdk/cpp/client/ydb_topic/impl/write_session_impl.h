@@ -131,7 +131,6 @@ private:
     }
 
     TEventInfo GetEventImpl() { // Assumes that we're under lock and that the event queue has events.
-        Y_VERIFY(!Mutex.TryAcquire());  // We are under lock
         Y_ASSERT(HasEventsImpl());
         if (!Events.empty()) {
             TEventInfo event = std::move(Events.front());

@@ -18,13 +18,13 @@
 
 # list_type:type function:lambda
 # doesn't support optional values
-(let simple_traits_factory_map (lambda '(list_type reduce_function map_function) (block '(
+(let simple_traits_factory_map (lambda '(list_type reduce_function map_function finish_function) (block '(
   (let init (lambda '(value) (Apply map_function value)))
   (let update (lambda '(value state) (Apply reduce_function (Apply map_function value) state)))
   (let save (lambda '(state) state))
   (let load (lambda '(state) state))
   (let merge (lambda '(state1 state2) (Apply reduce_function state1 state2)))
-  (let finish (lambda '(state) state))
+  (let finish (lambda '(state) (Apply finish_function state)))
   (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
 ))))
 
@@ -69,11 +69,13 @@
 (let count_if_traits_factory_opt (lambda '(list_type) (Apply count_traits_factory list_type (lambda '(value) (If (Coalesce value (Bool '0)) (Uint64 '1) (Uint64 '0))))))
 (let count_all_traits_factory_opt (lambda '(list_type) (Apply count_traits_factory list_type (lambda '(value) (Uint64 '1)))))
 
+(let remove_optional_type (lambda '(type) (MatchType type 'Optional (lambda '() (OptionalItemType type)) (lambda '() type))))
+(let convert_interval_to_decimal (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Decimal '35 '0))))
+(let convert_decimal_to_interval (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval))))
+
 # list_type:type
 # doesn't support optional values
 (let avg_traits_factory_raw (lambda '(list_type) (block '(
-  (let convert_interval_to_decimal (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Decimal '35 '0))))
-  (let convert_decimal_to_interval (lambda '(value) (Unwrap (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval)))))
   (let init (lambda '(value) '((MatchType (TypeOf value)
                                           'Decimal (lambda '() (WidenIntegral value))
                                           'Interval (lambda '() (Apply convert_interval_to_decimal value ))
@@ -92,7 +94,7 @@
                            'Decimal
                                (lambda '() (Cast (Div (Nth state '0) (Nth state '1)) (ListItemType list_type)))
                            'Interval
-                               (lambda '() (Apply convert_decimal_to_interval (Div (Nth state '0) (Nth state '1)) ) )
+                               (lambda '() (Unwrap (Apply convert_decimal_to_interval (Div (Nth state '0) (Nth state '1)) ) ))
                            (lambda '() (Div (Nth state '0) (Nth state '1)))
                 )
   ))
@@ -583,7 +585,13 @@
 # support optional values
 (let min_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMin one two)))))
 (let max_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMax one two)))))
-(let sum_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory_map list_type (lambda '(one two) (AggrAdd one two)) (lambda '(x) (WidenIntegral x)) )))
+(let sum_traits_factory_opt (lambda '(list_type) (block '(
+    (let item_type (Apply remove_optional_type (ListItemType list_type)))
+    (return (Apply simple_traits_factory_map list_type 
+        (lambda '(one two) (AggrAdd one two))
+        (lambda '(value) (MatchType item_type 'Interval (lambda '() (Apply convert_interval_to_decimal value)) (lambda '() (WidenIntegral value))))
+        (lambda '(value) (MatchType item_type 'Interval (lambda '() (Apply convert_decimal_to_interval value)) (lambda '() value)))
+))))))
 (let checked_sum_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type checked_sum_traits_factory_raw)))
 (let bit_and_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_and_traits_factory_raw)))
 (let bit_or_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_or_traits_factory_raw)))

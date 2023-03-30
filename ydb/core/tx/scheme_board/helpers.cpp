@@ -90,7 +90,7 @@ TIntrusivePtr<TEventSerializedData> SerializeEvent(IEventBase* ev) {
 void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, TAutoPtr<IEventBase> ev, ui32 flags, ui64 cookie) {
     auto buffer = SerializeEvent(ev.Get());
     for (const TActorId* recipient : recipients) {
-        TlsActivationContext->Send(new IEventHandleFat(
+        TlsActivationContext->Send(new IEventHandle(
             ev->Type(), flags, *recipient, sender, buffer, cookie
         ));
     }

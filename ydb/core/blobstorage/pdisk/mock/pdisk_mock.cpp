@@ -218,7 +218,7 @@ struct TPDiskMockState::TImpl {
     void TrimQuery() {
         for (auto& [ownerId, owner] : Owners) {
             if (!owner.Log.empty()) {
-                TActivationContext::Send(new IEventHandleFat(owner.CutLogId, {}, new NPDisk::TEvCutLog(ownerId,
+                TActivationContext::Send(new IEventHandle(owner.CutLogId, {}, new NPDisk::TEvCutLog(ownerId,
                     owner.OwnerRound, owner.Log.back().Lsn + 1, 0, 0, 0, 0)));
             }
         }
@@ -415,14 +415,14 @@ public:
 
     void Handle(NPDisk::TEvLog::TPtr ev) {
         if (LogQ.empty()) {
-            TActivationContext::Send(new IEventHandleFat(EvResume, 0, SelfId(), TActorId(), nullptr, 0));
+            TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), TActorId(), nullptr, 0));
         }
         LogQ.emplace_back(ev->Sender, ev->Release());
     }
 
     void Handle(NPDisk::TEvMultiLog::TPtr ev) {
         if (LogQ.empty()) {
-            TActivationContext::Send(new IEventHandleFat(EvResume, 0, SelfId(), TActorId(), nullptr, 0));
+            TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), TActorId(), nullptr, 0));
         }
         for (auto& msg : ev->Get()->Logs) {
             LogQ.emplace_back(ev->Sender, std::move(msg));
@@ -439,7 +439,7 @@ public:
             auto addRes = [&](NKikimrProto::EReplyStatus status, const TString& errorReason = TString()) {
                 auto p = std::make_unique<NPDisk::TEvLogResult>(status, GetStatusFlags(), errorReason);
                 res = p.get();
-                results.emplace_back(new IEventHandleFat(recipient, SelfId(), p.release()));
+                results.emplace_back(new IEventHandle(recipient, SelfId(), p.release()));
             };
             if (const auto it = Impl.Owners.find(msg->Owner); it == Impl.Owners.end()) {
                 Y_FAIL("invalid Owner");

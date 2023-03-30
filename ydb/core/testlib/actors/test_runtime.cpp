@@ -229,7 +229,7 @@ namespace NActors {
         if (!SleepEdgeActor) {
             SleepEdgeActor = AllocateEdgeActor();
         }
-        Schedule(new IEventHandleFat(SleepEdgeActor, SleepEdgeActor, new TEvents::TEvWakeup()), duration);
+        Schedule(new IEventHandle(SleepEdgeActor, SleepEdgeActor, new TEvents::TEvWakeup()), duration);
         GrabEdgeEventRethrow<TEvents::TEvWakeup>(SleepEdgeActor);
     }
 
@@ -248,7 +248,7 @@ namespace NActors {
 
     void TTestActorRuntime::SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload,
                                        ui32 nodeIndex, ui64 cookie) {
-        auto pipeEv = new IEventHandleFat(clientId, sender, payload, 0, cookie);
+        auto pipeEv = new IEventHandle(clientId, sender, payload, 0, cookie);
         pipeEv->Rewrite(NKikimr::TEvTabletPipe::EvSend, clientId);
         Send(pipeEv, nodeIndex, true);
     }
@@ -262,11 +262,11 @@ namespace NActors {
     }
 
     void TTestActorRuntime::ClosePipe(TActorId clientId, const TActorId& sender, ui32 nodeIndex) {
-        Send(new IEventHandleFat(clientId, sender, new NKikimr::TEvTabletPipe::TEvShutdown()), nodeIndex, true);
+        Send(new IEventHandle(clientId, sender, new NKikimr::TEvTabletPipe::TEvShutdown()), nodeIndex, true);
     }
 
     void TTestActorRuntime::DisconnectNodes(ui32 fromNodeIndex, ui32 toNodeIndex, bool async) {
-        Send(new IEventHandleFat(
+        Send(new IEventHandle(
             GetInterconnectProxy(fromNodeIndex, toNodeIndex),
             TActorId(),
             new TEvInterconnect::TEvDisconnect()),

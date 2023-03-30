@@ -562,7 +562,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
 
             const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId());
             const TActorId proxy = MakeBlobStorageProxyID(group);
-            ctx.ExecutorThread.Send(new IEventHandleFat(proxy, TActorId(), ev.Release(),
+            ctx.ExecutorThread.Send(new IEventHandle(proxy, TActorId(), ev.Release(),
                 IEventHandle::FlagForwardOnNondelivery, (ui64)TKeyValueState::ECollectCookie::Hard, &nodeWarden));
         }
     }
@@ -637,7 +637,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
 
             const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId());
             const TActorId proxy = MakeBlobStorageProxyID(group);
-            ctx.ExecutorThread.Send(new IEventHandleFat(proxy, KeyValueActorId, ev.Release(),
+            ctx.ExecutorThread.Send(new IEventHandle(proxy, KeyValueActorId, ev.Release(),
                 IEventHandle::FlagForwardOnNondelivery, (ui64)TKeyValueState::ECollectCookie::SoftInitial, &nodeWarden));
         }
     }

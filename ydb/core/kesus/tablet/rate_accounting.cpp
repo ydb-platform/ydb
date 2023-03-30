@@ -332,7 +332,7 @@ TRateAccounting::TRateAccounting(NActors::TActorId kesus, const IBillSink::TPtr&
 }
 
 void TRateAccounting::Stop() {
-    TActivationContext::Send(new IEventHandleFat(AccountingActor, Kesus,
+    TActivationContext::Send(new IEventHandle(AccountingActor, Kesus,
         new TEvents::TEvPoisonPill()));
 }
 
@@ -374,7 +374,7 @@ void TRateAccounting::Configure(const NKikimrKesus::TStreamingQuoterResource& pr
     // NOTE: Configure is called with effective props
     Props = props;
     ConfigureImpl();
-    TActivationContext::Send(new NActors::IEventHandleFat(AccountingActor, Kesus,
+    TActivationContext::Send(new NActors::IEventHandle(AccountingActor, Kesus,
         new TEvPrivate::TEvConfigure(TActivationContext::Now(), props)));
 }
 
@@ -452,7 +452,7 @@ bool TRateAccounting::RunAccounting() {
 
 void TRateAccounting::SetResourceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& resourceCounters) {
     Counters.SetResourceCounters(resourceCounters);
-    TActivationContext::Send(new NActors::IEventHandleFat(AccountingActor, Kesus,
+    TActivationContext::Send(new NActors::IEventHandle(AccountingActor, Kesus,
         new TEvPrivate::TEvCounters(Counters)));
 }
 
@@ -471,7 +471,7 @@ bool TRateAccounting::RunAccountingNoClean() {
     }
 
     // Offload hard work into accounting actor
-    TActivationContext::Send(new NActors::IEventHandleFat(AccountingActor, Kesus,
+    TActivationContext::Send(new NActors::IEventHandle(AccountingActor, Kesus,
         new TEvPrivate::TEvRunAccounting(
             accountTill - History.Interval(),
             TConsumptionHistory(History, Accounted, accountTill))));

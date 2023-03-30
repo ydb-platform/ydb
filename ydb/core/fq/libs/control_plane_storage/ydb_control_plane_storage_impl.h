@@ -748,7 +748,7 @@ private:
                 auto event = std::make_unique<ResponseEvent>(issues);
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandleFat(ev->Sender, self, event.release(), 0, ev->Cookie));
+                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
@@ -766,7 +766,7 @@ private:
                 }
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandleFat(ev->Sender, self, event.release(), 0, ev->Cookie));
+                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters.IncOk();
             }
             requestCounters.DecInFly();
@@ -823,7 +823,7 @@ private:
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(issues));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandleFat(ev->Sender, self, event.release(), 0, ev->Cookie));
+                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
@@ -836,7 +836,7 @@ private:
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(std::make_from_tuple<ResponseEvent>(result)));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandleFat(ev->Sender, self, event.release(), 0, ev->Cookie));
+                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters.IncOk();
             }
             requestCounters.IncInFly();

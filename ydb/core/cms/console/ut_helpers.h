@@ -238,7 +238,7 @@ inline void ChangeTenant(TTenantTestRuntime &runtime,
                          ui32 nodeIdx = 0,
                          bool wait = true)
 {
-    runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)),
+    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)),
                                   runtime.Sender,
                                   new TEvTenantPool::TEvTakeOwnership));
 
@@ -249,7 +249,7 @@ inline void ChangeTenant(TTenantTestRuntime &runtime,
     request->Record.SetSlotId("slot");
     request->Record.SetAssignedTenant(tenant);
     request->Record.SetLabel("slot-1");
-    runtime.Send(new IEventHandleFat(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)),
+    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)),
                                   runtime.Sender,
                                   request));
 
@@ -293,5 +293,53 @@ inline void CheckEqualsIgnoringVersion(NKikimrConfig::TAppConfig config1, NKikim
     UNIT_ASSERT_VALUES_EQUAL(config1.ShortDebugString(), config2.ShortDebugString());
 }
 
+inline void CheckApplyConfig(TTenantTestRuntime &runtime,
+                             Ydb::StatusIds::StatusCode code,
+                             TString yamlConfig)
+{
+        TAutoPtr<IEventHandle> handle;
+        auto *event = new TEvConsole::TEvApplyConfigRequest;
+        event->Record.MutableRequest()->set_config(yamlConfig);
+        runtime.SendToConsole(event);
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvApplyConfigResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
+}
+
+inline void CheckAddVolatileConfig(TTenantTestRuntime &runtime,
+                                   Ydb::StatusIds::StatusCode code,
+                                   TString clusterName,
+                                   ui64 version,
+                                   ui64 id,
+                                   TString volatileYamlConfig)
+{
+        TAutoPtr<IEventHandle> handle;
+        auto *event = new TEvConsole::TEvAddVolatileConfigRequest;
+        event->Record.MutableRequest()->set_cluster(clusterName);
+        event->Record.MutableRequest()->set_version(version);
+        event->Record.MutableRequest()->set_id(id);
+        event->Record.MutableRequest()->set_config(volatileYamlConfig);
+        runtime.SendToConsole(event);
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvAddVolatileConfigResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
+}
+
+inline void CheckRemoveVolatileConfig(TTenantTestRuntime &runtime,
+                                      Ydb::StatusIds::StatusCode code,
+                                      TString clusterName,
+                                      ui64 version,
+                                      ui64 id)
+{
+        TAutoPtr<IEventHandle> handle;
+        auto *event = new TEvConsole::TEvRemoveVolatileConfigRequest;
+        event->Record.MutableRequest()->set_cluster(clusterName);
+        event->Record.MutableRequest()->set_version(version);
+        event->Record.MutableRequest()->add_ids(id);
+        runtime.SendToConsole(event);
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvRemoveVolatileConfigResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
+}
 
 } // namesapce NKikimr::NConsole::NUT

@@ -44,7 +44,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
         const TActorId& sender = env.Runtime->AllocateEdgeActor(queueId.NodeId());
         const TLogoBlobID blobId(id, partIdx + 1);
         TRope buffer = type.PartSize(blobId) ? parts.Parts[partIdx].OwnedString : TRope(TString());
-        env.Runtime->Send(new IEventHandleFat(queueId, sender, new TEvBlobStorage::TEvVPut(blobId, buffer,
+        env.Runtime->Send(new IEventHandle(queueId, sender, new TEvBlobStorage::TEvVPut(blobId, buffer,
             info->GetVDiskId(orderNum), false, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog)),
             sender.NodeId());
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(sender);
@@ -83,7 +83,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
         auto query = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(info->GetVDiskId(i), TInstant::Max(),
             NKikimrBlobStorage::FastRead);
         query->AddExtremeQuery(id, 0, 0);
-        env.Runtime->Send(new IEventHandleFat(queueId, sender, query.release()), sender.NodeId());
+        env.Runtime->Send(new IEventHandle(queueId, sender, query.release()), sender.NodeId());
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(sender);
         const auto& record = res->Get()->Record;
         Y_VERIFY(record.GetStatus() == NKikimrProto::OK);

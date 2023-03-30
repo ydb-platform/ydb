@@ -271,7 +271,7 @@ void SendVGetResult(ui32 vDiskIdx, NKikimrProto::EReplyStatus status, ui32 partI
     }
     result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(subgroup[vDiskIdx].MsgId);
     result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(subgroup[vDiskIdx].SequenceId);
-    runtime.Send(new IEventHandleFat(from->Sender, from->ActorId, result.release(), 0, from->LastCookie));
+    runtime.Send(new IEventHandle(from->Sender, from->ActorId, result.release(), 0, from->LastCookie));
 }
 
 void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus status,
@@ -295,7 +295,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
         result->Record.SetCookie(request.RecordCookie);
-        runtime.Send(new IEventHandleFat(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
+        runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
         return;
     } else if (status == NKikimrProto::NODATA) {
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
@@ -309,7 +309,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
         result->Record.SetCookie(request.RecordCookie);
-        runtime.Send(new IEventHandleFat(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
+        runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
         return;
     } else if (status == NKikimrProto::OK) {
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
@@ -340,7 +340,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
         result->Record.SetCookie(request.RecordCookie);
-        runtime.Send(new IEventHandleFat(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
+        runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
         return;
     } else {
         Y_FAIL();
@@ -370,7 +370,7 @@ void SendVPutResultEvent(TTestActorRuntime &runtime, TVDiskState &vdisk, NKikimr
     vPutResult->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(vdisk.MsgId);
     vPutResult->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(vdisk.SequenceId);
     SetPredictedDelaysForAllQueues({});
-    runtime.Send(new IEventHandleFat(vdisk.Sender, vdisk.ActorId, vPutResult.release(), 0, vdisk.LastCookie));
+    runtime.Send(new IEventHandle(vdisk.Sender, vdisk.ActorId, vPutResult.release(), 0, vdisk.LastCookie));
 }
 
 void PrepareBlobSubgroup(TLogoBlobID logoblobid, TString data, TVector<TVDiskState> &subgroup,
@@ -378,7 +378,7 @@ void PrepareBlobSubgroup(TLogoBlobID logoblobid, TString data, TVector<TVDiskSta
     TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
     TActorId sender = runtime.AllocateEdgeActor(0);
 
-    runtime.Send(new IEventHandleFat(proxy, sender, new TEvBlobStorage::TEvPut(logoblobid, data, TInstant::Max())));
+    runtime.Send(new IEventHandle(proxy, sender, new TEvBlobStorage::TEvPut(logoblobid, data, TInstant::Max())));
     subgroup.resize(type.BlobSubgroupSize());
 
     ui32 partCount = type.TotalPartCount();
@@ -587,7 +587,7 @@ struct TDyingDecorator : public TTestDecorator {
     virtual ~TDyingDecorator() {
         if (NActors::TlsActivationContext) {
             std::unique_ptr<IEventBase> ev = std::make_unique<TEvRequestEnd>();
-            std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandleFat>(ParentId, ParentId, ev.release());
+            std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandle>(ParentId, ParentId, ev.release());
             TActivationContext::Send(handle.release());
         }
     }
@@ -760,7 +760,7 @@ Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) {
     TVector<TVDiskState> subgroup;
     PrepareBlobSubgroup(logoblobid, data, subgroup, runtime, type);
 
-    runtime.Send(new IEventHandleFat(proxy, sender, new TEvBlobStorage::TEvGet(logoblobid, 0, 0, TInstant::Max(),
+    runtime.Send(new IEventHandle(proxy, sender, new TEvBlobStorage::TEvGet(logoblobid, 0, 0, TInstant::Max(),
             NKikimrBlobStorage::EGetHandleClass::FastRead)));
     for (ui32 i = 0; i < 6; ++i) {
         TAutoPtr<IEventHandle> handle;
@@ -866,7 +866,7 @@ void MakeTestProtobufSizeWithMultiGet(const TVector<TBlobPack> &packs, TVector<u
         q.Shift = 0;
         q.Size = q.Id.BlobSize();
     }
-    runtime.Send(new IEventHandleFat(proxy, sender, new TEvBlobStorage::TEvGet(
+    runtime.Send(new IEventHandle(proxy, sender, new TEvBlobStorage::TEvGet(
         queries, blobCount, TInstant::Max(),
         NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)));
 
@@ -989,7 +989,7 @@ Y_UNIT_TEST(TestGivenStripe42GetThenVGetResponsePartsNodata263451ThenGetOk) {
     TVector<TVDiskState> subgroup;
     PrepareBlobSubgroup(logoblobid, data, subgroup, runtime, type);
 
-    runtime.Send(new IEventHandleFat(proxy, sender, new TEvBlobStorage::TEvGet(logoblobid, 0, 0, TInstant::Max(),
+    runtime.Send(new IEventHandle(proxy, sender, new TEvBlobStorage::TEvGet(logoblobid, 0, 0, TInstant::Max(),
         NKikimrBlobStorage::EGetHandleClass::FastRead)));
     for (ui32 i = 0; i < 8; ++i) {
         TAutoPtr<IEventHandle> handle;
@@ -1058,7 +1058,7 @@ Y_UNIT_TEST(TestGivenStripe42WhenGet2PartsOfBlobThenGetOk) {
         q.Shift = offsets[i];
         q.Size = sizes[i];
     }
-    runtime.Send(new IEventHandleFat(proxy, sender, new TEvBlobStorage::TEvGet(
+    runtime.Send(new IEventHandle(proxy, sender, new TEvBlobStorage::TEvGet(
         queries, (ui32)logoblobids.size(), TInstant::Max(),
         NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)));
 
@@ -1118,7 +1118,7 @@ Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
         q.Shift = offsets[i];
         q.Size = sizes[i];
     }
-    runtime.Send(new IEventHandleFat(proxy, sender, new TEvBlobStorage::TEvGet(
+    runtime.Send(new IEventHandle(proxy, sender, new TEvBlobStorage::TEvGet(
         queries, (ui32)logoblobids.size(), TInstant::Max(),
         NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)));
 
@@ -1178,7 +1178,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                     q.Size = size;
                 }
                 runtime.Send(
-                    new IEventHandleFat(
+                    new IEventHandle(
                         proxy, sender, new TEvBlobStorage::TEvGet(
                         queries, 1, TInstant::Max(),
                         NKikimrBlobStorage::EGetHandleClass::FastRead, false)));
@@ -1220,7 +1220,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                 result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(sequenceId);
                 result->Record.SetCookie(theRequest.RecordCookie);
                 runtime.Send(
-                    new IEventHandleFat(theRequest.Sender, theRequest.ActorId, result.release(), 0, theRequest.Cookie));
+                    new IEventHandle(theRequest.Sender, theRequest.ActorId, result.release(), 0, theRequest.Cookie));
 
                 // Receive GetResult
                 auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
@@ -1245,7 +1245,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                     result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
                     result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
                     result->Record.SetCookie(request.RecordCookie);
-                    runtime.Send(new IEventHandleFat(
+                    runtime.Send(new IEventHandle(
                         request.Sender, request.ActorId, result.release(), 0, request.Cookie));
                 }
 
@@ -1276,7 +1276,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
     const ui64 tabletId = 1;
     const ui32 minGeneration = 0;
     // Send Discover
-    runtime.Send(new IEventHandleFat(
+    runtime.Send(new IEventHandle(
         proxy, sender, new TEvBlobStorage::TEvDiscover(tabletId, minGeneration, true, false, TInstant::Max(), 0, true)));
 
     // Receive VGet
@@ -1313,7 +1313,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
                 &ingressRaw);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(req.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(req.SequenceId);
-        runtime.Send(new IEventHandleFat(req.Sender, req.ActorId, result.release(), 0, req.Cookie));
+        runtime.Send(new IEventHandle(req.Sender, req.ActorId, result.release(), 0, req.Cookie));
     }
 
     for (auto iter = lastRequest.begin(); iter != lastRequest.end(); ++iter) {
@@ -1329,7 +1329,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(req.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(req.SequenceId);
         runtime.Send(
-            new IEventHandleFat(req.Sender, req.ActorId, result.release(), 0, req.Cookie));
+            new IEventHandle(req.Sender, req.ActorId, result.release(), 0, req.Cookie));
     }
 
     lastRequest.clear();
@@ -1360,7 +1360,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(req.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(req.SequenceId);
         runtime.Send(
-            new IEventHandleFat(req.Sender, req.ActorId, result.release(), 0, req.Cookie));
+            new IEventHandle(req.Sender, req.ActorId, result.release(), 0, req.Cookie));
     }
     */
 

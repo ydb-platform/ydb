@@ -1,5 +1,0 @@
-LIBRARY()
-
-SRCS()
-
-END()

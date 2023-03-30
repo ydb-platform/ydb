@@ -388,7 +388,7 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, c
             } else {
                 ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(result.GetValue());
             }
-            actorSystem->Send(new NActors::IEventHandleFat(selfId, selfId, ev.Release()));
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
         }
     );
     CredentialsRequestInFlight = true;
@@ -556,7 +556,7 @@ void TMirrorer::StartWaitNextReaderEvent(const TActorContext& ctx) {
             selfId = SelfId(),
             futureId=futureId
         ](const NThreading::TFuture<void>&) {
-            actorSystem->Send(new NActors::IEventHandleFat(selfId, selfId, new TEvPQ::TEvReaderEventArrived(futureId)));
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPQ::TEvReaderEventArrived(futureId)));
         }
     );
 

@@ -616,7 +616,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
         desc.AddKeyColumnNames("key");
         desc.SetUniformPartitionsCount(2);
 
-        runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
         auto reply = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
         txId = reply->Record.GetTxId();
@@ -630,20 +630,20 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
 
     {
         auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) VALUES (1,0x80000002),(0x80000001,2)");
-        runtime.Send(new IEventHandleFat(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
         runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
     }
 
     {
         auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) SELECT value as key, value FROM `/Root/table-1`");
-        runtime.Send(new IEventHandleFat(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
 
         // Get shard IDs.
         ui64 shards[2];
         {
             auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
             request->Record.MutableDescribePath()->SetPath("/Root/table-1");
-            runtime.Send(new IEventHandleFat(MakeTxProxyID(), sender, request.Release()));
+            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
             auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
             for (auto i = 0; i < 2; ++i)
                 shards[i] = reply->GetRecord().GetPathDescription()
@@ -702,7 +702,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
 
     {
         auto request = MakeSQLRequest("SELECT * FROM `/Root/table-1`");
-        runtime.Send(new IEventHandleFat(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
         auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
         auto &resp = reply->Record.GetRef().GetResponse();
         UNIT_ASSERT_VALUES_EQUAL(resp.ResultsSize(), 1);

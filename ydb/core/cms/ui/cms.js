@@ -27,6 +27,7 @@ function main() {
 
     initCommon();
     initConfigsTab();
+    initYamlConfigTab();
     initValidatorsTab();
     initCmsLogTab();
     initConsoleLogTab();
@@ -43,5 +44,3 @@ function main() {
 function togglePopup() {
     $("#popup").toggle();
 }
-
-$(document).ready(main);

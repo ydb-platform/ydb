@@ -923,6 +923,8 @@ private:
             operatorId = Visit(maybeCombiner.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
             operatorId = Visit(maybeSort.Cast(), planNode);
+        } else if (auto maybeTop = TMaybeNode<TCoTop>(node)) {
+            operatorId = Visit(maybeTop.Cast(), planNode);
         } else if (auto maybeTopSort = TMaybeNode<TCoTopSort>(node)) {
             operatorId = Visit(maybeTopSort.Cast(), planNode);
         } else if (auto maybeTake = TMaybeNode<TCoTake>(node)) {
@@ -989,6 +991,15 @@ private:
         op.Properties["SortBy"] = PrettyExprStr(sort.KeySelectorLambda());
 
         return AddOperator(planNode, "Sort", std::move(op));
+    }
+
+    ui32 Visit(const TCoTop& top, TQueryPlanNode& planNode) {
+        TOperator op;
+        op.Properties["Name"] = "Top";
+        op.Properties["TopBy"] = PrettyExprStr(top.KeySelectorLambda());
+        op.Properties["Limit"] = PrettyExprStr(top.Count());
+
+        return AddOperator(planNode, "Top", std::move(op));
     }
 
     ui32 Visit(const TCoTopSort& topSort, TQueryPlanNode& planNode) {

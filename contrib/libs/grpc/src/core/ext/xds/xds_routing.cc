@@ -70,7 +70,7 @@ bool DomainMatch(MatchType match_type, y_absl::string_view domain_pattern_in,
 
 MatchType DomainPatternMatchType(y_absl::string_view domain_pattern) {
   if (domain_pattern.empty()) return INVALID_MATCH;
-  if (domain_pattern.find('*') == TString::npos) return EXACT_MATCH;
+  if (!y_absl::StrContains(domain_pattern, '*')) return EXACT_MATCH;
   if (domain_pattern == "*") return UNIVERSE_MATCH;
   if (domain_pattern[0] == '*') return SUFFIX_MATCH;
   if (domain_pattern[domain_pattern.size() - 1] == '*') return PREFIX_MATCH;

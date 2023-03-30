@@ -46,30 +46,25 @@ public:
             }
             const TSessionToCookie::iterator s2cIt = SessionToCookie.emplace(SessionId, NextCookie);
             InFlight.emplace(NextCookie, std::make_tuple(s2cIt, MD5::CalcRaw(data)));
-            TActivationContext::Send(new IEventHandleFat(TEvents::THelloWorld::Ping, IEventHandle::FlagTrackDelivery, Recipient,
+            TActivationContext::Send(new IEventHandle(TEvents::THelloWorld::Ping, IEventHandle::FlagTrackDelivery, Recipient,
                 SelfId(), MakeIntrusive<TEventSerializedData>(std::move(data), TEventSerializationInfo{}), NextCookie));
 //            Cerr << (TStringBuilder() << "Send# " << NextCookie << Endl);
             ++NextCookie;
         }
     }
 
-    void HandlePong(TAutoPtr<IEventHandle> e) {
+    void HandlePong(TAutoPtr<IEventHandle> ev) {
 //        Cerr << (TStringBuilder() << "Receive# " << ev->Cookie << Endl);
-        if (e->IsEventFat()) {
-            auto ev = IEventHandleFat::GetFat(e);
-            if (const auto it = InFlight.find(ev->Cookie); it != InFlight.end()) {
-                auto& [s2cIt, hash] = it->second;
-                Y_VERIFY(hash == ev->GetChainBuffer()->GetString());
-                SessionToCookie.erase(s2cIt);
-                InFlight.erase(it);
-            } else if (const auto it = Tentative.find(ev->Cookie); it != Tentative.end()) {
-                Y_VERIFY(it->second == ev->GetChainBuffer()->GetString());
-                Tentative.erase(it);
-            } else {
-                Y_FAIL("Cookie# %" PRIu64, ev->Cookie);
-            }
+        if (const auto it = InFlight.find(ev->Cookie); it != InFlight.end()) {
+            auto& [s2cIt, hash] = it->second;
+            Y_VERIFY(hash == ev->GetChainBuffer()->GetString());
+            SessionToCookie.erase(s2cIt);
+            InFlight.erase(it);
+        } else if (const auto it = Tentative.find(ev->Cookie); it != Tentative.end()) {
+            Y_VERIFY(it->second == ev->GetChainBuffer()->GetString());
+            Tentative.erase(it);
         } else {
-            Y_FAIL("Pong is not fat");
+            Y_FAIL("Cookie# %" PRIu64, ev->Cookie);
         }
         IssueQueries();
     }
@@ -128,13 +123,10 @@ public:
     {}
 
     void HandlePing(TAutoPtr<IEventHandle>& ev) {
-        if (ev->IsEventFat()) {
-            auto* evf = IEventHandleFat::GetFat(ev);
-            const TString& data = evf->GetChainBuffer()->GetString();
-            const TString& response = MD5::CalcRaw(data);
-            TActivationContext::Send(new IEventHandleFat(TEvents::THelloWorld::Pong, 0, evf->Sender, SelfId(),
-                MakeIntrusive<TEventSerializedData>(response, TEventSerializationInfo{}), evf->Cookie));
-        }
+        const TString& data = ev->GetChainBuffer()->GetString();
+        const TString& response = MD5::CalcRaw(data);
+        TActivationContext::Send(new IEventHandle(TEvents::THelloWorld::Pong, 0, ev->Sender, SelfId(),
+            MakeIntrusive<TEventSerializedData>(response, TEventSerializationInfo{}), ev->Cookie));
     }
 
     STRICT_STFUNC(StateFunc,

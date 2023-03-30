@@ -13,7 +13,7 @@ void CheckAddTenant(TTenantTestRuntime &runtime, const TString &tenant, TEvLocal
     limit.SetCPU(cpu);
     limit.SetMemory(memory);
     limit.SetNetwork(network);
-    runtime.Send(new IEventHandleFat(MakeLocalID(runtime.GetNodeId(0)),
+    runtime.Send(new IEventHandle(MakeLocalID(runtime.GetNodeId(0)),
                                   runtime.Sender,
                                   new TEvLocal::TEvAddTenant(tenant, limit)));
     TAutoPtr<IEventHandle> handle;

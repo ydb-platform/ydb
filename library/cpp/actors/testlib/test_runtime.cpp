@@ -48,10 +48,10 @@ namespace NActors {
         Cerr << ", ";
         if (ev->HasEvent())
             Cerr << " : " << (PRINT_EVENT_BODY ? ev->ToString() : ev->GetTypeName());
-        // else if (ev->HasBuffer())
-        //     Cerr << " : BUFFER";
-        // else
-        //     Cerr << " : EMPTY";
+        else if (ev->HasBuffer())
+            Cerr << " : BUFFER";
+        else
+            Cerr << " : EMPTY";
 
         Cerr << "\n";
     }
@@ -397,7 +397,7 @@ namespace NActors {
                             TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), ev->GetRecipientRewrite());
                             TActivationContext *prevTlsActivationContext = TlsActivationContext;
                             TlsActivationContext = &ctx;
-                            recipientActor->Receive(ev);
+                            recipientActor->Receive(ev, ctx);
                             TlsActivationContext = prevTlsActivationContext;
                             // we expect the logger to never die in tests
                         }
@@ -1420,9 +1420,8 @@ namespace NActors {
         }
     }
 
-    void TTestActorRuntimeBase::Send(const TActorId& recipient, const TActorId& sender, TAutoPtr<IEventHandleLight> ev, ui32 senderNodeIndex, bool viaActorSystem) {
-        ev->PrepareSend(recipient, sender);
-        Send(ev.Release(), senderNodeIndex, viaActorSystem);
+    void TTestActorRuntimeBase::Send(const TActorId& recipient, const TActorId& sender, TAutoPtr<IEventBase> ev, ui32 senderNodeIndex, bool viaActorSystem) {
+        Send(new IEventHandle(recipient, sender, ev.Release()), senderNodeIndex, viaActorSystem);
     }
 
     void TTestActorRuntimeBase::Send(TAutoPtr<IEventHandle> ev, ui32 senderNodeIndex, bool viaActorSystem) {
@@ -1628,7 +1627,7 @@ namespace NActors {
                 TCallstack::GetTlsCallstack() = ev->Callstack;
                 TCallstack::GetTlsCallstack().SetLinesToSkip();
 #endif
-                recipientActor->Receive(ev);
+                recipientActor->Receive(ev, ctx);
                 node->ExecutorThread->DropUnregistered();
             }
             CurrentRecipient = TActorId();
@@ -1866,8 +1865,7 @@ namespace NActors {
             if (HasReply) {
                 delete Context->Queue->Pop();
             }
-            IEventHandle::Forward(ev, originalSender);
-            ctx.ExecutorThread.Send(ev);
+            ctx.ExecutorThread.Send(IEventHandle::Forward(ev, originalSender));
             if (!IsSync && Context->Queue->Head()) {
                 SendHead(ctx);
             }
@@ -1899,17 +1897,9 @@ namespace NActors {
         TAutoPtr<IEventHandle> GetForwardedEvent() {
             IEventHandle* ev = Context->Queue->Head();
             ReplyChecker->OnRequest(ev);
-            TAutoPtr<IEventHandle> forwardedEv;
-            if (ev->IsEventLight()) {
-                IEventHandleLight* evl = IEventHandleLight::GetLight(ev);
-                evl->PrepareSend(Delegatee, ReplyId);
-                forwardedEv = ev;
-            } else {
-                IEventHandleFat* evf = IEventHandleFat::GetFat(ev);
-                forwardedEv = ev->HasEvent()
-                    ? new IEventHandleFat(Delegatee, ReplyId, evf->ReleaseBase().Release(), evf->Flags, evf->Cookie)
-                    : new IEventHandleFat(evf->GetTypeRewrite(), evf->Flags, Delegatee, ReplyId, evf->ReleaseChainBuffer(), evf->Cookie);
-            }
+            TAutoPtr<IEventHandle> forwardedEv = ev->HasEvent()
+                    ? new IEventHandle(Delegatee, ReplyId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie)
+                    : new IEventHandle(ev->GetTypeRewrite(), ev->Flags, Delegatee, ReplyId, ev->ReleaseChainBuffer(), ev->Cookie);
 
             return forwardedEv;
         }

@@ -375,6 +375,13 @@ public:
         for (const auto& [id, group] : Self->GroupMap) {
             group->FinishVDisksInGroup();
         }
+        for (const auto& [vslotId, vslot] : Self->VSlots) {
+            if (vslot->IsBeingDeleted()) {
+                if (TGroupInfo *group = Self->FindGroup(vslot->GroupId)) {
+                    group->VSlotsBeingDeleted.insert(vslotId);
+                }
+            }
+        }
 
         // tie donors and acceptors
         for (const auto& [vslotId, vslot] : Self->VSlots) {

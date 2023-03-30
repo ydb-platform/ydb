@@ -90,6 +90,8 @@ struct TDqSettings {
     NCommon::TConfSetting<double, false> HashShuffleTasksRatio;
     NCommon::TConfSetting<ui32, false> HashShuffleMaxTasks;
 
+    NCommon::TConfSetting<bool, false> UseWideChannels;
+
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
     void Save(TProtoConfig& config) {
@@ -133,8 +135,9 @@ struct TDqSettings {
         SAVE_SETTING(WatermarksLateArrivalDelayMs);
         SAVE_SETTING(UseAggPhases);
         SAVE_SETTING(HashJoinMode);
-        SAVE_SETTING(HashShuffleTasksRatio);        
-        SAVE_SETTING(HashShuffleMaxTasks);    
+        SAVE_SETTING(HashShuffleTasksRatio);
+        SAVE_SETTING(HashShuffleMaxTasks);
+        SAVE_SETTING(UseWideChannels);
 #undef SAVE_SETTING
     }
 

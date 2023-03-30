@@ -65,7 +65,7 @@ protected:
                 case IOperationsManager::EActivityType::Undefined:
                     return NThreading::MakeFuture<TObjectOperatorResult>(TObjectOperatorResult("undefined action type"));
             }
-            TActivationContext::Send(new IEventHandleFat(NProvider::MakeServiceId(nodeId), {}, new NProvider::TEvObjectsOperation(alterCommand)));
+            TActivationContext::Send(new IEventHandle(NProvider::MakeServiceId(nodeId), {}, new NProvider::TEvObjectsOperation(alterCommand)));
         }
         return result;
     }

@@ -343,7 +343,7 @@ private:
                     new TResponseProcessor(ev->Sender, Cache, ready, requests, TraceId, ev->Get()->MdbTransformHost, Parsers));
 
             for (const auto& [request, _] : requests) {
-                TActivationContext::Send(new IEventHandleFat(HttpProxy, helper, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request)));
+                TActivationContext::Send(new IEventHandle(HttpProxy, helper, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request)));
             }
         } else {
             SendResponse(ev->Sender, std::move(ready));

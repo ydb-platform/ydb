@@ -139,7 +139,7 @@ void TFakeCASetup::Execute(TCallback callback) {
     std::exception_ptr exception_ptr = nullptr;
     const TActorId& edgeId = Runtime->AllocateEdgeActor();
     auto promise = NThreading::NewPromise();
-    Runtime->Send(new IEventHandleFat(FakeActorId, edgeId, new TEvPrivate::TEvExecute(promise, callback, exception_ptr)));
+    Runtime->Send(new IEventHandle(FakeActorId, edgeId, new TEvPrivate::TEvExecute(promise, callback, exception_ptr)));
     auto future = promise.GetFuture();
     future.Wait();
     if (exception_ptr) {

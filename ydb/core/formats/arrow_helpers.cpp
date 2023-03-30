@@ -1171,15 +1171,24 @@ std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::
 static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<arrow::Array>& column,
                                                    NScheme::TTypeInfo colType) {
     switch (colType.GetTypeId()) {
+        case NScheme::NTypeIds::Bytes: {
+            Y_VERIFY(column->type()->id() == arrow::Type::STRING);
+            return std::make_shared<arrow::BinaryArray>(column->data());
+        }
+        case NScheme::NTypeIds::Date: {
+            Y_VERIFY(arrow::is_primitive(column->type()->id()));
+            Y_VERIFY(arrow::bit_width(column->type()->id()) == 16);
+            return std::make_shared<arrow::NumericArray<arrow::UInt16Type>>(column->data());
+        }
+        case NScheme::NTypeIds::Datetime: {
+            Y_VERIFY(arrow::is_primitive(column->type()->id()));
+            Y_VERIFY(arrow::bit_width(column->type()->id()) == 32);
+            return std::make_shared<arrow::NumericArray<arrow::Int32Type>>(column->data());
+        }
         case NScheme::NTypeIds::Timestamp: {
             Y_VERIFY(arrow::is_primitive(column->type()->id()));
             Y_VERIFY(arrow::bit_width(column->type()->id()) == 64);
             return std::make_shared<arrow::TimestampArray>(column->data());
-        }
-        case NScheme::NTypeIds::Date: {
-            Y_VERIFY(arrow::is_primitive(column->type()->id()));
-            Y_VERIFY(arrow::bit_width(column->type()->id()) == 32);
-            return std::make_shared<arrow::Date32Array>(column->data());
         }
         default:
             return {};
@@ -1203,6 +1212,44 @@ std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<
     auto convertedBatch = arrow::RecordBatch::Make(resultSchemaFixed, batch->num_rows(), columns);
     Y_VERIFY(convertedBatch->ValidateFull() == arrow::Status::OK());
     return convertedBatch;
+}
+
+bool TArrowToYdbConverter::NeedDataConversion(const NScheme::TTypeInfo& colType) {
+    switch (colType.GetTypeId()) {
+        case NScheme::NTypeIds::DyNumber:
+        case NScheme::NTypeIds::JsonDocument:
+        case NScheme::NTypeIds::Decimal:
+            return true;
+        default:
+            break;
+    }
+    return false;
+}
+
+bool TArrowToYdbConverter::NeedInplaceConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
+    switch (expectedType.GetTypeId()) {
+        case NScheme::NTypeIds::Bytes:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
+        case NScheme::NTypeIds::Date:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Uint16;
+        case NScheme::NTypeIds::Datetime:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int32;
+        case NScheme::NTypeIds::Timestamp:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int64;
+        default:
+            break;
+    }
+    return false;
+}
+
+bool TArrowToYdbConverter::NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
+    switch (expectedType.GetTypeId()) {
+        case NScheme::NTypeIds::JsonDocument:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
+        default:
+            break;
+    }
+    return false;
 }
 
 bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& errorMessage) {

@@ -179,39 +179,11 @@ private:
     }
 
 public:
-    static bool NeedDataConversion(const NScheme::TTypeInfo& colType) {
-        switch (colType.GetTypeId()) {
-            case NScheme::NTypeIds::DyNumber:
-            case NScheme::NTypeIds::JsonDocument:
-            case NScheme::NTypeIds::Decimal:
-                return true;
-            default:
-                break;
-        }
-        return false;
-    }
+    static bool NeedDataConversion(const NScheme::TTypeInfo& colType);
 
-    static bool NeedInplaceConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
-        switch (expectedType.GetTypeId()) {
-            case NScheme::NTypeIds::Timestamp:
-                return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int64;
-            case NScheme::NTypeIds::Date:
-                return typeInRequest.GetTypeId() == NScheme::NTypeIds::Uint16;
-            default:
-                break;
-        }
-        return false;
-    }
+    static bool NeedInplaceConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType);
 
-    static bool NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
-        switch (expectedType.GetTypeId()) {
-            case NScheme::NTypeIds::JsonDocument:
-                return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
-            default:
-                break;
-        }
-        return false;
-    }
+    static bool NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType);
 
     TArrowToYdbConverter(const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter)
         : YdbSchema(ydbSchema)

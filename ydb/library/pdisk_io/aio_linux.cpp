@@ -11,6 +11,8 @@
 #include <util/system/file.h>
 #include <util/stream/format.h>
 
+#undef RWF_APPEND
+
 #include <liburing.h>
 #include <libaio.h>
 #include <linux/fs.h>

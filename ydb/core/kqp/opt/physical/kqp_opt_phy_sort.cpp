@@ -25,15 +25,15 @@ TExprBase KqpRemoveRedundantSortByPkBase(
     bool allowSortForAllTables = false)
 {
     auto maybeSort = node.Maybe<TCoSort>();
-    auto maybeTopSort = node.Maybe<TCoTopSort>();
+    auto maybeTopBase = node.Maybe<TCoTopBase>();
 
-    if (!maybeSort && !maybeTopSort) {
+    if (!maybeSort && !maybeTopBase) {
         return node;
     }
 
-    auto input = maybeSort ? maybeSort.Cast().Input() : maybeTopSort.Cast().Input();
-    auto sortDirections = maybeSort ? maybeSort.Cast().SortDirections() : maybeTopSort.Cast().SortDirections();
-    auto keySelector = maybeSort ? maybeSort.Cast().KeySelectorLambda() : maybeTopSort.Cast().KeySelectorLambda();
+    auto input = maybeSort ? maybeSort.Cast().Input() : maybeTopBase.Cast().Input();
+    auto sortDirections = maybeSort ? maybeSort.Cast().SortDirections() : maybeTopBase.Cast().SortDirections();
+    auto keySelector = maybeSort ? maybeSort.Cast().KeySelectorLambda() : maybeTopBase.Cast().KeySelectorLambda();
 
     auto maybeFlatmap = input.Maybe<TCoFlatMap>();
 
@@ -155,10 +155,10 @@ TExprBase KqpRemoveRedundantSortByPkBase(
             .Done();
     }
 
-    if (maybeTopSort) {
+    if (maybeTopBase) {
         return Build<TCoTake>(ctx, node.Pos())
             .Input(input)
-            .Count(maybeTopSort.Cast().Count())
+            .Count(maybeTopBase.Cast().Count())
             .Done();
     } else {
         return input;
@@ -212,7 +212,7 @@ NYql::NNodes::TExprBase KqpRemoveRedundantSortByPkOverSource(
             if (expr.Maybe<TDqConnection>() || expr.Maybe<TDqPrecompute>() || expr.Maybe<TDqPhyPrecompute>()) {
                 return false;
             }
-            if (TCoSort::Match(expr.Raw()) || TCoTopSort::Match(expr.Raw())) {
+            if (TCoSort::Match(expr.Raw()) || TCoTopBase::Match(expr.Raw())) {
                 auto newExpr = KqpRemoveRedundantSortByPkBase(expr, exprCtx, kqpCtx,
                     [&](TExprBase node) -> TMaybe<TTableData> {
                         if (node.Ptr() != node.Ptr()) {

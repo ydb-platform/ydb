@@ -5527,7 +5527,7 @@ bool GetAvgResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inp
     if(IsDataOrOptionalOfData(&inputType, isOptional, lambdaType)) {
         auto lambdaTypeSlot = lambdaType->GetSlot();
         const TTypeAnnotationNode *avgResultType = nullptr;
-        if (IsDataTypeNumeric(lambdaTypeSlot)) {
+        if (IsDataTypeNumeric(lambdaTypeSlot) || lambdaTypeSlot == EDataSlot::Bool) {
             avgResultType = ctx.MakeType<TDataExprType>(EDataSlot::Double);
             if (isOptional) {
                 avgResultType = ctx.MakeType<TOptionalExprType>(avgResultType);
@@ -5539,7 +5539,7 @@ bool GetAvgResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inp
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
                 TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
-            return IGraphTransformer::TStatus::Error;
+            return false;
         }
 
         retType = avgResultType;

@@ -39,13 +39,32 @@ private:
     };
 
 public:
-    TConfigsSubscriber(const TActorId &ownerId, const TVector<ui32> &kinds, const NKikimrConfig::TAppConfig &currentConfig)
+    TConfigsSubscriber(
+            const TActorId &ownerId,
+            ui64 cookie,
+            const TVector<ui32> &kinds,
+            const NKikimrConfig::TAppConfig &currentConfig,
+            bool processYaml,
+            const TString &yamlConfig,
+            const TMap<ui64, TString> &volatileYamlConfigs)
         : OwnerId(ownerId)
+        , Cookie(cookie)
         , Kinds(kinds)
         , Generation(0)
         , NextGeneration(1)
         , LastOrder(0)
-        , CurrentConfig(currentConfig) {}
+        , CurrentConfig(currentConfig)
+        , ServeYaml(processYaml)
+        , YamlConfig(yamlConfig)
+        , VolatileYamlConfigs(volatileYamlConfigs)
+    {
+        if (ServeYaml && !YamlConfig.empty()) {
+            YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
+            for (auto &[id, config] : VolatileYamlConfigs) {
+                VolatileYamlConfigHashes[id] = THash<TString>()(config);
+            }
+        }
+    }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::CMS_CONFIGS_SUBSCRIBER;
@@ -54,7 +73,7 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         auto dinfo = AppData(ctx)->DomainsInfo;
         if (dinfo->Domains.size() != 1) {
-            Send(OwnerId, new NConsole::TEvConsole::TEvConfigSubscriptionError(Ydb::StatusIds::GENERIC_ERROR, "Ambiguous domain (use --domain option)"));
+            Send(OwnerId, new NConsole::TEvConsole::TEvConfigSubscriptionError(Ydb::StatusIds::GENERIC_ERROR, "Ambiguous domain (use --domain option)"), 0, Cookie);
 
             Die(ctx);
 
@@ -125,7 +144,7 @@ public:
         }
 
         if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionError(rec.GetStatus().GetCode(), rec.GetStatus().GetReason()));
+            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionError(rec.GetStatus().GetCode(), rec.GetStatus().GetReason()), 0, Cookie);
 
             Generation = 0;
             Die(ctx);
@@ -158,6 +177,30 @@ public:
             return;
         }
 
+        if (ServeYaml) {
+            if (!(rec.HasYamlConfigNotChanged() && rec.GetYamlConfigNotChanged())) {
+                if (rec.HasYamlConfig()) {
+                    YamlConfig = rec.GetYamlConfig();
+                    YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
+                }
+            }
+
+            TMap<ui64, TString> newVolatileYamlConfigs;
+            TMap<ui64, ui64> newVolatileYamlConfigHashes;
+            for (auto &volatileConfig : *rec.MutableVolatileConfigs()) {
+                if (volatileConfig.HasNotChanged() && volatileConfig.GetNotChanged()) {
+                    Y_ASSERT(VolatileYamlConfigs.contains(volatileConfig.GetId()));
+                    newVolatileYamlConfigs[volatileConfig.GetId()] = std::move(VolatileYamlConfigs[volatileConfig.GetId()]);
+                    newVolatileYamlConfigHashes[volatileConfig.GetId()] = VolatileYamlConfigHashes[volatileConfig.GetId()];
+                } else {
+                    newVolatileYamlConfigs[volatileConfig.GetId()] = volatileConfig.GetConfig();
+                    newVolatileYamlConfigHashes[volatileConfig.GetId()] = THash<TString>()(volatileConfig.GetConfig());
+                }
+            }
+            VolatileYamlConfigs = std::move(newVolatileYamlConfigs);
+            VolatileYamlConfigHashes = std::move(newVolatileYamlConfigHashes);
+        }
+
         NKikimrConfig::TConfigVersion newVersion(rec.GetConfig().GetVersion());
         THashSet<ui32> changes(rec.GetAffectedKinds().begin(), rec.GetAffectedKinds().end());
         for (auto &item : CurrentConfig.GetVersion().GetItems()) {
@@ -179,8 +222,8 @@ public:
         else
             CurrentConfig.MutableVersion()->Swap(&newVersion);
 
-        Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(Generation, CurrentConfig, changes),
-             IEventHandle::FlagTrackDelivery);
+        Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(Generation, CurrentConfig, changes, YamlConfig, VolatileYamlConfigs),
+             IEventHandle::FlagTrackDelivery, Cookie);
 
         LastOrder++;
     }
@@ -251,12 +294,24 @@ private:
         request->Record.MutableOptions()->SetTenant(Tenant);
         request->Record.MutableOptions()->SetNodeType(NodeType);
         request->Record.MutableOptions()->SetHost(FQDNHostName());
+        request->Record.SetServeYaml(ServeYaml);
 
         for (auto &kind : Kinds)
             request->Record.AddConfigItemKinds(kind);
 
         if (CurrentConfig.HasVersion())
             request->Record.MutableKnownVersion()->CopyFrom(CurrentConfig.GetVersion());
+
+        if (ServeYaml) {
+            if (!YamlConfig.empty()) {
+                request->Record.SetYamlVersion(YamlConfigVersion);
+                for (auto &[id, hash] : VolatileYamlConfigHashes) {
+                    auto *item = request->Record.AddVolatileYamlVersion();
+                    item->SetId(id);
+                    item->SetHash(hash);
+                }
+            }
+        }
 
         NTabletPipe::SendData(ctx, Pipe, request.Release());
     }
@@ -278,6 +333,7 @@ private:
 
 private:
     const TActorId OwnerId;
+    ui64 Cookie;
     const TVector<ui32> Kinds;
 
     ui64 Generation;
@@ -285,6 +341,12 @@ private:
     ui64 LastOrder;
 
     NKikimrConfig::TAppConfig CurrentConfig;
+
+    bool ServeYaml = false;
+    TString YamlConfig;
+    TMap<ui64, TString> VolatileYamlConfigs;
+    ui64 YamlConfigVersion = 0;
+    TMap<ui64, ui64> VolatileYamlConfigHashes;
 
     TString Tenant;
     TString NodeType;
@@ -295,7 +357,16 @@ private:
     TActorId Pipe;
 };
 
-IActor *CreateConfigsSubscriber(const TActorId &ownerId, const TVector<ui32> &kinds, const NKikimrConfig::TAppConfig &currentConfig) {
-    return new TConfigsSubscriber(ownerId, kinds, currentConfig);
+IActor *CreateConfigsSubscriber(
+    const TActorId &ownerId,
+    const TVector<ui32> &kinds,
+    const NKikimrConfig::TAppConfig &currentConfig,
+    ui64 cookie,
+    bool processYaml,
+    const TString &yamlConfig,
+    const TMap<ui64, TString> &volatileYamlConfigs)
+{
+    return new TConfigsSubscriber(ownerId, cookie, kinds, currentConfig, processYaml, yamlConfig, volatileYamlConfigs);
 }
-}
+
+} // namespace NKikimr::NConsole

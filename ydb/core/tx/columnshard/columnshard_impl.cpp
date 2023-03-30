@@ -247,28 +247,37 @@ bool TColumnShard::HaveOutdatedTxs() const {
     return it->MaxStep <= step;
 }
 
-TWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId) {
+TWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) {
     auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
     if (it != LongTxWritesByUniqueId.end()) {
-        return (TWriteId)it->second->WriteId;
+        auto itPart = it->second.find(partId);
+        if (itPart != it->second.end()) {
+            return (TWriteId)itPart->second->WriteId;
+        }
     }
     return (TWriteId)0;
 }
 
-TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId) {
+TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId) {
     auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
     if (it != LongTxWritesByUniqueId.end()) {
-        return (TWriteId)it->second->WriteId;
+        auto itPart = it->second.find(partId);
+        if (itPart != it->second.end()) {
+            return (TWriteId)itPart->second->WriteId;
+        }
+    } else {
+        it = LongTxWritesByUniqueId.emplace(longTxId.UniqueId, TPartsForLTXShard()).first;
     }
 
     TWriteId writeId = ++LastWriteId;
     auto& lw = LongTxWrites[writeId];
     lw.WriteId = (ui64)writeId;
+    lw.WritePartId = partId;
     lw.LongTxId = longTxId;
-    LongTxWritesByUniqueId[longTxId.UniqueId] = &lw;
+    it->second[partId] = &lw;
 
     Schema::SaveSpecialValue(db, Schema::EValueIds::LastWriteId, (ui64)writeId);
-    Schema::SaveLongTxWrite(db, writeId, longTxId);
+    Schema::SaveLongTxWrite(db, writeId, partId, longTxId);
 
     return writeId;
 }
@@ -278,11 +287,12 @@ void TColumnShard::AddLongTxWrite(TWriteId writeId, ui64 txId) {
     lw.PreparedTxId = txId;
 }
 
-void TColumnShard::LoadLongTxWrite(TWriteId writeId, const NLongTxService::TLongTxId& longTxId) {
+void TColumnShard::LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId) {
     auto& lw = LongTxWrites[writeId];
+    lw.WritePartId = writePartId;
     lw.WriteId = (ui64)writeId;
     lw.LongTxId = longTxId;
-    LongTxWritesByUniqueId[longTxId.UniqueId] = &lw;
+    LongTxWritesByUniqueId[longTxId.UniqueId][writePartId] = &lw;
 }
 
 bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId) {
@@ -290,7 +300,11 @@ bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64
         ui64 prepared = lw->PreparedTxId;
         if (!prepared || txId == prepared) {
             Schema::EraseLongTxWrite(db, writeId);
-            LongTxWritesByUniqueId.erase(lw->LongTxId.UniqueId);
+            auto& ltxParts = LongTxWritesByUniqueId[lw->LongTxId.UniqueId];
+            ltxParts.erase(lw->WritePartId);
+            if (ltxParts.empty()) {
+                LongTxWritesByUniqueId.erase(lw->LongTxId.UniqueId);
+            }
             LongTxWrites.erase(writeId);
             return true;
         }

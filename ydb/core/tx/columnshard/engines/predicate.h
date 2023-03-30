@@ -1,5 +1,10 @@
 #pragma once
+
 #include "defs.h"
+
+#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/program.h>
+#include <ydb/core/formats/switch_type.h>
 
 namespace NKikimr::NOlap {
 

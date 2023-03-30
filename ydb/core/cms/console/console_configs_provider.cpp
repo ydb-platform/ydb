@@ -1,9 +1,11 @@
 #include "console_configs_provider.h"
 #include "util.h"
+#include "http.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/cms/console/validators/registry.h>
+#include <ydb/core/mon/mon.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 
@@ -377,11 +379,19 @@ protected:
         TBase::Die(ctx);
     }
 };
+
 } // anonymous namespace
 
 void TConfigsProvider::Bootstrap(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider::Bootstrap");
+
+    NActors::TMon *mon = AppData()->Mon;
+    if (mon) {
+        NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+        mon->RegisterActorPage(actorsMonPage, "console_configs_provider", "Console Configs Provider", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+    }
+
     Become(&TThis::StateWork);
 }
 
@@ -636,7 +646,21 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
         affectedKinds.insert(prev.first);
     }
 
-    if (affectedKinds.empty()) {
+    bool yamlChanged = false;
+
+    if (subscription->YamlConfigVersion != YamlConfigVersion) {
+        yamlChanged = true;
+    }
+
+    yamlChanged |= VolatileYamlConfigHashes.size() != subscription->VolatileYamlConfigHashes.size();
+
+    for (auto &[id, hash] : VolatileYamlConfigHashes) {
+        if (auto it = subscription->VolatileYamlConfigHashes.find(id); it == subscription->VolatileYamlConfigHashes.end() || it->second != hash) {
+            yamlChanged = true;
+        }
+    }
+
+    if (affectedKinds.empty() && !yamlChanged) {
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
                     "TConfigsProvider: no changes found for subscription"
                         << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation);
@@ -653,50 +677,149 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
     NKikimrConfig::TAppConfig appConfig;
     config->ComputeConfig(affectedKinds, appConfig, true);
 
-    Send(subscription->Worker, new TEvConsole::TEvConfigSubscriptionNotification(subscription->Generation, std::move(appConfig), affectedKinds));
+    auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
+            subscription->Generation,
+            std::move(appConfig),
+            affectedKinds);
+
+    if (subscription->YamlConfigVersion != YamlConfigVersion) {
+        subscription->YamlConfigVersion = YamlConfigVersion;
+        request->Record.SetYamlConfig(YamlConfig);
+    } else {
+        request->Record.SetYamlConfigNotChanged(true);
+    }
+
+    for (auto &[id, hash] : VolatileYamlConfigHashes) {
+        auto *volatileConfig = request->Record.AddVolatileConfigs();
+        volatileConfig->SetId(id);
+        auto hashes = subscription->VolatileYamlConfigHashes.size();
+        Y_UNUSED(hashes);
+        auto itt = subscription->VolatileYamlConfigHashes.find(id);
+        if (itt != subscription->VolatileYamlConfigHashes.end()) {
+            auto tmp = itt->second;
+            Y_UNUSED(tmp);
+        }
+        if (auto it = subscription->VolatileYamlConfigHashes.find(id); it != subscription->VolatileYamlConfigHashes.end() && it->second == hash) {
+            volatileConfig->SetNotChanged(true);
+        } else {
+            volatileConfig->SetConfig(VolatileYamlConfigs[id]);
+        }
+    }
+
+    subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
+
+    ctx.Send(subscription->Worker, request.Release());
+}
+
+void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {
+    HTML(os) {
+        COLLAPSED_REF_CONTENT("yaml-config", "Yaml Config") {
+            DIV_CLASS("tab-left") {
+                TAG(TH5) {
+                    os << "Presistent Config" << Endl;
+                }
+                PRE() {
+                    os << YamlConfig;
+                }
+                for (auto &[id, config] : VolatileYamlConfigs) {
+                    TAG(TH5) {
+                        os << "Volatile Config #" << id << Endl;
+                    }
+                    PRE() {
+                        os << config;
+                    }
+                }
+            }
+        }
+        os << "<br/>" << Endl;
+        COLLAPSED_REF_CONTENT("in-memory-subscription", "InMemorySubscriptions") {
+            DIV_CLASS("tab-left") {
+                PRE() {
+                    for (auto &[_, s] : InMemoryIndex.GetSubscriptions()) {
+                        os << "- Subscriber: " << s->Subscriber << Endl
+                           << "  Generation: " << s->Generation << Endl
+                           << "  NodeId: " << s->NodeId << Endl
+                           << "  Host: " << s->Host << Endl
+                           << "  Tenant: " << s->Tenant << Endl
+                           << "  NodeType: " << s->NodeType << Endl
+                           << "  ItemKinds: " << KindsToString(s->ItemKinds) << Endl
+                           << "  ConfigVersions: " << s->LastProvided.ShortDebugString() << Endl
+                           << "  ServeYaml: " << s->ServeYaml << Endl
+                           << "  YamlVersion: " << s->YamlConfigVersion << ".[";
+                        bool first = true;
+                        for (auto &[id, hash] : s->VolatileYamlConfigHashes) {
+                            os << (first ? "" : ",") << id << "." << hash;
+                            first = false;
+                        }
+                        os << "]" << Endl;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void TConfigsProvider::Handle(NMon::TEvHttpInfo::TPtr &ev)
+{
+    TStringStream str;
+    str << NMonitoring::HTTPOKHTML;
+    HTML(str) {
+        NHttp::OutputStaticPart(str);
+        DumpStateHTML(str);
+    }
+
+    Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
 }
 
 void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
 {
-        auto subscriber = ev->Sender;
-        auto &rec = ev->Get()->Record;
+    auto subscriber = ev->Sender;
+    auto &rec = ev->Get()->Record;
 
-        auto existing = InMemoryIndex.GetSubscription(subscriber);
-        if (existing) {
-            if (existing->Generation >= rec.GetGeneration()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                            "TConfigsProvider received stale subscription request "
-                            << subscriber.ToString() << ":" << rec.GetGeneration());
-                return;
-            }
-
-            InMemoryIndex.RemoveSubscription(subscriber);
-            Send(existing->Worker, new TEvents::TEvPoisonPill());
+    auto existing = InMemoryIndex.GetSubscription(subscriber);
+    if (existing) {
+        if (existing->Generation >= rec.GetGeneration()) {
+            LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                        "TConfigsProvider received stale subscription request "
+                        << subscriber.ToString() << ":" << rec.GetGeneration());
+            return;
         }
 
-        TInMemorySubscription::TPtr subscription = new TInMemorySubscription();
-
-        subscription->Subscriber = subscriber;
-        subscription->Generation = rec.GetGeneration();
-
-        subscription->NodeId = rec.GetOptions().GetNodeId();
-        subscription->Host = rec.GetOptions().GetHost();
-        subscription->Tenant = rec.GetOptions().GetTenant();
-        subscription->NodeType = rec.GetOptions().GetNodeType();
-
-        subscription->ItemKinds.insert(rec.GetConfigItemKinds().begin(), rec.GetConfigItemKinds().end());
-        subscription->LastProvided.CopyFrom(rec.GetKnownVersion());
-
-        InMemoryIndex.AddSubscription(subscription);
-
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider registered new subscription "
-                    << subscriber.ToString() << ":" << rec.GetGeneration());
-
-        subscription->Worker = RegisterWithSameMailbox(new TSubscriptionClientSender(subscription, SelfId()));
-
-        CheckSubscription(subscription, ctx);
+        InMemoryIndex.RemoveSubscription(subscriber);
+        Send(existing->Worker, new TEvents::TEvPoisonPill());
     }
+
+    TInMemorySubscription::TPtr subscription = new TInMemorySubscription();
+
+    subscription->Subscriber = subscriber;
+    subscription->Generation = rec.GetGeneration();
+
+    subscription->NodeId = rec.GetOptions().GetNodeId();
+    subscription->Host = rec.GetOptions().GetHost();
+    subscription->Tenant = rec.GetOptions().GetTenant();
+    subscription->NodeType = rec.GetOptions().GetNodeType();
+
+    subscription->ItemKinds.insert(rec.GetConfigItemKinds().begin(), rec.GetConfigItemKinds().end());
+    subscription->LastProvided.CopyFrom(rec.GetKnownVersion());
+
+    if (rec.HasServeYaml()) {
+        subscription->ServeYaml = rec.GetServeYaml();
+        subscription->YamlConfigVersion = rec.GetYamlVersion();
+        for (auto &volatileConfigVersion : rec.GetVolatileYamlVersion()) {
+            subscription->VolatileYamlConfigHashes[volatileConfigVersion.GetId()] = volatileConfigVersion.GetHash();
+        }
+    }
+
+    InMemoryIndex.AddSubscription(subscription);
+
+    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "TConfigsProvider registered new subscription "
+                << subscriber.ToString() << ":" << rec.GetGeneration());
+
+    subscription->Worker = RegisterWithSameMailbox(new TSubscriptionClientSender(subscription, SelfId()));
+
+    CheckSubscription(subscription, ctx);
+}
 
 void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx)
 {
@@ -1082,6 +1205,47 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
     }
 
     ApplySubscriptionModifications(ev->Get()->Modifications, ctx);
+}
+
+void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const TActorContext &ctx) {
+    YamlConfig = ev->Get()->YamlConfig;
+    VolatileYamlConfigs = ev->Get()->VolatileYamlConfigs;
+
+    YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
+    VolatileYamlConfigHashes.clear();
+    for (auto& [id, config] : VolatileYamlConfigs) {
+        VolatileYamlConfigHashes[id] = THash<TString>()(config);
+    }
+
+    for (auto &[_, subscription] : InMemoryIndex.GetSubscriptions()) {
+        if (subscription->ServeYaml) {
+            auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
+                    subscription->Generation,
+                    NKikimrConfig::TAppConfig{},
+                    THashSet<ui32>{});
+
+            if (subscription->YamlConfigVersion != YamlConfigVersion) {
+                subscription->YamlConfigVersion = YamlConfigVersion;
+                request->Record.SetYamlConfig(YamlConfig);
+            } else {
+                request->Record.SetYamlConfigNotChanged(true);
+            }
+
+            for (auto &[id, hash] : VolatileYamlConfigHashes) {
+                auto *volatileConfig = request->Record.AddVolatileConfigs();
+                volatileConfig->SetId(id);
+                if (auto it = subscription->VolatileYamlConfigHashes.find(id); it != subscription->VolatileYamlConfigHashes.end() && it->second == hash) {
+                    volatileConfig->SetNotChanged(true);
+                } else {
+                    volatileConfig->SetConfig(VolatileYamlConfigs[id]);
+                }
+            }
+
+            subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
+
+            ctx.Send(subscription->Worker, request.Release());
+        }
+    }
 }
 
 } // namespace NKikimr::NConsole

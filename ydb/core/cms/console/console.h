@@ -1,11 +1,14 @@
 #pragma once
 #include "defs.h"
 
+#include <ydb/core/cms/console/yaml_config/yaml_config.h>
+
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/console.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_tenant.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/draft/ydb_console.pb.h>
 
 namespace NKikimr::NConsole {
 
@@ -41,6 +44,13 @@ struct TEvConsole {
         EvConfigSubscriptionNotification,
         EvUpdateTenantPoolConfig,
         EvGetLogTailRequest,
+        //
+        EvApplyConfigRequest,
+        EvAddVolatileConfigRequest,
+        EvRemoveVolatileConfigRequest,
+        EvGetAllConfigsRequest,
+        EvResolveConfigRequest,
+        EvResolveAllConfigRequest,
 
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
@@ -71,6 +81,13 @@ struct TEvConsole {
         EvConfigSubscriptionResponse,
         EvConfigSubscriptionError,
         EvGetLogTailResponse,
+        //
+        EvApplyConfigResponse,
+        EvAddVolatileConfigResponse,
+        EvRemoveVolatileConfigResponse,
+        EvGetAllConfigsResponse,
+        EvResolveConfigResponse,
+        EvResolveAllConfigResponse,
 
         EvEnd
     };
@@ -129,6 +146,40 @@ struct TEvConsole {
     struct TEvGetNodeConfigRequest : public TEventShortDebugPB<TEvGetNodeConfigRequest, NKikimrConsole::TGetNodeConfigRequest, EvGetNodeConfigRequest> {};
 
     struct TEvGetNodeConfigResponse : public TEventShortDebugPB<TEvGetNodeConfigResponse, NKikimrConsole::TGetNodeConfigResponse, EvGetNodeConfigResponse> {};
+    //////////////////////////////////////////////////
+    // NEW CONFIGS MANAGEMENT
+    //////////////////////////////////////////////////
+    struct TEvApplyConfigResponse : public TEventShortDebugPB<TEvApplyConfigResponse, NKikimrConsole::TApplyConfigResponse, EvApplyConfigResponse> {};
+
+    struct TEvApplyConfigRequest : public TEventShortDebugPB<TEvApplyConfigRequest, NKikimrConsole::TApplyConfigRequest, EvApplyConfigRequest> {
+        using TResponse = TEvApplyConfigResponse;
+    };
+
+    struct TEvAddVolatileConfigResponse : public TEventShortDebugPB<TEvAddVolatileConfigResponse, NKikimrConsole::TAddVolatileConfigResponse, EvAddVolatileConfigResponse> {};
+
+    struct TEvAddVolatileConfigRequest : public TEventShortDebugPB<TEvAddVolatileConfigRequest, NKikimrConsole::TAddVolatileConfigRequest, EvAddVolatileConfigRequest> {
+        using TResponse = TEvAddVolatileConfigResponse;
+    };
+
+    struct TEvRemoveVolatileConfigResponse : public TEventShortDebugPB<TEvRemoveVolatileConfigResponse, NKikimrConsole::TRemoveVolatileConfigResponse, EvRemoveVolatileConfigResponse> {};
+
+    struct TEvRemoveVolatileConfigRequest : public TEventShortDebugPB<TEvRemoveVolatileConfigRequest, NKikimrConsole::TRemoveVolatileConfigRequest, EvRemoveVolatileConfigRequest> {
+        using TResponse = TEvRemoveVolatileConfigResponse;
+    };
+
+    struct TEvGetAllConfigsResponse : public TEventShortDebugPB<TEvGetAllConfigsResponse, NKikimrConsole::TGetAllConfigsResponse, EvGetAllConfigsResponse> {};
+
+    struct TEvGetAllConfigsRequest : public TEventShortDebugPB<TEvGetAllConfigsRequest, NKikimrConsole::TGetAllConfigsRequest, EvGetAllConfigsRequest> {
+        using TResponse = TEvGetAllConfigsResponse;
+    };
+
+    struct TEvResolveConfigRequest : public TEventShortDebugPB<TEvResolveConfigRequest, NKikimrConsole::TResolveConfigRequest, EvResolveConfigRequest> {};
+
+    struct TEvResolveConfigResponse : public TEventShortDebugPB<TEvResolveConfigResponse, NKikimrConsole::TResolveConfigResponse, EvResolveConfigResponse> {};
+
+    struct TEvResolveAllConfigRequest : public TEventShortDebugPB<TEvResolveAllConfigRequest, NKikimrConsole::TResolveAllConfigRequest, EvResolveAllConfigRequest> {};
+
+    struct TEvResolveAllConfigResponse : public TEventShortDebugPB<TEvResolveAllConfigResponse, NKikimrConsole::TResolveAllConfigResponse, EvResolveAllConfigResponse> {};
 
     //////////////////////////////////////////////////
     // CMS MANAGEMENT
@@ -180,7 +231,9 @@ struct TEvConsole {
 
     struct TEvReplaceConfigSubscriptionsResponse : public TEventShortDebugPB<TEvReplaceConfigSubscriptionsResponse, NKikimrConsole::TReplaceConfigSubscriptionsResponse, EvReplaceConfigSubscriptionsResponse> {};
 
-    struct TEvConfigNotificationRequest : public TEventShortDebugPB<TEvConfigNotificationRequest, NKikimrConsole::TConfigNotificationRequest, EvConfigNotificationRequest> {};
+    struct TEvConfigNotificationRequest : public TEventShortDebugPB<TEvConfigNotificationRequest, NKikimrConsole::TConfigNotificationRequest, EvConfigNotificationRequest> {
+        const NKikimrConfig::TAppConfig& GetConfig() const { return Record.GetConfig(); }
+    };
 
     struct TEvConfigNotificationResponse : public TEventShortDebugPB<TEvConfigNotificationResponse, NKikimrConsole::TConfigNotificationResponse, EvConfigNotificationResponse> {
         TEvConfigNotificationResponse() {}
@@ -227,20 +280,48 @@ struct TEvConsole {
     struct TEvConfigSubscriptionNotification : public TEventShortDebugPB<TEvConfigSubscriptionNotification, NKikimrConsole::TConfigSubscriptionNotification, EvConfigSubscriptionNotification> {
         TEvConfigSubscriptionNotification() = default;
 
-        TEvConfigSubscriptionNotification(ui64 generation, NKikimrConfig::TAppConfig &&config, const THashSet<ui32> &affectedKinds)
+        TEvConfigSubscriptionNotification(
+            ui64 generation,
+            NKikimrConfig::TAppConfig &&config,
+            const THashSet<ui32> &affectedKinds,
+            const TString &yamlConfig = {},
+            const TMap<ui64, TString> &volatileYamlConfigs = {})
         {
             Record.SetGeneration(generation);
             Record.MutableConfig()->Swap(&config);
             for (ui32 kind : affectedKinds)
                 Record.AddAffectedKinds(kind);
+
+            if (!yamlConfig.empty()) {
+                Record.SetYamlConfig(yamlConfig);
+                for (auto &[id, config] : volatileYamlConfigs) {
+                    auto *volatileConfig = Record.AddVolatileConfigs();
+                    volatileConfig->SetId(id);
+                    volatileConfig->SetConfig(config);
+                }
+            }
         }
 
-        TEvConfigSubscriptionNotification(ui64 generation, const NKikimrConfig::TAppConfig &config, const THashSet<ui32> &affectedKinds)
+        TEvConfigSubscriptionNotification(
+            ui64 generation,
+            const NKikimrConfig::TAppConfig &config,
+            const THashSet<ui32> &affectedKinds,
+            const TString &yamlConfig = {},
+            const TMap<ui64, TString> &volatileYamlConfigs = {})
         {
             Record.SetGeneration(generation);
             Record.MutableConfig()->CopyFrom(config);
             for (ui32 kind : affectedKinds)
                 Record.AddAffectedKinds(kind);
+
+            if (!yamlConfig.empty()) {
+                Record.SetYamlConfig(yamlConfig);
+                for (auto &[id, config] : volatileYamlConfigs) {
+                    auto *volatileConfig = Record.AddVolatileConfigs();
+                    volatileConfig->SetId(id);
+                    volatileConfig->SetConfig(config);
+                }
+            }
         }
     };
 

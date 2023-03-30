@@ -282,18 +282,13 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAttachColumnShardWrites::T
     }
 
     for (const auto& write : msg->Record.GetWrites()) {
-        ui64 shardId = write.GetColumnShard();
-        ui64 writeId = write.GetWriteId();
+        const ui64 shardId = write.GetColumnShard();
+        const ui64 writeId = write.GetWriteId();
         auto it = tx.ColumnShardWrites.find(shardId);
         if (it == tx.ColumnShardWrites.end()) {
-            tx.ColumnShardWrites[shardId] = writeId;
-            continue;
+            it = tx.ColumnShardWrites.emplace(shardId, TTransaction::TShardWriteIds()).first;
         }
-        if (it->second == writeId) {
-            continue;
-        }
-        return SendReply(ERequestType::AttachColumnShardWrites, ev->Sender, ev->Cookie,
-            Ydb::StatusIds::GENERIC_ERROR, "Shard write id change detected, transaction may be broken");
+        it->second.emplace_back(writeId);
     }
 
     Send(ev->Sender, new TEvLongTxService::TEvAttachColumnShardWritesResult(Ydb::StatusIds::SUCCESS), 0, ev->Cookie);

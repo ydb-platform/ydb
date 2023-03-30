@@ -22,10 +22,10 @@
 
 namespace NKikimr::NCms {
 
-template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false>
-class TJsonProxyBase : public TActorBootstrapped<TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken>> {
+template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false, bool UseNested = false>
+class TJsonProxyBase : public TActorBootstrapped<TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken, UseNested>> {
 private:
-    using TBase = TActorBootstrapped<TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken>>;
+    using TBase = TActorBootstrapped<TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken, UseNested>>;
 
 protected:
     using TRequest = TRequestEvent;
@@ -165,14 +165,18 @@ protected:
     void Timeout(const TActorContext& ctx)
     {
         typename TResponseEvent::ProtoRecordType rec;
-        SetTempError(*rec.MutableStatus(), "Request timeout.");
+        if constexpr (!UseNested) {
+            SetTempError(*rec.MutableStatus(), "Request timeout.");
+        }
         ReplyAndDie(rec, ctx);
     }
 
     void Disconnect(const TActorContext& ctx)
     {
         typename TResponseEvent::ProtoRecordType rec;
-        SetTempError(*rec.MutableStatus(), GetTabletName() + " disconnected.");
+        if constexpr (!UseNested) {
+            SetTempError(*rec.MutableStatus(), GetTabletName() + " disconnected.");
+        }
         ReplyAndDie(rec, ctx);
     }
 
@@ -180,7 +184,9 @@ protected:
     {
         if (ev->Get()->Status != NKikimrProto::OK) {
             typename TResponseEvent::ProtoRecordType rec;
-            SetTempError(*rec.MutableStatus(), GetTabletName() + " is unavailable.");
+            if constexpr (!UseNested) {
+                SetTempError(*rec.MutableStatus(), GetTabletName() + " is unavailable.");
+            }
             ReplyAndDie(rec, ctx);
         }
     }
@@ -189,14 +195,14 @@ protected:
     TActorId Pipe;
 };
 
-template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false>
-class TJsonProxy : public TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken> {
+template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false, bool UseNested = false>
+class TJsonProxy : public TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken, UseNested> {
 private:
-    using TBase = TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken>;
+    using TBase = TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken, UseNested>;
 
 public:
     TJsonProxy(NMon::TEvHttpInfo::TPtr &event)
-        : TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken>(event)
+        : TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken, UseNested>(event)
     {
     }
 
@@ -218,11 +224,11 @@ public:
     }
 };
 
-template <typename TRequestEvent, typename TResponseEvent, bool useConsole, bool ForwardToken = false>
-class TJsonProxyCmsBase : public TJsonProxy<TRequestEvent, TResponseEvent, ForwardToken> {
+template <typename TRequestEvent, typename TResponseEvent, bool useConsole, bool ForwardToken = false, bool UseNested = false>
+class TJsonProxyCmsBase : public TJsonProxy<TRequestEvent, TResponseEvent, ForwardToken, UseNested> {
 public:
     TJsonProxyCmsBase(NMon::TEvHttpInfo::TPtr &event)
-        : TJsonProxy<TRequestEvent, TResponseEvent, ForwardToken>(event)
+        : TJsonProxy<TRequestEvent, TResponseEvent, ForwardToken, UseNested>(event)
     {
     }
 
@@ -242,7 +248,7 @@ public:
 template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false>
 using TJsonProxyCms = TJsonProxyCmsBase<TRequestEvent, TResponseEvent, false, ForwardToken>;
 
-template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false>
-using TJsonProxyConsole = TJsonProxyCmsBase<TRequestEvent, TResponseEvent, true, ForwardToken>;
+template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false, bool UseNested = false>
+using TJsonProxyConsole = TJsonProxyCmsBase<TRequestEvent, TResponseEvent, true, ForwardToken, UseNested>;
 
 } // namespace NKikimr::NCms

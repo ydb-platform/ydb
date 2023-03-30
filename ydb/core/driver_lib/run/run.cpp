@@ -83,6 +83,7 @@
 
 #include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
+#include <ydb/services/console/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/fq/grpc_service.h>
@@ -808,6 +809,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasCms) {
             server.AddService(new NGRpcService::TGRpcCmsService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasCms.IsRlAllowed()));
+
+            server.AddService(new NGRpcService::TGRpcConsoleService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasCms.IsRlAllowed()));
         }
 

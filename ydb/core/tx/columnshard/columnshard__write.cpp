@@ -55,7 +55,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         if (record.HasLongTxId()) {
             Y_VERIFY(metaShard == 0);
             auto longTxId = NLongTxService::TLongTxId::FromProto(record.GetLongTxId());
-            writeId = (ui64)Self->GetLongTxWrite(db, longTxId);
+            writeId = (ui64)Self->GetLongTxWrite(db, longTxId, record.GetWritePartId());
         }
 
         ui64 writeUnixTime = meta.GetDirtyWriteTimeSeconds();
@@ -198,7 +198,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         if (record.HasLongTxId()) {
             // TODO: multiple blobs in one longTx ({longTxId, dedupId} -> writeId)
             auto longTxId = NLongTxService::TLongTxId::FromProto(record.GetLongTxId());
-            if (ui64 writeId = (ui64)HasLongTxWrite(longTxId)) {
+            if (ui64 writeId = (ui64)HasLongTxWrite(longTxId, record.GetWritePartId())) {
                 LOG_S_DEBUG("Write (duplicate) into pathId " << tableId
                     << " longTx " << longTxId.ToString()
                     << " at tablet " << TabletID());

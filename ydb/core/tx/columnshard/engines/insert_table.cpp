@@ -196,8 +196,8 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, ui64 plan, ui64 txId
     std::vector<TCommittedBlob> ret;
     ret.reserve(committed->size());
 
-    for (auto& data : *committed) {
-        if (snapLessOrEqual(data.ShardOrPlan, data.WriteTxId, plan, txId)) {
+    for (const auto& data : *committed) {
+        if (SnapLessOrEqual(data.ShardOrPlan, data.WriteTxId, plan, txId)) {
             ret.emplace_back(TCommittedBlob{data.BlobId, data.ShardOrPlan, data.WriteTxId});
         }
     }

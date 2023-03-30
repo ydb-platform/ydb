@@ -33,8 +33,9 @@ namespace NLongTxService {
             TLongTxId TxId;
             TString DatabaseName;
             ETxState State = ETxState::Uninitialized;
-            // Maps column shards to known write ids
-            THashMap<ui64, ui64> ColumnShardWrites;
+            // Maps column shards to known write ids by partId
+            using TShardWriteIds = std::vector<ui64>;
+            THashMap<ui64, TShardWriteIds> ColumnShardWrites;
             // A list of currently known committers
             TVector<TSenderId> Committers;
             // The currently running commit actor

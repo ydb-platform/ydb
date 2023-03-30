@@ -723,80 +723,6 @@ TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) {
     return out;
 }
 
-ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    if (!batch) {
-        return 0;
-    }
-    ui64 bytes = 0;
-    for (auto& column : batch->columns()) { // TODO: use column_data() instead of columns()
-        bytes += GetArrayDataSize(column);
-    }
-    return bytes;
-}
-
-template <typename TType>
-ui64 GetArrayDataSizeImpl(const std::shared_ptr<arrow::Array>& column) {
-    return sizeof(typename TType::c_type) * column->length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::NullType>(const std::shared_ptr<arrow::Array>& column) {
-    return column->length() * 8; // Special value for empty lines
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::StringType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::StringArray>(column);
-    return typedColumn->total_values_length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::LargeStringType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::StringArray>(column);
-    return typedColumn->total_values_length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::BinaryType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::BinaryArray>(column);
-    return typedColumn->total_values_length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::LargeBinaryType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::BinaryArray>(column);
-    return typedColumn->total_values_length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::FixedSizeBinaryType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
-    return typedColumn->byte_width() * typedColumn->length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::Decimal128Type>(const std::shared_ptr<arrow::Array>& column) {
-    return sizeof(ui64) * 2 * column->length();
-}
-
-ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
-    auto type = column->type();
-    ui64 bytes = 0;
-    bool success = SwitchTypeWithNull(type->id(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-        Y_UNUSED(typeHolder);
-        bytes = GetArrayDataSizeImpl<TType>(column);
-        return true;
-    });
-
-    // Add null bit mask overhead if any.
-    if (HasNulls(column)) {
-        bytes += column->length() / 8 + 1;
-    }
-
-    Y_VERIFY_DEBUG(success, "Unsupported arrow type %s", type->ToString().data());
-    return bytes;
-}
-
 i64 LowerBound(const std::shared_ptr<arrow::Array>& array, const arrow::Scalar& border, i64 offset) {
     i64 pos = 0;
     SwitchType(array->type_id(), [&](const auto& type) {
@@ -1245,15 +1171,24 @@ std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::
 static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<arrow::Array>& column,
                                                    NScheme::TTypeInfo colType) {
     switch (colType.GetTypeId()) {
+        case NScheme::NTypeIds::Bytes: {
+            Y_VERIFY(column->type()->id() == arrow::Type::STRING);
+            return std::make_shared<arrow::BinaryArray>(column->data());
+        }
+        case NScheme::NTypeIds::Date: {
+            Y_VERIFY(arrow::is_primitive(column->type()->id()));
+            Y_VERIFY(arrow::bit_width(column->type()->id()) == 16);
+            return std::make_shared<arrow::NumericArray<arrow::UInt16Type>>(column->data());
+        }
+        case NScheme::NTypeIds::Datetime: {
+            Y_VERIFY(arrow::is_primitive(column->type()->id()));
+            Y_VERIFY(arrow::bit_width(column->type()->id()) == 32);
+            return std::make_shared<arrow::NumericArray<arrow::Int32Type>>(column->data());
+        }
         case NScheme::NTypeIds::Timestamp: {
             Y_VERIFY(arrow::is_primitive(column->type()->id()));
             Y_VERIFY(arrow::bit_width(column->type()->id()) == 64);
             return std::make_shared<arrow::TimestampArray>(column->data());
-        }
-        case NScheme::NTypeIds::Date: {
-            Y_VERIFY(arrow::is_primitive(column->type()->id()));
-            Y_VERIFY(arrow::bit_width(column->type()->id()) == 32);
-            return std::make_shared<arrow::Date32Array>(column->data());
         }
         default:
             return {};
@@ -1277,6 +1212,44 @@ std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<
     auto convertedBatch = arrow::RecordBatch::Make(resultSchemaFixed, batch->num_rows(), columns);
     Y_VERIFY(convertedBatch->ValidateFull() == arrow::Status::OK());
     return convertedBatch;
+}
+
+bool TArrowToYdbConverter::NeedDataConversion(const NScheme::TTypeInfo& colType) {
+    switch (colType.GetTypeId()) {
+        case NScheme::NTypeIds::DyNumber:
+        case NScheme::NTypeIds::JsonDocument:
+        case NScheme::NTypeIds::Decimal:
+            return true;
+        default:
+            break;
+    }
+    return false;
+}
+
+bool TArrowToYdbConverter::NeedInplaceConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
+    switch (expectedType.GetTypeId()) {
+        case NScheme::NTypeIds::Bytes:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
+        case NScheme::NTypeIds::Date:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Uint16;
+        case NScheme::NTypeIds::Datetime:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int32;
+        case NScheme::NTypeIds::Timestamp:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int64;
+        default:
+            break;
+    }
+    return false;
+}
+
+bool TArrowToYdbConverter::NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
+    switch (expectedType.GetTypeId()) {
+        case NScheme::NTypeIds::JsonDocument:
+            return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
+        default:
+            break;
+    }
+    return false;
 }
 
 bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& errorMessage) {

@@ -6,6 +6,8 @@
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
+#include <unordered_set>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -14,6 +16,63 @@ using namespace NYql::NNodes;
 namespace {
 
 static TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
+
+static const std::unordered_set<std::string> SecondLevelFilters = {
+    "string_contains",
+    "starts_with",
+    "ends_with"
+};
+
+struct TFilterOpsLevels {
+    TFilterOpsLevels(const TMaybeNode<TExprBase>& firstLevel, const TMaybeNode<TExprBase>& secondLevel)
+        : FirstLevelOps(firstLevel)
+        , SecondLevelOps(secondLevel)
+    {}
+
+    TFilterOpsLevels(const TMaybeNode<TExprBase>& predicate)
+        : FirstLevelOps(predicate)
+        , SecondLevelOps(NullNode)
+    {
+        if (IsSecondLevelOp(predicate)) {
+            FirstLevelOps = NullNode;
+            SecondLevelOps = predicate;
+        }
+    }
+
+    bool IsValid() {
+        return FirstLevelOps.IsValid() || SecondLevelOps.IsValid();
+    }
+
+    bool IsSecondLevelOp(const TMaybeNode<TExprBase>& predicate) {
+        if (auto maybeCompare = predicate.Maybe<TKqpOlapFilterCompare>()) {
+            auto op = maybeCompare.Cast().Operator().StringValue();
+            if (SecondLevelFilters.find(op) != SecondLevelFilters.end()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void WrapToNotOp(TExprContext& ctx, TPositionHandle pos) {
+        if (FirstLevelOps.IsValid()) {
+            FirstLevelOps = Build<TKqpOlapNot>(ctx, pos)
+                .Value(FirstLevelOps.Cast())
+                .Done();
+        }
+
+        if (SecondLevelOps.IsValid()) {
+            SecondLevelOps = Build<TKqpOlapNot>(ctx, pos)
+                .Value(SecondLevelOps.Cast())
+                .Done();
+        }
+    }
+
+
+    TMaybeNode<TExprBase> FirstLevelOps;
+    TMaybeNode<TExprBase> SecondLevelOps;
+};
+
+static TFilterOpsLevels NullFilterOpsLevels = TFilterOpsLevels(NullNode, NullNode);
 
 bool IsFalseLiteral(TExprBase node) {
     return node.Maybe<TCoBool>() && !FromString<bool>(node.Cast<TCoBool>().Literal().Value());
@@ -329,70 +388,88 @@ TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, TExprContext
     return NullNode;
 }
 
-TMaybeNode<TExprBase> PredicatePushdown(const TExprBase& predicate, TExprContext& ctx, TPositionHandle pos)
+TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, TExprContext& ctx, TPositionHandle pos)
 {
     auto maybeCoalesce = predicate.Maybe<TCoCoalesce>();
     if (maybeCoalesce.IsValid()) {
-        return CoalescePushdown(maybeCoalesce.Cast(), ctx, pos);
+        auto coalescePred = CoalescePushdown(maybeCoalesce.Cast(), ctx, pos);
+        return TFilterOpsLevels(coalescePred);
     }
 
     auto maybeExists = predicate.Maybe<TCoExists>();
     if (maybeExists.IsValid()) {
-        return ExistsPushdown(maybeExists.Cast(), ctx, pos);
+        auto existsPred = ExistsPushdown(maybeExists.Cast(), ctx, pos);
+        return TFilterOpsLevels(existsPred);
     }
 
     auto maybePredicate = predicate.Maybe<TCoCompare>();
     if (maybePredicate.IsValid()) {
-        return SimplePredicatePushdown(maybePredicate.Cast(), ctx, pos);
+        auto pred = SimplePredicatePushdown(maybePredicate.Cast(), ctx, pos);
+        return TFilterOpsLevels(pred);
     }
 
     if (predicate.Maybe<TCoNot>()) {
         auto notNode = predicate.Cast<TCoNot>();
-        auto pushedNot = PredicatePushdown(notNode.Value(), ctx, pos);
-
-        if (!pushedNot.IsValid()) {
-            return NullNode;
-        }
-
-        return Build<TKqpOlapNot>(ctx, pos)
-            .Value(pushedNot.Cast())
-            .Done();
+        auto pushedFilters = PredicatePushdown(notNode.Value(), ctx, pos);
+        pushedFilters.WrapToNotOp(ctx, pos);
+        return pushedFilters;
     }
 
     if (!predicate.Maybe<TCoAnd>() && !predicate.Maybe<TCoOr>() && !predicate.Maybe<TCoXor>()) {
-        return NullNode;
+        return NullFilterOpsLevels;
     }
 
-    TVector<TExprBase> pushedOps;
-    pushedOps.reserve(predicate.Ptr()->ChildrenSize());
+    TVector<TExprBase> firstLvlOps;
+    TVector<TExprBase> secondLvlOps;
+    firstLvlOps.reserve(predicate.Ptr()->ChildrenSize());
+    secondLvlOps.reserve(predicate.Ptr()->ChildrenSize());
 
     for (auto& child: predicate.Ptr()->Children()) {
         auto pushedChild = PredicatePushdown(TExprBase(child), ctx, pos);
 
         if (!pushedChild.IsValid()) {
-            return NullNode;
+            return NullFilterOpsLevels;
         }
 
-        pushedOps.emplace_back(pushedChild.Cast());
+        if (pushedChild.FirstLevelOps.IsValid()) {
+            firstLvlOps.emplace_back(pushedChild.FirstLevelOps.Cast());
+        }
+        if (pushedChild.SecondLevelOps.IsValid()) {
+            secondLvlOps.emplace_back(pushedChild.SecondLevelOps.Cast());
+        }
     }
 
     if (predicate.Maybe<TCoAnd>()) {
-        return Build<TKqpOlapAnd>(ctx, pos)
-            .Add(pushedOps)
-            .Done();
+        auto firstLvl = NullNode;
+        if (!firstLvlOps.empty()) {
+            firstLvl = Build<TKqpOlapAnd>(ctx, pos)
+                .Add(firstLvlOps)
+                .Done();
+        }
+        auto secondLvl = NullNode;
+        if (!secondLvlOps.empty()) {
+            secondLvl = Build<TKqpOlapAnd>(ctx, pos)
+                .Add(secondLvlOps)
+                .Done();
+        }
+        return TFilterOpsLevels(firstLvl, secondLvl);
     }
 
     if (predicate.Maybe<TCoOr>()) {
-        return Build<TKqpOlapOr>(ctx, pos)
-            .Add(pushedOps)
+        auto ops = Build<TKqpOlapOr>(ctx, pos)
+            .Add(firstLvlOps)
+            .Add(secondLvlOps)
             .Done();
+        return TFilterOpsLevels(ops, NullNode);
     }
 
     Y_VERIFY_DEBUG(predicate.Maybe<TCoXor>());
 
-    return Build<TKqpOlapXor>(ctx, pos)
-        .Add(pushedOps)
+    auto ops = Build<TKqpOlapXor>(ctx, pos)
+        .Add(firstLvlOps)
+        .Add(secondLvlOps)
         .Done();
+    return TFilterOpsLevels(ops, NullNode);
 }
 
 void SplitForPartialPushdown(const TPredicateNode& predicateTree, TPredicateNode& predicatesToPush, TPredicateNode& remainingPredicates,
@@ -476,18 +553,28 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     YQL_ENSURE(predicatesToPush.IsValid(), "Predicates to push is invalid");
     YQL_ENSURE(remainingPredicates.IsValid(), "Remaining predicates is invalid");
 
-    auto pushedPredicate = PredicatePushdown(predicatesToPush.ExprNode.Cast(), ctx, node.Pos());
-    YQL_ENSURE(pushedPredicate.IsValid(), "Pushed predicate should be always valid!");
+    auto pushedFilters = PredicatePushdown(predicatesToPush.ExprNode.Cast(), ctx, node.Pos());
+    YQL_ENSURE(pushedFilters.IsValid(), "Pushed predicate should be always valid!");
 
-    auto olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
-        .Input(read.Process().Body())
-        .Condition(pushedPredicate.Cast())
-        .Done();
+    TMaybeNode<TExprBase> olapFilter;
+    if (pushedFilters.FirstLevelOps.IsValid()) {
+        olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
+            .Input(read.Process().Body())
+            .Condition(pushedFilters.FirstLevelOps.Cast())
+            .Done();
+    }
+
+    if (pushedFilters.SecondLevelOps.IsValid()) {
+        olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
+            .Input(olapFilter.IsValid() ? olapFilter.Cast() : read.Process().Body())
+            .Condition(pushedFilters.SecondLevelOps.Cast())
+            .Done();
+    }
 
     auto newProcessLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"olap_filter_row"})
         .Body<TExprApplier>()
-            .Apply(olapFilter)
+            .Apply(olapFilter.Cast())
             .With(read.Process().Args().Arg(0), "olap_filter_row")
             .Build()
         .Done();

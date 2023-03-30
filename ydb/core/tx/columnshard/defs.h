@@ -18,6 +18,9 @@ struct TLimits {
     static constexpr const ui64 MAX_BYTES_TO_INSERT = 16 * 1024 * 1024;
     static constexpr const ui32 MAX_TX_RECORDS = 100000;
 
+    static ui64 GetBlobSizeForSplit();
+    static void SetBlobSizeForSplit(const ui64 value);
+
     TControlWrapper MinInsertBytes;
     TControlWrapper MaxInsertBytes;
     TControlWrapper InsertTableSize;

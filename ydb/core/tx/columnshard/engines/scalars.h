@@ -1,6 +1,9 @@
 #pragma once
+
 #include "defs.h"
+
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
 namespace NKikimr::NOlap {
 

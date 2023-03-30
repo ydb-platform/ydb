@@ -1418,7 +1418,7 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
         auto row = db.Table<Schema::NodeTenant>().Key(nodeId);
         row.Update(NIceDb::TUpdate<Schema::NodeTenant::Tenant>(tenant));
 
-        LOG_NOTICE(ctx, NKikimrServices::CMS,
+        LOG_TRACE(ctx, NKikimrServices::CMS,
                   "Persist node %" PRIu32 " tenant '%s'",
                   nodeId, tenant.data());
     }

@@ -229,21 +229,23 @@ struct TEvColumnShard {
         TEvWrite() = default;
 
         TEvWrite(const TActorId& source, ui64 metaShard, ui64 writeId, ui64 tableId,
-                 const TString& dedupId, const TString& data) {
+                 const TString& dedupId, const TString& data, const ui32 writePartId) {
             ActorIdToProto(source, Record.MutableSource());
             Record.SetTxInitiator(metaShard);
             Record.SetWriteId(writeId);
             Record.SetTableId(tableId);
             Record.SetDedupId(dedupId);
             Record.SetData(data);
+            Record.SetWritePartId(writePartId);
         }
 
         TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, ui64 tableId,
-                 const TString& dedupId, const TString& data) {
+                 const TString& dedupId, const TString& data, const ui32 writePartId) {
             ActorIdToProto(source, Record.MutableSource());
             Record.SetTableId(tableId);
             Record.SetDedupId(dedupId);
             Record.SetData(data);
+            Record.SetWritePartId(writePartId);
             longTxId.ToProto(Record.MutableLongTxId());
         }
 

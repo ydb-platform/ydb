@@ -1661,6 +1661,9 @@ private:
             addLock->SetCounter(lock.Counter);
             addLock->SetSchemeShard(lock.SchemeShard);
             addLock->SetPathId(lock.PathId);
+            if (lock.HasWrites) {
+                addLock->SetHasWrites(true);
+            }
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
                 << " Acquired lock# " << lock.LockId << ", counter# " << lock.Counter

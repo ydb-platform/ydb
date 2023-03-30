@@ -216,6 +216,7 @@ class SerializabilityChecker(object):
         self.nodes[0] = self.initial_node
         self.committed = set()
         self.committed.add(self.initial_node)
+        self.observed_commits = set()
         self.aborted = set()
 
         self._next_value = 1
@@ -361,12 +362,15 @@ class SerializabilityChecker(object):
         """For node ensures that it reads key/value pair correctly"""
         assert key in self.keys, 'Key %r was not prepared properly' % (key,)
         write = self.find_node(value)
-        assert key in write.writes, 'Key %r was not in write set for value %r' % (key, value)
+        if key not in write.writes:
+            raise SerializabilityError('Node %r observes key %r = %r which was not written' % (node.value, key, value))
         assert key not in node.reads or node.reads[key] is write, 'Key %r has multiple conflicting reads' % (key,)
         node.reads[key] = write
         if self.explain:
             self._add_reason(Reason.Observed(key, write.value, node.value))
         node.dependencies.add(write)
+        # We observed this write, so it must be committed
+        self.observed_commits.add(write)
 
     def ensure_write_value(self, node, key):
         """For node ensure that it writes key/value pair correctly"""
@@ -389,7 +393,29 @@ class SerializabilityChecker(object):
         self.committed.add(node)
 
     def abort(self, node):
-        self.aborted.add(node)
+        if node.reads:
+            # We want to check reads are correct even in aborted transactions
+            # To do that we pretend like we committed a readonly tx
+            #
+            # This assumes linearizable dependencies (calculated before tx is
+            # started) are correct, which is true for ydb since successful
+            # reads imply interactivity, and interactive transactions take a
+            # global snapshot, linearizing with everything.
+            for key in node.writes:
+                assert key in self.keys
+                info = self.keys[key]
+                del info.writes[node.value]
+            node.writes.clear()
+            self.commit(node)
+        else:
+            self.aborted.add(node)
+
+    def _process_observed_commits(self):
+        """Makes sure all observed nodes are in a committed set"""
+        for node in self.observed_commits:
+            if node in self.aborted or not node.writes:
+                raise SerializabilityError('Node %r was aborted but observed committed' % (node.value,))
+            self.committed.add(node)
 
     def _extend_committed(self):
         """Makes sure all nodes reachable from committed set are in a committed set"""
@@ -660,6 +686,7 @@ class SerializabilityChecker(object):
             self.logger.warning('WARNING: found some unexpected indirect dependencies')
 
     def verify(self):
+        self._process_observed_commits()
         self._extend_committed()
         self._flatten_dependencies()
         self._fill_reverse_dependencies()

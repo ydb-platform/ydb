@@ -122,7 +122,6 @@ class TestExecuteQueryWithParams(BaseTestTableService):
                 "FROM (SELECT $values AS lst) FLATTEN BY lst AS Table;"
         output = self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "--param",
                                                "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]"])
-        raise RuntimeError()
         return self.canonical_result(output)
 
     def test_scan_query_with_parameters(self):

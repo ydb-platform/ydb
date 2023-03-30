@@ -180,17 +180,7 @@ public:
             }
 
             if (auto* x = ScanData->ProfileStats.get()) {
-                NKqpProto::TKqpScanTableExtraStats tableExtraStats;
-                // protoScanStats->SetIScanStartTimeMs()
-                // protoScanStats->SetIScanFinishTimeMs();
-                tableExtraStats.SetIScanCpuTimeUs(x->ScanCpuTime.MicroSeconds());
-                tableExtraStats.SetIScanWaitTimeUs(x->ScanWaitTime.MicroSeconds());
-                tableExtraStats.SetIScanPageFaults(x->PageFaults);
-
-                tableExtraStats.SetMessages(x->Messages);
-                tableExtraStats.SetMessagesByPageFault(x->MessagesByPageFault);
-
-                tableStats->MutableExtra()->PackFrom(tableExtraStats);
+                // save your profile stats here
             }
         }
     }

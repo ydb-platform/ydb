@@ -1,6 +1,10 @@
 #pragma once
+
 #include "defs.h"
 #include "scalars.h"
+
+#include <ydb/core/formats/arrow_helpers.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 
 namespace NKikimr::NOlap {
 

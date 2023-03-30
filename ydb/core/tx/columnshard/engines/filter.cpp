@@ -1,6 +1,7 @@
-#include "defs.h"
 #include "filter.h"
+#include "defs.h"
 #include "indexed_read_data.h"
+
 #include <ydb/core/formats/arrow_helpers.h>
 #include <ydb/core/formats/custom_registry.h>
 
@@ -17,8 +18,8 @@ void TFilteredBatch::ApplyFilter() {
     Filter.clear();
 }
 
-std::vector<bool> MakeSnapshotFilter(std::shared_ptr<arrow::RecordBatch> batch,
-                                     std::shared_ptr<arrow::Schema> snapSchema,
+std::vector<bool> MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                     const std::shared_ptr<arrow::Schema>& snapSchema,
                                      ui64 planStep, ui64 txId) {
     Y_VERIFY(batch);
     Y_VERIFY(snapSchema);
@@ -39,7 +40,7 @@ std::vector<bool> MakeSnapshotFilter(std::shared_ptr<arrow::RecordBatch> batch,
         const auto* rawIds = std::static_pointer_cast<arrow::UInt64Array>(ids)->raw_values();
 
         for (int i = 0; i < steps->length(); ++i) {
-            bool value = snapLessOrEqual(rawSteps[i], rawIds[i], planStep, txId);
+            bool value = SnapLessOrEqual(rawSteps[i], rawIds[i], planStep, txId);
             alwaysTrue = alwaysTrue && value;
             bits.push_back(value);
         }
@@ -52,7 +53,7 @@ std::vector<bool> MakeSnapshotFilter(std::shared_ptr<arrow::RecordBatch> batch,
     return bits;
 }
 
-std::vector<bool> MakeReplaceFilter(std::shared_ptr<arrow::RecordBatch> batch,
+std::vector<bool> MakeReplaceFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
                                     THashSet<NArrow::TReplaceKey>& keys) {
     bool alwaysTrue = true;
     std::vector<bool> bits;
@@ -78,7 +79,7 @@ std::vector<bool> MakeReplaceFilter(std::shared_ptr<arrow::RecordBatch> batch,
     return bits;
 }
 
-std::vector<bool> MakeReplaceFilterLastWins(std::shared_ptr<arrow::RecordBatch> batch,
+std::vector<bool> MakeReplaceFilterLastWins(const std::shared_ptr<arrow::RecordBatch>& batch,
                                             THashSet<NArrow::TReplaceKey>& keys) {
     if (!batch->num_rows()) {
         return {};
@@ -136,7 +137,7 @@ TFilteredBatch FilterPortion(const std::shared_ptr<arrow::RecordBatch>& portion,
     if (filter.size() && !numRows) {
         return {};
     }
-    return TFilteredBatch{portion, filter};
+    return TFilteredBatch{portion, std::move(filter)};
 }
 
 TFilteredBatch FilterNotIndexed(const std::shared_ptr<arrow::RecordBatch>& batch, const TReadMetadata& readMetadata) {

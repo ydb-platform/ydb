@@ -1,6 +1,9 @@
 #pragma once
+
 #include "defs.h"
 #include "db_wrapper.h"
+
+#include <ydb/core/tx/columnshard/blob.h>
 
 namespace NKikimr::NOlap {
 

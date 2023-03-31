@@ -1184,8 +1184,8 @@ TExprNode::TPtr OptimizeToOptional(const TExprNode::TPtr& node, TExprContext& ct
     }
 
     if constexpr (!OrderAware) {
-        if (node->Head().GetConstraint<TSortedConstraintNode>()) {
-            YQL_CLOG(DEBUG, Core) << node->Content() << " over sorted collection";
+        if (const auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << node->Head().Content();
             return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
         }
     }
@@ -3365,6 +3365,13 @@ TExprNode::TPtr BuildJsonCompilePath(const TCoJsonQueryBase& jsonExpr, TExprCont
 
 template<bool Ordered>
 TExprNode::TPtr CanonizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if constexpr (!Ordered) {
+        if (const auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << node->Head().Content();
+            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
+        }
+    }
+
     YQL_CLOG(DEBUG, Core) << "Canonize " << node->Content() << " of width " << node->Tail().ChildrenSize() - 1U;
     return ctx.Builder(node->Pos())
         .Callable(Ordered ? "OrderedFlatMap" : "FlatMap")
@@ -3646,6 +3653,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Filter"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (const auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << node->Head().Content();
+            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
+        }
+
         YQL_CLOG(DEBUG, Core) << "Canonize " << node->Content();
         return ConvertFilterToFlatmap<TCoFilter, TCoFlatMap>(TCoFilter(node), ctx, optCtx);
     };
@@ -3656,6 +3668,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Map"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (const auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << node->Head().Content();
+            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
+        }
+
         YQL_CLOG(DEBUG, Core) << "Canonize " << node->Content();
         return ConvertMapToFlatmap<TCoMap, TCoFlatMap>(TCoMap(node), ctx);
     };
@@ -4527,7 +4544,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 .Callable("Take")
                     .Add(0, node->Head().HeadPtr())
                     .Callable(1, "Uint64")
-                        .Atom(0, "1", TNodeFlags::Default)
+                        .Atom(0, 1U)
                     .Seal()
                 .Seal()
                 .Build();
@@ -6654,17 +6671,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         if (node->Head().IsCallable("PgConst")) {
-            auto name = node->Head().GetTypeAnn()->Cast<TPgExprType>()->GetName();
+            const auto name = node->Head().GetTypeAnn()->Cast<TPgExprType>()->GetName();
             if (name == "bool") {
-                auto value = node->Head().Head().Content();
-                if (value.StartsWith('t') || value.StartsWith('f')) {
-                    return ctx.Builder(node->Pos())
-                        .Callable("Just")
-                            .Callable(0, "Bool")
-                                .Atom(0, (value[0] == 't') ? "1" : "0")
-                            .Seal()
-                        .Seal()
-                        .Build();
+                const auto value = node->Head().Head().Content();
+                if (value.starts_with('t') || value.starts_with('f')) {
+                    return MakeOptionalBool(node->Pos(), value.front() == 't', ctx);
                 }
             }
         }

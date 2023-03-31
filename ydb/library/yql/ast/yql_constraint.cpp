@@ -93,6 +93,18 @@ const TConstraintNode* TConstraintSet::RemoveConstraint(std::string_view name) {
     return res;
 }
 
+void TConstraintSet::Out(IOutputStream& out) const {
+    out.Write('{');
+    bool first = true;
+    for (const auto& c: Constraints_) {
+        if (!first)
+            out.Write(',');
+        out << *c;
+        first = false;
+    }
+    out.Write('}');
+}
+
 void TConstraintSet::ToJson(NJson::TJsonWriter& writer) const {
     writer.OpenMap();
     for (const auto& node : Constraints_) {
@@ -1823,6 +1835,11 @@ void Out<NYql::TConstraintNode::TPathType>(IOutputStream& out, const NYql::TCons
 template<>
 void Out<NYql::TConstraintNode>(IOutputStream& out, const NYql::TConstraintNode& c) {
     c.Out(out);
+}
+
+template<>
+void Out<NYql::TConstraintSet>(IOutputStream& out, const NYql::TConstraintSet& s) {
+    s.Out(out);
 }
 
 template<>

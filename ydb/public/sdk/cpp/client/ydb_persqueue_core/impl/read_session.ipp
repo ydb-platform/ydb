@@ -6,6 +6,8 @@
 #include "persqueue_impl.h"
 #include "common.h"
 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -256,7 +258,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
     std::function<void(bool)> connectTimeoutCallback;
 
     if (!status.Ok()) {
-        Log.Write(TLOG_INFO, GetLogPrefix() << "Got error. Status: " << status.Status
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got error. Status: " << status.Status
                                             << ". Description: " << IssuesSingleLineString(status.Issues));
     }
 
@@ -290,7 +292,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
             }
         }
 
-        Log.Write(TLOG_DEBUG, GetLogPrefix() << "Reconnecting session to cluster " << ClusterName << " in " << delay);
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Reconnecting session to cluster " << ClusterName << " in " << delay);
 
         ++ConnectionAttemptsDone;
 
@@ -345,7 +347,7 @@ template <bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::BreakConnectionAndReconnectImpl(
     TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred) {
     Y_VERIFY(Lock.IsLocked());
-    Log.Write(TLOG_INFO,
+    LOG_LAZY(Log, TLOG_INFO,
               GetLogPrefix() << "Break connection due to unexpected message from server. Status: " << status.Status
                              << ", Issues: \"" << IssuesSingleLineString(status.Issues) << "\"");
 
@@ -424,7 +426,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
 template<>
 inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>& deferred) {
     Y_VERIFY(Lock.IsLocked());
-    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
     TClientMessage<true> req;
     auto& init = *req.mutable_init_request();
     init.set_ranges_mode(GetRangesMode());
@@ -455,7 +457,7 @@ inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>
 template<>
 inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<false>& deferred) {
     Y_VERIFY(Lock.IsLocked());
-    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
     TClientMessage<false> req;
     auto& init = *req.mutable_init_request();
 
@@ -550,7 +552,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
     if (commitOffset) {
         commitOffsetLogStr << ". Commit offset: " << *commitOffset;
     }
-    Log.Write(
+    LOG_LAZY(Log,
         TLOG_INFO,
         GetLogPrefix() << "Confirm partition stream create. Partition stream id: " << GetPartitionStreamId(partitionStream)
             << ". Cluster: \"" << GetCluster(partitionStream) << "\". Topic: \"" << partitionStream->GetTopicPath()
@@ -560,7 +562,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
 
     with_lock (Lock) {
         if (Aborting || Closing || !IsActualPartitionStreamImpl(partitionStream)) { // Got previous incarnation.
-            Log.Write(
+            LOG_LAZY(Log,
                 TLOG_DEBUG,
                 GetLogPrefix() << "Skip partition stream create confirm. Partition stream id: "
                     << GetPartitionStreamId(partitionStream)
@@ -599,7 +601,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamDestroy(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream) {
-    Log.Write(
+    LOG_LAZY(Log,
         TLOG_INFO,
         GetLogPrefix() << "Confirm partition stream destroy. Partition stream id: "
             << GetPartitionStreamId(partitionStream)
@@ -610,7 +612,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
     TDeferredActions<UseMigrationProtocol> deferred;
     with_lock (Lock) {
         if (Aborting || Closing || !IsActualPartitionStreamImpl(partitionStream)) { // Got previous incarnation.
-            Log.Write(
+            LOG_LAZY(Log,
                 TLOG_DEBUG,
                 GetLogPrefix() << "Skip partition stream destroy confirm. Partition stream id: "
                     << GetPartitionStreamId(partitionStream)
@@ -656,7 +658,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset) {
-    Log.Write(
+    LOG_LAZY(Log,
         TLOG_DEBUG,
         GetLogPrefix() << "Commit offsets [" << startOffset << ", " << endOffset
             << "). Partition stream id: " << GetPartitionStreamId(partitionStream)
@@ -703,7 +705,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Commit(const TPartitio
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RequestPartitionStreamStatus(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream) {
-    Log.Write(
+    LOG_LAZY(Log,
         TLOG_DEBUG,
         GetLogPrefix() << "Requesting status for partition stream id: " << GetPartitionStreamId(partitionStream)
     );
@@ -732,7 +734,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RequestPartitionStream
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount)
 {
-    Log.Write(TLOG_DEBUG, GetLogPrefix()
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix()
                           << "The application data is transferred to the client. Number of messages "
                           << messagesCount
                           << ", size "
@@ -901,7 +903,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     Y_VERIFY(Lock.IsLocked());
     Y_UNUSED(deferred);
 
-    Log.Write(TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
 
     RetryState = nullptr;
 
@@ -1066,7 +1068,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     TDeferredActions<true>& deferred) {
     Y_VERIFY(Lock.IsLocked());
 
-    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
 
     TMap<ui64, TIntrusivePtr<TPartitionStreamImpl<true>>> partitionStreams;
     for (const Ydb::PersQueue::V1::CommitCookie& cookieProto : msg.cookies()) {
@@ -1128,7 +1130,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
     RetryState = nullptr;
 
-    Log.Write(TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
 
     // Successful init. Do nothing.
     ContinueReadingDataImpl();
@@ -1279,7 +1281,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     TDeferredActions<false>& deferred) {
     Y_VERIFY(Lock.IsLocked());
 
-    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
 
     for (const auto& rangeProto : msg.partitions_committed_offsets()) {
         auto partitionStreamIt = PartitionStreams.find(rangeProto.partition_session_id());
@@ -1439,7 +1441,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Abort() {
-    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Abort session to cluster");
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Abort session to cluster");
 
     with_lock (Lock) {
         AbortImpl();
@@ -2348,10 +2350,10 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
     // Clear data to free internal session's memory.
     messageData.clear_data();
 
-    partitionStream->GetLog().Write(TLOG_DEBUG, TStringBuilder()
-                                    << "Take Data. Partition " << partitionStream->GetPartitionId()
-                                    << ". Read: {" << Batch << ", " << Message << "} ("
-                                    << minOffset << "-" << maxOffset << ")");
+    LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+                                        << "Take Data. Partition " << partitionStream->GetPartitionId()
+                                        << ". Read: {" << Batch << ", " << Message << "} ("
+                                        << minOffset << "-" << maxOffset << ")");
 }
 
 template<bool UseMigrationProtocol>
@@ -2467,9 +2469,9 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
         }
     }
     if (auto session = Parent->Session.lock()) {
-        session->GetLog().Write(TLOG_DEBUG, TStringBuilder() << "Decompression task done. Partition/PartitionSessionId: "
-                                                             << partition_id << " (" << minOffset << "-"
-                                                             << maxOffset << ")");
+        LOG_LAZY(session->GetLog(), TLOG_DEBUG, TStringBuilder() << "Decompression task done. Partition/PartitionSessionId: "
+                                                                 << partition_id << " (" << minOffset << "-"
+                                                                 << maxOffset << ")");
     }
     Y_ASSERT(dataProcessed == SourceDataSize);
     std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session = Parent->Session.lock();

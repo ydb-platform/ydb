@@ -1517,8 +1517,7 @@ private:
         return PerformExecution(execQuery, ctx, cluster, settings.Mode, runFunc, finalizeFunc);
     }
 
-    bool ApplyTableOperations(const TString& cluster, const TVector<NKqpProto::TKqpTableOp>& tableOps,
-        NKikimrKqp::EIsolationLevel isolationLevel, TExprContext& ctx)
+    std::pair<bool, TIssues> ApplyTableOperations(const TString& cluster, const TVector<NKqpProto::TKqpTableOp>& tableOps)
     {
         bool enableImmediateEffects = SessionCtx->Config().FeatureFlags.GetEnableKqpImmediateEffects();
         auto queryType = SessionCtx->Query().Type;
@@ -1534,12 +1533,10 @@ private:
 
         if (!SessionCtx->HasTx()) {
             TKikimrTransactionContextBase emptyCtx;
-            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, isolationLevel, enableImmediateEffects,
-                queryType, ctx);
+            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, enableImmediateEffects, queryType);
         }
 
-        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, isolationLevel,
-            enableImmediateEffects, queryType, ctx);
+        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, enableImmediateEffects, queryType);
     }
 
     bool ApplyDdlOperation(const TString& cluster, TPositionHandle pos, const TString& table,
@@ -1555,7 +1552,11 @@ private:
         protoOp.SetTable(table);
         protoOp.SetOperation((ui32)op);
 
-        return ApplyTableOperations(cluster, {protoOp}, NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE, ctx);
+        auto [success, issues] = ApplyTableOperations(cluster, {protoOp});
+        for (auto& i : issues) {
+            ctx.AddError(std::move(i));
+        }
+        return success;
     }
 
 private:

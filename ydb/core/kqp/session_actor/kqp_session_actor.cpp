@@ -569,16 +569,6 @@ public:
         Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
     }
 
-    std::pair<bool, TIssues> ApplyTableOperations(TKqpTransactionContext* txCtx, const NKqpProto::TKqpPhyQuery& query) {
-        auto isolationLevel = *txCtx->EffectiveIsolationLevel;
-        bool enableImmediateEffects = Config->FeatureFlags.GetEnableKqpImmediateEffects();
-
-        TExprContext ctx;
-        bool success = txCtx->ApplyTableOperations(query.GetTableOps(), query.GetTableInfos(), isolationLevel,
-            enableImmediateEffects, EKikimrQueryType::Dml, ctx);
-        return {success, ctx.IssueManager.GetIssues()};
-    }
-
     bool PrepareQueryTransaction() {
         if (QueryState->HasTxControl()) {
             const auto& txControl = QueryState->GetTxControl();
@@ -623,7 +613,9 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        auto [success, issues] = ApplyTableOperations(QueryState->TxCtx.Get(), phyQuery);
+        bool enableImmediateEffects = Config->FeatureFlags.GetEnableKqpImmediateEffects();
+        auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
+            enableImmediateEffects, EKikimrQueryType::Dml);
         if (!success) {
             YQL_ENSURE(!issues.Empty());
             ReplyQueryError(GetYdbStatus(issues), "", MessageFromIssues(issues));

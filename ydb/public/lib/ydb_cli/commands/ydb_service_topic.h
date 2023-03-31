@@ -84,6 +84,11 @@ namespace NYdb::NConsoleClient {
         TCommandTopicConsumer();
     };
 
+    class TCommandTopicConsumerOffset: public TClientCommandTree {
+    public:
+        TCommandTopicConsumerOffset();
+    };
+
     class TCommandTopicConsumerAdd: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs {
     public:
         TCommandTopicConsumerAdd();
@@ -106,6 +111,20 @@ namespace NYdb::NConsoleClient {
     private:
         TString ConsumerName_;
     };
+
+    class TCommandTopicConsumerCommitOffset: public TYdbCommand, public TCommandWithTopicName {
+    public:
+        TCommandTopicConsumerCommitOffset();
+        void Config(TConfig& config) override;
+        void Parse(TConfig& config) override;
+        int Run(TConfig& config) override;
+
+    private:
+        TString ConsumerName_;
+        ui64 PartitionId_;
+        ui64 Offset_;
+    };
+
 
     class TCommandWithTransformBody {
     protected:

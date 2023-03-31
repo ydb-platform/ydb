@@ -379,9 +379,10 @@ static NKikimrConfig::TBootstrap GenerateBootstrapConfig(TTestActorRuntime &runt
     TVector<ui32> nodes;
     nodes.reserve(nodesCount);
     for (ui32 nodeIndex = 0; nodeIndex < nodesCount; ++nodeIndex) {
-        ui32 nodeId = runtime.GetNodeId(nodeIndex);
-        if (tenants.contains(nodeId))
+        if (tenants.contains(nodeIndex))
             continue;
+
+        ui32 nodeId = runtime.GetNodeId(nodeIndex);
         nodes.push_back(nodeId);
     }
 

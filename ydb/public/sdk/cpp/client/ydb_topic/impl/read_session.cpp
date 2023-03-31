@@ -1,5 +1,7 @@
 #include "read_session.h"
 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -49,7 +51,7 @@ void TReadSession::Start() {
         return;
     }
 
-    Log.Write(TLOG_INFO, GetLogPrefix() << "Starting read session");
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Starting read session");
 
     NPersQueue::TDeferredActions<false> deferred;
     with_lock (Lock) {
@@ -66,7 +68,7 @@ void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>
     Y_VERIFY(Lock.IsLocked());
 
     // Create cluster sessions.
-    Log.Write(
+    LOG_LAZY(Log,
         TLOG_DEBUG,
         GetLogPrefix() << "Starting single session"
     );
@@ -126,7 +128,7 @@ TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(bool block, size_t maxB
 }
 
 bool TReadSession::Close(TDuration timeout) {
-    Log.Write(TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
     // Log final counters.
     DumpCountersToLog();
     with_lock (Lock) {
@@ -206,7 +208,7 @@ TStringBuilder TReadSession::GetLogPrefix() const {
 }
 
 void TReadSession::OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) {
-    Log.Write(TLOG_DEBUG, GetLogPrefix()
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix()
                           << "The application data is transferred to the client. Number of messages "
                           << messagesCount
                           << ", size "
@@ -257,7 +259,7 @@ void TReadSession::DumpCountersToLog(size_t timeNumber) {
         /**/
 
     if (logCounters) {
-        Log.Write(TLOG_INFO,
+        LOG_LAZY(Log, TLOG_INFO,
             GetLogPrefix() << "Counters: {"
             C(Errors)
             C(CurrentSessionLifetimeMs)
@@ -303,7 +305,7 @@ void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, NPersQueue::TDefe
 
     if (!Aborting) {
         Aborting = true;
-        Log.Write(TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
+        LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
         if (DumpCountersContext) {
             DumpCountersContext->Cancel();
             DumpCountersContext.reset();

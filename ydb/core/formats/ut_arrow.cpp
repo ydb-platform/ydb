@@ -1,5 +1,6 @@
 #include <ydb/core/formats/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/converter.h>
 #include <ydb/core/formats/one_batch_input_stream.h>
 #include <ydb/core/formats/merging_sorted_input_stream.h>
 #include <ydb/library/binary_json/write.h>

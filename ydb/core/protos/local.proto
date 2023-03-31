@@ -11,6 +11,7 @@ option java_package = "ru.yandex.kikimr.proto";
 message TTabletAvailability {
     optional NKikimrTabletBase.TTabletTypes.EType Type = 1;
     optional uint64 MaxCount = 2;
+    optional int32 Priority = 3;
 }
 
 message TEvRegisterNode {

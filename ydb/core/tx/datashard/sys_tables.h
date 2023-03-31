@@ -65,6 +65,7 @@ struct TSysTables {
             ui64 Counter = 0;
             ui64 SchemeShard = 0;
             ui64 PathId = 0;
+            bool HasWrites = false; // Not exposed as a column
 
             bool IsEmpty() const { return (LockId == 0); }
             bool IsError() const { return IsError(Counter); }

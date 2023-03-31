@@ -3,7 +3,7 @@ Description=YDB MultiTenancy tenant service (%i)
 StartLimitInterval=10
 StartLimitBurst=15
 PartOf=ydb-server-mt-starter.service
-AssertFileNotEmpty=/opt/ydb/cfg/config.yaml
+AssertFileNotEmpty=/opt/ydb/cfg/config-mt.yaml
 
 [Service]
 Type=simple

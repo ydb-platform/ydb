@@ -136,7 +136,7 @@ public:
             TCpuGuard guard(ResourceUsage);
             data = NArrow::SerializeBatchNoCompression(batch);
         }
-        if (data.size() > TLimits::MAX_BLOB_SIZE) {
+        if (data.size() > TLimits::GetMaxBlobSize()) {
             LOG_S_INFO("Extracted data (" << data.size() << " bytes) is bigger than source ("
                 << srcData.size() << " bytes) and limit, writeId " << writeId << " pathId " << pathId
                 << " at tablet " << TabletId);
@@ -247,7 +247,7 @@ public:
                 const TString& currentBlob = blobs[blobsPos];
                 Y_VERIFY(currentBlob.size());
 
-                if ((accumulatedBlob.size() + currentBlob.size() > TLimits::MAX_BLOB_SIZE) ||
+                if ((accumulatedBlob.size() + currentBlob.size() > TLimits::GetMaxBlobSize()) ||
                     (accumulatedBlob.size() && !BlobGrouppingEnabled))
                 {
                     fnFlushAcummultedBlob(accumulatedBlob, portionInfo, recordsInBlob);

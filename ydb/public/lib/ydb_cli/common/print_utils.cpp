@@ -66,6 +66,11 @@ TString FormatTime(TInstant time) {
     }
 };
 
+TString FormatDuration(TDuration duration) {
+    return Sprintf("%.02f seconds",(duration.MilliSeconds() * 0.001));
+};
+
+
 TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
     switch (entry) {
     case NScheme::ESchemeEntryType::Directory:

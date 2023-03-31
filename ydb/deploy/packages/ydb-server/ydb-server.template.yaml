@@ -12,6 +12,8 @@ maintainer: "info@ydb.tech"
 description: |
   YDB is an open-source Distributed SQL Database that combines
   high availability and scalability with strong consistency and ACID transactions.
+  This package provides storage systemd services and configuration.
+  This package ensures that configuration for ydb storage node located in /opt/ydb/cfg/config.yaml file
 
 provides: []
 depends:

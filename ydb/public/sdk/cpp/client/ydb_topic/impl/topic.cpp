@@ -45,6 +45,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , PartitionWriteSpeedBytesPerSecond_(Proto_.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(Proto_.partition_write_burst_bytes())
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
+    , TopicStats_(Proto_.topic_stats())
 {
     Owner_ = Proto_.self().owner();
     PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_);
@@ -176,6 +177,10 @@ const TString& TTopicDescription::GetOwner() const {
     return Owner_;
 }
 
+const TTopicStats& TTopicDescription::GetTopicStats() const {
+    return TopicStats_;
+}
+
 const TVector<NScheme::TPermissions>& TTopicDescription::GetPermissions() const {
     return Permissions_;
 }
@@ -197,9 +202,51 @@ ui64 TPartitioningSettings::GetPartitionCountLimit() const {
     return PartitionCountLimit_;
 }
 
+TTopicStats::TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats)
+    : StoreSizeBytes_(topicStats.store_size_bytes())
+    , MinLastWriteTime_(TInstant::Seconds(topicStats.min_last_write_time().seconds()))
+    , MaxWriteTimeLag_(TDuration::Seconds(topicStats.max_write_time_lag().seconds()) + TDuration::MicroSeconds(topicStats.max_write_time_lag().nanos() / 1000))
+    , BytesWrittenPerMinute_(topicStats.bytes_written().per_minute())
+    , BytesWrittenPerHour_(topicStats.bytes_written().per_hour())
+    , BytesWrittenPerDay_(topicStats.bytes_written().per_day())
+{
+}
+
+ui64 TTopicStats::GetStoreSizeBytes() const {
+    return StoreSizeBytes_;
+}
+
+TInstant TTopicStats::GetMinLastWriteTime() const {
+    return MinLastWriteTime_;
+}
+
+TDuration TTopicStats::GetMaxWriteTimeLag() const {
+    return MaxWriteTimeLag_;
+}
+
+ui64 TTopicStats::GetBytesWrittenPerMinute() const {
+    return BytesWrittenPerMinute_;
+}
+
+ui64 TTopicStats::GetBytesWrittenPerHour() const {
+    return BytesWrittenPerHour_;
+}
+
+ui64 TTopicStats::GetBytesWrittenPerDay() const {
+    return BytesWrittenPerDay_;
+}
+
+
 TPartitionStats::TPartitionStats(const Ydb::Topic::PartitionStats& partitionStats)
     : StartOffset_(partitionStats.partition_offsets().start())
     , EndOffset_(partitionStats.partition_offsets().end())
+    , StoreSizeBytes_(partitionStats.store_size_bytes())
+    , LastWriteTime_(TInstant::Seconds(partitionStats.last_write_time().seconds()))
+    , MaxWriteTimeLag_(TDuration::Seconds(partitionStats.max_write_time_lag().seconds()) + TDuration::MicroSeconds(partitionStats.max_write_time_lag().nanos() / 1000))
+    , BytesWrittenPerMinute_(partitionStats.bytes_written().per_minute())
+    , BytesWrittenPerHour_(partitionStats.bytes_written().per_hour())
+    , BytesWrittenPerDay_(partitionStats.bytes_written().per_day())
+
 {}
 
 ui64 TPartitionStats::GetStartOffset() const {
@@ -209,6 +256,31 @@ ui64 TPartitionStats::GetStartOffset() const {
 ui64 TPartitionStats::GetEndOffset() const {
     return EndOffset_;
 }
+
+ui64 TPartitionStats::GetStoreSizeBytes() const {
+    return StoreSizeBytes_;
+}
+
+TInstant TPartitionStats::GetLastWriteTime() const {
+    return LastWriteTime_;
+}
+
+TDuration TPartitionStats::GetMaxWriteTimeLag() const {
+    return MaxWriteTimeLag_;
+}
+
+ui64 TPartitionStats::GetBytesWrittenPerMinute() const {
+    return BytesWrittenPerMinute_;
+}
+
+ui64 TPartitionStats::GetBytesWrittenPerHour() const {
+    return BytesWrittenPerHour_;
+}
+
+ui64 TPartitionStats::GetBytesWrittenPerDay() const {
+    return BytesWrittenPerDay_;
+}
+
 
 TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsumerResult::PartitionConsumerStats& partitionStats)
     : CommittedOffset_(partitionStats.committed_offset())

@@ -16,6 +16,12 @@ get_built_tool_path(
   enum_parser
 )
 get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+get_built_tool_path(
   TOOL_rescompiler_bin
   TOOL_rescompiler_dependency
   tools/rescompiler/bin
@@ -69,6 +75,7 @@ target_sources(ydb-core-cms PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/http.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/info_collector.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/logger.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/node_checkers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/sentinel.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/services.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/walle_api_handler.cpp
@@ -81,6 +88,11 @@ generate_enum_serilization(ydb-core-cms
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/services.h
   INCLUDE_HEADERS
   ydb/core/cms/services.h
+)
+generate_enum_serilization(ydb-core-cms
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/node_checkers.h
+  INCLUDE_HEADERS
+  ydb/core/cms/node_checkers.h
 )
 
 add_global_library_for(ydb-core-cms.global ydb-core-cms)

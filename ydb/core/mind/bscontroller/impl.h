@@ -827,6 +827,7 @@ public:
         // in-mem only
         std::map<TString, NPDisk::TDriveData> KnownDrives;
         THashSet<TGroupId> WaitingForGroups;
+        THashSet<TGroupId> GroupsRequested;
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -1428,6 +1429,7 @@ private:
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
     bool StopGivingGroups = false;
     bool GroupLayoutSanitizer = false;
+    std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
     NKikimrBlobStorage::TSerialManagementStage::E SerialManagementStage
             = NKikimrBlobStorage::TSerialManagementStage::DISCOVER_SERIAL;
 

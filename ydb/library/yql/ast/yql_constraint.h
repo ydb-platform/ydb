@@ -143,6 +143,7 @@ public:
     using TPredicate = std::function<bool(const std::string_view& name)>;
     bool FilterConstraints(const TPredicate& predicate);
 
+    void Out(IOutputStream& out) const;
     void ToJson(NJson::TJsonWriter& writer) const;
 private:
     TConstraintNode::TListType Constraints_;

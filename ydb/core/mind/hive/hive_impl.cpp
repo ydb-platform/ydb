@@ -1082,6 +1082,22 @@ TNodeInfo* THive::SelectNode<NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATE
     return itNode->Node;
 }
 
+TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet) const
+{
+    i32 priority = std::numeric_limits<i32>::min();
+    for (const TSelectedNode& selectedNode : selectedNodes) {
+        priority = std::max(priority, selectedNode.Node->GetPriorityForTablet(tablet));
+    }
+
+    auto it = std::partition(selectedNodes.begin(), selectedNodes.end(), [&] (const TSelectedNode& selectedNode) {
+        return selectedNode.Node->GetPriorityForTablet(tablet) == priority;
+    });
+
+    selectedNodes.erase(it, selectedNodes.end());
+
+    return selectedNodes;
+}
+
 THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
     BLOG_D("[FBN] Finding best node for tablet " << tablet.ToString());
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " family " << tablet.FamilyString());
@@ -1233,6 +1249,8 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
 
     TNodeInfo* selectedNode = nullptr;
     if (!selectedNodes.empty()) {
+        selectedNodes = SelectMaxPriorityNodes(std::move(selectedNodes), tablet);
+
         switch (GetNodeSelectStrategy()) {
             case NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM:
                 selectedNode = SelectNode<NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM>(selectedNodes);

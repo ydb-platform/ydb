@@ -314,6 +314,11 @@ public:
         auto& node = Self->GetNode(nodeId);
         db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::LastConnectTimestamp>(node.LastConnectTimestamp);
 
+        for (ui32 groupId : record.GetGroups()) {
+            node.GroupsRequested.insert(groupId);
+            Self->GroupToNode.emplace(groupId, nodeId);
+        }
+
         return true;
     }
 
@@ -532,6 +537,9 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
     EraseKnownDrivesOnDisconnected(&node);
     if (!lastSeenReadyQ.empty()) {
         Execute(CreateTxUpdateLastSeenReady(std::move(lastSeenReadyQ)));
+    }
+    for (TGroupId groupId : std::exchange(node.GroupsRequested, {})) {
+        GroupToNode.erase(std::make_tuple(groupId, nodeId));
     }
     node.LastDisconnectTimestamp = now;
     Execute(new TTxUpdateNodeDisconnectTimestamp(nodeId, this));

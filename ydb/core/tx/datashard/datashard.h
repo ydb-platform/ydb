@@ -588,7 +588,7 @@ struct TEvDataShard {
             Record.SetOrderId(stepOrderId.second);
         }
 
-        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId) {
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
             auto entry = Record.AddTxLocks();
             entry->SetLockId(lockId);
             entry->SetDataShard(shard);
@@ -596,6 +596,9 @@ struct TEvDataShard {
             entry->SetCounter(counter);
             entry->SetSchemeShard(ssId);
             entry->SetPathId(pathId);
+            if (hasWrites) {
+                entry->SetHasWrites(true);
+            }
         }
 
         NKikimrTxDataShard::ETransactionKind GetTxKind() const {

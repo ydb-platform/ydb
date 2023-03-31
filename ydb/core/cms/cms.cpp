@@ -1,24 +1,28 @@
 #include "cms_impl.h"
 #include "info_collector.h"
-#include "library/cpp/actors/core/actor.h"
-#include "library/cpp/actors/core/hfunc.h"
+#include "erasure_checkers.h"
+#include "node_checkers.h"
 #include "scheme.h"
 #include "sentinel.h"
-#include "erasure_checkers.h"
-#include "ydb/core/protos/config_units.pb.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
-#include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/cms/console/config_helpers.h>
+#include <ydb/core/erasure/erasure.h>
+#include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/config_units.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
+#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
 #include <util/generic/serialized_enum.h>
+#include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/system/hostname.h>
 
@@ -27,50 +31,6 @@ namespace NKikimr::NCms {
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
 
-void TCms::TNodeCounter::CountNode(const TNodeInfo &node,
-                                   bool ignoreDownState)
-{
-    ++Total;
-    TErrorInfo error;
-    if (node.IsLocked(error, TDuration(), TActivationContext::Now(), TDuration())) {
-        ++Locked;
-        if (error.Code == TStatus::DISALLOW)
-            Code = error.Code;
-    } else if (!ignoreDownState && node.IsDown(error, TInstant())) {
-        ++Down;
-    }
-}
-
-bool TCms::TNodeCounter::CheckLimit(ui32 limit,
-                                    EAvailabilityMode mode) const
-{
-    // No limit is set.
-    if (!limit)
-        return true;
-    // Limit is OK.
-    if ((Down + Locked + 1) <= limit)
-        return true;
-    // Allow to restart at least one node for forced restart mode.
-    return (mode == MODE_FORCE_RESTART
-            && !Locked);
-}
-
-bool TCms::TNodeCounter::CheckRatio(ui32 ratio,
-                                    EAvailabilityMode mode) const
-{
-    // No limit is set.
-    if (!ratio)
-        return true;
-    // Always allow at least one node to be locked.
-    if (!Down && !Locked)
-        return true;
-    // Limit is OK.
-    if (((Down + Locked + 1) * 100) <= (Total * ratio))
-        return true;
-    // Allow to restart at least one node for forced restart mode.
-    return (mode == MODE_FORCE_RESTART
-            && !Locked);
-}
 
 void TCms::OnActivateExecutor(const TActorContext &ctx)
 {
@@ -648,74 +608,25 @@ bool TCms::TryToLockNode(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
 
-    if (node.IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration))
-        return false;
+    bool isForceRestart = opts.AvailabilityMode == NKikimrCms::MODE_FORCE_RESTART;
 
-    ui32 tenantLimit = State->Config.TenantLimits.GetDisabledNodesLimit();
-    ui32 tenantRatioLimit = State->Config.TenantLimits.GetDisabledNodesRatioLimit();
-    ui32 clusterLimit = State->Config.ClusterLimits.GetDisabledNodesLimit();
-    ui32 clusterRatioLimit = State->Config.ClusterLimits.GetDisabledNodesRatioLimit();
-
-    // Check if limits should be checked.
-    if ((opts.TenantPolicy == NONE
-         || !node.Tenant
-         || (!tenantLimit && !tenantRatioLimit))
-        && !clusterLimit
-        && !clusterRatioLimit)
-        return true;
-
-    TNodeCounter tenantNodes;
-    TNodeCounter clusterNodes;
-    for (const auto& pr : ClusterInfo->AllNodes()) {
-        const auto& otherNode = pr.second;
-        bool ignoreDown = node.NodeId == otherNode->NodeId;
-        clusterNodes.CountNode(*otherNode, ignoreDown);
-        if (node.Tenant == otherNode->Tenant)
-            tenantNodes.CountNode(*otherNode, ignoreDown);
-    }
-
-    if (opts.TenantPolicy == DEFAULT
-        && node.Tenant) {
-        if (!tenantNodes.CheckLimit(tenantLimit, opts.AvailabilityMode)) {
-            error.Code = tenantNodes.Code;
-            error.Reason = TStringBuilder() << "Too many locked nodes for " << node.Tenant
-                                            << " locked: " << tenantNodes.Locked
-                                            << " down: " << tenantNodes.Down
-                                            << " total: " << tenantNodes.Total
-                                            << " limit: " << tenantLimit;
-            error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-            return false;
-        }
-        if (!tenantNodes.CheckRatio(tenantRatioLimit, opts.AvailabilityMode)) {
-            error.Code = tenantNodes.Code;
-            error.Reason = TStringBuilder() << "Too many locked nodes for " << node.Tenant
-                                            << " locked: " << tenantNodes.Locked
-                                            << " down: " << tenantNodes.Down
-                                            << " total: " << tenantNodes.Total
-                                            << " limit: " << tenantRatioLimit << "%";
-            error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-            return false;
-        }
-    }
-
-    if (!clusterNodes.CheckLimit(clusterLimit, opts.AvailabilityMode)) {
-        error.Code = clusterNodes.Code;
-        error.Reason = TStringBuilder() << "Too many locked nodes"
-                                        << " locked: " << clusterNodes.Locked
-                                        << " down: " << clusterNodes.Down
-                                        << " total: " << clusterNodes.Total
-                                        << " limit: " << clusterLimit;
+    if (!ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, isForceRestart))
+    {
+        error.Code = TStatus::DISALLOW_TEMP;
+        error.Reason = ClusterInfo->ClusterNodes->ReadableReason();
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+
         return false;
     }
-    if (!clusterNodes.CheckRatio(clusterRatioLimit, opts.AvailabilityMode)) {
-        error.Code = clusterNodes.Code;
-        error.Reason = TStringBuilder() << "Too many locked nodes"
-                                        << " locked: " << clusterNodes.Locked
-                                        << " down: " << clusterNodes.Down
-                                        << " total: " << clusterNodes.Total
-                                        << " limit: " << clusterRatioLimit << "%";
+
+    if (node.Tenant
+        && opts.TenantPolicy != NONE
+        && !ClusterInfo->TenantNodesChecker[node.Tenant]->TryToLockNode(node.NodeId, isForceRestart))
+    {
+        error.Code = TStatus::DISALLOW_TEMP;
+        error.Reason = ClusterInfo->TenantNodesChecker[node.Tenant]->ReadableReason();
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+
         return false;
     }
 
@@ -810,9 +721,9 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
             }
             break;
         case MODE_FORCE_RESTART:
-            if ( counters->GroupAlreadyHasLockedDisks() && opts.PartialPermissionAllowed) { 
+            if ( counters->GroupAlreadyHasLockedDisks() && opts.PartialPermissionAllowed) {
                 error.Code = TStatus::DISALLOW_TEMP;
-                error.Reason = "You cannot get two or more disks from the same group at the same time" 
+                error.Reason = "You cannot get two or more disks from the same group at the same time"
                                " without specifying the PartialPermissionAllowed parameter";
                 error.Deadline = defaultDeadline;
                 return false;
@@ -888,6 +799,7 @@ void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId
         auto &permission = *resp.MutablePermissions(i);
         permission.SetId(owner + "-p-" + ToString(State->NextPermissionId++));
         State->Permissions.emplace(permission.GetId(), TPermissionInfo(permission, requestId, owner));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Accepting permission");
         ClusterInfo->AddLocks(permission, requestId, owner, &ctx);
 
         if (!check || owner != WALLE_CMS_USER) {
@@ -1500,10 +1412,20 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
         info->ApplyDowntimes(State->Downtimes);
     }
 
+    // We need to generate NodeCheckers after MigrateOldInfo to get
+    // all the information about the tenants on the disconnected nodes
+    info->GenerateTenantNodesCheckers();
+
     AdjustInfo(info, ctx);
 
     State->ClusterInfo = info;
     ClusterInfo = info;
+
+    ui32 tenantLimit = State->Config.TenantLimits.GetDisabledNodesLimit();
+    ui32 tenantRatioLimit = State->Config.TenantLimits.GetDisabledNodesRatioLimit();
+    ui32 clusterLimit = State->Config.ClusterLimits.GetDisabledNodesLimit();
+    ui32 clusterRatioLimit = State->Config.ClusterLimits.GetDisabledNodesRatioLimit();
+    ClusterInfo->ApplyNodeLimits(clusterLimit, clusterRatioLimit, tenantLimit, tenantRatioLimit);
 
     ClusterInfo->UpdateDowntimes(State->Downtimes, ctx);
     Execute(CreateTxUpdateDowntimes(), ctx);
@@ -1658,7 +1580,13 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
     }
 
+    ClusterInfo->LogManager.PushRollbackPoint();
+    for (const auto &scheduled_request : State->ScheduledRequests) {
+            for (auto &action : scheduled_request.second.Request.GetActions())
+                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
+    }
     bool ok = CheckPermissionRequest(rec, resp->Record, scheduled.Request, ctx);
+    ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
     if (rec.GetDryRun()) {
@@ -1714,12 +1642,20 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
     TRequestInfo scheduled;
 
+    ClusterInfo->LogManager.PushRollbackPoint();
+    for (const auto &scheduled_request : State->ScheduledRequests) {
+        if (scheduled_request.second.Order < request.Order) {
+            for (auto &action : scheduled_request.second.Request.GetActions())
+                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
+        }
+    }
     // Deactivate locks of this and later requests to
     // avoid false conflicts.
     ClusterInfo->DeactivateScheduledLocks(request.Order);
     request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
     bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, ctx);
     ClusterInfo->ReactivateScheduledLocks();
+    ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
     if (rec.GetDryRun()) {

@@ -182,6 +182,9 @@ public:
             auto format = s3ReadObject.Object().Format().Ref().Content();
             if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
                 bool supportedArrowTypes = false;
+                if (State_->Types->UseBlocks) {
+                    YQL_ENSURE(State_->Configuration->UseBlocksSource.Get().GetOrElse(true), "Scalar Source is not compatible with Blocks engine");
+                }
                 if (State_->Configuration->UseBlocksSource.Get().GetOrElse(State_->Types->UseBlocks) && State_->Types->ArrowResolver) {
                     TVector<const TTypeAnnotationNode*> allTypes;
                     for (const auto& x : rowType->Cast<TStructExprType>()->GetItems()) {

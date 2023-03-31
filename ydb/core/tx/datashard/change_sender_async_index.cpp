@@ -201,6 +201,14 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         PassAway();
     }
 
+    void PassAway() override {
+        if (LeaderPipeCache) {
+            Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(ShardId));
+        }
+
+        TActorBootstrapped::PassAway();
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_PARTITION;

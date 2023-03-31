@@ -111,12 +111,12 @@ TFullSplitData SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
     TFullSplitData result(numShards);
 
     if (numShards == 1) {
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        if (!NArrow::SplitBySize(batch, batches, NColumnShard::TLimits::MAX_BLOB_SIZE)) {
-            return result.SetErrorString("cannot split batch in according to limits");
+        NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(batch, NColumnShard::TLimits::GetMaxBlobSize());
+        if (!blobsSplitted) {
+            return result.SetErrorString("cannot split batch in according to limits: " + blobsSplitted.GetErrorMessage());
         }
-        for (auto&& b : batches) {
-            TShardInfo splitInfo(NArrow::SerializeBatchNoCompression(b), b->num_rows());
+        for (auto&& b : blobsSplitted.GetResult()) {
+            TShardInfo splitInfo(b.GetData(), b.GetRowsCount());
             result.AddShardInfo(tabletIds[0], std::move(splitInfo));
         }
         return result;
@@ -139,12 +139,12 @@ TFullSplitData SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
     THashMap<ui64, TString> out;
     for (size_t i = 0; i < sharded.size(); ++i) {
         if (sharded[i]) {
-            std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-            if (!NArrow::SplitBySize(sharded[i], batches, NColumnShard::TLimits::GetBlobSizeForSplit())) {
-                return result.SetErrorString("cannot split batch in according to limits");
+            NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(sharded[i], NColumnShard::TLimits::GetMaxBlobSize());
+            if (!blobsSplitted) {
+                return result.SetErrorString("cannot split batch in according to limits: " + blobsSplitted.GetErrorMessage());
             }
-            for (auto&& b : batches) {
-                TShardInfo splitInfo(NArrow::SerializeBatchNoCompression(b), b->num_rows());
+            for (auto&& b : blobsSplitted.GetResult()) {
+                TShardInfo splitInfo(b.GetData(), b.GetRowsCount());
                 result.AddShardInfo(tabletIds[i], std::move(splitInfo));
             }
         }

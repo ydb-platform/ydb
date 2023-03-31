@@ -365,7 +365,14 @@ namespace NYdb::NConsoleClient {
         : TClientCommandTree("consumer", {}, "Consumer operations") {
         AddCommand(std::make_unique<TCommandTopicConsumerAdd>());
         AddCommand(std::make_unique<TCommandTopicConsumerDrop>());
+        AddCommand(std::make_unique<TCommandTopicConsumerOffset>());
     }
+
+    TCommandTopicConsumerOffset::TCommandTopicConsumerOffset()
+        : TClientCommandTree("offset", {}, "Consumer offset operations") {
+        AddCommand(std::make_unique<TCommandTopicConsumerCommitOffset>());
+    }
+
 
     TCommandTopicConsumerAdd::TCommandTopicConsumerAdd()
         : TYdbCommand("add", {}, "Consumer add operation") {
@@ -439,6 +446,43 @@ namespace NYdb::NConsoleClient {
         removeReadRuleSettings.AppendDropConsumers(ConsumerName_);
 
         TStatus status = topicClient.AlterTopic(TopicName, removeReadRuleSettings).GetValueSync();
+        ThrowOnError(status);
+        return EXIT_SUCCESS;
+    }
+
+
+    TCommandTopicConsumerCommitOffset::TCommandTopicConsumerCommitOffset()
+        : TYdbCommand("commit", {}, "Commit offset for consumer") {
+    }
+
+    void TCommandTopicConsumerCommitOffset::Config(TConfig& config) {
+        TYdbCommand::Config(config);
+        config.Opts->AddLongOption("consumer", "Consumer which offset will be changed")
+            .Required()
+            .StoreResult(&ConsumerName_);
+
+        config.Opts->AddLongOption("partition", "Partition which offset will be changed")
+            .Required()
+            .StoreResult(&PartitionId_);
+
+        config.Opts->AddLongOption("offset", "Partition offset to be setted for desired consumer")
+            .Required()
+            .StoreResult(&Offset_);
+
+        config.Opts->SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<topic-path>", "Topic from which consumer will be dropped");
+    }
+
+    void TCommandTopicConsumerCommitOffset::Parse(TConfig& config) {
+        TYdbCommand::Parse(config);
+        ParseTopicName(config, 0);
+    }
+
+    int TCommandTopicConsumerCommitOffset::Run(TConfig& config) {
+        TDriver driver = CreateDriver(config);
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        TStatus status = topicClient.CommitOffset(TopicName, PartitionId_, ConsumerName_, Offset_).GetValueSync();
         ThrowOnError(status);
         return EXIT_SUCCESS;
     }

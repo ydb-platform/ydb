@@ -92,8 +92,6 @@ public:
 
     void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats , bool last, const NYql::NDq::TDqMeteringStats*) override {
         if (last) {
-            stats->SetErrorsCount(ErrorsCount);
-
             NYql::NDqProto::TDqTableStats* tableStats = nullptr;
             for (auto& table : *stats->MutableTables()) {
                 if (table.GetTablePath() == TablePath) {
@@ -111,9 +109,10 @@ public:
             tableStats->SetReadBytes(tableStats->GetReadBytes() + ReadBytesCount);
             tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + ReadsPerShard.size());
 
-            NKqpProto::TKqpReadActorTableAggrExtraStats tableExtraStats;
+            NKqpProto::TKqpTableExtraStats tableExtraStats;
+            auto readActorTableAggrExtraStats = tableExtraStats.MutableReadActorTableAggrExtraStats();
             for (const auto& [shardId, _] : ReadsPerShard) {
-                tableExtraStats.AddAffectedShards(shardId);
+                readActorTableAggrExtraStats->AddAffectedShards(shardId);
             }
 
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
@@ -304,7 +303,6 @@ private:
             case Ydb::StatusIds::NOT_FOUND:
             case Ydb::StatusIds::OVERLOADED:
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                ++ErrorsCount;
                 TMaybe<NKikimrTxDataShard::TReadContinuationToken> continuationToken;
                 if (record.HasContinuationToken()) {
                     bool parseResult = continuationToken->ParseFromString(record.GetContinuationToken());
@@ -314,7 +312,6 @@ private:
                 return RetryTableRead(read, continuationToken);
             }
             default: {
-                ++ErrorsCount;
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
                 return RuntimeError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED, issues);
@@ -346,8 +343,6 @@ private:
         const auto& tabletId = ev->Get()->TabletId;
         auto shardIt = ReadsPerShard.find(tabletId);
         YQL_ENSURE(shardIt != ReadsPerShard.end());
-
-        ++ErrorsCount;
 
         for (auto* read : shardIt->second.Reads) {
             if (read->State == EReadState::Running) {
@@ -681,8 +676,6 @@ private:
     // stats
     ui64 ReadRowsCount = 0;
     ui64 ReadBytesCount = 0;
-
-    ui32 ErrorsCount = 0;
 
     TIntrusivePtr<TKqpCounters> Counters;
 };

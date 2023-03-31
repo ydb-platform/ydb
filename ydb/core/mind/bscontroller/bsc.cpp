@@ -311,7 +311,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerConfigRequest: {
             auto *msg = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>();
             if (msg->SelfHeal) {
-                return 1; // locally-generated self-heal commands
+                return 2; // locally-generated self-heal commands
             }
             const auto& record = msg->Record;
             const auto& request = record.GetRequest();

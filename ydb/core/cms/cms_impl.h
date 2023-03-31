@@ -110,19 +110,6 @@ private:
         {}
     };
 
-    struct TNodeCounter {
-        ui32 Total = 0;
-        ui32 Down = 0;
-        ui32 Locked = 0;
-        NKikimrCms::TStatus::ECode Code = NKikimrCms::TStatus::DISALLOW_TEMP;
-
-        void CountNode(const TNodeInfo &node, bool ignoreDownState);
-        // Check if we can lock one more node and stay in lock limits.
-        bool CheckLimit(ui32 limit, NKikimrCms::EAvailabilityMode mode) const;
-        // Check if we can lock one more node and stay in lock ration limits.
-        bool CheckRatio(ui32 ratio, NKikimrCms::EAvailabilityMode mode) const;
-    };
-
     ITransaction *CreateTxGetLogTail(TEvCms::TEvGetLogTailRequest::TPtr &ev);
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();

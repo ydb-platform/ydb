@@ -137,10 +137,20 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
             tableAggr->SetEraseRows(tableAggr->GetEraseRows() + table.GetEraseRows());
             tableAggr->SetAffectedPartitions(tableAggr->GetAffectedPartitions() + table.GetAffectedPartitions());
 
-            NKqpProto::TKqpReadActorTableAggrExtraStats tableExtraStats;
+            NKqpProto::TKqpTableExtraStats tableExtraStats;
             if (table.GetExtra().UnpackTo(&tableExtraStats)) {
-                for (const auto& shardId : tableExtraStats.GetAffectedShards()) {
+                for (const auto& shardId : tableExtraStats.GetReadActorTableAggrExtraStats().GetAffectedShards()) {
                     AffectedShards.insert(shardId);
+                }
+            }
+
+            // TODO: the following code is for backward compatibility, remove it after ydb release
+            {
+                NKqpProto::TKqpReadActorTableAggrExtraStats tableExtraStats;
+                if (table.GetExtra().UnpackTo(&tableExtraStats)) {
+                    for (const auto& shardId : tableExtraStats.GetAffectedShards()) {
+                        AffectedShards.insert(shardId);
+                    }
                 }
             }
         }
@@ -151,7 +161,6 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
             auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
 
             stageStats->SetTotalTasksCount(stageStats->GetTotalTasksCount() + 1);
-            stageStats->SetTotalErrorsCount(stageStats->GetTotalErrorsCount() + task.GetErrorsCount());
             UpdateAggr(stageStats->MutableCpuTimeUs(), task.GetCpuTimeUs());
             UpdateAggr(stageStats->MutableInputRows(), task.GetInputRows());
             UpdateAggr(stageStats->MutableInputBytes(), task.GetInputBytes());

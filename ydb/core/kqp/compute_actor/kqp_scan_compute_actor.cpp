@@ -255,11 +255,7 @@ public:
         if (last && ScanData && dst->TasksSize() > 0) {
             YQL_ENSURE(dst->TasksSize() == 1);
 
-            // NKqpProto::TKqpComputeActorExtraStats extraStats;
-
             auto* taskStats = dst->MutableTasks(0);
-            taskStats->SetErrorsCount(ErrorsCount);
-
             auto* tableStats = taskStats->AddTables();
 
             tableStats->SetTablePath(ScanData->TablePath);
@@ -272,20 +268,11 @@ public:
             }
 
             if (auto* x = ScanData->ProfileStats.get()) {
-                NKqpProto::TKqpScanTableExtraStats tableExtraStats;
-                // protoScanStats->SetIScanStartTimeMs()
-                // protoScanStats->SetIScanFinishTimeMs();
-                tableExtraStats.SetIScanCpuTimeUs(x->ScanCpuTime.MicroSeconds());
-                tableExtraStats.SetIScanWaitTimeUs(x->ScanWaitTime.MicroSeconds());
-                tableExtraStats.SetIScanPageFaults(x->PageFaults);
-
-                tableExtraStats.SetMessages(x->Messages);
-                tableExtraStats.SetMessagesByPageFault(x->MessagesByPageFault);
-
-                tableStats->MutableExtra()->PackFrom(tableExtraStats);
+                NKqpProto::TKqpTaskExtraStats taskExtraStats;
+                auto scanTaskExtraStats = taskExtraStats.MutableScanTaskExtraStats();
+                scanTaskExtraStats->SetRetriesCount(TotalRetries);
+                taskStats->MutableExtra()->PackFrom(taskExtraStats);
             }
-
-            // dst->MutableExtra()->PackFrom(extraStats);
         }
     }
 
@@ -358,6 +345,8 @@ private:
     }
 
     void RetryCostsRequest(TShardCostsState::TPtr state) {
+        ++TotalRetries;
+
         const ui32 att = state->TotalRetries++;
         Counters->ScanQueryShardDisconnect->Inc();
 
@@ -611,7 +600,6 @@ private:
 
         YQL_ENSURE(state->Generation == msg.GetGeneration());
 
-        ++ErrorsCount;
 
         if (state->State == EShardState::Starting) {
             // TODO: Do not parse issues here, use status code.
@@ -628,6 +616,7 @@ private:
             state->ActorId = {};
             InFlightShards.ClearAckState(state);
             state->ResetRetry();
+            ++TotalRetries;
             return StartReadShard(state);
         }
     }
@@ -637,8 +626,6 @@ private:
             return;
         }
         YQL_ENSURE(ScanData);
-
-        ++ErrorsCount;
 
         auto& msg = *ev->Get();
 
@@ -958,6 +945,8 @@ private:
             return ResolveShard(*state);
         }
 
+        ++TotalRetries;
+
         InFlightShards.ClearAckState(state);
         state->RetryAttempt++;
         state->TotalRetries++;
@@ -1242,7 +1231,7 @@ private:
     NWilson::TProfileSpan KqpComputeActorSpan;
     TInFlightShards InFlightShards;
     ui32 ScansCounter = 0;
-    ui32 ErrorsCount = 0;
+    ui32 TotalRetries = 0;
 
     std::set<ui32> TrackingNodes;
     ui32 MaxInFlight = 1024;

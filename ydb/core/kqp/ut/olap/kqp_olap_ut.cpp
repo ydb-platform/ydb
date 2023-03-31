@@ -2115,7 +2115,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_ResultCountExpr) {
-        NColumnShard::TLimits::SetBlobSizeForSplit(10000);
+        NColumnShard::TLimits::SetMaxBlobSize(10000);
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                     SELECT

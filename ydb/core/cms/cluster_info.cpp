@@ -947,7 +947,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
             ss << "  VDisk: " << vd.ToString() << Endl;
         node.DebugLocksDump(ss, "  ");
         ss << "}" << Endl;
-        LOG_DEBUG(ctx, NKikimrServices::CMS, ss.Str());
+        LOG_TRACE(ctx, NKikimrServices::CMS, ss.Str());
     }
     for (auto &entry: PDisks) {
         TStringStream ss;
@@ -958,7 +958,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
            << "  State: " << EState_Name(pdisk.State) << Endl;
         pdisk.DebugLocksDump(ss, "  ");
         ss << "}" << Endl;
-        LOG_DEBUG(ctx, NKikimrServices::CMS, ss.Str());
+        LOG_TRACE(ctx, NKikimrServices::CMS, ss.Str());
     }
     for (auto &entry: VDisks) {
         TStringStream ss;
@@ -972,7 +972,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
             ss << "  BSGroup: " << id << Endl;
         vdisk.DebugLocksDump(ss, "  ");
         ss << "}" << Endl;
-        LOG_DEBUG(ctx, NKikimrServices::CMS, ss.Str());
+        LOG_TRACE(ctx, NKikimrServices::CMS, ss.Str());
     }
     for (auto &entry: BSGroups) {
         TStringStream ss;
@@ -986,7 +986,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
         for (auto &vd : group.VDisks)
             ss << "  VDisk: " << vd.ToString() << Endl;
         ss << "}" << Endl;
-        LOG_DEBUG(ctx, NKikimrServices::CMS, ss.Str());
+        LOG_TRACE(ctx, NKikimrServices::CMS, ss.Str());
     }
 }
 

@@ -254,7 +254,10 @@ void TTransQueue::UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags) {
     auto it = TxsInFly.find(txId);
     Y_VERIFY(it != TxsInFly.end());
 
-    Y_VERIFY(!it->second->HasVolatilePrepareFlag(), "Unexpected UpdateTxFlags for a volatile transaction");
+    if (it->second->HasVolatilePrepareFlag()) {
+        // We keep volatile transactions in memory and don't store anything
+        return;
+    }
 
     const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask;
 

@@ -2,6 +2,7 @@
 #include "error.h"
 #include "proxy_actor.h"
 
+#include <ydb/core/ymq/base/action.h>
 #include <ydb/core/protos/sqs.pb.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/security.h>
@@ -12,6 +13,9 @@
 
 
 namespace NKikimr::NSQS {
+
+#define SQS_SWITCH_REQUEST(request, default_case)       \
+    SQS_SWITCH_REQUEST_CUSTOM(request, ENUMERATE_PROXY_ACTIONS, default_case)
 
 TString SecurityPrint(const NKikimrClient::TSqsResponse& resp) {
     switch (resp.GetResponseCase()) {
@@ -54,6 +58,13 @@ TString SecurityPrint(const NKikimrClient::TSqsResponse& resp) {
     Y_VERIFY(false);
 }
 
+std::tuple<TString, TString, TString> ParseCloudSecurityToken(const TString& token) {
+    TStringBuf tokenBuf(token);
+    TString userName = TString(tokenBuf.NextTok(':'));
+    TString folderId = TString(tokenBuf.NextTok(':'));
+    TString userSID = TString(tokenBuf.NextTok(':'));
+    return {userName, folderId, userSID};
+}
 
 void TProxyActor::Bootstrap() {
     this->Become(&TProxyActor::StateFunc);
@@ -69,9 +80,9 @@ void TProxyActor::Bootstrap() {
         securityToken = ExtractSecurityToken<typename std::remove_reference<decltype(request)>::type, TCredentials>(request);
         SQS_SWITCH_REQUEST(Request_, Y_VERIFY(false));
 #undef SQS_REQUEST_CASE
-        TStringBuf tokenBuf(securityToken);
-        UserName_ = TString(tokenBuf.NextTok(':'));
-        FolderId_ = TString(tokenBuf.NextTok(':'));
+        auto items = ParseCloudSecurityToken(securityToken);
+        UserName_ = std::get<0>(items);
+        FolderId_ = std::get<1>(items);
 
         // TODO: handle empty cloud id better
         RLOG_SQS_DEBUG("Proxy actor: used " << UserName_ << " as an account name and " << QueueName_ << " as a queue name");

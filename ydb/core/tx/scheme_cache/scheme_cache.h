@@ -264,7 +264,7 @@ struct TSchemeCacheNavigate {
     using TResultSet = TVector<TEntry>;
 
     TResultSet ResultSet;
-    TAutoPtr<const NACLib::TUserToken> UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString DatabaseName;
     ui64 DomainOwnerId = 0;
     ui64 ErrorCount = 0;
@@ -335,7 +335,7 @@ struct TSchemeCacheRequest {
     using TResultSet = TVector<TEntry>;
 
     TResultSet ResultSet;
-    TAutoPtr<const NACLib::TUserToken> UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString DatabaseName;
     ui64 DomainOwnerId = 0;
     ui64 ErrorCount = 0;

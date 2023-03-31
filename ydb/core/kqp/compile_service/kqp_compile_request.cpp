@@ -29,7 +29,7 @@ public:
         return NKikimrServices::TActivity::KQP_COMPILE_REQUEST;
     }
 
-    TKqpCompileRequestActor(const TActorId& owner, const TString& userToken, const TMaybe<TString>& uid,
+    TKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
         TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit,
         NWilson::TTraceId traceId)
         : Owner(owner)
@@ -153,13 +153,27 @@ private:
 private:
     void FillTables(const NKqpProto::TKqpPhyTx& phyTx) {
         for (const auto& stage : phyTx.GetStages()) {
-            for (const auto& tableOp : stage.GetTableOps()) {
-                TTableId tableId(tableOp.GetTable().GetOwnerId(), tableOp.GetTable().GetTableId());
+            auto addTable = [&](const NKqpProto::TKqpPhyTableId& table) {
+                TTableId tableId(table.GetOwnerId(), table.GetTableId());
                 auto it = TableVersions.find(tableId);
                 if (it != TableVersions.end()) {
-                    Y_ENSURE(it->second == tableOp.GetTable().GetVersion());
+                    Y_ENSURE(it->second == table.GetVersion());
                 } else {
-                    TableVersions.emplace(tableId, tableOp.GetTable().GetVersion());
+                    TableVersions.emplace(tableId, table.GetVersion());
+                }
+            };
+            for (const auto& tableOp : stage.GetTableOps()) {
+                addTable(tableOp.GetTable());
+            }
+            for (const auto& input : stage.GetInputs()) {
+                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
+                    addTable(input.GetStreamLookup().GetTable());
+                }
+            }
+
+            for (const auto& source : stage.GetSources()) {
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    addTable(source.GetReadRangesSource().GetTable());
                 }
             }
         }
@@ -189,8 +203,8 @@ private:
 
         auto navigate = MakeHolder<TSchemeCacheNavigate>();
         navigate->DatabaseName = database;
-        if (!UserToken.empty()) {
-            navigate->UserToken = new NACLib::TUserToken(UserToken);
+        if (UserToken && !UserToken->GetSerializedToken().empty()) {
+            navigate->UserToken = UserToken;
         }
 
         for (const auto& [tableId, _] : TableVersions) {
@@ -307,7 +321,7 @@ private:
 
 private:
     TActorId Owner;
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TMaybe<TString> Uid;
     TMaybe<TKqpQueryId> Query;
     bool KeepInCache = false;
@@ -316,13 +330,12 @@ private:
     TActorId TimeoutTimerId;
     THashMap<TTableId, ui64> TableVersions;
     THolder<TEvKqp::TEvCompileResponse> DeferredResponse;
-
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan CompileRequestSpan;
 };
 
 
-IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TString& userToken, const TMaybe<TString>& uid,
+IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit,
     NWilson::TTraceId traceId)
 {

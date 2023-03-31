@@ -49,13 +49,13 @@ class TAlterPQ: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    TPersQueueGroupInfo::TPtr ParseParams(
+    TTopicInfo::TPtr ParseParams(
             TOperationContext& context,
             NKikimrPQ::TPQTabletConfig* tabletConfig,
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        TPersQueueGroupInfo::TPtr params = new TPersQueueGroupInfo();
+        TTopicInfo::TPtr params = new TTopicInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
 
         if (alter.HasTotalGroupCount()) {
@@ -182,7 +182,7 @@ public:
     TTxState& PrepareChanges(
             TOperationId operationId,
             const TPath& path,
-            TPersQueueGroupInfo::TPtr pqGroup,
+            TTopicInfo::TPtr pqGroup,
             ui64 shardsToCreate,
             const TChannelsBindings& rbChannelsBinding,
             const TChannelsBindings& pqChannelsBinding,
@@ -204,7 +204,7 @@ public:
 
         for (auto& shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
-            for (const auto& pqInfo : shard.second->PQInfos) {
+            for (const auto& pqInfo : shard.second->Partitions) {
                 context.SS->PersistPersQueue(db, item->PathId, shardIdx, pqInfo);
             }
         }
@@ -262,7 +262,7 @@ public:
     bool ApplySharding(
             TTxId txId,
             const TPathId& pathId,
-            TPersQueueGroupInfo::TPtr pqGroup,
+            TTopicInfo::TPtr pqGroup,
             TTxState& txState,
             const TChannelsBindings& rbBindedChannels,
             const TChannelsBindings& pqBindedChannels,
@@ -318,7 +318,7 @@ public:
             txState.Shards.emplace_back(idx, ETabletType::PersQueue, TTxState::CreateParts);
 
             context.SS->RegisterShardInfo(idx, defaultShardInfo);
-            pqGroup->Shards[idx] = new TPQShardInfo();
+            pqGroup->Shards[idx] = new TTopicTabletInfo();
         }
 
         if (!hasBalancer) {
@@ -344,7 +344,7 @@ public:
         return shardsToCreate > 0;
     }
 
-    void ReassignIds(TPersQueueGroupInfo::TPtr pqGroup) {
+    void ReassignIds(TTopicInfo::TPtr pqGroup) {
         Y_VERIFY(pqGroup->TotalPartitionCount >= pqGroup->TotalGroupCount);
         ui32 numOld = pqGroup->TotalPartitionCount;
         ui32 numNew = pqGroup->AlterData->PartitionsToAdd.size() + numOld;
@@ -357,15 +357,15 @@ public:
         auto it = pqGroup->Shards.begin();
 
         for (const auto& p : pqGroup->AlterData->PartitionsToAdd) {
-            TPQShardInfo::TPersQueueInfo pqInfo;
+            TTopicTabletInfo::TTopicPartitionInfo pqInfo;
             pqInfo.PqId = p.PartitionId;
             pqInfo.GroupId = p.GroupId;
             pqInfo.KeyRange = p.KeyRange;
             pqInfo.AlterVersion = alterVersion;
-            while (it->second->PQInfos.size() >= average) {
+            while (it->second->Partitions.size() >= average) {
                 ++it;
             }
-            it->second->PQInfos.push_back(pqInfo);
+            it->second->Partitions.push_back(pqInfo);
         }
     }
 
@@ -421,7 +421,7 @@ public:
             }
         }
 
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(path.Base()->PathId);
+        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(path.Base()->PathId);
         Y_VERIFY(pqGroup);
 
         if (pqGroup->AlterVersion == 0) {
@@ -440,7 +440,7 @@ public:
         }
         newTabletConfig = tabletConfig;
 
-        TPersQueueGroupInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
+        TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
 
         if (!alterData) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
@@ -519,23 +519,10 @@ public:
             return result;
         }
 
-        auto getStorageLimit = [](auto &config, ui64 throughput) {
-            if (config.GetPartitionConfig().HasStorageLimitBytes()) {
-                return config.GetPartitionConfig().GetStorageLimitBytes();
-            } else {
-                return throughput * config.GetPartitionConfig().GetLifetimeSeconds();
-            }
-        };
+        const PQGroupReserve reserve(newTabletConfig, alterData->TotalPartitionCount);
+        const PQGroupReserve oldReserve(tabletConfig, pqGroup->TotalPartitionCount);
 
-        const ui64 throughput = ((ui64)(newTabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond())) *
-                             (alterData->TotalGroupCount);
-        const ui64 oldThroughput = ((ui64)(tabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond())) *
-                             (pqGroup->TotalGroupCount);
-
-        const ui64 storage = getStorageLimit(newTabletConfig, throughput);
-        const ui64 oldStorage = getStorageLimit(tabletConfig, oldThroughput);
-
-        const ui64 storageToReserve = storage > oldStorage ? storage - oldStorage : 0;
+        const ui64 storageToReserve = reserve.Storage > oldReserve.Storage ? reserve.Storage - oldReserve.Storage : 0;
 
         {
             TPath::TChecker checks = path.Check();
@@ -604,14 +591,14 @@ public:
 
         path.DomainInfo()->AddInternalShards(txState);
         path.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
-        path.DomainInfo()->UpdatePQReservedStorage(oldStorage, storage);
+        path.DomainInfo()->UpdatePQReservedStorage(oldReserve.Storage, reserve.Storage);
         path.Base()->IncShardsInside(shardsToCreate);
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(oldThroughput);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(reserve.Throughput);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(oldReserve.Throughput);
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(oldStorage);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(reserve.Storage);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(oldReserve.Storage);
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate);
 

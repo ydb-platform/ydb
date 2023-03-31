@@ -124,14 +124,15 @@ public:
 
     TString DumpQuery() const {
         TStringStream str;
-        str << "{";
+        str << '{';
+        str << "MustRestoreFirst# " << MustRestoreFirst;
         for (ui32 i = 0; i < QuerySize; ++i) {
-            str << (i ? " " : "")
+            str << ' '
                 << Queries[i].Id
-                << "@" << Queries[i].Shift
-                << ":" << Queries[i].Size;
+                << '@' << Queries[i].Shift
+                << ':' << Queries[i].Size;
         }
-        str << "}";
+        str << '}';
         return str.Str();
     }
 

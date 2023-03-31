@@ -355,11 +355,10 @@ void DistributedEraseTx(
 } // anonymous
 
 Y_UNIT_TEST_SUITE(EraseRowsTests) {
-    void EraseRowsShouldSuccess(TMaybe<ui64> injectSchemaVersion, bool enableMvcc) {
+    void EraseRowsShouldSuccess(TMaybe<ui64> injectSchemaVersion) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(enableMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -386,15 +385,14 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, value = 2020-04-15T00:00:00.000000Z");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(EraseRowsShouldSuccess) {
-        EraseRowsShouldSuccess(Nothing(), WithMvcc);
+    Y_UNIT_TEST(EraseRowsShouldSuccess) {
+        EraseRowsShouldSuccess(Nothing());
     }
 
-    Y_UNIT_TEST_WITH_MVCC(EraseRowsShouldFailOnVariousErrors) {
+    Y_UNIT_TEST(EraseRowsShouldFailOnVariousErrors) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -427,13 +425,12 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
             TProto::TEvEraseResponse::SCHEME_ERROR, "Cell count doesn't match row scheme");
     }
 
-    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase, bool enableMvcc = false) {
+    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(enableMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -457,7 +454,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), Strip(afterErase));
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldErase) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldErase) {
         ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
@@ -467,10 +464,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
         )", R"(
 key = 3, value = 2030-04-15T00:00:00.000000Z
 key = 4, value = (empty maybe)
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldNotErase) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldNotErase) {
         ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
@@ -480,10 +477,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 key = 1, value = 2030-04-15T00:00:00.000000Z
 key = 2, value = 2030-04-15T00:00:00.000000Z
 key = 3, value = 2030-04-15T00:00:00.000000Z
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint32) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint32) {
         ConditionalEraseShouldSuccess("Uint32", TUnit::SECONDS, R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
@@ -493,10 +490,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
         )", R"(
 key = 3, value = 1902441600
 key = 4, value = (empty maybe)
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64Seconds) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint64Seconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::SECONDS, R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
@@ -506,10 +503,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
         )", R"(
 key = 3, value = 1902441600
 key = 4, value = (empty maybe)
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64MilliSeconds) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint64MilliSeconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::MILLISECONDS, R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
@@ -519,10 +516,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
         )", R"(
 key = 3, value = 1902441600000
 key = 4, value = (empty maybe)
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64MicroSeconds) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint64MicroSeconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::MICROSECONDS, R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
@@ -532,10 +529,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
         )", R"(
 key = 3, value = 1902441600000000
 key = 4, value = (empty maybe)
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64NanoSeconds) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint64NanoSeconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::NANOSECONDS, R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
@@ -545,10 +542,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
         )", R"(
 key = 3, value = 1902441600000000000
 key = 4, value = (empty maybe)
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberSeconds) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDyNumberSeconds) {
         ConditionalEraseShouldSuccess("DyNumber", TUnit::SECONDS, R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
@@ -563,10 +560,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 key = 5, value = .19024416e10
 key = 6, value = .6362496e12
 key = 7, value = (empty maybe)
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberMilliSeconds) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDyNumberMilliSeconds) {
         ConditionalEraseShouldSuccess("DyNumber", TUnit::MILLISECONDS, R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
@@ -579,10 +576,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 key = 3, value = .19024416e13
 key = 4, value = .6362496e15
 key = 5, value = (empty maybe)
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberMicroSeconds) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDyNumberMicroSeconds) {
         ConditionalEraseShouldSuccess("DyNumber", TUnit::MICROSECONDS, R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
@@ -598,10 +595,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 key = 6, value = .19024416e16
 key = 7, value = .99999999999999999999999999999999999999e126
 key = 8, value = (empty maybe)
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberNanoSeconds) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDyNumberNanoSeconds) {
         ConditionalEraseShouldSuccess("DyNumber", TUnit::NANOSECONDS, R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
@@ -612,16 +609,15 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
         )", R"(
 key = 3, value = .19024416e19
 key = 4, value = (empty maybe)
-        )", WithMvcc);
+        )");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldFailOnVariousErrors) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnVariousErrors) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -661,13 +657,15 @@ key = 4, value = (empty maybe)
         }
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldBreakLocks) {
+    Y_UNIT_TEST_TWIN(ConditionalEraseRowsShouldBreakLocks, StreamLookup) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(WithMvcc)
+            .SetAppConfig(appConfig)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -714,13 +712,12 @@ key = 4, value = (empty maybe)
         }
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldNotEraseModifiedRows) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldNotEraseModifiedRows) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 

@@ -178,6 +178,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         engine->ReleaseUnusedMemory();
         txc.RequestMemory(txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR);
 
+        tx->GetDataTx()->ResetCollectedChanges();
         tx->ReleaseTxData(txc, ctx);
 
         return EExecutionStatus::Restart;
@@ -187,6 +188,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
+        tx->GetDataTx()->ResetCollectedChanges();
         tx->ReleaseTxData(txc, ctx);
 
         return EExecutionStatus::Restart;
@@ -194,6 +196,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID()
             << " needs to reschedule " << *op << " for dependencies");
 
+        tx->GetDataTx()->ResetCollectedChanges();
         tx->ReleaseTxData(txc, ctx);
 
         txc.Reschedule();

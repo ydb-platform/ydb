@@ -190,6 +190,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_cdc_stream.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_allocate_pq.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_deallocate_pq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__pq_stats.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__publish_to_scheme_board.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__state_changed_reply.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__table_stats.cpp
@@ -198,8 +199,10 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__upgrade_access_database.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__make_access_database_no_inheritable.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_audit_log_fragment.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_audit_log.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_billing_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_cdc_stream_scan.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_domain_links.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_effective_acl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_identificators.cpp

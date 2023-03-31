@@ -54,10 +54,9 @@ void THelperSchemaless::CreateTestOlapTable(TActorId sender, TString storeOrDirN
     WaitForSchemeOperation(sender, txId);
 }
 
-void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch) {
     auto* runtime = Server.GetRuntime();
 
-    auto batch = TestArrowBatch(pathIdBegin, tsBegin, rowCount);
     UNIT_ASSERT(batch);
     UNIT_ASSERT(batch->num_rows());
     auto data = NArrow::SerializeBatchNoCompression(batch);
@@ -92,6 +91,11 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBeg
     };
 
     runtime->DispatchEvents(options);
+}
+
+void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+    auto batch = TestArrowBatch(pathIdBegin, tsBegin, rowCount);
+    SendDataViaActorSystem(testTable, batch);
 }
 
 //
@@ -141,7 +145,7 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5 });
 }
 
-//
+// Clickbench table
 
 std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() {
     return std::make_shared<arrow::Schema>(
@@ -307,6 +311,52 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
     UNIT_ASSERT(batch->num_rows());
     UNIT_ASSERT(batch->Validate().ok());
     return batch;
+}
+
+// Table with NULLs
+
+std::shared_ptr<arrow::Schema> TTableWithNullsHelper::GetArrowSchema() {
+    return std::make_shared<arrow::Schema>(
+        std::vector<std::shared_ptr<arrow::Field>>{
+            arrow::field("id", arrow::int32()),
+            arrow::field("resource_id", arrow::utf8()),
+            arrow::field("level", arrow::int32())
+    });
+}
+
+std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch() {
+    return TestArrowBatch(0, 0, 10);
+}
+
+std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount) {
+    rowCount = 10;
+    std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
+
+    arrow::Int32Builder b1;
+    arrow::StringBuilder b2;
+    arrow::Int32Builder b3;
+
+    for (size_t i = 1; i <= rowCount / 2; ++i) {
+        Y_VERIFY(b1.Append(i).ok());
+        Y_VERIFY(b2.AppendNull().ok());
+        Y_VERIFY(b3.Append(i).ok());
+    }
+
+    for (size_t i = rowCount / 2 + 1; i <= rowCount; ++i) {
+        Y_VERIFY(b1.Append(i).ok());
+        Y_VERIFY(b2.Append(std::to_string(i)).ok());
+        Y_VERIFY(b3.AppendNull().ok());
+    }
+
+    std::shared_ptr<arrow::Int32Array> a1;
+    std::shared_ptr<arrow::StringArray> a2;
+    std::shared_ptr<arrow::Int32Array> a3;
+
+    Y_VERIFY(b1.Finish(&a1).ok());
+    Y_VERIFY(b2.Finish(&a2).ok());
+    Y_VERIFY(b3.Finish(&a3).ok());
+
+    return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3 });
 }
 
 }

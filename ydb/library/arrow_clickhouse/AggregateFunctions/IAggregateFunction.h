@@ -117,8 +117,7 @@ public:
         AggregateDataPtr * places,
         size_t place_offset,
         const IColumn ** columns,
-        Arena * arena,
-        ssize_t if_argument_pos = -1) const = 0;
+        Arena * arena) const = 0;
 
     virtual void mergeBatch(
         size_t row_begin,
@@ -135,8 +134,7 @@ public:
         size_t row_end,
         AggregateDataPtr __restrict place,
         const IColumn ** columns,
-        Arena * arena,
-        ssize_t if_argument_pos = -1) const = 0;
+        Arena * arena) const = 0;
 
     /** The case when the aggregation key is UInt8
       * and pointers to aggregation states are stored in AggregateDataPtr[256] lookup table.
@@ -204,15 +202,13 @@ public:
         AggregateDataPtr * places,
         size_t place_offset,
         const IColumn ** columns,
-        Arena * arena,
-        ssize_t if_argument_pos = -1) const override
+        Arena * arena) const override
     {
-        if (if_argument_pos >= 0)
+        if (columns && columns[0]->null_bitmap_data())
         {
-            const auto & flags = assert_cast<const ColumnUInt8 &>(*columns[if_argument_pos]).raw_values();
             for (size_t i = row_begin; i < row_end; ++i)
             {
-                if (flags[i] && places[i])
+                if (columns[0]->IsValid(i) && places[i])
                     static_cast<const Derived *>(this)->add(places[i] + place_offset, columns, i, arena);
             }
         }
@@ -242,15 +238,13 @@ public:
         size_t row_end,
         AggregateDataPtr __restrict place,
         const IColumn ** columns,
-        Arena * arena,
-        ssize_t if_argument_pos = -1) const override
+        Arena * arena) const override
     {
-        if (if_argument_pos >= 0)
+        if (columns && columns[0]->null_bitmap_data())
         {
-            const auto & flags = assert_cast<const ColumnUInt8 &>(*columns[if_argument_pos]).raw_values();
             for (size_t i = row_begin; i < row_end; ++i)
             {
-                if (flags[i])
+                if (columns[0]->IsValid(i))
                     static_cast<const Derived *>(this)->add(place, columns, i, arena);
             }
         }

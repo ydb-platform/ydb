@@ -236,6 +236,14 @@ private:
                 return;
             }
 
+            if (requestBaseCtx->IsClientLost()) {
+                // Any status here
+                LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                    "Client was disconnected before processing request (grpc request proxy)");
+                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+                return;
+            }
+
             Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
                 database->SchemeBoardResult->DescribeSchemeResult,
                 database->SecurityObject, event.Release(), Counters, skipCheckConnectRigths));
@@ -491,7 +499,7 @@ void LogRequest(const TEvent& event) {
     };
 
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
-        LOG_NOTICE(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
+        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
     }
     else {
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
@@ -528,6 +536,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvStreamPQMigrationReadRequest, PreHandle);
         HFunc(TEvStreamTopicWriteRequest, PreHandle);
         HFunc(TEvStreamTopicReadRequest, PreHandle);
+        HFunc(TEvCommitOffsetRequest, PreHandle);
         HFunc(TEvPQReadInfoRequest, PreHandle);
         HFunc(TEvPQDropTopicRequest, PreHandle);
         HFunc(TEvPQCreateTopicRequest, PreHandle);

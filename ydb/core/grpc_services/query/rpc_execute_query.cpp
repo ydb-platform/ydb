@@ -37,6 +37,10 @@ std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
     kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_QUERY);
     kqpRequest.MutableRequest()->SetKeepSession(false);
 
+    // TODO: Use tx control from request.
+    kqpRequest.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    kqpRequest.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+
     switch (req.query_case()) {
         case Ydb::Query::ExecuteQueryRequest::kQueryContent: {
             NYql::TIssues issues;

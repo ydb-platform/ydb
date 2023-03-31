@@ -51,13 +51,13 @@ namespace NKikimr::NBlobDepot {
                     response.RequestedSize = query.Size;
 
                     TString blobId = query.Id.AsBinaryString();
-                    if (const TResolvedValueChain *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
-                            std::make_shared<TResolveKeyContext>(i))) {
-                        if (!ProcessSingleResult(i, value, std::nullopt)) {
-                            return;
+                    if (const TResolvedValue *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
+                            std::make_shared<TResolveKeyContext>(i), Request.MustRestoreFirst)) {
+                        if (!ProcessSingleResult(i, value)) {
+                            return; // error occured
                         }
                     } else {
-                        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA29, "resolve pending", (VirtualGroupId, Agent.VirtualGroupId),
+                        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA29, "resolve pending", (AgentId, Agent.LogId),
                             (QueryId, GetQueryId()), (QueryIdx, i), (BlobId, query.Id));
                     }
                 }
@@ -65,51 +65,35 @@ namespace NKikimr::NBlobDepot {
                 CheckAndFinish();
             }
 
-            bool ProcessSingleResult(ui32 queryIdx, const TResolvedValueChain *value, const std::optional<TString>& errorReason) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA27, "ProcessSingleResult", (VirtualGroupId, Agent.VirtualGroupId),
-                    (QueryId, GetQueryId()), (QueryIdx, queryIdx), (Value, value), (ErrorReason, errorReason));
+            bool ProcessSingleResult(ui32 queryIdx, const TKeyResolved& result) {
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA27, "ProcessSingleResult", (AgentId, Agent.LogId),
+                    (QueryId, GetQueryId()), (QueryIdx, queryIdx), (Result, result));
 
                 auto& r = Response->Responses[queryIdx];
                 Y_VERIFY(r.Status == NKikimrProto::UNKNOWN);
-                if (errorReason) {
+                if (result.Error()) {
                     r.Status = NKikimrProto::ERROR;
                     --AnswersRemain;
-                } else if (!value) {
+                } else if (const TResolvedValue *value = result.GetResolvedValue(); !value) {
                     r.Status = NKikimrProto::NODATA;
                     --AnswersRemain;
                 } else if (Request.IsIndexOnly) {
                     r.Status = NKikimrProto::OK;
                     --AnswersRemain;
                 } else {
+                    Y_VERIFY(Request.MustRestoreFirst <= value->ReliablyWritten);
                     TReadArg arg{
                         *value,
                         Request.GetHandleClass,
                         Request.MustRestoreFirst,
-                        this,
                         Request.Queries[queryIdx].Shift,
                         Request.Queries[queryIdx].Size,
                         queryIdx,
-                        Request.ReaderTabletData};
-                    TString error;
-                    auto makeValueChain = [&] {
-                        TStringStream str;
-                        str << '[';
-                        for (int i = 0; i < value->size(); ++i) {
-                            const auto& item = value->at(i);
-                            if (i != 0) {
-                                str << ' ';
-                            }
-                            const auto blobId = LogoBlobIDFromLogoBlobID(item.GetBlobId());
-                            const ui64 subrangeBegin = item.GetSubrangeBegin();
-                            const ui64 subrangeEnd = item.HasSubrangeEnd() ? item.GetSubrangeEnd() : blobId.BlobSize();
-                            str << blobId << '@' << item.GetGroupId() << '{' << subrangeBegin << '-' << (subrangeEnd - 1) << '}';
-                        }
-                        str << ']';
-                        return str.Str();
+                        Request.ReaderTabletData,
+                        Request.Queries[queryIdx].Id.AsBinaryString(),
                     };
-                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA34, "IssueRead", (VirtualGroupId, Agent.VirtualGroupId),
-                        (Offset, arg.Offset), (Size, arg.Size), (ValueChain, makeValueChain()), (Tag, arg.Tag));
-                    const bool success = Agent.IssueRead(arg, error);
+                    TString error;
+                    const bool success = IssueRead(std::move(arg), error);
                     if (!success) {
                         EndWithError(NKikimrProto::ERROR, std::move(error));
                         return false;
@@ -119,9 +103,10 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnRead(ui64 tag, NKikimrProto::EReplyStatus status, TString buffer) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA35, "OnRead", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA35, "OnRead", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
                     (Tag, tag), (Status, status), (Buffer.size, status == NKikimrProto::OK ? buffer.size() : 0),
                     (ErrorReason, status != NKikimrProto::OK ? buffer : ""));
+
                 auto& resp = Response->Responses[tag];
                 Y_VERIFY(resp.Status == NKikimrProto::UNKNOWN);
                 resp.Status = status;
@@ -172,13 +157,15 @@ namespace NKikimr::NBlobDepot {
 
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
                 if (auto *p = std::get_if<TKeyResolved>(&response)) {
-                    ProcessSingleResult(context->Obtain<TResolveKeyContext>().QueryIdx, p->ValueChain, p->ErrorReason);
+                    ProcessSingleResult(context->Obtain<TResolveKeyContext>().QueryIdx, *p);
                     CheckAndFinish();
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
-                    Agent.HandleGetResult(context, **p);
+                    TQuery::HandleGetResult(context, **p);
+                } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
+                    TQuery::HandleResolveResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     if (auto *resolveContext = dynamic_cast<TResolveKeyContext*>(context.get())) {
-                        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA26, "TTabletDisconnected", (VirtualGroupId, Agent.VirtualGroupId),
+                        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA26, "TTabletDisconnected", (AgentId, Agent.LogId),
                             (QueryId, GetQueryId()), (QueryIdx, resolveContext->QueryIdx));
                         Response->Responses[resolveContext->QueryIdx].Status = NKikimrProto::ERROR;
                         --AnswersRemain;

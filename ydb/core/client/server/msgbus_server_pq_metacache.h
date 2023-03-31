@@ -45,6 +45,8 @@ struct TEvPqNewMetaCache {
         EvDescribeTopicsResponse,
         EvDescribeAllTopicsRequest,
         EvDescribeAllTopicsResponse,
+        EvGetNodesMappingRequest,
+        EvGetNodesMappingResponse,
         EvEnd
     };
 
@@ -109,6 +111,21 @@ struct TEvPqNewMetaCache {
             , Result(result)
         {}
     };
+
+    struct TEvGetNodesMappingRequest : public TEventLocal<TEvGetNodesMappingRequest, EvGetNodesMappingRequest> {
+    };
+
+    struct TEvGetNodesMappingResponse : public TEventLocal<TEvGetNodesMappingResponse, EvGetNodesMappingResponse> {
+        std::shared_ptr<THashMap<ui32, ui32>> NodesMapping;
+        bool Status;
+
+        TEvGetNodesMappingResponse(const std::shared_ptr<THashMap<ui32, ui32>>& nodesMapping, bool status)
+            : NodesMapping(std::move(nodesMapping))
+            , Status(status)
+        {}
+
+    };
+
 };
 IActor* CreatePQMetaCache(const ::NMonitoring::TDynamicCounterPtr& counters,
                           const TDuration& versionCheckInterval = TDuration::Seconds(1));

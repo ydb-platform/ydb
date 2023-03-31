@@ -28,12 +28,12 @@ using EDeletionPolicy = ESchemeBoardSubscriberDeletionPolicy;
 
 namespace NSchemeBoard {
 
-#define SBS_LOG_T(stream) SB_LOG_T(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "] " << this->SelfId() << " [" << Path << "] " << stream)
-#define SBS_LOG_D(stream) SB_LOG_D(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "] " << this->SelfId() << " [" << Path << "] " << stream)
-#define SBS_LOG_I(stream) SB_LOG_I(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "] " << this->SelfId() << " [" << Path << "] " << stream)
-#define SBS_LOG_N(stream) SB_LOG_N(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "] " << this->SelfId() << " [" << Path << "] " << stream)
-#define SBS_LOG_W(stream) SB_LOG_W(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "] " << this->SelfId() << " [" << Path << "] " << stream)
-#define SBS_LOG_E(stream) SB_LOG_E(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "] " << this->SelfId() << " [" << Path << "] " << stream)
+#define SBS_LOG_T(stream) SB_LOG_T(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
+#define SBS_LOG_D(stream) SB_LOG_D(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
+#define SBS_LOG_I(stream) SB_LOG_I(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
+#define SBS_LOG_N(stream) SB_LOG_N(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
+#define SBS_LOG_W(stream) SB_LOG_W(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
+#define SBS_LOG_E(stream) SB_LOG_E(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
 
 namespace {
 
@@ -225,8 +225,8 @@ namespace {
 
             // it is only because we need to manage undo of upgrade subdomain, finally remove it
 
-            if (Version.PathId == other.DomainId) { //Update from TSS, GSS->TSS
-                if (AbandonedSchemeShards.contains(other.Version.PathId.OwnerId)) { //TSS is ignored, present GSS reverted that TSS
+            if (Version.PathId == other.DomainId) { // Update from TSS, GSS->TSS
+                if (AbandonedSchemeShards.contains(other.Version.PathId.OwnerId)) { // TSS is ignored, present GSS reverted that TSS
                     reason = "Update was ignored, GSS implisytly banned that TSS";
                     return false;
                 }
@@ -235,8 +235,8 @@ namespace {
                 return true;
             }
 
-            if (DomainId == other.Version.PathId) { //Update from GSS, TSS->GSS
-                if (other.AbandonedSchemeShards.contains(Version.PathId.OwnerId)) { //GSS reverts TSS
+            if (DomainId == other.Version.PathId) { // Update from GSS, TSS->GSS
+                if (other.AbandonedSchemeShards.contains(Version.PathId.OwnerId)) { // GSS reverts TSS
                     reason = "Path was updated as a replacement from GSS, GSS implicitly reverts TSS";
                     return true;
                 }
@@ -294,17 +294,14 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
     void Handle(TSchemeBoardEvents::TEvNotify::TPtr& ev) {
         auto& record = *ev->Get()->MutableRecord();
 
-        SBS_LOG_D("Handle TSchemeBoardEvents::TEvNotify"
+        SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
-        SBS_LOG_T("Message:\n" << record.ShortDebugString());
 
         this->Send(ev->Sender, new TSchemeBoardEvents::TEvNotifyAck(record.GetVersion()));
 
         if (!IsValidNotification(Path, record)) {
-            SBS_LOG_E("Suspicious notification"
-                << ": sender# " << ev->Sender
-                << ", other path# " << record.GetPath()
-                << ", other pathId# " << TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
+            SBS_LOG_E("Suspicious " << ev->Get()->ToString()
+                << ": sender# " << ev->Sender);
             return;
         }
 
@@ -312,7 +309,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
-        SBS_LOG_D("Handle TSchemeBoardEvents::TEvSyncVersionRequest"
+        SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
 
@@ -321,7 +318,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TSchemeBoardEvents::TEvSyncVersionResponse::TPtr& ev) {
-        SBS_LOG_D("Handle TSchemeBoardEvents::TEvSyncVersionResponse"
+        SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
 
@@ -726,15 +723,12 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     void Handle(TSchemeBoardEvents::TEvNotify::TPtr& ev) {
         auto& record = *ev->Get()->MutableRecord();
 
-        SBS_LOG_D("Handle TSchemeBoardEvents::TEvNotify"
+        SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
-        SBS_LOG_T("Message:\n" << record.ShortDebugString());
 
         if (!IsValidNotification(Path, record)) {
-            SBS_LOG_E("Suspicious notification"
-                << ": sender# " << ev->Sender
-                << ", other path# " << record.GetPath()
-                << ", other pathId# " << TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
+            SBS_LOG_E("Suspicious " << ev->Get()->ToString()
+                << ": sender# " << ev->Sender);
             return;
         }
 
@@ -785,12 +779,12 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TSchemeBoardEvents::TEvSyncRequest::TPtr& ev) {
-        SBS_LOG_D("Handle TSchemeBoardEvents::TEvSyncRequest"
+        SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
 
         if (ev->Sender != Owner) {
-            SBS_LOG_W("Suspicious sync version request"
+            SBS_LOG_W("Suspicious " << ev->Get()->ToString()
                 << ": sender# " << ev->Sender
                 << ", owner# " << Owner);
             return;
@@ -806,7 +800,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TSchemeBoardEvents::TEvSyncVersionResponse::TPtr& ev) {
-        SBS_LOG_D("Handle TSchemeBoardEvents::TEvSyncVersionResponse"
+        SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
 
@@ -876,7 +870,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
-        SBS_LOG_D("Handle TEvStateStorage::TEvResolveReplicasList");
+        SBS_LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& replicas = ev->Get()->Replicas;
 

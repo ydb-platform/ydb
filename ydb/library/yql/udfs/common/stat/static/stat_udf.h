@@ -25,7 +25,7 @@ namespace {
         return TUnboxedValuePod(new TDigestResource(delta, K, args[0].Get<double>()));
     }
 
-    SIMPLE_UDF(TTDigest_AddValue, TResource<DigestResourceName>(TResource<DigestResourceName>, double)) {
+    SIMPLE_STRICT_UDF(TTDigest_AddValue, TResource<DigestResourceName>(TResource<DigestResourceName>, double)) {
         Y_UNUSED(valueBuilder);
         TDigestResource::Validate(args[0]);
         TDigestResource* resource = static_cast<TDigestResource*>(args[0].AsBoxed().Get());
@@ -33,13 +33,13 @@ namespace {
         return TUnboxedValuePod(resource);
     }
 
-    SIMPLE_UDF(TTDigest_GetPercentile, double(TResource<DigestResourceName>, double)) {
+    SIMPLE_STRICT_UDF(TTDigest_GetPercentile, double(TResource<DigestResourceName>, double)) {
         Y_UNUSED(valueBuilder);
         TDigestResource::Validate(args[0]);
         return TUnboxedValuePod(static_cast<TDigestResource*>(args[0].AsBoxed().Get())->Get()->GetPercentile(args[1].Get<double>()));
     }
 
-    SIMPLE_UDF(TTDigest_Serialize, char*(TResource<DigestResourceName>)) {
+    SIMPLE_STRICT_UDF(TTDigest_Serialize, char*(TResource<DigestResourceName>)) {
         TDigestResource::Validate(args[0]);
         return valueBuilder->NewString(static_cast<TDigestResource*>(args[0].AsBoxed().Get())->Get()->Serialize());
     }
@@ -49,7 +49,7 @@ namespace {
         return TUnboxedValuePod(new TDigestResource(TString(args[0].AsStringRef())));
     }
 
-    SIMPLE_UDF(TTDigest_Merge, TResource<DigestResourceName>(TResource<DigestResourceName>, TResource<DigestResourceName>)) {
+    SIMPLE_STRICT_UDF(TTDigest_Merge, TResource<DigestResourceName>(TResource<DigestResourceName>, TResource<DigestResourceName>)) {
         Y_UNUSED(valueBuilder);
         TDigestResource::Validate(args[0]);
         TDigestResource::Validate(args[1]);

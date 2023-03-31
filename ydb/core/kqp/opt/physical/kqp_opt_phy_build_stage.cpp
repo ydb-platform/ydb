@@ -54,6 +54,72 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
         .Done();
 }
 
+// ReadRangesSource can't deal with skipnullkeys, so we should expand it to (ExtractMembers (SkipNullKeys))
+//FIXME: simplify KIKIMR-16987
+NYql::NNodes::TExprBase ExpandSkipNullMembersForReadTableSource(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx, const TKqpOptimizeContext&) {
+    auto stage = node.Cast<TDqStage>();
+    TMaybe<size_t> tableSourceIndex;
+    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+        auto input = stage.Inputs().Item(i);
+        if (input.Maybe<TDqSource>() && input.Cast<TDqSource>().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
+            tableSourceIndex = i;
+        }
+    }
+    if (!tableSourceIndex) {
+        return node;
+    }
+
+    auto source = stage.Inputs().Item(*tableSourceIndex).Cast<TDqSource>();
+    auto readRangesSource = source.Settings().Cast<TKqpReadRangesSourceSettings>();
+    auto settings = TKqpReadTableSettings::Parse(readRangesSource.Settings());
+    
+    if (settings.SkipNullKeys.empty()) {
+        return node;
+    }
+
+    auto sourceArg = stage.Program().Args().Arg(*tableSourceIndex);
+
+    THashSet<TString> seenColumns;
+    TVector<TCoAtom> columns;
+    TVector<TCoAtom> skipNullColumns;
+    for (size_t i = 0; i < readRangesSource.Columns().Size(); ++i) {
+        auto atom = readRangesSource.Columns().Item(i);
+        auto column = atom.StringValue();
+        if (seenColumns.insert(column).second) {
+            columns.push_back(atom);
+        }
+    }
+    for (auto& column : settings.SkipNullKeys) {
+        TCoAtom atom(ctx.NewAtom(readRangesSource.Settings().Pos(), column));
+        skipNullColumns.push_back(atom);
+        if (seenColumns.insert(column).second) {
+            columns.push_back(atom);
+        }
+    }
+
+    settings.SkipNullKeys.clear();
+    auto newSettings = Build<TKqpReadRangesSourceSettings>(ctx, source.Pos())
+        .Table(readRangesSource.Table())
+        .Columns().Add(columns).Build()
+        .Settings(settings.BuildNode(ctx, source.Settings().Pos()))
+        .RangesExpr(readRangesSource.RangesExpr())
+        .ExplainPrompt(readRangesSource.ExplainPrompt())
+        .Done();
+    TDqStage replacedSettings = ReplaceTableSourceSettings(stage, *tableSourceIndex, newSettings, ctx);
+
+    TCoArgument replaceArg{ctx.NewArgument(sourceArg.Pos(), TStringBuilder() << "_kqp_source_arg_0")};
+    auto replaceExpr =
+        Build<TCoExtractMembers>(ctx, node.Pos())
+            .Members(readRangesSource.Columns())
+            .Input<TCoSkipNullMembers>()
+                .Input(replaceArg)
+                .Members().Add(skipNullColumns).Build()
+            .Build()
+        .Done();
+
+    return ReplaceStageArg(replacedSettings, *tableSourceIndex, replaceArg, replaceExpr, ctx);
+}
+
 TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlReadTable>()) {
         return node;
@@ -63,7 +129,9 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
 
     bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
     useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
-    useSource = useSource && tableDesc.Metadata->Kind != EKikimrTableKind::SysView;
+    useSource = useSource &&
+        tableDesc.Metadata->Kind != EKikimrTableKind::SysView &&
+        tableDesc.Metadata->Kind != EKikimrTableKind::Olap;
 
     TVector<TExprBase> values;
     TNodeOnNodeOwnedMap replaceMap;
@@ -215,6 +283,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
         .Done();
 }
 
+
 TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const TParentsMap& parents)
 {
@@ -228,7 +297,9 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
 
     bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
     useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
-    useSource = useSource && tableDesc.Metadata->Kind != EKikimrTableKind::SysView;
+    useSource = useSource &&
+        tableDesc.Metadata->Kind != EKikimrTableKind::SysView &&
+        tableDesc.Metadata->Kind != EKikimrTableKind::Olap;
 
     bool fullScan = TCoVoid::Match(ranges.Raw());
 
@@ -257,7 +328,12 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
                     .Build()
                 .Done();
         } else {
-            auto connections = FindDqConnections(node);
+            TVector<TDqConnection> connections;
+            bool isPure;
+            FindDqConnections(node, connections, isPure);
+            if (!isPure) {
+                return node;
+            }
             YQL_ENSURE(!connections.empty());
             TVector<TDqConnection> inputs;
             TVector<TExprBase> stageInputs;
@@ -270,8 +346,8 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
                     return node;
                 }
 
-                if (!IsSingleConsumerConnection(input, parents, false)) {
-                    continue;
+                if (!IsSingleConsumerConnection(input, parents, true)) {
+                    return node;
                 }
 
                 inputs.push_back(input);

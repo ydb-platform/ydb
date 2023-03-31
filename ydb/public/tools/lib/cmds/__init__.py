@@ -30,6 +30,7 @@ class EmptyArguments(object):
         self.debug_logging = []
         self.fixed_ports = False
         self.public_http_config_path = None
+        self.dont_use_log_files = False
 
 
 def ensure_path_exists(path):
@@ -300,6 +301,7 @@ def deploy(arguments):
         fq_config_path=arguments.fq_config_path,
         public_http_config_path=arguments.public_http_config_path,
         auth_config_path=arguments.auth_config_path,
+        use_log_files=not arguments.dont_use_log_files,
         **optionals
     )
 
@@ -383,10 +385,10 @@ def _cleanup_working_dir(arguments):
 
 def start(arguments):
     recipe = Recipe(arguments)
-    info = Recipe(arguments).read_metafile()
+    info = recipe.read_metafile()
     for node_id, node_meta in info['nodes'].items():
         files = {}
-        if os.path.exists(node_meta['stderr_file']):
+        if node_meta['stderr_file'] is not None and os.path.exists(node_meta['stderr_file']):
             files = {
                 'stdin_file': node_meta['stdin_file'],
                 'stderr_file': node_meta['stderr_file'],

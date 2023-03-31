@@ -25,7 +25,10 @@ public:
     TS3Export() = default;
 
     explicit TS3Export(TAutoPtr<TEvPrivate::TEvExport> ev)
-        : Event(ev.Release()) {
+        : Event(ev.Release())
+    {
+        Y_VERIFY(Event);
+        Y_VERIFY(Event->Status == NKikimrProto::UNKNOWN);
     }
 
     TEvPrivate::TEvExport::TBlobDataMap& Blobs() {
@@ -41,17 +44,16 @@ public:
         return KeysToWrite.empty();
     }
 
-    TS3Export& RegisterKey(const TString& key) {
-        KeysToWrite.emplace(key);
-        return *this;
+    void RegisterKey(const TString& key, const TUnifiedBlobId& blobId) {
+        KeysToWrite.emplace(key, blobId);
     }
 
-    TS3Export& FinishKey(const TString& key) {
-        KeysToWrite.erase(key);
-        return *this;
+    TUnifiedBlobId FinishKey(const TString& key) {
+        auto node = KeysToWrite.extract(key);
+        return node.mapped();
     }
 private:
-    TSet<TString> KeysToWrite;
+    std::unordered_map<TString, TUnifiedBlobId> KeysToWrite;
 };
 
 struct TS3Forget {
@@ -113,28 +115,39 @@ public:
     void Handle(TEvPrivate::TEvExport::TPtr& ev) {
         auto& msg = *ev->Get();
         ui64 exportNo = msg.ExportNo;
-        Y_VERIFY(ev->Get()->DstActor == ShardActor);
+        Y_VERIFY(msg.DstActor == ShardActor);
 
-        Y_VERIFY(!Exports.count(exportNo));
+        if (Exports.count(exportNo)) {
+            LOG_S_ERROR("[S3] Multiple exports with same export id '" << exportNo << "' at tablet " << TabletId);
+            return;
+        }
+
         Exports[exportNo] = TS3Export(ev->Release());
         auto& ex = Exports[exportNo];
 
-        for (auto& [blobId, blob] : ex.Blobs()) {
-            TString key = ex.AddExported(blobId, blob.PathId).GetS3Key();
-            Y_VERIFY(!ExportingKeys.count(key)); // TODO
+        for (auto& [blobId, blobData] : ex.Blobs()) {
+            TString key = ex.AddExported(blobId, msg.PathId).GetS3Key();
+            Y_VERIFY(!ExportingKeys.count(key)); // TODO: allow reexport?
 
-            ex.RegisterKey(key);
+            ex.RegisterKey(key, blobId);
             ExportingKeys[key] = exportNo;
-            
-            if (blob.Evicting) {
-                SendPutObjectIfNotExists(key, std::move(blob.Data));
-            } else {
-                SendPutObject(key, std::move(blob.Data));
-            }
+
+            SendPutObjectIfNotExists(key, std::move(blobData));
         }
     }
 
     void Handle(TEvPrivate::TEvForget::TPtr& ev) {
+        // It's possible to get several forgets for the same blob (remove + cleanup)
+        for (auto& evict : ev->Get()->Evicted) {
+            if (evict.ExternBlob.IsS3Blob()) {
+                const TString& key = evict.ExternBlob.GetS3Key();
+                if (ForgettingKeys.count(key)) {
+                    LOG_S_NOTICE("[S3] Ignore forget '" << evict.Blob.ToStringNew() << "' at tablet " << TabletId);
+                    return; // TODO: return an error?
+                }
+            }
+        }
+
         ui64 forgetNo = ++ForgetNo;
 
         Forgets[forgetNo] = TS3Forget(ev->Release());
@@ -147,7 +160,7 @@ public:
             }
 
             const TString& key = evict.ExternBlob.GetS3Key();
-            Y_VERIFY(!ForgettingKeys.count(key)); // TODO
+            Y_VERIFY(!ForgettingKeys.count(key));
 
             forget.KeysToDelete.emplace(key);
             ForgettingKeys[key] = forgetNo;
@@ -175,7 +188,6 @@ public:
         }
     }
 
-    // TODO: clean written blobs in failed export
     void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         Y_VERIFY(Initialized());
 
@@ -185,10 +197,14 @@ public:
         const bool hasError = !resultOutcome.IsSuccess();
         TString errStr;
         if (hasError) {
-            errStr = LogError("PutObjectResponse", resultOutcome.GetError(), !!msg.Key);
+            errStr = LogError("PutObjectResponse", resultOutcome.GetError(), msg.Key);
         }
 
-        Y_VERIFY(msg.Key); // FIXME
+        if (!msg.Key || msg.Key->empty()) {
+            LOG_S_ERROR("[S3] no key in PutObjectResponse at tablet " << TabletId);
+            return;
+        }
+
         const TString key = *msg.Key;
 
         LOG_S_DEBUG("[S3] PutObjectResponse '" << key << "' at tablet " << TabletId);
@@ -225,7 +241,7 @@ public:
         const auto& resultOutcome = msg.Result;
 
         if (!resultOutcome.IsSuccess()) {
-            KeyFinished(context->GetKey(), true, LogError("CheckObjectExistsResponse", resultOutcome.GetError(), !!context->GetKey()));
+            KeyFinished(context->GetKey(), true, LogError("CheckObjectExistsResponse", resultOutcome.GetError(), context->GetKey()));
         } else if (!msg.IsExists()) {
             SendPutObject(context->GetKey(), std::move(context->DetachData()));
         } else {
@@ -241,10 +257,14 @@ public:
 
         TString errStr;
         if (!resultOutcome.IsSuccess()) {
-            errStr = LogError("DeleteObjectResponse", resultOutcome.GetError(), !!msg.Key);
+            errStr = LogError("DeleteObjectResponse", resultOutcome.GetError(), msg.Key);
         }
 
-        Y_VERIFY(msg.Key); // FIXME
+        if (!msg.Key || msg.Key->empty()) {
+            LOG_S_ERROR("[S3] no key in DeleteObjectResponse at tablet " << TabletId);
+            return;
+        }
+
         TString key = *msg.Key;
 
         LOG_S_DEBUG("[S3] DeleteObjectResponse '" << key << "' at tablet " << TabletId);
@@ -287,7 +307,7 @@ public:
 
         TString errStr;
         if (!resultOutcome.IsSuccess()) {
-            errStr = LogError("GetObjectResponse", resultOutcome.GetError(), !!key);
+            errStr = LogError("GetObjectResponse", resultOutcome.GetError(), key);
         }
 
         if (!key || key->empty()) {
@@ -352,17 +372,12 @@ public:
         }
 
         auto& ex = it->second;
-        ex.FinishKey(key);
+        TUnifiedBlobId blobId = ex.FinishKey(key);
 
-        if (hasError) {
-            ex.Event->Status = NKikimrProto::ERROR;
-            Y_VERIFY(ex.Event->ErrorStrings.emplace(key, errStr).second, "%s", key.data());
-            if (ex.ExtractionFinished()) {
-                Send(ShardActor, ex.Event.release());
-                Exports.erase(exportNo);
-            }
-        } else if (ex.ExtractionFinished()) {
-            ex.Event->Status = NKikimrProto::OK;
+        ex.Event->AddResult(blobId, key, hasError, errStr);
+
+        if (ex.ExtractionFinished()) {
+            Y_VERIFY(ex.Event->Finished());
             Send(ShardActor, ex.Event.release());
             Exports.erase(exportNo);
         }
@@ -392,7 +407,7 @@ private:
             hFunc(TEvExternalStorage::TEvDeleteObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvCheckObjectExistsResponse, Handle);
-            
+
 #if 0
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
 #endif
@@ -415,8 +430,8 @@ private:
 
     void SendPutObject(const TString& key, TString&& data) const {
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(key)
-            .WithStorageClass(Aws::S3::Model::StorageClass::STANDARD_IA);
+            .WithKey(key);
+            //.WithStorageClass(Aws::S3::Model::StorageClass::STANDARD_IA); // TODO: move to config
 #if 0
         Aws::Map<Aws::String, Aws::String> metadata;
         metadata.emplace("Content-Type", "application/x-compressed");
@@ -460,13 +475,16 @@ private:
         Send(ExternalStorageActorId, new TEvExternalStorage::TEvDeleteObjectRequest(request));
     }
 
-    TString LogError(const TString& responseType, const Aws::S3::S3Error& error, bool hasKey) const {
+    TString LogError(const TString& responseType, const Aws::S3::S3Error& error,
+                     const std::optional<TString>& key) const {
         TString errStr = TString(error.GetExceptionName()) + " " + error.GetMessage();
-        if (errStr.empty() && !hasKey) {
+
+        LOG_S_NOTICE("[S3] Error in " << responseType << " for key '" << (key ? *key : TString())
+            << "' at tablet " << TabletId << ": " << errStr);
+
+        if (errStr.empty() && !key) {
             errStr = responseType + " with no key";
         }
-
-        LOG_S_NOTICE("[S3] Error in " << responseType << " at tablet " << TabletId << ": " << errStr);
         return errStr;
     }
 };

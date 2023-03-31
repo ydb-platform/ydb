@@ -254,6 +254,12 @@ protected:
         config.Opts->AddLongOption("hierarchic-cfg", "Use hierarchical approach for configuration parts overriding")
         .NoArgument().SetFlag(&HierarchicalCfg);
 
+        config.Opts->AddLongOption("label", "labels for this node")
+            .Optional().RequiredArgument("KEY=VALUE")
+            .KVHandler([&](TString key, TString val) {
+                RunConfig.Labels[key] = val;
+            });
+
         config.SetFreeArgsMin(0);
         config.Opts->SetFreeArgDefaultTitle("PATH", "path to protobuf file; files are merged in order in which they are enlisted");
     }
@@ -681,6 +687,13 @@ protected:
             messageBusConfig->SetStartTracingBusProxy(!!TracePath);
             messageBusConfig->SetTracePath(TracePath);
         }
+
+        RunConfig.Labels["node_id"] = ToString(NodeId);
+        RunConfig.Labels["node_host"] = FQDNHostName();
+        RunConfig.Labels["tenant"] = RunConfig.TenantName;
+        // will be replaced with proper version info
+        RunConfig.Labels["branch"] = GetBranch();
+        RunConfig.Labels["rev"] = ToString(GetProgramSvnRevision());
     }
 
     inline bool LoadConfigFromCMS() {

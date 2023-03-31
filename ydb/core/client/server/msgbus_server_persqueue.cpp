@@ -216,6 +216,7 @@ STFUNC(TPersQueueBaseRequestProcessor::StateFunc) {
         HFunc(TEvInterconnect::TEvNodesInfo, Handle);
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse, Handle);
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse, Handle);
+        HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse, Handle);
         HFunc(TEvPersQueue::TEvResponse, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
@@ -241,7 +242,18 @@ void TPersQueueBaseRequestProcessor::Handle(TEvPersQueue::TEvResponse::TPtr& ev,
 
 void TPersQueueBaseRequestProcessor::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
     Y_VERIFY(ListNodes);
-    NodesInfo.reset(new TNodesInfo(ev->Release()));
+    NodesInfo.reset(new TNodesInfo(ev->Release(), ctx));
+    if (ReadyToCreateChildren()) {
+        if (CreateChildren(ctx)) {
+            return;
+        }
+    }
+}
+
+void TPersQueueBaseRequestProcessor::Handle(
+        TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev, const TActorContext& ctx
+) {
+    NodesInfo->ProcessNodesMapping(ev, ctx);
     if (ReadyToCreateChildren()) {
         if (CreateChildren(ctx)) {
             return;
@@ -317,10 +329,14 @@ void TPersQueueBaseRequestProcessor::Handle(
 }
 
 bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const {
-    return TopicsDescription && (!ListNodes || NodesInfo.get() != nullptr);
+    return TopicsDescription
+           && (!ListNodes || (NodesInfo.get() != nullptr && NodesInfo->Ready));
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
+    if (ChildrenCreationDone)
+        return false;
+    ChildrenCreationDone = true;
     Y_VERIFY(TopicsDescription->ResultSet.size() == TopicsConverters.size());
     ui32 i = 0;
     for (const auto& entry : TopicsDescription->ResultSet) {
@@ -359,6 +375,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
     NeedChildrenCreation = false;
 
     THashSet<TString> topics;
+
     while (!ChildrenToCreate.empty()) {
         THolder<TPerTopicInfo> perTopicInfo(ChildrenToCreate.front().Release());
         ChildrenToCreate.pop_front();
@@ -382,7 +399,6 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
             Children.emplace(actorId, std::move(perTopicInfo));
         }
     }
-
     Y_VERIFY(topics.size() == Children.size());
 
     if (!TopicsToRequest.empty() && TopicsToRequest.size() != topics.size()) {
@@ -416,16 +432,26 @@ NKikimrClient::TResponse TPersQueueBaseRequestProcessor::MergeSubactorReplies() 
     return response;
 }
 
-TPersQueueBaseRequestProcessor::TNodesInfo::TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply)
+TPersQueueBaseRequestProcessor::TNodesInfo::TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply, const TActorContext& ctx)
     : NodesInfoReply(std::move(nodesInfoReply))
 {
+    const auto& pqConfig = AppData(ctx)->PQConfig;
+    bool useMapping = pqConfig.GetPQDiscoveryConfig().GetUseDynNodesMapping();
     HostNames.reserve(NodesInfoReply->Nodes.size());
     for (const NActors::TEvInterconnect::TNodeInfo& info : NodesInfoReply->Nodes) {
         HostNames.emplace(info.NodeId, info.Host);
-        auto insRes = MinNodeIdByHost.insert(std::make_pair(info.Host, info.NodeId));
-        if (!insRes.second) {
-            if (insRes.first->second > info.NodeId) {
-                insRes.first->second = info.NodeId;
+        if (useMapping) {
+            ctx.Send(
+                    CreatePersQueueMetaCacheV2Id(),
+                    new TEvPqNewMetaCache::TEvGetNodesMappingRequest()
+            );
+        } else {
+            Ready = true;
+            auto insRes = MinNodeIdByHost.insert(std::make_pair(info.Host, info.NodeId));
+            if (!insRes.second) {
+                if (insRes.first->second > info.NodeId) {
+                    insRes.first->second = info.NodeId;
+                }
             }
         }
     }
@@ -437,6 +463,13 @@ TTopicInfoBasedActor::TTopicInfoBasedActor(const TSchemeEntry& topicEntry, const
     , Name(topicName)
     , ProcessingResult(ProcessMetaCacheSingleTopicsResponse(SchemeEntry))
 {
+}
+
+void TPersQueueBaseRequestProcessor::TNodesInfo::ProcessNodesMapping(
+        TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev, const TActorContext&
+) {
+    DynToStaticNode = std::move(ev->Get()->NodesMapping);
+    Ready = true;
 }
 
 void TTopicInfoBasedActor::Bootstrap(const TActorContext &ctx) {

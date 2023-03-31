@@ -83,14 +83,15 @@ void PrepareTables(TSession session) {
 Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 
 void Test(const TString& query, const TString& answer, size_t rightTableReads) {
-    TKikimrRunner kikimr;
+    TKikimrSettings settings;
+    TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
     PrepareTables(session);
 
     TExecDataQuerySettings execSettings;
-    execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+    execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
     auto result = session.ExecuteDataQuery(Q_(query), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -98,15 +99,21 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads) {
     CompareYson(answer, FormatResultSetYson(result.GetResultSet(0)));
 
     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+    if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+    }
 
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 5);
 
     ui32 index = 1;
-    UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-    index = 2;
+    if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+        UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
+        index = 2;
+    }
 
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Right");

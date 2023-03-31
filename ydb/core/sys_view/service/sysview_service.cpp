@@ -322,6 +322,7 @@ public:
         , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 6 : 60))
         , CollectInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 3 : 30))
         , SendInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 2 : 20))
+        , ProcessLabeledCountersInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 5 : 60))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -1110,6 +1111,7 @@ private:
     const TDuration TotalInterval;
     const TDuration CollectInterval;
     const TDuration SendInterval;
+    const TDuration ProcessLabeledCountersInterval;
 
     template <typename TInterval>
     struct TDbWindow {
@@ -1208,7 +1210,6 @@ private:
     static constexpr size_t SummaryRetryAttempts = 5;
 
     static constexpr TDuration ProcessCountersInterval = TDuration::Seconds(5);
-    static constexpr TDuration ProcessLabeledCountersInterval = TDuration::Minutes(1);
 };
 
 THolder<IActor> CreateSysViewService(

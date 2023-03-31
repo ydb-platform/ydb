@@ -88,11 +88,11 @@ bool UseReadTableRanges(const TKikimrTableDescription& tableData, const TIntrusi
         return predicateExtractSetting == EOptionalFlag::Enabled;
     }
 
-    if (kqpCtx->IsScanQuery() && kqpCtx->Config->FeatureFlags.GetEnablePredicateExtractForScanQueries()) {
+    if (kqpCtx->IsScanQuery() && kqpCtx->Config->EnablePredicateExtractForScanQuery) {
         return true;
     }
 
-    if (kqpCtx->IsDataQuery() && kqpCtx->Config->FeatureFlags.GetEnablePredicateExtractForDataQueries()) {
+    if (kqpCtx->IsDataQuery() && kqpCtx->Config->EnablePredicateExtractForDataQuery) {
         return true;
     }
 
@@ -571,7 +571,7 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
             return nullptr;
         }
 
-        if (kqpCtx->IsScanQuery() && !kqpCtx->Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup()) {
+        if (kqpCtx->IsScanQuery() && !kqpCtx->Config->EnableKqpScanQueryStreamLookup) {
             const TString err = "Secondary index is not supported for ScanQuery";
             ctx.AddError(YqlIssue(ctx.GetPosition(read.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
             return nullptr;

@@ -5,7 +5,7 @@ namespace NKikimr::NBackgroundTasks {
 std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TInterruptTaskActor::OnSessionId(const TString& sessionId) {
     Ydb::Table::ExecuteDataQueryRequest request;
     TStringBuilder sb;
-    sb << "DECLARE $taskId AS String;" << Endl;
+    sb << "DECLARE $taskId AS Utf8;" << Endl;
     sb << "DECLARE $stateString AS String;" << Endl;
     sb << "DECLARE $startInstant AS Uint32;" << Endl;
     sb << "UPDATE `" + ExecutorController->GetTableName() + "`" << Endl;
@@ -23,8 +23,8 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TInterruptTaskAc
     }
 
     auto& idString = (*request.mutable_parameters())["$taskId"];
-    idString.mutable_value()->set_bytes_value(TaskId);
-    idString.mutable_type()->set_type_id(Ydb::Type::STRING);
+    idString.mutable_value()->set_text_value(TaskId);
+    idString.mutable_type()->set_type_id(Ydb::Type::UTF8);
 
     auto& sString = (*request.mutable_parameters())["$stateString"];
     sString.mutable_value()->set_bytes_value(State.SerializeToString());

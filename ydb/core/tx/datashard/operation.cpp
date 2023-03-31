@@ -181,6 +181,18 @@ void TOperation::ClearImmediateConflicts() {
     ImmediateConflicts.clear();
 }
 
+void TOperation::AddVolatileDependency(ui64 txId) {
+    VolatileDependencies.insert(txId);
+}
+
+void TOperation::RemoveVolatileDependency(ui64 txId, bool success) {
+    if (VolatileDependencies.erase(txId)) {
+        if (!success) {
+            VolatileDependenciesAborted = true;
+        }
+    }
+}
+
 TString TOperation::DumpDependencies() const
 {
     TStringStream ss;
@@ -267,7 +279,7 @@ TString TOperation::ExecutionProfileLogString(ui64 tabletId) const
 bool TOperation::HasRuntimeConflicts() const noexcept
 {
     // We may acquire some new dependencies at runtime
-    return !Dependencies.empty();
+    return !Dependencies.empty() || !VolatileDependencies.empty();
 }
 
 void TOperation::SetFinishProposeTs() noexcept

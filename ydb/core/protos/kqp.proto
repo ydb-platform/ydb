@@ -223,6 +223,7 @@ message TPreparedQuery {
     repeated TParameterDescription Parameters = 4;
     optional string Text = 5;
     optional NKqpProto.TKqpPhyQuery PhysicalQuery = 6;
+    optional bool EnableLlvm = 7;
 };
 
 message TQueryResponse {
@@ -585,9 +586,10 @@ message TEvKillScanTablet {
 
 message TKqpStreamLookupSettings {
      optional NKqpProto.TKqpPhyTableId Table = 1;
-     repeated string KeyColumns = 2;
-     repeated string Columns = 3;
+     repeated TKqpColumnMetadataProto KeyColumns = 2;
+     repeated TKqpColumnMetadataProto Columns = 3;
      optional TKqpSnapshot Snapshot = 4;
      optional uint64 LockTxId = 5;
      optional bool ImmediateTx = 6;
+     repeated string LookupKeyColumns = 7;
 }

@@ -10,6 +10,7 @@ namespace NKikimr::NBlobDepot {
         struct TEvPrivate {
             enum {
                 EvResume = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvResumeScanDataForCopying,
                 EvTxComplete,
             };
         };
@@ -38,7 +39,8 @@ namespace NKikimr::NBlobDepot {
         ui64 NextPutId = 1;
         THashMap<ui64, std::tuple<TData::TKey, ui64>> PutIdToKey;
 
-        class TTxCommitAssimilatedBlob;
+        bool ActionInProgress = false;
+        bool ResumeScanDataForCopyingInFlight = false;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -59,9 +61,9 @@ namespace NKikimr::NBlobDepot {
     private:
         void Action();
         void SendAssimilateRequest();
-        void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev);
         void ScanDataForCopying();
+        void HandleResumeScanDataForCopying();
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
         void HandleTxComplete(TAutoPtr<IEventHandle> ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);

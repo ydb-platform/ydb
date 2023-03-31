@@ -377,28 +377,11 @@ public:
             group->FinishVDisksInGroup();
         }
 
-        // fixup donors and acceptors
-        {
-            std::map<TGroupId, std::map<TVDiskIdShort, std::vector<TVSlotInfo*>>> map;
-            for (const auto& [vslotId, vslot] : Self->VSlots) {
-                if (!vslot->IsBeingDeleted()) {
-                    map[vslot->GroupId][vslot->GetShortVDiskId()].push_back(vslot.Get());
-                }
-            }
-            for (auto& [groupId, disks] : map) {
-                for (auto& [shortVDiskId, array] : disks) {
-                    auto comp = [](const TVSlotInfo *x, const TVSlotInfo *y) {
-                        Y_VERIFY(x->GroupGeneration != y->GroupGeneration);
-                        return x->GroupGeneration < y->GroupGeneration;
-                    };
-                    std::sort(array.begin(), array.end(), comp);
-                    TVSlotInfo *acceptor = array.back();
-                    for (size_t i = 0; i < array.size() - 1; ++i) {
-                        Y_VERIFY(array[i]->Mood == TMood::Donor);
-                        array[i]->AcceptorVSlotId = acceptor->VSlotId;
-                        acceptor->Donors.emplace_back(array[i]->VSlotId, array[i]->GetVDiskId());
-                    }
-                }
+        // tie donors and acceptors
+        for (const auto& [vslotId, vslot] : Self->VSlots) {
+            if (vslot->Mood == TMood::Donor) {
+                const TVSlotInfo *acceptor = Self->FindAcceptor(*vslot);
+                const_cast<TVSlotInfo&>(*acceptor).Donors.insert(vslotId);
             }
         }
 

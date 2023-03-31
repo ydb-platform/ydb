@@ -108,7 +108,7 @@ public:
             bool useVPatch = false)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_PATCH, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, "DSProxy.Patch")
+                ev->RestartCounter, "DSProxy.Patch", std::move(ev->ExecutionRelay))
         , OriginalGroupId(ev->OriginalGroupId)
         , OriginalId(ev->OriginalId)
         , PatchedId(ev->PatchedId)
@@ -706,8 +706,8 @@ public:
         handoffForParts.resize(inPrimary.size());
 
         for (auto &[subgroupIdx, partId] : FoundParts) {
-            if (subgroupIdx == partId) {
-                inPrimary[subgroupIdx] = true;
+            if (subgroupIdx == partId - 1) {
+                inPrimary[partId - 1] = true;
             } else {
                 handoffForParts[partId - 1].push_back(subgroupIdx);
             }

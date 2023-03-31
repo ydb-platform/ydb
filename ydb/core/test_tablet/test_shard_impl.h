@@ -20,6 +20,7 @@ namespace NKikimr::NTestShard {
             WRITE,
             READ_VALIDATE,
             STATE_SERVER_CONNECT,
+            INITIAL,
         };
 
         enum {
@@ -49,6 +50,7 @@ namespace NKikimr::NTestShard {
             TProtobufTabletCountersPair<TKeyValueCounters, TTestShardCounters> pair;
             State.SetupTabletCounters(pair.GetFirstTabletCounters().Release());
             Counters.reset(pair.GetSecondTabletCounters().Release());
+            Counters->Simple()[NTestShard::COUNTER_MODE_INITIAL] = 1;
         }
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -88,6 +90,7 @@ namespace NKikimr::NTestShard {
             s[NTestShard::COUNTER_MODE_WRITE] = mode == EMode::WRITE;
             s[NTestShard::COUNTER_MODE_READ_VALIDATE] = mode == EMode::READ_VALIDATE;
             s[NTestShard::COUNTER_MODE_STATE_SERVER_CONNECT] = mode == EMode::STATE_SERVER_CONNECT;
+            s[NTestShard::COUNTER_MODE_INITIAL] = mode == EMode::INITIAL;
         }
 
         void OnLoadComplete() {

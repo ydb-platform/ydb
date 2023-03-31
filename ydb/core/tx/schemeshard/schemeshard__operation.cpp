@@ -5,9 +5,7 @@
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_db_changes.h"
 
-#include "schemeshard_audit_log_fragment.h"
-#include "ydb/core/audit/audit_log.h"
-
+#include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/tablet/tablet_exception.h>
@@ -34,40 +32,6 @@ std::tuple<TMaybe<NACLib::TUserToken>, bool> ParseUserToken(const TString& token
     }
 
     return std::make_tuple(result, parseError);
-}
-
-TString RenderPaths(const TVector<TString>& paths) {
-    auto result = TStringBuilder();
-    result << "[" << JoinStrings(paths.begin(), paths.end(), ", ") << "]";
-    return result;
-}
-
-void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID) {
-    // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
-    // (even if it was packed into a single TxProxy transaction with some other operations).
-
-    //NOTE: UserSIDNone couldn't be an empty string as "subject" field is a required one,
-    // but AUDIT_PART() skips any part with an empty value
-    static const TString EmptyValue = "{none}";
-
-    for (const auto& operation : request.GetTransaction()) {
-        auto logEntry = MakeAuditLogFragment(operation);
-
-        auto databasePath = TPath::Resolve(operation.GetWorkingDir(), SS);
-        if (!databasePath.IsResolved()) {
-            databasePath.RiseUntilFirstResolvedParent();
-        }
-
-        AUDIT_LOG(
-            AUDIT_PART("txId", std::to_string(request.GetTxId()))
-            AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
-            AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
-            AUDIT_PART("operation", logEntry.Operation)
-            AUDIT_PART("paths", RenderPaths(logEntry.Paths), !logEntry.Paths.empty())
-            AUDIT_PART("status", NKikimrScheme::EStatus_Name(response.GetStatus()))
-            AUDIT_PART("reason", response.GetReason(), response.HasReason())
-        );
-    }
 }
 
 struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
@@ -969,7 +933,9 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
     case TTxState::ETxType::TxDropCdcStream:
         return CreateDropCdcStreamImpl(NextPartId(), txState);
     case TTxState::ETxType::TxDropCdcStreamAtTable:
-        return CreateDropCdcStreamAtTable(NextPartId(), txState);
+        return CreateDropCdcStreamAtTable(NextPartId(), txState, false);
+    case TTxState::ETxType::TxDropCdcStreamAtTableDropSnapshot:
+        return CreateDropCdcStreamAtTable(NextPartId(), txState, true);
 
     // Sequences
     case TTxState::ETxType::TxCreateSequence:

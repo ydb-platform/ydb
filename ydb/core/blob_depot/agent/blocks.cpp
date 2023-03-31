@@ -26,7 +26,7 @@ namespace NKikimr::NBlobDepot {
         if (status == NKikimrProto::UNKNOWN) {
             block.PendingBlockChecks.PushBack(query);
         }
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA01, "CheckBlockForTablet", (VirtualGroupId, Agent.VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA01, "CheckBlockForTablet", (AgentId, Agent.LogId),
             (QueryId, query->GetQueryId()), (TabletId, tabletId), (Generation, generation), (Status, status), (Now, now),
             (ExpirationTimestamp, block.ExpirationTimestamp), (RefreshQueried, refreshQueried),
             (RefreshId, block.RefreshId));
@@ -39,7 +39,7 @@ namespace NKikimr::NBlobDepot {
         } else if (std::holds_alternative<TTabletDisconnected>(response)) {
             auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
             auto& block = Blocks[queryBlockContext.TabletId];
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA36, "TBlocksManager::TTabletDisconnected", (VirtualGroupId, Agent.VirtualGroupId),
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA36, "TBlocksManager::TTabletDisconnected", (AgentId, Agent.LogId),
                 (TabletId, queryBlockContext.TabletId), (RefreshId, block.RefreshId));
             block.RefreshId = 0;
             IssueOnUpdateBlock(block);
@@ -50,7 +50,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TBlocksManager::Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvQueryBlocksResult& msg) {
         auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA02, "TEvQueryBlocksResult", (VirtualGroupId, Agent.VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA02, "TEvQueryBlocksResult", (AgentId, Agent.LogId),
             (Msg, msg), (TabletId, queryBlockContext.TabletId));
         auto& block = Blocks[queryBlockContext.TabletId];
         Y_VERIFY(block.RefreshId);
@@ -95,7 +95,7 @@ namespace NKikimr::NBlobDepot {
         for (const auto& tablet : tablets) {
             if (const auto it = Blocks.find(tablet.GetTabletId()); it != Blocks.end()) {
                 auto& block = it->second;
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA37, "OnBlockedTablets", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA37, "OnBlockedTablets", (AgentId, Agent.LogId),
                     (TabletId, it->first), (RefreshId, block.RefreshId), (BlockedGeneration, tablet.GetBlockedGeneration()),
                     (IssuerGuid, tablet.GetIssuerGuid()));
                 block.BlockedGeneration = tablet.GetBlockedGeneration();

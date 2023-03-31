@@ -90,7 +90,7 @@ private:
     void AnswerFailed(TSqsEvents::TEvGetConfiguration::TPtr& ev);
     void AskQueueAttributes();
     void OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev);
-    void MarkInflyReloading(ui64 shard, size_t invalidatedCount, const TString& invalidationReason);
+    void MarkInflyReloading(ui64 shard, i64 invalidatedCount, const TString& invalidationReason);
     void StartLoadingInfly();
     void StartLoadingInfly(ui64 shard, bool afterFailure = false);
     void OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRecord& reply);

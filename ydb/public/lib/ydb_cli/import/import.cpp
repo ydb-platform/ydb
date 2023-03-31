@@ -51,10 +51,12 @@ TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand
     , TableClient(std::make_shared<NTable::TTableClient>(driver))
 {
     UpsertSettings
-        .OperationTimeout(TDuration::Seconds(30))
-        .ClientTimeout(TDuration::Seconds(35));
+        .OperationTimeout(TDuration::Seconds(TImportFileSettings::OperationTimeoutSec))
+        .ClientTimeout(TDuration::Seconds(TImportFileSettings::ClientTimeoutSec));
     RetrySettings
-        .MaxRetries(100000).Verbose(rootConfig.IsVerbose());
+        .MaxRetries(TImportFileSettings::MaxRetries)
+        .Idempotent(true)
+        .Verbose(rootConfig.IsVerbose());
 }
 
 TStatus TImportFileClient::Import(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings) {
@@ -86,7 +88,7 @@ TStatus TImportFileClient::Import(const TString& filePath, const TString& dbPath
     }
 
     // If the filename passed is empty, read from stdin, else from the file.
-    std::unique_ptr<TFileInput> fileInput = filePath.empty() ? nullptr 
+    std::unique_ptr<TFileInput> fileInput = filePath.empty() ? nullptr
         : std::make_unique<TFileInput>(filePath, settings.FileBufferSize_);
     IInputStream& input = fileInput ? *fileInput : Cin;
 
@@ -230,7 +232,7 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
         return tableResult;
 
     const TType tableType = GetTableType(tableResult.GetTableDescription());
-    const NYdb::EBinaryStringEncoding stringEncoding = 
+    const NYdb::EBinaryStringEncoding stringEncoding =
         (settings.Format_==EOutputFormat::JsonBase64) ? NYdb::EBinaryStringEncoding::Base64 :
             NYdb::EBinaryStringEncoding::Unicode;
 
@@ -275,7 +277,7 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
 TStatus TImportFileClient::UpsertParquet([[maybe_unused]]const TString& filename, [[maybe_unused]]const TString& dbPath, [[maybe_unused]]const TImportFileSettings& settings) {
     #if defined (_WIN64) || defined (_WIN32) || defined (__WIN32__)
         return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Not supported on Windows");
-    #else 
+    #else
     std::shared_ptr<arrow::io::ReadableFile> infile;
     arrow::Result<std::shared_ptr<arrow::io::ReadableFile>> fileResult = arrow::io::ReadableFile::Open(filename);
     if (!fileResult.ok()) {
@@ -309,7 +311,7 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]]const TString& filename
     }
 
     std::deque<TAsyncStatus> inFlightRequests;
-    
+
     auto splitUpsertBatch = [this, &inFlightRequests, dbPath, settings](const std::shared_ptr<arrow::RecordBatch> &recordBatch){
         std::vector<std::shared_ptr<arrow::RecordBatch>> slicedRecordBatches;
         std::deque<std::shared_ptr<arrow::RecordBatch>> batchesDeque;
@@ -334,12 +336,12 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]]const TString& filename
             }
             else {
                 std::shared_ptr<arrow::RecordBatch> left = nextBatch->Slice(0, nextBatch->num_rows() / 2);
-                std::shared_ptr<arrow::RecordBatch> right = nextBatch->Slice(nextBatch->num_rows() / 2); 
+                std::shared_ptr<arrow::RecordBatch> right = nextBatch->Slice(nextBatch->num_rows() / 2);
                 batchesDeque.push_front(right);
                 batchesDeque.push_front(left);
             }
         }
-        auto schema = recordBatch->schema(); 
+        auto schema = recordBatch->schema();
         TString strSchema = NYdb_cli::NArrow::SerializeSchema(*schema);
         for (size_t i = 0; i < slicedRecordBatches.size(); i++) {
             TString buffer = NYdb_cli::NArrow::SerializeBatchNoCompression(slicedRecordBatches[i]);
@@ -375,7 +377,7 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]]const TString& filename
     #endif
 }
 
-inline 
+inline
 TAsyncStatus TImportFileClient::UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema) {
     auto upsert = [this, dbPath, buffer, strSchema](NYdb::NTable::TTableClient& tableClient) -> TAsyncStatus {
         return tableClient.BulkUpsert(dbPath, NTable::EDataFormat::ApacheArrow, buffer, strSchema, UpsertSettings)

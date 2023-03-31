@@ -27,15 +27,49 @@ class TGrpcServiceBase
     , public TGrpcServiceCfg
 {
 public:
-    TGrpcServiceBase(NActors::TActorSystem *system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NActors::TActorId id, bool rlAllowed)
-    : TGrpcServiceCfg(rlAllowed)
-    , ActorSystem_(system)
-    , Counters_(counters)
-    , GRpcRequestProxyId_(id)
-{ }
+    TGrpcServiceBase(NActors::TActorSystem *system,
+                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                     const NActors::TActorId& proxyId,
+                     bool rlAllowed)
+        : TGrpcServiceCfg(rlAllowed)
+        , ActorSystem_(system)
+        , Counters_(counters)
+        , GRpcRequestProxyId_(proxyId)
+        , GRpcProxies_{proxyId}
+    {
+    }
+
+    TGrpcServiceBase(NActors::TActorSystem *system,
+                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                     const TVector<NActors::TActorId>& proxies,
+                     bool rlAllowed)
+        : TGrpcServiceCfg(rlAllowed)
+        , ActorSystem_(system)
+        , Counters_(counters)
+        , GRpcRequestProxyId_(proxies[0])
+        , GRpcProxies_(proxies)
+    {
+        Y_VERIFY(proxies.size());
+    }
+
+    void InitService(
+        const std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& cqs,
+        NGrpc::TLoggerPtr logger,
+        size_t index) override
+    {
+        CQS.reserve(cqs.size());
+        for (auto& cq: cqs) {
+            CQS.push_back(cq.get());
+        }
+
+        CQ_ = CQS[index % cqs.size()];
+
+        // note that we might call an overloaded InitService(), and not the one from this class
+        InitService(CQ_, logger);
+    }
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override {
-        CQ_ = cq;
+        CQ_ = cq; // might be self assignment, but it's OK
         SetupIncomingRequests(std::move(logger));
     }
 
@@ -58,8 +92,11 @@ protected:
     NActors::TActorSystem* ActorSystem_;
     grpc::ServerCompletionQueue* CQ_ = nullptr;
 
+    std::vector<grpc::ServerCompletionQueue*> CQS;
+
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     const NActors::TActorId GRpcRequestProxyId_;
+    const TVector<NActors::TActorId> GRpcProxies_;
 
     NGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };

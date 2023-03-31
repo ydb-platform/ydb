@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             auto params = TParamsBuilder(paramsType);
 
             auto result = ExecQueryAndTestResult(session, query, params.Build(), R"([])");
-            AssertTableReads(result, "/Root/KeyValue", 0);
+            AssertTableReads(result, "/Root/KeyValue", 6);
         }
 
         // not empty parameters
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             pl.EndList().Build();
 
             auto result = ExecQueryAndTestResult(session, query, params.Build(), R"([[[1u];["One"]]])");
-            AssertTableReads(result, "/Root/KeyValue", 3);
+            AssertTableReads(result, "/Root/KeyValue", 6);
         }
     }
 
@@ -142,10 +142,10 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, true /* optionalParams */, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/KeyValue", 3);
+            AssertTableReads(result, "/Root/KeyValue", 6);
         });
         test(DisableOpt, false /* optionalParams */, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/KeyValue", 3);
+            AssertTableReads(result, "/Root/KeyValue", 6);
         });
 
         test(EnableOpt, true /* optionalParams */, [](const TDataQueryResult& result) {
@@ -417,7 +417,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/KeyValue", 2);
+            AssertTableReads(result, "/Root/KeyValue", 6);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 3);
+            AssertTableReads(result, "/Root/Test", 8);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -494,7 +494,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 3);
+            AssertTableReads(result, "/Root/Test", 8);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -940,11 +940,11 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 4);
+            AssertTableReads(result, "/Root/Test", 8);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 4);
+            AssertTableReads(result, "/Root/Test", 8);
         });
     }
 
@@ -994,7 +994,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             .Build();
 
         NYdb::NTable::TExecDataQuerySettings settings;
-        settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(Q1_(R"(
             DECLARE $keys AS List<Uint64>;
@@ -1012,7 +1012,8 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(PhasesCount) {
-        TKikimrRunner kikimr;
+        TKikimrSettings serverSettings;
+        TKikimrRunner kikimr(serverSettings);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         // simple key
@@ -1040,7 +1041,11 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             const Ydb::TableStats::QueryStats stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
+            if (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+                UNIT_ASSERT_EQUAL_C(1, stats.query_phases_size(), stats.DebugString());
+            } else {
+                UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
+            }
         }
 
         // complex (tuple) key
@@ -1078,7 +1083,11 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             CompareYson(R"([[[3500u];["None"];[1u];["Anna"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             const Ydb::TableStats::QueryStats stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
+            if (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+                UNIT_ASSERT_EQUAL_C(1, stats.query_phases_size(), stats.DebugString());
+            } else {
+                UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
+            }
         }
     }
 }

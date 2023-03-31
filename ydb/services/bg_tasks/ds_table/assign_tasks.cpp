@@ -6,7 +6,7 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TAssignTasksActo
     Ydb::Table::ExecuteDataQueryRequest request;
     TStringBuilder sb;
     const auto now = TActivationContext::Now();
-    sb << "DECLARE $executorId AS String;" << Endl;
+    sb << "DECLARE $executorId AS Utf8;" << Endl;
     sb << "DECLARE $lastPingCriticalBorder AS Uint32;" << Endl;
     sb << "DECLARE $lastPingNewValue AS Uint32;" << Endl;
     sb << "$ids = (SELECT id FROM `" << Controller->GetTableName() << "`"
@@ -28,8 +28,8 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TAssignTasksActo
     }
     {
         auto& param = (*request.mutable_parameters())["$executorId"];
-        param.mutable_value()->set_bytes_value(ExecutorId);
-        param.mutable_type()->set_type_id(Ydb::Type::STRING);
+        param.mutable_value()->set_text_value(ExecutorId);
+        param.mutable_type()->set_type_id(Ydb::Type::UTF8);
     }
     request.mutable_query()->set_yql_text(sb);
     request.set_session_id(sessionId);

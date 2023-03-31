@@ -4,11 +4,11 @@
 
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_value.h>
 #include <ydb/core/kqp/topics/kqp_topics.h>
-#include <ydb/core/kqp/common/kqp_prepared_query.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -108,8 +108,10 @@ public:
             : TxAlloc(txAlloc)
         {}
 
+        NKikimr::TControlWrapper PerRequestDataSizeLimit;
+        NKikimr::TControlWrapper MaxShardCount;
         TVector<TPhysicalTxData> Transactions;
-        TVector<NYql::NDq::TMkqlValueRef> Locks;
+        TMap<ui64, TVector<NKikimrTxDataShard::TLock>> DataShardLocks;
         NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
         bool ValidateLocks = false;
         bool EraseLocks = false;

@@ -71,7 +71,7 @@ public:
             DataShard.GetBuildIndexManager().Drop(params.GetBuildIndexId());
         }
 
-        const TSnapshotKey key(pathId.OwnerId, pathId.LocalPathId, step, txId);
+        const TSnapshotKey key(pathId, step, txId);
         DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

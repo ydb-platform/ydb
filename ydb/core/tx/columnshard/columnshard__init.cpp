@@ -294,24 +294,52 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
 
-    // Load primary index
-    if (Self->PrimaryIndex) {
-        TBlobGroupSelector dsGroupSelector(Self->Info());
-        NOlap::TDbWrapper idxDB(txc.DB, &dsGroupSelector);
-        if (!Self->PrimaryIndex->Load(idxDB, Self->PathsToDrop)) {
+    // There could be extern blobs that are evicting & dropped.
+    // Load info from export tables and check if we have such blobs in index to find them
+    THashSet<TUnifiedBlobId> lostEvictions;
+    TBlobManagerDb blobManagerDb(txc.DB);
+
+    // Initialize the BlobManager
+    {
+        if (!Self->BlobManager->LoadState(blobManagerDb)) {
+            return false;
+        }
+        if (!Self->BlobManager->LoadOneToOneExport(blobManagerDb, lostEvictions)) {
             return false;
         }
     }
 
-    // Initialize the BlobManager
-    {
-        TBlobManagerDb blobManagerDb(txc.DB);
-        if (!Self->BlobManager->LoadState(blobManagerDb)) {
+    // Load primary index
+    if (Self->PrimaryIndex) {
+        TBlobGroupSelector dsGroupSelector(Self->Info());
+        NOlap::TDbWrapper idxDB(txc.DB, &dsGroupSelector);
+        if (!Self->PrimaryIndex->Load(idxDB, lostEvictions, Self->PathsToDrop)) {
             return false;
         }
-        if (!Self->BlobManager->LoadOneToOneExport(blobManagerDb)) {
-            return false;
+    }
+
+    // Set dropped evicting records to be erased in future cleanups
+    TString strBlobs;
+    for (auto& blobId : lostEvictions) {
+        TEvictMetadata meta;
+        auto evict = Self->BlobManager->GetDropped(blobId, meta);
+        Y_VERIFY(evict.State == EEvictState::EVICTING);
+        evict.State = EEvictState::ERASING;
+
+        if (meta.GetTierName().empty()) {
+            LOG_S_ERROR("Blob " << evict.Blob << " eviction with empty tier name at tablet " << Self->TabletID());
         }
+
+        bool dropped;
+        bool present = Self->BlobManager->UpdateOneToOne(std::move(evict), blobManagerDb, dropped);
+        if (present) {
+            strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
+        } else {
+            LOG_S_ERROR("Unknown dropped evicting blob " << evict.Blob << " at tablet " << Self->TabletID());
+        }
+    }
+    if (!strBlobs.empty()) {
+        LOG_S_NOTICE("Erasing potentially exported blobs " << strBlobs << "at tablet " << Self->TabletID());
     }
 
     Self->UpdateInsertTableCounters();

@@ -179,7 +179,7 @@ private:
                 if (rr->GetSeqNo() != res.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != res.GetResult(i).GetPartNo()) {
                     LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE, "Handle TEvRead tablet: " << Tablet
                                     << " last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
-                                    << res.GetResult(i).GetSeqNo() << ", " << res.GetResult(i).GetPartNo() 
+                                    << res.GetResult(i).GetSeqNo() << ", " << res.GetResult(i).GetPartNo()
                                     << " full request(now): " << Request);
                 }
                 Y_VERIFY(rr->GetSeqNo() == res.GetResult(i).GetSeqNo());
@@ -375,11 +375,12 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
     }
 
-    TBuilderProxy(const ui64 tabletId, const TActorId& sender, const ui32 count)
+    TBuilderProxy(const ui64 tabletId, const TActorId& sender, const ui32 count, const ui64 cookie)
     : TabletId(tabletId)
     , Sender(sender)
     , Waiting(count)
     , Result()
+    , Cookie(cookie)
     {}
 
     void Bootstrap(const TActorContext& ctx)
@@ -405,7 +406,7 @@ private:
         for (const auto& p : Result) {
             resp.AddPartResult()->CopyFrom(p);
         }
-        ctx.Send(Sender, res.Release());
+        ctx.Send(Sender, res.Release(), 0, Cookie);
         TThis::Die(ctx);
     }
 
@@ -434,6 +435,7 @@ private:
     TActorId Sender;
     ui32 Waiting;
     TVector<typename T2::TPartResult> Result;
+    ui64 Cookie;
 };
 
 
@@ -441,17 +443,17 @@ TActorId CreateOffsetsProxyActor(const ui64 tabletId, const TActorId& sender, co
 {
     return ctx.Register(new TBuilderProxy<TEvPQ::TEvPartitionOffsetsResponse,
                                           NKikimrPQ::TOffsetsResponse,
-                                          TEvPersQueue::TEvOffsetsResponse>(tabletId, sender, count));
+                                          TEvPersQueue::TEvOffsetsResponse>(tabletId, sender, count, 0));
 }
 
 /******************************************************* StatusProxy *********************************************************/
 
 
-TActorId CreateStatusProxyActor(const ui64 tabletId, const TActorId& sender, const ui32 count, const TActorContext& ctx)
+TActorId CreateStatusProxyActor(const ui64 tabletId, const TActorId& sender, const ui32 count, const ui64 cookie, const TActorContext& ctx)
 {
     return ctx.Register(new TBuilderProxy<TEvPQ::TEvPartitionStatusResponse,
                                           NKikimrPQ::TStatusResponse,
-                                          TEvPersQueue::TEvStatusResponse>(tabletId, sender, count));
+                                          TEvPersQueue::TEvStatusResponse>(tabletId, sender, count, cookie));
 }
 
 /******************************************************* MonitoringProxy *********************************************************/
@@ -661,7 +663,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
             Partitions.emplace(partitionId, TPartitionInfo(
                 ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
                                             IsLocalDC, DCId, IsServerless, Config, *Counters,
-                                            true)),
+                                            false, true)),
                 GetPartitionKeyRange(partition),
                 true,
                 *Counters
@@ -780,7 +782,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                        IsLocalDC, DCId, IsServerless, Config, *Counters,
+                                        IsLocalDC, DCId, IsServerless, Config, *Counters, SubDomainOutOfSpace,
                                         false)),
             GetPartitionKeyRange(partition),
             false,
@@ -1440,7 +1442,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
          cnt += p.second.InitDone;
     }
 
-    TActorId ans = CreateStatusProxyActor(TabletID(), ev->Sender, cnt, ctx);
+    TActorId ans = CreateStatusProxyActor(TabletID(), ev->Sender, cnt, ev->Cookie, ctx);
     for (auto& p : Partitions) {
         if (!p.second.InitDone)
             continue;
@@ -1538,7 +1540,8 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, const T
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SET_OFFSET);
         THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
                                                                 cmd.GetOffset(),
-                                                                cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0);
+                                                                cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0,
+                                                                TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict());
         ctx.Send(partActor, event.Release());
     }
 }
@@ -2260,6 +2263,16 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx)
+{
+    const TEvPQ::TEvSubDomainStatus& event = *ev->Get();
+    SubDomainOutOfSpace = event.SubDomainOutOfSpace();
+
+    for (auto& p : Partitions) {
+        ctx.Send(p.second.Actor, new TEvPQ::TEvSubDomainStatus(event.SubDomainOutOfSpace()));
+    }
+}
+
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
     SetActivityType(NKikimrServices::TActivity::PERSQUEUE_ACTOR);
@@ -2288,6 +2301,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
         HFuncTraced(TEvPQ::TEvPartitionConfigChanged, Handle);
+        HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         default:
             return false;
     }

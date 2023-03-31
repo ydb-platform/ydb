@@ -100,11 +100,13 @@ private:
         TDuration PermissionDuration;
         NKikimrCms::ETenantPolicy TenantPolicy;
         NKikimrCms::EAvailabilityMode AvailabilityMode;
+        bool PartialPermissionAllowed;
 
         TActionOptions(TDuration dur)
             : PermissionDuration(dur)
             , TenantPolicy(NKikimrCms::DEFAULT)
             , AvailabilityMode(NKikimrCms::MODE_MAX_AVAILABILITY)
+            , PartialPermissionAllowed(false)
         {}
     };
 

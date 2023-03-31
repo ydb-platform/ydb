@@ -267,7 +267,7 @@ private:
     NKikimr::NPQ::TMultiCounter Errors;
     std::vector<NKikimr::NPQ::TMultiCounter> CodecCounters;
 
-    TIntrusivePtr<NACLib::TUserToken> Token;
+    TIntrusiveConstPtr<NACLib::TUserToken> Token;
     TString Auth;
     // Got 'update_token_request', authentication or authorization in progress,
     // or 'update_token_response' is not sent yet.

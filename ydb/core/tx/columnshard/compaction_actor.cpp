@@ -109,7 +109,7 @@ private:
 
         NBlobCache::TReadBlobRangeOptions readOpts {
             .CacheAfterRead = false,
-            .Fallback = isExternal,
+            .ForceFallback = isExternal,
             .IsBackgroud = true
         };
         Send(BlobCacheActorId,

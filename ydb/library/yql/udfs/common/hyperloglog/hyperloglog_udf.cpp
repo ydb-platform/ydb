@@ -212,6 +212,7 @@ namespace {
                 if (!typesOnly) {
                     builder.Implementation(new THyperLogLog_AddValue(builder.GetSourcePosition()));
                 }
+                builder.IsStrict();
                 return true;
             } else {
                 return false;
@@ -354,6 +355,7 @@ namespace {
                 if (!typesOnly) {
                     builder.Implementation(new THyperLogLog_Merge(builder.GetSourcePosition()));
                 }
+                builder.IsStrict();
                 return true;
             } else {
                 return false;
@@ -398,6 +400,7 @@ namespace {
                 if (!typesOnly) {
                     builder.Implementation(new THyperLogLog_GetResult(builder.GetSourcePosition()));
                 }
+                builder.IsStrict();
                 return true;
             } else {
                 return false;

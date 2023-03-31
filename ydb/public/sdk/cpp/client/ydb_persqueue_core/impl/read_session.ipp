@@ -20,6 +20,7 @@
 #include <util/stream/mem.h>
 #include <util/system/env.h>
 
+#include <utility>
 #include <variant>
 
 // Forward delcarations
@@ -152,7 +153,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
 {
     auto moveToReadyQueue = [&](TRawPartitionStreamEvent<UseMigrationProtocol> &&event) {
         queue.SignalEventImpl(stream, deferred, event.IsDataEvent());
-    
+
         Ready.push_back(std::move(event));
         NotReady.pop_front();
     };
@@ -474,7 +475,7 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
         if (topic.MaxLag_) {
             *topicSettings->mutable_max_lag() =
                 ::google::protobuf::util::TimeUtil::MillisecondsToDuration(topic.MaxLag_->MilliSeconds());
-        } else if (Settings.ReadFromTimestamp_) {
+        } else if (Settings.MaxLag_) {
             *topicSettings->mutable_max_lag() =
                 ::google::protobuf::util::TimeUtil::MillisecondsToDuration(Settings.MaxLag_->MilliSeconds());
         }
@@ -503,7 +504,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImp
             }
             req.mutable_read_request()->set_bytes_size(ReadSizeBudget);
             ReadSizeServerDelta += ReadSizeBudget;
-
             ReadSizeBudget = 0;
         }
 
@@ -1340,7 +1340,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnCreateNewDecompressi
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount)
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize)
 {
 
     *Settings.Counters_->MessagesInflight -= messagesCount;
@@ -1354,6 +1354,10 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDes
 
         CompressedDataSize -= compressedSize;
         DecompressedDataSize -= decompressedSize;
+
+        if constexpr (!UseMigrationProtocol) {
+            ReadSizeBudget += serverBytesSize;
+        }
 
         ContinueReadingDataImpl();
         StartDecompressionTasksImpl(deferred);
@@ -1820,7 +1824,7 @@ typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent
 TReadSessionEventsQueue<UseMigrationProtocol>::GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                                                                 size_t& maxByteSize,
                                                                 TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator) // Assumes that we're under lock.
-{ 
+{
     TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage> messages;
     TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage> compressedMessages;
 
@@ -2074,7 +2078,7 @@ template<bool UseMigrationProtocol>
 TDataDecompressionInfo<UseMigrationProtocol>::~TDataDecompressionInfo()
 {
     if (auto session = Session.lock()) {
-        session->OnDecompressionInfoDestroy(CompressedDataSize, DecompressedDataSize, MessagesInflight);
+        session->OnDecompressionInfoDestroy(CompressedDataSize, DecompressedDataSize, MessagesInflight, ServerBytesSize);
     }
 }
 
@@ -2305,13 +2309,15 @@ bool TDataDecompressionInfo<UseMigrationProtocol>::HasReadyUnreadData() const {
 }
 
 template<bool UseMigrationProtocol>
-void TDataDecompressionInfo<UseMigrationProtocol>::OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize)
+void TDataDecompressionInfo<UseMigrationProtocol>::OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount)
 {
     CompressedDataSize -= sourceSize;
     DecompressedDataSize += decompressedSize;
 
     if (auto session = Session.lock()) {
-        session->OnDataDecompressed(sourceSize, estimatedDecompressedSize, decompressedSize, messagesCount, serverBytesSize);
+        // TODO (ildar-khisam@): distribute total ServerBytesSize in proportion of source size
+        // Use CompressedDataSize, sourceSize, ServerBytesSize
+        session->OnDataDecompressed(sourceSize, estimatedDecompressedSize, decompressedSize, messagesCount, std::exchange(ServerBytesSize, 0));
     }
 }
 
@@ -2413,7 +2419,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     Y_ASSERT(dataProcessed == SourceDataSize);
     std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session = Parent->Session.lock();
 
-    Parent->OnDataDecompressed(SourceDataSize, EstimatedDecompressedSize, DecompressedSize, messagesProcessed, Parent->ServerBytesSize);
+    Parent->OnDataDecompressed(SourceDataSize, EstimatedDecompressedSize, DecompressedSize, messagesProcessed);
 
     Parent->SourceDataNotProcessed -= dataProcessed;
     Ready->Ready = true;

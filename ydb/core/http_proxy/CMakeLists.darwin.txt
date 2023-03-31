@@ -33,10 +33,12 @@ target_link_libraries(ydb-core-http_proxy PUBLIC
   cpp-client-iam_private
   ydb-services-datastreams
   services-persqueue_v1-actors
+  api-protos
 )
 target_sources(ydb-core-http_proxy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/auth_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/discovery_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/exceptions_mapping.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/grpc_service.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/http_req.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/http_service.cpp

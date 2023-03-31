@@ -206,7 +206,10 @@ private:
 
 class TAbstractFactory: public IProxyFactory {
 public:
-    TAbstractFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NKikimr::NMiniKQL::TComputationNodeFactory compFactory, TTaskTransformFactory taskTransformFactory)
+    TAbstractFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
+        TTaskTransformFactory taskTransformFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> patternCache)
         : DeterministicMode(!!GetEnv("YQL_DETERMINISTIC_MODE"))
         , RandomProvider(
             DeterministicMode
@@ -223,6 +226,7 @@ public:
         ExecutionContext.ComputationFactory = compFactory;
         ExecutionContext.RandomProvider = RandomProvider.Get();
         ExecutionContext.TimeProvider = TimeProvider.Get();
+        ExecutionContext.PatternCache = patternCache;
     }
 
 protected:
@@ -242,8 +246,9 @@ public:
     TLocalFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
         TTaskTransformFactory taskTransformFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> patternCache,
         bool terminateOnError)
-        : TAbstractFactory(functionRegistry, compFactory, taskTransformFactory)
+        : TAbstractFactory(functionRegistry, compFactory, taskTransformFactory, patternCache)
         , TerminateOnError(terminateOnError)
     { }
 
@@ -284,9 +289,9 @@ private:
 
 IProxyFactory::TPtr CreateFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
-    TTaskTransformFactory taskTransformFactory, bool terminateOnError)
+    TTaskTransformFactory taskTransformFactory, std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> patternCache, bool terminateOnError)
 {
-    return new TLocalFactory(functionRegistry, compFactory, taskTransformFactory, terminateOnError);
+    return new TLocalFactory(functionRegistry, compFactory, taskTransformFactory, patternCache, terminateOnError);
 }
 
 } // namespace NYql::NTaskRunnerProxy

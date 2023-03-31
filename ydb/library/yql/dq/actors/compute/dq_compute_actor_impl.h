@@ -577,10 +577,30 @@ protected:
         Terminate(success, TIssues({TIssue(message)}));
     }
 
+    void FillExtraData(NDqProto::TEvComputeActorState& state) {
+        auto* extraData = state.MutableExtraData();
+        for (auto& [index, input] : SourcesMap) {
+            if (auto data = input.AsyncInput->ExtraData()) {
+                auto* entry = extraData->AddSourcesExtraData();
+                entry->SetIndex(index);
+                entry->MutableData()->CopyFrom(*data);
+            }
+        }
+        for (auto& [index, input] : InputTransformsMap) {
+            if (auto data = input.AsyncInput->ExtraData()) {
+                auto* entry = extraData->AddInputTransformsData();
+                entry->SetIndex(index);
+                entry->MutableData()->CopyFrom(*data);
+            }
+        }
+    }
+
     void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
     {
         auto execEv = MakeHolder<TEvDqCompute::TEvState>();
         auto& record = execEv->Record;
+
+        FillExtraData(record);
 
         record.SetState(State);
         record.SetStatusCode(statusCode);
@@ -1504,7 +1524,8 @@ protected:
                         .ComputeActorId = this->SelfId(),
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
-                        .TaskCounters = TaskCounters
+                        .TaskCounters = TaskCounters,
+                        .Alloc = TaskRunner ? TaskRunner->GetAllocatorPtr() : nullptr
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();
@@ -1532,7 +1553,8 @@ protected:
                             .ComputeActorId = this->SelfId(),
                             .TypeEnv = typeEnv,
                             .HolderFactory = holderFactory,
-                            .ProgramBuilder = *transform.ProgramBuilder
+                            .ProgramBuilder = *transform.ProgramBuilder,
+                            .Alloc = TaskRunner->GetAllocatorPtr()
                         });
                 } catch (const std::exception& ex) {
                     throw yexception() << "Failed to create input transform " << inputDesc.GetTransform().GetType() << ": " << ex.what();
@@ -1894,10 +1916,12 @@ public:
 
             THashMap<ui64, ui64> ingressBytesMap;
             for (auto& [inputIndex, sourceInfo] : SourcesMap) {
-                if (sourceInfo.AsyncInput) {
+                if (auto* source = sourceInfo.AsyncInput) {
                     auto ingressBytes = sourceInfo.AsyncInput->GetIngressBytes();
                     ingressBytesMap.emplace(inputIndex, ingressBytes);
                     Ingress[sourceInfo.Type] = Ingress.Value(sourceInfo.Type, 0) + ingressBytes;
+                    // TODO: support async CA
+                    source->FillExtraStats(protoTask, last, TaskRunner ? TaskRunner->GetMeteringStats() : nullptr);
                 }
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) GetProfileStats(), ingressBytesMap);
@@ -1947,6 +1971,11 @@ public:
                     protoTransform->SetIngressBytes(ingressBytes);
 
                     protoTransform->SetMaxMemoryUsage(transformStats->MaxMemoryUsage);
+                }
+
+                if (auto* transform = transformInfo.AsyncInput) {
+                    // TODO: support async CA
+                    transform->FillExtraStats(protoTask, last, TaskRunner ? TaskRunner->GetMeteringStats() : 0);
                 }
             }
 

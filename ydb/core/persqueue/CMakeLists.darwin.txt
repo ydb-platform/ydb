@@ -24,6 +24,7 @@ target_link_libraries(ydb-core-persqueue PUBLIC
   ydb-core-base
   core-engine-minikql
   ydb-core-keyvalue
+  core-kqp-common
   ydb-core-metering
   core-persqueue-codecs
   core-persqueue-config
@@ -51,12 +52,14 @@ target_sources(ydb-core-persqueue PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_database.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_l2_cache.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/quota_tracker.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/read_balancer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/read_speed_limiter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/sourceid.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/subscriber.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/type_codecs_defs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/user_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/write_meta.cpp
 )
 generate_enum_serilization(ydb-core-persqueue

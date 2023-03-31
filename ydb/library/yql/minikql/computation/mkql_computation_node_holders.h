@@ -394,6 +394,8 @@ public:
         TMemoryUsageInfo& memInfo,
         const IFunctionRegistry* functionRegistry = nullptr);
 
+    ~THolderFactory();
+
     template <typename T, typename... TArgs>
     NUdf::TUnboxedValuePod Create(TArgs&&... args) const {
         return NUdf::TUnboxedValuePod(AllocateOn<T>(CurrentAllocState, &MemInfo, std::forward<TArgs>(args)...));

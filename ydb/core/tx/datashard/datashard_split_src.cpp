@@ -96,7 +96,7 @@ public:
 
 void TDataShard::CheckSplitCanStart(const TActorContext& ctx) {
     if (State == TShardState::SplitSrcWaitForNoTxInFlight) {
-        ui64 txInFly = TxInFly();
+        ui64 txInFly = TxInFly() + VolatileTxManager.GetTxInFlight();
         ui64 immediateTxInFly = ImmediateInFly();
         SetCounter(COUNTER_SPLIT_SRC_WAIT_TX_IN_FLY, txInFly);
         SetCounter(COUNTER_SPLIT_SRC_WAIT_IMMEDIATE_TX_IN_FLY, immediateTxInFly);

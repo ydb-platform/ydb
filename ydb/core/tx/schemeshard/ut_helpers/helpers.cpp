@@ -5,6 +5,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 
 #include <ydb/core/blockstore/core/blockstore.h>
 
@@ -2186,4 +2187,31 @@ namespace NSchemeShardUT_Private {
        auto& rec = result->Record;
        return rec;
    }
+
+    void SendTEvPeriodicTopicStats(TTestActorRuntime& runtime, ui64 topicId, ui64 generation, ui64 round, ui64 dataSize, ui64 usedReserveSize) {
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        TEvPersQueue::TEvPeriodicTopicStats* ev = new TEvPersQueue::TEvPeriodicTopicStats();
+        auto& rec = ev->Record;
+        rec.SetPathId(topicId);
+        rec.SetGeneration(generation);
+        rec.SetRound(round);
+        rec.SetDataSize(dataSize);
+        rec.SetUsedReserveSize(usedReserveSize);
+
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, ev);
+    }
+
+    void WriteToTopic(TTestActorRuntime& runtime, const TString& path, ui32& msgSeqNo, const TString& message) {
+        auto topicDescr = DescribePath(runtime, path).GetPathDescription().GetPersQueueGroup();
+        auto partitionId = topicDescr.GetPartitions()[0].GetPartitionId();
+        auto tabletId = topicDescr.GetPartitions()[0].GetTabletId();
+
+        const auto edge = runtime.AllocateEdgeActor();
+        TString cookie = NKikimr::NPQ::CmdSetOwner(&runtime, tabletId, edge, partitionId, "default", true).first;
+
+        TVector<std::pair<ui64, TString>> data;
+        data.push_back({1, message});
+        NKikimr::NPQ::CmdWrite(&runtime, tabletId, edge, partitionId, "sourceid0", msgSeqNo, data, false, {}, true, cookie, 0);
+    }
 }

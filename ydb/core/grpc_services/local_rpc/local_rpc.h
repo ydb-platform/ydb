@@ -34,8 +34,9 @@ public:
         : Request(std::forward<TProto>(req))
         , CbWrapper(std::forward<TCb>(cb))
         , DatabaseName(databaseName)
-        , InternalToken(token)
-    {}
+    {
+        InternalToken = new NACLib::TUserToken(token);
+    }
 
     bool HasClientCapability(const TString&) const override {
         return false;
@@ -47,8 +48,15 @@ public:
         return DatabaseName;
     }
 
-    const TString& GetInternalToken() const override {
+    const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
         return InternalToken;
+    }
+
+    const TString& GetSerializedToken() const override {
+        if (InternalToken) {
+            return InternalToken->GetSerializedToken();
+        }
+        return EmptySerializedTokenMessage_;
     }
 
     const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
@@ -148,6 +156,8 @@ public:
 
     void SetClientLostAction(std::function<void()>&&) override {}
 
+    bool IsClientLost() const override { return false; }
+
     void AddServerHint(const TString&) override {}
 
     void SetRuHeader(ui64) override {}
@@ -212,7 +222,8 @@ private:
     typename TRpc::TRequest Request;
     TCbWrapper CbWrapper;
     const TString DatabaseName;
-    const TString InternalToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
+    const TString EmptySerializedTokenMessage_;
 
     NYql::TIssueManager IssueManager;
     google::protobuf::Arena Arena;

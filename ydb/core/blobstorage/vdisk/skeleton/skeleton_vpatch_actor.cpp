@@ -58,16 +58,13 @@ namespace NKikimr::NPrivate {
         struct TXorDiffs {
             TVector<TDiff> Diffs;
             ui8 PartId;
-            std::unique_ptr<TEvBlobStorage::TEvVPatchXorDiffResult> ResultEvent;
             TActorId Sender;
             ui64 Cookie;
 
 
-            TXorDiffs(TVector<TDiff> &&diffs, ui8 partId, std::unique_ptr<TEvBlobStorage::TEvVPatchXorDiffResult> &&result,
-                    const TActorId &sender, ui64 cookie)
+            TXorDiffs(TVector<TDiff> &&diffs, ui8 partId, const TActorId &sender, ui64 cookie)
                 : Diffs(std::move(diffs))
                 , PartId(partId)
-                , ResultEvent(std::move(result))
                 , Sender(sender)
                 , Cookie(cookie)
             {
@@ -156,7 +153,7 @@ namespace NKikimr::NPrivate {
 
         void Bootstrap() {
             STLOG(PRI_INFO, BS_VDISK_PATCH, BSVSP03,
-                    VDiskLogPrefix << " TEvVPatch: bootsrapped;",
+                    VDiskLogPrefix << " TEvVPatch: bootstrapped;",
                     (OriginalBlobId, OriginalBlobId),
                     (Deadline, Deadline));
             ui32 cookie = 0;
@@ -166,9 +163,18 @@ namespace NKikimr::NPrivate {
                     TLogoBlobID::MaxPartId, nullptr);
             Send(LeaderId, msg.release());
 
+            TInstant now = TActivationContext::Now();
+            if (Deadline != TInstant::Zero() && Deadline < now) {
+                ErrorReason = "DEADLINE";
+                SendVPatchFoundParts(NKikimrProto::ERROR);
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
+                return;
+            }
+
             Become(&TThis::StartState);
 
-            TDuration liveDuration = Deadline - TActivationContext::Now();
+            TDuration liveDuration = Deadline - now;
             if (!Deadline || liveDuration > CommonLiveTime) {
                 liveDuration = CommonLiveTime;
             }
@@ -182,6 +188,7 @@ namespace NKikimr::NPrivate {
                     (OriginalBlobId, OriginalBlobId),
                     (FoundParts, FormatList(FoundOriginalParts)),
                     (Status, status));
+            FoundPartsEvent->Record.SetErrorReason(ErrorReason);
             for (ui8 part : FoundOriginalParts) {
                 FoundPartsEvent->AddPart(part);
             }
@@ -217,14 +224,16 @@ namespace NKikimr::NPrivate {
                 ErrorReason = TStringBuilder() << "Recieve not OK status from VGetRange,"
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
                 SendVPatchFoundParts(NKikimrProto::ERROR);
-                NotifySkeletonAndDie();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
             if (record.ResultSize() != 1) {
                 ErrorReason = TStringBuilder() << "Expected only one result, but given " << record.ResultSize()
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
                 SendVPatchFoundParts(NKikimrProto::ERROR);
-                NotifySkeletonAndDie();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
 
@@ -240,7 +249,9 @@ namespace NKikimr::NPrivate {
 
             SendVPatchFoundParts(NKikimrProto::OK);
             if (FoundOriginalParts.empty()) {
-                NotifySkeletonAndDie();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
+                return;
             }
         }
 
@@ -303,9 +314,11 @@ namespace NKikimr::NPrivate {
                     (PatchedBlobId, PatchedBlobId),
                     (OriginalPartId, (ui32)OriginalPartId),
                     (PatchedPartId, (ui32)PatchedPartId),
+                    (DataParts, (ui32)GType.DataParts()),
                     (ReceivedBlobId, blobId),
                     (Status, record.GetStatus()),
-                    (ResultSize, record.ResultSize()));
+                    (ResultSize, record.ResultSize()),
+                    (ParityPart, (blobId.PartId() <= GType.DataParts() ? "no" : "yes")));
 
             ui8 *buffer = reinterpret_cast<ui8*>(Buffer.UnsafeGetContiguousSpanMut().data());
             if (blobId.PartId() <= GType.DataParts()) {
@@ -319,9 +332,8 @@ namespace NKikimr::NPrivate {
                 ui32 dataSize = blobId.BlobSize();
 
                 for (ui32 idx = ReceivedXorDiffs.size(); idx != 0; --idx) {
-                    auto &[diffs, partId, result, sender, cookie] = ReceivedXorDiffs.back();
+                    auto &[diffs, partId, sender, cookie] = ReceivedXorDiffs.back();
                     GType.ApplyXorDiff(TErasureType::CrcModeNone, dataSize, buffer, diffs, partId - 1, toPart - 1);
-                    SendVDiskResponse(TActivationContext::AsActorContext(), sender, result.release(), cookie);
                     ReceivedXorDiffs.pop_back();
                 }
 
@@ -417,7 +429,9 @@ namespace NKikimr::NPrivate {
                     (OriginalBlobId, OriginalBlobId),
                     (PatchedBlobId, PatchedBlobId),
                     (OriginalPartId, (ui32)OriginalPartId),
-                    (PatchedPartId, (ui32)PatchedPartId));
+                    (PatchedPartId, (ui32)PatchedPartId),
+                    (ReceivedXorDiffs, ReceivedXorDiffCount),
+                    (ExpectedXorDiffs, WaitedXorDiffCount));
             ui64 cookie = OriginalBlobId.Hash();
             std::unique_ptr<IEventBase> put = std::make_unique<TEvBlobStorage::TEvVPut>(TLogoBlobID(PatchedBlobId, PatchedPartId),
                     Buffer, VDiskId, false, &cookie, Deadline, NKikimrBlobStorage::AsyncBlob);
@@ -434,6 +448,18 @@ namespace NKikimr::NPrivate {
             Sender = ev->Sender;
             Cookie = ev->Cookie;
             SendVPatchResult(NKikimrProto::ERROR);
+        }
+
+        void HandleForceEnd(TEvBlobStorage::TEvVPatchDiff::TPtr &ev) {
+            bool forceEnd = ev->Get()->IsForceEnd();
+            SendVPatchFoundParts(NKikimrProto::ERROR);
+            if (forceEnd) {
+                SendVPatchResult(NKikimrProto::OK);
+            } else {
+                SendVPatchResult(NKikimrProto::ERROR);
+            }
+            NotifySkeletonAboutDying();
+            Become(&TThis::ErrorState);
         }
 
         void Handle(TEvBlobStorage::TEvVPatchDiff::TPtr &ev) {
@@ -463,6 +489,7 @@ namespace NKikimr::NPrivate {
                     (OriginalPartId, (ui32)OriginalPartId),
                     (PatchedPartId, (ui32)PatchedPartId),
                     (XorReceiver, (isXorReceiver ? "yes" : "no")),
+                    (ParityPart, (PatchedPartId <= GType.DataParts() ? "no" : "yes")),
                     (ForceEnd, (forceEnd ? "yes" : "no")));
 
             Y_VERIFY(!ResultEvent);
@@ -476,7 +503,8 @@ namespace NKikimr::NPrivate {
 
             if (forceEnd) {
                 SendVPatchResult(NKikimrProto::OK);
-                NotifySkeletonAndDie();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
 
@@ -522,7 +550,8 @@ namespace NKikimr::NPrivate {
             ResultEvent->SetStatusFlagsAndFreeSpace(record.GetStatusFlags(), record.GetApproximateFreeSpaceShare());
 
             SendVPatchResult(status);
-            NotifySkeletonAndDie();
+            NotifySkeletonAboutDying();
+            Become(&TThis::ErrorState);
         }
 
         void HandleError(TEvBlobStorage::TEvVPatchXorDiff::TPtr &ev) {
@@ -553,17 +582,13 @@ namespace NKikimr::NPrivate {
             TInstant now = TActivationContext::Now();
             std::unique_ptr<TEvBlobStorage::TEvVPatchXorDiffResult> resultEvent = std::make_unique<TEvBlobStorage::TEvVPatchXorDiffResult>(
                     NKikimrProto::OK, now, &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr);
+            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie);
 
             if (!CheckDiff(xorDiffs, "XorDiff from datapart")) {
-                for (auto &[diffs, partId, result, sender, cookie] : ReceivedXorDiffs) {
-                    SendVDiskResponse(TActivationContext::AsActorContext(), sender, result.release(), cookie);
-                }
-                SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie);
-
                 if (ResultEvent) {
                     SendVPatchResult(NKikimrProto::ERROR);
-                    NotifySkeletonAboutDying();
                 }
+                NotifySkeletonAboutDying();
                 Become(&TThis::ErrorState);
                 return;
             }
@@ -571,6 +596,7 @@ namespace NKikimr::NPrivate {
             if (Buffer) {
                 ui8 *buffer = reinterpret_cast<ui8*>(Buffer.UnsafeGetContiguousSpanMut().data());
                 ui32 dataSize = OriginalBlobId.BlobSize();
+
                 GType.ApplyXorDiff(TErasureType::CrcModeNone, dataSize, buffer, xorDiffs, fromPart - 1, toPart - 1);
 
                 if (ReceivedXorDiffCount == WaitedXorDiffCount) {
@@ -578,19 +604,14 @@ namespace NKikimr::NPrivate {
                 }
 
                 xorDiffs.clear();
-                SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie);
             } else {
-                ReceivedXorDiffs.emplace_back(std::move(xorDiffs), fromPart, std::move(resultEvent),
+                ReceivedXorDiffs.emplace_back(std::move(xorDiffs), fromPart,
                         ev->Sender, ev->Cookie);
             }
         }
 
-        void NotifySkeletonAndDie() {
-            NotifySkeletonAboutDying();
-            PassAway();
-        }
-
         void NotifySkeletonAboutDying() {
+            STLOG(PRI_DEBUG, BS_VDISK_PATCH, BSVSP17, VDiskLogPrefix << " NotifySkeletonAboutDying;");
             Send(LeaderId, new TEvVPatchDyingRequest(PatchedBlobId));
         }
 
@@ -598,7 +619,8 @@ namespace NKikimr::NPrivate {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, before receiving diff";
             STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP11, VDiskLogPrefix << " " << ErrorReason << ";");
             SendVPatchFoundParts(NKikimrProto::ERROR);
-            NotifySkeletonAndDie();
+            NotifySkeletonAboutDying();
+            Become(&TThis::ErrorState);
         }
 
         void HandleInWaitState(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
@@ -612,12 +634,13 @@ namespace NKikimr::NPrivate {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, after receiving diff";
             STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP12, VDiskLogPrefix << " " << ErrorReason << ";");
             SendVPatchResult(NKikimrProto::ERROR);
-            NotifySkeletonAndDie();
+            NotifySkeletonAboutDying();
+            Become(&TThis::ErrorState);
         }
 
         void HandleInParityStates(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, after receiving diff";
-            STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP12, VDiskLogPrefix << " " << ErrorReason << ";");
+            STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP20, VDiskLogPrefix << " " << ErrorReason << ";");
             SendVPatchResult(NKikimrProto::ERROR);
             NotifySkeletonAboutDying();
             Become(&TThis::ErrorState);
@@ -627,8 +650,9 @@ namespace NKikimr::NPrivate {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvBlobStorage::TEvVGetResult, HandleVGetRangeResult)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
+                hFunc(TEvBlobStorage::TEvVPatchDiff, HandleForceEnd)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInStartState)
-                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
+                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << TypeName(*ev->GetBase()));
             }
         }
 
@@ -637,7 +661,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPatchDiff, Handle)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInWaitState)
-                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
+                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << TypeName(*ev->GetBase()));
             }
         }
 
@@ -645,9 +669,10 @@ namespace NKikimr::NPrivate {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvBlobStorage::TEvVPatchDiff, HandleError)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, HandleError)
+                IgnoreFunc(TEvBlobStorage::TEvVPatchXorDiffResult)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInWaitState)
                 sFunc(TEvVPatchDyingConfirm, PassAway)
-                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
+                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << TypeName(*ev->GetBase()));
             }
         }
 
@@ -657,7 +682,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPutResult, Handle)
                 IgnoreFunc(TEvBlobStorage::TEvVPatchXorDiffResult)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInDataStates)
-                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
+                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << TypeName(*ev->GetBase()));
             }
         }
 
@@ -667,7 +692,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPutResult, Handle)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInParityStates)
-                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
+                default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << TypeName(*ev->GetBase()));
             }
         }
     };

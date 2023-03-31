@@ -175,11 +175,18 @@ namespace NActors {
             Become(std::forward<TArgs>(args)...);
             Y_VERIFY(!Terminated || CurrentStateFunc() == &TThis::HoldByError); // ensure we never escape this state
             if (CurrentStateFunc() != &TThis::PendingActivation) {
-                PassAwayTimestamp = TInstant::Max();
+                PassAwayTimestamp = TMonotonic::Max();
+            } else if (DynamicPtr) {
+                PassAwayTimestamp = TActivationContext::Monotonic() + TDuration::Seconds(15);
+                if (!PassAwayScheduled) {
+                    TActivationContext::Schedule(PassAwayTimestamp, new IEventHandle(EvPassAwayIfNeeded, 0, SelfId(),
+                        {}, nullptr, 0));
+                    PassAwayScheduled = true;
+                }
             }
         }
 
-        TInstant PassAwayTimestamp;
+        TMonotonic PassAwayTimestamp;
         bool PassAwayScheduled = false;
 
         void SwitchToInitialState() {
@@ -189,17 +196,18 @@ namespace NActors {
                 " PendingIncomingHandshakeEvents# %zu State# %s", LogPrefix.data(), PendingSessionEvents.size(),
                 PendingIncomingHandshakeEvents.size(), State);
             SwitchToState(__LINE__, "PendingActivation", &TThis::PendingActivation);
-            if (DynamicPtr && !PassAwayScheduled && PassAwayTimestamp != TInstant::Max()) {
-                TActivationContext::Schedule(PassAwayTimestamp, new IEventHandle(EvPassAwayIfNeeded, 0, SelfId(),
-                    {}, nullptr, 0));
-                PassAwayScheduled = true;
-            }
         }
 
         void HandlePassAwayIfNeeded() {
             Y_VERIFY(PassAwayScheduled);
-            if (PassAwayTimestamp != TInstant::Max()) {
+            const TMonotonic now = TActivationContext::Monotonic();
+            if (now >= PassAwayTimestamp) {
                 PassAway();
+            } else if (PassAwayTimestamp != TMonotonic::Max()) {
+                TActivationContext::Schedule(PassAwayTimestamp, new IEventHandle(EvPassAwayIfNeeded, 0, SelfId(),
+                    {}, nullptr, 0));
+            } else {
+                PassAwayScheduled = false;
             }
         }
 
@@ -387,11 +395,11 @@ namespace NActors {
 
         // hold all events before connection is established
         struct TPendingSessionEvent {
-            TInstant Deadline;
+            TMonotonic Deadline;
             ui32 Size;
             THolder<IEventHandle> Event;
 
-            TPendingSessionEvent(TInstant deadline, ui32 size, TAutoPtr<IEventHandle> event)
+            TPendingSessionEvent(TMonotonic deadline, ui32 size, TAutoPtr<IEventHandle> event)
                 : Deadline(deadline)
                 , Size(size)
                 , Event(event)

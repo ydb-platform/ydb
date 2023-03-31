@@ -25,7 +25,8 @@ public:
         return NKikimrServices::TActivity::KQP_TABLE_RESOLVER;
     }
 
-    TKqpTableResolver(const TActorId& owner, ui64 txId, TMaybe<TString> userToken,
+    TKqpTableResolver(const TActorId& owner, ui64 txId,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         const TVector<IKqpGateway::TPhysicalTxData>& transactions, TKqpTableKeys& tableKeys,
         TKqpTasksGraph& tasksGraph)
         : Owner(owner)
@@ -233,8 +234,8 @@ private:
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->ResultSet.reserve(TasksGraph.GetStagesInfo().size());
-        if (UserToken) {
-            request->UserToken = new NACLib::TUserToken(*UserToken);
+        if (UserToken && !UserToken->GetSerializedToken().empty()) {
+            request->UserToken = UserToken;
         }
 
         for (auto& pair : TasksGraph.GetStagesInfo()) {
@@ -313,7 +314,7 @@ private:
 private:
     const TActorId Owner;
     const ui64 TxId;
-    const TMaybe<TString> UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
     TKqpTableKeys& TableKeys;
 
@@ -327,7 +328,8 @@ private:
 
 } // anonymous namespace
 
-NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId, TMaybe<TString> userToken,
+NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     const TVector<IKqpGateway::TPhysicalTxData>& transactions, TKqpTableKeys& tableKeys, TKqpTasksGraph& tasksGraph) {
     return new TKqpTableResolver(owner, txId, userToken, transactions, tableKeys, tasksGraph);
 }

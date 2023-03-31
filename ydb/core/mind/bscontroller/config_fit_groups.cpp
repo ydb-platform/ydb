@@ -169,8 +169,6 @@ namespace NKikimr {
 
                 // mapping for audit log
                 TMap<TVDiskIdShort, TVSlotId> replacedSlots;
-                TStackVec<std::pair<TVSlotId, bool>, 32> replaceQueue;
-                THashMap<TVDiskIdShort, TPDiskId> replacedDisks;
                 i64 requiredSpace = Min<i64>();
                 bool sanitizingRequest = (State.SanitizingRequests.find(groupId) != State.SanitizingRequests.end());
 
@@ -213,9 +211,7 @@ namespace NKikimr {
                         // get the current PDisk in the desired slot and replace it with the target one; if the target
                         // PDisk id is zero, then new PDisk will be picked up automatically
                         g[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = targetPDiskId;
-                        replacedSlots.emplace(TVDiskIdShort(vslot->RingIdx, vslot->FailDomainIdx, vslot->VDiskIdx), vslot->VSlotId);
-                        replaceQueue.emplace_back(vslot->VSlotId, State.SuppressDonorMode.count(vslot->VSlotId));
-                        replacedDisks.emplace(vslot->GetShortVDiskId(), vslot->VSlotId.ComprisingPDiskId());
+                        replacedSlots.emplace(vslot->GetShortVDiskId(), vslot->VSlotId);
                     } else {
                         preservedSlots.emplace(vslot->GetVDiskId(), vslot->VSlotId);
                         auto& m = vslot->Metrics;
@@ -249,16 +245,18 @@ namespace NKikimr {
                     if (hasMissingSlots || !IgnoreGroupSanityChecks) {
                         TGroupMapper::TForbiddenPDisks forbid;
                         for (const auto& vslot : groupInfo->VDisksInGroup) {
-                            for (const auto& [vslotId, vdiskId] : vslot->Donors) {
+                            const TVDiskIdShort vdiskId = vslot->GetShortVDiskId();
+                            for (const TVSlotId& vslotId : vslot->Donors) {
                                 if (group[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk] == TPDiskId()) {
                                     forbid.insert(vslotId.ComprisingPDiskId());
                                 }
                             }
                         }
-                        if ((replacedDisks.empty() && sanitizingRequest) || (replacedDisks.size() == 1)) {
+                        if ((replacedSlots.empty() && sanitizingRequest) ||
+                                (State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1 && hasMissingSlots)) {
                             auto result = SanitizeGroup(groupId, group, std::move(forbid), requiredSpace, AllowUnusableDisks);
 
-                            if (replacedDisks.empty()) {
+                            if (replacedSlots.empty()) {
                                 // update information about replaced disks
                                 for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
                                     if (vslot->GetShortVDiskId() == result.first) {
@@ -266,13 +264,15 @@ namespace NKikimr {
                                         Y_VERIFY(it != preservedSlots.end());
                                         preservedSlots.erase(it);
                                         replacedSlots.emplace(result.first, vslot->VSlotId);
-                                        replaceQueue.emplace_back(vslot->VSlotId, State.SuppressDonorMode.count(vslot->VSlotId));
-                                        replacedDisks.emplace(result.first, vslot->VSlotId.ComprisingPDiskId());
                                         break;
                                     }
                                 }
                             }
                         } else {
+                            THashMap<TVDiskIdShort, TPDiskId> replacedDisks;
+                            for (const auto& [vdiskId, vslotId] : replacedSlots) {
+                                replacedDisks.emplace(vdiskId, vslotId.ComprisingPDiskId());
+                            }
                             AllocateGroup(groupId, group, replacedDisks, std::move(forbid), requiredSpace, AllowUnusableDisks);
                         }
                         if (!IgnoreVSlotQuotaCheck) {
@@ -284,6 +284,26 @@ namespace NKikimr {
                                     Mapper->AdjustSpaceAvailable(pdiskId, -requiredSpace);
                                 }
                             }
+                        }
+                    }
+
+                    // make list of donors and dispose unused slots
+                    std::vector<TVSlotId> donors;
+                    for (const auto& [vdiskId, vslotId] : replacedSlots) {
+                        const bool suppressDonorMode = State.SuppressDonorMode.contains(vslotId);
+                        if (State.DonorMode && !suppressDonorMode && !State.UncommittedVSlots.count(vslotId)) {
+                            donors.push_back(vslotId);
+                        } else {
+                            if (adjustSpaceAvailable) {
+                                const TVSlotInfo *slot = State.VSlots.Find(vslotId);
+                                Y_VERIFY(slot);
+                                if (!slot->PDisk->SlotSpaceEnforced(State.Self)) {
+                                    // mark the space from destroyed slot as available
+                                    Mapper->AdjustSpaceAvailable(vslotId.ComprisingPDiskId(), slot->Metrics.GetAllocatedSize());
+                                }
+                            }
+
+                            State.DestroyVSlot(vslotId);
                         }
                     }
 
@@ -346,36 +366,16 @@ namespace NKikimr {
                             (Replacements, makeReplacements()));
                     }
 
-                    for (const auto& [vslotId, suppressDonorMode] : replaceQueue) {
-                        if (State.DonorMode && !suppressDonorMode && !State.UncommittedVSlots.count(vslotId)) {
-                            TVSlotInfo *mutableSlot = State.VSlots.FindForUpdate(vslotId);
-                            Y_VERIFY(mutableSlot);
-                            // make slot the donor one for the newly created slot
-                            const auto it = newSlots.find(mutableSlot->GetShortVDiskId());
-                            Y_VERIFY(it != newSlots.end());
-                            mutableSlot->MakeDonorFor(it->second);
-                            for (const auto& [donorVSlotId, donorVDiskId] : it->second->Donors) {
-                                TVSlotInfo *mutableDonor = State.VSlots.FindForUpdate(donorVSlotId);
-                                Y_VERIFY(mutableDonor);
-                                Y_VERIFY(mutableDonor->Mood == TMood::Donor);
-                                mutableDonor->AcceptorVSlotId = it->second->VSlotId;
-                            }
-                        } else {
-                            if (adjustSpaceAvailable) {
-                                const TVSlotInfo *slot = State.VSlots.Find(vslotId);
-                                Y_VERIFY(slot);
-                                if (!slot->PDisk->SlotSpaceEnforced(State.Self)) {
-                                    // mark the space from destroyed slot as available
-                                    Mapper->AdjustSpaceAvailable(vslotId.ComprisingPDiskId(), slot->Metrics.GetAllocatedSize());
-                                }
-                            }
-
-                            State.DestroyVSlot(vslotId);
-                        }
+                    for (const TVSlotId& vslotId : donors) {
+                        TVSlotInfo *mutableSlot = State.VSlots.FindForUpdate(vslotId);
+                        Y_VERIFY(mutableSlot);
+                        const auto it = newSlots.find(mutableSlot->GetShortVDiskId());
+                        Y_VERIFY(it != newSlots.end());
+                        mutableSlot->MakeDonorFor(it->second);
                     }
-                } else {
-                    Y_VERIFY(replaceQueue.empty());
                 }
+
+                State.CheckConsistency();
             }
 
         private:

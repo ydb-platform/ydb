@@ -593,8 +593,7 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 class IFunctionTypeInfoBuilder9: public IFunctionTypeInfoBuilder8 {
 public:
-    virtual IFunctionTypeInfoBuilder9& BlockImplementationImpl(
-            TUniquePtr<IBoxedValue> impl) = 0;
+    virtual void Unused1() = 0;
 };
 #endif
 
@@ -631,12 +630,22 @@ public:
 class IFunctionTypeInfoBuilder14: public IFunctionTypeInfoBuilder13 {
 public:
     virtual IBlockTypeBuilder::TPtr Block(bool isScalar) const = 0;
-    virtual void Unused1() = 0;
     virtual void Unused2() = 0;
+    virtual void Unused3() = 0;
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 28)
+class IFunctionTypeInfoBuilder15: public IFunctionTypeInfoBuilder14 {
+public:
+    virtual IFunctionTypeInfoBuilder15& SupportsBlocks() = 0;
+    virtual IFunctionTypeInfoBuilder15& IsStrict() = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 28)
+using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder15;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder14;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder13;
@@ -767,14 +776,6 @@ public:
         const TStringRef& functionName
     ) {
         IRImplementationImpl(moduleIR, moduleIRUniqId, functionName);
-        return *this;
-    }
-#endif
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-    IFunctionTypeInfoBuilder& BlockImplementation(
-            TUniquePtr<IBoxedValue> impl) {
-        BlockImplementationImpl(std::move(impl));
         return *this;
     }
 #endif

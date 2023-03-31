@@ -359,6 +359,8 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropCdcStreamAtTable) {
         commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
+        commonShardOp = TTxState::ConfigureParts;
     } else {
         Y_FAIL("UNREACHABLE");
     }

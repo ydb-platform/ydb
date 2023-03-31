@@ -27,6 +27,8 @@ message TFunctionResult {
     repeated TArgResult Args = 11;
     optional string ReturnType = 12;
     optional string ReturnDoc = 13;
+    optional bool SupportsBlocks = 14;
+    optional bool IsStrict = 15;
 };
 
 message TImport {

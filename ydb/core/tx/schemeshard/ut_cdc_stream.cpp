@@ -1,5 +1,6 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -137,123 +138,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
                 NLs::RetentionPeriod(rp),
             });
         }
-    }
-
-    void InitialScan(bool enable) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions()
-            .EnableProtoSourceIdInfo(true)
-            .EnableChangefeedInitialScan(enable));
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Uint64" }
-            Columns { Name: "value" Type: "Uint64" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        const auto expectedStatus = enable
-            ? NKikimrScheme::StatusAccepted
-            : NKikimrScheme::StatusPreconditionFailed;
-
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
-            StreamDescription {
-              Name: "Stream"
-              Mode: ECdcStreamModeKeysOnly
-              Format: ECdcStreamFormatProto
-              State: ECdcStreamStateScan
-            }
-        )", {expectedStatus});
-
-        if (!enable) {
-            return;
-        }
-
-        env.TestWaitNotification(runtime, txId);
-        const auto lockTxId = txId;
-
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
-            NLs::PathExist,
-            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
-            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
-            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateScan),
-        });
-
-        auto testAlterCdcStream = [&runtime](ui64 txId, const TString& parentPath, const TString& schema,
-                const TMaybe<ui64>& lockTxId, TEvSchemeShard::EStatus expectedStatus = NKikimrScheme::StatusAccepted)
-        {
-            auto request = AlterCdcStreamRequest(txId, parentPath, schema);
-            if (lockTxId) {
-                request->Record.MutableTransaction(0)->MutableLockGuard()->SetOwnerTxId(*lockTxId);
-            }
-
-            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request);
-            TestModificationResult(runtime, txId, expectedStatus);
-        };
-
-        // without guard & lockTxId
-        testAlterCdcStream(++txId, "/MyRoot", R"(
-            TableName: "Table"
-            StreamName: "Stream"
-            GetReady {
-              LockTxId: 0
-            }
-        )", {}, NKikimrScheme::StatusMultipleModifications);
-
-        // with guard, without lockTxId
-        testAlterCdcStream(++txId, "/MyRoot", R"(
-            TableName: "Table"
-            StreamName: "Stream"
-            GetReady {
-              LockTxId: 0
-            }
-        )", lockTxId, NKikimrScheme::StatusMultipleModifications);
-
-        // without guard, with lockTxId
-        testAlterCdcStream(++txId, "/MyRoot", Sprintf(R"(
-            TableName: "Table"
-            StreamName: "Stream"
-            GetReady {
-              LockTxId: %lu
-            }
-        )", lockTxId), {}, NKikimrScheme::StatusMultipleModifications);
-
-        // with guard & lockTxId
-        testAlterCdcStream(++txId, "/MyRoot", Sprintf(R"(
-            TableName: "Table"
-            StreamName: "Stream"
-            GetReady {
-              LockTxId: %lu
-            }
-        )", lockTxId), lockTxId);
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
-            NLs::PathExist,
-            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
-            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
-            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
-        });
-
-        // another try should fail
-        testAlterCdcStream(++txId, "/MyRoot", Sprintf(R"(
-            TableName: "Table"
-            StreamName: "Stream"
-            GetReady {
-              LockTxId: %lu
-            }
-        )", lockTxId), {}, NKikimrScheme::StatusPreconditionFailed);
-    }
-
-    Y_UNIT_TEST(InitialScanShouldSucceed) {
-        InitialScan(true);
-    }
-
-    Y_UNIT_TEST(InitialScanShouldFail) {
-        InitialScan(false);
     }
 
     Y_UNIT_TEST(Negative) {
@@ -944,4 +828,417 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         Metering(false);
     }
 
+    Y_UNIT_TEST(ChangeOwner) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const auto* path : {"Table", "Table/Stream", "Table/Stream/streamImpl"}) {
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/%s", path)), {
+                NLs::HasOwner("root@builtin"),
+            });
+        }
+
+        TestModifyACL(runtime, ++txId, "/MyRoot", "Table", "", "user@builtin");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const auto* path : {"Table", "Table/Stream", "Table/Stream/streamImpl"}) {
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/%s", path)), {
+                NLs::HasOwner("user@builtin"),
+            });
+        }
+    }
+
 } // TCdcStreamTests
+
+Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
+    void InitialScan(bool enable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedInitialScan(enable));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto expectedStatus = enable
+            ? NKikimrScheme::StatusAccepted
+            : NKikimrScheme::StatusPreconditionFailed;
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )", {expectedStatus});
+
+        if (!enable) {
+            return;
+        }
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateScan),
+        });
+    }
+
+    Y_UNIT_TEST(InitialScanEnabled) {
+        InitialScan(true);
+    }
+
+    Y_UNIT_TEST(InitialScanDisabled) {
+        InitialScan(false);
+    }
+
+    Y_UNIT_TEST(AlterStream) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedInitialScan(true));
+        runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto lockTxId = txId;
+        auto testAlterCdcStream = [&runtime](ui64 txId, const TString& parentPath, const TString& schema,
+                const TMaybe<ui64>& lockTxId, TEvSchemeShard::EStatus expectedStatus = NKikimrScheme::StatusAccepted)
+        {
+            auto request = AlterCdcStreamRequest(txId, parentPath, schema);
+            if (lockTxId) {
+                request->Record.MutableTransaction(0)->MutableLockGuard()->SetOwnerTxId(*lockTxId);
+            }
+
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request);
+            TestModificationResult(runtime, txId, expectedStatus);
+        };
+
+        // try to disable
+        testAlterCdcStream(++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+            Disable {}
+        )", lockTxId, NKikimrScheme::StatusPreconditionFailed);
+
+        // without guard & lockTxId
+        testAlterCdcStream(++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+            GetReady {
+              LockTxId: 0
+            }
+        )", {}, NKikimrScheme::StatusMultipleModifications);
+
+        // with guard, without lockTxId
+        testAlterCdcStream(++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+            GetReady {
+              LockTxId: 0
+            }
+        )", lockTxId, NKikimrScheme::StatusMultipleModifications);
+
+        // without guard, with lockTxId
+        testAlterCdcStream(++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            StreamName: "Stream"
+            GetReady {
+              LockTxId: %lu
+            }
+        )", lockTxId), {}, NKikimrScheme::StatusMultipleModifications);
+
+        // with guard & lockTxId
+        testAlterCdcStream(++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            StreamName: "Stream"
+            GetReady {
+              LockTxId: %lu
+            }
+        )", lockTxId), lockTxId);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        // another try should fail
+        testAlterCdcStream(++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            StreamName: "Stream"
+            GetReady {
+              LockTxId: %lu
+            }
+        )", lockTxId), {}, NKikimrScheme::StatusPreconditionFailed);
+    }
+
+    Y_UNIT_TEST(DropStream) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedInitialScan(true));
+        runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream1"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // the table is locked now
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "extra"  Type: "Uint64"}
+        )", {NKikimrScheme::StatusMultipleModifications});
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream2"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusMultipleModifications});
+
+        // drop the stream that locks the table
+        TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // the table is no longer locked
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "extra"  Type: "Uint64"}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream2"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    void Metering(bool serverless) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedInitialScan(true));
+        ui64 txId = 100;
+
+        // create shared db
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Shared"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Shared"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            StoragePools {
+              Name: "pool-2"
+              Kind: "pool-kind-2"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto attrs = AlterUserAttrs({
+            {"cloud_id", "CLOUD_ID_VAL"},
+            {"folder_id", "FOLDER_ID_VAL"},
+            {"database_id", "DATABASE_ID_VAL"}
+        });
+
+        // create serverless db
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", Sprintf(R"(
+            Name: "Serverless"
+            ResourcesDomainKey {
+                SchemeShard: %lu
+                PathId: 2
+            }
+        )", TTestTxConfig::SchemeShard), attrs);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Serverless"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString dbName;
+        if (serverless) {
+            dbName = "/MyRoot/Serverless";
+        } else {
+            dbName = "/MyRoot/Shared";
+        }
+
+        ui64 schemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, dbName), {
+            NLs::PathExist,
+            NLs::ExtractTenantSchemeshard(&schemeShard)
+        });
+
+        UNIT_ASSERT(schemeShard != 0 && schemeShard != TTestTxConfig::SchemeShard);
+
+        TestCreateTable(runtime, schemeShard, ++txId, dbName, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, schemeShard);
+
+        bool catchMeteringRecord = false;
+        TString meteringRecord;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCdcStreamScanResponse:
+                if (const auto* msg = ev->Get<TEvDataShard::TEvCdcStreamScanResponse>()) {
+                    if (msg->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                        catchMeteringRecord = true;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            case NMetering::TEvMetering::EvWriteMeteringJson:
+                if (catchMeteringRecord) {
+                    meteringRecord = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        });
+
+        TestCreateCdcStream(runtime, schemeShard, ++txId, dbName, R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )");
+        env.TestWaitNotification(runtime, txId, schemeShard);
+
+        if (serverless) {
+            if (meteringRecord.empty()) {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&meteringRecord](IEventHandle&) {
+                    return !meteringRecord.empty();
+                });
+                runtime.DispatchEvents(opts);
+            }
+
+            UNIT_ASSERT_STRINGS_EQUAL(meteringRecord, TBillRecord()
+                .Id("cdc_stream_scan-9437197-3-9437197-4")
+                .CloudId("CLOUD_ID_VAL")
+                .FolderId("FOLDER_ID_VAL")
+                .ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::FromValue(0))
+                .Usage(TBillRecord::RequestUnits(1, TInstant::FromValue(0)))
+                .ToString());
+        } else {
+            for (int i = 0; i < 10; ++i) {
+                env.SimulateSleep(runtime, TDuration::Seconds(1));
+            }
+
+            UNIT_ASSERT(meteringRecord.empty());
+        }
+    }
+
+    Y_UNIT_TEST(MeteringServerless) {
+        Metering(true);
+    }
+
+    Y_UNIT_TEST(MeteringDedicated) {
+        Metering(false);
+    }
+
+} // TCdcStreamWithInitialScanTests

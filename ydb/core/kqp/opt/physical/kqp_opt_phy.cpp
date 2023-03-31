@@ -34,6 +34,7 @@ public:
         AddHandler(0, &TKqlStreamLookupTable::Match, HNDL(BuildStreamLookupTableStages));
         AddHandler(0, [](const TExprNode* node) { return TCoSort::Match(node) || TCoTopSort::Match(node); },
             HNDL(RemoveRedundantSortByPk));
+        AddHandler(0, &TDqStage::Match, HNDL(RemoveRedundantSortByPkOverSource));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
@@ -104,6 +105,8 @@ public:
         AddHandler(1, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<true>));
         AddHandler(1, &TCoTake::Match, HNDL(PropagatePrecomuteTake<true>));
         AddHandler(1, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<true>));
+
+        AddHandler(2, &TDqStage::Match, HNDL(ExpandNullMembersForReadTableSource));
 #undef HNDL
 
         SetGlobal(1u);
@@ -135,9 +138,21 @@ protected:
         return output;
     }
 
+    TMaybeNode<TExprBase> RemoveRedundantSortByPkOverSource(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRemoveRedundantSortByPkOverSource(node, ctx, KqpCtx);
+        DumpAppliedRule("RemoveRedundantSortByPkOverSource", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> RemoveRedundantSortByPk(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRemoveRedundantSortByPk(node, ctx, KqpCtx);
         DumpAppliedRule("RemoveRedundantSortByPk", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> ExpandNullMembersForReadTableSource(TExprBase node, TExprContext& ctx) {
+        TExprBase output = ExpandSkipNullMembersForReadTableSource(node, ctx, KqpCtx);
+        DumpAppliedRule("ExpandSkipNullMembersForReadTableSource", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -321,7 +336,7 @@ protected:
     TMaybeNode<TExprBase> BuildJoin(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal, /*pushLeftStage =*/ !KqpCtx.IsDataQuery());
+        TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal, /*pushLeftStage =*/ !KqpCtx.IsDataQuery() && AllowFuseJoinInputs(node));
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

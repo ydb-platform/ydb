@@ -25,9 +25,9 @@ bool TAccess::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& r
 
 NInternal::TTableRecord TAccess::SerializeToRecord() const {
     NInternal::TTableRecord result;
-    result.SetColumn(TDecoder::OwnerUserId, NInternal::TYDBValue::Bytes(OwnerUserId));
-    result.SetColumn(TDecoder::SecretId, NInternal::TYDBValue::Bytes(SecretId));
-    result.SetColumn(TDecoder::AccessSID, NInternal::TYDBValue::Bytes(AccessSID));
+    result.SetColumn(TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(OwnerUserId));
+    result.SetColumn(TDecoder::SecretId, NInternal::TYDBValue::Utf8(SecretId));
+    result.SetColumn(TDecoder::AccessSID, NInternal::TYDBValue::Utf8(AccessSID));
     return result;
 }
 

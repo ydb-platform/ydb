@@ -442,7 +442,12 @@ Y_UNIT_TEST_SUITE(KqpMergeCn) {
     }
 
     Y_UNIT_TEST(SortBy_PK_Uint64_Desc) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(false);
+        TKikimrSettings ksettings;
+        ksettings.SetAppConfig(app);
+
+        TKikimrRunner kikimr{ksettings};
         auto db = kikimr.GetTableClient();
         CreateSimpleDataTypes(kikimr);
 

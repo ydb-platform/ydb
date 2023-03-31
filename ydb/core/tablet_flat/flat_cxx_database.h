@@ -2132,6 +2132,10 @@ public:
         : Database(database)
     {}
 
+    TToughDb& GetDatabase() const {
+        return Database;
+    }
+
     template <typename TableType> typename TableType::TKey::template Selector<TableType> Table() { return Database; }
 
     template <typename TableType>

@@ -45,11 +45,13 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     ui32 status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
     auto& logoBlobId = Ev->Get()->BlobId;
     auto putStatus = Ev->Get()->PutStatus;
+    Y_VERIFY(putStatus == NKikimrProto::OK);
+    Y_VERIFY(logoBlobId.IsValid());
 
     bool ok = false;
     if (!Self->PrimaryIndex || !Self->IsTableWritable(tableId)) {
         status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
-    } else if (putStatus == NKikimrProto::OK && logoBlobId.IsValid()) {
+    } else {
         if (record.HasLongTxId()) {
             Y_VERIFY(metaShard == 0);
             auto longTxId = NLongTxService::TLongTxId::FromProto(record.GetLongTxId());
@@ -97,15 +99,11 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
 
             Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->BlobBatch), blobManagerDb);
         } else {
+            LOG_S_DEBUG("TTxWrite duplicate writeId " << writeId << " at tablet " << Self->TabletID());
+
             // Return EResultStatus::SUCCESS for dups
             Self->IncCounter(COUNTER_WRITE_DUPLICATE);
         }
-    } else if (putStatus == NKikimrProto::TIMEOUT) {
-        status = NKikimrTxColumnShard::EResultStatus::TIMEOUT;
-    } else if (putStatus == NKikimrProto::TRYLATER) {
-        status = NKikimrTxColumnShard::EResultStatus::OVERLOADED;
-    } else {
-        status = NKikimrTxColumnShard::EResultStatus::ERROR;
     }
 
     if (status != NKikimrTxColumnShard::EResultStatus::SUCCESS) {
@@ -138,15 +136,16 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     ui64 metaShard = record.GetTxInitiator();
     ui64 writeId = record.GetWriteId();
     TString dedupId = record.GetDedupId();
+    auto putStatus = ev->Get()->PutStatus;
 
     bool isWritable = IsTableWritable(tableId);
     bool error = data.empty() || data.size() > TLimits::MAX_BLOB_SIZE || !PrimaryIndex || !isWritable;
-    bool errorReturned = (ev->Get()->PutStatus != NKikimrProto::OK) && (ev->Get()->PutStatus != NKikimrProto::UNKNOWN);
+    bool errorReturned = (putStatus != NKikimrProto::OK) && (putStatus != NKikimrProto::UNKNOWN);
     bool isOutOfSpace = IsAnyChannelYellowStop();
 
     if (error || errorReturned) {
-        LOG_S_WARN("Write (fail) " << data.size() << " bytes into pathId " << tableId
-            << ", status " << ev->Get()->PutStatus
+        LOG_S_NOTICE("Write (fail) " << data.size() << " bytes into pathId " << tableId
+            << ", status " << putStatus
             << (PrimaryIndex? "": ", no index") << (isWritable? "": ", ro")
             << " at tablet " << TabletID());
 
@@ -154,8 +153,10 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 
         auto errCode = NKikimrTxColumnShard::EResultStatus::ERROR;
         if (errorReturned) {
-            if (ev->Get()->PutStatus == NKikimrProto::TIMEOUT) {
+            if (putStatus == NKikimrProto::TIMEOUT || putStatus == NKikimrProto::DEADLINE) {
                 errCode = NKikimrTxColumnShard::EResultStatus::TIMEOUT;
+            } else if (putStatus == NKikimrProto::TRYLATER || putStatus == NKikimrProto::OUT_OF_SPACE) {
+                errCode = NKikimrTxColumnShard::EResultStatus::OVERLOADED;
             }
             --WritesInFly; // write failed
         }
@@ -169,6 +170,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             << (writeId? (" writeId " + ToString(writeId)).c_str() : "") << " at tablet " << TabletID());
 
         --WritesInFly; // write successed
+        Y_VERIFY(putStatus == NKikimrProto::OK);
         Execute(new TTxWrite(this, ev), ctx);
     } else if (isOutOfSpace || InsertTable->IsOverloaded(tableId) || ShardOverloaded()) {
         IncCounter(COUNTER_WRITE_FAIL);
@@ -193,6 +195,23 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
         ctx.Send(ev->Get()->GetSource(), result.release());
     } else {
+        if (record.HasLongTxId()) {
+            // TODO: multiple blobs in one longTx ({longTxId, dedupId} -> writeId)
+            auto longTxId = NLongTxService::TLongTxId::FromProto(record.GetLongTxId());
+            if (ui64 writeId = (ui64)HasLongTxWrite(longTxId)) {
+                LOG_S_DEBUG("Write (duplicate) into pathId " << tableId
+                    << " longTx " << longTxId.ToString()
+                    << " at tablet " << TabletID());
+
+                IncCounter(COUNTER_WRITE_DUPLICATE);
+
+                auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
+                    TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::SUCCESS);
+                ctx.Send(ev->Get()->GetSource(), result.release());
+                return;
+            }
+        }
+
         LOG_S_DEBUG("Write (blob) " << data.size() << " bytes into pathId " << tableId
             << (writeId? (" writeId " + ToString(writeId)).c_str() : "")
             << " at tablet " << TabletID());

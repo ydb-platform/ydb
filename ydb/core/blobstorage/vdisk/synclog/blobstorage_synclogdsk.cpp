@@ -487,7 +487,7 @@ namespace NKikimr {
         }
 
         void TDiskRecLog::Deserialize(const char *pos, const char *end) {
-            ui32 chunksNum = *(const ui32 *)pos;
+            ui32 chunksNum = ReadUnaligned<ui32>(pos);
             pos += 4;
             while (pos != end) {
                 std::pair<TIndexedChunkPtr, const char *> c = TIndexedChunk::Construct(pos);

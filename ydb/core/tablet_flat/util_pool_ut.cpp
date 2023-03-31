@@ -68,6 +68,25 @@ Y_UNIT_TEST_SUITE(TMemoryPoolTest) {
         DoTransactions(16);
     }
 
+    Y_UNIT_TEST(LongRollback) {
+        TMemoryPool pool(1);
+        UNIT_ASSERT_C(pool.Used() == 0, pool.Used());
+        UNIT_ASSERT_C(pool.Used() + pool.Wasted() == pool.Total(), pool.Used() << " + " << pool.Wasted() << " != " << pool.Total());
+        for (int j = 0; j < 2; ++j) {
+            pool.BeginTransaction();
+            for (int i = 0; i < 1000; ++i) {
+                void* ptr = pool.Allocate(3);
+                UNIT_ASSERT(ptr);
+            }
+            UNIT_ASSERT_C(pool.Used() > 0, pool.Used());
+            UNIT_ASSERT_C(pool.Wasted() < pool.Total(), pool.Wasted() << " >= " << pool.Total());
+            UNIT_ASSERT_C(pool.Used() + pool.Wasted() == pool.Total(), pool.Used() << " + " << pool.Wasted() << " != " << pool.Total());
+            pool.RollbackTransaction();
+            UNIT_ASSERT_C(pool.Used() == 0, pool.Used());
+            UNIT_ASSERT_C(pool.Used() + pool.Wasted() == pool.Total(), pool.Used() << " + " << pool.Wasted() << " != " << pool.Total());
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(TMemoryPoolTest)
 
 } // namespace NKikimr::NUtil

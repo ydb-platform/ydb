@@ -52,6 +52,7 @@ message TEvModifySchemeTransaction {
     optional string Owner = 5;
     optional bool FailOnExist = 6; // depricated, TModifyScheme.FailOnExist is recomended
     optional string UserToken = 7; // serialized NACLib::TUserToken
+    optional string PeerName = 8;
 }
 
 message TFetcherCheckUserTieringPermissionsResult {

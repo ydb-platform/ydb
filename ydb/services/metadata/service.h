@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/services/metadata/abstract/common.h>
 #include <library/cpp/actors/core/event_local.h>
+#include <shared_mutex>
 
 namespace NKikimr::NMetadata::NProvider {
 
@@ -72,12 +73,13 @@ class TConfig;
 class TServiceOperator {
 private:
     friend class TService;
+    std::shared_mutex Lock;
     bool EnabledFlag = false;
     TString Path = ".metadata";
     static void Register(const TConfig& config);
 public:
     static bool IsEnabled();
-    static const TString& GetPath();
+    static TString GetPath();
 };
 
 }

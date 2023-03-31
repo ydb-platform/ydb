@@ -15,6 +15,8 @@ namespace NKikimr::NBlobDepot {
 
     using NTabletFlatExecutor::TTabletExecutedFlat;
 
+    struct TToken {};
+
     class TBlobDepot
         : public TActor<TBlobDepot>
         , public TTabletExecutedFlat
@@ -26,6 +28,7 @@ namespace NKikimr::NBlobDepot {
                 EvDoGroupMetricsExchange,
                 EvKickSpaceMonitor,
                 EvProcessRegisterAgentQ,
+                EvUpdateThroughputs,
             };
         };
 
@@ -50,7 +53,6 @@ namespace NKikimr::NBlobDepot {
 
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
 
-        struct TToken {};
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
 
         struct TAgent {
@@ -176,6 +178,7 @@ namespace NKikimr::NBlobDepot {
             ProcessRegisterAgentQ();
             KickSpaceMonitor();
             StartDataLoad();
+            UpdateThroughputs();
         }
 
         void StartDataLoad();
@@ -197,16 +200,21 @@ namespace NKikimr::NBlobDepot {
 
         void InitChannelKinds();
         void InvalidateGroupForAllocation(ui32 groupId);
-        void PickChannels(NKikimrBlobDepot::TChannelKind::E kind, std::vector<ui8>& channels);
+        bool PickChannels(NKikimrBlobDepot::TChannelKind::E kind, std::vector<ui8>& channels);
 
         TString GetLogId() const {
             const auto *executor = Executor();
             const ui32 generation = executor ? executor->Generation() : 0;
+            TStringBuilder sb;
+            sb << '{' << TabletID();
             if (Config.HasVirtualGroupId()) {
-                return TStringBuilder() << "{" << TabletID() << ":" << generation << "@" << Config.GetVirtualGroupId() << "}";
-            } else {
-                return TStringBuilder() << "{" << TabletID() << ":" << generation << "}";
+                sb << '@' << Config.GetVirtualGroupId();
             }
+            sb << '}';
+            if (generation) {
+                sb << ':' << generation;
+            }
+            return sb;
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -302,8 +310,14 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group metrics exchange
 
+        ui64 BytesRead = 0;
+        ui64 BytesWritten = 0;
+        std::deque<std::tuple<TMonotonic, ui64, ui64>> MetricsQ;
+
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
+        void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
+        void UpdateThroughputs(bool reschedule = true);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation

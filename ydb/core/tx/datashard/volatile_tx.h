@@ -27,8 +27,8 @@ namespace NKikimr::NDataShard {
         Waiting = 0,
         // Volatile transaction is logically committed, but not yet committed in storage
         Committed = 1,
-        // Volatile transaction is aborted, waiting to be garbage collected
-        Aborted = 2,
+        // Volatile transaction is aborting, waiting to be persistently removed
+        Aborting = 2,
     };
 
     class IVolatileTxCallback : public TThrRefBase {
@@ -36,8 +36,8 @@ namespace NKikimr::NDataShard {
         using TPtr = TIntrusivePtr<IVolatileTxCallback>;
 
     public:
-        virtual void OnCommit() = 0;
-        virtual void OnAbort() = 0;
+        virtual void OnCommit(ui64 txId) = 0;
+        virtual void OnAbort(ui64 txId) = 0;
     };
 
     struct TVolatileTxInfo {
@@ -49,7 +49,8 @@ namespace NKikimr::NDataShard {
         absl::flat_hash_set<ui64> Dependents;
         absl::flat_hash_set<ui64> Participants;
         bool AddCommitted = false;
-        absl::flat_hash_set<ui64> BlockedTransactions;
+        absl::flat_hash_set<ui64> BlockedOperations;
+        absl::flat_hash_set<ui64> WaitingRemovalOperations;
         TStackVec<IVolatileTxCallback::TPtr, 2> Callbacks;
     };
 
@@ -114,6 +115,41 @@ namespace NKikimr::NDataShard {
             const TIntrusivePtr<TTxMap>& TxMap;
         };
 
+        struct TCompareInfoByVersion {
+            using is_transparent = void;
+
+            bool operator()(const TVolatileTxInfo* a, const TVolatileTxInfo* b) const {
+                // Note: we may have multiple infos with the same version
+                return std::tie(a->Version, a) < std::tie(b->Version, b);
+            }
+
+            bool operator()(const TVolatileTxInfo* a, const TRowVersion& b) const {
+                return a->Version < b;
+            }
+
+            bool operator()(const TRowVersion& a, const TVolatileTxInfo* b) const {
+                return a < b->Version;
+            }
+        };
+
+        struct TWaitingSnapshotEvent {
+            TRowVersion Snapshot;
+            std::unique_ptr<IEventHandle> Event;
+
+            TWaitingSnapshotEvent(const TRowVersion& snapshot, std::unique_ptr<IEventHandle>&& event)
+                : Snapshot(snapshot)
+                , Event(std::move(event))
+            { }
+
+            bool operator<(const TWaitingSnapshotEvent& rhs) const {
+                // Note: inverted for max-heap
+                return rhs.Snapshot < Snapshot;
+            }
+        };
+
+    public:
+        using TVolatileTxByVersion = std::set<TVolatileTxInfo*, TCompareInfoByVersion>;
+
     public:
         TVolatileTxManager(TDataShard* self)
             : Self(self)
@@ -126,6 +162,14 @@ namespace NKikimr::NDataShard {
         TVolatileTxInfo* FindByTxId(ui64 txId) const;
         TVolatileTxInfo* FindByCommitTxId(ui64 txId) const;
 
+        size_t GetTxInFlight() const { return VolatileTxs.size(); }
+
+        const TVolatileTxByVersion& GetVolatileTxByVersion() const { return VolatileTxByVersion; }
+
+        bool HasVolatileTxsAtSnapshot(const TRowVersion& snapshot) const {
+            return !VolatileTxByVersion.empty() && (*VolatileTxByVersion.begin())->Version <= snapshot;
+        }
+
         void PersistAddVolatileTx(
             ui64 txId, const TRowVersion& version,
             TConstArrayRef<ui64> commitTxIds,
@@ -135,6 +179,15 @@ namespace NKikimr::NDataShard {
 
         bool AttachVolatileTxCallback(
             ui64 txId, IVolatileTxCallback::TPtr callback);
+
+        bool AttachBlockedOperation(
+            ui64 txId, ui64 dependentTxId);
+
+        bool AttachWaitingRemovalOperation(
+            ui64 txId, ui64 dependentTxId);
+
+        void AttachWaitingSnapshotEvent(
+            const TRowVersion& snapshot, std::unique_ptr<IEventHandle>&& event);
 
         void AbortWaitingTransaction(TVolatileTxInfo* info);
 
@@ -160,6 +213,8 @@ namespace NKikimr::NDataShard {
         void RunAbortCallbacks(TVolatileTxInfo* info);
         void RemoveFromTxMap(TVolatileTxInfo* info);
         void UnblockDependents(TVolatileTxInfo* info);
+        void UnblockOperations(TVolatileTxInfo* info, bool success);
+        void UnblockWaitingRemovalOperations(TVolatileTxInfo* info);
         void AddPendingCommit(ui64 txId);
         void AddPendingAbort(ui64 txId);
         void RunPendingCommitTx();
@@ -169,6 +224,8 @@ namespace NKikimr::NDataShard {
         TDataShard* const Self;
         absl::flat_hash_map<ui64, std::unique_ptr<TVolatileTxInfo>> VolatileTxs; // TxId -> Info
         absl::flat_hash_map<ui64, TVolatileTxInfo*> VolatileTxByCommitTxId; // CommitTxId -> Info
+        TVolatileTxByVersion VolatileTxByVersion;
+        std::vector<TWaitingSnapshotEvent> WaitingSnapshotEvents;
         TIntrusivePtr<TTxMap> TxMap;
         std::deque<ui64> PendingCommits;
         std::deque<ui64> PendingAborts;

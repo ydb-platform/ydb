@@ -66,21 +66,6 @@ bool IsSameProtoTypeImpl(const NKikimrMiniKQL::TVariantType& actual, const NKiki
 
 } // namespace
 
-EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest) {
-    switch (queryRequest.GetCollectStats()) {
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
-            return EKikimrStatsMode::None;
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-            return EKikimrStatsMode::Basic;
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
-            return EKikimrStatsMode::Full;
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
-            return EKikimrStatsMode::Profile;
-        default:
-            return EKikimrStatsMode::None;
-    }
-}
-
 TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings) {
     const auto& queryLimitsProto = settings.Service.GetQueryLimits();
     const auto& phaseLimitsProto = queryLimitsProto.GetPhaseLimits();
@@ -96,7 +81,7 @@ TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings) {
 }
 
 void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, const TKqpRequestInfo& requestInfo,
-    const TDuration& duration, Ydb::StatusIds::StatusCode status, const TString& userToken, ui64 parametersSize,
+    const TDuration& duration, Ydb::StatusIds::StatusCode status, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, ui64 parametersSize,
     NKikimrKqp::TEvQueryResponse *record, const std::function<TString()> extractQueryText)
 {
     auto logSettings = ctx.LoggerSettings();
@@ -121,7 +106,7 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
     }
 
     if (duration >= TDuration::MilliSeconds(thresholdMs)) {
-        auto username = NACLib::TUserToken(userToken).GetUserSID();
+        auto username = userToken->GetUserSID();
         if (username.empty()) {
             username = "UNAUTHENTICATED";
         }

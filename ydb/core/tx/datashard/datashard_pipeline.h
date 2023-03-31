@@ -6,6 +6,7 @@
 #include "datashard_dep_tracker.h"
 #include "datashard_user_table.h"
 #include "execution_unit.h"
+#include "read_iterator.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
@@ -230,6 +231,7 @@ public:
     TOperation::TPtr FindOp(ui64 txId);
 
     TOperation::TPtr GetActiveOp(ui64 txId);
+    TOperation::TPtr GetVolatileOp(ui64 txId);
     const TMap<TStepOrder, TOperation::TPtr> &GetActiveOps() const { return ActiveOps; }
 
     void AddActiveOp(TOperation::TPtr op);
@@ -338,6 +340,10 @@ public:
         const TRowVersion& version,
         TEvDataShard::TEvRead::TPtr ev,
         const TActorContext& ctx);
+    bool HasWaitingReadIterator(const TReadIteratorId& readId);
+    bool CancelWaitingReadIterator(const TReadIteratorId& readId);
+    void RegisterWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event);
+    bool HandleWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event);
 
     TRowVersion GetReadEdge() const;
     TRowVersion GetUnreadableEdge(bool prioritizedReads) const;
@@ -484,6 +490,7 @@ private:
     THashMap<ui64, TOperation::TPtr> CompletingOps;
 
     TMultiMap<TRowVersion, TEvDataShard::TEvRead::TPtr> WaitingDataReadIterators;
+    THashMap<TReadIteratorId, TEvDataShard::TEvRead*, TReadIteratorId::THash> WaitingReadIteratorsById;
 
     bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);
     void SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId);

@@ -156,8 +156,8 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     }
 }
 
-template <typename TProto>
-void FillColumns(const TCoAtomList& columns, const TKikimrTableMetadata& tableMeta,
+template <typename TProto, typename TContainer>
+void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMeta,
     TProto& opProto, bool allowSystemColumns)
 {
     for (const auto& columnNode : columns) {
@@ -518,6 +518,17 @@ public:
             for (auto member : programParams->GetItems()) {
                 inputsParams.push_back(member);
             }
+
+            std::sort(inputsParams.begin(), inputsParams.end(),
+                [](const TItemExprType* first, const TItemExprType* second) {
+                    return first->GetName() < second->GetName();
+                });
+            inputsParams.erase(std::unique(inputsParams.begin(), inputsParams.end(), 
+                [](const TItemExprType* first, const TItemExprType* second) {
+                    return first->GetName() == second->GetName();
+                }),
+                inputsParams.end());
+
             return ctx.MakeType<TStructExprType>(inputsParams);
         }
     }
@@ -790,14 +801,24 @@ private:
             auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
             YQL_ENSURE(tableMeta);
 
-            FillColumns(settings.Columns().Cast(), *tableMeta, readProto, allowSystemColumns);
+            {
+
+                THashMap<TString, const TExprNode*> columnsMap;
+                for (auto item : settings.Columns().Cast()) {
+                    columnsMap[item.StringValue()] = item.Raw();
+                }
+                TVector<TCoAtom> columns;
+                auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
+                for (auto item : type->GetItems()) {
+                    columns.push_back(TCoAtom(columnsMap.at(item->GetName())));
+                }
+                FillColumns(columns, *tableMeta, readProto, allowSystemColumns);
+            }
             auto readSettings = TKqpReadTableSettings::Parse(settings.Settings().Cast());
 
             readProto.SetReverse(readSettings.Reverse);
             readProto.SetSorted(readSettings.Sorted);
-            for (auto&& key : readSettings.SkipNullKeys) {
-                readProto.AddSkipNullKeys(key);
-            }
+            YQL_ENSURE(readSettings.SkipNullKeys.empty());
 
             auto ranges = settings.RangesExpr().template Maybe<TCoParameter>();
             if (ranges.IsValid()) {
@@ -921,16 +942,20 @@ private:
                 streamLookupProto.AddKeyColumns(TString(keyColumn->GetName()));
             }
 
-            for (const auto& column : streamLookup.Columns()) {
-                YQL_ENSURE(tableMeta->Columns.FindPtr(column), "Unknown column: " << TString(column));
-                streamLookupProto.AddColumns(TString(column));
-            }
-
             const auto resultType = streamLookup.Ref().GetTypeAnn();
             YQL_ENSURE(resultType, "Empty stream lookup result type");
             YQL_ENSURE(resultType->GetKind() == ETypeAnnotationKind::Stream, "Unexpected stream lookup result type");
             const auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType();
             streamLookupProto.SetResultType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *resultItemType), TypeEnv));
+
+            YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Struct);
+            const auto& resultColumns = resultItemType->Cast<TStructExprType>()->GetItems();
+            for (const auto column : resultColumns) {
+                const auto& systemColumns = GetSystemColumns();
+                YQL_ENSURE(tableMeta->Columns.FindPtr(column->GetName()) || systemColumns.find(column->GetName()) != systemColumns.end(),
+                    "Unknown column: " << column->GetName());
+                streamLookupProto.AddColumns(TString(column->GetName()));
+            }
 
             return;
         }

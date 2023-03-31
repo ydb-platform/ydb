@@ -111,7 +111,7 @@ private:
 
         NBlobCache::TReadBlobRangeOptions readOpts {
             .CacheAfterRead = true,
-            .Fallback = fallback,
+            .ForceFallback = fallback,
             .IsBackgroud = false
         };
         Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, std::move(readOpts)));
@@ -177,6 +177,7 @@ private:
     // Returns true if it was able to produce new batch
     bool ProduceResults() {
         Y_VERIFY(!Finished);
+        Y_VERIFY(ScanIterator);
 
         if (ScanIterator->Finished()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
@@ -210,6 +211,13 @@ private:
         auto& batch = result.ResultBatch;
         int numRows = batch->num_rows();
         int numColumns = batch->num_columns();
+        if (!numRows) {
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " producing result: got empty batch"
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+            return true;
+        }
+
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " producing result: got ready result"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
@@ -264,7 +272,7 @@ private:
         // Send new results if there is available capacity
         i64 MAX_SCANDATA_MESSAGES_IN_FLIGHT = 2;
         while (InFlightScanDataMessages < MAX_SCANDATA_MESSAGES_IN_FLIGHT) {
-            if (!ProduceResults()) {
+            if (!ScanIterator || !ProduceResults()) {
                 break;
             }
         }

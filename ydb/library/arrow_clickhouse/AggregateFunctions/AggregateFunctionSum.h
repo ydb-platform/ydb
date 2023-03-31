@@ -33,9 +33,16 @@ struct AggregateFunctionSumData
 {
     using Impl = AggregateFunctionSumAddOverflowImpl<T>;
     T sum{};
+    bool has_value = false;
+
+    bool has() const
+    {
+        return has_value;
+    }
 
     void NO_SANITIZE_UNDEFINED ALWAYS_INLINE add(T value)
     {
+        has_value = true;
         Impl::add(sum, value);
     }
 
@@ -84,7 +91,7 @@ struct AggregateFunctionSumData
     {
         addManyImpl(ptr, start, end);
     }
-
+#if 0
     template <typename Value, bool add_if_zero>
     void NO_SANITIZE_UNDEFINED NO_INLINE addManyConditionalInternalImpl(
         const Value * __restrict ptr,
@@ -172,7 +179,34 @@ struct AggregateFunctionSumData
     {
         return addManyConditionalInternal<Value, false>(ptr, cond_map, start, end);
     }
+#else
+    template <typename Value>
+    void NO_SANITIZE_UNDEFINED NO_INLINE addManyConditionalImpl(
+        const Value * __restrict ptr,
+        const uint8_t * __restrict condition_map,
+        size_t start,
+        size_t end) /// NOLINT
+    {
+        // TODO: optimize
 
+        const auto * end_ptr = ptr + end;
+        ptr += start;
+
+        while (ptr < end_ptr)
+        {
+            if (arrow::BitUtil::GetBit(condition_map, start))
+                Impl::add(sum, *ptr);
+            ++ptr;
+            ++start;
+        }
+    }
+
+    template <typename Value>
+    void ALWAYS_INLINE addManyConditional(const Value * __restrict ptr, const uint8_t * __restrict cond_map, size_t start, size_t end)
+    {
+        return addManyConditionalImpl<Value>(ptr, cond_map, start, end);
+    }
+#endif
     void NO_SANITIZE_UNDEFINED merge(const AggregateFunctionSumData & rhs)
     {
         Impl::add(sum, rhs.sum);
@@ -219,14 +253,13 @@ public:
         size_t row_end,
         AggregateDataPtr __restrict place,
         const IColumn ** columns,
-        Arena *,
-        ssize_t if_argument_pos) const override
+        Arena *) const override
     {
         const auto & column = assert_cast<const ColumnType &>(*columns[0]);
-        if (if_argument_pos >= 0)
+        if (auto * flags = column.null_bitmap_data())
         {
-            const auto & flags = assert_cast<const ColumnUInt8 &>(*columns[if_argument_pos]).raw_values();
-            this->data(place).addManyConditional(column.raw_values(), flags, row_begin, row_end);
+            auto * condition_map = flags + column.offset();
+            this->data(place).addManyConditional(column.raw_values(), condition_map, row_begin, row_end);
         }
         else
         {
@@ -241,7 +274,10 @@ public:
 
     void insertResultInto(AggregateDataPtr __restrict place, MutableColumn & to, Arena *) const override
     {
-        assert_cast<MutableColumnType &>(to).Append(this->data(place).get()).ok();
+        if (this->data(place).has())
+            assert_cast<MutableColumnType &>(to).Append(this->data(place).get()).ok();
+        else
+            assert_cast<MutableColumnType &>(to).AppendNull().ok();
     }
 };
 

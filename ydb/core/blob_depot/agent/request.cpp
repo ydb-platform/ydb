@@ -36,7 +36,12 @@ namespace NKikimr::NBlobDepot {
         });
     }
 
-    void TRequestSender::OnRequestComplete(TRequestInFlight& requestInFlight, TResponse response) {
+    void TRequestSender::OnRequestComplete(TRequestInFlight& requestInFlight, TResponse response,
+            std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay) {
+        if (executionRelay) {
+            const size_t num = SubrequestRelays.erase(executionRelay);
+            Y_VERIFY(num);
+        }
         requestInFlight.Unlink();
         ProcessResponse(requestInFlight.Id, std::move(requestInFlight.Context), std::move(response));
     }
@@ -63,16 +68,20 @@ namespace NKikimr::NBlobDepot {
     // TBlobDepotAgent machinery
 
     void TBlobDepotAgent::RegisterRequest(ui64 id, TRequestSender *sender, TRequestContext::TPtr context,
-            TRequestInFlight::TCancelCallback cancelCallback, bool toBlobDepotTablet) {
+            TRequestInFlight::TCancelCallback cancelCallback, bool toBlobDepotTablet,
+            std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay) {
         TRequestsInFlight& map = toBlobDepotTablet ? TabletRequestInFlight : OtherRequestInFlight;
         const bool inserted = map.emplace(id, sender, std::move(context), std::move(cancelCallback),
             toBlobDepotTablet).second;
         Y_VERIFY(inserted);
+        if (executionRelay) {
+            sender->SubrequestRelays.emplace(executionRelay);
+        }
     }
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleTabletResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA16, "HandleTabletResponse", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA16, "HandleTabletResponse", (AgentId, LogId),
             (Id, ev->Cookie), (Type, TypeName<TEvent>()), (Sender, ev->Sender), (PipeServerId, PipeServerId),
             (Match, ev->Sender == PipeServerId));
         if (ev->Sender == PipeServerId) {
@@ -91,18 +100,20 @@ namespace NKikimr::NBlobDepot {
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA17, "HandleOtherResponse", (VirtualGroupId, VirtualGroupId),
-            (Id, ev->Cookie), (Type, TypeName<TEvent>()));
-        OnRequestComplete(ev->Cookie, ev->Get(), OtherRequestInFlight);
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA17, "HandleOtherResponse", (AgentId, LogId), (Id, ev->Cookie),
+            (Type, TypeName<TEvent>()), (Msg, *ev->Get()));
+        Y_VERIFY(ev->Get()->ExecutionRelay);
+        OnRequestComplete(ev->Cookie, ev->Get(), OtherRequestInFlight, std::move(ev->Get()->ExecutionRelay));
     }
 
     template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvGetResult::TPtr ev);
     template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvPutResult::TPtr ev);
 
-    void TBlobDepotAgent::OnRequestComplete(ui64 id, TResponse response, TRequestsInFlight& map) {
+    void TBlobDepotAgent::OnRequestComplete(ui64 id, TResponse response, TRequestsInFlight& map,
+            std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay) {
         if (auto node = map.extract(id)) {
             auto& requestInFlight = node.value();
-            requestInFlight.Sender->OnRequestComplete(requestInFlight, std::move(response));
+            requestInFlight.Sender->OnRequestComplete(requestInFlight, std::move(response), std::move(executionRelay));
         }
     }
 

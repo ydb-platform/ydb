@@ -12,11 +12,6 @@ namespace NKqp {
 using namespace NYql;
 using namespace NYql::NDq;
 
-namespace NComputeActor {
-void FillTaskInputStats(const NDqProto::TDqTask& task, NDqProto::TDqTaskStats& taskStats);
-
-} // namespace NComputeActor
-
 class TKqpTaskRunnerExecutionContext : public IDqTaskRunnerExecutionContext {
 public:
     TKqpTaskRunnerExecutionContext(ui64 txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUp,

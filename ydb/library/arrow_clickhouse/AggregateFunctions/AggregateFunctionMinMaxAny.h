@@ -38,7 +38,7 @@ public:
         if (has())
             assert_cast<MutableColumnType &>(to).Append(value).ok();
         else
-            assert_cast<MutableColumnType &>(to).AppendEmptyValue().ok();
+            assert_cast<MutableColumnType &>(to).AppendNull().ok();
     }
 
     void change(const IColumn & column, size_t row_num, Arena *)
@@ -201,7 +201,7 @@ public:
         if (has())
             assert_cast<MutableColumnType &>(to).Append(getData(), size).ok();
         else
-            assert_cast<MutableColumnType &>(to).AppendEmptyValue().ok();
+            assert_cast<MutableColumnType &>(to).AppendNull().ok();
     }
 
     /// Assuming to.has()
@@ -572,20 +572,20 @@ public:
         size_t row_end,
         AggregateDataPtr place,
         const IColumn ** columns,
-        Arena * arena,
-        ssize_t if_argument_pos) const override
+        Arena * arena) const override
     {
         if constexpr (is_any)
             if (this->data(place).has())
                 return;
-        if (if_argument_pos >= 0)
+
+        const auto & column = *columns[0];
+        if (column.null_bitmap_data())
         {
-            const auto & flags = assert_cast<const ColumnUInt8 &>(*columns[if_argument_pos]).raw_values();
             for (size_t i = row_begin; i < row_end; ++i)
             {
-                if (flags[i])
+                if (column.IsValid(i))
                 {
-                    this->data(place).changeIfBetter(*columns[0], i, arena);
+                    this->data(place).changeIfBetter(column, i, arena);
                     if constexpr (is_any)
                         break;
                 }
@@ -595,7 +595,7 @@ public:
         {
             for (size_t i = row_begin; i < row_end; ++i)
             {
-                this->data(place).changeIfBetter(*columns[0], i, arena);
+                this->data(place).changeIfBetter(column, i, arena);
                 if constexpr (is_any)
                     break;
             }

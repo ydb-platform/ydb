@@ -14,11 +14,11 @@
                         "Group",
                         "Name"
                     ],
-                    "limit": "1001",
                     "scan_by": [
-                        "Group (1, 6)"
+                        "Group (-\u221e, +\u221e)",
+                        "Name (-\u221e, +\u221e)"
                     ],
-                    "type": "Scan"
+                    "type": "FullScan"
                 }
             ]
         }

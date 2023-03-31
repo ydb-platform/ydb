@@ -24,8 +24,10 @@ struct TEvPrivate {
         EvRunBorrowedCompaction,
         EvCompletePublication,
         EvCompleteBarrier,
-        EvPersistStats,
+        EvPersistTableStats,
         EvConsoleConfigsTimeout,
+        EvRunCdcStreamScan,
+        EvPersistTopicStats,
         EvEnd
     };
 
@@ -158,11 +160,23 @@ struct TEvPrivate {
         }
     };
 
-    struct TEvPersistStats: public TEventLocal<TEvPersistStats, EvPersistStats> {
-        TEvPersistStats() = default;
+    struct TEvPersistTableStats: public TEventLocal<TEvPersistTableStats, EvPersistTableStats> {
+        TEvPersistTableStats() = default;
+    };
+
+    struct TEvPersistTopicStats: public TEventLocal<TEvPersistTopicStats, EvPersistTopicStats> {
+        TEvPersistTopicStats() = default;
     };
 
     struct TEvConsoleConfigsTimeout: public TEventLocal<TEvConsoleConfigsTimeout, EvConsoleConfigsTimeout> {
+    };
+
+    struct TEvRunCdcStreamScan: public TEventLocal<TEvRunCdcStreamScan, EvRunCdcStreamScan> {
+        const TPathId StreamPathId;
+
+        TEvRunCdcStreamScan(const TPathId& streamPathId)
+            : StreamPathId(streamPathId)
+        {}
     };
 
 }; // TEvPrivate

@@ -6708,5 +6708,126 @@
                 "Blobs": 1
             }
         }
+    },
+    {
+        "TableId": 103,
+        "TableName": "CdcStreamScanShardStatus",
+        "TableKey": [
+            1,
+            2,
+            3,
+            4
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "OwnerShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LocalShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Status",
+                "ColumnType": "Uint32"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
+    },
+    {
+        "TableId": 106,
+        "TableName": "PersQueueGroupStats",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "SeqNoGeneration",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "SeqNoRound",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "DataSize",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "UsedReserveSize",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
     }
 ]

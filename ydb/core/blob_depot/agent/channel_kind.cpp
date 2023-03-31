@@ -8,7 +8,7 @@ namespace NKikimr::NBlobDepot {
             NumAvailableItems += range.GetEnd() - range.GetBegin();
         }
 
-        ProcessQueriesWaitingForId();
+        ProcessQueriesWaitingForId(true);
     }
 
     ui32 TBlobDepotAgent::TChannelKind::GetNumAvailableItems() const {
@@ -32,6 +32,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
         if (options.empty()) {
+            agent.IssueAllocateIdsIfNeeded(*this);
             return std::nullopt;
         }
 
@@ -67,10 +68,10 @@ namespace NKikimr::NBlobDepot {
         QueriesWaitingForId.PushBack(query);
     }
 
-    void TBlobDepotAgent::TChannelKind::ProcessQueriesWaitingForId() {
+    void TBlobDepotAgent::TChannelKind::ProcessQueriesWaitingForId(bool success) {
         TIntrusiveList<TQuery, TPendingId> temp;
         temp.Swap(QueriesWaitingForId);
-        temp.ForEach([&](TQuery *query) { query->OnIdAllocated(); });
+        temp.ForEach([&](TQuery *query) { query->OnIdAllocated(success); });
     }
 
 } // NKikimr::NBlobDepot

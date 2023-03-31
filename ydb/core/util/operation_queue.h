@@ -53,6 +53,9 @@ struct TConfig {
     // retry after this amount of time
     TDuration WakeupInterval = TDuration::Seconds(1);
 
+    // Do not wakeup too often
+    TDuration MinWakeupInterval = TDuration::Zero();
+
     // done and timeouted items are enqueued again
     bool IsCircular = false;
 
@@ -631,43 +634,55 @@ void TOperationQueue<T, TQueue>::ScheduleWakeup() {
         return;
 
     auto now = Timer.Now();
+    auto wakeup = TMonotonic::Max();
+
     if (RunningItems.Empty() && !ReadyQueue.Empty()) {
         if (TokenBucket.Available() <= 0) {
             // we didn't start anything because of RPS limit
-            NextWakeup = now + TokenBucket.NextAvailableDelay();
-            Timer.SetWakeupTimer(TokenBucket.NextAvailableDelay());
-            return;
+            wakeup = now + TokenBucket.NextAvailableDelay();
         } else if (!NextWakeup) {
             // special case when we failed to start anything
-            NextWakeup = now + Config.WakeupInterval;
-            Timer.SetWakeupTimer(Config.WakeupInterval);
+            wakeup = now + Config.WakeupInterval;
+        }
+    } else {
+        // note, that by design we should have remove timeouted items,
+        // thus assume that timeout is in future
+        if (Config.Timeout && !RunningItems.Empty()) {
+            const auto& item = RunningItems.Front();
+            wakeup = Min(wakeup, item.Timestamp + Config.Timeout);
+        }
+
+        if (!WaitingItems.Empty()) {
+            const auto& item = WaitingItems.Front();
+            wakeup = Min(wakeup, item.Timestamp + Config.MinOperationRepeatDelay);
+        }
+
+        // neither timeout will happen or there any waiting items.
+        // in this case, queue will be triggered by enqueue operation.
+        if (wakeup == TMonotonic::Max())
             return;
+
+        // no sense to wakeup earlier that rate limit allows
+        if (HasRateLimit) {
+            wakeup = Max(wakeup, now + TokenBucket.NextAvailableDelay());
         }
     }
 
-    auto wakeup = TMonotonic::Max();
+    // don't wakeup too often (as well as don't wakeup in past)
+    wakeup = Max(wakeup, now + Config.MinWakeupInterval);
 
-    if (Config.Timeout && !RunningItems.Empty()) {
-        const auto& item = RunningItems.Front();
-        wakeup = Min(wakeup, item.Timestamp + Config.Timeout);
-    }
-
-    if (!WaitingItems.Empty()) {
-        const auto& item = WaitingItems.Front();
-        wakeup = Min(wakeup, item.Timestamp + Config.MinOperationRepeatDelay);
-    }
-
-    if (wakeup == TMonotonic::Max())
-        return;
-
-    // no sense to wakeup earlier that rate limit allows
-    if (HasRateLimit) {
-        wakeup = Max(wakeup, now + TokenBucket.NextAvailableDelay());
-    }
-
-    if (!NextWakeup || NextWakeup > wakeup) {
+    if (!NextWakeup) {
         NextWakeup = wakeup;
         Timer.SetWakeupTimer(wakeup - now);
+        return;
+    }
+
+    if (NextWakeup > wakeup) {
+        auto delta = NextWakeup - wakeup;
+        if (!Config.MinWakeupInterval || delta > Config.MinWakeupInterval) {
+            NextWakeup = wakeup;
+            Timer.SetWakeupTimer(wakeup - now);
+        }
     }
 }
 

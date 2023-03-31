@@ -68,6 +68,8 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
     };
 
     struct TTabletState {
+        bool ForceReconnect = false;
+
         THashMap<TActorId, TClientState> ByClient;
         THashMap<TActorId, TClientState*> ByPeer;
 
@@ -207,7 +209,8 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
 
     TClientState* EnsureClient(TTabletState *tabletState, ui64 tabletId) {
         TClientState *clientState = nullptr;
-        if (!tabletState->LastClient || Config->PipeRefreshTime && tabletState->ByClient.size() < 2 && Config->PipeRefreshTime < (TActivationContext::Now() - tabletState->LastCreated)) {
+        if (!tabletState->LastClient || tabletState->ForceReconnect || Config->PipeRefreshTime && tabletState->ByClient.size() < 2 && Config->PipeRefreshTime < (TActivationContext::Now() - tabletState->LastCreated)) {
+            tabletState->ForceReconnect = false;
             // Remove current client if it is idle
             if (tabletState->LastClient) {
                 clientState = tabletState->FindClient(tabletState->LastClient);
@@ -238,6 +241,13 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             Y_VERIFY(clientState, "Missing expected client state for active client");
         }
         return clientState;
+    }
+
+    void Handle(TEvPipeCache::TEvForcePipeReconnect::TPtr &ev) {
+        const ui64 tablet = ev->Get()->TabletId;
+        if (auto* tabletState = ByTablet.FindPtr(tablet)) {
+            tabletState->ForceReconnect = true;
+        }
     }
 
     void Handle(TEvPipeCache::TEvGetTabletNode::TPtr &ev) {
@@ -449,6 +459,7 @@ public:
         Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvGetTabletNode, Handle);
+            hFunc(TEvPipeCache::TEvForcePipeReconnect, Handle);
             hFunc(TEvPipeCache::TEvForward, Handle);
             hFunc(TEvPipeCache::TEvUnlink, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);

@@ -2,6 +2,8 @@
 
 #include "events.h"
 
+#include <ydb/services/datastreams/datastreams_codes.h>
+
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
@@ -15,14 +17,16 @@
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 
+#include <util/stream/output.h>
 #include <util/string/builder.h>
 
 
+#define ISSUE_CODE_OK 0
+#define ISSUE_CODE_GENERIC 500030
+#define ISSUE_CODE_ERROR 500100
+
 
 namespace NKikimr::NHttpProxy {
-
-HttpCodes StatusToHttpCode(NYdb::EStatus status);
-TString StatusToErrorType(NYdb::EStatus status);
 
 class TRetryCounter {
 public:
@@ -88,7 +92,7 @@ struct THttpRequestContext {
     }
 
     THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
-    void DoReply(const TActorContext& ctx);
+    void DoReply(const TActorContext& ctx, size_t issueCode = ISSUE_CODE_GENERIC);
     void ParseHeaders(TStringBuf headers);
     void RequestBodyToProto(NProtoBuf::Message* request);
 };
@@ -125,3 +129,6 @@ NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& 
 
 } // namespace NKinesis::NHttpProxy
 
+
+template <>
+void Out<NKikimr::NHttpProxy::THttpResponseData>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseData& p);

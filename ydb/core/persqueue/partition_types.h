@@ -68,16 +68,16 @@ struct TMessage {
         TSplitMessageGroupMsg
     > Body;
 
-    ui64 QuotedTime;
-    ui64 QueueTime;
-    ui64 WriteTime;
+    TDuration QuotedTime;   // baseline for request and duration for response
+    TDuration QueueTime;    // baseline for request and duration for response
+    TInstant WriteTimeBaseline;
 
     template <typename T>
-    explicit TMessage(T&& body, ui64 quotedTime, ui64 queueTime, ui64 writeTime)
+    explicit TMessage(T&& body, TDuration quotedTime, TDuration queueTime, TInstant writeTimeBaseline = TInstant::Zero())
         : Body(std::forward<T>(body))
         , QuotedTime(quotedTime)
         , QueueTime(queueTime)
-        , WriteTime(writeTime)
+        , WriteTimeBaseline(writeTimeBaseline)
     {
     }
 

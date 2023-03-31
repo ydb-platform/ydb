@@ -367,7 +367,9 @@ void TTablet::HandleByFollower(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev) {
             Send(UserTablet,
                 new TEvTablet::TEvFBoot(TabletID(), FollowerId, 0,
                     Launcher, msg->DependencyGraph.Get(), Info,
-                    ResourceProfiles, TxCacheQuota));
+                    ResourceProfiles, TxCacheQuota,
+                    std::move(msg->GroupReadBytes),
+                    std::move(msg->GroupReadOps)));
 
             Send(Launcher, new TEvTablet::TEvRestored(TabletID(), StateStorageInfo.KnownGeneration, UserTablet, true));
             BLOG_TRACE("SBoot with rebuilt graph", "TSYS05");

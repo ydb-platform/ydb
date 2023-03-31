@@ -279,7 +279,7 @@ namespace NKikimr::NDataStreams::V1 {
                                         error, ctx);
         }
 
-        if (this->Request_->GetInternalToken().empty()) {
+        if (this->Request_->GetSerializedToken().empty()) {
             if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
                                             Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
@@ -288,7 +288,7 @@ namespace NKikimr::NDataStreams::V1 {
                                             << " is denied", ctx);
             }
         }
-        NACLib::TUserToken token(this->Request_->GetInternalToken());
+        NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
         ShouldBeCharged = std::find(
             AppData(ctx)->PQConfig.GetNonChargeableUser().begin(),
@@ -319,7 +319,7 @@ namespace NKikimr::NDataStreams::V1 {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            NACLib::TUserToken token(this->Request_->GetInternalToken());
+            NACLib::TUserToken token(this->Request_->GetSerializedToken());
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, token)) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
                                             Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
@@ -330,8 +330,19 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
+
         PQGroupInfo = topicInfo->PQGroupInfo;
         SetMeteringMode(PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode());
+
+        if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !PQGroupInfo->Description.GetPQTabletConfig().GetLocalDC()) {
+
+            return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                                        Ydb::PersQueue::ErrorCode::BAD_REQUEST,
+                                        TStringBuilder() << "write to mirrored stream "
+                                        << this->GetProtoRequest()->stream_name()
+                                        << " is forbidden", ctx);
+        }
+
 
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());

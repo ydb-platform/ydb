@@ -43,6 +43,8 @@ message TCommandHeader {
         SINK_IS_FINISHED = 24; // Header -> TIsFinishedResponse
         SINK_OUTPUT_TYPE = 25; // Header -> TGetTypeResponse
         SINK_STATS = 26; // Header -> TGetSinkStatsResponse
+
+        GET_METERING_STATS = 27;
     };
 
     int32 Version = 1;
@@ -65,6 +67,14 @@ message TPopResponse {
     repeated TMetric Metric = 3;
     google.protobuf.Any Stats = 4;
 }
+
+message TMeteringStatsResponse {
+    message TInputStats {
+        uint64 RowsConsumed = 1;
+        uint64 BytesConsumed = 2;
+    };
+    repeated TInputStats Inputs = 1;
+};
 
 message TSinkPopRequest {
     uint64 Bytes = 1;

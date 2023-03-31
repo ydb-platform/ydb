@@ -111,7 +111,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbageResult>(status, TabletId, RecordGeneration,
             PerGenerationCounter, Channel);
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(true, PriorityForStatusOutbound(status), "DSPC02", "Result# " << result->Print(false));
+        A_LOG_LOG_S(true, status == NKikimrProto::OK ? NLog::PRI_INFO : NLog::PRI_NOTICE, "DSPC02", "Result# " << result->Print(false));
         SendResponseAndDie(std::move(result));
     }
 
@@ -147,7 +147,7 @@ public:
             NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_COLLECT, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                "DSProxy.CollectGarbage")
+                "DSProxy.CollectGarbage", std::move(ev->ExecutionRelay))
         , TabletId(ev->TabletId)
         , RecordGeneration(ev->RecordGeneration)
         , PerGenerationCounter(ev->PerGenerationCounter)

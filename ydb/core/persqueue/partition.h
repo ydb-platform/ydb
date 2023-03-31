@@ -1,20 +1,24 @@
 #pragma once
-#include <util/generic/set.h>
-
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/sliding_window/sliding_window.h>
-#include <ydb/core/keyvalue/keyvalue_events.h>
-#include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
 #include "blob.h"
 #include "header.h"
 #include "key.h"
 #include "partition_types.h"
+#include "quota_tracker.h"
 #include "sourceid.h"
 #include "subscriber.h"
 #include "user_info.h"
+#include "utils.h"
+
+#include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
+
+#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
+#include <library/cpp/sliding_window/sliding_window.h>
+
+#include <util/generic/set.h>
 
 
 namespace NKikimr::NPQ {
@@ -73,7 +77,7 @@ private:
     void ReplyOk(const TActorContext& ctx, const ui64 dst);
     void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie);
 
-    void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, ui64 partitionQuotedTime, TDuration topicQuotedTime, ui64 queueTime, ui64 writeTime);
+    void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, TDuration partitionQuotedTime, TDuration topicQuotedTime, TDuration queueTime, TDuration writeTime);
 
     void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
@@ -118,6 +122,7 @@ private:
     void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void HandleDataRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
     void HandleDataRead(const NKikimrClient::TResponse& range, const TActorContext& ctx);
     void HandleGetDiskStatus(const NKikimrClient::TResponse& res, const TActorContext& ctx);
@@ -183,8 +188,9 @@ private:
     bool CleanUp(TEvKeyValue::TEvRequest* request, bool hasWrites, const TActorContext& ctx);
     bool CleanUpBlobs(TEvKeyValue::TEvRequest *request, bool hasWrites, const TActorContext& ctx);
     bool IsQuotingEnabled() const;
-    bool ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    bool ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, const TActorContext& ctx);
     bool WaitingForPreviousBlobQuota() const;
+    bool WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 withSize = 0) const;
     size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request);
     std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const;
     std::pair<TKey, ui32> Compact(const TKey& key, const ui32 size, bool headCleared);
@@ -222,7 +228,7 @@ private:
     void ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
                         const TActorContext& ctx);
     void EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
-                                   TUserInfo& userInfo,
+                                   TUserInfoBase& userInfo,
                                    const TActorContext& ctx);
 
     void ScheduleReplyOk(const ui64 dst);
@@ -248,9 +254,9 @@ private:
     void AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request);
     void AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
                            const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated);
-                     
-    TUserInfo& GetOrCreatePendingUser(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration = {});
-    TUserInfo* GetPendingUserIfExists(const TString& user);
+
+    TUserInfoBase& GetOrCreatePendingUser(const TString& user, TMaybe<ui64> readRuleGeneration = {});
+    TUserInfoBase* GetPendingUserIfExists(const TString& user);
 
     THolder<TEvPQ::TEvProxyResponse> MakeReplyOk(const ui64 dst);
     THolder<TEvPQ::TEvProxyResponse> MakeReplyGetClientOffsetOk(const ui64 dst,
@@ -278,6 +284,12 @@ private:
     void InitPendingUserInfoForImportantClients(const TEvPQ::TEvChangePartitionConfig& event,
                                                 const TActorContext& ctx);
 
+    template <typename T>
+    void EmplaceRequest(T&& body, const TActorContext& ctx) {
+        Requests.emplace_back(body, WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now() - TInstant::Zero());
+    }
+    void EmplaceResponse(TMessage&& message, const TActorContext& ctx);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -285,11 +297,25 @@ public:
 
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
-               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
+               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace,
                bool newPartition = false,
                TVector<TTransaction> distrTxs = {});
 
     void Bootstrap(const TActorContext& ctx);
+
+    ui64 Size() const {
+        return BodySize + Head.PackedSize;
+    }
+
+    ui64 MeteringDataSize(const TActorContext& ctx) const;
+
+    ui64 UsedReserveSize(const TActorContext& ctx) const {
+         return std::min<ui64>(MeteringDataSize(ctx), ReserveSize());
+    }
+
+    ui64 ReserveSize() const {
+        return TopicPartitionReserveSize(Config);
+    }
 
 
     //Bootstrap sends kvRead
@@ -336,6 +362,7 @@ private:
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
             HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
+            HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
             break;
@@ -386,6 +413,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
+            HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
 
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
@@ -438,6 +466,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
+            HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
 
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
@@ -515,10 +544,7 @@ private:
     std::deque<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>> ImmediateTxs;
     std::deque<TTransaction> DistrTxs;
     THashMap<TString, size_t> UserActCount;
-    THashMap<TString, TUserInfo> PendingUsersInfo;
-    THashMap<TString, TInstant> PendingReadFromTimestamp;
-    THashMap<TString, bool> PendingSetImportant;
-    THashSet<TString> PendingHasReadRule;
+    THashMap<TString, TUserInfoBase> PendingUsersInfo;
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
     THashSet<TString> AffectedUsers;
     bool UsersInfoWriteInProgress = false;
@@ -567,6 +593,7 @@ private:
     TInstant CurrentTimestamp;
 
     bool DiskIsFull;
+    bool SubDomainOutOfSpace;
 
     TSet<THasDataReq> HasDataRequests;
     TSet<THasDataDeadline> HasDataDeadlines;

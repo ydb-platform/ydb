@@ -6,6 +6,9 @@
 
 namespace {
 
+constexpr char RateLimiterRateAttrName[] = "drop_blockstore_volume_rate_limiter_rate";
+constexpr char RateLimiterCapacityAttrName[] = "drop_blockstore_volume_rate_limiter_capacity";
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 
@@ -218,6 +221,36 @@ public:
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
+        }
+
+        {
+            auto& rateLimiter = context.SS->DropBlockStoreVolumeRateLimiter;
+
+            // update rate limiter params
+            auto domainDir = context.SS->PathsById.at(path.GetPathIdForDomain());
+            double rate = 0;
+            double capacity = 0;
+            auto& attrs = domainDir->UserAttrs->Attrs;
+            if (TryFromString(attrs[RateLimiterRateAttrName], rate) && 
+                TryFromString(attrs[RateLimiterCapacityAttrName], capacity))
+            {
+                rateLimiter.SetRate(rate);
+                rateLimiter.SetCapacity(capacity);
+            }
+
+            if (rate > 0.0 && capacity > 0.0) {
+                rateLimiter.Fill(AppData()->TimeProvider->Now());
+
+                if (rateLimiter.Available() >= 1.0) {
+                    rateLimiter.Take(1.0);
+                } else {
+                    // TODO: should use separate status?
+                    result->SetError(
+                        NKikimrScheme::StatusNotAvailable,
+                        "Too many requests");
+                    return result;
+                }
+            }
         }
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropBlockStoreVolume, path.Base()->PathId);

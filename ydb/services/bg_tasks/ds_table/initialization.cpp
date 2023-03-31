@@ -14,7 +14,7 @@ void TBGTasksInitializer::DoPrepare(NMetadata::NInitializer::IInitializerInput::
         {
             auto& column = *request.add_columns();
             column.set_name("id");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();
@@ -24,12 +24,12 @@ void TBGTasksInitializer::DoPrepare(NMetadata::NInitializer::IInitializerInput::
         {
             auto& column = *request.add_columns();
             column.set_name("class");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();
             column.set_name("executorId");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();

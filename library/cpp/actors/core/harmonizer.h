@@ -10,6 +10,7 @@ namespace NActors {
         ui64 IncreasingThreadsByNeedyState = 0;
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
+        i16 PotentialMaxThreadCount = 0;
         bool IsNeedy = false;
         bool IsStarved = false;
         bool IsHoggish = false;

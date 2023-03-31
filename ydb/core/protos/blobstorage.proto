@@ -165,15 +165,6 @@ enum EEntityStatus {
     RESTART = 4; // entity has changed config or changed environment and should be restarted by warden
 }
 
-message TGroupDecommitStatus {
-    enum E {
-        NONE = 0; // no decomission
-        PENDING = 1; // decommission machinery is starting
-        IN_PROGRESS = 2; // decomission underway
-        DONE = 3; // group decomission complete
-    }
-}
-
 message TGroupInfo {
     message TFailRealm {
         message TFailDomain {
@@ -197,7 +188,7 @@ message TGroupInfo {
     optional string StoragePoolName = 13;
     optional EPDiskType DeviceType = 14;
     optional uint64 BlobDepotId = 15; // if filled, then this is virtual group
-    optional TGroupDecommitStatus.E DecommitStatus = 16;
+    optional NKikimrBlobStorage.TGroupDecommitStatus.E DecommitStatus = 16;
 }
 
 message TEvVPatchStart {
@@ -596,6 +587,8 @@ message TEvVAssimilate {
     optional fixed64 SkipBlocksUpTo = 10; // return keys strictly greater than this; if not set, return since the first one
     optional TBarrierKey SkipBarriersUpTo = 11; // the same behaviour
     optional NKikimrProto.TLogoBlobID SkipBlobsUpTo = 12; // the same behaviour
+
+    optional bool IgnoreDecommitState = 13 [default = false]; // do not check if VDisk belongs to a being-decommitted group
 }
 
 message TEvVAssimilateResult {

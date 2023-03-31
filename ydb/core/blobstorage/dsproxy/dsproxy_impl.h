@@ -285,6 +285,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
             ? NKikimrProto::ERROR
             : NKikimrProto::NO_GROUP;
         auto response = ev->Get()->MakeErrorResponse(status, ErrorDescription, GroupId);
+        SetExecutionRelay(*response, std::move(ev->Get()->ExecutionRelay));
         NActors::NLog::EPriority priority = CheckPriorityForErrorState();
         LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::BS_PROXY, ExtraLogInfo << "Group# " << GroupId
                 << " HandleError ev# " << ev->Get()->Print(false)

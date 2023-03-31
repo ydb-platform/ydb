@@ -8,10 +8,10 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TAddTasksActor::
     Ydb::Table::ExecuteDataQueryRequest request;
     TStringBuilder sb;
     sb << "DECLARE $activityString AS String;" << Endl;
-    sb << "DECLARE $taskId AS String;" << Endl;
+    sb << "DECLARE $taskId AS Utf8;" << Endl;
     sb << "DECLARE $schedulerString AS String;" << Endl;
     sb << "DECLARE $enabled AS Bool;" << Endl;
-    sb << "DECLARE $className AS String;" << Endl;
+    sb << "DECLARE $className AS Utf8;" << Endl;
     sb << "DECLARE $startInstant AS Uint32;" << Endl;
     sb << "DECLARE $constructInstant AS Uint32;" << Endl;
     sb << "UPSERT INTO `" + Controller->GetTableName() + "` (id, enabled, class, startInstant, constructInstant, activity, scheduler)" << Endl;
@@ -49,13 +49,13 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TAddTasksActor::
 
     {
         auto& param = (*request.mutable_parameters())["$className"];
-        param.mutable_value()->set_bytes_value(Task.GetClass());
-        param.mutable_type()->set_type_id(Ydb::Type::STRING);
+        param.mutable_value()->set_text_value(Task.GetClass());
+        param.mutable_type()->set_type_id(Ydb::Type::UTF8);
     }
 
     auto& idString = (*request.mutable_parameters())["$taskId"];
-    idString.mutable_value()->set_bytes_value(Task.GetId());
-    idString.mutable_type()->set_type_id(Ydb::Type::STRING);
+    idString.mutable_value()->set_text_value(Task.GetId());
+    idString.mutable_type()->set_type_id(Ydb::Type::UTF8);
 
     auto& aString = (*request.mutable_parameters())["$activityString"];
     aString.mutable_value()->set_bytes_value(Task.GetActivity().SerializeToString());

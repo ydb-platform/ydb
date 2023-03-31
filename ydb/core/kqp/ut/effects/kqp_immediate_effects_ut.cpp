@@ -32,8 +32,6 @@ namespace {
 Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     Y_UNIT_TEST(Upsert) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -90,8 +88,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpsertDuplicates) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -125,8 +121,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpsertExistingKey) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -173,8 +167,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(Replace) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -231,8 +223,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ReplaceDuplicates) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -266,8 +256,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(ReplaceExistingKey) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -314,8 +302,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(Insert) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -372,8 +358,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(InsertDuplicates) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -401,8 +385,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(InsertExistingKey) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -429,8 +411,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpdateOn) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -483,8 +463,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(Delete) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -533,8 +511,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpdateAfterUpsert) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -564,8 +540,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(DeleteAfterUpsert) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -604,8 +578,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpdateAfterInsert) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -635,8 +607,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(DeleteAfterInsert) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -676,8 +646,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpsertAfterInsert) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -703,8 +671,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(UpsertAfterInsertWithIndex) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -780,8 +746,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(DeleteOnAfterInsertWithIndex) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -843,8 +807,6 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
     Y_UNIT_TEST(MultipleEffectsWithIndex) {
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
             .SetEnableKqpImmediateEffects(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();

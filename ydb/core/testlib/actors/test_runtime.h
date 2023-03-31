@@ -52,6 +52,7 @@ namespace NActors {
 
         ~TTestActorRuntime();
 
+        void AddAppDataInit(std::function<void(ui32, NKikimr::TAppData&)> callback);
         virtual void Initialize(TEgg);
 
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
@@ -72,6 +73,7 @@ namespace NActors {
         }
 
         static bool DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
+
     private:
         void Initialize() override;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GetCountersForComponent(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const char* component) override;
@@ -92,5 +94,6 @@ namespace NActors {
         THolder<IDestructable> Opaque;
         TVector<ui16> MonPorts;
         TActorId SleepEdgeActor;
+        TVector<std::function<void(ui32, NKikimr::TAppData&)>> AppDataInit_;
     };
 } // namespace NActors

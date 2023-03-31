@@ -14,6 +14,7 @@ struct TEvPipeCache {
         EvForward = EventSpaceBegin(TKikimrEvents::ES_PIPECACHE),
         EvUnlink,
         EvGetTabletNode,
+        EvForcePipeReconnect,
 
         EvDeliveryProblem = EvForward + 1 * 512,
         EvGetTabletNodeResult,
@@ -63,6 +64,18 @@ struct TEvPipeCache {
         explicit TEvGetTabletNode(ui64 tabletId)
             : TabletId(tabletId)
         {}
+    };
+
+    /**
+     * Invalidate tablet node cache
+     */
+    struct TEvForcePipeReconnect : public TEventLocal<TEvForcePipeReconnect, EvForcePipeReconnect> {
+        const ui64 TabletId;
+
+        explicit TEvForcePipeReconnect(ui64 tabletId) 
+            : TabletId(tabletId)
+        {
+        }
     };
 
     /**

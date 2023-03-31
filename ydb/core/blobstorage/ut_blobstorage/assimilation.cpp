@@ -4,7 +4,7 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
     Y_UNIT_TEST(Test) {
         TEnvironmentSetup env{{
             .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
         }};
         auto& runtime = env.Runtime;
 
@@ -94,6 +94,7 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
                 const TActorId client = runtime->AllocateEdgeActor(vdiskId.NodeId(), __FILE__, __LINE__);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVAssimilate>(info->GetVDiskId(i), lastBlock, lastBarrier,
                     lastBlob);
+                ev->Record.SetIgnoreDecommitState(true);
                 runtime->Send(new IEventHandle(vdiskId, client, ev.release()), vdiskId.NodeId());
                 auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVAssimilateResult>(client);
                 const auto& record = res->Get()->Record;

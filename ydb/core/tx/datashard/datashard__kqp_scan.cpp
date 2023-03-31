@@ -543,6 +543,13 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
     auto scanComputeActor = ev->Sender;
     auto generation = request.GetGeneration();
 
+    if (VolatileTxManager.HasVolatileTxsAtSnapshot(TRowVersion(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId()))) {
+        VolatileTxManager.AttachWaitingSnapshotEvent(
+            TRowVersion(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId()),
+            std::unique_ptr<IEventHandle>(ev.Release()));
+        return;
+    }
+
     auto infoIt = TableInfos.find(request.GetLocalPathId());
 
     auto reportError = [this, scanComputeActor, generation] (const TString& table, const TString& detailedReason) {

@@ -15,43 +15,50 @@ namespace NKikimr {
 
             void Handle(TEvBlobStorage::TEvPut::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM01, "TEvPut", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()),0, ev->Cookie);
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvGet::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM02, "TEvGet", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie);
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvBlock::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM03, "TEvBlock", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie);
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvDiscover::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM04, "TEvDiscover", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie);
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvRange::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM05, "TEvRange", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie);
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM06, "TEvCollectGarbage", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie);
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvStatus::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM07, "TEvStatus", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, new TEvBlobStorage::TEvStatusResult(NKikimrProto::OK, Model->GetStorageStatusFlags()), 0,
-                        ev->Cookie);
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), new TEvBlobStorage::TEvStatusResult(NKikimrProto::OK,
+                    Model->GetStorageStatusFlags())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvAssimilate::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM09, "TEvAssimilate", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::ERROR, "not implemented"));
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::ERROR,
+                    "not implemented")), 0, ev->Cookie);
+            }
+
+            template<typename TOut, typename TIn>
+            TOut *CopyExecutionRelay(TIn *in, TOut *out) {
+                out->ExecutionRelay = std::move(in->ExecutionRelay);
+                return out;
             }
 
             void HandlePoison(TEvents::TEvPoisonPill::TPtr& ev) {

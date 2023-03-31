@@ -94,9 +94,10 @@ public:
     virtual bool DropOneToOne(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
     virtual bool UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) = 0;
     virtual bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) = 0;
-    virtual bool LoadOneToOneExport(IBlobManagerDb& db) = 0;
+    virtual bool LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobId>& droppedEvicting) = 0;
     virtual TEvictedBlob GetEvicted(const TUnifiedBlobId& blob, TEvictMetadata& meta) = 0;
     virtual TEvictedBlob GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) = 0;
+    virtual void GetCleanupBlobs(THashSet<TEvictedBlob>& cleanup) const = 0;
     virtual bool HasExternBlobs() const = 0;
 };
 
@@ -226,7 +227,6 @@ public:
         CountersUpdate = TBlobManagerCounters();
         return res;
     }
-    bool IsEvicting(const TUnifiedBlobId& id);
 
     // Implementation of IBlobManager interface
     TBlobBatch StartBlobBatch(ui32 channel = BLOB_CHANNEL) override;
@@ -238,9 +238,10 @@ public:
     bool DropOneToOne(const TUnifiedBlobId& blob, IBlobManagerDb& db) override;
     bool UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) override;
     bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) override;
-    bool LoadOneToOneExport(IBlobManagerDb& db) override;
+    bool LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobId>& droppedEvicting) override;
     TEvictedBlob GetEvicted(const TUnifiedBlobId& blobId, TEvictMetadata& meta) override;
     TEvictedBlob GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) override;
+    void GetCleanupBlobs(THashSet<TEvictedBlob>& cleanup) const override;
 
     bool HasExternBlobs() const override {
         return EvictedBlobs.size() || DroppedEvictedBlobs.size();
@@ -248,6 +249,7 @@ public:
 
     // Implementation of IBlobInUseTracker
     void SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) override;
+    bool BlobInUse(const NOlap::TUnifiedBlobId& blobId) const override;
 
 private:
     TGenStep FindNewGCBarrier();

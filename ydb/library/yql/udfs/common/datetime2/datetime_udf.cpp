@@ -309,25 +309,25 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
 
     // Make*
 
-    SIMPLE_UDF(TMakeDate, TDate(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TMakeDate, TDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = Reference(args[0]);
         return TUnboxedValuePod(storage.ToDate(builder, false));
     }
 
-    SIMPLE_UDF(TMakeDatetime, TDatetime(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TMakeDatetime, TDatetime(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = Reference(args[0]);
         return TUnboxedValuePod(storage.ToDatetime(builder));
     }
 
-    SIMPLE_UDF(TMakeTimestamp, TTimestamp(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TMakeTimestamp, TTimestamp(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = Reference(args[0]);
         return TUnboxedValuePod(storage.ToTimestamp(builder));
     }
 
-    SIMPLE_UDF(TMakeTzDate, TTzDate(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TMakeTzDate, TTzDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = Reference(args[0]);
         TUnboxedValuePod result(storage.ToDate(builder, true));
@@ -335,7 +335,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return result;
     }
 
-    SIMPLE_UDF(TMakeTzDatetime, TTzDatetime(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TMakeTzDatetime, TTzDatetime(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = Reference(args[0]);
         TUnboxedValuePod result(storage.ToDatetime(builder));
@@ -343,7 +343,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return result;
     }
 
-    SIMPLE_UDF(TMakeTzTimestamp, TTzTimestamp(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TMakeTzTimestamp, TTzTimestamp(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = Reference(args[0]);
         TUnboxedValuePod result(storage.ToTimestamp(builder));
@@ -353,17 +353,17 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
 
     // Get*
 
-#define GET_METHOD(field, type)                                          \
-    SIMPLE_UDF(TGet##field, type(TAutoMap<TResource<TMResourceName>>)) { \
-        Y_UNUSED(valueBuilder);                                          \
-        return TUnboxedValuePod(Get##field(args[0]));                    \
+#define GET_METHOD(field, type)                                                 \
+    SIMPLE_STRICT_UDF(TGet##field, type(TAutoMap<TResource<TMResourceName>>)) { \
+        Y_UNUSED(valueBuilder);                                                 \
+        return TUnboxedValuePod(Get##field(args[0]));                           \
     }
 
     GET_METHOD(Year, ui16)
     GET_METHOD(DayOfYear, ui16)
     GET_METHOD(Month, ui8)
 
-    SIMPLE_UDF(TGetMonthName, char*(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TGetMonthName, char*(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         static const std::array<TUnboxedValue, 12U> monthNames = {{
             TUnboxedValuePod::Embedded(TStringRef::Of("January")),
@@ -385,14 +385,14 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
     GET_METHOD(WeekOfYear, ui8)
     GET_METHOD(WeekOfYearIso8601, ui8)
 
-    SIMPLE_UDF(TGetDayOfMonth, ui8(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TGetDayOfMonth, ui8(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(GetDay(args[0]));
     }
 
     GET_METHOD(DayOfWeek, ui8)
 
-    SIMPLE_UDF(TGetDayOfWeekName, char*(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TGetDayOfWeekName, char*(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         static const std::array<TUnboxedValue, 7U> dayNames = {{
             TUnboxedValuePod::Embedded(TStringRef::Of("Monday")),
@@ -410,19 +410,19 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
     GET_METHOD(Minute, ui8)
     GET_METHOD(Second, ui8)
 
-    SIMPLE_UDF(TGetMillisecondOfSecond, ui32(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TGetMillisecondOfSecond, ui32(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(GetMicrosecond(args[0]) / 1000u);
     }
 
-    SIMPLE_UDF(TGetMicrosecondOfSecond, ui32(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TGetMicrosecondOfSecond, ui32(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(GetMicrosecond(args[0]));
     }
 
     GET_METHOD(TimezoneId, ui16)
 
-    SIMPLE_UDF(TGetTimezoneName, char*(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TGetTimezoneName, char*(TAutoMap<TResource<TMResourceName>>)) {
         auto timezoneId = GetTimezoneId(args[0]);
         if (timezoneId >= NUdf::GetTimezones().size()) {
             return TUnboxedValuePod();
@@ -549,13 +549,14 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
                 builder.Implementation(new TUpdate(builder.GetSourcePosition()));
             }
 
+            builder.IsStrict();
             return true;
         }
     };
 
     // From*
 
-    SIMPLE_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) {
+    SIMPLE_STRICT_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) {
         Y_UNUSED(valueBuilder);
         auto res = args[0].Get<ui32>();
         if (!ValidateDatetime(res)) {
@@ -564,7 +565,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod((ui64)(res * 1000000ull));
     }
 
-    SIMPLE_UDF(TFromMilliseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(TFromMilliseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);
         auto res = args[0].Get<ui64>();
         if (res >= MAX_TIMESTAMP / 1000u) {
@@ -573,7 +574,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod(res * 1000u);
     }
 
-    SIMPLE_UDF(TFromMicroseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(TFromMicroseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);
         auto res = args[0].Get<ui64>();
         if (!ValidateTimestamp(res)) {
@@ -582,37 +583,37 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod(res);
     }
 
-    SIMPLE_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) {
+    SIMPLE_STRICT_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) {
         Y_UNUSED(valueBuilder);
         const i64 res = i64(args[0].Get<i32>()) * 86400000000ll;
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
 
-    SIMPLE_UDF(TIntervalFromHours, TOptional<TInterval>(TAutoMap<i32>)) {
+    SIMPLE_STRICT_UDF(TIntervalFromHours, TOptional<TInterval>(TAutoMap<i32>)) {
         Y_UNUSED(valueBuilder);
         const i64 res = i64(args[0].Get<i32>()) * 3600000000ll;
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
 
-    SIMPLE_UDF(TIntervalFromMinutes, TOptional<TInterval>(TAutoMap<i32>)) {
+    SIMPLE_STRICT_UDF(TIntervalFromMinutes, TOptional<TInterval>(TAutoMap<i32>)) {
         Y_UNUSED(valueBuilder);
         const i64 res = i64(args[0].Get<i32>()) * 60000000ll;
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
 
-    SIMPLE_UDF(TIntervalFromSeconds, TOptional<TInterval>(TAutoMap<i32>)) {
+    SIMPLE_STRICT_UDF(TIntervalFromSeconds, TOptional<TInterval>(TAutoMap<i32>)) {
         Y_UNUSED(valueBuilder);
         const i64 res = i64(args[0].Get<i32>()) * 1000000ll;
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
 
-    SIMPLE_UDF(TIntervalFromMilliseconds, TOptional<TInterval>(TAutoMap<i64>)) {
+    SIMPLE_STRICT_UDF(TIntervalFromMilliseconds, TOptional<TInterval>(TAutoMap<i64>)) {
         Y_UNUSED(valueBuilder);
         const i64 res = i64(args[0].Get<i64>()) * 1000ll;
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
 
-    SIMPLE_UDF(TIntervalFromMicroseconds, TOptional<TInterval>(TAutoMap<i64>)) {
+    SIMPLE_STRICT_UDF(TIntervalFromMicroseconds, TOptional<TInterval>(TAutoMap<i64>)) {
         Y_UNUSED(valueBuilder);
         const i64 res = args[0].Get<i64>();
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
@@ -620,17 +621,17 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
 
     // To*
 
-    SIMPLE_UDF(TToDays, i32(TAutoMap<TInterval>)) {
+    SIMPLE_STRICT_UDF(TToDays, i32(TAutoMap<TInterval>)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(i32(args[0].Get<i64>() / 86400000000ll));
     }
 
-    SIMPLE_UDF(TToHours, i32(TAutoMap<TInterval>)) {
+    SIMPLE_STRICT_UDF(TToHours, i32(TAutoMap<TInterval>)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(i32(args[0].Get<i64>() / 3600000000ll));
     }
 
-    SIMPLE_UDF(TToMinutes, i32(TAutoMap<TInterval>)) {
+    SIMPLE_STRICT_UDF(TToMinutes, i32(TAutoMap<TInterval>)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(i32(args[0].Get<i64>() / 60000000ll));
     }
@@ -661,6 +662,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
             if (!typesOnly) {                                                \
                 builder.Implementation(new TTo##units<TUserDataType>);       \
             }                                                                \
+            builder.IsStrict();                                              \
         }                                                                    \
     };
 
@@ -705,7 +707,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
 
     // StartOf*
 
-    SIMPLE_UDF(TStartOfYear, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TStartOfYear, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
         auto& storage = Reference(result);
         storage.Month = 1;
@@ -722,7 +724,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return result;
     }
 
-    SIMPLE_UDF(TStartOfQuarter, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TStartOfQuarter, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
         auto& storage = Reference(result);
         storage.Month = (storage.Month - 1) / 3 * 3 + 1;
@@ -739,7 +741,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return result;
     }
 
-    SIMPLE_UDF(TStartOfMonth, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TStartOfMonth, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
         auto& storage = Reference(result);
         storage.Day = 1;
@@ -755,7 +757,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return result;
     }
 
-    SIMPLE_UDF(TStartOfWeek, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TStartOfWeek, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
         auto& storage = Reference(result);
         auto& builder = valueBuilder->GetDateBuilder();
@@ -774,7 +776,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return result;
     }
 
-    SIMPLE_UDF(TStartOfDay, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TStartOfDay, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
         auto& storage = Reference(result);
         storage.Hour = 0;
@@ -789,7 +791,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return result;
     }
 
-    SIMPLE_UDF(TStartOf, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, TAutoMap<TInterval>)) {
+    SIMPLE_STRICT_UDF(TStartOf, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, TAutoMap<TInterval>)) {
         auto result = args[0];
         ui64 interval = std::abs(args[1].Get<i64>());
         if (interval == 0) {
@@ -815,7 +817,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return result;
     }
 
-    SIMPLE_UDF(TTimeOfDay, TInterval(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TTimeOfDay, TInterval(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         auto& storage = Reference(args[0]);
         return TUnboxedValuePod((i64)storage.ToTimeOfDay());
@@ -823,15 +825,15 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
 
     // Add ...
 
-    SIMPLE_UDF(TShiftYears, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
+    SIMPLE_STRICT_UDF(TShiftYears, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
         return DoAddYears(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
     }
 
-    SIMPLE_UDF(TShiftQuarters, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
+    SIMPLE_STRICT_UDF(TShiftQuarters, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
         return DoAddMonths(args[0], 3ll * args[1].Get<i32>(), valueBuilder->GetDateBuilder());
     }
 
-    SIMPLE_UDF(TShiftMonths, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
+    SIMPLE_STRICT_UDF(TShiftMonths, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
         return DoAddMonths(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
     }
 
@@ -1466,18 +1468,18 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         }
     };
 
-#define PARSE_SPECIFIC_FORMAT(format)                                                   \
-    SIMPLE_UDF(TParse##format, TOptional<TResource<TMResourceName>>(TAutoMap<char*>)) { \
-        auto str = args[0].AsStringRef();                                               \
-        TInstant instant;                                                               \
-        if (!TInstant::TryParse##format(TStringBuf(str.Data(), str.Size()), instant)) { \
-            return TUnboxedValuePod();                                                  \
-        }                                                                               \
-        auto& builder = valueBuilder->GetDateBuilder();                                 \
-        TUnboxedValuePod result(0);                                                     \
-        auto& storage = Reference(result);                                  \
-        storage.FromTimestamp(builder, instant.MicroSeconds());                         \
-        return result;                                                                  \
+#define PARSE_SPECIFIC_FORMAT(format)                                                          \
+    SIMPLE_STRICT_UDF(TParse##format, TOptional<TResource<TMResourceName>>(TAutoMap<char*>)) { \
+        auto str = args[0].AsStringRef();                                                      \
+        TInstant instant;                                                                      \
+        if (!TInstant::TryParse##format(TStringBuf(str.Data(), str.Size()), instant)) {        \
+            return TUnboxedValuePod();                                                         \
+        }                                                                                      \
+        auto& builder = valueBuilder->GetDateBuilder();                                        \
+        TUnboxedValuePod result(0);                                                            \
+        auto& storage = Reference(result);                                                     \
+        storage.FromTimestamp(builder, instant.MicroSeconds());                                \
+        return result;                                                                         \
     }
 
     PARSE_SPECIFIC_FORMAT(Rfc822);

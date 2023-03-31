@@ -416,7 +416,7 @@ public:
 
 
 class TDone: public TSubOperationState {
-private:
+protected:
     TOperationId OperationId;
 
     TString DebugHint() const override {
@@ -584,7 +584,7 @@ public:
                    "topicName is empty"
                        <<", pathId: " << txState->TargetPathId);
 
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups[txState->TargetPathId];
+        TTopicInfo::TPtr pqGroup = context.SS->Topics[txState->TargetPathId];
         Y_VERIFY_S(pqGroup,
                    "pqGroup is null"
                        << ", pathId " << txState->TargetPathId);
@@ -616,14 +616,14 @@ public:
             TTabletId tabletId = context.SS->ShardInfos.at(idx).TabletID;
 
             if (shard.TabletType == ETabletType::PersQueue) {
-                TPQShardInfo::TPtr pqShard = pqGroup->Shards.at(idx);
+                TTopicTabletInfo::TPtr pqShard = pqGroup->Shards.at(idx);
                 Y_VERIFY_S(pqShard, "pqShard is null, idx is " << idx << " has was "<< THash<TShardIdx>()(idx));
 
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Propose configure PersQueue"
                                 << ", opId: " << OperationId
                                 << ", tabletId: " << tabletId
-                                << ", PQInfos size: " << pqShard->PQInfos.size()
+                                << ", Partitions size: " << pqShard->Partitions.size()
                                 << ", at schemeshard: " << ssId);
 
                 TAutoPtr<TEvPersQueue::TEvUpdateConfig> event(new TEvPersQueue::TEvUpdateConfig());
@@ -643,7 +643,7 @@ public:
 
                 event->Record.MutableTabletConfig()->SetVersion(pqGroup->AlterData->AlterVersion);
 
-                for (const auto& pq : pqShard->PQInfos) {
+                for (const auto& pq : pqShard->Partitions) {
                     event->Record.MutableTabletConfig()->AddPartitionIds(pq.PqId);
 
                     auto& partition = *event->Record.MutableTabletConfig()->AddPartitions();
@@ -713,12 +713,16 @@ public:
                     tablet->SetTabletId(ui64(tabletId));
                     tablet->SetOwner(context.SS->TabletID());
                     tablet->SetIdx(ui64(p.first.GetLocalId()));
-                    for (const auto& pq : pqShard->PQInfos) {
+                    for (const auto& pq : pqShard->Partitions) {
                         auto info = event->Record.AddPartitions();
                         info->SetPartition(pq.PqId);
                         info->SetTabletId(ui64(tabletId));
                         info->SetGroup(pq.GroupId);
                     }
+                }
+
+                if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {
+                    event->Record.SetSubDomainPathId(subDomainPathId);
                 }
 
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -791,7 +795,7 @@ public:
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups[pathId];
+        TTopicInfo::TPtr pqGroup = context.SS->Topics[pathId];
         pqGroup->FinishAlter();
         context.SS->PersistPersQueueGroup(db, pathId, pqGroup);
         context.SS->PersistRemovePersQueueGroupAlter(db, pathId);
@@ -1052,6 +1056,7 @@ class TConfigurePartsAtTable: public TSubOperationState {
         case TTxState::TxAlterCdcStreamAtTable:
         case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
         case TTxState::TxDropCdcStreamAtTable:
+        case TTxState::TxDropCdcStreamAtTableDropSnapshot:
             return true;
         default:
             return false;
@@ -1131,6 +1136,7 @@ class TProposeAtTable: public TSubOperationState {
         case TTxState::TxAlterCdcStreamAtTable:
         case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
         case TTxState::TxDropCdcStreamAtTable:
+        case TTxState::TxDropCdcStreamAtTableDropSnapshot:
             return true;
         default:
             return false;
@@ -1206,6 +1212,40 @@ protected:
     const TOperationId OperationId;
 
 }; // TProposeAtTable
+
+class TProposeAtTableDropSnapshot: public TProposeAtTable {
+public:
+    using TProposeAtTable::TProposeAtTable;
+
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+        TProposeAtTable::HandleReply(ev, context);
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        const auto& pathId = txState->TargetPathId;
+
+        Y_VERIFY(context.SS->TablesWithSnapshots.contains(pathId));
+        const auto snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
+
+        auto it = context.SS->SnapshotTables.find(snapshotTxId);
+        if (it != context.SS->SnapshotTables.end()) {
+            it->second.erase(pathId);
+            if (it->second.empty()) {
+                context.SS->SnapshotTables.erase(it);
+            }
+        }
+
+        context.SS->SnapshotsStepIds.erase(snapshotTxId);
+        context.SS->TablesWithSnapshots.erase(pathId);
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistDropSnapshot(db, snapshotTxId, pathId);
+
+        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
+        return true;
+    }
+
+}; // TProposeAtTableDropSnapshot
 
 } // NCdcStreamState
 

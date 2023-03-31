@@ -112,6 +112,8 @@ struct TKikimrRunConfig {
     TString                    TenantName;
     TBasicKikimrServicesMask   ServicesMask;
 
+    TMap<TString, TString>     Labels;
+
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,
                      ui32 nodeId = 0, const TKikimrScopeId& scopeId = {});
 };

@@ -697,6 +697,7 @@ namespace {
                 if (!typesOnly) {
                     builder.Implementation(new THistogramPrint(histogramIndexes));
                 }
+                builder.IsStrict();
                 return true;
             } else {
                 return false;
@@ -767,6 +768,7 @@ namespace {
                 if (!typesOnly) {
                     builder.Implementation(new THistogramToCumulativeDistributionFunction(histogramIndexes));
                 }
+                builder.IsStrict();
                 return true;
             } else {
                 return false;
@@ -855,6 +857,7 @@ namespace {
                 if (!typesOnly) {
                     builder.Implementation(new THistogramNormalize(histogramIndexes));
                 }
+                builder.IsStrict();
                 return true;
             } else {
                 return false;

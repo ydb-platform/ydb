@@ -198,13 +198,14 @@ namespace NKikimr::NTestShard {
                 return IssueRead(key);
             }
 
-            if (outcome == EReadOutcome::RETRY && RetryCount < 10) {
+            if (outcome == EReadOutcome::RETRY && RetryCount < 32) {
                 const bool inserted = KeyReadsWaitingForRetry.insert(key).second;
                 Y_VERIFY(inserted);
                 STLOG(PRI_ERROR, TEST_SHARD, TS24, "read key failed -- going to retry", (TabletId, TabletId),
                     (Key, key), (Message, message));
             } else {
-                Y_VERIFY_S(outcome == EReadOutcome::OK, "Message# " << message << " Key# " << key);
+                Y_VERIFY_S(outcome == EReadOutcome::OK, "Message# " << message << " Key# " << key << " Outcome# "
+                    << (int)outcome << " RetryCount# " << RetryCount);
 
                 const bool inserted = Keys.try_emplace(key, value.size()).second;
                 Y_VERIFY(inserted);

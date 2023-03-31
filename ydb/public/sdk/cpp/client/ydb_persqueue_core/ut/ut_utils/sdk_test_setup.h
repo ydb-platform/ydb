@@ -105,7 +105,7 @@ public:
     }
 
     void SetNetDataViaFile(const TString& netDataTsv) {
-        NetDataFile = MakeHolder<TTempFileHandle>("netData.tsv");
+        NetDataFile = MakeHolder<TTempFileHandle>();
         NetDataFile->Write(netDataTsv.Data(), netDataTsv.Size());
         NetDataFile->FlushData();
         Server.ServerSettings.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name());

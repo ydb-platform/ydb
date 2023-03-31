@@ -85,7 +85,7 @@ namespace NKikimr::NBsController {
                 item->SetPath(pdiskInfo.Path);
                 item->SetStatus(pdiskInfo.Status);
                 item->SetPDiskId(pdiskId.PDiskId);
-                item->SetSerial(pdiskInfo.ExpectedSerial);
+                //item->SetSerial(pdiskInfo.ExpectedSerial);
                 item->SetStatusChangeTimestamp(pdiskInfo.StatusTimestamp.GetValue());
             }
             return true;
@@ -95,196 +95,94 @@ namespace NKikimr::NBsController {
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TAddDriveSerial& cmd,
             TStatus& /*status*/) {
 
-        const TString& newSerial = cmd.GetSerial();
+        const auto& serial = cmd.GetSerial();
+        auto boxId = cmd.GetBoxId();
 
-        Schema::DriveSerial::BoxId::Type boxId = cmd.GetBoxId();
-        const TDriveSerialInfo *driveInfo = DrivesSerials.Find(newSerial);
-
+        auto driveInfo = DrivesSerials.Find(serial);
         if (driveInfo && driveInfo->LifeStage != NKikimrBlobStorage::TDriveLifeStage::REMOVED) {
-            throw TExAlready() << "Device with such serial already exists in BSC database and not in lifeStage REMOVED";
+            throw TExAlready() << "Device with such serial already exists in BSC database in lifeStage " << driveInfo->LifeStage;
         }
 
-        if (auto it = NodeForSerial.find(newSerial); it != NodeForSerial.end()) {
-            // Serial of drive is known, but drive not present in DrivesSerial
-            // Check is it defined in HostConfigs
-            TNodeId nodeId = it->second;
-            const TNodeInfo& nodeInfo = Nodes.Get().at(nodeId);
-            TString path = nodeInfo.KnownDrives.at(newSerial).Path;
+        auto it = NodeIdByDiskSerialNumber.find(serial);
+        if (it == NodeIdByDiskSerialNumber.end()) {
+            throw TExError() << "Couldn't find node id for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
+        }
+        auto nodeId = it->second;
 
-            TPDiskId from = TPDiskId::MinForNode(nodeId);
-            TPDiskId to = TPDiskId::MaxForNode(nodeId);
-            std::optional<TPDiskId> updatePDiskId;
-            PDisks.ForEachInRange(from, to, [&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
-                if (pdiskInfo.Path == path) {
-                    updatePDiskId = pdiskId;
-                    return false;
-                }
-                return true;
-            });
-            if (updatePDiskId) {
-                // PDisk is defined through HostConfigs, but there may be fictional row in DrivesSerials
-                // if row is present - delete it
-                if (driveInfo) {
-                    DrivesSerials.DeleteExistingEntry(newSerial);
-                    driveInfo = nullptr;
-                }
-                TPDiskInfo *pdiskInfo = PDisks.FindForUpdate(*updatePDiskId);
-                if (pdiskInfo->ExpectedSerial == newSerial) {
-                    throw TExAlready() << "Device with such serial already exists in BSC database and is defined through "
-                        << "HostConfigs";
-                }
-                pdiskInfo->ExpectedSerial = newSerial;
-                if (pdiskInfo->BoxId != boxId) {
-                    throw TExError() << "Drive is defind in host configs, but placed in another box# " << pdiskInfo->BoxId;
-                }
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA06, "Set new ExpectedSerial for HostConfigs drive",
-                    (UniqueId, UniqueId), (Serial, newSerial), (BoxId, boxId), (PDiskId, *updatePDiskId), (Path, path));
-                Fit.Boxes.insert(boxId);
-                return;
-            }
+        const auto& nodes = Nodes.Get();
+        auto nodeIt = nodes.find(nodeId);
+        if (nodeIt == nodes.end()) {
+            throw TExError() << "Couldn't find node by node id" << TErrorParams::NodeId(nodeId) << " for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
         }
 
-        {
-            // Additional check, may give false negative if ExpectedSerial for pdisk is unknown
-            TMaybe<TPDiskId> from;
-            TMaybe<TPDiskId> to;
-            if (auto it = NodeForSerial.find(newSerial); it != NodeForSerial.end()) {
-                from = TPDiskId::MinForNode(it->second);
-                to = TPDiskId::MaxForNode(it->second);
-            }
-
-            std::optional<TPDiskId> existingPDisk;
-            PDisks.ForEachInRange(from, to, [&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
-                if (newSerial == pdiskInfo.ExpectedSerial) {
-                    existingPDisk = pdiskId;
-                    return false;
-                }
-                return true;
-            });
-            if (existingPDisk) {
-                throw TExAlready() << "Device with such serial already exists in BSC database and is defined in HostConfigs"
-                    << " pdiskId# " << *existingPDisk;
-            }
+        const auto& nodeInfo = nodeIt->second;
+        auto driveIt = nodeInfo.KnownDrives.find(serial);
+        if (driveIt == nodeInfo.KnownDrives.end()) {
+            throw TExError() << "Couldn't find disk on node" << TErrorParams::NodeId(nodeId) << " by serial number" << TErrorParams::DiskSerialNumber(serial);
         }
 
-        // delete existing entry, if any, but keep its GUID
-        std::optional<TMaybe<Schema::DriveSerial::Guid::Type>> guid = driveInfo ? std::make_optional(driveInfo->Guid) : std::nullopt;
+        // delete REMOVED entry, if any, but keep its GUID
+        auto guid = driveInfo ? std::make_optional(driveInfo->Guid) : std::nullopt;
         if (driveInfo) {
-            DrivesSerials.DeleteExistingEntry(newSerial);
+            DrivesSerials.DeleteExistingEntry(serial);
         }
 
-        TDriveSerialInfo *driveInfoNew = DrivesSerials.ConstructInplaceNewEntry(newSerial, boxId);
+        auto driveInfoMutable = DrivesSerials.ConstructInplaceNewEntry(serial, boxId);
         if (guid) {
-            driveInfoNew->Guid = *guid;
+            driveInfoMutable->Guid = *guid;
         }
-
-        driveInfoNew->Kind = cmd.GetKind();
-        driveInfoNew->PDiskType = cmd.GetPDiskType();
+        driveInfoMutable->Kind = cmd.GetKind();
+        if (cmd.GetPDiskType() != NKikimrBlobStorage::UNKNOWN_TYPE) {
+            driveInfoMutable->PDiskType = cmd.GetPDiskType();
+        } else {
+            driveInfoMutable->PDiskType = PDiskTypeToPDiskType(driveIt->second.DeviceType);
+        }
         TString config;
-        const bool success = cmd.GetPDiskConfig().SerializeToString(&config);
-        Y_VERIFY(success);
-        driveInfoNew->PDiskConfig = config;
+        if (!cmd.GetPDiskConfig().SerializeToString(&config)) {
+            throw TExError() << "Couldn't serialize PDiskConfig for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
+        }
+        driveInfoMutable->PDiskConfig = config;
+        driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::ADDED;
+        driveInfoMutable->NodeId = nodeId;
+        driveInfoMutable->Path = driveIt->second.Path;
 
         Fit.Boxes.insert(boxId);
 
-        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA00, "AddDriveSerial", (UniqueId, UniqueId), (Serial, newSerial),
+        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA00, "AddDriveSerial", (UniqueId, UniqueId), (Serial, serial),
             (BoxId, boxId));
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRemoveDriveSerial& cmd,
             TStatus& /*status*/) {
 
-        const TString& serial = cmd.GetSerial();
+        const auto& serial = cmd.GetSerial();
 
-        if (const TDriveSerialInfo *driveInfo = DrivesSerials.Find(serial); !driveInfo) {
-            // Drive is defined in HostConfigs
-            //
-
-            // Fast search (works only for online nodes)
-            std::optional<TNodeId> nodeId;
-            if (auto it = NodeForSerial.find(serial); it != NodeForSerial.end()) {
-                nodeId = it->second;
-            } else {
-                // Slow PDisks fullscan
-                PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
-                    if (pdiskInfo.ExpectedSerial == serial) {
-                        nodeId = pdiskId.NodeId;
-                        return false;
-                    }
-                    return true;
-                });
-            }
-            if (!nodeId) {
-                throw TExError() << "Device with such serial is unknown for BSC";
-            }
-
-            TPDiskId from = TPDiskId::MinForNode(*nodeId);
-            TPDiskId to = TPDiskId::MaxForNode(*nodeId);
-            std::optional<TPDiskId> removePDiskId;
-            PDisks.ForEachInRange(from, to, [&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
-                if (pdiskInfo.ExpectedSerial == serial) {
-                    if (pdiskInfo.NumActiveSlots) {
-                        throw TExError() << "There are active vdisks on that drive";
-                    }
-                    if (removePDiskId) {
-                        throw TExError() << "has two pdisks defined in HostConfigs with same serial number";
-                    }
-                    removePDiskId = pdiskId;
-                }
-                return true;
-            });
-            if (!removePDiskId) {
-                throw TExError() << "The serial was seen in cluster on node# " << *nodeId
-                    << " but now there are no pdisks with the serial";
-            }
-            auto* pdiskUpdate = PDisks.FindForUpdate(*removePDiskId);
-            pdiskUpdate->ExpectedSerial = {};
-            STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA08, "Reset ExpectedSerial for HostConfig drive",
-                (UniqueId, UniqueId), (Serial, serial), (PDiskId, *removePDiskId));
-
-            // create fictional row in DrivesSerials to be able to reply kAlready for already removed disk
-            // even if they are defined through HostConfig
-            TDriveSerialInfo *driveInfoNew = DrivesSerials.ConstructInplaceNewEntry(serial, pdiskUpdate->BoxId);
-            driveInfoNew->Guid = pdiskUpdate->Guid;
-            driveInfoNew->Kind = pdiskUpdate->Kind.Kind();
-            driveInfoNew->PDiskType = PDiskTypeToPDiskType(pdiskUpdate->Kind.Type());
-            driveInfoNew->PDiskConfig = pdiskUpdate->PDiskConfig;
-            driveInfoNew->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED;
-
-            Fit.Boxes.insert(pdiskUpdate->BoxId);
-        } else {
-            if (driveInfo->LifeStage == NKikimrBlobStorage::TDriveLifeStage::REMOVED) {
-                throw TExAlready() << "Drive is already removed";
-            }
-
-            if (driveInfo->NodeId && driveInfo->PDiskId) {
-                TPDiskId pdiskId(*driveInfo->NodeId, *driveInfo->PDiskId);
-                if (auto* pdiskInfo = PDisks.Find(pdiskId)) {
-                    if (pdiskInfo->NumActiveSlots) {
-                        throw TExError() << "There are active vdisks on that drive";
-                    } else {
-                        // PDisk will be deleted automatically in FitPDisks
-                    }
-                }
-            }
-
-            TDriveSerialInfo *driveInfoMutable = DrivesSerials.FindForUpdate(serial);
-            driveInfoMutable->NodeId.Clear();
-            driveInfoMutable->PDiskId.Clear();
-            driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED;
-
-            Fit.Boxes.insert(driveInfoMutable->BoxId);
-
-            STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA07, "RemoveDriveSerial", (UniqueId, UniqueId), (Serial, serial));
+        auto driveInfo = DrivesSerials.Find(serial);
+        if (!driveInfo) {
+            throw TExError() << "Couldn't find disk with serial number" << TErrorParams::DiskSerialNumber(serial);
         }
+
+        if (driveInfo->LifeStage == NKikimrBlobStorage::TDriveLifeStage::REMOVED) {
+            throw TExError() << "Disk with serial number" << TErrorParams::DiskSerialNumber(serial) << " has already been removed";
+        }
+
+        auto driveInfoMutable = DrivesSerials.FindForUpdate(serial);
+        driveInfoMutable->NodeId.Clear();
+        driveInfoMutable->PDiskId.Clear();
+        driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED;
+        driveInfoMutable->Path.Clear();
+
+        Fit.Boxes.insert(driveInfo->BoxId);
+
+        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA07, "RemoveDriveSerial", (UniqueId, UniqueId), (Serial, serial));
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TForgetDriveSerial& cmd,
             TStatus& /*status*/) {
 
-        const TString& serial = cmd.GetSerial();
+        const auto& serial = cmd.GetSerial();
 
-        if (const TDriveSerialInfo *driveInfo = DrivesSerials.Find(serial)) {
+        if (auto driveInfo = DrivesSerials.Find(serial)) {
             switch (driveInfo->LifeStage) {
                 case NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN:
                     [[fallthrough]];
@@ -311,11 +209,17 @@ namespace NKikimr::NBsController {
             break;
         case NKikimrBlobStorage::TSerialManagementStage::CHECK_SERIAL:
             PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
-                TString expected = pdiskInfo.ExpectedSerial;
-                if (pdiskInfo.Path && (!expected || expected != pdiskInfo.LastSeenSerial)) {
-                    throw TExError() << "pdisk has not ExpectedSerial or ExpectedSerial not equals to LastSeenSerial"
-                        << " pdiskId# " << pdiskId << " expected# " << expected.Quote()
-                        << " lastSeen# " << pdiskInfo.LastSeenSerial;
+                if (pdiskInfo.ExpectedSerial && pdiskInfo.LastSeenSerial && pdiskInfo.ExpectedSerial != pdiskInfo.LastSeenSerial) {
+                    throw TExError() << "LastSeenSerial doesn't match ExpectedSerial for pdisk"
+                        << TErrorParams::NodeId(pdiskId.NodeId) << TErrorParams::PDiskId(pdiskId.PDiskId);
+                }
+            });
+            break;
+        case NKikimrBlobStorage::TSerialManagementStage::ONLY_SERIAL:
+            PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
+                if (pdiskInfo.ExpectedSerial != pdiskInfo.LastSeenSerial) {
+                    throw TExError() << "LastSeenSerial doesn't match ExpectedSerial for pdisk"
+                        << TErrorParams::NodeId(pdiskId.NodeId) << TErrorParams::PDiskId(pdiskId.PDiskId);
                 }
             });
             break;

@@ -133,24 +133,13 @@ namespace NKikimr::NBlobDepot {
                 if (Self->Data->IsLoaded()) {
                     return true;
                 }
-                bool success = true;
                 for (const auto& item : Request->Get()->Record.GetItems()) {
                     auto key = TData::TKey::FromBinaryKey(item.GetKey(), Self->Config);
-                    if (Self->Data->IsKeyLoaded(key)) {
-                        continue;
-                    }
-                    using Table = Schema::Data;
-                    auto row = db.Table<Table>().Key(item.GetKey()).Select();
-                    if (!row.IsReady()) {
-                        success = false;
-                    } else if (row.IsValid()) {
-                        Self->Data->AddDataOnLoad(std::move(key), row.GetValue<Table::Value>(),
-                            row.GetValueOrDefault<Table::UncertainWrite>(), true);
-                    } else {
-                        Self->Data->AddLoadSkip(std::move(key));
+                    if (!Self->Data->EnsureKeyLoaded(key, txc)) {
+                        return false;
                     }
                 }
-                return success;
+                return true;
             }
 
             bool CheckKeyAgainstBarrier(const TData::TKey& key, TString *error) {

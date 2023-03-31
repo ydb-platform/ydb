@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
         //UNIT_ASSERT_VALUES_EQUAL(stats[0].PreemptedEvents, 0); // depends on execution time and system load, so may be non-zero
         UNIT_ASSERT_VALUES_EQUAL(stats[0].NonDeliveredEvents, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EmptyMailboxActivation, 0);
-        //UNIT_ASSERT_VALUES_EQUAL(stats[0].CpuNs, 0); // depends on total duration of test, so undefined
+        //UNIT_ASSERT_VALUES_EQUAL(stats[0].CpuUs, 0); // depends on total duration of test, so undefined
         UNIT_ASSERT(stats[0].ElapsedTicks > 0);
         //UNIT_ASSERT(stats[0].ParkedTicks == 0); // per-pool parked time does not make sense for united pools
         UNIT_ASSERT_VALUES_EQUAL(stats[0].BlockedTicks, 0);

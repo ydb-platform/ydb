@@ -37,6 +37,7 @@ message TValue {
     optional EKeepState KeepState = 3;
     optional bool Public = 4;
     optional bool GoingToAssimilate = 5;
+    optional uint32 ValueVersion = 6;
 }
 
 message TGivenIdRange {
@@ -220,8 +221,15 @@ message TEvResolveResult {
         optional bytes Meta = 4;
         repeated uint64 Owners = 5;
         optional string ErrorReason = 6; // if set, this means value wasn't resolved due to error
+        optional uint32 ValueVersion = 7; // ValueChain version, gets increased every time value is changed
+        optional bool ReliablyWritten = 8; // MustRestoreFirst was either set, or the blob is in local storage
     }
     optional NKikimrProto.EReplyStatus Status = 1; // OVERRUN means there are more messages on the way
     optional string ErrorReason = 2;
     repeated TResolvedKey ResolvedKeys = 3;
+}
+
+message TEvPushMetrics {
+    optional uint64 BytesRead = 1; // since last update
+    optional uint64 BytesWritten = 2; // since last update
 }

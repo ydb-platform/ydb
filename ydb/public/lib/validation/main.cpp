@@ -8,7 +8,7 @@
 #include <google/protobuf/io/printer.h>
 #include <google/protobuf/io/zero_copy_stream.h>
 
-#include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
@@ -471,7 +471,20 @@ class TMessageGenerator {
         }
     };
 
-    using TItems = THashMap<const OneofDescriptor*, TItem>;
+    struct TOrderedCmp {
+        bool operator()(const OneofDescriptor* lhs, const OneofDescriptor* rhs) const noexcept {
+            if (!lhs && !rhs) {
+                return false;
+            } else if (!lhs) {
+                return true;
+            } else if (!rhs) {
+                return false;
+            }
+            return lhs->index() < rhs->index();
+        }
+    };
+
+    using TItems = TMap<const OneofDescriptor*, TItem, TOrderedCmp>;
 
     void Declare(TPrinter& printer, const TItems& items) {
         if (!items) {

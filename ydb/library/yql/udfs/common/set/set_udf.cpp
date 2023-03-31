@@ -1,4 +1,3 @@
-
 #include <ydb/library/yql/public/udf/udf_type_ops.h>
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
@@ -454,6 +453,8 @@ public:
             }
 
             if (name == CreateName) {
+                builder.IsStrict();
+
                 builder.Args()->Add(valueType).Add<ui32>().Done().Returns(setType);
 
                 if (!typesOnly) {
@@ -468,6 +469,8 @@ public:
             }
 
             if (name == AddValueName) {
+                builder.IsStrict();
+
                 builder.Args()->Add(setType).Add(valueType).Done().Returns(setType);
 
                 if (!typesOnly) {
@@ -482,6 +485,8 @@ public:
             }
 
             if (name == WasChangedName) {
+                builder.IsStrict();
+
                 builder.Args()->Add(setType).Done().Returns<bool>();
 
                 if (!typesOnly) {
@@ -496,6 +501,8 @@ public:
             }
 
             if (name == MergeName) {
+                builder.IsStrict();
+
                 builder.Args()->Add(setType).Add(setType).Done().Returns(setType);
 
                 if (!typesOnly) {
@@ -510,6 +517,8 @@ public:
             }
 
             if (name == SerializeName) {
+                builder.IsStrict();
+
                 builder.Args()->Add(setType).Done().Returns(serializedType);
 
                 if (!typesOnly) {
@@ -539,6 +548,8 @@ public:
 
             if (name == GetResultName) {
                 auto resultType = builder.List()->Item(valueType).Build();
+
+                builder.IsStrict();
 
                 builder.Args()->Add(setType).Done().Returns(resultType);
 

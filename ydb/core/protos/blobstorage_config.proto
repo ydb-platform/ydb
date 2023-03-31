@@ -23,6 +23,15 @@ enum EVirtualGroupState {
     WORKING = 2; // operational
 }
 
+message TGroupDecommitStatus {
+    enum E {
+        NONE = 0; // no decomission
+        PENDING = 1; // decommission machinery is starting
+        IN_PROGRESS = 2; // decomission underway
+        DONE = 3; // group decomission complete
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TYPICAL HOST CONFIGURATIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -221,8 +230,8 @@ message TDriveLifeStage {
     enum E {
         UNKNOWN = 0; // life stage is unknown (default)
         NOT_SEEN = 1; // info about drive is located in BSC db, but drive is not seen in any node
-        ALLOCATED = 2; // PDisk is created
-        REMOVED = 3; // drive marked as removed
+        ADDED = 2; // PDisk has been added to the DrivesSerials table
+        REMOVED = 3; // PDisk has been removed from the DrivesSerials table
         ERROR = 4; // drive was moved between nodes with allocated VDisks
     }
 }
@@ -254,6 +263,7 @@ message TProposeStoragePools {
 }
 
 message TQueryBaseConfig {
+    bool VirtualGroupsOnly = 2;
 }
 
 message TReadSettings {
@@ -589,6 +599,7 @@ message TBaseConfig {
         NKikimrBlobStorage.TPDiskMetrics PDiskMetrics = 14;
         uint64 DriveStatusChangeTimestamp = 15; // TInstant::GetValue()
         EDecommitStatus DecommitStatus = 16;
+        string ExpectedSerial = 17;
     }
     message TVSlot {
         message TDonorDisk {
@@ -610,6 +621,13 @@ message TBaseConfig {
         repeated TDonorDisk Donors = 11;
         bool Ready = 12; // is disk READY in terms of BSC (stable READY status for some period of time)
     }
+    message TVirtualGroupInfo {
+        EVirtualGroupState State = 1;
+        string Name = 2;
+        uint64 BlobDepotId = 3;
+        string ErrorReason = 4;
+        TGroupDecommitStatus.E DecommitStatus = 5;
+    }
     message TGroup {
         uint32 GroupId = 1;
         uint32 GroupGeneration = 2;
@@ -620,6 +638,7 @@ message TBaseConfig {
         bool SeenOperational = 7;
         TGroupStatus.E OperatingStatus = 8; // group status based on latest VDisk reports only
         TGroupStatus.E ExpectedStatus = 9; // status based not only on operational report, but on PDisk status and plans too
+        TVirtualGroupInfo VirtualGroupInfo = 10;
     }
     message TNode {
         uint32 NodeId = 1;
@@ -697,6 +716,7 @@ message TConfigResponse {
                 NKikimrBlobStorage.TVDiskID VDiskId = 12;
                 NKikimrBlobStorage.TVSlotId VSlotId = 13;
                 string StoragePoolName = 14;
+                string DiskSerialNumber = 15;
             }
         }
 

@@ -1,0 +1,63 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(proto)
+
+add_library(library-cpp-unified_agent_client)
+target_include_directories(library-cpp-unified_agent_client PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/include
+)
+target_link_libraries(library-cpp-unified_agent_client PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-grpc
+  cpp-logger-global
+  cpp-threading-future
+  cpp-monlib-dynamic_counters
+  cpp-unified_agent_client-proto
+  tools-enum_parser-enum_serialization_runtime
+)
+target_sources(library-cpp-unified_agent_client PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/backend.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/backend_creator.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/client_impl.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/counters.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/helpers.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/grpc_io.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/grpc_status_code.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/clock.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/duration_counter.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/logger.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/throttling.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/proto_weighing.cpp
+)
+generate_enum_serilization(library-cpp-unified_agent_client
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/grpc_io.h
+  INCLUDE_HEADERS
+  library/cpp/unified_agent_client/grpc_io.h
+)
+
+add_global_library_for(library-cpp-unified_agent_client.global library-cpp-unified_agent_client)
+target_include_directories(library-cpp-unified_agent_client.global PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/include
+)
+target_link_libraries(library-cpp-unified_agent_client.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-grpc
+  cpp-logger-global
+  cpp-threading-future
+  cpp-monlib-dynamic_counters
+  cpp-unified_agent_client-proto
+  tools-enum_parser-enum_serialization_runtime
+)
+target_sources(library-cpp-unified_agent_client.global PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/registrar.cpp
+)

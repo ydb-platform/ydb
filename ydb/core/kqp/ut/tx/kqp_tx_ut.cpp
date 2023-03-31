@@ -664,26 +664,6 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto commitResult = tx.Commit().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
     }
-
-    Y_UNIT_TEST(SnapshotRONoMvccReads) {
-        TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableMvccSnapshotReads(false));
-
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        // Query
-        auto result = session.ExecuteDataQuery(Q1_(R"(
-            SELECT * FROM EightShard WHERE Key = 102;
-        )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-
-        // Begin
-        auto beginResult = session.BeginTransaction(TTxSettings::SnapshotRO()).ExtractValueSync();
-        beginResult.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(beginResult.GetStatus(), EStatus::BAD_REQUEST);
-    }
 }
 
 } // namespace NKqp

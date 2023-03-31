@@ -23,6 +23,7 @@ target_link_libraries(ydb-core-load_test PUBLIC
   core-blobstorage-pdisk
   ydb-core-control
   ydb-core-keyvalue
+  core-kqp-common
   ydb-library-workload
   public-lib-base
   public-lib-operation_id

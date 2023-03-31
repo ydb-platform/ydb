@@ -19,7 +19,7 @@ public:
 
 private:
     TEvPrivate::TEvExport::TPtr Ev;
-    std::vector<NOlap::TEvictedBlob> BlobsToForget;
+    THashSet<NOlap::TEvictedBlob> BlobsToForget;
 };
 
 
@@ -33,7 +33,7 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
     auto& msg = *Ev->Get();
     auto status = msg.Status;
 
-    if (status == NKikimrProto::OK) {
+    {
         TBlobManagerDb blobManagerDb(txc.DB);
 
         for (auto& [blob, externId] : msg.SrcToDstBlobs) {
@@ -41,6 +41,11 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
             Y_VERIFY(blobId.IsDsBlob());
             Y_VERIFY(externId.IsS3Blob());
             bool dropped = false;
+
+            if (!msg.Blobs.count(blobId)) {
+                Y_VERIFY(!msg.ErrorStrings.empty());
+                continue; // not exported
+            }
 
 #if 0 // TODO: SELF_CACHED logic
             NOlap::TEvictedBlob evict{
@@ -59,32 +64,28 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
 
             // Delayed erase of evicted blob. Blob could be already deleted.
             if (present && !dropped) {
-                LOG_S_DEBUG("Delete exported blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                LOG_S_NOTICE("Blob exported '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
                 Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
                 Self->IncCounter(COUNTER_BLOBS_ERASED);
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
-            } else if (present) {
-                LOG_S_DEBUG("Stale exported blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+            } else if (present && dropped) {
+                LOG_S_NOTICE("Stale blob exported '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
 
                 TEvictMetadata meta;
                 evict = Self->BlobManager->GetDropped(blobId, meta);
                 Y_VERIFY(evict.State == EEvictState::EXTERN);
 
-                if (Self->DelayedForgetBlobs.count(blobId)) {
-                    Self->DelayedForgetBlobs.erase(blobId);
-                    BlobsToForget.emplace_back(std::move(evict));
-                } else {
-                    LOG_S_ERROR("No delayed forget for stale exported blob '"
-                        << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
-                }
+                BlobsToForget.emplace(std::move(evict));
             } else {
-                LOG_S_ERROR("Exported but unknown blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                LOG_S_ERROR("Unknown blob exported '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
             }
 
             // TODO: delete not present in S3 for sure (avoid race between export and forget)
 #endif
         }
+    }
 
+    if (status == NKikimrProto::OK) {
         Self->IncCounter(COUNTER_EXPORT_SUCCESS);
     } else {
         Self->IncCounter(COUNTER_EXPORT_FAIL);
@@ -97,39 +98,41 @@ void TTxExportFinish::Complete(const TActorContext& ctx) {
     Y_VERIFY(Ev);
     LOG_S_DEBUG("TTxExportFinish.Complete at tablet " << Self->TabletID());
 
-    auto& msg = *Ev->Get();
-    Y_VERIFY(!msg.TierName.empty());
-    Self->ActiveEviction = false;
     if (!BlobsToForget.empty()) {
-        Self->ForgetBlobs(ctx, msg.TierName, std::move(BlobsToForget));
+        Self->ForgetBlobs(ctx, BlobsToForget);
     }
+
+    Y_VERIFY(Self->ActiveEvictions, "Unexpected active evictions count at tablet %lu", Self->TabletID());
+    --Self->ActiveEvictions;
 }
 
 
 void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& ctx) {
-    auto status = ev->Get()->Status;
+    auto& msg = *ev->Get();
+    auto status = msg.Status;
 
-    Y_VERIFY(!ActiveTtl, "TTL already in progress at tablet %lu", TabletID());
-    Y_VERIFY(!ActiveEviction || status != NKikimrProto::UNKNOWN, "Eviction in progress at tablet %lu", TabletID());
-    ui64 exportNo = ev->Get()->ExportNo;
-    auto& tierName = ev->Get()->TierName;
+    Y_VERIFY(ActiveEvictions, "Unexpected active evictions count at tablet %lu", TabletID());
+    ui64 exportNo = msg.ExportNo;
+    auto& tierName = msg.TierName;
+    ui64 pathId = msg.PathId;
 
-    if (status == NKikimrProto::ERROR) {
-        LOG_S_WARN("Export (fail): " << exportNo << " tier '" << tierName << "' error: "
+    if (status == NKikimrProto::UNKNOWN) {
+        LOG_S_DEBUG("Export (write): id " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
+        ExportBlobs(ctx, exportNo, tierName, pathId, std::move(msg.Blobs));
+    } else if (status == NKikimrProto::ERROR && msg.Blobs.empty()) {
+        LOG_S_WARN("Export (fail): id " << exportNo << " tier '" << tierName << "' error: "
             << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());
-        ActiveEviction = false;
-    } else if (status == NKikimrProto::UNKNOWN) {
-        LOG_S_DEBUG("Export (write): " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
-        auto& tierBlobs = ev->Get()->Blobs;
-        Y_VERIFY(tierBlobs.size());
-        ExportBlobs(ctx, exportNo, tierName, std::move(tierBlobs));
-    } else if (status == NKikimrProto::OK) {
-        LOG_S_DEBUG("Export (apply): " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
-        Execute(new TTxExportFinish(this, ev), ctx);
+        --ActiveEvictions;
     } else {
-        Y_VERIFY(false);
+        // There's no atomicity needed here. Allow partial export
+        if (status == NKikimrProto::ERROR) {
+            LOG_S_WARN("Export (partial): id " << exportNo << " tier '" << tierName << "' error: "
+                << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());
+        } else {
+            LOG_S_DEBUG("Export (apply): id " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
+        }
+        Execute(new TTxExportFinish(this, ev), ctx);
     }
-    ActiveEviction = true;
 }
 
 }

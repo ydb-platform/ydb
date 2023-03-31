@@ -80,7 +80,7 @@ namespace NKikimr::NBlobDepot {
                 auto& kind = it->second;
 
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA21, "allocated BlobSeqId", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA21, "allocated BlobSeqId", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (BlobSeqId, blobSeqId), (BlobId, Request.Id));
                 if (!blobSeqId) {
                     return kind.EnqueueQueryWaitingForId(this);
@@ -124,6 +124,7 @@ namespace NKikimr::NBlobDepot {
                     ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
                     BDEV_QUERY(BDEV10, "TEvPut_sendToProxy", (BlobSeqId, BlobSeqId), (GroupId, groupId), (BlobId, id));
                     Agent.SendToProxy(groupId, std::move(ev), this, nullptr);
+                    Agent.BytesWritten += id.BlobSize();
                     ++PutsInFlight;
                 };
 
@@ -157,7 +158,7 @@ namespace NKikimr::NBlobDepot {
                     item->ClearUncertainWrite();
                 }
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA30, "IssueCommitBlobSeq", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA30, "IssueCommitBlobSeq", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (UncertainWrite, uncertainWrite), (Msg, CommitBlobSeq));
 
                 Agent.Issue(CommitBlobSeq, this, nullptr);
@@ -167,7 +168,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void RemoveBlobSeqFromInFlight() {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA32, "RemoveBlobSeqFromInFlight", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA32, "RemoveBlobSeqFromInFlight", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()));
 
                 Y_VERIFY(IsInFlight);
@@ -188,8 +189,12 @@ namespace NKikimr::NBlobDepot {
                 CheckBlocks(); // just restart request
             }
 
-            void OnIdAllocated() override {
-                IssuePuts();
+            void OnIdAllocated(bool success) override {
+                if (success) {
+                    IssuePuts();
+                } else {
+                    EndWithError(NKikimrProto::ERROR, "out of space");
+                }
             }
 
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
@@ -205,7 +210,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandlePutResult(TRequestContext::TPtr /*context*/, TEvBlobStorage::TEvPutResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA22, "TEvPutResult", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA22, "TEvPutResult", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Msg, msg));
 
                 BDEV_QUERY(BDEV11, "TEvPut_resultFromProxy", (BlobId, msg.Id), (Status, msg.Status),
@@ -235,7 +240,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleCommitBlobSeqResult(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvCommitBlobSeqResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA31, "TEvCommitBlobSeqResult", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA31, "TEvCommitBlobSeqResult", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Msg, msg));
 
                 Y_VERIFY(WaitingForCommitBlobSeq);

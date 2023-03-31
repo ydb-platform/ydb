@@ -1552,6 +1552,26 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, State, Mode, Format, VirtualTimestamps>;
     };
 
+    struct CdcStreamScanShardStatus : Table<103> {
+        // path id of cdc stream
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        // shard idx of datashard
+        struct OwnerShardIdx : Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalShardIdx : Column<4, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+
+        struct Status : Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus; };
+
+        using TKey = TableKey<OwnerPathId, LocalPathId, OwnerShardIdx, LocalShardIdx>;
+        using TColumns = TableColumns<
+            OwnerPathId,
+            LocalPathId,
+            OwnerShardIdx,
+            LocalShardIdx,
+            Status
+        >;
+    };
+
     struct Sequences : Table<97> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -1597,6 +1617,19 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, Description>;
+    };
+
+    struct PersQueueGroupStats : Table<106> {
+        struct PathId :          Column<1, NScheme::NTypeIds::Uint64> {};
+
+        struct SeqNoGeneration : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SeqNoRound :      Column<3, NScheme::NTypeIds::Uint64> {};
+
+        struct DataSize :        Column<4, NScheme::NTypeIds::Uint64> {};
+        struct UsedReserveSize : Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, SeqNoGeneration, SeqNoRound, DataSize, UsedReserveSize>;
     };
 
     using TTables = SchemaTables<
@@ -1700,7 +1733,9 @@ struct Schema : NIceDb::Schema {
         SequencesAlters,
         Replications,
         ReplicationsAlterData,
-        BlobDepots
+        BlobDepots,
+        CdcStreamScanShardStatus,
+        PersQueueGroupStats
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

@@ -112,7 +112,7 @@ private:
             Ydb::Table::DeleteSessionResponse>;
 
         auto actorId = NRpcService::DoLocalRpcSameMailbox<TEvDeleteSessionRequest>(
-            std::move(request), std::move(cb), database, Request_->GetInternalToken(), ctx);
+            std::move(request), std::move(cb), database, Request_->GetSerializedToken(), ctx);
 
         LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
             SelfId() << " Client lost, session " << sessionId << " will be closed by " << actorId);

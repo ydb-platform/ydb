@@ -19,14 +19,14 @@ namespace NKikimr {
 // TODO: make part of util?
 namespace NOperationQueue {
 
-template <typename T, typename TQueue, int Ev, int LogServiceId>
+template <typename T, typename TQueue, int Ev, int LogServiceId, ui32 ActivityType>
 class TOperationQueueWithTimer
-    : public TActor<TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId>>
+    : public TActor<TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId, ActivityType>>
     , public ITimer
     , public TOperationQueue<T, TQueue>
 {
-    using TThis = ::NKikimr::NOperationQueue::TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId>;
-    using TActorBase = TActor<TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId>>;
+    using TThis = ::NKikimr::NOperationQueue::TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId, ActivityType>;
+    using TActorBase = TActor<TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId, ActivityType>>;
     using TBase = TOperationQueue<T, TQueue>;
 
     struct TEvWakeupQueue : public TEventLocal<TEvWakeupQueue, Ev> {
@@ -53,6 +53,10 @@ public:
         , TBase(config, queueConfig, starter, *this)
     {}
 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::EType(ActivityType);
+    }
+
     void Shutdown(const TActorContext &ctx) {
         if (LongTimerId)
             ctx.Send(LongTimerId, new TEvents::TEvPoison);
@@ -72,7 +76,8 @@ private:
         When = this->Now() + delta;
         auto ctx = TActivationContext::ActorContextFor(TActorBase::SelfId());
         LongTimerId = CreateLongTimer(ctx, delta,
-            new IEventHandle(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue));
+            new IEventHandle(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue),
+            AppData(ctx)->UserPoolId);
 
         LOG_DEBUG_S(ctx, ServiceId,
             "Operation queue set wakeup after delta# " << delta.Seconds() << " seconds");

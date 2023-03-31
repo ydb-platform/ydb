@@ -238,7 +238,7 @@ std::optional<ui64> EstimateIntegralDataSize(const TDataType* dataType) {
     }
 }
 
-ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniKQL::TType* type, bool* fixed) {
+ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniKQL::TType* type, bool* fixed, TDqDataSerializer::TEstimateSizeSettings settings) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
         case TType::EKind::Null:
@@ -261,7 +261,7 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
                 case NUdf::EDataSlot::Json:
                 case NUdf::EDataSlot::JsonDocument:
                 case NUdf::EDataSlot::Yson:
-                    return 2 + value.AsStringRef().Size();
+                    return (settings.WithHeaders?2:0) + value.AsStringRef().Size();
                 default:
                     YQL_ENSURE(false, "" << dataType->GetKindAsStr());
             }
@@ -276,7 +276,7 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
                         return *size;
                     }
                 }
-                return EstimateSizeImpl(value.GetOptionalValue(), optionalType->GetItemType(), fixed);
+                return EstimateSizeImpl(value.GetOptionalValue(), optionalType->GetItemType(), fixed, settings);
             }
             return 0;
         }
@@ -284,18 +284,18 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
         case TType::EKind::List: {
             auto listType = static_cast<const TListType*>(type);
             auto itemType = listType->GetItemType();
-            ui64 size = 2;
+            ui64 size = (settings.WithHeaders?2:0);
             if (value.HasFastListLength() && value.GetListLength() > 0 && value.GetElements()) {
                 auto len = value.GetListLength();
                 auto p = value.GetElements();
                 do {
-                    size += EstimateSizeImpl(*p++, itemType, fixed);
+                    size += EstimateSizeImpl(*p++, itemType, fixed, settings);
                 }
                 while (--len);
             } else {
                 const auto iter = value.GetListIterator();
                 for (NUdf::TUnboxedValue item; iter.Next(item);) {
-                    size += EstimateSizeImpl(item, itemType, fixed);
+                    size += EstimateSizeImpl(item, itemType, fixed, settings);
                 }
             }
             return size;
@@ -303,7 +303,7 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
 
         case TType::EKind::Struct: {
             auto structType = static_cast<const TStructType*>(type);
-            ui64 size = 2;
+            ui64 size = (settings.WithHeaders?2:0);
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
                 auto memberType = structType->GetMemberType(index);
 
@@ -315,7 +315,7 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
                     }
                 }
 
-                size += EstimateSizeImpl(value.GetElement(index), memberType, fixed);
+                size += EstimateSizeImpl(value.GetElement(index), memberType, fixed, settings);
             }
 
             return size;
@@ -323,7 +323,7 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
 
         case TType::EKind::Tuple: {
             auto tupleType = static_cast<const TTupleType*>(type);
-            ui64 size = 2;
+            ui64 size = (settings.WithHeaders?2:0);
             for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
                 auto elementType = tupleType->GetElementType(index);
 
@@ -335,7 +335,7 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
                     }
                 }
 
-                size += EstimateSizeImpl(value.GetElement(index), elementType, fixed);
+                size += EstimateSizeImpl(value.GetElement(index), elementType, fixed, settings);
             }
             return size;
         }
@@ -345,11 +345,11 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
             auto keyType = dictType->GetKeyType();
             auto payloadType = dictType->GetPayloadType();
 
-            ui64 size = 2;
+            ui64 size = (settings.WithHeaders?2:0);
             const auto iter = value.GetDictIterator();
             for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
-                size += EstimateSizeImpl(key, keyType, fixed);
-                size += EstimateSizeImpl(payload, payloadType, fixed);
+                size += EstimateSizeImpl(key, keyType, fixed, settings);
+                size += EstimateSizeImpl(payload, payloadType, fixed, settings);
             }
             return size;
         }
@@ -364,7 +364,7 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
                 MKQL_ENSURE(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
                 innerType = static_cast<TTupleType*>(innerType)->GetElementType(variantIndex);
             }
-            return 2 + EstimateSizeImpl(value.GetVariantItem(), innerType, fixed);
+            return (settings.WithHeaders?2:0) + EstimateSizeImpl(value.GetVariantItem(), innerType, fixed, settings);
         }
 
         case TType::EKind::Pg: {
@@ -382,19 +382,23 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
         case TType::EKind::Flow:
         case TType::EKind::ReservedKind:
         case TType::EKind::Tagged:
-        case TType::EKind::Block:
+        case TType::EKind::Block: {
+            if (settings.DiscardUnsupportedTypes) {
+                return 0;
+            }
             THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
+        }
     }
 }
 
 } // namespace
 
-ui64 TDqDataSerializer::EstimateSize(const NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* type, bool* fixed)
+ui64 TDqDataSerializer::EstimateSize(const NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* type, bool* fixed, TDqDataSerializer::TEstimateSizeSettings settings)
 {
     if (fixed) {
         *fixed = true;
     }
-    return EstimateSizeImpl(value, type, fixed);
+    return EstimateSizeImpl(value, type, fixed, settings);
 }
 
 } // namespace NYql::NDq

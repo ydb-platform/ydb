@@ -265,6 +265,10 @@ void TIndexInfo::UpdatePathTiering(THashMap<ui64, NOlap::TTiering>& pathTiering)
             if (!tierInfo->EvictColumn) {
                 tierInfo->EvictColumn = schema->GetFieldByName(tierInfo->EvictColumnName);
             }
+            // TODO: eviction with recompression is not supported yet
+            if (tierInfo->NeedExport) {
+                tierInfo->Compression = {};
+            }
         }
         if (tiering.Ttl && !tiering.Ttl->EvictColumn) {
             tiering.Ttl->EvictColumn = schema->GetFieldByName(tiering.Ttl->EvictColumnName);

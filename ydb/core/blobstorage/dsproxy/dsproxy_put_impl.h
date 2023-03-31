@@ -55,9 +55,11 @@ private:
         bool Replied = false;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
         NWilson::TSpan Span;
+        std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
 
         TBlobInfo(TLogoBlobID id, TRope&& buffer, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
-                NLWTrace::TOrbit&& orbit, std::vector<std::pair<ui64, ui32>> extraBlockChecks, bool single)
+                NLWTrace::TOrbit&& orbit, std::vector<std::pair<ui64, ui32>> extraBlockChecks, bool single,
+                std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay)
             : BlobId(id)
             , Buffer(std::move(buffer))
             , BufferSize(Buffer.size())
@@ -66,6 +68,7 @@ private:
             , Orbit(std::move(orbit))
             , ExtraBlockChecks(std::move(extraBlockChecks))
             , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put.Blob"))
+            , ExecutionRelay(std::move(executionRelay))
         {}
 
         void Output(IOutputStream& s) const {
@@ -118,7 +121,7 @@ public:
         , Tactic(ev->Tactic)
     {
         Blobs.emplace_back(ev->Id, TRope(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
-            std::move(ev->ExtraBlockChecks), true);
+            std::move(ev->ExtraBlockChecks), true, std::move(ev->ExecutionRelay));
 
         auto& blob = Blobs.back();
         LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID, blob.BlobId.ToString(), Tactic,
@@ -147,7 +150,7 @@ public:
             Y_VERIFY(msg.HandleClass == putHandleClass);
             Y_VERIFY(msg.Tactic == tactic);
             Blobs.emplace_back(msg.Id, TRope(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
-                std::move(msg.Orbit), std::move(msg.ExtraBlockChecks), false);
+                std::move(msg.Orbit), std::move(msg.ExtraBlockChecks), false, std::move(msg.ExecutionRelay));
             Deadline = Max(Deadline, msg.Deadline);
 
             auto& blob = Blobs.back();

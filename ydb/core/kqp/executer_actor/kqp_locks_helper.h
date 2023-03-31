@@ -10,6 +10,6 @@ namespace NKikimr::NKqp {
 
 void BuildLocks(NKikimrMiniKQL::TResult& result, const TVector<NKikimrTxDataShard::TLock>& locks);
 
-TMap<ui64, TVector<NKikimrTxDataShard::TLock>> ExtractLocks(const TVector<NYql::NDq::TMkqlValueRef>& locks);
+NKikimrTxDataShard::TLock ExtractLock(const NYql::NDq::TMkqlValueRef& lock);
 
 } // namespace NKikimr::NKqp

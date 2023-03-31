@@ -341,8 +341,9 @@ public:
                 token = credential->Content;
             }
 
+            TIntrusiveConstPtr<NACLib::TUserToken> tokenPtr = new NACLib::TUserToken(token);
             if (!token.empty()) {
-                Gateway->SetToken(cluster, token);
+                Gateway->SetToken(cluster, tokenPtr);
             }
         }
 

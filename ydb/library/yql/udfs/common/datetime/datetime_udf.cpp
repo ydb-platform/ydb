@@ -13,19 +13,19 @@ using namespace NUdf;
 using namespace NDatetime;
 
 namespace {
-    SIMPLE_UDF(TToString, char*(TAutoMap<TTimestamp>)) {
+    SIMPLE_STRICT_UDF(TToString, char*(TAutoMap<TTimestamp>)) {
         const auto input = args[0].Get<ui64>();
         TInstant instant = TInstant::MicroSeconds(input);
         return valueBuilder->NewString(instant.ToString());
     }
 
-    SIMPLE_UDF(TToStringUpToSeconds, char*(TAutoMap<TTimestamp>)) {
+    SIMPLE_STRICT_UDF(TToStringUpToSeconds, char*(TAutoMap<TTimestamp>)) {
         const auto input = args[0].Get<ui64>();
         TInstant instant = TInstant::MicroSeconds(input);
         return valueBuilder->NewString(instant.ToStringUpToSeconds());
     }
 
-    SIMPLE_UDF(TToStringFormat, char*(TAutoMap<TTimestamp>, char*)) {
+    SIMPLE_STRICT_UDF(TToStringFormat, char*(TAutoMap<TTimestamp>, char*)) {
         const auto input = args[0].Get<ui64>();
         const TString format(args[1].AsStringRef());
         TInstant instant = TInstant::MicroSeconds(input);
@@ -33,7 +33,7 @@ namespace {
         return valueBuilder->NewString(tm.ToString(format.c_str()));
     }
 
-    SIMPLE_UDF(TToDate, char*(TAutoMap<TTimestamp>)) {
+    SIMPLE_STRICT_UDF(TToDate, char*(TAutoMap<TTimestamp>)) {
         const auto input = args[0].Get<ui64>();
         TInstant instant = TInstant::MicroSeconds(input);
         TSimpleTM tm = TSimpleTM::New(static_cast<time_t>(instant.Seconds()));
@@ -76,7 +76,7 @@ namespace {
         return TUnboxedValuePod(result);
     }
 
-    SIMPLE_UDF(TIsWeekend, bool(TAutoMap<TTimestamp>)) {
+    SIMPLE_STRICT_UDF(TIsWeekend, bool(TAutoMap<TTimestamp>)) {
         Y_UNUSED(valueBuilder);
         const auto input = args[0].Get<ui64>();
         TInstant instant = TInstant::MicroSeconds(input);
@@ -149,12 +149,12 @@ namespace {
         return success ? TUnboxedValuePod(result.MicroSeconds() + bonus) : TUnboxedValuePod();
     }
 
-    SIMPLE_UDF(TFromString, TOptional<ui64>(TOptional<char*>)) {
+    SIMPLE_STRICT_UDF(TFromString, TOptional<ui64>(TOptional<char*>)) {
         Y_UNUSED(valueBuilder);
         return FromStringImpl(args);
     }
 
-    SIMPLE_UDF(TTimestampFromString, TOptional<TTimestamp>(TOptional<char*>)) {
+    SIMPLE_STRICT_UDF(TTimestampFromString, TOptional<TTimestamp>(TOptional<char*>)) {
         Y_UNUSED(valueBuilder);
         return FromStringImpl(args);
     }
@@ -169,42 +169,42 @@ namespace {
         return success ? TUnboxedValuePod(result.MicroSeconds()) : TUnboxedValuePod();
     }
 
-    SIMPLE_UDF(TFromStringFormat, TOptional<ui64>(TOptional<char*>, char*)) {
+    SIMPLE_STRICT_UDF(TFromStringFormat, TOptional<ui64>(TOptional<char*>, char*)) {
         Y_UNUSED(valueBuilder);
         return FromStringFormatImpl(args);
     }
 
-    SIMPLE_UDF(TTimestampFromStringFormat, TOptional<TTimestamp>(TOptional<char*>, char*)) {
+    SIMPLE_STRICT_UDF(TTimestampFromStringFormat, TOptional<TTimestamp>(TOptional<char*>, char*)) {
         Y_UNUSED(valueBuilder);
         return FromStringFormatImpl(args);
     }
 
-    SIMPLE_UDF(TDateStartOfDay, TDate(TAutoMap<TDate>)) {
+    SIMPLE_STRICT_UDF(TDateStartOfDay, TDate(TAutoMap<TDate>)) {
         Y_UNUSED(valueBuilder);
         const auto input = args[0].Get<ui16>();
         return TUnboxedValuePod(ui16(input));
     }
 
-    SIMPLE_UDF(TDatetimeStartOfDay, TDatetime(TAutoMap<TDatetime>)) {
+    SIMPLE_STRICT_UDF(TDatetimeStartOfDay, TDatetime(TAutoMap<TDatetime>)) {
         Y_UNUSED(valueBuilder);
         const auto input = args[0].Get<ui32>();
         return TUnboxedValuePod(ui32(input - input % 86400));
     }
 
-    SIMPLE_UDF(TTimestampStartOfDay, TTimestamp(TAutoMap<TTimestamp>)) {
+    SIMPLE_STRICT_UDF(TTimestampStartOfDay, TTimestamp(TAutoMap<TTimestamp>)) {
         Y_UNUSED(valueBuilder);
         const auto input = args[0].Get<ui64>();
         return TUnboxedValuePod(ui64(input - input % 86400000000ull));
     }
 
-    SIMPLE_UDF(TGetTimeOfDay, TInterval(TAutoMap<TTimestamp>)) {
+    SIMPLE_STRICT_UDF(TGetTimeOfDay, TInterval(TAutoMap<TTimestamp>)) {
         Y_UNUSED(valueBuilder);
         const auto input = args[0].Get<ui64>();
         return TUnboxedValuePod(ui64(input % 86400000000ull));
     }
 
 #define DATETIME_TO_UDF(unit, type)                                 \
-    SIMPLE_UDF(TTo##unit, type(TAutoMap<TTimestamp>)) {             \
+    SIMPLE_STRICT_UDF(TTo##unit, type(TAutoMap<TTimestamp>)) {      \
         Y_UNUSED(valueBuilder);                                     \
         const ui64 input = args[0].Get<ui64>();                     \
         TInstant instant = TInstant::MicroSeconds(input);           \
@@ -212,7 +212,7 @@ namespace {
     }
 
 #define DATETIME_INTERVAL_TO_UDF(unit, type)                                                         \
-    SIMPLE_UDF(TIntervalTo##unit, type(TAutoMap<TInterval>)) {                                       \
+    SIMPLE_STRICT_UDF(TIntervalTo##unit, type(TAutoMap<TInterval>)) {                                \
         Y_UNUSED(valueBuilder);                                                                      \
         const i64 input = args[0].Get<i64>();                                                        \
         TDuration duration = TDuration::MicroSeconds(std::abs(input));                               \
@@ -220,58 +220,58 @@ namespace {
     }
 
 #define DATETIME_FROM_UDF(unit)                                        \
-    SIMPLE_UDF(TFrom##unit, ui64(TAutoMap<ui64>)) {                    \
+    SIMPLE_STRICT_UDF(TFrom##unit, ui64(TAutoMap<ui64>)) {             \
         Y_UNUSED(valueBuilder);                                        \
         EMPTY_RESULT_ON_EMPTY_ARG(0);                                  \
         const auto input = args[0].Get<ui64>();                        \
         return TUnboxedValuePod(TInstant::unit(input).MicroSeconds()); \
     }
 
-#define DATETIME_TIMESTAMP_FROM_UDF(unit)                                      \
-    SIMPLE_UDF(TTimestampFrom##unit, TOptional<TTimestamp>(TOptional<ui64>)) { \
-        Y_UNUSED(valueBuilder);                                                \
-        EMPTY_RESULT_ON_EMPTY_ARG(0);                                          \
-        const auto input = args[0].Get<ui64>();                                \
-        ui64 result = TInstant::unit(input).MicroSeconds();                    \
-        if (result < MAX_TIMESTAMP) {                                          \
-            return TUnboxedValuePod(result);                                   \
-        } else {                                                               \
-            return TUnboxedValuePod();                                         \
-        }                                                                      \
+#define DATETIME_TIMESTAMP_FROM_UDF(unit)                                             \
+    SIMPLE_STRICT_UDF(TTimestampFrom##unit, TOptional<TTimestamp>(TOptional<ui64>)) { \
+        Y_UNUSED(valueBuilder);                                                       \
+        EMPTY_RESULT_ON_EMPTY_ARG(0);                                                 \
+        const auto input = args[0].Get<ui64>();                                       \
+        ui64 result = TInstant::unit(input).MicroSeconds();                           \
+        if (result < MAX_TIMESTAMP) {                                                 \
+            return TUnboxedValuePod(result);                                          \
+        } else {                                                                      \
+            return TUnboxedValuePod();                                                \
+        }                                                                             \
     }
 
-#define DATETIME_INTERVAL_FROM_UDF(unit)                                    \
-    SIMPLE_UDF(TIntervalFrom##unit, TOptional<TInterval>(TOptional<i64>)) { \
-        Y_UNUSED(valueBuilder);                                             \
-        EMPTY_RESULT_ON_EMPTY_ARG(0);                                       \
-        const auto input = args[0].Get<i64>();                              \
-        i64 result = TInstant::unit(std::abs(input)).MicroSeconds();        \
-        if (static_cast<ui64>(result) < MAX_TIMESTAMP) {                    \
-            return TUnboxedValuePod(input >= 0 ? result : -result);         \
-        } else {                                                            \
-            return TUnboxedValuePod();                                      \
-        }                                                                   \
+#define DATETIME_INTERVAL_FROM_UDF(unit)                                           \
+    SIMPLE_STRICT_UDF(TIntervalFrom##unit, TOptional<TInterval>(TOptional<i64>)) { \
+        Y_UNUSED(valueBuilder);                                                    \
+        EMPTY_RESULT_ON_EMPTY_ARG(0);                                              \
+        const auto input = args[0].Get<i64>();                                     \
+        i64 result = TInstant::unit(std::abs(input)).MicroSeconds();               \
+        if (static_cast<ui64>(result) < MAX_TIMESTAMP) {                           \
+            return TUnboxedValuePod(input >= 0 ? result : -result);                \
+        } else {                                                                   \
+            return TUnboxedValuePod();                                             \
+        }                                                                          \
     }
 
-#define DATETIME_GET_UDF(udfName, resultType, result)            \
-    SIMPLE_UDF(udfName, resultType(TAutoMap<TTimestamp>)) {      \
-        Y_UNUSED(valueBuilder);                                  \
-        const auto input = args[0].Get<ui64>();                  \
-        const TInstant& instant = TInstant::MicroSeconds(input); \
-        TSimpleTM tm = TSimpleTM::New(                           \
-            static_cast<time_t>(instant.Seconds()));             \
-        Y_UNUSED(tm);                                            \
-        return TUnboxedValuePod(result);                         \
+#define DATETIME_GET_UDF(udfName, resultType, result)                   \
+    SIMPLE_STRICT_UDF(udfName, resultType(TAutoMap<TTimestamp>)) {      \
+        Y_UNUSED(valueBuilder);                                         \
+        const auto input = args[0].Get<ui64>();                         \
+        const TInstant& instant = TInstant::MicroSeconds(input);        \
+        TSimpleTM tm = TSimpleTM::New(                                  \
+            static_cast<time_t>(instant.Seconds()));                    \
+        Y_UNUSED(tm);                                                   \
+        return TUnboxedValuePod(result);                                \
     }
 
-#define DATETIME_GET_STRING_UDF(udfName, result)                 \
-    SIMPLE_UDF(udfName, char*(TAutoMap<TTimestamp>)) {           \
-        const auto input = args[0].Get<ui64>();                  \
-        const TInstant& instant = TInstant::MicroSeconds(input); \
-        TSimpleTM tm = TSimpleTM::New(                           \
-            static_cast<time_t>(instant.Seconds()));             \
-        Y_UNUSED(tm);                                            \
-        return valueBuilder->NewString(result);                  \
+#define DATETIME_GET_STRING_UDF(udfName, result)                        \
+    SIMPLE_STRICT_UDF(udfName, char*(TAutoMap<TTimestamp>)) {           \
+        const auto input = args[0].Get<ui64>();                         \
+        const TInstant& instant = TInstant::MicroSeconds(input);        \
+        TSimpleTM tm = TSimpleTM::New(                                  \
+            static_cast<time_t>(instant.Seconds()));                    \
+        Y_UNUSED(tm);                                                   \
+        return valueBuilder->NewString(result);                         \
     }
 
     TInstant InstantFromMicroseconds(ui64 value) {
@@ -299,7 +299,7 @@ namespace {
     }
 
 #define DATETIME_START_UDF(udfName, type, logic, inputConv, outputConv)            \
-    SIMPLE_UDF(udfName, type(TAutoMap<type>)) {                                    \
+    SIMPLE_STRICT_UDF(udfName, type(TAutoMap<type>)) {                             \
         Y_UNUSED(valueBuilder);                                                    \
         const auto input = args[0].Get<typename NUdf::TDataType<type>::TLayout>(); \
         TInstant instant = inputConv(input);                                       \

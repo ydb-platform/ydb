@@ -10,6 +10,25 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/hfunc.h>
 
+
+struct TMsgPqCodes {
+    TString Message;
+    Ydb::PersQueue::ErrorCode::ErrorCode PQCode;
+
+    TMsgPqCodes(TString const& message, Ydb::PersQueue::ErrorCode::ErrorCode pqCode)
+    : Message(message), PQCode(pqCode) {}
+};
+
+struct TYdbPqCodes {
+    Ydb::StatusIds::StatusCode YdbCode;
+    Ydb::PersQueue::ErrorCode::ErrorCode PQCode;
+
+    TYdbPqCodes(Ydb::StatusIds::StatusCode YdbCode, Ydb::PersQueue::ErrorCode::ErrorCode PQCode)
+    : YdbCode(YdbCode),
+        PQCode(PQCode) {}
+};
+
+
 namespace NKikimr::NGRpcProxy::V1 {
 
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
@@ -24,7 +43,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TString& localDc = TString()
     );
 
-    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
+    TYdbPqCodes FillProposeRequestImpl(
         const TString& name,
         const Ydb::Topic::CreateTopicRequest& request,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
@@ -33,7 +52,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TString& path,
         const TString& database = TString(),
         const TString& localDc = TString()
-
     );
 
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
@@ -58,7 +76,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                                             TString& error, const TActorContext& ctx,
                                             const Ydb::StatusIds::StatusCode dubsStatus = Ydb::StatusIds::BAD_REQUEST);
 
-    TString AddReadRuleToConfig(
+    TMsgPqCodes AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig *config,
         const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr,
         const TClientServiceTypes& supportedReadRuleServiceTypes,
@@ -71,7 +89,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TActorContext& ctx
     );
     NYql::TIssue FillIssue(const TString &errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode);
-
+    NYql::TIssue FillIssue(const TString &errorReason, const size_t errorCode);
 
     template <typename T>
     class THasCdcStreamCompatibility {
@@ -134,13 +152,13 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             SetDatabase(proposal.get(), *this->Request_);
 
-            if (this->Request_->GetInternalToken().empty()) {
+            if (this->Request_->GetSerializedToken().empty()) {
                 if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                     return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                           "Unauthenticated access is forbidden, please provide credentials", ctx);
                 }
             } else {
-                proposal->Record.SetUserToken(this->Request_->GetInternalToken());
+                proposal->Record.SetUserToken(this->Request_->GetSerializedToken());
             }
 
             static_cast<TDerived*>(this)->FillProposeRequest(*proposal, ctx, workingDir, name);
@@ -161,13 +179,13 @@ namespace NKikimr::NGRpcProxy::V1 {
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             navigateRequest->ResultSet.emplace_back(entry);
 
-            if (this->Request_->GetInternalToken().empty()) {
+            if (this->Request_->GetSerializedToken().empty()) {
                 if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                     return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                           "Unauthenticated access is forbidden, please provide credentials", ctx);
                 }
             } else {
-                navigateRequest->UserToken = new NACLib::TUserToken(this->Request_->GetInternalToken());
+                navigateRequest->UserToken = new NACLib::TUserToken(this->Request_->GetSerializedToken());
             }
             if (!IsDead) {
                 ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));
@@ -185,8 +203,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                 NSchemeCache::TSchemeCacheNavigate::KindTopic) {
                 this->Request_->RaiseIssue(
                     FillIssue(
-                              TStringBuilder() << "path '" << path << "' is not a topic",
-                              Ydb::PersQueue::ErrorCode::ERROR
+                              TStringBuilder() << "path '" << path << "' is not a stream",
+                              Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
                               )
                     );
                 TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
@@ -221,7 +239,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                     this->Request_->RaiseIssue(
                         FillIssue(
                             TStringBuilder() << "path '" << path << "' is not compatible scheme object",
-                            Ydb::PersQueue::ErrorCode::ERROR
+                            Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
                         )
                     );
                     return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
@@ -229,7 +247,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                     this->Request_->RaiseIssue(
                         FillIssue(
                             TStringBuilder() << "path '" << path << "' creation is not completed",
-                            Ydb::PersQueue::ErrorCode::ERROR
+                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
                         )
                     );
                     return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
@@ -242,7 +260,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                     FillIssue(
                         TStringBuilder() << "path '" << path << "' does not exist or you " <<
                         "do not have access rights",
-                        Ydb::PersQueue::ErrorCode::ERROR
+                        Ydb::PersQueue::ErrorCode::ACCESS_DENIED
                     )
                 );
                 return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
@@ -251,7 +269,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 this->Request_->RaiseIssue(
                     FillIssue(
                         TStringBuilder() << "table creation is not completed",
-                        Ydb::PersQueue::ErrorCode::ERROR
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
                     )
                 );
                 return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
@@ -261,7 +279,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 this->Request_->RaiseIssue(
                     FillIssue(
                         TStringBuilder() << "path '" << path << "' is not a table",
-                        Ydb::PersQueue::ErrorCode::ERROR
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
                     )
                 );
                 return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
@@ -271,7 +289,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 this->Request_->RaiseIssue(
                     FillIssue(
                         TStringBuilder() << "unknown database root",
-                        Ydb::PersQueue::ErrorCode::ERROR
+                        Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
                     )
                 );
                 return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
@@ -287,6 +305,14 @@ namespace NKikimr::NGRpcProxy::V1 {
                             Ydb::PersQueue::ErrorCode::ErrorCode pqStatus,
                             const TString& messageText, const NActors::TActorContext& ctx) {
             this->Request_->RaiseIssue(FillIssue(messageText, pqStatus));
+            this->Request_->ReplyWithYdbStatus(status);
+            this->Die(ctx);
+            IsDead = true;
+        }
+
+        void ReplyWithError(Ydb::StatusIds::StatusCode status, size_t additionalStatus,
+                            const TString& messageText, const NActors::TActorContext& ctx) {
+            this->Request_->RaiseIssue(FillIssue(messageText, additionalStatus));
             this->Request_->ReplyWithYdbStatus(status);
             this->Die(ctx);
             IsDead = true;

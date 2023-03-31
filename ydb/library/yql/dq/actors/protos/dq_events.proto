@@ -1,6 +1,7 @@
 package NYql.NDqProto;
 option cc_enable_arenas = true;
 
+import "google/protobuf/any.proto";
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
@@ -54,6 +55,16 @@ message TComputeActorStats {
     reserved 2; //optional NKqpProto.TKqpStatsRun LegacyStats = 2;
 };
 
+message TExtraInputData {
+    optional uint32 Index = 1;
+    optional google.protobuf.Any Data = 2;
+}
+
+message TComputeActorExtraData {
+    repeated TExtraInputData SourcesExtraData = 1;
+    repeated TExtraInputData InputTransformsData = 2;
+}
+
 message TEvComputeActorState {
     optional uint32 State = 1; // == EComputeState
     optional TComputeActorStats LegacyStats = 2;
@@ -62,6 +73,7 @@ message TEvComputeActorState {
     optional uint64 TaskId = 5;
     optional TDqComputeActorStats Stats = 6;
     optional NYql.NDqProto.StatusIds.StatusCode StatusCode = 7;
+    optional TComputeActorExtraData ExtraData = 8;
 };
 
 message TEvComputeStateRequest {

@@ -73,7 +73,7 @@ public:
 class TServiceOperator {
 private:
     friend class TExecutor;
-    bool EnabledFlag = false;
+    std::atomic<bool> EnabledFlag{ false };
     static void Register();
 public:
     static bool IsEnabled();

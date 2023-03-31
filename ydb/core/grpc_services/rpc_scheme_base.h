@@ -33,6 +33,7 @@ protected:
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest(new TEvTxUserProxy::TEvProposeTransaction());
         SetAuthToken(proposeRequest, *this->Request_);
         SetDatabase(proposeRequest.get(), *this->Request_);
+        SetPeerName(proposeRequest.get(), *this->Request_);
         SetRequestType(proposeRequest.get(), *this->Request_);
         return proposeRequest;
     }
@@ -101,6 +102,7 @@ protected:
                     }
                     case NKikimrScheme::EStatus::StatusSchemeError:
                     case NKikimrScheme::EStatus::StatusNameConflict:
+
                     case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
                         return this->ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
                     }

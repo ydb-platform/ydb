@@ -261,8 +261,6 @@ namespace NKikimr::NStorage {
             std::optional<TVDiskID> WhiteboardVDiskId;
             ui64 WhiteboardInstanceGuid;
 
-            bool SlayInFlight = false;
-
             NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
             std::optional<NKikimrBlobStorage::EVDiskStatus> ReportedVDiskStatus; // last reported to BSC
 
@@ -307,6 +305,7 @@ namespace NKikimr::NStorage {
         };
 
         std::map<TVSlotId, TVDiskRecord> LocalVDisks;
+        std::map<TVSlotId, ui64> SlayInFlight;
         TIntrusiveList<TVDiskRecord, TUnreportedMetricTag> VDisksWithUnreportedMetrics;
 
         void DestroyLocalVDisk(TVDiskRecord& vdisk);

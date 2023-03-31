@@ -122,7 +122,21 @@ namespace NActors {
         }
 
         ui32 GetThreads(ui32 poolId) const {
-            return Executors ? Executors[poolId]->GetThreads() : CpuManager.GetThreads(poolId);
+            auto result = GetThreadsOptional(poolId);
+            Y_VERIFY(result, "undefined pool id: %" PRIu32, (ui32)poolId);
+            return *result;
+        }
+
+        std::optional<ui32> GetThreadsOptional(const ui32 poolId) const {
+            if (Y_LIKELY(Executors)) {
+                if (Y_LIKELY(poolId < ExecutorsCount)) {
+                    return Executors[poolId]->GetDefaultThreadCount();
+                } else {
+                    return {};
+                }
+            } else {
+                return CpuManager.GetThreadsOptional(poolId);
+            }
         }
     };
 

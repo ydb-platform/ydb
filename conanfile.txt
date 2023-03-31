@@ -1,14 +1,12 @@
 [requires]
 bison/3.5.3
 c-ares/1.18.1
-libiconv/1.15
 openssl/1.1.1s
 ragel/6.10
 yasm/1.3.0
 zlib/1.2.12
 
 [options]
-libiconv:shared=True
 
 [imports]
 bin, *yasm* -> ./bin

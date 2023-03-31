@@ -214,16 +214,30 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     settings.MutableTable()->CopyFrom(streamLookup.GetTable());
 
     auto table = tableKeys.GetTable(MakeTableId(streamLookup.GetTable()));
+    for (const auto& keyColumn : table.KeyColumns) {
+        auto columnIt = table.Columns.find(keyColumn);
+        YQL_ENSURE(columnIt != table.Columns.end(), "Unknown column: " << keyColumn);
+
+        auto* keyColumnProto = settings.AddKeyColumns();
+        keyColumnProto->SetName(keyColumn);
+        keyColumnProto->SetId(columnIt->second.Id);
+        keyColumnProto->SetTypeId(columnIt->second.Type.GetTypeId());
+    }
+
     for (const auto& keyColumn : streamLookup.GetKeyColumns()) {
         auto columnIt = table.Columns.find(keyColumn);
         YQL_ENSURE(columnIt != table.Columns.end(), "Unknown column: " << keyColumn);
-        settings.AddKeyColumns(keyColumn);
+        settings.AddLookupKeyColumns(keyColumn);
     }
 
     for (const auto& column : streamLookup.GetColumns()) {
         auto columnIt = table.Columns.find(column);
         YQL_ENSURE(columnIt != table.Columns.end(), "Unknown column: " << column);
-        settings.AddColumns(column);
+
+        auto* columnProto = settings.AddColumns();
+        columnProto->SetName(column);
+        columnProto->SetId(columnIt->second.Id);
+        columnProto->SetTypeId(columnIt->second.Type.GetTypeId());
     }
 
     TTransform streamLookupTransform;
@@ -619,7 +633,7 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettin
     } else {
         bool usePoints = true;
         for (auto& range : Ranges) {
-            if (std::holds_alternative<TSerializedCellVec>(range)) {
+            if (std::holds_alternative<TSerializedTableRange>(range)) {
                 usePoints = false;
             }
         }

@@ -1396,7 +1396,9 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     }
 
     Y_UNIT_TEST(TestExecError) {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         ui16 grpc = server.GetPort();
 
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -2936,7 +2938,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         for (bool returnStats : {false, true}) {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             if (returnStats) {
-                execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+                execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
             }
             {
                 auto query = "UPSERT INTO `/Root/Foo` (Key, Value) VALUES (0, 'aa');";

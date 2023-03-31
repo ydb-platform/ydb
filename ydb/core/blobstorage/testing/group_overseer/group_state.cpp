@@ -59,13 +59,7 @@ namespace NKikimr::NTesting {
             isBlocked = Max(isBlocked, IsBlocked(tabletId, generation));
         }
 
-        const EConfidence isCollected = IsCollected(msg.Id,
-            blob.ConfirmedKeep ? EConfidence::CONFIRMED :
-                blob.NumKeepsInFlight ?  EConfidence::POSSIBLE :
-                EConfidence::SURELY_NOT,
-            blob.ConfirmedDoNotKeep ? EConfidence::CONFIRMED :
-                blob.NumDoNotKeepsInFlight ?  EConfidence::POSSIBLE :
-                EConfidence::SURELY_NOT);
+        const EConfidence isCollected = IsCollected(msg.Id, &blob);
 
         const bool inserted = blob.PutsInFlight.emplace(queryId, TBlobInfo::TQueryContext{
             .IsBlocked = isBlocked == EConfidence::CONFIRMED, // if true, we can't get OK answer
@@ -161,6 +155,10 @@ namespace NKikimr::NTesting {
                     .PerGenerationCounter = msg.PerGenerationCounter,
                     .CollectGeneration = msg.CollectGeneration,
                     .CollectStep = msg.CollectStep
+                },
+                .Flags{
+                    msg.DoNotKeep ? std::set<TLogoBlobID>(msg.DoNotKeep->begin(), msg.DoNotKeep->end()) : std::set<TLogoBlobID>{},
+                    msg.Keep ? std::set<TLogoBlobID>(msg.Keep->begin(), msg.Keep->end()) : std::set<TLogoBlobID>{}
                 }
             });
 
@@ -282,74 +280,54 @@ namespace NKikimr::NTesting {
         return it == Blocks.end() ? EConfidence::SURELY_NOT : it->second.IsBlocked(generation);
     }
 
-    TGroupState::EConfidence TGroupState::IsCollected(TLogoBlobID id, EConfidence keep, EConfidence doNotKeep) const {
-        EConfidence result = EConfidence::SURELY_NOT;
-
+    TGroupState::EConfidence TGroupState::IsCollected(TLogoBlobID id, const TBlobInfo *blob) const {
         const TBarrierId barrierId(id.TabletID(), id.Channel());
         if (const auto it = Barriers.find(barrierId); it != Barriers.end()) {
             const TBarrierInfo& barrier = it->second;
             const auto genstep = std::make_tuple(id.Generation(), id.Step());
 
-            EConfidence isCollectedBySoftBarrier;
-            switch (keep) {
-                case EConfidence::SURELY_NOT:
-                    isCollectedBySoftBarrier = EConfidence::CONFIRMED;
-                    break;
+            bool confirmedHard = (barrier.Confirmed[true] && genstep <= barrier.Confirmed[true]->GetCollectGenStep());
 
-                case EConfidence::POSSIBLE:
-                    switch (doNotKeep) {
-                        case EConfidence::SURELY_NOT:
-                        case EConfidence::POSSIBLE:
-                            isCollectedBySoftBarrier = EConfidence::POSSIBLE;
-                            break;
-
-                        case EConfidence::CONFIRMED:
-                            // this case should not occur
-                            isCollectedBySoftBarrier = EConfidence::SURELY_NOT;
-                            break;
-                    }
-                    break;
-
-                case EConfidence::CONFIRMED:
-                    switch (doNotKeep) {
-                        case EConfidence::SURELY_NOT:
-                            isCollectedBySoftBarrier = EConfidence::SURELY_NOT;
-                            break;
-
-                        case EConfidence::POSSIBLE:
-                        case EConfidence::CONFIRMED:
-                            isCollectedBySoftBarrier = EConfidence::POSSIBLE;
-                            break;
-                    }
-                    break;
-            }
-
-            auto getBarrierState = [&](const auto& confirmed, const auto& inflight) {
-                if (confirmed && genstep <= confirmed->GetCollectGenStep()) {
-                    return EConfidence::CONFIRMED;
-                }
+            bool inflightHard = false;
+            {
+                const auto& inflight = barrier.InFlight[true];
                 if (!inflight.empty()) {
                     const auto& most = *--inflight.end();
                     if (genstep <= most.Value.GetCollectGenStep()) {
-                        return EConfidence::POSSIBLE;
+                        inflightHard = true;
                     }
                 }
-                return EConfidence::SURELY_NOT;
-            };
+            }
 
-            result = Max(getBarrierState(barrier.Confirmed[true], barrier.InFlight[true]),
-                Min(isCollectedBySoftBarrier, getBarrierState(barrier.Confirmed[false], barrier.InFlight[false])));
+            bool confirmedSoft = (!blob || blob->ConfirmedDoNotKeep || !blob->ConfirmedKeep) &&
+                    (barrier.Confirmed[false] && genstep <= barrier.Confirmed[false]->GetCollectGenStep());
+
+            bool inflightSoft = false;
+            if (blob && !blob->ConfirmedDoNotKeep) {
+                const auto& inflight = barrier.InFlight[false];
+                auto it = inflight.begin();
+                for (; it != inflight.end() && genstep > it->Value.GetCollectGenStep(); ++it) {}
+
+                if (it != inflight.end()) {
+                    for (; it != inflight.end(); ++it) {
+                        if (!it->Flags[true].count(id) || it->Flags[false].count(id)) {
+                            // The blob can be collected after applying this barrier
+                            inflightSoft = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (confirmedHard || confirmedSoft) {
+                return EConfidence::CONFIRMED;
+            }
+            if (inflightHard || inflightSoft) {
+                return EConfidence::POSSIBLE;
+            }
+            return EConfidence::SURELY_NOT;
         }
-
-        return result;
-    }
-
-    TGroupState::EConfidence TGroupState::IsCollected(TLogoBlobID id, const TBlobInfo *blob) const {
-        const EConfidence keep = blob->ConfirmedKeep ? EConfidence::CONFIRMED :
-            blob->NumKeepsInFlight ? EConfidence::POSSIBLE : EConfidence::SURELY_NOT;
-        const EConfidence doNotKeep = blob->ConfirmedDoNotKeep ? EConfidence::CONFIRMED :
-            blob->NumDoNotKeepsInFlight ? EConfidence::POSSIBLE : EConfidence::SURELY_NOT;
-        return IsCollected(id, keep, doNotKeep);
+        return EConfidence::SURELY_NOT;
     }
 
     void TGroupState::ApplyBarrier(TBarrierId barrierId, std::optional<std::tuple<ui32, ui32>> prevGenStep,
@@ -398,7 +376,7 @@ namespace NKikimr::NTesting {
             blob = LookupBlob(id, false);
         }
         if (!blob) {
-            switch (IsCollected(id, EConfidence::SURELY_NOT, EConfidence::SURELY_NOT)) {
+            switch (IsCollected(id, nullptr)) {
                 case EConfidence::SURELY_NOT: return EBlobState::NOT_WRITTEN;
                 case EConfidence::POSSIBLE: return EBlobState::NOT_WRITTEN;
                 case EConfidence::CONFIRMED: return EBlobState::CERTAINLY_COLLECTED_OR_NEVER_WRITTEN;

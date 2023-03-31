@@ -21,7 +21,7 @@ public:
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
-        const TMaybe<NACLib::TUserToken>& userToken);
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
 
     TVector<TString> GetCollectedSchemeData();
 
@@ -37,15 +37,15 @@ private:
     template<typename TPath>
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadataCache(
         const TString& cluster, const TPath& id, NYql::IKikimrGateway::TLoadTableMetadataSettings settings, const TString& database,
-        const TMaybe<NACLib::TUserToken>& userToken);
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadIndexMetadataByPathId(
         const TString& cluster, const NKikimr::TIndexId& indexId, const TString& tableName, const TString& database,
-        const TMaybe<NACLib::TUserToken>& userToken);
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadIndexMetadata(
         NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult, const TString& database,
-        const TMaybe<NACLib::TUserToken>& userToken);
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
 
     void OnLoadedTableMetadata(NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult);
 

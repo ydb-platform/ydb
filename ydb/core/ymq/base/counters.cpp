@@ -970,6 +970,14 @@ void TCloudAuthCounters::IncCounter(const NCloudAuth::EActionType actionType, co
     ++*CloudAuthCounters[actionType][credentialType][grpcStatus];
 }
 
+void TCloudAuthCounters::IncAuthorizeCounter(const NCloudAuth::ECredentialType credentialType, bool error) {
+    if (error) {
+        ++*AuthorizeError[credentialType];
+    } else {
+        ++*AuthorizeSuccess[credentialType];
+    }
+}
+
 void TCloudAuthCounters::InitCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> cloudAuthCounters) {
     for (size_t actionType = 0; actionType < NCloudAuth::EActionType::ActionTypesCount; ++actionType) {
         const auto actionTypeStr = ToString(static_cast<NCloudAuth::EActionType>(actionType));
@@ -977,8 +985,14 @@ void TCloudAuthCounters::InitCounters(TIntrusivePtr<::NMonitoring::TDynamicCount
         for (size_t credentialType = 0; credentialType < NCloudAuth::ECredentialType::CredentialTypesCount; ++credentialType) {
             const auto credentialTypeStr = ToString(static_cast<NCloudAuth::ECredentialType>(credentialType));
             const auto actionAndCredentialCounters = actionCounters->GetSubgroup("credential_type", credentialTypeStr);
-            for (size_t grpcStatus = 0; grpcStatus < GRPC_STATUSES_COUNT; ++grpcStatus) {
-                INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, CloudAuthCounters[actionType][credentialType][grpcStatus], StringifyGrpcStatus(grpcStatus), ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
+            
+            if (actionType == NCloudAuth::EActionType::Authorize) {
+                INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, AuthorizeSuccess[credentialType], "Ok", ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
+                INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, AuthorizeError[credentialType], "PermissionDenied", ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
+            } else {
+                for (size_t grpcStatus = 0; grpcStatus < GRPC_STATUSES_COUNT; ++grpcStatus) {
+                    INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, CloudAuthCounters[actionType][credentialType][grpcStatus], StringifyGrpcStatus(grpcStatus), ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
+                }
             }
         }
     }

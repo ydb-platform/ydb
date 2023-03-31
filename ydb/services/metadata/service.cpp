@@ -9,16 +9,22 @@ NActors::TActorId MakeServiceId(const ui32 nodeId) {
 }
 
 void TServiceOperator::Register(const TConfig& config) {
-    Singleton<TServiceOperator>()->EnabledFlag = true;
-    Singleton<TServiceOperator>()->Path = config.GetPath();
+    auto* service = Singleton<TServiceOperator>();
+    std::unique_lock<std::shared_mutex> lock(service->Lock);
+    service->EnabledFlag = true;
+    service->Path = config.GetPath();
 }
 
 bool TServiceOperator::IsEnabled() {
-    return Singleton<TServiceOperator>()->EnabledFlag;
+    auto* service = Singleton<TServiceOperator>();
+    std::shared_lock<std::shared_mutex> lock(service->Lock);
+    return service->EnabledFlag;
 }
 
-const TString& TServiceOperator::GetPath() {
-    return Singleton<TServiceOperator>()->Path;
+TString TServiceOperator::GetPath() {
+    auto* service = Singleton<TServiceOperator>();
+    std::shared_lock<std::shared_mutex> lock(service->Lock);
+    return service->Path;
 }
 
 }

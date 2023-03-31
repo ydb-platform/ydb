@@ -14,8 +14,8 @@ namespace NKikimr {
 namespace NGRpcService {
 
 inline void SetAuthToken(NKikimrKqp::TEvQueryRequest& req, const IRequestCtxMtSafe& ctx) {
-    if (ctx.GetInternalToken()) {
-        req.SetUserToken(ctx.GetInternalToken());
+    if (ctx.GetSerializedToken()) {
+        req.SetUserToken(ctx.GetSerializedToken());
     }
 }
 

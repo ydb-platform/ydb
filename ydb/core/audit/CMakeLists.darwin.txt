@@ -18,8 +18,7 @@ target_link_libraries(ydb-core-audit PUBLIC
   library-cpp-resource
 )
 target_sources(ydb-core-audit PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/audit/audit_log_json_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/audit/audit_log_txt_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/audit/audit_log_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/audit/audit_log.cpp
 )
 

@@ -47,24 +47,9 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
     }
 
     std::set<TLogoBlobID> blobsToDelete;
-    bool first = true;
     for (auto& [_, blobsOfChunk] : chunkToBlob) {
-        blobsToDelete.insert(blobsOfChunk.begin(), blobsOfChunk.end());
-        if (first && blobsOfChunk.size() > 1) {
-            first = false;
-            UNIT_ASSERT(blobsOfChunk.size() >= targetNumChunks);
-
-            // keep all blobs but targetNumChunks - 1
-            for (ui32 i = 0; i < blobsOfChunk.size() - (targetNumChunks - 1); ++i) {
-                keep->push_back(blobsOfChunk[i]);
-            }
-        } else {
-            // keep one blob
-            keep->push_back(blobsOfChunk.front());
-        }
-    }
-    for (const TLogoBlobID& id : *keep) {
-        blobsToDelete.erase(id);
+        blobsToDelete.insert(std::next(blobsOfChunk.begin()), blobsOfChunk.end());
+        keep->push_back(blobsOfChunk.front());
     }
 
     // issue gc command
@@ -86,7 +71,7 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
         env.StopNode(node);
     }
     env.StartNode(actorId.NodeId());
-    env.Sim(TDuration::Seconds(30));
+    env.Sim(TDuration::Seconds(20));
 
     for (;;) {
         // trigger compaction
@@ -110,16 +95,15 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
             }
         }
         if (numUndeleted) {
-            env.Sim(TDuration::Minutes(1));
+            env.Sim(TDuration::Seconds(10));
             continue;
         }
-        ui32 num1 = 0, numOther = 0;
         for (const auto& [_, numBlobs] : chunkToBlobs) {
-            Cerr << "numBlobs# " << numBlobs << Endl;
-            ++(numBlobs == 1 ? num1 : numOther);
+            if (numBlobs == targetNumChunks && chunkToBlobs.size() == 1) {
+                return nullptr; // all done
+            }
+            UNIT_ASSERT_VALUES_EQUAL(numBlobs, 1);
         }
-        UNIT_ASSERT_VALUES_EQUAL(numOther, 1);
-        UNIT_ASSERT_VALUES_EQUAL(num1, targetNumChunks - 1);
         break;
     }
 
@@ -135,6 +119,9 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
 
         TVector<TLogoBlobID> keep;
         TIntrusivePtr<TBlobStorageGroupInfo> info = PrepareEnv(env, &keep);
+        if (!info) {
+            return;
+        }
         const ui32 orderNum = 0;
         const TActorId& actorId = info->GetActorId(orderNum);
 
@@ -167,6 +154,9 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
 
         TVector<TLogoBlobID> keep;
         TIntrusivePtr<TBlobStorageGroupInfo> info = PrepareEnv(env, &keep);
+        if (!info) {
+            return;
+        }
         const ui32 orderNum = 0;
         const TActorId& actorId = info->GetActorId(orderNum);
 

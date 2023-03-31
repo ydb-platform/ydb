@@ -61,6 +61,7 @@ static inline bool InternalErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode errorC
         case Ydb::PersQueue::ErrorCode::INITIALIZING:
         case Ydb::PersQueue::ErrorCode::OVERLOAD:
         case Ydb::PersQueue::ErrorCode::WRITE_ERROR_DISK_IS_FULL:
+        case Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED:
             return true;
         default:
             return false;

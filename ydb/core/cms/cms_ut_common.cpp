@@ -49,6 +49,7 @@ void TFakeNodeWhiteboardService::Handle(TEvConfigsDispatcher::TEvGetConfigReques
     resp->Config = std::make_shared<NKikimrConfig::TAppConfig>(appConfig);
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
+
 void TFakeNodeWhiteboardService::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev,
                                         const TActorContext &ctx)
 {
@@ -497,7 +498,7 @@ static void SetupServices(TTestActorRuntime &runtime,
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableBootstrapConfig()->CopyFrom(TFakeNodeWhiteboardService::BootstrapConfig);
     runtime.AddLocalService(MakeConfigsDispatcherID(runtime.GetNodeId(0)),
-                           TActorSetupCmd(CreateConfigsDispatcher(appConfig), TMailboxType::Simple, 0), 0);
+                            TActorSetupCmd(CreateConfigsDispatcher(appConfig, {}), TMailboxType::Simple, 0), 0);
 
     runtime.Initialize(app.Unwrap());
     auto dnsConfig = new TDynamicNameserviceConfig();

@@ -86,6 +86,10 @@ public:
     bool HadInconsistentReads() const { return InconsistentReads; }
     void SetInconsistentReads() { InconsistentReads = true; }
 
+    bool HasVolatileReadDependencies() const { return !VolatileReadDependencies.empty(); }
+    const absl::flat_hash_set<ui64>& GetVolatileReadDependencies() const { return VolatileReadDependencies; }
+    void AddVolatileReadDependency(ui64 txId) { VolatileReadDependencies.insert(txId); }
+
 private:
     void TouchTableRange(const TTableId& tableId, const TTableRange& range) const;
     void TouchTablePoint(const TTableId& tableId, const TArrayRef<const TCell>& key) const;
@@ -117,6 +121,7 @@ private:
     bool InconsistentReads = false;
     TRowVersion ReadVersion = TRowVersion::Min();
     THashMap<std::pair<ui64, ui64>, TActorId> OutputChannels;
+    absl::flat_hash_set<ui64> VolatileReadDependencies;
 };
 
 class TKqpDatashardApplyContext : public NUdf::IApplyContext {

@@ -462,7 +462,9 @@ namespace NMem {
 
         void CommitTx(ui64 txId, TRowVersion rowVersion) {
             auto it = Committed.find(txId);
-            if (it == Committed.end() || it->second > rowVersion) {
+            bool toInsert = (it == Committed.end());
+
+            if (toInsert || it->second > rowVersion) {
                 if (RollbackState) {
                     if (it != Committed.end()) {
                         UndoBuffer.push_back(TUndoOpUpdateCommitted{ txId, it->second });
@@ -471,7 +473,7 @@ namespace NMem {
                     }
                 }
                 Committed[txId] = rowVersion;
-                if (it == Committed.end()) {
+                if (toInsert) {
                     auto itRemoved = Removed.find(txId);
                     if (itRemoved != Removed.end()) {
                         if (RollbackState) {

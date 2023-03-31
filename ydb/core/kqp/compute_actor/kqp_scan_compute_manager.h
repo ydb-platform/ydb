@@ -59,6 +59,13 @@ public:
         return NeedAckStates;
     }
 
+    void ClearAckState(TShardState::TPtr state) {
+        auto it = NeedAckStates.find(state->ScannerIdx);
+        if (it != NeedAckStates.end()) {
+            NeedAckStates.erase(it);
+        }
+    }
+
     void AckSent(TShardState::TPtr state) {
         Y_VERIFY(StatesByIndex.contains(state->ScannerIdx));
         NeedAckStates.erase(state->ScannerIdx);

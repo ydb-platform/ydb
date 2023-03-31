@@ -53,12 +53,12 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(limit);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(200ul << 20);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(20ul << 30);
+    appCfg.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
 
     // TODO: KIKIMR-14294
     auto kikimrSettings = TKikimrSettings()
         .SetAppConfig(appCfg)
-        .SetKqpSettings({})
-        .SetEnableKqpScanQueryStreamLookup(false);
+        .SetKqpSettings({});
 
     TKikimrRunner kikimr{kikimrSettings};
     // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);

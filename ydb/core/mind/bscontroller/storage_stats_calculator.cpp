@@ -34,7 +34,7 @@ public:
         const TBlobStorageController::THostRecordMap& hostRecordMap,
         ui32 groupReserveMin,
         ui32 groupReservePart)
-        : TActorCoroImpl(/* stackSize */ 64 * 1024, /* allowUnhandledPoisonPill */ true, /* allowUnhandledDtor */ true)
+        : TActorCoroImpl(/* stackSize */ 640 * 1024, /* allowUnhandledPoisonPill */ true, /* allowUnhandledDtor */ true) // 640 KiB should be enough for anything!
         , SystemViewsState(systemViewsState)
         , HostRecordMap(hostRecordMap)
         , GroupReserveMin(groupReserveMin)

@@ -634,7 +634,7 @@ bool TCheckSchemeTxUnit::CheckFinalizeBuildIndex(TActiveTransaction *activeTx) {
     }
 
     const auto pathId = GetPathId(finalize);
-    const auto snapshotKey = TSnapshotKey(pathId.OwnerId, pathId.LocalPathId, finalize.GetSnapshotStep(), finalize.GetSnapshotTxId());
+    const auto snapshotKey = TSnapshotKey(pathId, finalize.GetSnapshotStep(), finalize.GetSnapshotTxId());
 
     if (DataShard.GetSnapshotManager().FindAvailable(snapshotKey) == nullptr) {
         LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,

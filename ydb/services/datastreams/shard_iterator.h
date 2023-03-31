@@ -8,6 +8,7 @@
 namespace NKikimr::NDataStreams::V1 {
 
 class TShardIterator {
+
 using TPartitionOffset =
     std::invoke_result_t<decltype(&NKikimrClient::TCmdReadResult_TResult::GetOffset),
                          NKikimrClient::TCmdReadResult_TResult>;
@@ -25,7 +26,7 @@ using TYdsTimestamp =
                          NKikimrPQ::TYdsShardIterator>;
 static_assert(std::is_same<TCreationTimestamp, TYdsTimestamp>::value,
               "Types of partition message creation timestamp and yds record timestamp should match");
-                  
+
 public:
 static constexpr ui64 LIFETIME_MS = TDuration::Minutes(5).MilliSeconds();
 

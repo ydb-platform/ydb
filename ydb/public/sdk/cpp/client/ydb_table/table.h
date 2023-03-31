@@ -205,11 +205,15 @@ public:
     TChangefeedDescription& WithVirtualTimestamps();
     // Customise retention period of underlying topic (24h by default).
     TChangefeedDescription& WithRetentionPeriod(const TDuration& value);
+    // Initial scan will output the current state of the table first
+    TChangefeedDescription& WithInitialScan();
 
     const TString& GetName() const;
     EChangefeedMode GetMode() const;
     EChangefeedFormat GetFormat() const;
+    EChangefeedState GetState() const;
     bool GetVirtualTimestamps() const;
+    bool GetInitialScan() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
     TString ToString() const;
@@ -226,8 +230,10 @@ private:
     TString Name_;
     EChangefeedMode Mode_;
     EChangefeedFormat Format_;
+    EChangefeedState State_ = EChangefeedState::Unknown;
     bool VirtualTimestamps_ = false;
     std::optional<TDuration> RetentionPeriod_;
+    bool InitialScan_ = false;
 };
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);

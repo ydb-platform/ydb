@@ -148,6 +148,10 @@ public:
 
     ~TPatternNodes()
     {
+        for (auto it = ComputationNodesList.rbegin(); it != ComputationNodesList.rend(); ++it) {
+            *it = nullptr;
+        }
+
         ComputationNodesList.clear();
         if (!UncaughtException()) {
 #ifndef NDEBUG
@@ -454,7 +458,11 @@ private:
             name == "KqpWideReadTable" ||
             name == "KqpWideReadTableRanges" ||
             name == "KqpLookupTable" ||
-            name == "KqpReadTable"
+            name == "KqpReadTable" ||
+            name == "RangeMultiply" ||
+            name == "RangeUnion" ||
+            name == "RangeIntersect" ||
+            name == "RangeFinalize"
         ) {
             PatternNodes->SuitableForCache = false;
         }

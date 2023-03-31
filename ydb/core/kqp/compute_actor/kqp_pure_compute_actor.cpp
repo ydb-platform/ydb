@@ -192,11 +192,6 @@ public:
                 tableStats->MutableExtra()->PackFrom(tableExtraStats);
             }
         }
-
-        if (last && dst->TasksSize() > 0) {
-            YQL_ENSURE(dst->TasksSize() == 1);
-            NComputeActor::FillTaskInputStats(GetTask(), *dst->MutableTasks(0));
-        }
     }
 
 private:

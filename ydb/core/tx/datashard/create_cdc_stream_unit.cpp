@@ -31,11 +31,10 @@ public:
 
         const auto& params = schemeTx.GetCreateCdcStreamNotice();
         const auto& streamDesc = params.GetStreamDescription();
+        const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
 
         const auto pathId = PathIdFromPathId(params.GetPathId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
-
-        const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
 
         const auto version = params.GetTableSchemaVersion();
         Y_VERIFY(version);
@@ -52,8 +51,11 @@ public:
             Y_VERIFY(tx->GetStep() != 0);
 
             DataShard.GetSnapshotManager().AddSnapshot(txc.DB,
-                TSnapshotKey(pathId.OwnerId, pathId.LocalPathId, tx->GetStep(), tx->GetTxId()),
+                TSnapshotKey(pathId, tx->GetStep(), tx->GetTxId()),
                 params.GetSnapshotName(), TSnapshot::FlagScheme, TDuration::Zero());
+
+            DataShard.GetCdcStreamScanManager().Add(txc.DB,
+                pathId, streamPathId, TRowVersion(tx->GetStep(), tx->GetTxId()));
         }
 
         AddSender.Reset(new TEvChangeExchange::TEvAddSender(

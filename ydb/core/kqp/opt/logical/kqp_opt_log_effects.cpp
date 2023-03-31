@@ -15,14 +15,14 @@ TExprBase KqpDeleteOverLookup(const TExprBase& node, TExprContext& ctx, const TK
 
     auto deleteRows = node.Cast<TKqlDeleteRows>();
 
-    TMaybeNode<TKqlLookupTable> lookup;
+    TMaybeNode<TKqlLookupTableBase> lookup;
     TMaybeNode<TCoSkipNullMembers> skipNulMembers;
 
-    if (deleteRows.Input().Maybe<TKqlLookupTable>()) {
-        lookup = deleteRows.Input().Cast<TKqlLookupTable>();
-    } else if (deleteRows.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlLookupTable>()) {
+    if (deleteRows.Input().Maybe<TKqlLookupTableBase>()) {
+        lookup = deleteRows.Input().Cast<TKqlLookupTableBase>();
+    } else if (deleteRows.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlLookupTableBase>()) {
         skipNulMembers = deleteRows.Input().Cast<TCoSkipNullMembers>();
-        lookup = skipNulMembers.Input().Cast<TKqlLookupTable>();
+        lookup = skipNulMembers.Input().Cast<TKqlLookupTableBase>();
     } else {
         return node;
     }

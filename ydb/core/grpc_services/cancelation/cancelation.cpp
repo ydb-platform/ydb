@@ -13,16 +13,15 @@ void PassSubscription(const TEvSubscribeGrpcCancel* ev, IRequestCtxMtSafe* reque
     NActors::TActorSystem* as)
 {
     auto subscriber = ActorIdFromProto(ev->Record.GetSubscriber());
-    auto tag = ev->Record.GetWakeupTag();
-    requestCtx->SetClientLostAction([subscriber, tag, as]() {
-        as->Send(subscriber, new TEvents::TEvWakeup(tag));
+    requestCtx->SetClientLostAction([subscriber, as]() {
+        as->Send(subscriber, new TEvClientLost);
     });
 }
 
 void SubscribeRemoteCancel(const NActors::TActorId& service, const NActors::TActorId& subscriber,
-    ui64 wakeupTag, NActors::TActorSystem* as)
+    NActors::TActorSystem* as)
 {
-    as->Send(service, new TEvSubscribeGrpcCancel(subscriber, wakeupTag));
+    as->Send(service, new TEvSubscribeGrpcCancel(subscriber));
 }
 
 }

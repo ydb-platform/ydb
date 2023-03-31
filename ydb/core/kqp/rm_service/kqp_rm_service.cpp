@@ -91,6 +91,8 @@ struct TTxState {
     ui64 TxExternalDataQueryMemory = 0;
     ui32 TxExecutionUnits = 0;
     TInstant CreatedAt;
+
+    bool IsDataQuery = false;
 };
 
 struct TTxStatesBucket {
@@ -205,6 +207,10 @@ public:
     bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
         TKqpNotEnoughResources* details) override
     {
+        if (resources.MemoryPool == EKqpMemoryPool::DataQuery) {
+            NotifyExternalResourcesAllocated(txId, taskId, resources);
+            return true;
+        }
         Y_VERIFY(resources.MemoryPool == EKqpMemoryPool::ScanQuery);
         if (Y_UNLIKELY(resources.Memory == 0 && resources.ExecutionUnits == 0)) {
             return true;
@@ -350,10 +356,18 @@ public:
 
         auto& txBucket = TxBucket(txId);
 
-        with_lock (txBucket.Lock) {
+        {
+            TMaybe<TGuard<TMutex>> guard;
+            guard.ConstructInPlace(txBucket.Lock);
+
             auto txIt = txBucket.Txs.find(txId);
             if (txIt == txBucket.Txs.end()) {
                 return;
+            }
+
+            if (txIt->second.IsDataQuery) {
+                guard.Clear();
+                return NotifyExternalResourcesFreed(txId, taskId);
             }
 
             auto taskIt = txIt->second.Tasks.find(taskId);
@@ -403,10 +417,17 @@ public:
 
         auto& txBucket = TxBucket(txId);
 
-        with_lock (txBucket.Lock) {
+        {
+            TMaybe<TGuard<TMutex>> guard;
+            guard.ConstructInPlace(txBucket.Lock);
+
             auto txIt = txBucket.Txs.find(txId);
             if (txIt == txBucket.Txs.end()) {
                 return;
+            }
+            if (txIt->second.IsDataQuery) {
+                guard.Clear();
+                return NotifyExternalResourcesFreed(txId);
             }
 
             for (auto& [taskId, taskState] : txIt->second.Tasks) {
@@ -442,12 +463,14 @@ public:
     void NotifyExternalResourcesAllocated(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
         LOG_D("TxId: " << txId << ", taskId: " << taskId << ". External allocation: " << resources.ToString());
 
-        YQL_ENSURE(resources.ExecutionUnits == 0);
+        // we don't register data execution units for now
+        //YQL_ENSURE(resources.ExecutionUnits == 0);
         YQL_ENSURE(resources.MemoryPool == EKqpMemoryPool::DataQuery);
 
         auto& txBucket = TxBucket(txId);
         with_lock (txBucket.Lock) {
             auto& tx = txBucket.Txs[txId];
+            tx.IsDataQuery = true;
             auto& task = tx.Tasks[taskId];
 
             task.ExternalDataQueryMemory = resources.Memory;
@@ -488,6 +511,35 @@ public:
                 txIt->second.Tasks.erase(taskIt);
                 txIt->second.TxExternalDataQueryMemory -= releaseMemory;
             }
+        } // with_lock (txBucket.Lock)
+
+        with_lock (Lock) {
+            Y_VERIFY_DEBUG(ExternalDataQueryMemory >= releaseMemory);
+            ExternalDataQueryMemory -= releaseMemory;
+        } // with_lock (Lock)
+
+        Counters->RmExternalMemory->Sub(releaseMemory);
+        Y_VERIFY_DEBUG(Counters->RmExternalMemory->Val() >= 0);
+
+        FireResourcesPublishing();
+    }
+
+    void NotifyExternalResourcesFreed(ui64 txId) {
+        LOG_D("TxId: " << txId << ". External free.");
+
+        ui64 releaseMemory = 0;
+
+        auto& txBucket = TxBucket(txId);
+        with_lock (txBucket.Lock) {
+            auto txIt = txBucket.Txs.find(txId);
+            if (txIt == txBucket.Txs.end()) {
+                return;
+            }
+
+            for (auto task : txIt->second.Tasks) {
+                releaseMemory += task.second.ExternalDataQueryMemory;
+            }
+            txBucket.Txs.erase(txId);
         } // with_lock (txBucket.Lock)
 
         with_lock (Lock) {

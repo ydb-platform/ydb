@@ -8,7 +8,30 @@ namespace NKikimr::NKqp::NOpt {
 using namespace NYql;
 using namespace NYql::NNodes;
 
-TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+THashSet<const TExprNode*> CollectConnections(TDqStage stage, TExprBase node) {
+    THashSet<const TExprNode*> args;
+    for (auto&& arg : stage.Program().Args()) {
+        args.insert(arg.Raw());
+    }
+
+    THashSet<const TExprNode*> result;
+    TNodeOnNodeOwnedMap replaceMap;
+    VisitExpr(node.Ptr(), 
+        [&](const TExprNode::TPtr& exprPtr) -> bool {
+            TExprBase expr(exprPtr);
+            if (expr.Maybe<TDqConnection>()) {
+                return false;
+            }
+            if (args.contains(exprPtr.Get())) {
+                result.insert(exprPtr.Get());
+            }
+            return true;
+        });
+    return result;
+}
+
+//FIXME: simplify KIKIMR-16987
+TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
     auto stage = node.Cast<TDqStage>();
     TMaybe<size_t> tableSourceIndex;
     for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
@@ -25,19 +48,10 @@ TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, cons
     auto readRangesSource = source.Settings().Cast<TKqpReadRangesSourceSettings>();
     auto settings = TKqpReadTableSettings::Parse(readRangesSource.Settings());
 
-    if (kqpCtx.IsScanQuery()) {
-        auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readRangesSource.Table().Path());
-
-        if (tableDesc.Metadata->Kind != EKikimrTableKind::Olap) {
-            return node;
-        }
-    }
-
     if (settings.ItemsLimit) {
         return node; // already set?
     }
 
-    NYql::TNodeOnNodeOwnedMap replaces;
     auto sourceArg = stage.Program().Args().Arg(*tableSourceIndex);
     TExprNode::TPtr foundTake;
     bool singleConsumer = true;
@@ -100,15 +114,57 @@ TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, cons
     if (limitValue.Maybe<TCoUint64>()) {
         settings.SetItemsLimit(limitValue.Cast().Ptr());
     } else {
+        if (auto args = CollectConnections(stage, limitValue.Cast())) {
+            TVector<TCoArgument> stageArgs;
+            TVector<TExprBase> inputs;
+            TNodeOnNodeOwnedMap replaces;
+
+            size_t index = 0;
+            for (auto&& arg : stage.Program().Args()) {
+                if (args.contains(arg.Raw())) {
+                    TCoArgument replace{ctx.NewArgument(node.Pos(), TStringBuilder() << "_kqp_pc_arg_" << index)};
+                    inputs.push_back(stage.Inputs().Item(index));
+                    stageArgs.push_back(replace);
+                    replaces[arg.Raw()] = replace.Ptr();
+                }
+                index += 1;
+            }
+
+            limitValue = Build<TDqCnValue>(ctx, node.Pos())
+                    .Output()
+                        .Stage<TDqStage>()
+                            .Settings().Build()
+                            .Inputs().Add(inputs).Build()
+                            .Program<TCoLambda>()
+                                .Args(stageArgs)
+                                .Body<TCoToStream>()
+                                    .Input<TCoJust>()
+                                        .Input(ctx.ReplaceNodes(limitValue.Cast().Ptr(), replaces))
+                                        .Build()
+                                    .Build()
+                                .Build()
+                            .Build()
+                        .Index().Build("0")
+                        .Build()
+                    .Done();
+        }
+
         settings.SetItemsLimit(Build<TDqPrecompute>(ctx, node.Pos())
             .Input(limitValue.Cast())
             .Done().Ptr());
     }
-    replaces[readRangesSource.Settings().Raw()] = settings.BuildNode(ctx, source.Pos()).Ptr();
-    
-    return TExprBase(ctx.ReplaceNodes(node.Ptr(), replaces));
-}
 
+    auto newSettings = Build<TKqpReadRangesSourceSettings>(ctx, source.Pos())
+        .Table(readRangesSource.Table())
+        .Columns(readRangesSource.Columns())
+        .Settings(settings.BuildNode(ctx, source.Pos()))
+        .RangesExpr(readRangesSource.RangesExpr())
+        .ExplainPrompt(readRangesSource.ExplainPrompt())
+        .Done();
+
+    return ReplaceTableSourceSettings(stage, *tableSourceIndex, newSettings, ctx);
+}                             
+                              
 
 TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoTake>()) {
@@ -120,7 +176,7 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
     auto input = maybeSkip ? maybeSkip.Cast().Input() : take.Input();
 
     bool isReadTable = input.Maybe<TKqpReadTable>().IsValid();
-    bool isReadTableRanges = input.Maybe<TKqlReadTableRangesBase>().IsValid();
+    bool isReadTableRanges = input.Maybe<TKqpReadTableRanges>().IsValid() || input.Maybe<TKqpReadOlapTableRanges>().IsValid() ;
 
     if (!isReadTable && !isReadTableRanges) {
         return node;

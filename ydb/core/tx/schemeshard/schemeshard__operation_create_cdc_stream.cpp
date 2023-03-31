@@ -291,7 +291,7 @@ protected:
             Y_VERIFY(stream->AlterData);
             context.SS->DescribeCdcStream(childPathId, childName, stream->AlterData, *notice.MutableStreamDescription());
 
-            if (stream->AlterData->State == NKikimrSchemeOp::ECdcStreamStateScan) {
+            if (stream->AlterData->State == TCdcStreamInfo::EState::ECdcStreamStateScan) {
                 notice.SetSnapshotName("ChangefeedInitialScan");
             }
         }
@@ -307,7 +307,9 @@ public:
     using NCdcStreamState::TProposeAtTable::TProposeAtTable;
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-        NCdcStreamState::TProposeAtTable::HandleReply(ev, context);
+        if (!NCdcStreamState::TProposeAtTable::HandleReply(ev, context)) {
+            return false;
+        }
 
         const auto step = TStepId(ev->Get()->StepId);
         NIceDb::TNiceDb db(context.GetDB());
@@ -319,6 +321,55 @@ public:
     }
 
 }; // TProposeAtTableWithInitialScan
+
+class TDoneWithInitialScan: public TDone {
+public:
+    using TDone::TDone;
+
+    bool ProgressState(TOperationContext& context) override {
+        if (!TDone::ProgressState(context)) {
+            return false;
+        }
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        Y_VERIFY(txState->TxType == TTxState::TxCreateCdcStreamAtTableWithInitialScan);
+        const auto& pathId = txState->TargetPathId;
+
+        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        auto path = context.SS->PathsById.at(pathId);
+
+        TMaybe<TPathId> streamPathId;
+        for (const auto& [_, childPathId] : path->GetChildren()) {
+            Y_VERIFY(context.SS->PathsById.contains(childPathId));
+            auto childPath = context.SS->PathsById.at(childPathId);
+
+            if (childPath->CreateTxId != OperationId.GetTxId()) {
+                continue;
+            }
+
+            Y_VERIFY(childPath->IsCdcStream() && !childPath->Dropped());
+            Y_VERIFY(context.SS->CdcStreams.contains(childPathId));
+            auto stream = context.SS->CdcStreams.at(childPathId);
+
+            Y_VERIFY(stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan);
+            Y_VERIFY_S(!streamPathId, "Too many cdc streams are planned to fill with initial scan"
+                << ": found# " << *streamPathId
+                << ", another# " << childPathId);
+            streamPathId = childPathId;
+        }
+
+        if (AppData()->DisableCdcAutoSwitchingToReadyStateForTests) {
+            return true;
+        }
+
+        Y_VERIFY(streamPathId);
+        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunCdcStreamScan(*streamPathId));
+
+        return true;
+    }
+
+}; // TDoneWithInitialScan
 
 class TNewCdcStreamAtTable: public TSubOperation {
     static TTxState::ETxState NextState() {
@@ -353,7 +404,11 @@ class TNewCdcStreamAtTable: public TSubOperation {
         case TTxState::ProposedWaitParts:
             return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            if (InitialScan) {
+                return MakeHolder<TDoneWithInitialScan>(OperationId);
+            } else {
+                return MakeHolder<TDone>(OperationId);
+            }
         default:
             return nullptr;
         }

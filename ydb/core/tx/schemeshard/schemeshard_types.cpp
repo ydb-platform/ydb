@@ -1,9 +1,8 @@
 #include "schemeshard_types.h"
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
-TSchemeLimits::TSchemeLimits(const NKikimrScheme::TSchemeLimits &proto) {
+TSchemeLimits::TSchemeLimits(const NKikimrScheme::TSchemeLimits& proto) {
     if (proto.HasMaxDepth()) {
         MaxDepth = proto.GetMaxDepth();
     }
@@ -76,5 +75,4 @@ NKikimrScheme::TSchemeLimits TSchemeLimits::AsProto() const {
     return result;
 }
 
-}
 }

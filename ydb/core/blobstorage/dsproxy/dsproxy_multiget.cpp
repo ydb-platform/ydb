@@ -97,7 +97,7 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_MULTIGET, false, latencyQueueKind, now, storagePoolCounters, 0,
-                "DSProxy.MultiGet")
+                "DSProxy.MultiGet", std::move(ev->ExecutionRelay))
         , QuerySize(ev->QuerySize)
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)

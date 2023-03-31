@@ -128,6 +128,7 @@ public:
     virtual TRowVersion GetWriteVersion(const TTableId& tableId) const = 0;
     virtual TRowVersion GetReadVersion(const TTableId& tableId) const = 0;
 
+
     virtual IChangeCollector* GetChangeCollector(const TTableId& tableId) const = 0;
 
     // Non-zero WriteTxId will force engine to work using a given persistent tx
@@ -135,6 +136,12 @@ public:
 
     // Commits a given persistent tx
     virtual void CommitWriteTxId(const TTableId& tableId, ui64 writeTxId);
+
+    // Used to check if the engine reads before writing to keys
+    virtual bool NeedToReadBeforeWrite(const TTableId& tableId) const {
+        Y_UNUSED(tableId);
+        return false;
+    }
 
     // Used to control reads in the presense of uncommitted transactions
     virtual NTable::ITransactionMapPtr GetReadTxMap(const TTableId& tableId) const = 0;

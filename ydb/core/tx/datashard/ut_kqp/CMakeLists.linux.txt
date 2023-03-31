@@ -46,6 +46,7 @@ target_link_options(ydb-core-tx-datashard-ut_kqp PRIVATE
 target_sources(ydb-core-tx-datashard-ut_kqp PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_kqp.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_kqp_stream_lookup.cpp
 )
 add_test(
   NAME

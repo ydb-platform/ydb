@@ -7,8 +7,31 @@
 namespace NKikimr {
 namespace NGRpcService {
 
+TGRpcYdbTableService::TGRpcYdbTableService(NActors::TActorSystem *system,
+                                           TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                                           const NActors::TActorId& proxyId,
+                                           bool rlAllowed,
+                                           size_t handlersPerCompletionQueue)
+    : TGrpcServiceBase(system, counters, proxyId, rlAllowed)
+    , HandlersPerCompletionQueue(Max(size_t{1}, handlersPerCompletionQueue))
+{
+}
+
+TGRpcYdbTableService::TGRpcYdbTableService(NActors::TActorSystem *system,
+                                           TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                                           const TVector<NActors::TActorId>& proxies,
+                                           bool rlAllowed,
+                                           size_t handlersPerCompletionQueue)
+    : TGrpcServiceBase(system, counters, proxies, rlAllowed)
+    , HandlersPerCompletionQueue(Max(size_t{1}, handlersPerCompletionQueue))
+{
+}
+
 void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+
+    size_t proxyCounter = 0;
+
 #ifdef ADD_REQUEST_LIMIT
 #error ADD_REQUEST_LIMIT macro already defined
 #endif
@@ -17,27 +40,37 @@ void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #error ADD_STREAM_REQUEST_LIMIT macro already defined
 #endif
 
-#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE) \
-    MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response, TGRpcYdbTableService>>    \
-        (this, &Service_, CQ_,                                                                                  \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                           \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
-                    new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>        \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr}));      \
-            }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                    \
-            #NAME, logger, getCounterBlock("table", #NAME))->Run();
+#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE)                                                                       \
+    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                         \
+        for (auto* cq: CQS) {                                                                                         \
+            MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response, TGRpcYdbTableService>>  \
+                (this, &Service_, cq,                                                                                 \
+                    [this, proxyCounter](NGrpc::IRequestContextBase *ctx) {                                           \
+                        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
+                        ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                           \
+                            new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>      \
+                                (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr}));    \
+                    }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                  \
+                    #NAME, logger, getCounterBlock("table", #NAME))->Run();                                           \
+            ++proxyCounter;                                                                                           \
+        }                                                                                                             \
+    }
 
 #define ADD_STREAM_REQUEST_LIMIT(NAME, IN, OUT, CB, LIMIT_TYPE) \
-    MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>                          \
-        (this, &Service_, CQ_,                                                                                  \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                           \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
-                    new TGrpcRequestNoOperationCall<Ydb::Table::IN, Ydb::Table::OUT>                            \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr}));      \
-            }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                    \
-            #NAME, logger, getCounterBlock("table", #NAME))->Run();
+    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                         \
+        for (auto* cq: CQS) {                                                                                         \
+            MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>                        \
+                (this, &Service_, cq,                                                                                 \
+                    [this, proxyCounter](NGrpc::IRequestContextBase *ctx) {                                           \
+                        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
+                        ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                           \
+                            new TGrpcRequestNoOperationCall<Ydb::Table::IN, Ydb::Table::OUT>                          \
+                                (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr}));    \
+                    }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                  \
+                    #NAME, logger, getCounterBlock("table", #NAME))->Run();                                           \
+            ++proxyCounter;                                                                                           \
+        }                                                                                                             \
+    }
 
     ADD_REQUEST_LIMIT(CreateSession, DoCreateSessionRequest, Rps)
     ADD_REQUEST_LIMIT(KeepAlive, DoKeepAliveRequest, Rps)

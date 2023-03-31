@@ -22,7 +22,7 @@ namespace {
         }
     };
 
-    SIMPLE_UDF(TFromString, TOptionalString(TAutoMapString)) {
+    SIMPLE_STRICT_UDF(TFromString, TOptionalString(TAutoMapString)) {
         try {
             TString input(args[0].AsStringRef());
             const TIp4Or6& ip = Ip4Or6FromString(input.c_str());
@@ -48,7 +48,7 @@ namespace {
         }
     }
 
-    SIMPLE_UDF(TIsIPv4, bool(TOptionalString)) {
+    SIMPLE_STRICT_UDF(TIsIPv4, bool(TOptionalString)) {
         Y_UNUSED(valueBuilder);
         bool result = false;
         if (args[0]) {
@@ -58,7 +58,7 @@ namespace {
         return TUnboxedValuePod(result);
     }
 
-    SIMPLE_UDF(TIsIPv6, bool(TOptionalString)) {
+    SIMPLE_STRICT_UDF(TIsIPv6, bool(TOptionalString)) {
         Y_UNUSED(valueBuilder);
         bool result = false;
         if (args[0]) {
@@ -68,7 +68,7 @@ namespace {
         return TUnboxedValuePod(result);
     }
 
-    SIMPLE_UDF(TIsEmbeddedIPv4, bool(TOptionalString)) {
+    SIMPLE_STRICT_UDF(TIsEmbeddedIPv4, bool(TOptionalString)) {
         Y_UNUSED(valueBuilder);
         bool result = false;
         if (args[0]) {

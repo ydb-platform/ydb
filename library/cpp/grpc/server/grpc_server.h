@@ -54,7 +54,14 @@ struct TServerOptions {
     //! Number of worker threads.
     DECLARE_FIELD(WorkerThreads, size_t, 2);
 
-    //! Create one completion queue per thread
+    //! Number of workers per completion queue, i.e. when
+    // WorkerThreads=8 and PriorityWorkersPerCompletionQueue=2
+    // there will be 4 completion queues. When set to 0 then
+    // only UseCompletionQueuePerThread affects number of CQ.
+    DECLARE_FIELD(WorkersPerCompletionQueue, size_t, 0);
+
+    //! Obsolete. Create one completion queue per thread.
+    // Setting true equals to the WorkersPerCompletionQueue=1
     DECLARE_FIELD(UseCompletionQueuePerThread, bool, false);
 
     //! Memory quota size for grpc server in bytes. Zero means unlimited.
@@ -122,6 +129,15 @@ class ICancelableContext {
 public:
     virtual void Shutdown() = 0;
     virtual ~ICancelableContext() = default;
+
+private:
+    template<class T>
+    friend class TGrpcServiceBase;
+
+    // Shard assigned by RegisterRequestCtx. This field is not thread-safe
+    // because RegisterRequestCtx may only be called once for a single service,
+    // so it's only assigned once.
+    size_t ShardIndex = size_t(-1);
 };
 
 template <class TLimit>
@@ -166,7 +182,17 @@ class IGRpcService: public TThrRefBase {
 public:
     virtual grpc::Service* GetService() = 0;
     virtual void StopService() noexcept = 0;
+
     virtual void InitService(grpc::ServerCompletionQueue* cq, TLoggerPtr logger) = 0;
+
+    virtual void InitService(
+        const std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& cqs,
+        TLoggerPtr logger,
+        size_t index)
+    {
+        InitService(cqs[index % cqs.size()].get(), logger);
+    }
+
     virtual void SetGlobalLimiterHandle(TGlobalLimiter* limiter) = 0;
     virtual bool IsUnsafeToShutdown() const = 0;
     virtual size_t RequestsInProgress() const = 0;
@@ -236,13 +262,15 @@ public:
     using TCurrentGRpcService = T;
 
     void StopService() noexcept override {
-        with_lock(Lock_) {
-            AtomicSet(ShuttingDown_, 1);
+        AtomicSet(ShuttingDown_, 1);
 
-            // Send TryCansel to event (can be send after finishing).
-            // Actual dtors will be called from grpc thread, so deadlock impossible
-            for (auto* request : Requests_) {
-                request->Shutdown();
+        for (auto& shard : Shards_) {
+            with_lock(shard.Lock_) {
+                // Send TryCansel to event (can be send after finishing).
+                // Actual dtors will be called from grpc thread, so deadlock impossible
+                for (auto* request : shard.Requests_) {
+                    request->Shutdown();
+                }
             }
         }
     }
@@ -263,8 +291,10 @@ public:
 
     size_t RequestsInProgress() const override {
         size_t c = 0;
-        with_lock(Lock_) {
-            c = Requests_.size();
+        for (auto& shard : Shards_) {
+            with_lock(shard.Lock_) {
+                c += shard.Requests_.size();
+            }
         }
         return c;
     }
@@ -290,23 +320,29 @@ public:
     }
 
     bool RegisterRequestCtx(ICancelableContext* req) {
-        with_lock(Lock_) {
-            auto r = Requests_.emplace(req);
-            Y_VERIFY(r.second, "Ctx already registered");
+        if (Y_LIKELY(req->ShardIndex == size_t(-1))) {
+            req->ShardIndex = NextShard_.fetch_add(1, std::memory_order_relaxed) % Shards_.size();
+        }
 
+        auto& shard = Shards_[req->ShardIndex];
+        with_lock(shard.Lock_) {
             if (IsShuttingDown()) {
-                // Server is already shutting down
-                Requests_.erase(r.first);
                 return false;
             }
+
+            auto r = shard.Requests_.emplace(req);
+            Y_VERIFY(r.second, "Ctx already registered");
         }
 
         return true;
     }
 
     void DeregisterRequestCtx(ICancelableContext* req) {
-        with_lock(Lock_) {
-            Y_VERIFY(Requests_.erase(req), "Ctx is not registered");
+        Y_VERIFY(req->ShardIndex != size_t(-1), "Ctx does not have an assigned shard index");
+
+        auto& shard = Shards_[req->ShardIndex];
+        with_lock(shard.Lock_) {
+            Y_VERIFY(shard.Requests_.erase(req), "Ctx is not registered");
         }
     }
 
@@ -325,8 +361,14 @@ private:
     bool SslServer_ = false;
     bool NeedAuth_ = false;
 
-    THashSet<ICancelableContext*> Requests_;
-    TAdaptiveLock Lock_;
+    struct TShard {
+        TAdaptiveLock Lock_;
+        THashSet<ICancelableContext*> Requests_;
+    };
+
+    // Note: benchmarks showed 4 shards is enough to scale to ~30 threads
+    TVector<TShard> Shards_{ size_t(4) };
+    std::atomic<size_t> NextShard_{ 0 };
 };
 
 class TGRpcServer {

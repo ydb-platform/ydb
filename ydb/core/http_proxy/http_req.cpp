@@ -3,6 +3,7 @@
 #include "http_req.h"
 #include "json_proto_conversion.h"
 #include "custom_metrics.h"
+#include "exceptions_mapping.h"
 
 #include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/cgiparam/cgiparam.h>
@@ -60,84 +61,49 @@ namespace NKikimr::NHttpProxy {
     using namespace Ydb::DataStreams::V1;
     using namespace NYdb::NDataStreams::V1;
 
-    TString StatusToErrorType(NYdb::EStatus status) {
+    TException MapToException(NYdb::EStatus status, const TString& method, size_t issueCode = ISSUE_CODE_ERROR) {
+        auto IssueCode = static_cast<NYds::EErrorCodes>(issueCode);
+
         switch(status) {
         case NYdb::EStatus::SUCCESS:
-            return "OK";
+            return TException("", HTTP_OK);
         case NYdb::EStatus::BAD_REQUEST:
-            return "InvalidParameterValueException"; //TODO: bring here issues and parse from them
-        case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
+            return BadRequestExceptions(method, IssueCode);
         case NYdb::EStatus::UNAUTHORIZED:
-            return "AccessDeniedException";
+            return UnauthorizedExceptions(method, IssueCode);
         case NYdb::EStatus::INTERNAL_ERROR:
-            return "InternalFailureException";
-        case NYdb::EStatus::ABORTED:
-            return "RequestExpiredException"; //TODO: find better code
-        case NYdb::EStatus::UNAVAILABLE:
-            return "ServiceUnavailableException";
+            return InternalErrorExceptions(method, IssueCode);
         case NYdb::EStatus::OVERLOADED:
-            return "ThrottlingException";
-        case NYdb::EStatus::SCHEME_ERROR:
-            return "ResourceNotFoundException";
+            return OverloadedExceptions(method, IssueCode);
         case NYdb::EStatus::GENERIC_ERROR:
-            return "InternalFailureException"; //TODO: find better code
-        case NYdb::EStatus::TIMEOUT:
-            return "RequestTimeoutException";
-        case NYdb::EStatus::BAD_SESSION:
-            return "AccessDeniedException";
+            return GenericErrorExceptions(method, IssueCode);
         case NYdb::EStatus::PRECONDITION_FAILED:
+            return PreconditionFailedExceptions(method, IssueCode);
         case NYdb::EStatus::ALREADY_EXISTS:
-            return "ValidationErrorException"; //TODO: find better code
+            return AlreadyExistsExceptions(method, IssueCode);
+        case NYdb::EStatus::SCHEME_ERROR:
+            return SchemeErrorExceptions(method, IssueCode);
         case NYdb::EStatus::NOT_FOUND:
-            return "ResourceNotFoundException";
-        case NYdb::EStatus::SESSION_EXPIRED:
-            return "AccessDeniedException";
+            return NotFoundExceptions(method, IssueCode);
         case NYdb::EStatus::UNSUPPORTED:
-            return "InvalidActionException";
-        default:
-            return "InternalFailureException";
-        }
-
-    }
-
-    HttpCodes StatusToHttpCode(NYdb::EStatus status) {
-        switch(status) {
-        case NYdb::EStatus::SUCCESS:
-            return HTTP_OK;
-        case NYdb::EStatus::UNSUPPORTED:
-        case NYdb::EStatus::BAD_REQUEST:
-            return HTTP_BAD_REQUEST;
+            return UnsupportedExceptions(method, IssueCode);
         case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
-        case NYdb::EStatus::UNAUTHORIZED:
-            return HTTP_FORBIDDEN;
-        case NYdb::EStatus::INTERNAL_ERROR:
-            return HTTP_INTERNAL_SERVER_ERROR;
+            return TException("Unauthenticated", HTTP_BAD_REQUEST);
         case NYdb::EStatus::ABORTED:
-            return HTTP_CONFLICT;
+            return TException("Aborted", HTTP_BAD_REQUEST);
         case NYdb::EStatus::UNAVAILABLE:
-            return HTTP_SERVICE_UNAVAILABLE;
-        case NYdb::EStatus::OVERLOADED:
-            return HTTP_BAD_REQUEST;
-        case NYdb::EStatus::SCHEME_ERROR:
-            return HTTP_NOT_FOUND;
-        case NYdb::EStatus::GENERIC_ERROR:
-            return HTTP_BAD_REQUEST;
+            return TException("Unavailable", HTTP_BAD_REQUEST);
         case NYdb::EStatus::TIMEOUT:
-            return HTTP_GATEWAY_TIME_OUT;
+            return TException("RequestExpired", HTTP_BAD_REQUEST);
         case NYdb::EStatus::BAD_SESSION:
-            return HTTP_UNAUTHORIZED;
-        case NYdb::EStatus::PRECONDITION_FAILED:
-            return HTTP_PRECONDITION_FAILED;
-        case NYdb::EStatus::ALREADY_EXISTS:
-            return HTTP_CONFLICT;
-        case NYdb::EStatus::NOT_FOUND:
-            return HTTP_NOT_FOUND;
+            return TException("BadSession", HTTP_BAD_REQUEST);
         case NYdb::EStatus::SESSION_EXPIRED:
-            return HTTP_UNAUTHORIZED;
+            return TException("SessionExpired", HTTP_BAD_REQUEST);
         default:
-            return HTTP_INTERNAL_SERVER_ERROR;
+            return TException("InternalException", HTTP_INTERNAL_SERVER_ERROR);
         }
     }
+
 
     template<class TProto>
     TString ExtractStreamNameWithoutProtoField(const TProto& req)
@@ -266,6 +232,7 @@ namespace NKikimr::NHttpProxy {
                     HFunc(TEvServerlessProxy::TEvClientReady, HandleClientReady);
                     HFunc(TEvServerlessProxy::TEvDiscoverDatabaseEndpointResult, Handle);
                     HFunc(TEvServerlessProxy::TEvError, HandleError);
+                    HFunc(TEvServerlessProxy::TEvErrorWithIssue, HandleErrorWithIssue);
                     HFunc(TEvServerlessProxy::TEvGrpcRequestResult, HandleGrpcResponse);
                     HFunc(TEvServerlessProxy::TEvToken, HandleToken);
                     default:
@@ -367,6 +334,7 @@ namespace NKikimr::NHttpProxy {
                         auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
                         if (response.IsSuccess()) {
                             result->Message = MakeHolder<TProtoResult>(response.GetResult());
+
                         }
                         result->Status = MakeHolder<NYdb::TStatus>(response);
                         actorSystem->Send(actorId, result.Release());
@@ -393,7 +361,11 @@ namespace NKikimr::NHttpProxy {
                 ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Response);
             }
 
-            void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText) {
+            void HandleErrorWithIssue(TEvServerlessProxy::TEvErrorWithIssue::TPtr& ev, const TActorContext& ctx) {
+                ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Response, ev->Get()->IssueCode);
+            }
+
+            void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
                 /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{
                              1, true, true,
@@ -402,26 +374,12 @@ namespace NKikimr::NHttpProxy {
                               {"folder", HttpContext.FolderId},
                               {"database", HttpContext.DatabaseId},
                               {"stream", HttpContext.StreamName},
-                              {"code", TStringBuilder() << (int)StatusToHttpCode(status)},
+                              {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
                               {"name", "api.http.errors_per_second"}}
                          });
-
-                ctx.Send(MakeMetricsServiceID(),
-                         new TEvServerlessProxy::TEvCounter{
-                             1, true, true,
-                             {{"database", HttpContext.DatabaseName},
-                              {"method", Method},
-                              {"cloud_id", HttpContext.CloudId},
-                              {"folder_id", HttpContext.FolderId},
-                              {"database_id", HttpContext.DatabaseId},
-                              {"topic", HttpContext.StreamName},
-                              {"code", TStringBuilder() << (int)StatusToHttpCode(status)},
-                              {"name", "api.http.data_streams.response.count"}}
-                         });
-                //TODO: add api.http.response.count
                 HttpContext.ResponseData.Status = status;
                 HttpContext.ResponseData.ErrorText = errorText;
-                HttpContext.DoReply(ctx);
+                HttpContext.DoReply(ctx, issueCode);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
@@ -459,7 +417,7 @@ namespace NKikimr::NHttpProxy {
                     return;
                 }
 
-                return ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Message);
+                ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Message);
             }
 
             void ReportLatencyCounters(const TActorContext& ctx) {
@@ -490,7 +448,7 @@ namespace NKikimr::NHttpProxy {
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{
                                  1, true, true,
-                                 {{"database", HttpContext.DatabaseName},
+                                {{"database", HttpContext.DatabaseName},
                                   {"method", Method},
                                   {"cloud_id", HttpContext.CloudId},
                                   {"folder_id", HttpContext.FolderId},
@@ -516,7 +474,11 @@ namespace NKikimr::NHttpProxy {
                         TStringOutput stringOutput(errorText);
                         ev->Get()->Status->GetIssues().PrintTo(stringOutput);
                         RetryCounter.Void();
-                        return ReplyWithError(ctx, ev->Get()->Status->GetStatus(), errorText);
+                        auto issues = ev->Get()->Status->GetIssues();
+                        size_t issueCode = (
+                            issues && issues.begin()->IssueCode != ISSUE_CODE_OK
+                            ) ? issues.begin()->IssueCode : ISSUE_CODE_GENERIC;
+                        return ReplyWithError(ctx, ev->Get()->Status->GetStatus(), errorText, issueCode);
                         }
                     }
                 }
@@ -533,12 +495,18 @@ namespace NKikimr::NHttpProxy {
                 StartTime = ctx.Now();
                 try {
                     HttpContext.RequestBodyToProto(&Request);
-                } catch (std::exception& e) {
+                } catch (const NKikimr::NSQS::TSQSException& e) {
+                    NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
+                    if (e.ErrorClass.ErrorCode == "MissingParameter")
+                        issueCode = NYds::EErrorCodes::MISSING_PARAMETER;
+                    else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString")
+                        issueCode = NYds::EErrorCodes::INVALID_ARGUMENT;
+                    return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
+                } catch (const std::exception& e) {
                     LOG_SP_WARN_S(ctx, NKikimrServices::HTTP_PROXY,
                                   "got new request with incorrect json from [" << HttpContext.SourceAddress << "] " <<
                                   "database '" << HttpContext.DatabaseName << "'");
-
-                    return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what());
+                    return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                 }
 
                 if (HttpContext.DatabaseName.empty()) {
@@ -644,9 +612,16 @@ namespace NKikimr::NHttpProxy {
             proc->second->Execute(std::move(context), std::move(signature), ctx);
             return true;
         }
-        context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
-        context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
-        context.DoReply(ctx);
+        else if (name.empty()) {
+            context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
+            context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
+            context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
+        }
+        else {
+            context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
+            context.ResponseData.ErrorText = TStringBuilder() << "Missing method name " << name;
+            context.DoReply(ctx);
+        }
         return false;
     }
 
@@ -699,7 +674,7 @@ namespace NKikimr::NHttpProxy {
         return signature;
     }
 
-    void THttpRequestContext::DoReply(const TActorContext& ctx) {
+    void THttpRequestContext::DoReply(const TActorContext& ctx, size_t issueCode) {
         auto createResponse = [this](const auto& request,
                                      TStringBuf status,
                                      TStringBuf message,
@@ -750,13 +725,14 @@ namespace NKikimr::NHttpProxy {
 
             ResponseData.Body.SetType(NJson::JSON_MAP);
             ResponseData.Body["message"] = ResponseData.ErrorText;
-            ResponseData.Body["__type"] = StatusToErrorType(ResponseData.Status);
+            ResponseData.Body["__type"] = MapToException(ResponseData.Status, MethodName, issueCode).first;
         }
 
+        auto [errorName, httpCode] = MapToException(ResponseData.Status, MethodName, issueCode);
         auto response = createResponse(
             Request,
-            TStringBuilder() << (ui32)StatusToHttpCode(ResponseData.Status),
-            StatusToErrorType(ResponseData.Status),
+            TStringBuilder() << (ui32)httpCode,
+            errorName,
             strByMimeAws(ContentType),
             ResponseData.DumpBody(ContentType)
         );
@@ -781,8 +757,8 @@ namespace NKikimr::NHttpProxy {
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_TARGET_HEADER)) {
                 TString requestTarget = TString(header.second);
                 TVector<TString> parts = SplitString(requestTarget, ".");
-                ApiVersion = parts[0];
-                MethodName = parts[1];
+                ApiVersion = parts.size() > 0 ? parts[0] : "";
+                MethodName = parts.size() > 1 ? parts[1] : "";
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_CONTENT_TYPE_HEADER)) {
                 ContentType = mimeByStr(header.second);
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_DATE_HEADER)) {
@@ -898,7 +874,10 @@ namespace NKikimr::NHttpProxy {
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
             const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
             if (navigate->ErrorCount) {
-                return ReplyWithError(ctx, NYdb::EStatus::SCHEME_ERROR, TStringBuilder() << "Database with path '" << Database << "' doesn't exists");
+                return ReplyWithError(
+                    ctx, NYdb::EStatus::SCHEME_ERROR, TStringBuilder() << "Database with path '" << Database << "' doesn't exists",
+                    NYds::EErrorCodes::NOT_FOUND
+                );
             }
             Y_VERIFY(navigate->ResultSet.size() == 1);
             if (navigate->ResultSet.front().PQGroupInfo) {
@@ -935,7 +914,9 @@ namespace NKikimr::NHttpProxy {
             TInstant signedAt;
             if (!Signature.Get() && IamToken.empty()) {
                 return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
-                                      "Neither Credentials nor IAM token was provided");
+                                      "Neither Credentials nor IAM token was provided",
+                                      NYds::EErrorCodes::INCOMPLETE_SIGNATURE
+                );
             }
             if (Signature) {
                 bool found = false;
@@ -948,12 +929,23 @@ namespace NKikimr::NHttpProxy {
                 if (!found) {
                     return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
                         TStringBuilder() << "Wrong service region: got " << Signature->GetRegion() <<
-                        " expected " << ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion(0));
+                        " expected " << ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion(0),
+                        NYds::EErrorCodes::INCOMPLETE_SIGNATURE
+                    );
                 }
 
                 if (!TInstant::TryParseIso8601(Signature->GetSigningTimestamp(), signedAt)) {
                     return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST,
-                                          "Failed to parse Signature timestamp");
+                                          "Failed to parse Signature timestamp",
+                                          NYds::EErrorCodes::INCOMPLETE_SIGNATURE
+                    );
+                }
+
+                if (Signature->GetAccessKeyId().empty()) {
+                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
+                                          "Access key id should be provided",
+                                          NYds::EErrorCodes::MISSING_AUTHENTICATION_TOKEN
+                    );
                 }
             }
 
@@ -1041,8 +1033,9 @@ namespace NKikimr::NHttpProxy {
             ctx.Send(MakeIamTokenServiceID(), std::move(request));
         }
 
-        void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText) {
-            ctx.Send(Sender, new TEvServerlessProxy::TEvError(status, errorText));
+        void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText,
+                            NYds::EErrorCodes issueCode = NYds::EErrorCodes::GENERIC_ERROR) {
+            ctx.Send(Sender, new TEvServerlessProxy::TEvErrorWithIssue(status, errorText, static_cast<size_t>(issueCode)));
             TBase::Die(ctx);
         }
 
@@ -1137,3 +1130,10 @@ namespace NKikimr::NHttpProxy {
 
 } // namespace NKikimr::NHttpProxy
 
+
+template <>
+void Out<NKikimr::NHttpProxy::THttpResponseData>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseData& p) {
+    TString s = TStringBuilder() << "NYdb status: " << std::to_string(static_cast<size_t>(p.Status)) <<
+    ". Body: " << NJson::WriteJson(p.Body) << ". Error text: " << p.ErrorText;
+    o.Write(s.data(), s.length());
+}

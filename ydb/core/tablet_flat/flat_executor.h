@@ -555,6 +555,17 @@ class TExecutor
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);
     void Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx);
     void Handle(NOps::TEvResult::TPtr &ev);
+    void ProcessIoStats(
+            NBlockIO::EDir dir, NBlockIO::EPriority priority,
+            ui64 bytes, ui64 ops,
+            NBlockIO::TEvStat::TByCnGr&& groupBytes,
+            NBlockIO::TEvStat::TByCnGr&& groupOps,
+            const TActorContext& ctx);
+    void ProcessIoStats(
+            NBlockIO::EDir dir, NBlockIO::EPriority priority,
+            NBlockIO::TEvStat::TByCnGr&& groupBytes,
+            NBlockIO::TEvStat::TByCnGr&& groupOps,
+            const TActorContext& ctx);
     void Handle(NBlockIO::TEvStat::TPtr &ev, const TActorContext &ctx);
     void Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled);
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);

@@ -195,7 +195,6 @@ public:
             return nullptr;
         }
 
-        StopIdleCheck(candidate);
         return candidate;
     }
 

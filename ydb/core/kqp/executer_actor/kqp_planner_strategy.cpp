@@ -22,7 +22,7 @@ public:
     ~TKqpGreedyPlanner() override {}
 
     TVector<TResult> Plan(const TVector<NKikimrKqp::TKqpNodeResources>& nodeResources,
-        TVector<TTaskResourceEstimation>&& tasks) override
+        const TVector<TTaskResourceEstimation>& tasks) override
     {
         TVector<TResult> result;
 
@@ -58,15 +58,13 @@ public:
             }
         }
 
-        Sort(tasks, [](const auto& l, const auto& r) { return l.TotalMemoryLimit > r.TotalMemoryLimit; });
-
         if (LogFunc) {
-            for (auto& task : tasks) {
+            for (const auto& task : tasks) {
                 LogFunc(TStringBuilder() << "[TaskResources] task: " << task.TaskId << ", memory: " << task.TotalMemoryLimit);
             }
         }
 
-        for (auto& taskEstimation : tasks) {
+        for (const auto& taskEstimation : tasks) {
             TNodeDesc node = nodes.top();
 
             if (node.RemainsComputeActors > 0 &&

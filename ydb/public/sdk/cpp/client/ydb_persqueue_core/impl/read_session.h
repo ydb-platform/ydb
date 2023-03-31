@@ -238,6 +238,10 @@ public:
         return DoDecompress;
     }
 
+    i64 GetServerBytesSize() const {
+        return ServerBytesSize;
+    }
+
     TMaybe<std::pair<size_t, size_t>> GetReadyThreshold() const {
         size_t readyCount = 0;
         std::pair<size_t, size_t> ret;
@@ -270,7 +274,7 @@ public:
     void PutDecompressionError(std::exception_ptr error, size_t batch, size_t message);
     std::exception_ptr GetDecompressionError(size_t batch, size_t message);
 
-    void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize = 0);
+    void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount);
     void OnUserRetrievedEvent(i64 decompressedDataSize, size_t messagesCount);
 
 private:
@@ -962,7 +966,7 @@ public:
     void Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset);
 
     void OnCreateNewDecompressionTask();
-    void OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount);
+    void OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize);
 
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize = 0);
 

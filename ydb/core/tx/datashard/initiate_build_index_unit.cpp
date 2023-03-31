@@ -63,7 +63,7 @@ public:
         ui64 txId = tx->GetTxId();
         Y_VERIFY(step != 0);
 
-        const TSnapshotKey key(pathId.OwnerId, pathId.LocalPathId, step, txId);
+        const TSnapshotKey key(pathId, step, txId);
         const ui64 flags = TSnapshot::FlagScheme;
 
         DataShard.GetSnapshotManager().AddSnapshot(

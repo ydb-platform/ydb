@@ -12,7 +12,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 TReadInitAndAuthActor::TReadInitAndAuthActor(
         const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
         const TString& session, const NActors::TActorId& metaCache, const NActors::TActorId& newSchemeCache,
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NACLib::TUserToken> token,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
         const NPersQueue::TTopicsToConverter& topics, const TString& localCluster
 )
     : ParentId(parentId)
@@ -39,7 +39,7 @@ void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth for : " << ClientId);
     Become(&TThis::StateFunc);
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
-    DescribeTopics(ctx);
+    DescribeTopics(ctx, true);
 }
 
 void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bool showPrivate) {
@@ -100,6 +100,11 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.MeteringMode = pqDescr.GetPQTabletConfig().GetMeteringMode();
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
     topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
+
+    for (const auto& partitionDescription : pqDescr.GetPartitions()) {
+        topicsIter->second.PartitionIdToTabletId[partitionDescription.GetPartitionId()] =
+            partitionDescription.GetTabletId();
+    }
 
     if (!topicsIter->second.DiscoveryConverter->IsValid()) {
         TString errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503",
@@ -265,7 +270,7 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicInitInfoMap res;
     for (auto& [name, holder] : Topics) {
         res.insert(std::make_pair(name, TTopicInitInfo{
-            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode
+            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode, holder.PartitionIdToTabletId
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

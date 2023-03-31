@@ -84,8 +84,15 @@ public:
         THolder<TEvInterconnect::TEvNodesInfo> NodesInfoReply;
         THashMap<ui32, TString> HostNames;
         THashMap<TString, ui32> MinNodeIdByHost;
+        std::shared_ptr<THashMap<ui32, ui32>> DynToStaticNode;
 
-        explicit TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply);
+        bool Ready = false;
+        void ProcessNodesMapping(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev,
+                                 const TActorContext& ctx);
+        explicit TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply, const TActorContext& ctx);
+    private:
+        void FinalizeWhenReady(const TActorContext& ctx);
+        void Finalize(const TActorContext& ctx);
     };
 
 public:
@@ -95,6 +102,7 @@ public:
     bool NeedChildrenCreation = false;
 
     ui32 ChildrenCreated = 0;
+    bool ChildrenCreationDone = false;
 
     std::deque<THolder<TPerTopicInfo>> ChildrenToCreate;
 
@@ -131,6 +139,7 @@ protected:
     virtual STFUNC(StateFunc);
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
@@ -152,7 +161,7 @@ protected:
 
     // Nodes info
     const bool ListNodes;
-    std::shared_ptr<const TNodesInfo> NodesInfo;
+    std::shared_ptr<TNodesInfo> NodesInfo;
 };
 
 // Helper actor that sends TEvGetBalancerDescribe and checks ACL (ACL is not implemented yet).

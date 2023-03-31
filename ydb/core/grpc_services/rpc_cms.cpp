@@ -73,7 +73,7 @@ private:
             && this->GetProtoRequest()->operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) {
             auto request = MakeHolder<TEvConsole::TEvNotifyOperationCompletionRequest>();
             request->Record.MutableRequest()->set_id(response.operation().id());
-            request->Record.SetUserToken(this->Request_->GetInternalToken());
+            request->Record.SetUserToken(this->Request_->GetSerializedToken());
 
             NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         } else {
@@ -139,7 +139,7 @@ private:
     {
         auto request = MakeHolder<TCmsRequest>();
         request->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
-        request->Record.SetUserToken(this->Request_->GetInternalToken());
+        request->Record.SetUserToken(this->Request_->GetSerializedToken());
         NTabletPipe::SendData(ctx, CmsPipe, request.Release());
     }
 };

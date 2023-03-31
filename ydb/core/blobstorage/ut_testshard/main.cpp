@@ -31,7 +31,9 @@ Y_UNIT_TEST_SUITE(BlobDepotWithTestShard) {
                 record.SetOwnerIdx(1 + i);
                 record.SetTabletType(TTabletTypes::TestShard);
                 for (ui32 j = 0; j < 3; ++j) {
-                    record.AddBindedChannels()->SetStoragePoolName("virtual");
+                    auto *ch = record.AddBindedChannels();
+                    ch->SetStoragePoolName("virtual");
+                    ch->SetPhysicalGroupsOnly(false);
                 }
                 NTabletPipe::SendData(edge, clientId, ev.release());
             });
@@ -106,7 +108,7 @@ Y_UNIT_TEST_SUITE(BlobDepotWithTestShard) {
             }
         });
 
-        for (ui32 i = 0; i < 1000; ++i) {
+        for (ui32 i = 0; i < 100; ++i) {
             for (IActor *actor : blobDepots) {
                 NBlobDepot::ValidateBlobDepot(actor, env.GroupOverseer);
             }

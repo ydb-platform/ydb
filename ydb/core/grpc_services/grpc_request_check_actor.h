@@ -29,7 +29,7 @@ class TGrpcRequestCheckActor
     using TBase = TActorBootstrappedSecureRequest<TGrpcRequestCheckActor>;
 public:
     void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
-        LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error.ToString());
+        LOG_INFO(ctx, NKikimrServices::GRPC_SERVER, error.ToString());
         if (error.Retryable) {
             GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_UNAVAILABLE);
         } else {
@@ -197,9 +197,16 @@ public:
     }
 
     void SetTokenAndDie() {
-        GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_OK);
-        GrpcRequestBaseCtx_->SetInternalToken(TBase::GetSerializedToken());
-        ReplyBackAndDie();
+        if (GrpcRequestBaseCtx_->IsClientLost()) {
+            LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                "Client was disconnected before processing request (check actor)");
+            const NYql::TIssues issues;
+            ReplyUnavailableAndDie(issues);
+        } else {
+            GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_OK);
+            GrpcRequestBaseCtx_->SetInternalToken(TBase::GetParsedToken());
+            ReplyBackAndDie();
+        }
     }
 
     STATEFN(DbAccessStateFunc) {
@@ -236,7 +243,7 @@ private:
                     break;
                 case Ydb::StatusIds::TIMEOUT:
                     Counters_->IncDatabaseRateLimitedCounter();
-                    LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Throughput limit exceeded");
+                    LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Throughput limit exceeded");
                     ReplyOverloadedAndDie(MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED, "Throughput limit exceeded"));
                     break;
                 default:
@@ -401,7 +408,8 @@ private:
         }
 
         const ui32 access = NACLib::ConnectDatabase;
-        if (SecurityObject_->CheckAccess(access, TBase::GetSerializedToken())) {
+        const auto& parsedToken = TBase::GetParsedToken();
+        if (parsedToken && SecurityObject_->CheckAccess(access, *parsedToken)) {
             return {false, std::nullopt};
         }
 
@@ -418,7 +426,7 @@ private:
             return {false, std::nullopt};
         }
 
-        LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", error.c_str());
+        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", error.c_str());
         return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)};
     }
 

@@ -23,6 +23,7 @@ enum ESimpleCounters {
     COUNTER_CHANGE_QUEUE_SIZE  = 13                                [(CounterOpts) = {Name: "ChangeQueueSize"}];
     COUNTER_READ_ITERATORS_WAITING = 14                            [(CounterOpts) = {Name: "ReadIteratorsWaiting"}];
     COUNTER_READ_ITERATORS_COUNT = 15                              [(CounterOpts) = {Name: "ReadIteratorsCount"}];
+    COUNTER_READ_ITERATORS_EXHAUSTED_COUNT = 16                    [(CounterOpts) = {Name: "ReadIteratorsExhaustedCount"}];
 }
 
 enum ECumulativeCounters {
@@ -449,4 +450,6 @@ enum ETxTypes {
     TXTYPE_REMOVE_LOCK_CHANGE_RECORDS = 72                [(TxTypeOpts) = {Name: "TxRemoveLockChangeRecords"}];
     TXTYPE_VOLATILE_TX_COMMIT = 73                        [(TxTypeOpts) = {Name: "TxVolatileTxCommit"}];
     TXTYPE_VOLATILE_TX_ABORT = 74                         [(TxTypeOpts) = {Name: "TxVolatileTxAbort"}];
+    TXTYPE_CDC_STREAM_SCAN_RUN  = 75                      [(TxTypeOpts) = {Name: "TTxCdcStreamScanRun"}];
+    TXTYPE_CDC_STREAM_SCAN_PROGRESS = 76                  [(TxTypeOpts) = {Name: "TTxCdcStreamScanProgress"}];
 }

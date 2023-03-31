@@ -43,6 +43,7 @@ bool CheckCounter(::NMonitoring::TDynamicCounterPtr group, const char* sensorNam
 bool CheckLtCounter(::NMonitoring::TDynamicCounterPtr group, const char* sensorName, ui32 refValue,
                   bool isDerivative) {
     auto value = group->GetNamedCounter("name", sensorName, isDerivative)->Val();
+    Cerr << "CHECK COUNTER " << sensorName << " wait less than " << refValue << " got " << value << "\n";
     return (value <= refValue);
 }
 
@@ -71,7 +72,7 @@ bool CheckLabeledCounters(::NMonitoring::TDynamicCounterPtr databaseGroup, const
 
 void GetCounters(TTestEnv& env, const TString& databaseName, const TString& databasePath,
                  std::function<bool(::NMonitoring::TDynamicCounterPtr)> particularCountersCheck) {
-    for (size_t iter = 0; iter < 30; ++iter) {
+    for (size_t iter = 0; iter < 35; ++iter) {
         Cerr << "iteration " << iter << Endl;
 
         bool checkDb = false;
@@ -91,9 +92,9 @@ void GetCounters(TTestEnv& env, const TString& databaseName, const TString& data
             return;
         }
 
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(10));
     }
-    UNIT_ASSERT_C(false, "out of iterations");
+    UNIT_ASSERT_C(false, "out of 35 iterations with delay 10s");
 }
 
 } // namespace
@@ -108,8 +109,8 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
         auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
             bool isGood{true};
 
-            isGood &= CheckCounter(topicGroup, "topic.partitions.alive_count", partitionsN, false);
-            isGood &= CheckCounter(topicGroup, "topic.partitions.write_speed_bytes_per_second", 50'000'000, false);
+            isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN, false);
+            isGood &= CheckCounter(topicGroup, "topic.partition.write.speed_limit_bytes_per_second", 50'000'000, false);
             isGood &= CheckCounter(topicGroup, "topic.producers_count", 0, false);
 
             return isGood;
@@ -118,7 +119,6 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
         CreateDatabase(env, databaseName);
         NPQ::PQTabletPrepare({.partitions=partitionsN}, {}, *env.GetServer().GetRuntime(),
                                  env.GetPqTabletIds()[0], edge);
-        Sleep(TDuration::Minutes(1));
         GetCounters(env, databaseName, databasePath, check);
     }
 
@@ -142,28 +142,27 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
                     Cerr << ss.Str() << Endl;
                 }
 
-                isGood &= CheckCounter(topicGroup, "topic.partitions.alive_count", partitionsN, false);
-                isGood &= CheckCounter(topicGroup, "topic.partitions.write_speed_bytes_per_second", 50'000'000, false);
+                isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN, false);
+                isGood &= CheckCounter(topicGroup, "topic.partition.write.speed_limit_bytes_per_second", 50'000'000, false);
                 isGood &= CheckCounter(topicGroup, "topic.producers_count", 0, false);
 
                 return isGood;
             };
-            Sleep(TDuration::Minutes(1));
             GetCounters(env, databaseName, databasePath, check);
         }
 
+        Sleep(TDuration::Seconds(60));
         env.GetServer().GetRuntime()->Register(CreateTabletKiller(env.GetPqTabletIds()[0]));
 
         {
             auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
                 bool isGood{true};
 
-                isGood &= CheckLtCounter(topicGroup, "topic.max_partition_uptime_milliseconds",
-                                         TDuration::Minutes(1).MilliSeconds() + 200, false);
-                isGood &= CheckCounter(topicGroup, "topic.partitions.alive_count", partitionsN, false);
+                isGood &= CheckLtCounter(topicGroup, "topic.partition.uptime_milliseconds_min",
+                                         TDuration::Seconds(60).MilliSeconds() + 200, false);
+                isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN, false);
                 return isGood;
             };
-            Sleep(TDuration::Minutes(1));
             GetCounters(env, databaseName, databasePath, check);
         }
     }
@@ -175,8 +174,8 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
         auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
             bool isGood{true};
 
-            isGood &= CheckCounter(topicGroup, "topic.partitions.alive_count", partitionsN*2, false);
-            isGood &= CheckCounter(topicGroup, "topic.partitions.write_speed_bytes_per_second", 50'000'000, false);
+            isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN*2, false);
+            isGood &= CheckCounter(topicGroup, "topic.partition.write.speed_limit_bytes_per_second", 50'000'000, false);
             isGood &= CheckCounter(topicGroup, "topic.producers_count", 0, false);
 
             return isGood;
@@ -188,7 +187,6 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
                                      tbId, env.GetServer().GetRuntime()->AllocateEdgeActor());
         }
 
-        Sleep(TDuration::Minutes(1));
         GetCounters(env, databaseName, databasePath, check);
     }
 
@@ -207,14 +205,13 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
             auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
                 bool isGood{true};
 
-                isGood &= CheckCounter(topicGroup, "topic.partitions.alive_count", partitionsN*2, false);
-                isGood &= CheckCounter(topicGroup, "topic.partitions.write_speed_bytes_per_second", 50'000'000, false);
+                isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN*2, false);
+                isGood &= CheckCounter(topicGroup, "topic.partition.write.speed_limit_bytes_per_second", 50'000'000, false);
                 isGood &= CheckCounter(topicGroup, "topic.producers_count", 0, false);
 
                 return isGood;
             };
 
-            Sleep(TDuration::Minutes(1));
             GetCounters(env, databaseName, databasePath, check);
         }
 
@@ -227,12 +224,11 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
             auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
                 bool isGood{true};
 
-                isGood &= CheckCounter(topicGroup, "topic.partitions.alive_count", partitionsN, false);
+                isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN, false);
 
                 return isGood;
             };
 
-            Sleep(TDuration::Seconds(30));
             GetCounters(env, databaseName, databasePath, check);
         }
     }
@@ -252,77 +248,33 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
             auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
                 bool isGood{true};
 
-                isGood &= CheckCounter(topicGroup, "topic.partitions.alive_count", partitionsN*2, false);
-                isGood &= CheckCounter(topicGroup, "topic.partitions.write_speed_bytes_per_second", 50'000'000, false);
+                isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN*2, false);
+                isGood &= CheckCounter(topicGroup, "topic.partition.write.speed_limit_bytes_per_second", 50'000'000, false);
                 isGood &= CheckCounter(topicGroup, "topic.producers_count", 0, false);
 
                 return isGood;
             };
 
-            Sleep(TDuration::Minutes(1));
-            GetCounters(env, databaseName, databasePath, check);
-        }
-
-        env.GetServer().GetRuntime()->DisconnectNodes(0, 1, false);
-        env.GetServer().GetRuntime()->DisconnectNodes(0, 2, false);
-
-        {
-            auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
-                bool isGood{true};
-
-                isGood &= CheckCounter(topicGroup, "topic.partitions.alive_count", partitionsN*2, false);
-
-                return isGood;
-            };
-
-            Sleep(TDuration::Minutes(1));
-            GetCounters(env, databaseName, databasePath, check);
-        }
-    }
-
-    Y_UNIT_TEST(TwoTabletsDisconnectOneNodeHardWay) {
-        TTestEnv env(1, 2, 0, 2, true);
-        const TString databaseName = NPQ::TTabletPreparationParameters().databaseId;
-        const TString databasePath = NPQ::TTabletPreparationParameters().databasePath;
-        auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
-        CreateDatabase(env, databaseName);
-        for (auto& tbId : env.GetPqTabletIds()) {
-            NPQ::PQTabletPrepare({.partitions=partitionsN}, {}, *env.GetServer().GetRuntime(),
-                                     tbId, edge);
-        }
-
-        {
-            auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
-                bool isGood{true};
-
-                isGood &= CheckCounter(topicGroup, "topic.partitions.alive_count", partitionsN*2, false);
-                isGood &= CheckCounter(topicGroup, "topic.partitions.write_speed_bytes_per_second", 50'000'000, false);
-                isGood &= CheckCounter(topicGroup, "topic.producers_count", 0, false);
-
-                return isGood;
-            };
-
-            Sleep(TDuration::Minutes(1));
             GetCounters(env, databaseName, databasePath, check);
         }
 
         for (ui32 i = 0; i < env.GetServer().StaticNodes() + env.GetServer().DynamicNodes(); i++) {
             env.GetClient().MarkNodeInHive(env.GetServer().GetRuntime(), i, false);
+            if (i > 0) {
+                env.GetServer().GetRuntime()->DisconnectNodes(0, i, false);
+                env.GetServer().GetRuntime()->DisconnectNodes(i, 0, false);
+            }
         }
-
-        env.GetServer().GetRuntime()->DisconnectNodes(0, 1, true);
-        env.GetServer().GetRuntime()->DisconnectNodes(0, 2, true);
 
         {
             auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
                 bool isGood{true};
 
-                isGood &= CheckCounter(topicGroup, "topic.partitions.alive_count", partitionsN, false);
-                isGood &= CheckCounter(topicGroup, "topic.partitions.total_count", partitionsN, false);
+                isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN, false);
+                isGood &= CheckCounter(topicGroup, "topic.partition.total_count", partitionsN, false);
                 return isGood;
             };
 
-            Sleep(TDuration::Minutes(1));
             GetCounters(env, databaseName, databasePath, check);
         }
     }

@@ -1,6 +1,7 @@
 #include "grpc_pq_read.h"
 
 #include "actors/read_info_actor.h"
+#include "actors/commit_offset_actor.h"
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tx/scheme_board/cache.h>
@@ -121,11 +122,25 @@ void TPQReadService::Handle(NGRpcService::TEvStreamPQMigrationReadRequest::TPtr&
     HandleStreamPQReadRequest<NGRpcService::TEvStreamPQMigrationReadRequest>(ev, ctx);
 }
 
+void TPQReadService::Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, const TActorContext& ctx) {
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new commit offset request");
+
+    if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new commit offset request failed - cluster is not known yet");
+
+        ev->Get()->SendResult(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING), FillInfoResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING)); //CANCELLED
+        return;
+    } else {
+        ctx.Register(new TCommitOffsetActor(ev->Release().Release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
+    }
+}
+
 void TPQReadService::Handle(NGRpcService::TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx) {
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new read info request");
 
-    if (Clusters.empty() || LocalCluster.empty()) {
+    if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new read info request failed - cluster is not known yet");
 
         ev->Get()->SendResult(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING), FillInfoResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING)); //CANCELLED
@@ -153,6 +168,10 @@ void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEv
 }
 
 void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvCommitOffsetRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), ev->Release().Release());
 }
 

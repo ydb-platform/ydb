@@ -369,7 +369,7 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
             if (record.IsTokenReady()) {
                 // token already have built
                 record.AccessTime = now;
-                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Token, record.SerializedToken), 0, cookie);
+                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
             } else if (record.Error) {
                 // token stores information about previous error
                 record.AccessTime = now;
@@ -407,7 +407,7 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
         }
         if (record.IsTokenReady()) {
             // offline check ready
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Token, record.SerializedToken), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
             return;
         }
         record.AuthorizeRequests.emplace_back(ev.Release());
@@ -857,7 +857,10 @@ protected:
         return TDerived::ETokenType::Unknown;
     }
 
-    struct TTokenRecordBase {
+    class TTokenRecordBase {
+    private:
+        TIntrusiveConstPtr<NACLib::TUserToken> Token;
+    public:
         TTokenRecordBase(const TTokenRecordBase&) = delete;
         TTokenRecordBase& operator =(const TTokenRecordBase&) = delete;
 
@@ -867,8 +870,6 @@ protected:
         THashMap<TString, TPermissionRecord> Permissions;
         TString Subject; // login
         TEvTicketParser::TError Error;
-        TIntrusivePtr<NACLib::TUserToken> Token;
-        TString SerializedToken;
         TDeque<THolder<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
         ui64 ResponsesLeft = 0;
         TInstant InitTime;
@@ -884,6 +885,20 @@ protected:
         TTokenRecordBase(const TStringBuf ticket)
             : Ticket(ticket)
         {}
+
+        void SetToken(const TIntrusivePtr<NACLib::TUserToken>& token) {
+            // saving serialization info into the token instance.
+            token->SaveSerializationInfo();
+            Token = token;
+        }
+
+        const TIntrusiveConstPtr<NACLib::TUserToken> GetToken() const {
+            return Token;
+        }
+
+        void UnsetToken() {
+            Token = nullptr;
+        }
 
         TString GetAttributeValue(const TString& permission, const TString& key) const {
             if (auto it = Permissions.find(permission); it != Permissions.end()) {
@@ -946,13 +961,13 @@ protected:
             }
         }
 
-        bool IsOfflineToken() const {
+        bool NeedsRefresh() const {
             switch (TokenType) {
                 case TDerived::ETokenType::Builtin:
                 case TDerived::ETokenType::Login:
-                    return true;
-                default:
                     return false;
+                default:
+                    return Signature.AccessKeyId.empty();
             }
         }
 
@@ -965,13 +980,13 @@ protected:
         return key.Before(':');
     }
 
-    void EnrichUserTokenWithBuiltins(const TTokenRecordBase& record) {
+    void EnrichUserTokenWithBuiltins(const TTokenRecordBase& record, TIntrusivePtr<NACLib::TUserToken>& token) {
         const TString& allAuthenticatedUsers = AppData()->AllAuthenticatedUsers;
         if (!allAuthenticatedUsers.empty()) {
-            record.Token->AddGroupSID(allAuthenticatedUsers);
+            token->AddGroupSID(allAuthenticatedUsers);
         }
         for (const TString& sid : record.AdditionalSIDs) {
-            record.Token->AddGroupSID(sid);
+            token->AddGroupSID(sid);
         }
         if (!record.Permissions.empty()) {
             TString subject;
@@ -990,7 +1005,7 @@ protected:
             }
 
             for (const TString& group : groups) {
-                record.Token->AddGroupSID(group);
+                token->AddGroupSID(group);
             }
         }
     }
@@ -1048,19 +1063,18 @@ protected:
     void SetToken(const TString& key, TTokenRecord& record, TIntrusivePtr<NACLib::TUserToken> token) {
         TInstant now = TlsActivationContext->Now();
         record.Error.clear();
-        record.Token = token;
-        EnrichUserTokenWithBuiltins(record);
+        EnrichUserTokenWithBuiltins(record, token);
+        record.SetToken(token);
         if (!token->GetUserSID().empty()) {
             record.Subject = token->GetUserSID();
         }
-        record.SerializedToken = token->SerializeAsString();
         if (!record.ExpireTime) {
             record.ExpireTime = GetExpireTime(now);
         }
-        if (record.IsOfflineToken()) {
-            record.RefreshTime = record.ExpireTime;
-        } else {
+        if (record.NeedsRefresh()) {
             record.SetOkRefreshTime(this, now);
+        } else {
+            record.RefreshTime = record.ExpireTime;
         }
         CounterTicketsSuccess->Inc();
         CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
@@ -1080,8 +1094,7 @@ protected:
             BLOG_D("Ticket " << MaskTicket(record.Ticket) << " ("
                         << record.PeerName << ") has now retryable error message '" << error.Message << "'");
         } else {
-            record.Token = nullptr;
-            record.SerializedToken.clear();
+            record.UnsetToken();
             record.SetOkRefreshTime(this, now);
             CounterTicketsErrorsPermanent->Inc();
             BLOG_D("Ticket " << MaskTicket(record.Ticket) << " ("
@@ -1094,7 +1107,7 @@ protected:
     void Respond(TTokenRecordBase& record) {
         if (record.IsTokenReady()) {
             for (const auto& request : record.AuthorizeRequests) {
-                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Token, record.SerializedToken), 0, request->Cookie);
+                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.GetToken()), 0, request->Cookie);
             }
         } else {
             for (const auto& request : record.AuthorizeRequests) {
@@ -1155,7 +1168,9 @@ protected:
 
     template <typename TTokenRecord>
     bool CanRefreshTicket(const TString& key, TTokenRecord& record) {
-        if (AccessServiceValidator && (record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::Unknown)) {
+        if (AccessServiceValidator
+            && ((record.TokenType == TDerived::ETokenType::AccessService && !record.Signature.AccessKeyId)
+                || record.TokenType == TDerived::ETokenType::Unknown)) {
             GetDerived()->ResetTokenRecord(record);
             if (record.Permissions) {
                 RequestAccessServiceAuthorization(key, record);
@@ -1194,9 +1209,9 @@ protected:
         html << "<tr><td>Expire Time</td><td>" << record.ExpireTime << "</td></tr>";
         html << "<tr><td>Access Time</td><td>" << record.AccessTime << "</td></tr>";
         html << "<tr><td>Peer Name</td><td>" << record.PeerName << "</td></tr>";
-        if (record.Token != nullptr) {
-            html << "<tr><td>User SID</td><td>" << record.Token->GetUserSID() << "</td></tr>";
-            for (const TString& group : record.Token->GetGroupSIDs()) {
+        if (record.IsTokenReady()) {
+            html << "<tr><td>User SID</td><td>" << record.GetToken()->GetUserSID() << "</td></tr>";
+            for (const TString& group : record.GetToken()->GetGroupSIDs()) {
                 html << "<tr><td>Group SID</td><td>" << group << "</td></tr>";
             }
         }
@@ -1221,7 +1236,7 @@ protected:
         html << "<td>" << record.Database << "</td>";
         html << "<td>" << record.Subject << "</td>";
         html << "<td>" << record.Error << "</td>";
-        html << "<td>" << "<a href='ticket_parser?token=" << MD5::Calc(key) << "'>" << HtmlBool(record.Token != nullptr) << "</a>" << "</td>";
+        html << "<td>" << "<a href='ticket_parser?token=" << MD5::Calc(key) << "'>" << HtmlBool(record.IsTokenReady()) << "</a>" << "</td>";
         html << "<td>" << record.AuthorizeRequests.size() << "</td>";
         html << "<td>" << record.ResponsesLeft << "</td>";
         html << "<td>" << record.RefreshTime << "</td>";
@@ -1353,7 +1368,7 @@ public:
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "ticket_parser", "Ticket Parser", false, TActivationContext::ActorSystem(), TActorId());
+            mon->RegisterActorPage(actorsMonPage, "ticket_parser", "Ticket Parser", false, TActivationContext::ActorSystem(), this->SelfId());
         }
 
         Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());

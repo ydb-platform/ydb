@@ -41,7 +41,7 @@ protected:
     void ReportCreateSession(ui64 requestSize);
     void ReportPingSession(ui64 requestSize);
     void ReportCloseSession(ui64 requestSize);
-    void ReportQueryRequest(const NKikimrKqp::TQueryRequest& request);
+    void ReportQueryRequest(ui64 requestBytes, ui64 parametersBytes, ui64 queryBytes);
 
     void ReportQueryWithRangeScan();
     void ReportQueryWithFullScan();
@@ -269,7 +269,9 @@ public:
     void ReportCreateSession(TKqpDbCountersPtr dbCounters, ui64 requestSize);
     void ReportPingSession(TKqpDbCountersPtr dbCounters, ui64 requestSize);
     void ReportCloseSession(TKqpDbCountersPtr dbCounters, ui64 requestSize);
-    void ReportQueryRequest(TKqpDbCountersPtr dbCounters, const NKikimrKqp::TQueryRequest& request);
+    void ReportQueryAction(TKqpDbCountersPtr dbCounters, NKikimrKqp::EQueryAction action);
+    void ReportQueryType(TKqpDbCountersPtr dbCounters, NKikimrKqp::EQueryType type);
+    void ReportQueryRequest(TKqpDbCountersPtr dbCounters, ui64 requestBytes, ui64 parametersBytes, ui64 queryBytes);
 
     void ReportResponseStatus(TKqpDbCountersPtr dbCounters, ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus);
     void ReportResultsBytes(TKqpDbCountersPtr dbCounters, ui64 resultsSize);
@@ -364,6 +366,19 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardDisconnect;
     ::NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardResolve;
     NMonitoring::THistogramPtr ScanQueryRateLimitLatency;
+
+    // Iterator reads counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr IteratorsShardResolve;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IteratorsReadSplits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SentIteratorAcks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SentIteratorCancels;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CreatedIterators;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRetries;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorFails;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
     // Physical tx duration
     NMonitoring::THistogramPtr LiteralTxTotalTimeHistogram;

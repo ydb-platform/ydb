@@ -14,8 +14,25 @@ class TGRpcYdbTableService
 public:
     using TGrpcServiceBase<Ydb::Table::V1::TableService>::TGrpcServiceBase;
 
+    TGRpcYdbTableService(
+        NActors::TActorSystem *system,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+        const NActors::TActorId& proxyId,
+        bool rlAllowed,
+        size_t handlersPerCompletionQueue = 1);
+
+    TGRpcYdbTableService(
+        NActors::TActorSystem *system,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+        const TVector<NActors::TActorId>& proxies,
+        bool rlAllowed,
+        size_t handlersPerCompletionQueue);
+
 private:
     void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
+
+private:
+    const size_t HandlersPerCompletionQueue;
 };
 
 } // namespace NGRpcService

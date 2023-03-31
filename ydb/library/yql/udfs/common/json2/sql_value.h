@@ -156,6 +156,8 @@ namespace NJson2Udf {
                 .Done()
                 .Returns(returnType);
 
+            builder.IsStrict();
+
             if (!typesOnly) {
                 builder.Implementation(new TSqlValue(builder.GetSourcePosition()));
             }

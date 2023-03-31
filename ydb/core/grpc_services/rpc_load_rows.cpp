@@ -344,10 +344,10 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) override {
-        if (Request->GetInternalToken().empty())
+        if (Request->GetSerializedToken().empty())
             return true;
 
-        NACLib::TUserToken userToken(Request->GetInternalToken());
+        NACLib::TUserToken userToken(Request->GetSerializedToken());
         const ui32 access = NACLib::EAccessRights::UpdateRow;
         auto resolveResult = GetResolveNameResult();
         if (!resolveResult) {
@@ -519,10 +519,10 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) override {
-        if (Request->GetInternalToken().empty())
+        if (Request->GetSerializedToken().empty())
             return true;
 
-        NACLib::TUserToken userToken(Request->GetInternalToken());
+        NACLib::TUserToken userToken(Request->GetSerializedToken());
         const ui32 access = NACLib::EAccessRights::UpdateRow;
         auto resolveResult = GetResolveNameResult();
         if (!resolveResult) {

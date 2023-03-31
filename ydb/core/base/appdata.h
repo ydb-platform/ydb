@@ -141,12 +141,14 @@ struct TAppData {
     NKikimrConfig::TCompactionConfig CompactionConfig;
     NKikimrConfig::TDomainsConfig DomainsConfig;
     NKikimrConfig::TBootstrap BootstrapConfig;
+    std::optional<NKikimrSharedCache::TSharedCacheConfig> SharedCacheConfig;
     bool EnforceUserTokenRequirement = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;
     bool AllowShadowDataInSchemeShardForTests = false;
     bool EnableMvccSnapshotWithLegacyDomainRoot = false;
     bool UsePartitionStatsCollectorForTests = false;
+    bool DisableCdcAutoSwitchingToReadyStateForTests = false;
     TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers = "all-users@well-known";

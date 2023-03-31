@@ -30,6 +30,7 @@ const bool ENABLE_DATASHARD_LOG = true;
 const bool DUMP_RESULT = false;
 
 void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
+    Y_UNUSED(opts);
     if (ENABLE_DATASHARD_LOG) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     }
@@ -40,7 +41,6 @@ void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
 
     TAppPrepare app;
 
-    app.SetEnableMvcc(opts.Mvcc);
 
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                       "dc-1", domainId, FAKE_SCHEMESHARD_TABLET_ID,
@@ -1462,6 +1462,19 @@ TRowVersion CommitWrites(
     return { step, txId };
 }
 
+ui64 AsyncDropTable(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& workingDir,
+        const TString& name)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpDropTable, workingDir);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableDrop();
+    desc.SetName(name);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+}
+
 ui64 AsyncSplitTable(
         Tests::TServer::TPtr server,
         TActorId sender,
@@ -1640,6 +1653,9 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetMode(streamDesc.Mode);
     desc.MutableStreamDescription()->SetFormat(streamDesc.Format);
     desc.MutableStreamDescription()->SetVirtualTimestamps(streamDesc.VirtualTimestamps);
+    if (streamDesc.InitialState) {
+        desc.MutableStreamDescription()->SetState(*streamDesc.InitialState);
+    }
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }

@@ -57,6 +57,13 @@
         return res;                                                                                         \
     }
 
+#define MATH_STRICT_UDF_IMPL(name, signature, options)                                                             \
+    UDF_IMPL(T##name, builder.SimpleSignature<signature>().IsStrict(); options;, ;, ;, "/llvm_bc/Math", #name "IR") {  \
+        TUnboxedValuePod res;                                                                               \
+        name##IR(this, &res, valueBuilder, args);                                                           \
+        return res;                                                                                         \
+    }
+
 #define REGISTER_MATH_UDF(udfName, ...)         T##udfName,
 #define REGISTER_MATH_UDF_LAST(udfName, ...)    T##udfName
 
@@ -70,7 +77,7 @@ namespace {
     extern const char precision[] = "Precision";
     using TPrecision = TNamedArg<int, precision>;
 
-    MATH_UDF_MAP(MATH_UDF_IMPL, MATH_UDF_IMPL)
+    MATH_UDF_MAP(MATH_STRICT_UDF_IMPL, MATH_STRICT_UDF_IMPL)
 
     SIMPLE_MODULE(TMathModule,
         MATH_UDF_MAP(REGISTER_MATH_UDF, REGISTER_MATH_UDF_LAST))

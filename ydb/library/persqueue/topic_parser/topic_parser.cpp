@@ -310,10 +310,9 @@ bool TDiscoveryConverter::TryParseModernMirroredPath(TStringBuf path) {
     CHECK_SET_VALID(res, "Malformed mirrored topic path - expected to end with '-mirrored-from-<cluster>'", return false);
     CHECK_SET_VALID(!snd.empty(), "Malformed mirrored topic path - expected to end with valid cluster name",
                     return false);
-    CHECK_SET_VALID(Dc.empty() || Dc == "unknown" || Dc == snd,
-                    "Bad mirrored topic path - cluster in name mismatches with cluster provided",
-                    return false);
     Dc = snd;
+
+    CHECK_SET_VALID(LocalDc != Dc, "Local topic cannot contain '-mirrored-from' part", return false);
     FullModernName = path;
     ModernName = fst;
     if (Account_.Defined()) {
@@ -775,8 +774,19 @@ TString TTopicNameConverter::GetFederationPath() const {
     if (FstClass) {
         return ClientsideName;
     }
+
     return LbPath.GetOrElse("");
 }
+
+
+TString TTopicNameConverter::GetFederationPathWithDC() const {
+    if (FstClass) {
+        return ClientsideName;
+    }
+
+    return Account_ ? (*Account_ + "/" + FullModernName) : LbPath.GetOrElse("");
+}
+
 
 const TString& TTopicNameConverter::GetCluster() const {
     return Dc;

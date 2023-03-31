@@ -17,6 +17,7 @@ struct TPredicate;
 struct TCompactionLimits {
     static constexpr const ui32 MIN_GOOD_BLOB_SIZE = 256 * 1024; // some BlobStorage constant
     static constexpr const ui32 MAX_BLOB_SIZE = 8 * 1024 * 1024; // some BlobStorage constant
+    static constexpr const ui64 EVICT_HOT_PORTION_BYTES = 1 * 1024 * 1024;
     static constexpr const ui64 DEFAULT_EVICTION_BYTES = 64 * 1024 * 1024;
     static constexpr const ui64 MAX_BLOBS_TO_DELETE = 10000;
 
@@ -63,11 +64,13 @@ struct TCompactionInfo {
 struct TPortionEvictionFeatures {
     const TString TargetTierName;
     const ui64 PathId;      // portion path id for cold-storage-key construct
+    bool NeedExport = false;
     bool DataChanges = true;
 
-    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId)
+    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId, bool needExport)
         : TargetTierName(targetTierName)
         , PathId(pathId)
+        , NeedExport(needExport)
     {}
 };
 
@@ -309,7 +312,7 @@ public:
     virtual TString SerializeMark(const std::shared_ptr<arrow::Scalar>& scalar) const = 0;
     virtual std::shared_ptr<arrow::Scalar> DeserializeMark(const TString& key) const = 0;
 
-    virtual bool Load(IDbWrapper& db, const THashSet<ui64>& pathsToDrop = {}) = 0;
+    virtual bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) = 0;
 
     virtual std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                                 const THashSet<ui32>& columnIds,
@@ -319,11 +322,12 @@ public:
     virtual std::shared_ptr<TColumnEngineChanges> StartInsert(TVector<TInsertedData>&& dataToIndex) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
                                                                   const TSnapshot& outdatedSnapshot) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot,
-                                                               THashSet<ui64>& pathsToDrop) = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,
+                                                               ui32 maxRecords) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
                                                            ui64 maxBytesToEvict = TCompactionLimits::DEFAULT_EVICTION_BYTES) = 0;
     virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) = 0;
+    virtual void FreeLocks(std::shared_ptr<TColumnEngineChanges> changes) = 0;
     virtual void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     //virtual void UpdateTableSchema(ui64 pathId, const TSnapshot& snapshot, TIndexInfo&& info) = 0; // TODO
     virtual void UpdateCompactionLimits(const TCompactionLimits& limits) = 0;

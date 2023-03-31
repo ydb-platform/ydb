@@ -40,5 +40,7 @@ enum EErrorCode {
     CREATE_TIMEOUT = 22; // TODO: move to pqlib codes
     IDLE_TIMEOUT = 23; // TODO: move to pqlib codes
 
+    SET_OFFSET_ERROR_COMMIT_TO_PAST = 25;
+
     ERROR = 100;
 }

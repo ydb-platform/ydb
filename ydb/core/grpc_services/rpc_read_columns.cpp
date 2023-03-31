@@ -141,7 +141,7 @@ private:
         auto path = ::NKikimr::SplitPath(table);
         TMaybe<ui64> tabletId = TryParseLocalDbPath(path);
         if (tabletId) {
-            if (Request->GetInternalToken().empty() || !IsSuperUser(Request->GetInternalToken(), *AppData(ctx))) {
+            if (Request->GetSerializedToken().empty() || !IsSuperUser(NACLib::TUserToken(Request->GetSerializedToken()), *AppData(ctx))) {
                 return ReplyWithError(Ydb::StatusIds::NOT_FOUND, "Invalid table path specified", ctx);
             }
 
@@ -459,10 +459,10 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) {
-        if (Request->GetInternalToken().empty())
+        if (Request->GetSerializedToken().empty())
             return true;
 
-        NACLib::TUserToken userToken(Request->GetInternalToken());
+        NACLib::TUserToken userToken(Request->GetSerializedToken());
 
         const ui32 access = NACLib::EAccessRights::SelectRow;
         for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : ResolveNamesResult->ResultSet) {

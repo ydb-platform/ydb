@@ -1,16 +1,15 @@
 #pragma once
 
+#include "change_collector.h"
 #include "datashard_direct_transaction.h"
 
 namespace NKikimr {
 namespace NDataShard {
 
 class TDirectTxErase : public IDirectTx {
-    using IChangeCollector = NMiniKQL::IChangeCollector;
-
     TEvDataShard::TEvEraseRowsRequest::TPtr Ev;
     THolder<TEvDataShard::TEvEraseRowsResponse> Result;
-    THolder<IChangeCollector> ChangeCollector;
+    THolder<IDataShardChangeCollector> ChangeCollector;
 
     enum class EStatus {
         Success,
@@ -53,7 +52,7 @@ class TDirectTxErase : public IDirectTx {
             return true;
         }
 
-        IChangeCollector* GetChangeCollector() const {
+        IDataShardChangeCollector* GetChangeCollector() const {
             return Tx ? Tx->ChangeCollector.Get() : nullptr;
         }
     };
@@ -71,7 +70,7 @@ public:
 
     bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) override;
     TDirectTxResult GetResult(TDataShard* self) override;
-    TVector<IChangeCollector::TChange> GetCollectedChanges() const override;
+    TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const override;
 };
 
 } // NDataShard

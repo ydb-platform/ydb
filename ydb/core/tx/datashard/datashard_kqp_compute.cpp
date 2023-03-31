@@ -224,8 +224,7 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                 break;
             case TKeyDesc::ERowOperation::Update:
             case TKeyDesc::ERowOperation::Erase: {
-                const auto collector = EngineHost.GetChangeCollector(key.TableId);
-                if (collector && collector->NeedToReadKeys()) {
+                if (EngineHost.NeedToReadBeforeWrite(key.TableId)) {
                     columnOpFilter.insert(TKeyDesc::EColumnOperation::Set);
                     columnOpFilter.insert(TKeyDesc::EColumnOperation::InplaceUpdate);
                 }

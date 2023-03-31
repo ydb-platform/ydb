@@ -3,7 +3,7 @@
 Y_UNIT_TEST_SUITE(BigCluster) {
 
     Y_UNIT_TEST(Test) {
-        for (ui32 num : {10, 100}) {
+        for (ui32 num : {10, NSan::MSanIsOn() ? 20 : 100}) {
             THPTimer timer;
             {
                 TEnvironmentSetup env(num, nullptr);

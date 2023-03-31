@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "change_collector.h"
 
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -94,6 +95,9 @@ public:
         EngineHost.Reset();
     }
 
+    ui64 GetStep() const { return StepTxId.first; }
+    ui64 GetTxId() const { return StepTxId.second; }
+
     const TValidationInfo& TxInfo() const { return Info; }
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 
@@ -103,9 +107,9 @@ public:
     void SetIsImmediateTx();
     void SetIsRepeatableSnapshot();
 
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion, TTransactionContext& txc);
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
 
-    TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;
+    TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();
 
     TVector<ui64> GetVolatileCommitTxIds() const;

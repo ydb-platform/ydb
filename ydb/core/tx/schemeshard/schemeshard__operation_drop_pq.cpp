@@ -85,7 +85,7 @@ public:
         TString topicName = context.SS->PathsById.at(txState->TargetPathId)->Name;
         Y_VERIFY_S(topicName.size(), "topicName is empty. PathId: " << txState->TargetPathId);
 
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(txState->TargetPathId);
+        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(txState->TargetPathId);
         Y_VERIFY_S(pqGroup, "pqGroup is null. PathId: " << txState->TargetPathId);
 
         bool haveWork = false;
@@ -195,7 +195,7 @@ public:
         Y_VERIFY(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(pathId);
+        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(pathId);
         Y_VERIFY(pqGroup);
 
         // KIKIMR-13173
@@ -211,22 +211,21 @@ public:
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
         Y_VERIFY(parseOk);
 
-        ui64 throughput = ((ui64)pqGroup->TotalPartitionCount) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-        const ui64 storage = [&config, &throughput]() {
-                        if (config.GetPartitionConfig().HasStorageLimitBytes()) {
-                            return config.GetPartitionConfig().GetStorageLimitBytes();
-                        } else {
-                            return throughput * config.GetPartitionConfig().GetLifetimeSeconds();
-                        }
-                    }();
+        const PQGroupReserve reserve(config, pqGroup->TotalPartitionCount);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();
         domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount);
-        domainInfo->DecPQReservedStorage(storage);
+        domainInfo->DecPQReservedStorage(reserve.Storage);
+        domainInfo->AggrDiskSpaceUsage({}, pqGroup->Stats);
+        if (domainInfo->CheckDiskSpaceQuotas(context.SS)) {
+            auto subDomainId = context.SS->ResolvePathIdForDomain(pathId);
+            context.SS->PersistSubDomainState(db, subDomainId, *domainInfo);
+            context.OnComplete.PublishToSchemeBoard(OperationId, subDomainId);
+        }
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(throughput);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(storage);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(reserve.Throughput);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(reserve.Storage);
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Sub(pqGroup->TotalPartitionCount);
 
@@ -309,7 +308,7 @@ class TDropPQ: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    void SetPQBalancer(TPersQueueGroupInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
+    void SetPQBalancer(TTopicInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
         auto shardId = pqGroup->BalancerShardIdx;
         auto tabletId = pqGroup->BalancerTabletID;
 
@@ -325,11 +324,11 @@ public:
         }
     }
 
-    void SetPQShards(TPersQueueGroupInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
+    void SetPQShards(TTopicInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
         ui32 drops = 0;
         for (auto shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
-            TPQShardInfo::TPtr info = shard.second;
+            TTopicTabletInfo::TPtr info = shard.second;
 
             auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
 
@@ -434,7 +433,7 @@ public:
             return result;
         }
 
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(path.Base()->PathId);
+        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(path.Base()->PathId);
         Y_VERIFY(pqGroup);
 
         if (pqGroup->AlterData) {

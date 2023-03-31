@@ -16,7 +16,6 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(true)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

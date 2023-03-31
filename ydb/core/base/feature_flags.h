@@ -24,10 +24,6 @@ public:
         }
     }
 
-    inline void SetEnableMvccSnapshotReadsForTest(bool value) {
-        SetEnableMvccSnapshotReads(value);
-    }
-
     inline void SetEnableBackgroundCompactionForTest(bool value) {
         SetEnableBackgroundCompaction(value);
     }
@@ -38,12 +34,6 @@ public:
 
     inline void SetEnableBorrowedSplitCompactionForTest(bool value) {
         SetEnableBorrowedSplitCompaction(value);
-    }
-
-    inline void SetEnableMvccForTest(bool value) {
-        SetEnableMvcc(value
-            ? NKikimrConfig::TFeatureFlags::VALUE_TRUE
-            : NKikimrConfig::TFeatureFlags::VALUE_FALSE);
     }
 };
 

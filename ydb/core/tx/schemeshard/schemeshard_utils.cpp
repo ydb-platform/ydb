@@ -1,6 +1,7 @@
 #include "schemeshard_utils.h"
 
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 
 namespace NKikimr {
@@ -197,6 +198,11 @@ void TSelfPinger::ScheduleSelfPingWakeup(const NActors::TActorContext &ctx) {
     ctx.Schedule(SELF_PING_INTERVAL, new TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime);
     SelfPingWakeupScheduled = true;
     SelfPingWakeupScheduledTime = AppData(ctx)->TimeProvider->Now();
+}
+
+PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions) {
+    Storage = partitions * NPQ::TopicPartitionReserveSize(tabletConfig);
+    Throughput = partitions * NPQ::TopicPartitionReserveThroughput(tabletConfig);
 }
 
 }
@@ -414,7 +420,6 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     } else {
         result.MutablePartitioningPolicy()->SetSizeToSplit(2_GB);
         result.MutablePartitioningPolicy()->SetMinPartitionsCount(1);
-        result.MutablePartitioningPolicy()->SetMaxPartitionsCount(5000);
     }
     if (baseTablePartitionConfig.HasPipelineConfig()) {
         result.MutablePipelineConfig()->CopyFrom(baseTablePartitionConfig.GetPipelineConfig());

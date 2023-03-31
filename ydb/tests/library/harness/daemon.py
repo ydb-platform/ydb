@@ -3,9 +3,8 @@ import abc
 import logging
 import os
 import signal
-import tempfile
-import subprocess
 import sys
+import subprocess
 
 from yatest.common import process
 import six
@@ -66,11 +65,10 @@ class Daemon(object):
         self.__killed = False
         self.__core_pattern = core_pattern
         self.logger = logger.getChild(self.__class__.__name__)
-        if stdout_file is None:
-            self.__stdout_file = tempfile.NamedTemporaryFile(dir=self.__cwd, prefix="stdout_", delete=False)
-            self.__stderr_file = tempfile.NamedTemporaryFile(dir=self.__cwd, prefix="stderr_", delete=False)
-            self.__stdin_file = tempfile.NamedTemporaryFile(dir=self.__cwd, prefix="stdin_", delete=False)
-        else:
+        self.__stdout_file = sys.stdout
+        self.__stdin_file = sys.stdin
+        self.__stderr_file = sys.stderr
+        if stdout_file is not None:
             self.__stdout_file = open(stdout_file, mode='w+b')
             self.__stdin_file = open(stdin_file, mode='w+b')
             self.__stderr_file = open(stderr_file, mode='w+b')
@@ -81,15 +79,24 @@ class Daemon(object):
 
     @property
     def stdin_file_name(self):
-        return os.path.abspath(self.__stdin_file.name)
+        if self.__stdin_file is not sys.stdin:
+            return os.path.abspath(self.__stdin_file.name)
+        else:
+            return None
 
     @property
     def stdout_file_name(self):
-        return os.path.abspath(self.__stdout_file.name)
+        if self.__stdout_file is not sys.stdout:
+            return os.path.abspath(self.__stdout_file.name)
+        else:
+            return None
 
     @property
     def stderr_file_name(self):
-        return os.path.abspath(self.__stderr_file.name)
+        if self.__stderr_file is not sys.stderr:
+            return os.path.abspath(self.__stderr_file.name)
+        else:
+            return None
 
     def is_alive(self):
         return self.__daemon is not None and self.__daemon.running

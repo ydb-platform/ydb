@@ -14,8 +14,7 @@ namespace NKikimrChangeExchange {
     class TChangeRecord;
 }
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 class TChangeRecordBuilder;
 
@@ -101,8 +100,7 @@ private:
 
 }; // TChangeRecordBuilder
 
-} // NDataShard
-} // NKikimr
+}
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TChangeRecord, out, value) {
     return value.Out(out);

@@ -598,7 +598,7 @@ public:
     public:
         virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
             const TString& cluster, const TString& table, const TLoadTableMetadataSettings& settings, const TString& database,
-            const TMaybe<NACLib::TUserToken>& userToken) = 0;
+            const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) = 0;
 
         virtual TVector<TString> GetCollectedSchemeData() = 0;
 
@@ -611,7 +611,7 @@ public:
     virtual TString GetDefaultCluster() = 0;
     virtual TMaybe<TString> GetSetting(const TString& cluster, const TString& name) = 0;
 
-    virtual void SetToken(const TString& cluster, const TString& token) = 0;
+    virtual void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) = 0;
 
     virtual NThreading::TFuture<TListPathResult> ListPath(const TString& cluster, const TString& path) = 0;
 

@@ -132,6 +132,10 @@ To update cluster (stop + start):
             '--public-http-config-path', default=None,
             help='The path to public HTTP config'
         )
+        sub_parser.add_argument(
+            '--dont-use-log-files', default=False, action='store_true',
+            help='Don\'t use log files (only STDOUT and STDERR output)'
+        )
 
     arguments = parser.parse_args()
     arguments.ydb_working_dir = cmds.wrap_path(arguments.ydb_working_dir)

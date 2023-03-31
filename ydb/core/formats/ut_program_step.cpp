@@ -56,68 +56,221 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, EOperati
     return batch->num_rows();
 }
 
-void SumGroupBy(bool nullable, ui32 numKeys = 1, bool emptySrc = false) {
-    std::optional<double> null;
-    if (nullable) {
-        null = 0;
-    }
-
+std::vector<bool> LikeTest(const std::vector<std::string>& data,
+                           EOperation op, const std::string& pattern, bool ignoreCase = false)
+{
     auto schema = std::make_shared<arrow::Schema>(std::vector{
-                                                std::make_shared<arrow::Field>("x", arrow::int16()),
-                                                std::make_shared<arrow::Field>("y", arrow::uint32())});
-    std::shared_ptr<arrow::RecordBatch> batch;
-    if (emptySrc) {
-        batch = arrow::RecordBatch::Make(schema, 0, std::vector{NumVecToArray(arrow::int16(), {}),
-                                                                NumVecToArray(arrow::uint32(), {})});
-    } else {
-        batch = arrow::RecordBatch::Make(schema, 4, std::vector{NumVecToArray(arrow::int16(), {-1, 0, 0, -1}, null),
-                                                                NumVecToArray(arrow::uint32(), {1, 0, 0, 1}, null)});
-    }
+                                                std::make_shared<arrow::Field>("x", arrow::utf8())});
+    arrow::StringBuilder sb;
+    sb.AppendValues(data).ok();
+    auto batch = arrow::RecordBatch::Make(schema, data.size(), {*sb.Finish()});
     UNIT_ASSERT(batch->ValidateFull().ok());
 
     auto step = std::make_shared<TProgramStep>();
-    step->GroupBy = {
-        TAggregateAssign("sum_x", EAggregate::Sum, {"x"}),
-        TAggregateAssign("sum_y", EAggregate::Sum, {"y"})
+    step->Assignes = {
+        TAssign("res", op, {"x"}, std::make_shared<arrow::compute::MatchSubstringOptions>(pattern, ignoreCase))
     };
-    step->GroupByKeys.push_back("x");
-    if (numKeys == 2) {
-        step->GroupByKeys.push_back("y");
-    }
-
+    step->Projection = {"res"};
     auto status = ApplyProgram(batch, TProgram({step}), GetCustomExecContext());
     if (!status.ok()) {
         Cerr << status.ToString() << "\n";
     }
     UNIT_ASSERT(status.ok());
     UNIT_ASSERT(batch->ValidateFull().ok());
-    UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), numKeys + 2);
-    UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), (emptySrc ? 0 : 2));
-    UNIT_ASSERT_EQUAL(batch->column(0)->type_id(), arrow::Type::INT64);
-    UNIT_ASSERT_EQUAL(batch->column(1)->type_id(), arrow::Type::UINT64);
-    UNIT_ASSERT_EQUAL(batch->column(2)->type_id(), arrow::Type::INT16);
-    if (numKeys == 2) {
-        UNIT_ASSERT_EQUAL(batch->column(3)->type_id(), arrow::Type::UINT32);
+    UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+
+    auto& resColumn = static_cast<const arrow::BooleanArray&>(*batch->GetColumnByName("res"));
+    std::vector<bool> vec;
+    for (int i = 0; i < resColumn.length(); ++i) {
+        UNIT_ASSERT(!resColumn.IsNull(i)); // TODO
+        vec.push_back(resColumn.Value(i));
+    }
+    return vec;
+}
+
+enum class ETest {
+    DEFAULT,
+    EMPTY,
+    ONE_VALUE
+};
+
+struct TSumData {
+    static std::shared_ptr<arrow::RecordBatch> Data(ETest test,
+                                                    std::shared_ptr<arrow::Schema>& schema,
+                                                    bool nullable)
+    {
+        std::optional<double> null;
+        if (nullable) {
+            null = 0;
+        }
+
+        if (test == ETest::DEFAULT) {
+            return arrow::RecordBatch::Make(schema, 4, std::vector{NumVecToArray(arrow::int16(), {-1, 0, 0, -1}, null),
+                                                                   NumVecToArray(arrow::uint32(), {1, 0, 0, 1}, null)});
+        } else if (test == ETest::EMPTY) {
+            return arrow::RecordBatch::Make(schema, 0, std::vector{NumVecToArray(arrow::int16(), {}),
+                                                                   NumVecToArray(arrow::uint32(), {})});
+        } else if (test == ETest::ONE_VALUE) {
+            return arrow::RecordBatch::Make(schema, 1, std::vector{NumVecToArray(arrow::int16(), {1}),
+                                                                   NumVecToArray(arrow::uint32(), {0}, null)});
+        }
+        return {};
     }
 
-    if (emptySrc) {
+    static void CheckResult(ETest test, const std::shared_ptr<arrow::RecordBatch>& batch, ui32 numKeys, bool nullable) {
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), numKeys + 2);
+        UNIT_ASSERT_EQUAL(batch->column(0)->type_id(), arrow::Type::INT64);
+        UNIT_ASSERT_EQUAL(batch->column(1)->type_id(), arrow::Type::UINT64);
+        UNIT_ASSERT_EQUAL(batch->column(2)->type_id(), arrow::Type::INT16);
+        if (numKeys == 2) {
+            UNIT_ASSERT_EQUAL(batch->column(3)->type_id(), arrow::Type::UINT32);
+        }
+
+        if (test == ETest::EMPTY) {
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 0);
+            return;
+        }
+
+        auto& aggX = static_cast<arrow::Int64Array&>(*batch->column(0));
+        auto& aggY = static_cast<arrow::UInt64Array&>(*batch->column(1));
+        auto& colX = static_cast<arrow::Int16Array&>(*batch->column(2));
+
+        if (test == ETest::ONE_VALUE) {
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(aggX.Value(0), 1);
+            if (nullable) {
+                UNIT_ASSERT(aggY.IsNull(0));
+            } else {
+                UNIT_ASSERT(!aggY.IsNull(0));
+                UNIT_ASSERT_VALUES_EQUAL(aggY.Value(0), 0);
+            }
+            return;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
+
+        for (ui32 row = 0; row < 2; ++row) {
+            if (colX.IsNull(row)) {
+                UNIT_ASSERT(aggX.IsNull(row));
+                UNIT_ASSERT(aggY.IsNull(row));
+            } else {
+                UNIT_ASSERT(!aggX.IsNull(row));
+                UNIT_ASSERT(!aggY.IsNull(row));
+                if (colX.Value(row) == 0) {
+                    UNIT_ASSERT_VALUES_EQUAL(aggX.Value(row), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(aggY.Value(row), 0);
+                } else if (colX.Value(row) == -1) {
+                    UNIT_ASSERT_VALUES_EQUAL(aggX.Value(row), -2);
+                    UNIT_ASSERT_VALUES_EQUAL(aggY.Value(row), 2);
+                } else {
+                    UNIT_ASSERT(false);
+                }
+            }
+        }
+    }
+};
+
+struct TMinMaxSomeData {
+    static std::shared_ptr<arrow::RecordBatch> Data(ETest /*test*/,
+                                                    std::shared_ptr<arrow::Schema>& schema,
+                                                    bool nullable)
+    {
+        std::optional<double> null;
+        if (nullable) {
+            null = 0;
+        }
+
+        return arrow::RecordBatch::Make(schema, 1, std::vector{NumVecToArray(arrow::int16(), {1}),
+                                                               NumVecToArray(arrow::uint32(), {0}, null)});
+    }
+
+    static void CheckResult(ETest /*test*/, const std::shared_ptr<arrow::RecordBatch>& batch, ui32 numKeys,
+                            bool nullable) {
+        UNIT_ASSERT_VALUES_EQUAL(numKeys, 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), numKeys + 2);
+        UNIT_ASSERT_EQUAL(batch->column(0)->type_id(), arrow::Type::INT16);
+        UNIT_ASSERT_EQUAL(batch->column(1)->type_id(), arrow::Type::UINT32);
+        UNIT_ASSERT_EQUAL(batch->column(2)->type_id(), arrow::Type::INT16);
+
+        auto& aggX = static_cast<arrow::Int16Array&>(*batch->column(0));
+        auto& aggY = static_cast<arrow::UInt32Array&>(*batch->column(1));
+        auto& colX = static_cast<arrow::Int16Array&>(*batch->column(2));
+
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(colX.Value(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(aggX.Value(0), 1);
+        if (nullable) {
+            UNIT_ASSERT(aggY.IsNull(0));
+        } else {
+            UNIT_ASSERT(!aggY.IsNull(0));
+            UNIT_ASSERT_VALUES_EQUAL(aggY.Value(0), 0);
+        }
         return;
     }
+};
 
-    auto& sumX = static_cast<arrow::Int64Array&>(*batch->column(0));
-    auto& sumY = static_cast<arrow::UInt64Array&>(*batch->column(1));
-    auto& colX = static_cast<arrow::Int16Array&>(*batch->column(2));
+void GroupByXY(bool nullable, ui32 numKeys, ETest test = ETest::DEFAULT,
+               EAggregate aggFunc = EAggregate::Sum) {
+    auto schema = std::make_shared<arrow::Schema>(std::vector{
+                                                std::make_shared<arrow::Field>("x", arrow::int16()),
+                                                std::make_shared<arrow::Field>("y", arrow::uint32())});
 
-    for (ui32 row = 0; row < 2; ++row) {
-        if (colX.IsNull(row) || colX.Value(row) == 0) {
-            UNIT_ASSERT_VALUES_EQUAL(sumX.Value(row), 0);
-            UNIT_ASSERT_VALUES_EQUAL(sumY.Value(row), 0);
-        } else if (colX.Value(row) == -1) {
-            UNIT_ASSERT_VALUES_EQUAL(sumX.Value(row), -2);
-            UNIT_ASSERT_VALUES_EQUAL(sumY.Value(row), 2);
-        } else {
-            UNIT_ASSERT(false);
-        }
+    std::shared_ptr<arrow::RecordBatch> batch;
+    switch (aggFunc) {
+        case EAggregate::Sum:
+            batch = TSumData::Data(test, schema, nullable);
+            break;
+        case EAggregate::Min:
+        case EAggregate::Max:
+        case EAggregate::Some:
+            batch = TMinMaxSomeData::Data(test, schema, nullable);
+            break;
+        default:
+            break;
+    }
+    UNIT_ASSERT(batch);
+    auto status = batch->ValidateFull();
+    if (!status.ok()) {
+        Cerr << status.ToString() << "\n";
+    }
+    UNIT_ASSERT(status.ok());
+
+    auto step = std::make_shared<TProgramStep>();
+    step->GroupBy = {
+        TAggregateAssign("agg_x", aggFunc, {"x"}),
+        TAggregateAssign("agg_y", aggFunc, {"y"})
+    };
+    step->GroupByKeys.push_back("x");
+    if (numKeys == 2) {
+        step->GroupByKeys.push_back("y");
+    }
+
+    status = ApplyProgram(batch, TProgram({step}), GetCustomExecContext());
+    if (!status.ok()) {
+        Cerr << status.ToString() << "\n";
+    }
+    UNIT_ASSERT(status.ok());
+
+    status = batch->ValidateFull();
+    if (!status.ok()) {
+        Cerr << status.ToString() << "\n";
+    }
+    UNIT_ASSERT(status.ok());
+
+    switch (aggFunc) {
+        case EAggregate::Sum:
+            TSumData::CheckResult(test, batch, numKeys, nullable);
+            break;
+        case EAggregate::Min:
+        case EAggregate::Max:
+        case EAggregate::Some:
+            TMinMaxSomeData::CheckResult(test, batch, numKeys, nullable);
+            break;
+        default:
+            break;
     }
 }
 
@@ -240,6 +393,60 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         UNIT_ASSERT(FilterTestUnary({x, z->make_array()}, EOperation::Invert, EOperation::Equal) == 3);
     }
 
+    Y_UNIT_TEST(StartsWith) {
+        std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::StartsWith, "aa");
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
+    Y_UNIT_TEST(EndsWith) {
+        std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::EndsWith, "aa");
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
+    Y_UNIT_TEST(MatchSubstring) {
+        std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::MatchSubstring, "aa");
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
+    Y_UNIT_TEST(StartsWithIgnoreCase) {
+        std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::StartsWith, "aA", true);
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
+    Y_UNIT_TEST(EndsWithIgnoreCase) {
+        std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::EndsWith, "aA", true);
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
+    Y_UNIT_TEST(MatchSubstringIgnoreCase) {
+        std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::MatchSubstring, "aA", true);
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[1], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+    }
+
     Y_UNIT_TEST(ScalarTest) {
         auto schema = std::make_shared<arrow::Schema>(std::vector{
                                                     std::make_shared<arrow::Field>("x", arrow::int64()),
@@ -326,18 +533,34 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
     }
 
     Y_UNIT_TEST(SumGroupBy) {
-        SumGroupBy(true);
-        SumGroupBy(true, 2);
+        GroupByXY(true, 1);
+        GroupByXY(true, 2);
 
-        SumGroupBy(true, 1, true);
-        SumGroupBy(true, 2, true);
+        GroupByXY(true, 1, ETest::EMPTY);
+        GroupByXY(true, 2, ETest::EMPTY);
+
+        GroupByXY(true, 1, ETest::ONE_VALUE);
     }
 
     Y_UNIT_TEST(SumGroupByNotNull) {
-        SumGroupBy(false);
-        SumGroupBy(false, 2);
+        GroupByXY(false, 1);
+        GroupByXY(false, 2);
 
-        SumGroupBy(false, 1, true);
-        SumGroupBy(false, 2, true);
+        GroupByXY(false, 1, ETest::EMPTY);
+        GroupByXY(false, 2, ETest::EMPTY);
+
+        GroupByXY(false, 1, ETest::ONE_VALUE);
+    }
+
+    Y_UNIT_TEST(MinMaxSomeGroupBy) {
+        GroupByXY(true, 1, ETest::ONE_VALUE, EAggregate::Min);
+        GroupByXY(true, 1, ETest::ONE_VALUE, EAggregate::Max);
+        GroupByXY(true, 1, ETest::ONE_VALUE, EAggregate::Some);
+    }
+
+    Y_UNIT_TEST(MinMaxSomeGroupByNotNull) {
+        GroupByXY(false, 1, ETest::ONE_VALUE, EAggregate::Min);
+        GroupByXY(false, 1, ETest::ONE_VALUE, EAggregate::Max);
+        GroupByXY(false, 1, ETest::ONE_VALUE, EAggregate::Some);
     }
 }

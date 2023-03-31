@@ -9,7 +9,7 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
     const NMetadata::NModifications::IOperationsManager::TModificationContext& context) const
 {
     NMetadata::NInternal::TTableRecord result;
-    result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Bytes(settings.GetObjectId()));
+    result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     {
         auto it = settings.GetFeatures().find(TTierConfig::TDecoder::TierConfig);
         if (it != settings.GetFeatures().end()) {
@@ -31,7 +31,7 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
                     return "SecretKey is incorrect";
                 }
                 *proto.MutableObjectStorage()->MutableSecretKey() = secretKey->SerializeToString();
-                result.SetColumn(TTierConfig::TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Bytes(proto.DebugString()));
+                result.SetColumn(TTierConfig::TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Utf8(proto.DebugString()));
             }
         }
     }

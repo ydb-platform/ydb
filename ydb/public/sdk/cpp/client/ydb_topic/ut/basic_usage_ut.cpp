@@ -1,5 +1,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_topic/ut/managed_executor.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
@@ -91,6 +93,115 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         f.GetValueSync();
         ReadSession->Close(TDuration::MilliSeconds(10));
         AtomicSet(check, 0);
+    }
+
+
+    Y_UNIT_TEST(ReadWithRestarts) {
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+
+        NPersQueue::TWriteSessionSettings writeSettings;
+        writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
+        writeSettings.Codec(NPersQueue::ECodec::RAW);
+        NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+        writeSettings.CompressionExecutor(executor);
+
+        auto& client = setup->GetPersQueueClient();
+        auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+        ui32 count = 700;
+        std::string message(2'000, 'x');
+        for (ui32 i = 1; i <= count; ++i) {
+            bool res = session->Write(message);
+            UNIT_ASSERT(res);
+        }
+        bool res = session->Close(TDuration::Seconds(10));
+        UNIT_ASSERT(res);
+
+        std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
+
+        // Create topic client.
+        NYdb::NTopic::TTopicClient topicClient(setup->GetDriver());
+
+        // Create read session.
+        NYdb::NTopic::TReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName(setup->GetTestClient())
+            .MaxMemoryUsageBytes(1_MB)
+            .AppendTopics(setup->GetTestTopic());
+
+        //
+        // controlled decompressor
+        //
+        auto decompressor = CreateThreadPoolManagedExecutor(1);
+        readSettings.DecompressionExecutor(decompressor);
+
+
+        //
+        // auxiliary functions for decompressor and handler control
+        //
+        auto WaitTasks = [&](auto f, size_t c) {
+            while (f() < c) {
+                Sleep(TDuration::MilliSeconds(100));
+            };
+        };
+        auto WaitPlannedTasks = [&](auto e, size_t count) {
+            WaitTasks([&]() { return e->GetPlannedCount(); }, count);
+        };
+        auto WaitExecutedTasks = [&](auto e, size_t count) {
+            WaitTasks([&]() { return e->GetExecutedCount(); }, count);
+        };
+
+        auto RunTasks = [&](auto e, const std::vector<size_t>& tasks) {
+            size_t n = tasks.size();
+            WaitPlannedTasks(e, n);
+            size_t completed = e->GetExecutedCount();
+            e->StartFuncs(tasks);
+            WaitExecutedTasks(e, completed + n);
+        };
+        Y_UNUSED(RunTasks);
+
+        auto PlanTasksAndRestart = [&](auto e, const std::vector<size_t>& tasks) {
+            size_t n = tasks.size();
+            WaitPlannedTasks(e, n);
+            size_t completed = e->GetExecutedCount();
+
+            setup->KillPqrb(setup->GetTestTopic(), setup->GetLocalCluster());
+            Cerr << ">>> TEST: PQRB killed" << Endl;
+            Sleep(TDuration::MilliSeconds(100));
+
+            e->StartFuncs(tasks);
+            WaitExecutedTasks(e, completed + n);
+        };
+        Y_UNUSED(PlanTasksAndRestart);
+
+
+        NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
+        TAtomic lastOffset = 0u;
+
+        auto f = checkedPromise.GetFuture();
+        readSettings.EventHandlers_.SimpleDataHandlers(
+            [&]
+            (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+            AtomicSet(lastOffset, ev.GetMessages().back().GetOffset());
+            ev.Commit();
+            Cerr << ">>> TEST: last offset = " << lastOffset << Endl;
+        });
+
+        Cerr << ">>> TEST: Create session" << Endl;
+
+        ReadSession = topicClient.CreateReadSession(readSettings);
+
+        ui32 i = 0;
+        while (AtomicGet(lastOffset) + 1 < count) {
+            Cerr << ">>> TEST: last offset = " << AtomicGet(lastOffset) << Endl;
+            // TODO (ildar-khisam@): restarts with progress and check sdk budget
+            // PlanTasksAndRestart(decompressor, {i++});
+            RunTasks(decompressor, {i++});
+        }
+
+        ReadSession->Close(TDuration::MilliSeconds(10));
+        Cerr << ">>> TEST: Session gracefully closed" << Endl;
     }
 }
 

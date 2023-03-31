@@ -168,6 +168,22 @@ bool TestCreateTable(const TString& txBody, ui64 planStep = 1000, ui64 txId = 10
     return ProposeSchemaTx(runtime, sender, txBody, {++planStep, ++txId});
 }
 
+TString GetReadResult(NKikimrTxColumnShard::TEvReadResult& resRead,
+                      std::optional<ui32> batchNo = 0,
+                      std::optional<bool> finished = true)
+{
+    UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
+    UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), TTestTxConfig::TxTablet1);
+    UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+    if (batchNo) {
+        UNIT_ASSERT_VALUES_EQUAL(resRead.GetBatch(), *batchNo);
+    }
+    if (finished) {
+        UNIT_ASSERT_EQUAL(resRead.GetFinished(), *finished);
+    }
+    return resRead.GetData();
+}
+
 static constexpr ui32 PORTION_ROWS = 80 * 1000;
 
 // ts[0] = 1600000000; // date -u --date='@1600000000' Sun Sep 13 12:26:40 UTC 2020
@@ -265,15 +281,11 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         UNIT_ASSERT(event);
 
         auto& resRead = Proto(event);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(resRead.GetBatch(), 0);
-        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-        UNIT_ASSERT(resRead.GetData().size() > 0);
+        TString data = GetReadResult(resRead);
+        UNIT_ASSERT(data.size() > 0);
 
         auto& schema = resRead.GetMeta().GetSchema();
-        UNIT_ASSERT(CheckSame(resRead.GetData(), schema, PORTION_ROWS, spec.TtlColumn, ts[1]));
+        UNIT_ASSERT(CheckSame(data, schema, PORTION_ROWS, spec.TtlColumn, ts[1]));
     }
 
     // Alter TTL
@@ -308,12 +320,8 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         UNIT_ASSERT(event);
 
         auto& resRead = Proto(event);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(resRead.GetBatch(), 0);
-        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-        UNIT_ASSERT_VALUES_EQUAL(resRead.GetData().size(), 0);
+        TString data = GetReadResult(resRead);
+        UNIT_ASSERT_VALUES_EQUAL(data.size(), 0);
     }
 
     // Disable TTL
@@ -366,6 +374,8 @@ public:
     ui32 SuccessCounter = 0;
     ui32 ErrorsCounter = 0;
     ui32 ResponsesCounter = 0;
+    ui32 CaptureReadEvents = 0;
+    std::vector<TAutoPtr<IEventHandle>> CapturedReads;
 
     TString SerializeToString() const {
         TStringBuilder sb;
@@ -399,50 +409,60 @@ public:
         Cerr << "FINISH_WAITING(" << attemption << "): " << SerializeToString() << Endl;
         SuccessCounterStart = SuccessCounter;
     }
+
+    void WaitReadsCaptured(TTestBasicRuntime& runtime) const {
+        const TInstant startInstant = TAppData::TimeProvider->Now();
+        const TInstant deadline = startInstant + TDuration::Seconds(10);
+        while (CaptureReadEvents && TAppData::TimeProvider->Now() < deadline) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(CaptureReadEvents, 0);
+    }
+
+    void ResendCapturedReads(TTestBasicRuntime& runtime) {
+        for (auto& cev : CapturedReads) {
+            auto* msg = TryGetPrivateEvent<NBlobCache::TEvBlobCache::TEvReadBlobRange>(cev);
+            UNIT_ASSERT(msg);
+            Cerr << "RESEND " << msg->BlobRange.ToString() << " "
+                    << msg->ReadOptions.ToString() << Endl;
+            runtime.Send(cev.Release());
+        }
+        CapturedReads.clear();
+    }
 };
 
 class TEventsCounter {
 private:
     TCountersContainer* Counters = nullptr;
     TTestBasicRuntime& Runtime;
-    const TActorId Sender;
-
-    template <class TPrivateEvent>
-    static TPrivateEvent* TryGetPrivateEvent(TAutoPtr<IEventHandle>& ev) {
-        if (ev->GetTypeRewrite() != TPrivateEvent::EventType) {
-            return nullptr;
-        }
-        return dynamic_cast<TPrivateEvent*>(ev->GetBase());
-    }
 
 public:
-    TEventsCounter(TCountersContainer& counters, TTestBasicRuntime& runtime, const TActorId sender)
+    TEventsCounter(TCountersContainer& counters, TTestBasicRuntime& runtime)
         : Counters(&counters)
         , Runtime(runtime)
-        , Sender(sender)
     {
         Y_UNUSED(Runtime);
-        Y_UNUSED(Sender);
     }
 
     bool operator()(TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
         TStringBuilder ss;
         if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvExport>(ev)) {
-            ss << "EXPORT";
-            if (msg->Status == NKikimrProto::OK) {
-                ss << "(" << ++Counters->SuccessCounter << "): SUCCESS";
-            }
-            if (msg->Status == NKikimrProto::ERROR) {
-                ss << "(" << ++Counters->ErrorsCounter << "): ERROR";
-            }
-            if (msg->Status == NKikimrProto::UNKNOWN) {
-                ss << "(" << ++Counters->UnknownsCounter << "): UNKNOWN";
-            }
+            ss << "EXPORT(" << ++Counters->SuccessCounter << "): " << NKikimrProto::EReplyStatus_Name(msg->Status);
         } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectResponse>(ev)) {
             ss << "S3_RESPONSE(put " << ++Counters->ResponsesCounter << "):";
         } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(ev)) {
             ss << "(" << ++Counters->SuccessCounter << "): DELETE SUCCESS";
             ss << "S3_RESPONSE(delete " << ++Counters->ResponsesCounter << "):";
+        } else if (auto* msg = TryGetPrivateEvent<NBlobCache::TEvBlobCache::TEvReadBlobRange>(ev)) {
+            if (Counters->CaptureReadEvents) {
+                Cerr << "CAPTURE " << msg->BlobRange.ToString() << " "
+                    << msg->ReadOptions.ToString() << Endl;
+                --Counters->CaptureReadEvents;
+                Counters->CapturedReads.push_back(ev.Release());
+                return true;
+            } else {
+                return false;
+            }
         } else {
             return false;
         }
@@ -469,6 +489,18 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
+
+    // Disable blob cache. It hides evict-delete, evict-read races.
+    {
+        TAtomic unused;
+        runtime.GetAppData().Icb->SetValue("BlobCache.MaxCacheDataSize", 0, unused);
+    }
+
+    // Disable GC batching so that deleted blobs get collected without a delay
+    {
+        TAtomic unused;
+        runtime.GetAppData().Icb->SetValue("ColumnShardControls.BlobCountToTriggerGC", 1, unused);
+    }
 
     //
 
@@ -506,7 +538,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     specRowsBytes.reserve(specs.size());
 
     TCountersContainer counter;
-    runtime.SetEventFilter(TEventsCounter(counter, runtime, sender));
+    runtime.SetEventFilter(TEventsCounter(counter, runtime));
     for (ui32 i = 0; i < specs.size(); ++i) {
         bool hasColdEviction = false;
         for (auto&& i : specs[i].Tiers) {
@@ -529,44 +561,71 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
         }
 
+        // Read crossed with eviction (start)
+        {
+            auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep-1, Max<ui64>(), tableId);
+            Proto(read.get()).AddColumnNames(specs[i].TtlColumn);
+
+            counter.CaptureReadEvents = 1; // TODO: we need affected by tiering blob here
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
+            counter.WaitReadsCaptured(runtime);
+        }
+
+        // Eviction
+
         TriggerTTL(runtime, sender, { ++planStep, ++txId }, {}, 0, specs[i].TtlColumn);
+
+        Cerr << (hasColdEviction ? "Cold" : "Hot")
+            << " tiering, spec " << i << ", num tiers: " << specs[i].Tiers.size() << "\n";
+
         if (hasColdEviction) {
-            Cerr << "Cold tiering, spec " << i << ", num tiers: " << specs[i].Tiers.size() << "\n";
             if (i > initialEviction) {
                 counter.WaitEvents(runtime, i, 1, TDuration::Seconds(40));
             } else {
                 counter.WaitEvents(runtime, i, 0, TDuration::Seconds(20));
             }
         } else {
-            Cerr << "Hot tiering, spec " << i << ", num tiers: " << specs[i].Tiers.size() << "\n";
             counter.WaitEvents(runtime, i, 0, TDuration::Seconds(4));
         }
         if (reboots) {
             ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
         }
 
-        // Read
+        // Read crossed with eviction (finish)
+        {
+            counter.ResendCapturedReads(runtime);
+            ui32 numBatches = 0;
+            THashSet<ui32> batchNumbers;
+            while (!numBatches || numBatches < batchNumbers.size()) {
+                auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+                UNIT_ASSERT(event);
 
-        --planStep;
-        auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, Max<ui64>(), tableId);
+                auto& resRead = Proto(event);
+                TString data = GetReadResult(resRead, {}, {});
+                batchNumbers.insert(resRead.GetBatch());
+                if (resRead.GetFinished()) {
+                    numBatches = resRead.GetBatch() + 1;
+                }
+            }
+        }
+
+        // Read data after eviction
+
+        auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep-1, Max<ui64>(), tableId);
         Proto(read.get()).AddColumnNames(specs[i].TtlColumn);
-
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
+
         specRowsBytes.emplace_back(0, 0);
-        ui32 idx = 0;
         while (true) {
             auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
             UNIT_ASSERT(event);
 
             auto& resRead = Proto(event);
-            UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-            UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-            UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-            UNIT_ASSERT_EQUAL(resRead.GetBatch(), idx++);
-
-            if (!resRead.GetData().size()) {
+            TString data = GetReadResult(resRead, {}, {});
+            if (!data.size()) {
                 break;
             }
+
             auto& meta = resRead.GetMeta();
             auto& schema = meta.GetSchema();
             auto ttlColumn = DeserializeColumn(resRead.GetData(), schema, specs[i].TtlColumn);
@@ -844,12 +903,8 @@ void TestDrop(bool reboots) {
         UNIT_ASSERT(event);
 
         auto& resRead = Proto(event);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
-        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-        UNIT_ASSERT_EQUAL(resRead.GetData().size(), 0);
+        TString data = GetReadResult(resRead);
+        UNIT_ASSERT_EQUAL(data.size(), 0);
     }
 }
 

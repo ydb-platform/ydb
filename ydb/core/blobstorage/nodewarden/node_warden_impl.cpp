@@ -8,6 +8,9 @@ using namespace NKikimr;
 using namespace NStorage;
 
 TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
+    return {};
+
+#if 0
     TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel();
 
     try {
@@ -30,6 +33,7 @@ TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
     });
 
     return drives;
+#endif
 }
 
 void TNodeWarden::StartInvalidGroupProxy() {
@@ -182,31 +186,38 @@ void TNodeWarden::Handle(TEvInterconnect::TEvNodeInfo::TPtr ev) {
 void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     const NPDisk::TEvSlayResult &msg = *ev->Get();
     const TVSlotId vslotId(LocalNodeId, msg.PDiskId, msg.VSlotId);
-    STLOG(PRI_INFO, BS_NODE, NW28, "Handle(NPDisk::TEvSlayResult)", (Msg, msg.ToString()));
+    const auto it = SlayInFlight.find(vslotId);
+    Y_VERIFY_DEBUG(it != SlayInFlight.end());
+    STLOG(PRI_INFO, BS_NODE, NW28, "Handle(NPDisk::TEvSlayResult)", (Msg, msg.ToString()),
+        (ExpectedRound, it != SlayInFlight.end() ? std::make_optional(it->second) : std::nullopt));
+    if (it == SlayInFlight.end() || it->second != msg.SlayOwnerRound) {
+        return; // outdated response
+    }
     switch (msg.Status) {
-        case NKikimrProto::NOTREADY:
+        case NKikimrProto::NOTREADY: {
+            const ui64 round = NextLocalPDiskInitOwnerRound();
             TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(MakeBlobStoragePDiskID(LocalNodeId,
-                msg.PDiskId), SelfId(), new NPDisk::TEvSlay(msg.VDiskId, msg.SlayOwnerRound, msg.PDiskId, msg.VSlotId)));
+                msg.PDiskId), SelfId(), new NPDisk::TEvSlay(msg.VDiskId, round, msg.PDiskId, msg.VSlotId)));
+            it->second = round;
             break;
+        }
 
         case NKikimrProto::OK:
-        case NKikimrProto::ALREADY: {
+        case NKikimrProto::ALREADY:
+            SlayInFlight.erase(it);
             if (const auto vdiskIt = LocalVDisks.find(vslotId); vdiskIt == LocalVDisks.end()) {
                 SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
             } else {
                 SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
-
                 TVDiskRecord& vdisk = vdiskIt->second;
-                Y_VERIFY(vdisk.SlayInFlight);
-                vdisk.SlayInFlight = false;
                 StartLocalVDiskActor(vdisk, TDuration::Zero()); // restart actor after successful wiping
                 SendDiskMetrics(false);
             }
             break;
-        }
 
-        case NKikimrProto::CORRUPTED:
+        case NKikimrProto::CORRUPTED: // this branch doesn't really work
         case NKikimrProto::ERROR:
+            SlayInFlight.erase(it);
             STLOG(PRI_ERROR, BS_NODE, NW29, "Handle(NPDisk::TEvSlayResult) error", (Msg, msg.ToString()));
             SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::OPERATION_ERROR);
             break;

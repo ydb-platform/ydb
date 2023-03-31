@@ -1055,6 +1055,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
         }
 
+        request->Record.SetPeerName(GetRequestProto().GetPeerName());
         if (GetRequestEv().HasModifyScheme()) {
             request->Record.AddTransaction()->MergeFrom(GetModifyScheme());
         } else {

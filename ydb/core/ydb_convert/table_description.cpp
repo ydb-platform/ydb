@@ -420,7 +420,6 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
         auto changefeed = out.add_changefeeds();
 
         changefeed->set_name(stream.GetName());
-        changefeed->set_state(Ydb::Table::ChangefeedDescription::STATE_ENABLED);
         changefeed->set_virtual_timestamps(stream.GetVirtualTimestamps());
 
         switch (stream.GetMode()) {
@@ -438,6 +437,16 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
         switch (stream.GetFormat()) {
         case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
             changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+            break;
+        default:
+            break;
+        }
+
+        switch (stream.GetState()) {
+        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateReady:
+        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled:
+        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan:
+            changefeed->set_state(static_cast<Ydb::Table::ChangefeedDescription::State>(stream.GetState()));
             break;
         default:
             break;
@@ -473,6 +482,15 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
         status = Ydb::StatusIds::BAD_REQUEST;
         error = "Invalid changefeed format";
         return false;
+    }
+
+    if (in.initial_scan()) {
+        if (!AppData()->FeatureFlags.GetEnableChangefeedInitialScan()) {
+            status = Ydb::StatusIds::UNSUPPORTED;
+            error = "Changefeed initial scan is not supported yet";
+            return false;
+        }
+        out.SetState(NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan);
     }
 
     return true;

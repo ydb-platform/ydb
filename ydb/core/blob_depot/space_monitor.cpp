@@ -23,7 +23,29 @@ namespace NKikimr::NBlobDepot {
             group.StatusFlags = msg.StatusFlags;
             group.ApproximateFreeSpaceShare = msg.ApproximateFreeSpaceShare;
             Self->InvalidateGroupForAllocation(groupId);
+
+            if (group.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
+                HandleYellowChannels();
+            }
         }
+    }
+
+    void TSpaceMonitor::HandleYellowChannels() {
+        TVector<ui32> yellowMove, yellowStop;
+
+        for (const auto& [groupId, group] : Groups) {
+            if (group.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
+                yellowMove.insert(yellowMove.end(), group.Channels.begin(), group.Channels.end());
+            } else if (group.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+                yellowStop.insert(yellowMove.end(), group.Channels.begin(), group.Channels.end());
+            }
+        }
+
+        Y_VERIFY(yellowMove || yellowStop);
+        STLOG(PRI_INFO, BLOB_DEPOT, BDT28, "asking to reassign channels", (Id, Self->GetLogId()),
+            (YellowMove, FormatList(yellowMove)),
+            (YellowStop, FormatList(yellowStop)));
+        Self->Executor()->OnYellowChannels(std::move(yellowMove), std::move(yellowStop));
     }
 
     void TSpaceMonitor::Kick() {
@@ -49,11 +71,11 @@ namespace NKikimr::NBlobDepot {
         }
         const TChannelKind& kind = it->second;
         for (const auto& [channel, group] : kind.ChannelGroups) {
-            Groups.try_emplace(group);
+            Groups[group].Channels.push_back(channel);
         }
     }
 
-    ui64 TSpaceMonitor::GetGroupAllocationWeight(ui32 groupId) const {
+    ui64 TSpaceMonitor::GetGroupAllocationWeight(ui32 groupId, bool stopOnLightYellow) const {
         const auto it = Groups.find(groupId);
         if (it == Groups.end()) {
             Y_VERIFY_DEBUG(false);
@@ -61,8 +83,10 @@ namespace NKikimr::NBlobDepot {
         }
 
         const TGroupRecord& group = it->second;
-        if (group.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
-            return 0; // do not write data to this group
+        if (group.StatusFlags.Check(stopOnLightYellow
+                ? NKikimrBlobStorage::StatusDiskSpaceLightYellowMove
+                : NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+            return 0;
         }
 
         if (!group.ApproximateFreeSpaceShare) { // not collected yet?

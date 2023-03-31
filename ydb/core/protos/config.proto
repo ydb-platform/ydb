@@ -40,6 +40,12 @@ message TAffinity {
 }
 
 message TActorSystemConfig {
+    enum ENodeType {
+        STORAGE = 1;
+        COMPUTE = 2;
+        HYBRID = 3;
+    }
+
     message TExecutor {
         enum EType {
             BASIC = 1;
@@ -113,6 +119,13 @@ message TActorSystemConfig {
     }
 
     optional TUnitedWorkers UnitedWorkers = 11;
+
+    optional bool UseAutoConfig = 12;
+
+    // Used only with UseAutoConfig;
+    optional uint32 CpuCount = 13;
+    optional ENodeType NodeType = 14 [default = COMPUTE];
+
 }
 
 message TStaticNameserviceConfig {
@@ -652,6 +665,11 @@ message TGRpcConfig {
     optional uint32 KeepAliveMaxProbeCount = 102 [default = 3]; // TCP_KEEPCNT
     optional uint32 KeepAliveProbeIntervalSec = 103 [default = 10]; // TCP_KEEPINTVL
 
+    optional uint32 WorkersPerCompletionQueue = 104 [default = 2];
+    optional uint32 HandlersPerCompletionQueue = 105 [default = 1];
+
+    optional uint32 GRpcProxyCount = 106 [default = 1];
+
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
 }
 
@@ -690,7 +708,7 @@ message TFeatureFlags {
     optional bool EnableExternalHive = 17 [default = true];
     optional bool UseSchemeBoardCacheForSchemeRequests = 18 [default = true]; // deprecated: always true
     optional bool CompileMinikqlWithVersion = 19 [default = true]; // deprecated: always true
-    optional bool ReadTableWithSnapshot = 20 [default = true];
+    optional bool ReadTableWithSnapshot = 20 [default = true]; // deprecated: always true
     optional bool ImportantTabletsUseSystemPool = 21 [default = true];
     optional bool EnableOfflineSlaves = 22 [default = true]; // deprecated: always true
     optional bool CheckDatabaseAccessPermission = 23 [default = false];
@@ -715,7 +733,7 @@ message TFeatureFlags {
     optional bool AllowStreamExecuteYqlScript = 42 [default = true];
     optional bool EnableKqpScanOverPersistentSnapshot = 43 [default = true]; // deprecated: always true
     optional bool EnableOlapSchemaOperations = 44 [default = true];
-    optional bool EnableVPatch = 45 [default = false];
+    optional bool EnableVPatch = 45 [default = true];
     optional bool EnableMvccSnapshotReads = 46 [default = true];
     optional Tribool EnableMvcc = 47 [default = VALUE_TRUE];
     optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = true];
@@ -733,21 +751,21 @@ message TFeatureFlags {
     optional bool EnablePublicApiExternalBlobs = 59 [default = false];
     optional bool EnablePublicApiKeepInMemory = 60 [default = false];
     optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
-    optional bool EnablePredicateExtractForScanQueries = 62 [default = true];
+    reserved 62; // EnablePredicateExtractForScanQueries
     optional bool AllowVDiskDefrag = 63 [default = true];
     optional bool EnableAsyncHttpMon = 64 [default = true];
     optional bool EnableChangefeeds = 65 [default = true];
-    optional bool EnableKqpScanQueryStreamLookup = 66 [default = false];
+    reserved 66; // EnableKqpScanQueryStreamLookup
     optional bool EnableKqpScanQueryMultipleOlapShardsReads = 67 [default = false];
-    optional bool EnablePredicateExtractForDataQueries = 68 [default = true];
+    reserved 68; // EnablePredicateExtractForDataQueries;
     reserved 69; // optional bool EnableKqpPatternCacheLiteral = 69 [default = false];
-    optional bool EnableMoveIndex = 70 [default = false];
+    optional bool EnableMoveIndex = 70 [default = true];
     // enable http handle for self termination
     optional bool EnableFailureInjectionTermination = 71 [default = false];
     optional bool EnableChunkLocking = 72 [default = false];
     optional bool EnableNotNullDataColumns = 73 [default = false];
     optional bool EnableGrpcAudit = 74 [default = false];
-    optional bool EnableKqpDataQueryStreamLookup = 75 [default = false];
+    reserved 75; // EnableKqpDataQueryStreamLookup
     optional bool EnableBorrowedSplitCompaction = 76 [default = true];
     optional bool EnableChangefeedInitialScan = 77 [default = false];
     reserved 78; // EnableKqpScanQuerySourceRead
@@ -760,6 +778,7 @@ message TFeatureFlags {
     reserved 83; // EnableKqpDataQuerySourceRead
     optional bool EnableSmallDiskOptimization = 84 [default = true];
     optional bool EnableDataShardVolatileTransactions = 85 [default = false];
+    optional bool EnableTopicDiskSubDomainQuota = 89 [default = false];
 }
 
 
@@ -1072,7 +1091,7 @@ message TTableServiceConfig {
         reserved 13;
         reserved 14;
         optional TShardsScanningPolicy ShardsScanningPolicy = 16;
-        optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 104857600]; // 100 MiB, 0 is for disable
+        optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 0]; // 0 is for disable
     }
 
     message TSpillingServiceConfig {
@@ -1185,6 +1204,12 @@ message TTableServiceConfig {
         optional uint32 LeakyBucketQuotaBucketDurationSeconds = 6 [default = 60];
     }
 
+    message TExecuterRetriesConfig {
+        optional uint32 MinDelayToRetryMs = 1 [default = 10];
+        optional uint32 MaxDelayToRetryMs = 2 [default = 400];
+        optional uint32 MaxRetryNumber = 3 [default = 10];
+    }
+
     optional uint32 QueryLimitBytes = 1;
     optional uint32 ParametersLimitBytes = 2;
     optional uint32 SessionsLimitPerNode = 3;
@@ -1214,6 +1239,14 @@ message TTableServiceConfig {
     optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
     optional bool EnableKqpDataQuerySourceRead = 27 [default = false];
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
+    optional bool EnableKqpScanQueryStreamLookup = 30 [default = false];
+    optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
+    optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
+    optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
+    optional bool EnablePublishKqpProxyByRM = 34 [default = false];
+    optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
+    optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
+    optional bool EnablePredicateExtractForDataQueries = 37 [default = false];
 };
 
 // Config describes immediate controls and allows
@@ -1394,6 +1427,8 @@ message TImmediateControlsConfig {
 message TMeteringConfig {
     optional string MeteringFilePath = 1;
     repeated string SystemBackupSIDs = 2;
+    optional string LogName = 3;
+    optional bool UnifiedAgentEnable = 4 [default = false];
 };
 
 message TAuditConfig {
@@ -1402,10 +1437,23 @@ message TAuditConfig {
         TXT = 2;
     }
 
-    optional string AuditFilePath = 1;
-    optional EFormat Format = 2 [default = JSON];
-    optional string LogName = 3;
-    optional bool UnifiedAgentEnable = 4 [default = false];
+    message TStderrBackend {
+        optional EFormat Format = 1 [default = JSON];
+    }
+
+    message TFileBackend {
+        optional EFormat Format = 1 [default = JSON];
+        optional string FilePath = 2;
+    }
+
+    message TUnifiedAgentBackend {
+        optional EFormat Format = 1 [default = JSON];
+        optional string LogName = 2;
+    }
+
+    optional TStderrBackend StderrBackend = 1;
+    optional TFileBackend FileBackend = 2;
+    optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
 };
 
 message THiveTabletLimit {
@@ -1521,6 +1569,8 @@ message TDataShardConfig {
     optional uint64 TtlReadAheadHi = 14 [default = 1048576];
     optional uint64 IdleMemCompactionIntervalSeconds = 15 [default = 60];
     optional uint64 RestoreReadBufferSizeLimit = 16 [default = 268435456]; // 256 MB
+    optional string CdcInitialScanTaskName = 17 [default = "cdc_initial_scan"];
+    optional uint32 CdcInitialScanTaskPriority = 18 [default = 10];
 }
 
 message TSchemeShardConfig {
@@ -1593,6 +1643,9 @@ message TCompactionConfig {
 
         // Compact even if shard has single part and empty memtable
         optional bool CompactSinglePartedShards = 10 [default = false];
+
+        // Do not wakeup earlier, than this interval
+        optional uint64 MinWakeupIntervalMs = 11 [default = 10];
     }
 
     message TBorrowedCompactionConfig {
@@ -1601,6 +1654,9 @@ message TCompactionConfig {
 
         // After this interval we will try to restart
         optional uint64 TimeoutSeconds = 3 [default = 15];
+
+        // Do not wakeup earlier, than this interval
+        optional uint64 MinWakeupIntervalMs = 4 [default = 10];
     }
 
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;

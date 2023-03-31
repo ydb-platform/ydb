@@ -303,7 +303,7 @@ private:
     TActorId NewSchemeCache;
 
     TActorId AuthInitActor;
-    TIntrusivePtr<NACLib::TUserToken> Token;
+    TIntrusiveConstPtr<NACLib::TUserToken> Token;
 
     TString ClientId;
     TString ClientPath;

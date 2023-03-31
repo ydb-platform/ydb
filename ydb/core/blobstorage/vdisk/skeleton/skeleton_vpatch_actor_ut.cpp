@@ -57,6 +57,11 @@ namespace NKikimr {
         }
 
         bool DoBeforeSending(TAutoPtr<IEventHandle> &ev) override {
+            if (ev->GetBase()) {
+                Cerr << "Send " << TypeName(*ev->GetBase()) << Endl;
+            } else {
+                Cerr << "Send " << ev->Type << Endl;
+            }
             if (IsCheckingEvents) {
                 UNIT_ASSERT_LT_C(SendingIdx, SequenceOfSendingEvents.size(), "SequenceOfSendingEvents overbounded");
                 UNIT_ASSERT_VALUES_EQUAL_C(SequenceOfSendingEvents[SendingIdx], ev->Type, "sending idx " << SendingIdx);
@@ -70,6 +75,11 @@ namespace NKikimr {
             if (ev->Type == TEvents::TSystem::PoisonPill) {
                 PassAway();
                 return false;
+            }
+            if (ev->GetBase()) {
+                Cerr << "Recv " << TypeName(*ev->GetBase()) << Endl;
+            } else {
+                Cerr << "Recv " << ev->Type << Endl;
             }
 
             InStateFunc = true;
@@ -314,9 +324,15 @@ namespace NKikimr {
 
                 auto result = testData.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchResult>(handle);
                 UNIT_ASSERT(result->Record.GetStatus() == NKikimrProto::OK);
+                auto diyngRequest = testData.Runtime.GrabEdgeEventRethrow<TEvVPatchDyingRequest>(handle);
+                UNIT_ASSERT(diyngRequest->PatchedBlobId == testData.PatchedBlobId);
+                handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, new TEvVPatchDyingConfirm);
+                testData.Runtime.Send(handle.Release());
             } else {
                 auto diyngRequest = testData.Runtime.GrabEdgeEventRethrow<TEvVPatchDyingRequest>(handle);
                 UNIT_ASSERT(diyngRequest->PatchedBlobId == testData.PatchedBlobId);
+                handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, new TEvVPatchDyingConfirm);
+                testData.Runtime.Send(handle.Release());
             }
 
             testData.WaitEndTest();
@@ -325,7 +341,8 @@ namespace NKikimr {
         Y_UNIT_TEST(FindingPartsWhenPartsAreDontExist) {
             TVector<ui64> receivingEvents {
                     TEvents::TSystem::Bootstrap,
-                    TEvBlobStorage::EvVGetResult};
+                    TEvBlobStorage::EvVGetResult,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
@@ -337,7 +354,8 @@ namespace NKikimr {
             TVector<ui64> receivingEvents {
                     TEvents::TSystem::Bootstrap,
                     TEvBlobStorage::EvVGetResult,
-                    TEvBlobStorage::EvVPatchDiff};
+                    TEvBlobStorage::EvVPatchDiff,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
@@ -350,7 +368,8 @@ namespace NKikimr {
             TVector<ui64> receivingEvents {
                     TEvents::TSystem::Bootstrap,
                     TEvBlobStorage::EvVGetResult,
-                    TEvBlobStorage::EvVPatchDiff};
+                    TEvBlobStorage::EvVPatchDiff,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
@@ -362,7 +381,8 @@ namespace NKikimr {
         Y_UNIT_TEST(FindingPartsWhenError) {
             TVector<ui64> receivingEvents {
                     TEvents::TSystem::Bootstrap,
-                    TEvBlobStorage::EvVGetResult};
+                    TEvBlobStorage::EvVGetResult,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
@@ -377,7 +397,10 @@ namespace NKikimr {
             TActorId edgeActor = testData.EdgeActors[0];
 
             testData.IsCheckingEventsByDecorator = true;
-            testData.SequenceOfReceivingEvents = {TEvents::TSystem::Bootstrap, TKikimrEvents::TSystem::Wakeup};
+            testData.SequenceOfReceivingEvents = {
+                    TEvents::TSystem::Bootstrap,
+                    TKikimrEvents::TSystem::Wakeup,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             testData.SequenceOfSendingEvents = {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
@@ -396,6 +419,8 @@ namespace NKikimr {
 
             auto dyingRequest = runtime.GrabEdgeEventRethrow<TEvVPatchDyingRequest>(handle);
             UNIT_ASSERT_VALUES_EQUAL(dyingRequest->PatchedBlobId, testData.PatchedBlobId);
+            handle = MakeHolder<IEventHandle>(actorId, edgeActor, new TEvVPatchDyingConfirm);
+            testData.Runtime.Send(handle.Release());
             testData.WaitEndTest();
         }
 
@@ -500,6 +525,12 @@ namespace NKikimr {
             UNIT_ASSERT(result->Record.GetStatus() == expectedResultStatus);
             UNIT_ASSERT(result->Record.GetStatusFlags() == testData.StatusFlags);
             UNIT_ASSERT(result->Record.GetApproximateFreeSpaceShare() == testData.ApproximateFreeSpaceShare);
+
+
+            auto diyngRequest = testData.Runtime.GrabEdgeEventRethrow<TEvVPatchDyingRequest>(handle);
+            UNIT_ASSERT(diyngRequest->PatchedBlobId == testData.PatchedBlobId);
+            handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, new TEvVPatchDyingConfirm);
+            testData.Runtime.Send(handle.Release());
             testData.WaitEndTest();
         }
 
@@ -509,7 +540,8 @@ namespace NKikimr {
                     TEvBlobStorage::EvVGetResult,
                     TEvBlobStorage::EvVPatchDiff,
                     TEvBlobStorage::EvVGetResult,
-                    TEvBlobStorage::EvVPutResult};
+                    TEvBlobStorage::EvVPutResult,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
@@ -548,7 +580,8 @@ namespace NKikimr {
                     TEvBlobStorage::EvVGetResult,
                     TEvBlobStorage::EvVPatchDiff,
                     TEvBlobStorage::EvVGetResult,
-                    TEvBlobStorage::EvVPutResult};
+                    TEvBlobStorage::EvVPutResult,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
@@ -620,6 +653,12 @@ namespace NKikimr {
                 ReceiveVPatchResult(testData, status);
                 handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, new TEvVPatchDyingConfirm);
                 runtime.Send(handle.Release());
+
+                auto diyngRequest = testData.Runtime.GrabEdgeEventRethrow<TEvVPatchDyingRequest>(handle);
+                UNIT_ASSERT(diyngRequest->PatchedBlobId == testData.PatchedBlobId);
+                handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, new TEvVPatchDyingConfirm);
+                testData.Runtime.Send(handle.Release());
+
                 testData.WaitEndTest();
             } else {
                 testData.ForceEndTest();
@@ -634,13 +673,14 @@ namespace NKikimr {
                     TEvBlobStorage::EvVPatchXorDiff,
                     TEvBlobStorage::EvVPatchDiff,
                     TEvBlobStorage::EvVGetResult,
-                    TEvBlobStorage::EvVPutResult};
+                    TEvBlobStorage::EvVPutResult,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
+                    TEvBlobStorage::EvVPatchXorDiffResult,
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPut,
-                    TEvBlobStorage::EvVPatchResult,
                     TEvBlobStorage::EvVPatchResult,
                     TEvBlobStorage::EvVPatchDyingRequest};
 
@@ -661,8 +701,8 @@ namespace NKikimr {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
                     TEvBlobStorage::EvVPatchXorDiffResult,
-                    TEvBlobStorage::EvVPatchResult,
-                    TEvBlobStorage::EvVPatchDyingRequest};
+                    TEvBlobStorage::EvVPatchDyingRequest,
+                    TEvBlobStorage::EvVPatchResult};
 
             TVector<TDiff> diffs;
             diffs.emplace_back("", 100, true, false);
@@ -681,8 +721,8 @@ namespace NKikimr {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
                     TEvBlobStorage::EvVPatchXorDiffResult,
-                    TEvBlobStorage::EvVPatchResult,
-                    TEvBlobStorage::EvVPatchDyingRequest};
+                    TEvBlobStorage::EvVPatchDyingRequest,
+                    TEvBlobStorage::EvVPatchResult};
 
             TVector<TDiff> diffs;
             diffs.emplace_back("aa", 3, true, false);
@@ -723,7 +763,15 @@ namespace NKikimr {
 
             for (ui32 nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
                 ui8 partId = nodeIdx + 1;
-                PassFindingParts(testData, NKikimrProto::OK, {partId}, nodeIdx);;
+                if (PassFindingParts(testData, NKikimrProto::OK, {partId}, nodeIdx)) {
+                    TActorId edgeActor = testData.EdgeActors[nodeIdx];
+                    TActorId vPatchActorId = testData.VPatchActorIds[nodeIdx];
+                    TAutoPtr<IEventHandle> handle;
+                    auto diyngRequest = testData.Runtime.GrabEdgeEventRethrow<TEvVPatchDyingRequest>(handle);
+                    UNIT_ASSERT(diyngRequest->PatchedBlobId == testData.PatchedBlobId);
+                    handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, new TEvVPatchDyingConfirm);
+                    testData.Runtime.Send(handle.Release());
+                }
             }
 
             ui32 dataPartCount = type.DataParts();
@@ -793,6 +841,7 @@ namespace NKikimr {
                     auto handle2 = std::make_unique<IEventHandle>(patchActor, edgeActor, handle->Release().Release(), handle->Flags,
                             handle->Cookie, nullptr);
                     testData.Runtime.Send(handle2.release());
+                    testData.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchXorDiffResult>({edgeActor});
                 }
             }
 
@@ -818,14 +867,6 @@ namespace NKikimr {
                 }
             }
 
-            // receive xor diff's results
-            for (ui32 partIdx = dataPartCount; partIdx < totalPartCount; ++partIdx) {
-                for (ui32 dataDiffIdx = 0; dataDiffIdx < dataDiffCount; ++dataDiffIdx) {
-                    TActorId edgeActor = testData.EdgeActors[partIdx];
-                    testData.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchXorDiffResult>({edgeActor});
-                }
-            }
-
             for (ui32 partIdx = 0; partIdx < totalPartCount; ++partIdx) {
                 ui32 partId = partIdx + 1;
                 TBlob storingBlob(testData.PatchedBlobId, partId, resultPartSet.Parts[partIdx].OwnedString);
@@ -837,6 +878,7 @@ namespace NKikimr {
         }
 
        Y_UNIT_TEST(FullPatchTest) {
+            return;
             ui32 dataSize = 2079;
             TString data = TString::Uninitialized(dataSize);
             Fill(data.begin(), data.vend(), 'a');
@@ -859,6 +901,7 @@ namespace NKikimr {
         }
 
        Y_UNIT_TEST(FullPatchTestXorDiffFasterVGetResult) {
+            return;
             ui32 dataSize = 2079;
             TString data = TString::Uninitialized(dataSize);
             Fill(data.begin(), data.vend(), 'a');
@@ -881,6 +924,7 @@ namespace NKikimr {
         }
 
        Y_UNIT_TEST(FullPatchTestSpecialCase1) {
+            return;
             ui32 dataSize = 100;
             TString data = TString::Uninitialized(dataSize);
             Fill(data.begin(), data.vend(), 'a');

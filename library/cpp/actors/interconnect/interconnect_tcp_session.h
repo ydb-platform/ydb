@@ -266,7 +266,7 @@ namespace NActors {
         }
 
         const TDuration DeadPeerTimeout;
-        TInstant LastReceiveTimestamp;
+        TMonotonic LastReceiveTimestamp;
         void HandleCheckDeadPeer();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -413,15 +413,15 @@ namespace NActors {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // pinger
 
-        TInstant LastPingTimestamp;
+        TMonotonic LastPingTimestamp;
         static constexpr TDuration PingPeriodicity = TDuration::Seconds(1);
         void IssuePingRequest();
         void Handle(TEvProcessPingRequest::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        TInstant LastInputActivityTimestamp;
-        TInstant LastPayloadActivityTimestamp;
+        TMonotonic LastInputActivityTimestamp;
+        TMonotonic LastPayloadActivityTimestamp;
         TWatchdogTimer<TEvCheckCloseOnIdle> CloseOnIdleWatchdog;
         TWatchdogTimer<TEvCheckLostConnection> LostConnectionWatchdog;
 
@@ -481,8 +481,8 @@ namespace NActors {
 
         // time at which we want to send confirmation packet even if there was no outgoing data
         ui64 UnconfirmedBytes = 0;
-        TInstant ForcePacketTimestamp = TInstant::Max();
-        TPriorityQueue<TInstant, TVector<TInstant>, std::greater<TInstant>> FlushSchedule;
+        TMonotonic ForcePacketTimestamp = TMonotonic::Max();
+        TPriorityQueue<TMonotonic, TVector<TMonotonic>, std::greater<TMonotonic>> FlushSchedule;
         size_t MaxFlushSchedule = 0;
         ui64 FlushEventsScheduled = 0;
         ui64 FlushEventsProcessed = 0;

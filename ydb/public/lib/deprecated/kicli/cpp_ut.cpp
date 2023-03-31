@@ -41,7 +41,6 @@ Tests::TServer StartupKikimr(NGRpcProxy::TGRpcClientConfig& clientConfig,
     settings.SetLogBackend(logBackend);
     settings.AppConfig.CopyFrom(config);
     settings.SetEnableSystemViews(false);
-    settings.SetEnableMvcc(false);
 
     Tests::TServer Server(settings);
     Server.EnableGRpc(grpcPort);

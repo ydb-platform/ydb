@@ -23,6 +23,9 @@ namespace NKikimr::NBsController {
 
             TBoxInfo::THostInfo info;
             info.HostConfigId = host.GetHostConfigId();
+            if (const ui32 nodeId = host.GetEnforcedNodeId()) {
+                info.EnforcedNodeId = nodeId;
+            }
 
             const auto &hostConfigs = HostConfigs.Get();
             if (!hostConfigs.count(info.HostConfigId)) {

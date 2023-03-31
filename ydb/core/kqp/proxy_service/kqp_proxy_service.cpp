@@ -199,35 +199,48 @@ public:
         PublishResourceUsage();
         AskSelfNodeInfo();
         SendWhiteboardRequest();
-        ScheduleIdleSessionCheck();
+        ScheduleIdleSessionCheck(TDuration::Seconds(2));
     }
 
     TDuration GetSessionIdleDuration() const {
         return TDuration::Seconds(TableServiceConfig.GetSessionIdleDurationSeconds());
     }
 
-    void ScheduleIdleSessionCheck() {
+    void ScheduleIdleSessionCheck(const TDuration& scheduleInterval) {
         if (!ShutdownState) {
-            const TDuration IdleSessionsCheckInterval = TDuration::Seconds(2);
-            Schedule(IdleSessionsCheckInterval, new TEvPrivate::TEvCloseIdleSessions());
+            Schedule(scheduleInterval, new TEvPrivate::TEvCloseIdleSessions());
         }
     }
 
     void Handle(TEvPrivate::TEvCloseIdleSessions::TPtr&) {
-        CheckIdleSessions();
-        ScheduleIdleSessionCheck();
+        bool hasMoreToShutdown = CheckIdleSessions();
+        if (hasMoreToShutdown) {
+            // we already performed several session shutdowns, but there are many sessions to
+            // be shutdowned. so we need to speadup the process.
+            static const TDuration quickIdleCheckInterval = TDuration::MilliSeconds(10);
+            ScheduleIdleSessionCheck(quickIdleCheckInterval);
+        } else {
+            static const TDuration defaultIdleCheckInterval = TDuration::Seconds(2);
+            ScheduleIdleSessionCheck(defaultIdleCheckInterval);
+        }
     }
 
-    void CheckIdleSessions(const ui32 maxSessionsToClose = 10) {
+    bool CheckIdleSessions(const ui32 maxSessionsToClose = 10) {
         ui32 closedIdleSessions = 0;
         const NActors::TMonotonic now = TActivationContext::Monotonic();
         while(true) {
             const TKqpSessionInfo* sessionInfo = LocalSessions->GetIdleSession(now);
-            if (sessionInfo == nullptr || closedIdleSessions > maxSessionsToClose)
-                break;
+            if (sessionInfo == nullptr)
+                return false;
 
+            Counters->ReportSessionActorClosedIdle(sessionInfo->DbCounters);
+            LocalSessions->StopIdleCheck(sessionInfo);
             SendSessionClose(sessionInfo);
             ++closedIdleSessions;
+
+            if (closedIdleSessions > maxSessionsToClose) {
+                return true;
+            }
         }
     }
 
@@ -452,6 +465,9 @@ public:
         }
 
         auto responseEv = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
+        // If we create many sessions per second, it might be ok to check and close
+        // several idle sessions
+        CheckIdleSessions(3);
 
         TProcessResult<TKqpSessionInfo*> result;
         TKqpDbCountersPtr dbCounters;
@@ -468,7 +484,8 @@ public:
             dbCounters = Counters->GetDbCounters(request.GetDatabase());
         }
 
-        LogRequest(request, requestInfo, ev->Sender, dbCounters);
+        Counters->ReportCreateSession(dbCounters, request.ByteSize());
+        KQP_PROXY_LOG_D("Received create session request, trace_id: " << event.GetTraceId());
 
         responseEv->Record.SetResourceExhausted(result.ResourceExhausted);
         responseEv->Record.SetYdbStatus(result.YdbStatus);
@@ -480,66 +497,50 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        auto& event = ev->Get()->Record;
-        auto& request = *event.MutableRequest();
-        TString traceId = event.GetTraceId();
+        const TString& database = ev->Get()->GetDatabase();
+        const TString& traceId = ev->Get()->GetTraceId();
+        const auto queryType = ev->Get()->GetType();
+        const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
-        if (request.GetSessionId().empty()) {
+        if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                request.GetDatabase(), false, result))
+                database, false, result))
             {
-                LogRequest(request, requestInfo, ev->Sender, requestId, Counters->GetDbCounters(request.GetDatabase()));
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
             }
 
-            request.SetSessionId(result.Value->SessionId);
+            ev->Get()->SetSessionId(result.Value->SessionId);
         }
 
-        TString sessionId = request.GetSessionId();
+        const TString& sessionId = ev->Get()->GetSessionId();
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         if (!dbCounters) {
-            dbCounters = Counters->GetDbCounters(request.GetDatabase());
+            dbCounters = Counters->GetDbCounters(database);
         }
 
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
-        LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
+        Counters->ReportQueryRequest(dbCounters, ev->Get()->GetRequestSize(), ev->Get()->GetParametersSize(), ev->Get()->GetQuerySize());
+        Counters->ReportQueryAction(dbCounters, queryAction);
+        Counters->ReportQueryType(dbCounters, queryType);
 
         auto queryLimitBytes = TableServiceConfig.GetQueryLimitBytes();
-        if (queryLimitBytes && IsSqlQuery(request.GetType())) {
-            auto querySizeBytes = request.GetQuery().size();
-            if (querySizeBytes > queryLimitBytes) {
-                TString error = TStringBuilder() << "Query text size exceeds limit (" << querySizeBytes << "b > " << queryLimitBytes << "b)";
-                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
-                return;
-            }
+        if (queryLimitBytes && IsSqlQuery(queryType) && ev->Get()->GetQuerySize() > queryLimitBytes) {
+            TString error = TStringBuilder() << "Query text size exceeds limit ("
+                << ev->Get()->GetQuerySize() << "b > " << queryLimitBytes << "b)";
+            ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
+            return;
         }
 
         auto paramsLimitBytes = TableServiceConfig.GetParametersLimitBytes();
-        if (paramsLimitBytes) {
-            auto paramsBytes = request.GetParameters().ByteSizeLong();
-            if (paramsBytes > paramsLimitBytes) {
-                TString error = TStringBuilder() << "Parameters size exceeds limit (" << paramsBytes << "b > " << paramsLimitBytes << "b)";
-                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
-                return;
-            }
-        }
-
-        if (request.HasTxControl() && request.GetTxControl().has_begin_tx()) {
-            switch (request.GetTxControl().begin_tx().tx_mode_case()) {
-                case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
-                    if (!AppData()->FeatureFlags.GetEnableMvccSnapshotReads()) {
-                        ReplyProcessError(Ydb::StatusIds::BAD_REQUEST,
-                            "Snapshot reads not supported in current database", requestId);
-                        return;
-                    }
-
-                default:
-                    break;
-            }
+        if (paramsLimitBytes && ev->Get()->GetParametersSize() > paramsLimitBytes) {
+            TString error = TStringBuilder() << "Parameters size exceeds limit ("
+                << ev->Get()->GetParametersSize() << "b > " << paramsLimitBytes << "b)";
+            ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
+            return;
         }
 
         TActorId targetId;
@@ -547,7 +548,7 @@ public:
             targetId = sessionInfo->WorkerId;
             LocalSessions->StopIdleCheck(sessionInfo);
         } else {
-            targetId = TryGetSessionTargetActor(request.GetSessionId(), requestInfo, requestId);
+            targetId = TryGetSessionTargetActor(sessionId, requestInfo, requestId);
             if (!targetId) {
                 return;
             }
@@ -557,10 +558,12 @@ public:
         // because it is much better to give detailed error message rather than generic timeout.
         // For example, it helps to avoid race in event order when worker and proxy recieve timeout at the same moment.
         // If worker located in the different datacenter we should better substract some RTT estimate, but at this point it's not done.
-        auto timeoutMs = GetQueryTimeout(request.GetType(), request.GetTimeoutMs(), TableServiceConfig) + DEFAULT_EXTRA_TIMEOUT_WAIT;
+        auto timeout = ev->Get()->GetOperationTimeout();
+        auto timeoutMs = GetQueryTimeout(queryType, timeout.MilliSeconds(), TableServiceConfig) + DEFAULT_EXTRA_TIMEOUT_WAIT;
         StartQueryTimeout(requestId, timeoutMs);
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
-        KQP_PROXY_LOG_D(TKqpRequestInfo(traceId, sessionId) << "Sent request to target, requestId: " << requestId << ", targetId: " << targetId);
+        KQP_PROXY_LOG_D("Sent request to target, requestId: " << requestId
+            << ", targetId: " << targetId << ", sessionId: " << sessionId);
     }
 
     void Handle(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
@@ -573,7 +576,7 @@ public:
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
 
-        LogRequest(request, requestInfo, ev->Sender, dbCounters);
+        Counters->ReportCloseSession(dbCounters, request.ByteSize());
 
         if (LocalSessions->IsPendingShutdown(sessionId) && dbCounters) {
             Counters->ReportSessionGracefulShutdownHit(dbCounters);
@@ -601,7 +604,8 @@ public:
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvPingSessionRequest);
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
-        LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
+        KQP_PROXY_LOG_D("Received ping session request, request_id: " << requestId << ", trace_id: " << traceId);
+        Counters->ReportPingSession(dbCounters, request.ByteSize());
 
         TActorId targetId;
         if (sessionInfo) {
@@ -1056,39 +1060,6 @@ private:
         const NKikimrKqp::TEvPingSessionResponse& event, TKqpDbCountersPtr dbCounters)
     {
         Counters->ReportResponseStatus(dbCounters, event.ByteSize(), event.GetStatus());
-    }
-
-    void LogRequest(const NKikimrKqp::TCloseSessionRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender,
-        TKqpDbCountersPtr dbCounters)
-    {
-        KQP_PROXY_LOG_D(requestInfo << "Received close session request, sender: " << sender << ", SessionId: " << request.GetSessionId());
-        Counters->ReportCloseSession(dbCounters, request.ByteSize());
-    }
-
-    void LogRequest(const NKikimrKqp::TQueryRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 requestId,
-        TKqpDbCountersPtr dbCounters)
-    {
-        KQP_PROXY_LOG_D(requestInfo << "Received new query request, sender: " << sender << ", RequestId: " << requestId
-            << ", Query: \"" << request.GetQuery().substr(0, 10000) << "\"");
-        Counters->ReportQueryRequest(dbCounters, request);
-    }
-
-    void LogRequest(const NKikimrKqp::TCreateSessionRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender,
-        TKqpDbCountersPtr dbCounters)
-    {
-        KQP_PROXY_LOG_D(requestInfo << "Received create session request, sender: " << sender);
-        Counters->ReportCreateSession(dbCounters, request.ByteSize());
-    }
-
-    void LogRequest(const NKikimrKqp::TPingSessionRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 requestId,
-        TKqpDbCountersPtr dbCounters)
-    {
-        KQP_PROXY_LOG_D(requestInfo << "Received ping session request, sender: " << sender << " selfID: " << SelfId() << ", RequestId: " << requestId);
-        Counters->ReportPingSession(dbCounters, request.ByteSize());
     }
 
     bool ReplyProcessError(Ydb::StatusIds::StatusCode ydbStatus, const TString& message, ui64 requestId)

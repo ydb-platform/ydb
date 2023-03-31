@@ -51,10 +51,18 @@ struct TPortionInfo {
     TString TierName;
 
     bool Empty() const { return Records.empty(); }
-    bool Valid() const { return !Empty() && Meta.Produced != TPortionMeta::UNSPECIFIED && HasMinMax(FirstPkColumn); }
+    bool Produced() const { return Meta.Produced != TPortionMeta::UNSPECIFIED; }
+    bool Valid() const { return !Empty() && Produced() && HasMinMax(FirstPkColumn); }
     bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
     bool CanHaveDups() const { return !Valid() || IsInserted(); }
-    ui32 NumRecords() const { return Records.size(); }
+    size_t NumRecords() const { return Records.size(); }
+
+    bool EvictReady(size_t hotSize) const {
+        return Meta.Produced == TPortionMeta::COMPACTED
+            || Meta.Produced == TPortionMeta::SPLIT_COMPACTED
+            || Meta.Produced == TPortionMeta::EVICTED
+            || (Meta.Produced == TPortionMeta::INSERTED && BlobsSizes().first >= hotSize);
+    }
 
     ui64 Portion() const {
         Y_VERIFY(!Empty());

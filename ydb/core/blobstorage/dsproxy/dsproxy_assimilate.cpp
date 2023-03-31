@@ -268,7 +268,7 @@ public:
             NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters>& storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
             NKikimrServices::BS_PROXY_ASSIMILATE, false, {}, now, storagePoolCounters, ev->RestartCounter,
-            "DSProxy.Assimilate")
+            "DSProxy.Assimilate", std::move(ev->ExecutionRelay))
         , SkipBlocksUpTo(ev->SkipBlocksUpTo)
         , SkipBarriersUpTo(ev->SkipBarriersUpTo)
         , SkipBlobsUpTo(ev->SkipBlobsUpTo)
@@ -314,7 +314,7 @@ public:
 
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-        const ui32 orderNumber = Info->GetOrderNumber(vdiskId);
+        const ui32 orderNumber = Info->GetTopology().GetOrderNumber(vdiskId);
         Y_VERIFY(orderNumber < PerVDiskInfo.size());
 
         if (record.GetStatus() == NKikimrProto::OK) {

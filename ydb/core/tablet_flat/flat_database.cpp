@@ -629,6 +629,22 @@ bool TDatabase::HasChanges() const
 
 TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator *cookieAllocator)
 {
+    if (commit) {
+        for (auto& callback : OnCommit_) {
+            callback();
+        }
+    } else {
+        auto it = OnRollback_.rbegin();
+        auto end = OnRollback_.rend();
+        while (it != end) {
+            (*it)();
+            ++it;
+        }
+    }
+
+    OnCommit_.clear();
+    OnRollback_.clear();
+
     TempIterators.clear();
 
     if (IteratedTables) {

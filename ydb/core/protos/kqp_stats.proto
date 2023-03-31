@@ -24,6 +24,11 @@ message TKqpShardTableAggrExtraStats {
     NYql.NDqProto.TDqStatsAggr ShardCpuTimeUs = 2;
 }
 
+// aggregated read actor extra stats for table
+message TKqpReadActorTableAggrExtraStats {
+    repeated uint64 AffectedShards = 1;
+}
+
 message TKqpScanTableExtraStats {
     // IScan stats
     uint64 IScanStartTimeMs = 1;     // start IScan timestamp

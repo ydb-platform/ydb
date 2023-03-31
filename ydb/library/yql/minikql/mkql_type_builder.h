@@ -38,11 +38,12 @@ struct TFunctionTypeInfo
     const TType* RunConfigType = nullptr;
     const TType* UserType = nullptr;
     NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation;
-    NUdf::TUniquePtr<NUdf::IBoxedValue> BlockImplementation;
     TString ModuleIR;
     TString ModuleIRUniqID;
     TString IRFunctionName;
     bool Deterministic = true;
+    bool SupportsBlocks = false;
+    bool IsStrict = false;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -133,23 +134,23 @@ public:
     NUdf::TType* EmptyList() const override;
     NUdf::TType* EmptyDict() const override;
 
-    NUdf::IFunctionTypeInfoBuilder9& BlockImplementationImpl(
-        NUdf::TUniquePtr<NUdf::IBoxedValue> impl) override;
-
+    void Unused1() override;
     NUdf::ISetTypeBuilder::TPtr Set() const override;
     NUdf::IEnumTypeBuilder::TPtr Enum(ui32 expectedItems = 10) const override;
     NUdf::TType* Tagged(const NUdf::TType* baseType, const NUdf::TStringRef& tag) const override;
     NUdf::TType* Pg(ui32 typeId) const override;
     NUdf::IBlockTypeBuilder::TPtr Block(bool isScalar) const override;
-    void Unused1() override;
     void Unused2() override;
+    void Unused3() override;
+
+    NUdf::IFunctionTypeInfoBuilder15& SupportsBlocks() override;
+    NUdf::IFunctionTypeInfoBuilder15& IsStrict() override;
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;
 
 private:
     const TTypeEnvironment& Env_;
     NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation_;
-    NUdf::TUniquePtr<NUdf::IBoxedValue> BlockImplementation_;
     const TType* ReturnType_;
     const TType* RunConfigType_;
     const TType* UserType_;
@@ -165,6 +166,8 @@ private:
     TString ModuleIR_;
     TString ModuleIRUniqID_;
     TString IRFunctionName_;
+    bool SupportsBlocks_ = false;
+    bool IsStrict_ = false;
 };
 
 class TTypeInfoHelper : public NUdf::ITypeInfoHelper

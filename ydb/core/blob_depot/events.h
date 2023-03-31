@@ -27,6 +27,7 @@ namespace NKikimr {
             EvResolve,
             EvResolveResult,
             EvDiscardSpoiledBlobSeq,
+            EvPushMetrics,
         };
 
 #define BLOBDEPOT_PARAM_ARG(ARG) std::optional<std::decay_t<decltype(Record.Get##ARG())>> param##ARG,
@@ -71,6 +72,7 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvResolve);
         BLOBDEPOT_EVENT_PB(EvResolveResult, Status, ErrorReason);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvDiscardSpoiledBlobSeq);
+        BLOBDEPOT_EVENT_PB(EvPushMetrics, BytesRead, BytesWritten);
 
         template<typename TEvent>
         struct TResponseFor {};

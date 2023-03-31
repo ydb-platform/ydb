@@ -87,14 +87,16 @@ public:
     TUserToken(const TString& originalUserToken, const TSID& userSID, const TVector<TSID>& groupSIDs);
     TUserToken(const NACLibProto::TUserToken& token);
     TUserToken(NACLibProto::TUserToken&& token);
-    TUserToken(const TString& token);
+    explicit TUserToken(const TString& token);
     bool IsExist(const TSID& someSID) const; // check for presence of SID specified in the token
     TSID GetUserSID() const;
     TVector<TSID> GetGroupSIDs() const;
     TString GetOriginalUserToken() const;
     TString SerializeAsString() const;
+    void SaveSerializationInfo();
     void AddGroupSID(const TSID& groupSID);
     bool IsSystemUser() const;
+    const TString& GetSerializedToken() const;
 
     using NACLibProto::TUserToken::ShortDebugString;
 
@@ -102,6 +104,8 @@ protected:
     static TSID GetUserFromVector(const TVector<TSID>& userAndGroupSIDs);
     static TVector<TSID> GetGroupsFromVector(const TVector<TSID>& userAndGroupSIDs);
     void SetGroupSIDs(const TVector<TString>& groupSIDs);
+private:
+    TString Serialized_;
 };
 
 class TACL : public NACLibProto::TACL {

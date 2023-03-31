@@ -162,8 +162,6 @@ void TTiersManager::TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshotExt
         auto& manager = Managers.emplace(i.second.GetTierName(), std::move(localManager)).first->second;
         manager.Start(Secrets);
     }
-    ReadyForUsageFlag = true;
-    TActivationContext::AsActorContext().Send(TabletActorId, new NTiers::TEvTiersManagerReadyForUsage);
 }
 
 TActorId TTiersManager::GetStorageActorId(const TString& tierId) {
@@ -216,7 +214,7 @@ NMetadata::NFetcher::ISnapshotsFetcher::TPtr TTiersManager::GetExternalDataManip
 
 THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
     THashMap<ui64, NKikimr::NOlap::TTiering> result;
-    if (!Snapshot) {
+    if (!IsReady()) {
         return result;
     }
     auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(Snapshot);
@@ -231,6 +229,7 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
                     auto it = tierConfigs.find(name);
                     if (it != tierConfigs.end()) {
                         tier->Compression = NTiers::ConvertCompression(it->second.GetProtoConfig().GetCompression());
+                        tier->NeedExport = it->second.NeedExport();
                     }
                 }
             }

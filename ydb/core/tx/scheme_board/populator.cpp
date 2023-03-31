@@ -29,11 +29,11 @@
 namespace NKikimr {
 namespace NSchemeBoard {
 
-#define SBP_LOG_T(stream) SB_LOG_T(SCHEME_BOARD_POPULATOR, stream)
-#define SBP_LOG_D(stream) SB_LOG_D(SCHEME_BOARD_POPULATOR, stream)
-#define SBP_LOG_N(stream) SB_LOG_N(SCHEME_BOARD_POPULATOR, stream)
-#define SBP_LOG_E(stream) SB_LOG_E(SCHEME_BOARD_POPULATOR, stream)
-#define SBP_LOG_CRIT(stream) SB_LOG_CRIT(SCHEME_BOARD_POPULATOR, stream)
+#define SBP_LOG_T(stream) SB_LOG_T(SCHEME_BOARD_POPULATOR, "" << SelfId() << " " << stream)
+#define SBP_LOG_D(stream) SB_LOG_D(SCHEME_BOARD_POPULATOR, "" << SelfId() << " " << stream)
+#define SBP_LOG_N(stream) SB_LOG_N(SCHEME_BOARD_POPULATOR, "" << SelfId() << " " << stream)
+#define SBP_LOG_E(stream) SB_LOG_E(SCHEME_BOARD_POPULATOR, "" << SelfId() << " " << stream)
+#define SBP_LOG_CRIT(stream) SB_LOG_CRIT(SCHEME_BOARD_POPULATOR, "" << SelfId() << " " << stream)
 
 namespace {
 
@@ -80,12 +80,10 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
             auto& record = msg->Description.Record;
 
             if (!record.HasStatus()) {
-                SBP_LOG_E("Ignore description without status"
-                    << ": self# " << SelfId());
+                SBP_LOG_E("Ignore description without status");
             } else if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
                 SBP_LOG_E("Ignore description"
-                    << ": self# " << SelfId()
-                    << ", status# " << record.GetStatus()
+                    << ": status# " << record.GetStatus()
                     << ", msg# " << record.ShortDebugString());
             } else {
                 CurPathId = GetPathId(record);
@@ -95,10 +93,9 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
 
         if (msg->HasMigratedPath()) {
             SBP_LOG_D("Ignore description of migrated path"
-                << ": self# " << SelfId()
-                << ", owner# " << Owner
+                << ": owner# " << Owner
                 << ", localPathId# " << msg->MigratedPathId);
-            //this path should be described by another owner (tenant schemeshard)
+            // this path should be described by another owner (tenant schemeshard)
             auto& migratedLocalPathIds = *update->Record.MutableMigratedLocalPathIds();
             migratedLocalPathIds.SetBegin(msg->MigratedPathId);
             migratedLocalPathIds.SetEnd(msg->MigratedPathId);
@@ -215,8 +212,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
     bool Check(TEvent& ev, T this_, T that, const TString& what) {
         if (this_ != that) {
             SBP_LOG_E("Suspicious " << TypeName<TEvent>()
-                << ": self# " << SelfId()
-                << ", sender# " << ev->Sender
+                << ": sender# " << ev->Sender
                 << ", " << what << "# " << this_
                 << ", other " << what << "# " << that);
             return false;
@@ -236,9 +232,8 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvHandshakeResponse::TPtr& ev) {
-        SBP_LOG_D("Handle TSchemeBoardEvents::TEvHandshakeResponse"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender);
+        SBP_LOG_D("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender);
 
         if (!CheckOwner(ev)) {
             return;
@@ -246,23 +241,19 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
 
         const ui64 generation = ev->Get()->Record.GetGeneration();
         if (generation > Generation) {
-            SBP_LOG_CRIT("I MUST DIE"
-                << ": self# " << SelfId());
+            SBP_LOG_CRIT("Keep calm");
             Become(&TThis::StateCalm);
         } else {
             SBP_LOG_N("Successful handshake"
-                << ": self# " << SelfId()
-                << ", replica# " << ev->Sender);
+                << ": replica# " << ev->Sender);
 
             if (generation < Generation) {
                 SBP_LOG_N("Start full sync"
-                    << ": self# " << SelfId()
-                    << ", replica# " << ev->Sender);
+                    << ": replica# " << ev->Sender);
                 ProcessSync();
             } else {
                 SBP_LOG_N("Resume sync"
-                    << ": self# " << SelfId()
-                    << ", replica# " << ev->Sender
+                    << ": replica# " << ev->Sender
                     << ", fromPathId# " << LastAckedPathId.NextId());
                 ResumeSync(LastAckedPathId.NextId());
             }
@@ -273,30 +264,24 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvDescribeResult::TPtr& ev) {
-        SBP_LOG_D("Handle TSchemeBoardEvents::TEvDescribeResult"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender);
-        SBP_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 1000));
+        SBP_LOG_D("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender);
 
         ProcessSync(ev->Get());
     }
 
     void Handle(TSchemeBoardEvents::TEvUpdate::TPtr& ev) {
-        SBP_LOG_D("Handle TSchemeBoardEvents::TEvUpdate"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender
+        SBP_LOG_D("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
-        SBP_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 1000));
 
         EnqueueUpdate(ev, true);
     }
 
     void Handle(TSchemeBoardEvents::TEvUpdateAck::TPtr& ev) {
-        SBP_LOG_D("Handle TSchemeBoardEvents::TEvUpdateAck (replica)"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender
+        SBP_LOG_D("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
-        SBP_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 1000));
 
         if (!CheckOwner(ev) || !CheckGeneration(ev)) {
             return;
@@ -313,10 +298,8 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvCommitResponse::TPtr& ev) {
-        SBP_LOG_D("Handle TSchemeBoardEvents::TEvCommitResponse"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender);
-        SBP_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 1000));
+        SBP_LOG_D("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender);
 
         if (!CheckOwner(ev) || !CheckGeneration(ev)) {
             return;
@@ -544,18 +527,15 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvRequestDescribe::TPtr& ev) {
-        SBP_LOG_D("Handle TSchemeBoardEvents::TEvRequestDescribe"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender
-            << ", pathId# " << ev->Get()->PathId);
+        SBP_LOG_D("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender);
 
         const TActorId replicaPopulator = ev->Sender;
         const TActorId replica = ev->Get()->Replica;
 
         if (ReplicaToReplicaPopulator[replica] != replicaPopulator) {
             SBP_LOG_CRIT("Inconsistent replica populator"
-                << ": self# " << SelfId()
-                << ", replica# " << replica
+                << ": replica# " << replica
                 << ", replicaPopulator# " << replicaPopulator);
             return;
         }
@@ -643,13 +623,10 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvRequestUpdate::TPtr& ev) {
+        SBP_LOG_D("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender);
+
         const TPathId pathId = ev->Get()->PathId;
-
-        SBP_LOG_D("Handle TSchemeBoardEvents::TEvRequestUpdate"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender
-            << ", pathId# " << pathId);
-
         THolder<TSchemeBoardEvents::TEvUpdateBuilder> update;
 
         auto it = Descriptions.find(pathId);
@@ -665,28 +642,23 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     }
 
     void DelayUpdate(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        SBP_LOG_D("DelayUpdate TEvSchemeShard::TEvDescribeSchemeResult"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender
+        SBP_LOG_D("DelayUpdate " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
-        SBP_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 1000));
 
         DelayedUpdates.emplace_back(ev.Release());
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        SBP_LOG_D("Handle TEvSchemeShard::TEvDescribeSchemeResult"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender
+        SBP_LOG_D("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
-        SBP_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 1000));
 
         auto* msg = static_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder*>(ev->Get());
         auto& record = msg->Record;
 
         if (!record.HasStatus()) {
-            SBP_LOG_E("Description without status"
-                << ": self# " << SelfId());
+            SBP_LOG_E("Description without status");
             return;
         }
 
@@ -695,8 +667,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         const ui64 version = isDeletion ? Max<ui64>() : GetPathVersion(record);
 
         SBP_LOG_N("Update description"
-            << ": self# " << SelfId()
-            << ", owner# " << Owner
+            << ": owner# " << Owner
             << ", pathId# " << pathId
             << ", cookie# " << ev->Cookie
             << ", is deletion# " << (isDeletion ? "true" : "false"));
@@ -704,8 +675,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         if (isDeletion) {
             if (!Descriptions.contains(pathId)) {
                 SBP_LOG_N("Immediate ack for deleted path"
-                    << ": self# " << SelfId()
-                    << ", sender# " << ev->Sender
+                    << ": sender# " << ev->Sender
                     << ", cookie# " << ev->Cookie
                     << ", pathId# " << pathId);
 
@@ -736,17 +706,14 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     void Handle(TSchemeBoardEvents::TEvUpdateAck::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        SBP_LOG_D("Handle TSchemeBoardEvents::TEvUpdateAck (main)"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender
+        SBP_LOG_D("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
-        SBP_LOG_T("Message:\n" << record.ShortDebugString());
 
         auto it = UpdateAcks.find(ev->Cookie);
         if (it == UpdateAcks.end()) {
             SBP_LOG_D("Ack for unknown update (already acked?)"
-                << ": self# " << SelfId()
-                << ", sender# " << ev->Sender
+                << ": sender# " << ev->Sender
                 << ", cookie# " << ev->Cookie);
             return;
         }
@@ -760,8 +727,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                && pathIt->first.second <= version) {
             if (++pathIt->second > (GroupInfo->NToSelect / 2)) {
                 SBP_LOG_N("Ack update"
-                    << ": self# " << SelfId()
-                    << ", ack to# " << it->second.AckTo
+                    << ": ack to# " << it->second.AckTo
                     << ", cookie# " << ev->Cookie
                     << ", pathId# " << pathId
                     << ", version# " << pathIt->first.second);
@@ -784,16 +750,14 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     }
 
     void Handle(TEvStateStorage::TEvListSchemeBoardResult::TPtr& ev) {
-        SBP_LOG_D("Handle TEvStateStorage::TEvListSchemeBoardResult"
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender);
+        SBP_LOG_D("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender);
 
         const auto& info = ev->Get()->Info;
 
         if (!info) {
             SBP_LOG_E("Publish on unconfigured SchemeBoard"
-                << ": self# " << SelfId()
-                << ", StateStorage group# " << StateStorageGroup);
+                << ": StateStorage group# " << StateStorageGroup);
             Become(&TThis::StateCalm);
             return;
         }
@@ -880,8 +844,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
     void HandleUndelivered() {
         SBP_LOG_E("Publish on unavailable SchemeBoard"
-            << ": self# " << SelfId()
-            << ", StateStorage group# " << StateStorageGroup);
+            << ": StateStorage group# " << StateStorageGroup);
         Become(&TThis::StateCalm);
     }
 

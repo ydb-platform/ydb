@@ -153,8 +153,7 @@ namespace NActors {
         i16 GetMinThreadCount() const override;
         i16 GetMaxThreadCount() const override;
         bool IsThreadBeingStopped(i16 threadIdx) const override;
-        double GetThreadConsumedUs(i16 threadIdx) override;
-        double GetThreadBookedUs(i16 threadIdx) override;
+        TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) override;
         i16 GetBlockingThreadCount() const override;
         i16 GetPriority() const override;
 

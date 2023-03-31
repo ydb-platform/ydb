@@ -53,7 +53,18 @@ public:
     void Deserialize(const NDqProto::TData& data, const NKikimr::NMiniKQL::TType* itemType, NUdf::TUnboxedValue& value) const;
 
     ui64 CalcSerializedSize(NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* type);
-    static ui64 EstimateSize(const NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* type, bool* fixed = nullptr);
+
+    struct TEstimateSizeSettings {
+        bool WithHeaders;
+        bool DiscardUnsupportedTypes;
+
+        TEstimateSizeSettings() {
+            WithHeaders = true;
+            DiscardUnsupportedTypes = false;
+        }
+    };
+
+    static ui64 EstimateSize(const NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* type, bool* fixed = nullptr, TEstimateSizeSettings = {});
 
     static void DeserializeParam(const NDqProto::TData& data, const NKikimr::NMiniKQL::TType* type,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value);

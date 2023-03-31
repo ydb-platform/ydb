@@ -9,110 +9,6 @@ namespace NDataShard {
 
 static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(10);
 
-class TDataShard::TFindSubDomainPathIdActor : public TActorBootstrapped<TFindSubDomainPathIdActor> {
-    using TBase = TActorBootstrapped<TFindSubDomainPathIdActor>;
-
-public:
-    TFindSubDomainPathIdActor(const TActorId& parent, ui64 tabletId, ui64 schemeShardId, bool delayFirstRequest)
-        : Parent(parent)
-        , TabletId(tabletId)
-        , SchemeShardId(schemeShardId)
-        , DelayNextRequest(delayFirstRequest)
-    { }
-
-    void Bootstrap() {
-        if (DelayNextRequest) {
-            // Wait up to a large delay, so requests from shards spread over time
-            auto delay = TDuration::MicroSeconds(RandomNumber(MaxFindSubDomainPathIdDelay.MicroSeconds()));
-            Timer = CreateLongTimer(TActivationContext::AsActorContext(), delay,
-                new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup));
-            Become(&TThis::StateSleep);
-        } else {
-            DelayNextRequest = true;
-            WakeUp();
-        }
-    }
-
-    void PassAway() override {
-        if (Timer) {
-            Send(Timer, new TEvents::TEvPoison);
-        }
-        NTabletPipe::CloseAndForgetClient(SelfId(), SchemeShardPipe);
-        TBase::PassAway();
-    }
-
-private:
-    STFUNC(StateSleep) {
-        Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
-            sFunc(TEvents::TEvWakeup, WakeUp);
-        }
-    }
-
-    void WakeUp() {
-        Timer = { };
-        SchemeShardPipe = Register(NTabletPipe::CreateClient(SelfId(), SchemeShardId));
-        NTabletPipe::SendData(SelfId(), SchemeShardPipe,
-            new NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathId(TabletId));
-        Become(&TThis::StateWork);
-    }
-
-private:
-    STFUNC(StateWork) {
-        Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
-            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathIdResult, Handle);
-        }
-    }
-
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        const auto* msg = ev->Get();
-
-        if (msg->Status != NKikimrProto::OK) {
-            // We could not connect to schemeshard, try again
-            SchemeShardPipe = { };
-            Bootstrap();
-            return;
-        }
-    }
-
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        const auto* msg = ev->Get();
-
-        if (msg->ClientId == SchemeShardPipe) {
-            // We lost connection to schemeshard, try again
-            SchemeShardPipe = { };
-            Bootstrap();
-            return;
-        }
-    }
-
-    void Handle(NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathIdResult::TPtr& ev) {
-        const auto* msg = ev->Get();
-
-        if (msg->Record.GetStatus() != NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS) {
-            // The request failed for some reason, we just stop trying in that case
-            PassAway();
-            return;
-        }
-
-        Send(Parent, new TEvPrivate::TEvSubDomainPathIdFound(msg->Record.GetSchemeShardId(), msg->Record.GetSubDomainPathId()));
-        PassAway();
-    }
-
-private:
-    const TActorId Parent;
-    const ui64 TabletId;
-    const ui64 SchemeShardId;
-    bool DelayNextRequest;
-    TActorId Timer;
-    TActorId SchemeShardPipe;
-};
-
 void TDataShard::StopFindSubDomainPathId() {
     if (FindSubDomainPathIdActor) {
         Send(FindSubDomainPathIdActor, new TEvents::TEvPoison);
@@ -126,7 +22,7 @@ void TDataShard::StartFindSubDomainPathId(bool delayFirstRequest) {
         CurrentSchemeShardId != INVALID_TABLET_ID &&
         (!SubDomainPathId || SubDomainPathId->OwnerId != CurrentSchemeShardId))
     {
-        FindSubDomainPathIdActor = Register(new TFindSubDomainPathIdActor(SelfId(), TabletID(), CurrentSchemeShardId, delayFirstRequest));
+        FindSubDomainPathIdActor = Register(CreateFindSubDomainPathIdActor(SelfId(), TabletID(), CurrentSchemeShardId, delayFirstRequest, MaxFindSubDomainPathIdDelay));
     }
 }
 
@@ -159,7 +55,7 @@ private:
     const ui64 LocalPathId;
 };
 
-void TDataShard::Handle(TEvPrivate::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
 
     if (FindSubDomainPathIdActor == ev->Sender) {

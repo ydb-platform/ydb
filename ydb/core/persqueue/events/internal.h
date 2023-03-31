@@ -124,6 +124,8 @@ struct TEvPQ {
         EvTxCommitDone,
         EvTxRollback,
         EvPartitionConfigChanged,
+        EvSubDomainStatus,
+        EvStatsWakeup,
         EvEnd
     };
 
@@ -253,7 +255,8 @@ struct TEvPQ {
         };
 
         TEvSetClientInfo(const ui64 cookie, const TString& clientId, const ui64 offset, const TString& sessionId,
-                            const ui32 generation, const ui32 step, ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0)
+                            const ui32 generation, const ui32 step, ESetClientInfoType type = ESCI_OFFSET,
+                            ui64 readRuleGeneration = 0, bool strict = false)
         : Cookie(cookie)
         , ClientId(clientId)
         , Offset(offset)
@@ -262,6 +265,7 @@ struct TEvPQ {
         , Step(step)
         , Type(type)
         , ReadRuleGeneration(readRuleGeneration)
+        , Strict(strict)
         {
         }
 
@@ -273,6 +277,7 @@ struct TEvPQ {
         ui32 Step;
         ESetClientInfoType Type;
         ui64 ReadRuleGeneration;
+        bool Strict;
     };
 
     struct TEvGetClientOffset : public TEventLocal<TEvGetClientOffset, EvGetClientOffset> {
@@ -630,12 +635,12 @@ struct TEvPQ {
         TEvInitCredentials()
         {}
     };
-    
+
     struct TEvCredentialsCreated : public TEventLocal<TEvCredentialsCreated, EvCredentialsCreated> {
         TEvCredentialsCreated(const TString& error)
             : Error(error)
         {}
-        
+
         TEvCredentialsCreated(std::shared_ptr<NYdb::ICredentialsProviderFactory> credentials)
             : Credentials(credentials)
         {}
@@ -740,6 +745,26 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
+    };
+
+    struct TEvSubDomainStatus : public TEventPB<TEvSubDomainStatus, NKikimrPQ::TEvSubDomainStatus, EvSubDomainStatus> {
+        TEvSubDomainStatus() {
+        }
+
+        explicit TEvSubDomainStatus(bool subDomainOutOfSpace)
+        {
+            Record.SetSubDomainOutOfSpace(subDomainOutOfSpace);
+        }
+
+        bool SubDomainOutOfSpace() const { return Record.GetSubDomainOutOfSpace(); }
+    };
+
+    struct TEvStatsWakeup : public TEventLocal<TEvStatsWakeup, EvStatsWakeup> {
+        TEvStatsWakeup(ui64 round)
+            : Round(round)
+        {}
+
+        ui64 Round;
     };
 };
 

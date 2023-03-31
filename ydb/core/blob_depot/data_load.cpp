@@ -1,109 +1,100 @@
 #include "data.h"
 #include "schema.h"
 #include "garbage_collection.h"
+#include "coro_tx.h"
 
 namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
 
-    class TData::TTxDataLoad : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        std::optional<TString> LastTrashKey;
-        std::optional<TString> LastDataKey;
-        bool TrashLoaded = false;
-        bool SuccessorTx = true;
-
-    public:
-        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DATA_LOAD; }
-
-        TTxDataLoad(TBlobDepot *self)
-            : TTransactionBase(self)
-        {}
-
-        TTxDataLoad(TTxDataLoad& predecessor)
-            : TTransactionBase(predecessor.Self)
-            , LastTrashKey(std::move(predecessor.LastTrashKey))
-            , LastDataKey(std::move(predecessor.LastDataKey))
-            , TrashLoaded(predecessor.TrashLoaded)
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT28, "TData::TTxDataLoad::Execute", (Id, Self->GetLogId()));
-
-            NIceDb::TNiceDb db(txc.DB);
+    void TData::StartLoad() {
+        Self->Execute(std::make_unique<TCoroTx>(Self, Self->Token, [&] {
             bool progress = false;
 
-            auto load = [&](auto t, auto& lastKey, auto callback) {
-                auto table = t.GreaterOrEqual(lastKey.value_or(TString()));
-                static constexpr ui64 PrechargeRows = 10'000;
-                static constexpr ui64 PrechargeBytes = 1'000'000;
-                if (!table.Precharge(PrechargeRows, PrechargeBytes)) {
-                    return false;
-                }
-                auto rows = table.Select();
-                if (!rows.IsReady()) {
-                    return false;
-                }
-                while (rows.IsValid()) {
-                    if (auto key = rows.GetKey(); key != lastKey) {
-                        callback(key, rows);
-                        lastKey.emplace(std::move(key));
-                        progress = true;
-                    }
-                    if (!rows.Next()) {
-                        return false;
-                    }
-                }
-                lastKey.reset();
-                return true;
+            TString trash;
+            bool trashLoaded = false;
+
+            TScanRange r{
+                .Begin = TKey::Min(),
+                .End = TKey::Max(),
+                .PrechargeRows = 10'000,
+                .PrechargeBytes = 1'000'000,
             };
 
-            if (!TrashLoaded) {
-                auto addTrash = [this](const auto& key, const auto& /*rows*/) {
-                    Self->Data->AddTrashOnLoad(TLogoBlobID::FromBinary(key));
-                };
-                if (!load(db.Table<Schema::Trash>(), LastTrashKey, addTrash)) {
-                    return progress;
+            while (!(trashLoaded = LoadTrash(*TCoroTx::GetTxc(), trash, progress)) ||
+                    !ScanRange(r, TCoroTx::GetTxc(), &progress, [](const TKey&, const TValue&) { return true; })) {
+                if (std::exchange(progress, false)) {
+                    TCoroTx::FinishTx();
+                    TCoroTx::RunSuccessorTx();
+                } else {
+                    TCoroTx::RestartTx();
                 }
-                TrashLoaded = true;
             }
 
-            auto addData = [this](const auto& key, const auto& rows) {
-                auto k = TData::TKey::FromBinaryKey(key, Self->Config);
-                Self->Data->AddDataOnLoad(k, rows.template GetValue<Schema::Data::Value>(),
-                    rows.template GetValueOrDefault<Schema::Data::UncertainWrite>(), false);
-                Y_VERIFY(!Self->Data->LastLoadedKey || *Self->Data->LastLoadedKey < k);
-                Self->Data->LastLoadedKey = std::move(k);
-            };
-            if (!load(db.Table<Schema::Data>(), LastDataKey, addData)) {
-                return progress;
-            }
+            TCoroTx::FinishTx();
+            Self->Data->OnLoadComplete();
+        }));
+    }
 
-            SuccessorTx = false; // everything loaded
-            return true;
+    bool TData::LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress) {
+        NIceDb::TNiceDb db(txc.DB);
+        auto table = db.Table<Schema::Trash>().GreaterOrEqual(from);
+        static constexpr ui64 PrechargeRows = 10'000;
+        static constexpr ui64 PrechargeBytes = 1'000'000;
+        if (!table.Precharge(PrechargeRows, PrechargeBytes)) {
+            return false;
         }
-
-        void Complete(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT29, "TData::TTxDataLoad::Complete", (Id, Self->GetLogId()),
-                (TrashLoaded, TrashLoaded), (SuccessorTx, SuccessorTx));
-
-            if (SuccessorTx) {
-                Self->Execute(std::make_unique<TTxDataLoad>(*this));
-            } else {
-                Self->Data->OnLoadComplete();
+        auto rows = table.Select();
+        if (!rows.IsReady()) {
+            return false;
+        }
+        while (rows.IsValid()) {
+            if (auto key = rows.GetKey(); key != from) {
+                Self->Data->AddTrashOnLoad(TLogoBlobID::FromBinary(key));
+                from = std::move(key);
+                progress = true;
+            }
+            if (!rows.Next()) {
+                return false;
             }
         }
-    };
-
-    void TData::StartLoad() {
-        Self->Execute(std::make_unique<TTxDataLoad>(Self));
+        return true;
     }
 
     void TData::OnLoadComplete() {
-        Loaded = true;
-        LoadSkip.clear();
+        Self->Data->LoadedKeys([&](const TKey& left, const TKey& right) {
+            // verify that LoadedKeys == {Min, Max} exactly
+            Y_VERIFY_S(left == TKey::Min() && right == TKey::Max() && !Loaded, "Id# " << Self->GetLogId()
+                << " Left# " << left.ToString()
+                << " Right# " << right.ToString()
+                << " Loaded# " << Loaded
+                << " LoadedKeys# " << LoadedKeys.ToString());
+            Loaded = true;
+            return true;
+        });
+        Y_VERIFY(Loaded);
         Self->OnDataLoadComplete();
         for (auto& [key, record] : RecordsPerChannelGroup) {
             record.CollectIfPossible(this);
+        }
+    }
+
+    bool TData::EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc) {
+        if (IsKeyLoaded(key)) {
+            return true;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+        using Table = Schema::Data;
+        auto row = db.Table<Table>().Key(key.MakeBinaryKey()).Select();
+        if (!row.IsReady()) {
+            return false;
+        } else {
+            if (row.IsValid()) {
+                AddDataOnLoad(key, row.GetValue<Table::Value>(), row.GetValueOrDefault<Table::UncertainWrite>());
+            }
+            Self->Data->LoadedKeys |= {key, key};
+            return true;
         }
     }
 

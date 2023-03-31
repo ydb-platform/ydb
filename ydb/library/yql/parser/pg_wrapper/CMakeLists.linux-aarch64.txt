@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(Iconv REQUIRED)
 find_package(OpenSSL REQUIRED)
 add_subdirectory(interface)
 add_subdirectory(ut)
@@ -122,7 +121,6 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   library-yql-utils
   contrib-libs-icu
   contrib-libs-libc_compat
-  Iconv::Iconv
   contrib-libs-libxml
   contrib-libs-lz4
   OpenSSL::OpenSSL

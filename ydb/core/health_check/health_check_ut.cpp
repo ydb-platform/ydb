@@ -57,7 +57,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto domain = record->mutable_pathdescription()->mutable_domaindescription();
         domain->mutable_diskspaceusage()->mutable_tables()->set_totalsize(size);
-        domain->mutable_databasequotas()->set_data_stream_reserved_storage_quota(quota);
+        if (quota == 0) {
+            domain->clear_databasequotas();
+        } else {
+            domain->mutable_databasequotas()->set_data_size_hard_quota(quota);
+        }
     }
 
     void AddGroupsInControllerSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev,  int groupCount) {
@@ -265,7 +269,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         domain->mutable_databasequotas()->set_data_stream_reserved_storage_quota(quota);
     }
 
-     void StorageTest(ui64 usage, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
+     void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -285,7 +289,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             switch (ev->GetTypeRewrite()) {
                 case TEvSchemeShard::EvDescribeSchemeResult: {
                     auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
-                    ChangeDescribeSchemeResult(x, usage, 100);
+                    ChangeDescribeSchemeResult(x, usage, quota);
                     break;
                 }
             }
@@ -309,19 +313,23 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     Y_UNIT_TEST(StorageLimit95) {
-        StorageTest(95, 1, Ydb::Monitoring::StatusFlag::RED);
+        StorageTest(95, 100, 1, Ydb::Monitoring::StatusFlag::RED);
     }
 
     Y_UNIT_TEST(StorageLimit87) {
-        StorageTest(87, 1, Ydb::Monitoring::StatusFlag::ORANGE);
+        StorageTest(87, 100, 1, Ydb::Monitoring::StatusFlag::ORANGE);
     }
 
     Y_UNIT_TEST(StorageLimit80) {
-        StorageTest(80, 1, Ydb::Monitoring::StatusFlag::YELLOW);
+        StorageTest(80, 100, 1, Ydb::Monitoring::StatusFlag::YELLOW);
     }
 
     Y_UNIT_TEST(StorageLimit50) {
-        StorageTest(50, 0, Ydb::Monitoring::StatusFlag::GREEN);
+        StorageTest(50, 100, 0, Ydb::Monitoring::StatusFlag::GREEN);
+    }
+
+    Y_UNIT_TEST(StorageNoQuota) {
+        StorageTest(100, 0, 0, Ydb::Monitoring::StatusFlag::GREEN);
     }
 }
 

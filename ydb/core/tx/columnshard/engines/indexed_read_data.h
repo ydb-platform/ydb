@@ -48,7 +48,7 @@ struct TReadMetadataBase {
     std::shared_ptr<arrow::Schema> LoadSchema; // ResultSchema + required for intermediate operations
     std::shared_ptr<arrow::Schema> ResultSchema; // TODO: add Program modifications
     std::shared_ptr<NSsa::TProgram> Program;
-    std::shared_ptr<const THashMap<TUnifiedBlobId, TUnifiedBlobId>> ExternBlobs; // DS -> S3 map TODO: move out of base
+    std::shared_ptr<const THashSet<TUnifiedBlobId>> ExternBlobs;
     ESorting Sorting{ESorting::ASC}; // Sorting inside returned batches
     ui64 Limit{0}; // TODO
 
@@ -221,14 +221,16 @@ private:
     THashMap<TBlobRange, ui32> IndexedBlobs; // blobId -> batchNo
     ui32 ReadyNotIndexed{0};
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> OutNotIndexed; // granule -> not indexed to append
-    THashMap<ui64, TMap<ui64, std::shared_ptr<arrow::RecordBatch>>> ReadyGranules; // granule -> portions
+    THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> ReadyGranules; // granule -> portions data
     THashMap<ui64, ui32> PortionBatch; // portion -> batch
     TVector<ui64> BatchPortion; // batch -> portion
     THashMap<ui64, ui64> PortionGranule; // portion -> granule
     THashMap<ui64, ui32> GranuleWaits; // granule -> num portions to wait
     TDeque<ui64> GranulesOutOrder;
     TMap<TColumnEngineForLogs::TMark, ui64> TsGranules; // ts (key) -> granule
-    THashSet<ui64> PortionsWithSelfDups;
+    THashSet<ui64> GranulesWithDups;
+    THashSet<ui64> PortionsWithDups;
+    THashSet<const void*> BatchesToDedup;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription;
 
     const TIndexInfo& IndexInfo() const {
@@ -251,12 +253,11 @@ private:
         const std::shared_ptr<arrow::RecordBatch>& batch, ui64 planStep, ui64 txId) const;
     std::shared_ptr<arrow::RecordBatch> AssembleIndexedBatch(ui32 batchNo);
     void UpdateGranuleWaits(ui32 batchNo);
-    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SplitByGranules(
+    std::shared_ptr<arrow::RecordBatch> MergeNotIndexed(
         std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const;
-    TVector<std::vector<std::shared_ptr<arrow::RecordBatch>>> ReadyToOut();
+    std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> ReadyToOut();
     TVector<TPartialReadResult> MakeResult(
-        TVector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules,
-        const int64_t maxRowsInBatch) const;
+        std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules, int64_t maxRowsInBatch) const;
 };
 
 }

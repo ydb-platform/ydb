@@ -2064,7 +2064,7 @@ tx_meta {
         Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
         Ydb::Table::ExecuteDataQueryRequest request;
         request.set_session_id(sessionId);
-        request.mutable_query()->set_yql_text("DECLARE $param1 AS \"Tuple<Int32,Bool>\"; SELECT $param1 AS Tuple;");
+        request.mutable_query()->set_yql_text("DECLARE $param1 AS Tuple<Int32,Bool>; SELECT $param1 AS Tuple;");
         request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
         request.mutable_tx_control()->set_commit_tx(true);
 

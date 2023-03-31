@@ -77,10 +77,10 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
     }
 
     if (pathEl->PathType == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-        auto it = Self->PersQueueGroups.FindPtr(pathEl->PathId);
+        auto it = Self->Topics.FindPtr(pathEl->PathId);
         Y_VERIFY(it, "PersQueueGroup is not found");
 
-        TPersQueueGroupInfo::TPtr pqGroupInfo = *it;
+        TTopicInfo::TPtr pqGroupInfo = *it;
         if (pqGroupInfo->HasBalancer()) {
             descr->SetBalancerTabletID(ui64(pqGroupInfo->BalancerTabletID));
         }
@@ -411,9 +411,9 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
 }
 
 void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr pathEl) {
-    auto it = Self->PersQueueGroups.FindPtr(pathId);
+    auto it = Self->Topics.FindPtr(pathId);
     Y_VERIFY(it, "PersQueueGroup is not found");
-    TPersQueueGroupInfo::TPtr pqGroupInfo = *it;
+    TTopicInfo::TPtr pqGroupInfo = *it;
 
     if (pqGroupInfo->PreSerializedPathDescription.empty()) {
         NKikimrScheme::TEvDescribeSchemeResult preSerializedResult;
@@ -444,7 +444,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
 
             struct TPartitionDesc {
                 TTabletId TabletId = InvalidTabletId;
-                const TPQShardInfo::TPersQueueInfo* Info = nullptr;
+                const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
             };
 
             TVector<TPartitionDesc> descriptions; // index is pqId
@@ -454,7 +454,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 auto it = Self->ShardInfos.find(shardIdx);
                 Y_VERIFY_S(it != Self->ShardInfos.end(), "No shard with shardIdx: " << shardIdx);
 
-                for (const auto& pq : pqShard->PQInfos) {
+                for (const auto& pq : pqShard->Partitions) {
                     if (pq.AlterVersion <= pqGroupInfo->AlterVersion) {
                         Y_VERIFY_S(pq.PqId < pqGroupInfo->NextPartitionId,
                             "Wrong pqId: " << pq.PqId << ", nextPqId: " << pqGroupInfo->NextPartitionId);
@@ -498,7 +498,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
 
         for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
             const auto& shardInfo = Self->ShardInfos.at(shardIdx);
-            for (const auto& pq : pqShard->PQInfos) {
+            for (const auto& pq : pqShard->Partitions) {
                 if (pq.AlterVersion <= pqGroupInfo->AlterVersion) {
                     auto partition = allocate->MutablePartitions()->Add();
                     partition->SetPartitionId(pq.PqId);
@@ -673,6 +673,10 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     diskSpaceUsage->MutableTables()->SetTotalSize(subDomainInfo->GetDiskSpaceUsage().Tables.TotalSize);
     diskSpaceUsage->MutableTables()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Tables.DataSize);
     diskSpaceUsage->MutableTables()->SetIndexSize(subDomainInfo->GetDiskSpaceUsage().Tables.IndexSize);
+    diskSpaceUsage->MutableTopics()->SetReserveSize(subDomainInfo->GetPQReservedStorage());
+    diskSpaceUsage->MutableTopics()->SetAccountSize(subDomainInfo->GetPQAccountStorage());
+    diskSpaceUsage->MutableTopics()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Topics.DataSize);
+    diskSpaceUsage->MutableTopics()->SetUsedReserveSize(subDomainInfo->GetDiskSpaceUsage().Topics.UsedReserveSize);
 
     if (subDomainInfo->GetDeclaredSchemeQuotas()) {
         entry->MutableDeclaredSchemeQuotas()->CopyFrom(*subDomainInfo->GetDeclaredSchemeQuotas());

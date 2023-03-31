@@ -119,7 +119,7 @@ struct TComputationContext : public TComputationContextLLVM {
     bool ExecuteLLVM = true;
     arrow::MemoryPool& ArrowMemoryPool;
     std::vector<NUdf::TUnboxedValue*> WideFields;
-    TTypeEnvironment& TypeEnv;
+    TTypeEnvironment* TypeEnv = nullptr;
 
     TComputationContext(const THolderFactory& holderFactory,
         const NUdf::IValueBuilder* builder,

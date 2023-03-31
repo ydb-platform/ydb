@@ -91,7 +91,7 @@ public:
             return;
         }
 
-        const TString& internalToken = proxyCtx->GetInternalToken();
+        const TString& internalToken = proxyCtx->GetSerializedToken();
         TVector<TString> permissions;
         if (internalToken) {
             NACLib::TUserToken userToken(internalToken);

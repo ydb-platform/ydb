@@ -478,6 +478,75 @@ void TestWriteReadDup() {
     }
 }
 
+void TestWriteReadLongTxDup() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    //
+
+    ui64 tableId = 1;
+    auto ydbSchema = TTestSchema::YdbSchema();
+    SetupSchema(runtime, sender, tableId, ydbSchema);
+
+    constexpr ui32 numRows = 10;
+    std::pair<ui64, ui64> portion = {10, 10 + numRows};
+
+    NLongTxService::TLongTxId longTxId;
+    UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
+
+    ui64 txId = 0;
+    ui64 planStep = 100;
+    std::optional<ui64> writeId;
+
+    // Only the first blob with dedup pair {longTx, dedupId} should be inserted
+    // Others should return OK (write retries emulation)
+    for (ui32 i = 0; i < 4; ++i) {
+        auto data = MakeTestBlob({portion.first + i, portion.second + i}, ydbSchema);
+        UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
+
+        auto writeIdOpt = WriteData(runtime, sender, longTxId, tableId, "0", data);
+        UNIT_ASSERT(writeIdOpt);
+        if (!i) {
+            writeId = *writeIdOpt;
+        }
+        UNIT_ASSERT_EQUAL(*writeIdOpt, *writeId);
+    }
+
+    ProposeCommit(runtime, sender, ++txId, {*writeId});
+    TSet<ui64> txIds = {txId};
+    PlanCommit(runtime, sender, planStep, txIds);
+
+    // read
+    TAutoPtr<IEventHandle> handle;
+    {
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+                    new TEvColumnShard::TEvRead(sender, 0, planStep, txId, tableId));
+        auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+        UNIT_ASSERT(event);
+
+        auto& resRead = Proto(event);
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), 0);
+        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
+        UNIT_ASSERT(resRead.GetData().size() > 0);
+
+        auto data = resRead.GetData();
+        auto meta = resRead.GetMeta();
+        UNIT_ASSERT(CheckColumns(data, meta, TTestSchema::ExtractNames(ydbSchema), numRows));
+        UNIT_ASSERT(DataHas(TVector<TString>{data}, meta.GetSchema(), portion, true));
+        UNIT_ASSERT(DataHasOnly(TVector<TString>{data}, meta.GetSchema(), portion));
+    }
+}
+
 void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString codec = "") {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1095,6 +1164,33 @@ static NKikimrSSA::TProgram MakeSelect(TAssignment::EFunction compareId = TAssig
     return ssa;
 }
 
+// SELECT level, timestamp FROM t WHERE likeFunc(timestamp, pattern)
+static NKikimrSSA::TProgram MakeSelectLike(TAssignment::EFunction likeId, const TString& pattern) {
+    NKikimrSSA::TProgram ssa;
+
+    std::vector<ui32> columnIds = {6}; // message
+
+    auto* line1 = ssa.AddCommand();
+    auto* l1_assign = line1->MutableAssign();
+    l1_assign->MutableColumn()->SetId(100);
+    l1_assign->MutableConstant()->SetText(pattern);
+
+    auto* line2 = ssa.AddCommand();
+    auto* l2_assign = line2->MutableAssign();
+    l2_assign->MutableColumn()->SetId(101);
+    auto* l2_func = l2_assign->MutableFunction();
+    l2_func->SetId(likeId);
+    l2_func->AddArguments()->SetId(columnIds[0]);
+    l2_func->AddArguments()->SetId(100);
+
+    auto* line3 = ssa.AddCommand();
+    line3->MutableFilter()->MutablePredicate()->SetId(101);
+
+    auto* line4 = ssa.AddCommand();
+    line4->MutableProjection()->AddColumns()->SetId(columnIds[0]);
+    return ssa;
+}
+
 // SELECT min(x), max(x), some(x), count(x) FROM t [GROUP BY key[0], key[1], ...]
 NKikimrSSA::TProgram MakeSelectAggregates(ui32 columnId, const std::vector<ui32>& keys = {},
                                           bool addProjection = true)
@@ -1330,6 +1426,101 @@ void TestReadWithProgram(const TestTableDescription& table = {})
                     break;
                 case 2:
                     UNIT_ASSERT(CheckColumns(readData[0], meta, {"level", "timestamp"}, 0));
+                    break;
+                default:
+                    break;
+            }
+        }
+        ++i;
+    }
+}
+
+void TestReadWithProgramLike(const TestTableDescription& table = {}) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime,
+        CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 metaShard = TTestTxConfig::TxTablet1;
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 planStep = 100;
+    ui64 txId = 100;
+
+    SetupSchema(runtime, sender, tableId, table.Schema);
+
+    { // write some data
+        bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, table.Schema));
+        UNIT_ASSERT(ok);
+
+        ProposeCommit(runtime, sender, metaShard, txId, {writeId});
+        PlanCommit(runtime, sender, planStep, txId);
+    }
+
+    TString pattern = "1";
+    std::vector<NKikimrSSA::TProgram> ssas = {
+        MakeSelectLike(TAssignment::FUNC_STR_MATCH, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_MATCH_IGNORE_CASE, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_STARTS_WITH, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_STARTS_WITH_IGNORE_CASE, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_ENDS_WITH, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_ENDS_WITH_IGNORE_CASE, pattern)
+    };
+
+    ui32 i = 0;
+    for (auto& ssa : ssas) {
+        TString programText;
+        {
+            TString serialized;
+            UNIT_ASSERT(ssa.SerializeToString(&serialized));
+            NKikimrSSA::TOlapProgram program;
+            program.SetProgram(serialized);
+            UNIT_ASSERT(program.SerializeToString(&programText));
+        }
+
+        auto* readEvent = new TEvColumnShard::TEvRead(sender, metaShard, planStep, txId, tableId);
+        auto& readProto = Proto(readEvent);
+
+        readProto.SetOlapProgramType(::NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS);
+        readProto.SetOlapProgram(programText);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, readEvent);
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+        UNIT_ASSERT(result);
+
+        auto& resRead = Proto(result);
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
+        {
+            UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+            UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+            UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
+            UNIT_ASSERT(resRead.GetData().size() > 0);
+
+            auto& meta = resRead.GetMeta();
+            //auto& schema = meta.GetSchema();
+            TString readData = resRead.GetData();
+
+            switch (i) {
+                case 0:
+                case 1:
+                    UNIT_ASSERT(CheckColumns(readData, meta, {"message"}, 19));
+                    break;
+                case 2:
+                case 3:
+                    UNIT_ASSERT(CheckColumns(readData, meta, {"message"}, 11));
+                    break;
+                case 4:
+                case 5:
+                    UNIT_ASSERT(CheckColumns(readData, meta, {"message"}, 10));
                     break;
                 default:
                     break;
@@ -1597,6 +1788,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(WriteReadDuplicate) {
         TestWriteReadDup();
+        TestWriteReadLongTxDup();
     }
 
     Y_UNIT_TEST(WriteRead) {
@@ -1713,6 +1905,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(ReadWithProgram) {
         TestReadWithProgram();
+    }
+
+    Y_UNIT_TEST(ReadWithProgramLike) {
+        TestReadWithProgramLike();
     }
 
     Y_UNIT_TEST(ReadSomePrograms) {
@@ -2178,16 +2374,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT_VALUES_EQUAL(response.IssuesSize(), 1);
             UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), "Snapshot 640000:18446744073709551615 too old");
         }
-    }
-
-    // Private events of different actors reuse the same ES_PRIVATE range
-    // So in order to capture the right private event we need to check its type via dynamic_cast
-    template <class TPrivateEvent>
-    TPrivateEvent* TryGetPrivateEvent(TAutoPtr<IEventHandle> &ev) {
-        if (ev->GetTypeRewrite() != TPrivateEvent::EventType) {
-            return nullptr;
-        }
-        return dynamic_cast<TPrivateEvent*>(ev->GetBase());
     }
 
     void TestCompactionGC(bool enableSmallBlobs) {

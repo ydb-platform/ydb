@@ -1,5 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/persqueue/events/internal.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -70,10 +71,10 @@ NLs::TCheckFunc LsCheckSubDomainParamsInMassiveCase(const TString name = "",
     };
 }
 
-NLs::TCheckFunc LsCheckDiskQuotaExceeded(bool value = true) {
+NLs::TCheckFunc LsCheckDiskQuotaExceeded(bool value = true, TString msg = TString()) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         auto& desc = record.GetPathDescription().GetDomainDescription();
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetDomainState().GetDiskQuotaExceeded(), value);
+        UNIT_ASSERT_VALUES_EQUAL_C(desc.GetDomainState().GetDiskQuotaExceeded(), value, msg);
     };
 }
 
@@ -2254,7 +2255,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(24),
+                                NLs::PathVersionEqual(23),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2301,7 +2302,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(28),
+                                NLs::PathVersionEqual(27),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2322,7 +2323,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(28),
+                                NLs::PathVersionEqual(27),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2339,7 +2340,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(28),
+                                NLs::PathVersionEqual(27),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2357,7 +2358,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(30),
+                                NLs::PathVersionEqual(29),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(1),
                                 NLs::ShardsInsideDomain(4)});
@@ -2374,7 +2375,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(30),
+                                NLs::PathVersionEqual(29),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(1),
                                 NLs::ShardsInsideDomain(5)});
@@ -2391,7 +2392,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(30),
+                                NLs::PathVersionEqual(29),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(1),
                                 NLs::ShardsInsideDomain(5)});
@@ -2899,11 +2900,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         }
     }
 
-    Y_UNIT_TEST(DiskSpaceQuotas) {
+    Y_UNIT_TEST(TableDiskSpaceQuotas) {
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
         opts.DisableStatsBatching(true);
         opts.EnablePersistentPartitionStats(true);
+        opts.EnableTopicDiskSubDomainQuota(false);
 
         TTestEnv env(runtime, opts);
         ui64 txId = 100;
@@ -2957,7 +2959,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckDiskQuotaExceeded(false)});
+                           {LsCheckDiskQuotaExceeded(false, "SubDomain created")});
 
         // skip a single coordinator and mediator
         ui64 tabletId = TTestTxConfig::FakeHiveTablets + 2;
@@ -2974,14 +2976,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         waitForTableStats(1);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckDiskQuotaExceeded(true)});
+                           {LsCheckDiskQuotaExceeded(true, "Table was created and data was written")});
 
         TestDropTable(runtime, ++txId, "/MyRoot/USER_0", "Table1");
         waitForSchemaChanged(1);
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckDiskQuotaExceeded(false)});
+                           {LsCheckDiskQuotaExceeded(false, "Table dropped")});
     }
 
     Y_UNIT_TEST(SchemeDatabaseQuotaRejects) {
@@ -3112,6 +3114,86 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(0)});
         }
+    }
+
+    Y_UNIT_TEST(TopicDiskSpaceQuotas) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        opts.EnableTopicDiskSubDomainQuota(true);
+
+        TTestEnv env(runtime, opts);
+
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_TRACE);
+
+        runtime.GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+
+        ui64 txId = 100;
+
+        // Subdomain with a 1-byte data size quota
+        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                        Name: "USER_1"
+                        PlanResolution: 50
+                        Coordinators: 1
+                        Mediators: 1
+                        TimeCastBucketsPerMediator: 2
+                        StoragePools {
+                            Name: "name_USER_0_kind_hdd-1"
+                            Kind: "hdd-1"
+                        }
+                        StoragePools {
+                            Name: "name_USER_0_kind_hdd-2"
+                            Kind: "hdd-2"
+                        }
+                        DatabaseQuotas {
+                            data_size_hard_quota: 1
+                        }
+                )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
+                           {LsCheckDiskQuotaExceeded(false, "SubDomain was created")});
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot/USER_1", R"(
+            Name: "Topic1"
+            TotalGroupCount: 3
+            PartitionPerTablet: 7
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 60
+                }
+                MeteringMode: METERING_MODE_REQUEST_UNITS
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
+                           {LsCheckDiskQuotaExceeded(false, "Topic was created")});
+
+        ui64 balancerId = DescribePath(runtime, "/MyRoot/USER_1/Topic1").GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
+
+        auto stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        UNIT_ASSERT_EQUAL_C(false, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer");
+        
+        ui32 seqNo = 100;
+        WriteToTopic(runtime, "/MyRoot/USER_1/Topic1", ++seqNo, "Message 0");
+        env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
+                           {LsCheckDiskQuotaExceeded(true, "Message 0 was written")});
+
+        stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        UNIT_ASSERT_EQUAL_C(true, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer after write");
+
+        TestDropPQGroup(runtime, ++txId, "/MyRoot/USER_1", "Topic1");
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
+                           {LsCheckDiskQuotaExceeded(false, "Topic1 was deleted")});
     }
 }
 

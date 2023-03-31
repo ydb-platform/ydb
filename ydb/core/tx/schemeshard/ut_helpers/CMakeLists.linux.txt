@@ -23,6 +23,7 @@ target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
   core-engine-minikql
   core-filestore-core
   ydb-core-metering
+  persqueue-ut-common
   ydb-core-protos
   ydb-core-scheme
   ydb-core-tablet_flat

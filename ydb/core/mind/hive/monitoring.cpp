@@ -319,8 +319,13 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         Y_UNUSED(txc);
         TStringStream str;
-        RenderHTMLPage(str);
-        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+        if (Event->Cgi().Get("format") == "json") {
+            RenderJsonPageWithExtraData(str);
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(str.Str()));
+        } else {
+            RenderHTMLPage(str);
+            ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+        }
         return true;
     }
 
@@ -362,6 +367,64 @@ public:
         }
         out << "</tbody>";
         out << "</table>";
+    }
+
+    void RenderJsonPageWithExtraData(IOutputStream &out) {
+        ui64 nodes = 0;
+        ui64 aliveNodes = 0;
+
+        for (const auto& pr : Self->Nodes) {
+            if (pr.second.IsAlive()) {
+                ++aliveNodes;
+            }
+            if (!pr.second.IsUnknown()) {
+                ++nodes;
+            }
+        }
+
+        NJson::TJsonValue jsonData;
+
+        jsonData["TotalNodes"] = nodes;
+        jsonData["AliveNodes"] = aliveNodes;
+
+        TVector<TNodeInfo*> nodeInfos;
+        nodeInfos.reserve(Self->Nodes.size());
+        for (auto& pr : Self->Nodes) {
+            if (!pr.second.IsUnknown()) {
+                nodeInfos.push_back(&pr.second);
+            }
+        }
+        TInstant aliveLine = TInstant::Now() - TDuration::Minutes(10);
+
+        NJson::TJsonValue& jsonNodes = jsonData["Nodes"];
+        for (TNodeInfo* nodeInfo : nodeInfos) {
+            TNodeInfo& node = *nodeInfo;
+            TNodeId id = node.Id;
+
+            if (!node.IsAlive() && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine) {
+                continue;
+            }
+
+            NJson::TJsonValue& jsonNode = jsonNodes.AppendValue(NJson::TJsonValue());
+            TString host;
+            auto it = Self->NodesInfo.find(node.Id);
+            if (it != Self->NodesInfo.end()) {
+                auto &ni = it->second;
+                if (ni.Host.empty()) {
+                    host = ni.Address;
+                } else {
+                    host = ni.Host;
+                }
+            }
+
+            jsonNode["Id"] = id;
+            jsonNode["Host"] = host;
+
+            jsonNode["Domain"] = node.ServicedDomains.empty() ? "" : Self->GetDomainName(node.GetServicedDomain());
+            jsonNode["Alive"] = node.IsAlive();
+            jsonNode["Down"] = node.Down;
+        }
+        NJson::WriteJson(&out, &jsonData);
     }
 };
 

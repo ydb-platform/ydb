@@ -24,7 +24,7 @@ public:
 
 private:
     struct TPathIdBlobs {
-        THashSet<TUnifiedBlobId> Blobs;
+        THashMap<TUnifiedBlobId, TString> Blobs;
         ui64 PathId;
         TPathIdBlobs(const ui64 pathId)
             : PathId(pathId) {
@@ -33,9 +33,8 @@ private:
     };
 
     TEvPrivate::TEvWriteIndex::TPtr Ev;
-    THashMap<TUnifiedBlobId, NOlap::TPortionEvictionFeatures> BlobsToExport;
     THashMap<TString, TPathIdBlobs> ExportTierBlobs;
-    THashMap<TString, std::vector<NOlap::TEvictedBlob>> TierBlobsToForget;
+    THashSet<NOlap::TEvictedBlob> BlobsToForget;
     ui64 ExportNo = 0;
 };
 
@@ -49,6 +48,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
     ui64 blobsWritten = 0;
     ui64 bytesWritten = 0;
+    THashMap<TUnifiedBlobId, NOlap::TPortionEvictionFeatures> blobsToExport;
 
     auto changes = Ev->Get()->IndexChanges;
     Y_VERIFY(changes);
@@ -129,43 +129,59 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 }
             }
 
+            THashSet<TUnifiedBlobId> protectedBlobs;
+
             Self->IncCounter(COUNTER_EVICTION_PORTIONS_WRITTEN, changes->PortionsToEvict.size());
             for (auto& [portionInfo, evictionFeatures] : changes->PortionsToEvict) {
-                auto& tierName = portionInfo.TierName;
-                if (tierName.empty()) {
-                    continue;
-                }
-
                 // Mark exported blobs
-                auto& tManager = Self->GetTierManagerVerified(tierName);
-                if (tManager.NeedExport()) {
+                if (evictionFeatures.NeedExport) {
+                    auto& tierName = portionInfo.TierName;
+                    Y_VERIFY(!tierName.empty());
+
                     for (auto& rec : portionInfo.Records) {
                         auto& blobId = rec.BlobRange.BlobId;
-                        if (!BlobsToExport.count(blobId)) {
-                            BlobsToExport.emplace(blobId, evictionFeatures);
-
+                        if (!blobsToExport.count(blobId)) {
                             NKikimrTxColumnShard::TEvictMetadata meta;
                             meta.SetTierName(tierName);
-                            Self->BlobManager->ExportOneToOne(blobId, meta, blobManagerDb);
+                            if (Self->BlobManager->ExportOneToOne(blobId, meta, blobManagerDb)) {
+                                blobsToExport.emplace(blobId, evictionFeatures);
+                            } else {
+                                // TODO: support S3 -> S3 eviction
+                                LOG_S_ERROR("Prevent evict evicted blob '" << blobId.ToStringNew()
+                                    << "' at tablet " << Self->TabletID());
+                                protectedBlobs.insert(blobId);
+                            }
                         }
                     }
                 }
             }
 
-            const auto& portionsToDrop = changes->PortionsToDrop;
+            // Note: RAW_BYTES_ERASED and BYTES_ERASED counters are not in sync for evicted data
             THashSet<TUnifiedBlobId> blobsToDrop;
-            Self->IncCounter(COUNTER_PORTIONS_ERASED, portionsToDrop.size());
-            for (const auto& portionInfo : portionsToDrop) {
-                for (const auto& rec : portionInfo.Records) {
-                    blobsToDrop.insert(rec.BlobRange.BlobId);
+            for (const auto& rec : changes->EvictedRecords) {
+                const auto& blobId = rec.BlobRange.BlobId;
+                if (blobsToExport.count(blobId)) {
+                    // Eviction to S3. TTxExportFinish will delete src blob when dst blob get EEvictState::EXTERN state.
+                } else if (!protectedBlobs.count(blobId)) {
+                    // We could drop the blob immediately
+                    if (!blobsToDrop.count(blobId)) {
+                        LOG_S_TRACE("Delete evicted blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                        blobsToDrop.insert(blobId);
+                    }
+
                 }
-                Self->IncCounter(COUNTER_RAW_BYTES_ERASED, portionInfo.RawBytesSum());
             }
 
-            // Note: RAW_BYTES_ERASED and BYTES_ERASED counters are not in sync for evicted data
-            THashSet<TUnifiedBlobId> blobsToEvict;
-            for (const auto& rec : changes->EvictedRecords) {
-                blobsToEvict.insert(rec.BlobRange.BlobId);
+            Self->IncCounter(COUNTER_PORTIONS_ERASED, changes->PortionsToDrop.size());
+            for (const auto& portionInfo : changes->PortionsToDrop) {
+                for (const auto& rec : portionInfo.Records) {
+                    const auto& blobId = rec.BlobRange.BlobId;
+                    if (!blobsToDrop.count(blobId)) {
+                        LOG_S_TRACE("Delete blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                        blobsToDrop.insert(blobId);
+                    }
+                }
+                Self->IncCounter(COUNTER_RAW_BYTES_ERASED, portionInfo.RawBytesSum());
             }
 
             for (const auto& blobId : blobsToDrop) {
@@ -174,32 +190,13 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                     auto evict = Self->BlobManager->GetDropped(blobId, meta);
                     Y_VERIFY(evict.State != EEvictState::UNKNOWN);
 
-                    bool exported = ui8(evict.State) == ui8(EEvictState::SELF_CACHED) ||
-                                    ui8(evict.State) == ui8(EEvictState::EXTERN);
-                    if (exported) {
-                        LOG_S_DEBUG("Forget blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
-                        TierBlobsToForget[meta.GetTierName()].emplace_back(std::move(evict));
-                    } else {
-                        LOG_S_DEBUG("Deleyed forget blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
-                        Self->DelayedForgetBlobs.insert(blobId);
-                    }
+                    BlobsToForget.emplace(std::move(evict));
 
-                    bool deleted = ui8(evict.State) >= ui8(EEvictState::EXTERN); // !EVICTING and !SELF_CACHED
-                    if (deleted) {
+                    if (NOlap::IsDeleted(evict.State)) {
+                        LOG_S_DEBUG("Skip delete blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
                         continue;
                     }
                 }
-                LOG_S_TRACE("Delete blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
-                Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
-                Self->IncCounter(COUNTER_BLOBS_ERASED);
-                Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
-            }
-            for (const auto& blobId : blobsToEvict) {
-                if (BlobsToExport.count(blobId)) {
-                    // DS to S3 eviction. Keep source blob in DS till EEvictState::EXTERN state.
-                    continue;
-                }
-                LOG_S_TRACE("Delete evicted blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
                 Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
                 Self->IncCounter(COUNTER_BLOBS_ERASED);
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
@@ -213,7 +210,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
             Self->UpdateIndexCounters();
         } else {
-            LOG_S_INFO("TTxWriteIndex (" << changes->TypeString()
+            LOG_S_NOTICE("TTxWriteIndex (" << changes->TypeString()
                 << ") cannot apply changes: " << *changes << " at tablet " << Self->TabletID());
 
             // TODO: delayed insert
@@ -223,16 +220,16 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
             << ") cannot write index blobs at tablet " << Self->TabletID());
     }
 
-    if (BlobsToExport.size()) {
-        size_t numBlobs = BlobsToExport.size();
-        for (auto& [blobId, evFeatures] : BlobsToExport) {
+    if (blobsToExport.size()) {
+        size_t numBlobs = blobsToExport.size();
+        for (auto& [blobId, evFeatures] : blobsToExport) {
             auto it = ExportTierBlobs.find(evFeatures.TargetTierName);
             if (it == ExportTierBlobs.end()) {
                 it = ExportTierBlobs.emplace(evFeatures.TargetTierName, TPathIdBlobs(evFeatures.PathId)).first;
             }
-            it->second.Blobs.emplace(blobId);
+            it->second.Blobs.emplace(blobId, TString());
         }
-        BlobsToExport.clear();
+        blobsToExport.clear();
 
         ExportNo = Self->LastExportNo + 1;
         Self->LastExportNo += ExportTierBlobs.size();
@@ -243,6 +240,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NIceDb::TNiceDb db(txc.DB);
         Schema::SaveSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
     }
+
+    Self->PrimaryIndex->FreeLocks(changes);
 
     if (changes->IsInsert()) {
         Self->ActiveIndexingOrCompaction = false;
@@ -270,9 +269,15 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     } else if (changes->IsCleanup()) {
         Self->ActiveCleanup = false;
 
+        Self->BlobManager->GetCleanupBlobs(BlobsToForget);
+
         Self->IncCounter(ok ? COUNTER_CLEANUP_SUCCESS : COUNTER_CLEANUP_FAIL);
     } else if (changes->IsTtl()) {
         Self->ActiveTtl = false;
+
+        // Do not start new TTL till we evict current PortionsToEvict. We could evict them twice otherwise
+        Y_VERIFY(!Self->ActiveEvictions, "Unexpected active evictions count at tablet %lu", Self->TabletID());
+        Self->ActiveEvictions = ExportTierBlobs.size();
 
         Self->IncCounter(ok ? COUNTER_TTL_SUCCESS : COUNTER_TTL_FAIL);
         Self->IncCounter(COUNTER_EVICTION_BLOBS_WRITTEN, blobsWritten);
@@ -293,23 +298,16 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
         Self->EnqueueBackgroundActivities();
     }
 
-    for (auto& [tierName, blobIds] : ExportTierBlobs) {
+    for (auto& [tierName, pathBlobs] : ExportTierBlobs) {
         Y_VERIFY(ExportNo);
+        Y_VERIFY(pathBlobs.PathId);
 
-        TEvPrivate::TEvExport::TBlobDataMap blobsData;
-        for (auto&& i : blobIds.Blobs) {
-            TEvPrivate::TEvExport::TExportBlobInfo info(blobIds.PathId);
-            info.Evicting = Self->BlobManager->IsEvicting(i);
-            blobsData.emplace(i, std::move(info));
-        }
-
-        ctx.Send(Self->SelfId(), new TEvPrivate::TEvExport(ExportNo, tierName, std::move(blobsData)));
+        ctx.Send(Self->SelfId(),
+                 new TEvPrivate::TEvExport(ExportNo, tierName, pathBlobs.PathId, std::move(pathBlobs.Blobs)));
         ++ExportNo;
     }
 
-    for (auto& [tierName, blobs] : TierBlobsToForget) {
-        Self->ForgetBlobs(ctx, tierName, std::move(blobs));
-    }
+    Self->ForgetBlobs(ctx, BlobsToForget);
 }
 
 

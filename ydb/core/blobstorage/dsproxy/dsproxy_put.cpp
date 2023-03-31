@@ -329,7 +329,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
     void SendReply(std::unique_ptr<TEvBlobStorage::TEvPutResult> &putResult, ui64 blobIdx) {
         NKikimrProto::EReplyStatus status = putResult->Status;
-        A_LOG_LOG_S(false, status == NKikimrProto::OK ? NLog::PRI_DEBUG : NLog::PRI_NOTICE, "BPP21",
+        A_LOG_LOG_S(false, status == NKikimrProto::OK ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPP21",
             "SendReply putResult# " << putResult->ToString() << " ResponsesSent# " << ResponsesSent
             << " PutImpl.Blobs.size# " << PutImpl.Blobs.size()
             << " Last# " << (ResponsesSent + 1 == PutImpl.Blobs.size() ? "true" : "false"));
@@ -353,6 +353,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         LWTRACK(DSProxyPutReply, PutImpl.Blobs[blobIdx].Orbit);
         putResult->Orbit = std::move(PutImpl.Blobs[blobIdx].Orbit);
         putResult->WrittenBeyondBarrier = PutImpl.WrittenBeyondBarrier[blobIdx];
+        putResult->ExecutionRelay = std::move(PutImpl.Blobs[blobIdx].ExecutionRelay);
         if (!IsManyPuts) {
             SendResponse(std::move(putResult), TimeStatsEnabled ? &TimeStats : nullptr);
         } else {
@@ -402,6 +403,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
                 item.Span.GetTraceId()
             ));
             put->RestartCounter = counter;
+            put->ExecutionRelay = std::move(item.ExecutionRelay);
         }
         return ev;
     }
@@ -429,7 +431,7 @@ public:
             bool enableRequestMod3x3ForMinLatecy)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_PUT, false, latencyQueueKind, now, storagePoolCounters,
-                ev->RestartCounter, "DSProxy.Put")
+                ev->RestartCounter, "DSProxy.Put", nullptr)
         , PutImpl(info, state, ev, mon, enableRequestMod3x3ForMinLatecy, source, cookie, Span.GetTraceId())
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , Deadline(ev->Deadline)
@@ -472,7 +474,7 @@ public:
             bool enableRequestMod3x3ForMinLatecy)
         : TBlobStorageGroupRequestActor(info, state, mon, TActorId(), 0, NWilson::TTraceId(),
                 NKikimrServices::BS_PROXY_PUT, false, latencyQueueKind, now, storagePoolCounters,
-                MaxRestartCounter(events), "DSProxy.Put")
+                MaxRestartCounter(events), "DSProxy.Put", nullptr)
         , PutImpl(info, state, events, mon, handleClass, tactic, enableRequestMod3x3ForMinLatecy)
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , IsManyPuts(true)

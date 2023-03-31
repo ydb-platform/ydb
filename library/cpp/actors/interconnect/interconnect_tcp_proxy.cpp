@@ -40,7 +40,6 @@ namespace NActors {
         SetPrefix(Sprintf("Proxy %s [node %" PRIu32 "]", SelfId().ToString().data(), PeerNodeId));
 
         SwitchToInitialState();
-        PassAwayTimestamp = TActivationContext::Now() + TDuration::Seconds(15);
 
         LOG_INFO_IC("ICP01", "ready to work");
     }
@@ -563,7 +562,7 @@ namespace NActors {
         ValidateEvent(ev, "EnqueueSessionEvent");
         const ui32 size = ev->GetSize();
         PendingSessionEventsSize += size;
-        PendingSessionEvents.emplace_back(TActivationContext::Now() + Common->Settings.MessagePendingTimeout, size, ev);
+        PendingSessionEvents.emplace_back(TActivationContext::Monotonic() + Common->Settings.MessagePendingTimeout, size, ev);
         ScheduleCleanupEventQueue();
         CleanupEventQueue();
     }
@@ -810,7 +809,7 @@ namespace NActors {
 
         if (!CleanupEventQueueScheduled && PendingSessionEvents) {
             // apply batching at 50 ms granularity
-            Schedule(Max(TDuration::MilliSeconds(50), PendingSessionEvents.front().Deadline - TActivationContext::Now()), new TEvCleanupEventQueue);
+            Schedule(Max(TDuration::MilliSeconds(50), PendingSessionEvents.front().Deadline - TActivationContext::Monotonic()), new TEvCleanupEventQueue);
             CleanupEventQueueScheduled = true;
         }
     }
@@ -827,7 +826,7 @@ namespace NActors {
     void TInterconnectProxyTCP::CleanupEventQueue() {
         ICPROXY_PROFILED;
 
-        const TInstant now = TActivationContext::Now();
+        const TMonotonic now = TActivationContext::Monotonic();
         while (PendingSessionEvents) {
             TPendingSessionEvent& ev = PendingSessionEvents.front();
             if (now >= ev.Deadline || PendingSessionEventsSize > Common->Settings.MessagePendingSize) {

@@ -58,6 +58,7 @@ struct TEvSchemeShard {
         EvDescribeSchemeResult,
         EvFindTabletSubDomainPathId,
         EvFindTabletSubDomainPathIdResult,
+        EvSubDomainPathIdFound,
 
         EvInitRootShard = EvModifySchemeTransaction + 5 * 512,
         EvInitRootShardResult,
@@ -595,6 +596,18 @@ struct TEvSchemeShard {
         }
     };
 
+    struct TEvSubDomainPathIdFound : public TEventLocal<TEvSubDomainPathIdFound, EvSubDomainPathIdFound> {
+            TEvSubDomainPathIdFound(ui64 schemeShardId, ui64 localPathId)
+                : SchemeShardId(schemeShardId)
+                , LocalPathId(localPathId)
+            { }
+
+            const ui64 SchemeShardId;
+            const ui64 LocalPathId;
+    };
+
+
+
     struct TEvLogin : TEventPB<TEvLogin, NKikimrScheme::TEvLogin, EvLogin> {
         TEvLogin() = default;
     };
@@ -608,6 +621,7 @@ struct TEvSchemeShard {
 
 IActor* CreateFlatTxSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);
 bool PartitionConfigHasExternalBlobsEnabled(const NKikimrSchemeOp::TPartitionConfig &partitionConfig);
+IActor* CreateFindSubDomainPathIdActor(const TActorId& parent, ui64 tabletId, ui64 schemeShardId, bool delayFirstRequest, TDuration maxFindSubDomainPathIdDelay = TDuration::Minutes(10));
 }
 
 template<>

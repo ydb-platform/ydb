@@ -188,6 +188,18 @@ public:
         return false;
     }
 
+    static bool NeedInplaceConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {
+        switch (expectedType.GetTypeId()) {
+            case NScheme::NTypeIds::Timestamp:
+                return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int64;
+            case NScheme::NTypeIds::Date:
+                return typeInRequest.GetTypeId() == NScheme::NTypeIds::Uint16;
+            default:
+                break;
+        }
+        return false;
+    }
+
     TArrowToYdbConverter(const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter)
         : YdbSchema(ydbSchema)
         , RowWriter(rowWriter)
@@ -206,6 +218,8 @@ public:
 };
 
 std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                   const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert);
+std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                    const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert);
 
 inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {

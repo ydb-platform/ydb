@@ -3,6 +3,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
@@ -14,6 +15,15 @@
 
 namespace NKikimr {
 namespace NLongTxService {
+    struct TRetryData {
+        static constexpr ui32 MaxPrepareRetriesPerShard = 100;  // ~30 sec
+        static constexpr ui32 MaxPlanRetriesPerShard = 1000;    // ~5 min
+        static constexpr ui32 RetryDelayMs = 300;
+
+        ui64 WriteId = 0;
+        TString TxBody;
+        ui32 NumRetries = 0;
+    };
 
     class TLongTxServiceActor::TCommitActor : public TActorBootstrapped<TCommitActor> {
     public:
@@ -64,7 +74,7 @@ namespace NLongTxService {
             const auto* msg = ev->Get();
             TxId = msg->TxId;
             Services = msg->Services;
-            LogPrefix = TStringBuilder() << LogPrefix << " TxId# " << TxId;
+            LogPrefix = TStringBuilder() << LogPrefix << " TxId# " << TxId << " ";
             TXLOG_DEBUG("Allocated TxId");
             PrepareTransaction();
         }
@@ -79,15 +89,40 @@ namespace NLongTxService {
                 TString txBody;
                 Y_VERIFY(tx.SerializeToString(&txBody));
 
-                TXLOG_DEBUG("Sending TEvProposeTransaction to ColumnShard# " << tabletId << " WriteId# " << writeId);
-                SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvProposeTransaction>(
+                WaitingShards.emplace(tabletId, TRetryData{writeId, txBody, 0});
+                SendPrepareTransaction(tabletId);
+            }
+            Become(&TThis::StatePrepare);
+        }
+
+        bool SendPrepareTransaction(ui64 tabletId, bool delayed = false) {
+            auto it = WaitingShards.find(tabletId);
+            if (it == WaitingShards.end()) {
+                return false;
+            }
+
+            auto& data = it->second;
+            if (delayed) {
+                if (data.NumRetries >= TRetryData::MaxPrepareRetriesPerShard) {
+                    return false;
+                }
+                ++data.NumRetries;
+                if (ToRetry.empty()) {
+                    TimeoutTimerActorId = CreateLongTimer(TDuration::MilliSeconds(TRetryData::RetryDelayMs),
+                        new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
+                }
+                ToRetry.insert(tabletId);
+                return true;
+            }
+
+            TXLOG_DEBUG("Sending TEvProposeTransaction to ColumnShard# " << tabletId << " WriteId# " << data.WriteId);
+
+            SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_COMMIT,
                     SelfId(),
                     TxId,
-                    std::move(txBody)));
-                WaitingShards.insert(tabletId);
-            }
-            Become(&TThis::StatePrepare);
+                    data.TxBody));
+            return true;
         }
 
         STFUNC(StatePrepare) {
@@ -95,6 +130,7 @@ namespace NLongTxService {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvColumnShard::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
+                CFunc(TEvents::TSystem::Wakeup, HandlePrepareTimeout);
             }
         }
 
@@ -126,7 +162,7 @@ namespace NLongTxService {
         void HandlePrepare(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
             const auto* msg = ev->Get();
             const ui64 tabletId = msg->Record.GetOrigin();
-            const auto status = msg->Record.GetStatus();
+            const NKikimrTxColumnShard::EResultStatus status = msg->Record.GetStatus();
 
             TXLOG_DEBUG("Received TEvProposeTransactionResult from"
                 << " ColumnShard# " << tabletId
@@ -155,9 +191,13 @@ namespace NLongTxService {
                     // Cancel transaction, since we didn't plan it
                     CancelProposal();
 
+                    auto ydbStatus = NColumnShard::ConvertToYdbStatus(status);
                     NYql::TIssues issues;
-                    issues.AddIssue("TODO: need mapping from shard errors to api errors");
-                    return FinishWithError(Ydb::StatusIds::GENERIC_ERROR, std::move(issues));
+                    issues.AddIssue(TStringBuilder() << "Cannot prepare transaction at shard " << tabletId);
+                    if (msg->Record.HasStatusMessage()) {
+                        issues.AddIssue(msg->Record.GetStatusMessage());
+                    }
+                    return FinishWithError(ydbStatus, std::move(issues));
                 }
             }
         }
@@ -165,10 +205,20 @@ namespace NLongTxService {
         void HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
             const auto* msg = ev->Get();
             const ui64 tabletId = msg->TabletId;
+            Y_VERIFY(tabletId != SelectedCoordinator);
 
             TXLOG_DEBUG("Delivery problem"
                 << " TabletId# " << tabletId
                 << " NotDelivered# " << msg->NotDelivered);
+
+            if (!WaitingShards.count(tabletId)) {
+                return;
+            }
+
+            // Delayed retry
+            if (SendPrepareTransaction(tabletId, true)) {
+                return;
+            }
 
             // Cancel transaction, since we didn't plan it
             CancelProposal();
@@ -178,10 +228,19 @@ namespace NLongTxService {
             return FinishWithError(Ydb::StatusIds::UNAVAILABLE, std::move(issues));
         }
 
+        void HandlePrepareTimeout(const TActorContext& /*ctx*/) {
+            TimeoutTimerActorId = {};
+            for (ui64 tabletId : ToRetry) {
+                SendPrepareTransaction(tabletId);
+            }
+            ToRetry.clear();
+        }
+
     private:
         void PlanTransaction() {
             Y_VERIFY(SelectedCoordinator);
             Y_VERIFY(WaitingShards.empty());
+            ToRetry.clear();
 
             auto req = MakeHolder<TEvTxProxy::TEvProposeTransaction>(
                 SelectedCoordinator, TxId, 0, MinStep, MaxStep);
@@ -193,7 +252,7 @@ namespace NLongTxService {
                 auto* x = reqAffectedSet->Add();
                 x->SetTabletId(tabletId);
                 x->SetFlags(/* write */ 2);
-                WaitingShards.insert(tabletId);
+                WaitingShards.emplace(tabletId, TRetryData{});
             }
 
             TXLOG_DEBUG("Sending TEvProposeTransaction to SelectedCoordinator# " << SelectedCoordinator);
@@ -207,6 +266,7 @@ namespace NLongTxService {
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandlePlan);
                 hFunc(TEvColumnShard::TEvProposeTransactionResult, HandlePlan);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePlan);
+                CFunc(TEvents::TSystem::Wakeup, HandlePlanTimeout);
             }
         }
 
@@ -267,10 +327,23 @@ namespace NLongTxService {
                     return Finish();
                 }
 
-                default: {
+                case NKikimrTxColumnShard::OUTDATED: {
+                    if (!WaitingShards.count(tabletId)) {
+                        return;
+                    }
                     NYql::TIssues issues;
-                    issues.AddIssue("TODO: need mapping from shard errors to api errors");
-                    return FinishWithError(Ydb::StatusIds::GENERIC_ERROR, std::move(issues));
+                    issues.AddIssue(TStringBuilder() << "Shard " << tabletId << " has no info about tx " << TxId);
+                    return FinishWithError(Ydb::StatusIds::UNDETERMINED, std::move(issues));
+                }
+
+                default: {
+                    auto ydbStatus = NColumnShard::ConvertToYdbStatus(status);
+                    NYql::TIssues issues;
+                    issues.AddIssue(TStringBuilder() << "Cannot plan transaction at shard " << tabletId);
+                    if (msg->Record.HasStatusMessage()) {
+                        issues.AddIssue(msg->Record.GetStatusMessage());
+                    }
+                    return FinishWithError(ydbStatus, std::move(issues));
                 }
             }
         }
@@ -296,14 +369,64 @@ namespace NLongTxService {
                     issues.AddIssue("Coordinator not available, transaction was not committed");
                     return FinishWithError(Ydb::StatusIds::UNAVAILABLE, std::move(issues));
                 }
-            } else if (!WaitingShards.contains(tabletId)) {
-                // We are not waiting for results from this shard
-                return;
+            } else {
+                if (!PlanStep) {
+                    // Waiting for PlanStep. Do not break transaction.
+                    return;
+                }
+                // It's planned, not completed. We could check TEvProposeTransactionResult by PlanStep.
+                // - tx is completed if PlanStep:TxId at tablet is greater then ours
+                // - tx is not completed otherwise. Keep waiting TEvProposeTransactionResult for it.
+                if (SendCheckPlannedTransaction(tabletId, true)) {
+                    return;
+                }
             }
 
             NYql::TIssues issues;
             issues.AddIssue(TStringBuilder() << "Shard " << tabletId << " is not available");
             return FinishWithError(Ydb::StatusIds::UNDETERMINED, std::move(issues));
+        }
+
+        void HandlePlanTimeout(const TActorContext& /*ctx*/) {
+            TimeoutTimerActorId = {};
+            for (ui64 tabletId : ToRetry) {
+                SendCheckPlannedTransaction(tabletId);
+            }
+            ToRetry.clear();
+        }
+
+        bool SendCheckPlannedTransaction(ui64 tabletId, bool delayed = false) {
+            Y_VERIFY(PlanStep);
+
+            if (delayed) {
+                auto it = WaitingShards.find(tabletId);
+                if (it == WaitingShards.end()) {
+                    // We are not waiting for results from this shard
+                    return true;
+                }
+
+                auto& numRetries = it->second.NumRetries;
+                if (numRetries >= TRetryData::MaxPlanRetriesPerShard) {
+                    return false;
+                }
+                ++numRetries;
+
+                if (ToRetry.empty()) {
+                    TimeoutTimerActorId = CreateLongTimer(TDuration::MilliSeconds(TRetryData::RetryDelayMs),
+                        new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
+                }
+                ToRetry.insert(tabletId);
+                return true;
+            }
+
+            TXLOG_DEBUG("Ask TEvProposeTransactionResult from ColumnShard# " << tabletId
+                << " for PlanStep# " << PlanStep << " TxId# " << TxId);
+
+            SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvCheckPlannedTransaction>(
+                SelfId(),
+                PlanStep,
+                TxId));
+            return true;
         }
 
     private:
@@ -336,11 +459,13 @@ namespace NLongTxService {
         TString LogPrefix;
         ui64 TxId = 0;
         NTxProxy::TTxProxyServices Services;
-        THashSet<ui64> WaitingShards;
+        THashMap<ui64, TRetryData> WaitingShards;
         ui64 SelectedCoordinator = 0;
         ui64 MinStep = 0;
         ui64 MaxStep = Max<ui64>();
         ui64 PlanStep = 0;
+        THashSet<ui64> ToRetry;
+        TActorId TimeoutTimerActorId;
     };
 
     void TLongTxServiceActor::StartCommitActor(TTransaction& tx) {

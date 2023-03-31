@@ -42,6 +42,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpEnableSpilling);
     REGISTER_SETTING(*this, _KqpDisableLlvmForUdfStages);
 
+    REGISTER_SETTING(*this, KqpPushOlapProcess);
+
     /* Compile time */
     REGISTER_SETTING(*this, _CommitPerShardKeysSizeLimitBytes);
     REGISTER_SETTING(*this, _DefaultCluster);

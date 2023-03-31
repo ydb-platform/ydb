@@ -13,8 +13,7 @@
 
 #include <util/stream/str.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 void TChangeRecord::SerializeTo(NKikimrChangeExchange::TChangeRecord& record) const {
     record.SetOrder(Order);
@@ -347,5 +346,4 @@ TChangeRecord&& TChangeRecordBuilder::Build() {
     return std::move(Record);
 }
 
-} // NDataShard
-} // NKikimr
+}

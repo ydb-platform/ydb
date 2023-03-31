@@ -312,6 +312,9 @@ struct TEvWhiteboard{
             if (groupInfo->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE) {
                 Record.SetEncryption(true);
             }
+            if (groupInfo->BlobDepotId) {
+                Record.SetBlobDepotId(*groupInfo->BlobDepotId);
+            }
         }
     };
 

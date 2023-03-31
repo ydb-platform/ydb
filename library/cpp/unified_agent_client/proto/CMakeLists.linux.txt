@@ -1,0 +1,46 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(cpp-unified_agent_client-proto)
+set_property(TARGET cpp-unified_agent_client-proto PROPERTY
+  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
+)
+target_link_libraries(cpp-unified_agent_client-proto PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-grpc
+  tools-enum_parser-enum_serialization_runtime
+  contrib-libs-protobuf
+)
+target_proto_messages(cpp-unified_agent_client-proto PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/proto/unified_agent.proto
+)
+generate_enum_serilization(cpp-unified_agent_client-proto
+  ${CMAKE_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.pb.h
+  INCLUDE_HEADERS
+  library/cpp/unified_agent_client/proto/unified_agent.pb.h
+)
+target_proto_addincls(cpp-unified_agent_client-proto
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(cpp-unified_agent_client-proto
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
+target_proto_plugin(cpp-unified_agent_client-proto
+  grpc_cpp
+  grpc_cpp
+)

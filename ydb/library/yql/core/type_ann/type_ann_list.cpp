@@ -5339,6 +5339,8 @@ namespace {
             }
 
             input->SetTypeAnn(retType);
+        } else if (name == "some") {
+            input->SetTypeAnn(lambda->GetTypeAnn());
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unsupported agg name: " << name));

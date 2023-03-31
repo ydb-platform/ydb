@@ -12,11 +12,11 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
+TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                                                const NKikimrSchemeOp::TPersQueueGroupDescription& op,
                                                TEvSchemeShard::EStatus& status, TString& errStr)
 {
-    TPersQueueGroupInfo::TPtr pqGroupInfo = new TPersQueueGroupInfo;
+    TTopicInfo::TPtr pqGroupInfo = new TTopicInfo;
 
     ui32 partitionCount = 0;
     if (op.HasTotalGroupCount()) {
@@ -93,7 +93,7 @@ TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
 
     TString prevBound;
     for (ui32 i = 0; i < partitionCount; ++i) {
-        using TKeyRange = TPQShardInfo::TKeyRange;
+        using TKeyRange = TTopicTabletInfo::TKeyRange;
         TMaybe<TKeyRange> keyRange;
 
         if (op.PartitionBoundariesSize()) {
@@ -176,7 +176,7 @@ TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
 
 void ApplySharding(TTxId txId,
                    TPathId pathId,
-                   TPersQueueGroupInfo::TPtr pqGroup,
+                   TTopicInfo::TPtr pqGroup,
                    TTxState& txState,
                    const TChannelsBindings& rbBindedChannels,
                    const TChannelsBindings& pqBindedChannels,
@@ -193,8 +193,8 @@ void ApplySharding(TTxId txId,
         ss->RegisterShardInfo(idx, shardInfo);
         txState.Shards.emplace_back(idx, ETabletType::PersQueue, TTxState::CreateParts);
 
-        TPQShardInfo::TPtr pqShard = new TPQShardInfo();
-        pqShard->PQInfos.reserve(pqGroup->MaxPartsPerTablet);
+        TTopicTabletInfo::TPtr pqShard = new TTopicTabletInfo();
+        pqShard->Partitions.reserve(pqGroup->MaxPartsPerTablet);
         pqGroup->Shards[idx] = pqShard;
     }
 
@@ -208,14 +208,14 @@ void ApplySharding(TTxId txId,
     auto it = pqGroup->PartitionsToAdd.begin();
     for (ui32 pqId = 0; pqId < pqGroup->TotalGroupCount; ++pqId, ++it) {
         auto idx = ss->NextShardIdx(startShardIdx, pqId / pqGroup->MaxPartsPerTablet);
-        TPQShardInfo::TPtr pqShard = pqGroup->Shards[idx];
+        TTopicTabletInfo::TPtr pqShard = pqGroup->Shards[idx];
 
-        TPQShardInfo::TPersQueueInfo pqInfo;
+        TTopicTabletInfo::TTopicPartitionInfo pqInfo;
         pqInfo.PqId = it->PartitionId;
         pqInfo.GroupId = it->GroupId;
         pqInfo.KeyRange = it->KeyRange;
         pqInfo.AlterVersion = 1;
-        pqShard->PQInfos.push_back(pqInfo);
+        pqShard->Partitions.push_back(pqInfo);
     }
 }
 
@@ -347,7 +347,7 @@ public:
             return result;
         }
 
-        TPersQueueGroupInfo::TPtr pqGroup = CreatePersQueueGroup(
+        TTopicInfo::TPtr pqGroup = CreatePersQueueGroup(
             context, createDEscription, status, errStr);
 
         if (!pqGroup.Get()) {
@@ -365,15 +365,7 @@ public:
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
         Y_VERIFY(parseOk);
 
-        const ui64 throughput = ((ui64)partitionsToCreate) *
-                                config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-        const ui64 storage = [&config, &throughput]() {
-            if (config.GetPartitionConfig().HasStorageLimitBytes()) {
-                return config.GetPartitionConfig().GetStorageLimitBytes();
-            } else {
-                return throughput * config.GetPartitionConfig().GetLifetimeSeconds();
-            }
-        }();
+        const PQGroupReserve reserve(config, partitionsToCreate);
 
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
@@ -381,7 +373,7 @@ public:
                 .ShardsLimit(shardsToCreate)
                 .PathShardsLimit(shardsToCreate)
                 .PQPartitionsLimit(partitionsToCreate)
-                .PQReservedStorageLimit(storage);
+                .PQReservedStorageLimit(reserve.Storage);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -455,16 +447,16 @@ public:
 
         for (auto& shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
-            for (const auto& pqInfo : shard.second->PQInfos) {
+            for (const auto& pqInfo : shard.second->Partitions) {
                 context.SS->PersistPersQueue(db, pathId, shardIdx, pqInfo);
             }
         }
 
-        TPersQueueGroupInfo::TPtr emptyGroup = new TPersQueueGroupInfo;
+        TTopicInfo::TPtr emptyGroup = new TTopicInfo;
         emptyGroup->Shards.swap(pqGroup->Shards);
 
-        context.SS->PersQueueGroups[pathId] = emptyGroup;
-        context.SS->PersQueueGroups[pathId]->AlterData = pqGroup;
+        context.SS->Topics[pathId] = emptyGroup;
+        context.SS->Topics[pathId]->AlterData = pqGroup;
         context.SS->IncrementPathDbRefCount(pathId);
 
         context.SS->PersistPersQueueGroup(db, pathId, emptyGroup);
@@ -515,10 +507,10 @@ public:
         dstPath.DomainInfo()->IncPathsInside();
         dstPath.DomainInfo()->AddInternalShards(txState);
         dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
-        dstPath.DomainInfo()->IncPQReservedStorage(storage);
+        dstPath.DomainInfo()->IncPQReservedStorage(reserve.Storage);
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(reserve.Throughput);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(reserve.Storage);
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate);
 

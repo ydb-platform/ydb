@@ -6,6 +6,7 @@
 #include "datashard_outreadset.h"
 #include "datashard_snapshots.h"
 #include "execution_unit_kind.h"
+#include "change_collector.h"
 
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/engine/minikql/change_collector_iface.h>
@@ -444,7 +445,7 @@ struct TOutputOpData {
     using TResultPtr = THolder<TEvDataShard::TEvProposeTransactionResult>;
     using TDelayedAcks = TVector<THolder<IEventHandle>>;
     using TOutReadSets = TMap<std::pair<ui64, ui64>, TString>; // source:target -> body
-    using TChangeRecord = NMiniKQL::IChangeCollector::TChange;
+    using TChangeRecord = IDataShardChangeCollector::TChange;
     using TExpectedReadSets = TMap<std::pair<ui64, ui64>, TStackVec<TActorId, 1>>;
 
     TResultPtr Result;
@@ -651,6 +652,9 @@ public:
     const NFH::TFlatHashSet<TOperation::TPtr> &GetSpecialDependencies() const { return SpecialDependencies; }
     const NFH::TFlatHashSet<TOperation::TPtr> &GetPlannedConflicts() const { return PlannedConflicts; }
     const NFH::TFlatHashSet<TOperation::TPtr> &GetImmediateConflicts() const { return ImmediateConflicts; }
+    const absl::flat_hash_set<ui64> &GetVolatileDependencies() const { return VolatileDependencies; }
+    bool HasVolatileDependencies() const { return !VolatileDependencies.empty(); }
+    bool GetVolatileDependenciesAborted() const { return VolatileDependenciesAborted; }
 
     void AddDependency(const TOperation::TPtr &op);
     void AddSpecialDependency(const TOperation::TPtr &op);
@@ -664,6 +668,10 @@ public:
     void ClearImmediateConflicts();
     void ClearSpecialDependents();
     void ClearSpecialDependencies();
+
+    void AddVolatileDependency(ui64 txId);
+    void RemoveVolatileDependency(ui64 txId, bool success);
+    void ClearVolatileDependenciesAborted() { VolatileDependenciesAborted = false; }
 
     TString DumpDependencies() const;
 
@@ -831,6 +839,8 @@ private:
     NFH::TFlatHashSet<TOperation::TPtr> SpecialDependencies;
     NFH::TFlatHashSet<TOperation::TPtr> PlannedConflicts;
     NFH::TFlatHashSet<TOperation::TPtr> ImmediateConflicts;
+    absl::flat_hash_set<ui64> VolatileDependencies;
+    bool VolatileDependenciesAborted = false;
     TVector<EExecutionUnitKind> ExecutionPlan;
     // Index of current execution unit.
     size_t CurrentUnit;

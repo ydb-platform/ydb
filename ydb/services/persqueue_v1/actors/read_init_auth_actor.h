@@ -21,7 +21,7 @@ class TReadInitAndAuthActor : public NActors::TActorBootstrapped<TReadInitAndAut
 public:
     TReadInitAndAuthActor(const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
                           const TString& session, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-                          TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NACLib::TUserToken> token,
+                          TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
                           const NPersQueue::TTopicsToConverter& topics, const TString& localCluster);
 
     ~TReadInitAndAuthActor();
@@ -72,7 +72,7 @@ private:
     const TString ClientId;
     const TString ClientPath;
 
-    TIntrusivePtr<NACLib::TUserToken> Token;
+    TIntrusiveConstPtr<NACLib::TUserToken> Token;
 
     THashMap<TString, TTopicHolder> Topics; // topic -> info
 

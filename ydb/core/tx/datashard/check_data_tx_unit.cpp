@@ -104,7 +104,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 << " at " << DataShard.TabletID();
 
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
-                ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
+                ->AddError(NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST, err);
             op->Abort(EExecutionUnitKind::FinishPropose);
 
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);

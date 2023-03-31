@@ -73,7 +73,7 @@
                                                         "Name": "Aggregate"
                                                     },
                                                     {
-                                                        "ReadRanges": [
+                                                        "ReadRange": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadColumns": null,
@@ -238,7 +238,7 @@
                                                         "Name": "Aggregate"
                                                     },
                                                     {
-                                                        "ReadRanges": [
+                                                        "ReadRange": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadColumns": null,

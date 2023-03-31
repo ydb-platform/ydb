@@ -14,13 +14,43 @@
                         "Group",
                         "Name"
                     ],
-                    "limit": "1001",
-                    "scan_by": [
-                        "Group [2, 2]",
-                        "Group [10, 10]",
-                        "Name [Name1, Name5]"
+                    "lookup_by": [
+                        "Group (10)"
                     ],
-                    "type": "Scan"
+                    "scan_by": [
+                        "Name [Name1, Name3)"
+                    ],
+                    "type": "Lookup"
+                },
+                {
+                    "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ],
+                    "lookup_by": [
+                        "Group (10)"
+                    ],
+                    "scan_by": [
+                        "Name [Name3, Name5]"
+                    ],
+                    "type": "Lookup"
+                },
+                {
+                    "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ],
+                    "lookup_by": [
+                        "Group (2)"
+                    ],
+                    "scan_by": [
+                        "Name (-\u221e, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

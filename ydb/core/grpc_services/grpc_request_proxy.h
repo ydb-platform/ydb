@@ -35,11 +35,11 @@ public:
 
     struct TEvRefreshTokenResponse : public TEventLocal<TEvRefreshTokenResponse, EvRefreshTokenResponse> {
         bool Authenticated;
-        TString InternalToken;
+        TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
         bool Retryable;
         NYql::TIssues Issues;
 
-        TEvRefreshTokenResponse(bool ok, const TString& token, bool retryable, const NYql::TIssues& issues)
+        TEvRefreshTokenResponse(bool ok, const TIntrusiveConstPtr<NACLib::TUserToken>& token, bool retryable, const NYql::TIssues& issues)
             : Authenticated(ok)
             , InternalToken(token)
             , Retryable(retryable)
@@ -55,6 +55,7 @@ protected:
     void Handle(TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamTopicWriteRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvCommitOffsetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQDropTopicRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQCreateTopicRequest::TPtr& ev, const TActorContext& ctx);
@@ -75,8 +76,13 @@ protected:
     TActorId DiscoveryCacheActorID;
 };
 
-inline TActorId CreateGRpcRequestProxyId() {
-    const auto actorId = TActorId(0, "GRpcReqProxy");
+inline TActorId CreateGRpcRequestProxyId(int n = 0) {
+    if (n == 0) {
+        const auto actorId = TActorId(0, "GRpcReqProxy");
+        return actorId;
+    }
+
+    const auto actorId = TActorId(0, TStringBuilder() << "GRpcReqPro" << n);
     return actorId;
 }
 

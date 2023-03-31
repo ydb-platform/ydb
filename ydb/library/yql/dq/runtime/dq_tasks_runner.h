@@ -5,6 +5,7 @@
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
 #include <ydb/library/yql/dq/runtime/dq_compute.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
+#include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
@@ -311,12 +312,14 @@ public:
     virtual bool IsAllocatorAttached() = 0;
     virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0;
     virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0;
+    virtual std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() const = 0;
 
     virtual const THashMap<TString, TString>& GetSecureParams() const = 0;
     virtual const THashMap<TString, TString>& GetTaskParams() const = 0;
 
     virtual void UpdateStats() = 0;
     virtual const TDqTaskRunnerStats* GetStats() const = 0;
+    virtual const TDqMeteringStats* GetMeteringStats() const = 0;
 
     [[nodiscard]]
     virtual TString Save() const = 0;

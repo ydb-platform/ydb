@@ -253,6 +253,7 @@ void TUserActionProcessorFixture::CreatePartitionActor(ui32 id,
                                      false,
                                      Config,
                                      *tabletCounters,
+                                     false,
                                      newPartition,
                                      std::move(txs));
     ActorId = Ctx->Runtime->Register(actor);

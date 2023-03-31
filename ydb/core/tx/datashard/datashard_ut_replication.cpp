@@ -11,11 +11,10 @@ using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardReplication) {
 
-    Y_UNIT_TEST_WITH_MVCC(SimpleApplyChanges) {
+    Y_UNIT_TEST(SimpleApplyChanges) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -82,11 +81,10 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         }
     }
 
-    void DoSplitMergeChanges(bool withMvcc, bool withReboots) {
+    void DoSplitMergeChanges(bool withReboots) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(withMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -208,12 +206,12 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         }
     }
 
-    Y_UNIT_TEST_WITH_MVCC(SplitMergeChanges) {
-        DoSplitMergeChanges(WithMvcc, false);
+    Y_UNIT_TEST(SplitMergeChanges) {
+        DoSplitMergeChanges(false);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(SplitMergeChangesReboots) {
-        DoSplitMergeChanges(WithMvcc, true);
+    Y_UNIT_TEST(SplitMergeChangesReboots) {
+        DoSplitMergeChanges(true);
     }
 
 }

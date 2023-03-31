@@ -302,6 +302,16 @@ TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>&
     return WriteColumnValuesFromArrowImpl(accessor, batch, columnIndex, columnType);
 }
 
+TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
+    const arrow::RecordBatch& batch, i64 columnIndex, i64 resultColumnIndex, NScheme::TTypeInfo columnType)
+{
+    const auto accessor = [=, &editAccessors](const ui32 rowIndex, const ui32 colIndex) -> NUdf::TUnboxedValue& {
+        YQL_ENSURE(colIndex == columnIndex);
+        return editAccessors[rowIndex][resultColumnIndex];
+    };
+    return WriteColumnValuesFromArrowImpl(accessor, batch, columnIndex, columnType);
+}
+
 std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type) {
     auto sizes = GetUnboxedValueSize(value, type);
     return {sizes.AllocatedBytes, sizes.DataBytes};

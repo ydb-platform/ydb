@@ -256,7 +256,7 @@ namespace {
         }
     };
 
-    SIMPLE_UDF(TEscape, char*(char*)) {
+    SIMPLE_STRICT_UDF(TEscape, char*(char*)) {
         const std::string_view input(args[0].AsStringRef());
         const auto& result = RE2::QuoteMeta(StringPiece(input.data(), input.size()));
         return input == result ? TUnboxedValue(args[0]) : valueBuilder->NewString(result);
@@ -315,6 +315,8 @@ namespace {
             bool typesOnly) {
             Y_UNUSED(userType);
             if (Name() == name) {
+                builder.IsStrict();
+
                 auto argsBuilder = builder.Args();
 #define FIELD_HANDLE(name, index, type, ...) argsBuilder->Add<TOptional<type>>().Name(TStringRef::Of(#name));
                 OPTIONS_MAP(FIELD_HANDLE)

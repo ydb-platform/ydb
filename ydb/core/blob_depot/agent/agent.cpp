@@ -18,6 +18,9 @@ namespace NKikimr::NBlobDepot {
         if (info) {
             Y_VERIFY(info->BlobDepotId);
             TabletId = *info->BlobDepotId;
+            LogId = TStringBuilder() << '{' << TabletId << '@' << virtualGroupId << '}';
+        } else {
+            LogId = TStringBuilder() << '{' << '?' << '@' << virtualGroupId << "}";
         }
     }
 
@@ -34,6 +37,7 @@ namespace NKikimr::NBlobDepot {
 
         HandleQueryWatchdog();
         HandlePendingEventQueueWatchdog();
+        HandlePushMetrics();
     }
 
     IActor *CreateBlobDepotAgent(ui32 virtualGroupId, TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId) {

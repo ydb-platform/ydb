@@ -10,6 +10,11 @@ namespace NActors {
     struct TWorkerContext;
     class ISchedulerCookie;
 
+    struct TCpuConsumption {
+        double ConsumedUs = 0;
+        double BookedUs = 0;
+    };
+
     class IExecutorPool : TNonCopyable {
     public:
         const ui32 PoolId;
@@ -131,14 +136,9 @@ namespace NActors {
             return false;
         }
 
-        virtual double GetThreadConsumedUs(i16 threadIdx) {
+        virtual TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) {
             Y_UNUSED(threadIdx);
-            return 0.0;
-        }
-
-        virtual double GetThreadBookedUs(i16 threadIdx) {
-            Y_UNUSED(threadIdx);
-            return 0.0;
+            return TCpuConsumption{0.0, 0.0};
         }
     };
 

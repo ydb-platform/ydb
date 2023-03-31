@@ -39,8 +39,8 @@ bool TTierConfig::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Valu
 
 NMetadata::NInternal::TTableRecord TTierConfig::SerializeToRecord() const {
     NMetadata::NInternal::TTableRecord result;
-    result.SetColumn(TDecoder::TierName, NMetadata::NInternal::TYDBValue::Bytes(TierName));
-    result.SetColumn(TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Bytes(ProtoConfig.DebugString()));
+    result.SetColumn(TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(TierName));
+    result.SetColumn(TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Utf8(ProtoConfig.DebugString()));
     return result;
 }
 

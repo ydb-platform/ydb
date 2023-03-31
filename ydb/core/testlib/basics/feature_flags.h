@@ -33,10 +33,7 @@ public:
     FEATURE_FLAG_SETTER(EnableNotNullColumns)
     FEATURE_FLAG_SETTER(EnableBulkUpsertToAsyncIndexedTables)
     FEATURE_FLAG_SETTER(EnableChangefeeds)
-    FEATURE_FLAG_SETTER(EnableKqpScanQueryStreamLookup)
-    FEATURE_FLAG_SETTER(EnableKqpDataQueryStreamLookup)
     FEATURE_FLAG_SETTER(EnableMoveIndex)
-    FEATURE_FLAG_SETTER(EnablePredicateExtractForDataQueries)
     FEATURE_FLAG_SETTER(EnableNotNullDataColumns)
     FEATURE_FLAG_SETTER(EnableArrowFormatAtDatashard)
     FEATURE_FLAG_SETTER(EnableGrpcAudit)
@@ -45,18 +42,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardGenericReadSets)
     FEATURE_FLAG_SETTER(EnableAlterDatabaseCreateHiveFirst)
     FEATURE_FLAG_SETTER(EnableDataShardVolatileTransactions)
-
-    TDerived& SetEnableMvcc(std::optional<bool> value) {
-        if (value) {
-            if (*value) {
-                FeatureFlags.SetEnableMvcc(NKikimrConfig::TFeatureFlags::VALUE_TRUE);
-            } else {
-                FeatureFlags.SetEnableMvcc(NKikimrConfig::TFeatureFlags::VALUE_FALSE);
-            }
-        }
-
-        return *static_cast<TDerived*>(this);
-    }
+    FEATURE_FLAG_SETTER(EnableTopicDiskSubDomainQuota)
 
     #undef FEATURE_FLAG_SETTER
 };

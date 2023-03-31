@@ -270,7 +270,7 @@ namespace {
                         SetErrorAndClear(Context.Get(), entry);
                     }
                 }
-           
+
                 if (Context->Request->UserToken) {
                     auto securityObject = GetSecurityObject(entry);
                     if (securityObject == nullptr) {
@@ -809,6 +809,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 column.PType = NScheme::TypeInfoFromProtoColumnType(columnDesc.GetTypeId(),
                     columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
                 nameToId[column.Name] = column.Id;
+                if (columnDesc.GetNotNull()) {
+                    NotNullColumns.insert(columnDesc.GetName());
+                }
             }
 
             KeyColumnTypes.resize(schemaDesc.KeyColumnNamesSize());
@@ -1667,11 +1670,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
 
             const bool isTable = Kind == TNavigate::KindTable || Kind == TNavigate::KindColumnTable;
+            const bool isTopic = Kind == TNavigate::KindTopic || Kind == TNavigate::KindCdcStream;
+
             if (entry.Operation == TNavigate::OpTable && !isTable) {
                 return SetError(context, entry, TNavigate::EStatus::PathNotTable);
             }
 
-            if (!Created && isTable) {
+            if (!Created && (isTable || isTopic)) {
                 return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
             }
 

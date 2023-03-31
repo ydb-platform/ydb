@@ -274,6 +274,14 @@ TActorId SetOwner(
     const TString& owner,
     bool force);
 
+TActorId SetOwner(
+    TTestActorRuntime* runtime,
+    ui64 tabletId, 
+    const TActorId& sender,
+    const ui32 partition,
+    const TString& owner,
+    bool force);
+
 void FillDeprecatedUserInfo(
     NKikimrClient::TKeyValueRequest_TCmdWrite* write,
     const TString& client,
@@ -319,6 +327,18 @@ void WriteData(
     i64 offset,
     bool disableDeduplication = false);
 
+void WriteData(
+    TTestActorRuntime* runtime,
+    ui64 tabletId, 
+    const TActorId& sender,
+    const ui32 partition,
+    const TString& sourceId,
+    const TVector<std::pair<ui64, TString>> data,
+    const TString& cookie,
+    i32 msgSeqNo,
+    i64 offset,
+    bool disableDeduplication = false);
+
 void WritePartData(
     const ui32 partition,
     const TString& sourceId,
@@ -353,6 +373,14 @@ TVector<TString> CmdSourceIdRead(TTestContext& tc);
 std::pair<TString, TActorId> CmdSetOwner(
     const ui32 partition,
     TTestContext& tc,
+    const TString& owner = "default",
+    bool force = true);
+
+std::pair<TString, TActorId> CmdSetOwner(
+    TTestActorRuntime* runtime,
+    ui64 tabletId, 
+    const TActorId& sender,
+    const ui32 partition,
     const TString& owner = "default",
     bool force = true);
 
@@ -428,5 +456,25 @@ void CmdWrite(
     bool treatWrongCookieAsError = false,
     bool treatBadOffsetAsError = true,
     bool disableDeduplication = false);
+
+void CmdWrite(
+    TTestActorRuntime* runtime,
+    ui64 tabletId, 
+    const TActorId& sender,
+    const ui32 partition,
+    const TString& sourceId,
+    ui32& msgSeqNo,
+    const TVector<std::pair<ui64, TString>> data,
+    bool error = false,
+    const THashSet<ui32>& alreadyWrittenSeqNo = {},
+    bool isFirst = false,
+    const TString& ownerCookie = "",
+    i32 msn = -1,
+    i64 offset = -1,
+    bool treatWrongCookieAsError = false,
+    bool treatBadOffsetAsError = true,
+    bool disableDeduplication = false);
+
+THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId);
 
 } // namespace NKikimr::NPQ

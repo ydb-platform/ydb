@@ -111,6 +111,25 @@ def test_drop_tenant_without_nodes_could_continue(ydb_cluster):
     ydb_cluster.unregister_and_stop_slots(database_nodes)
 
 
+def test_drop_tenant_without_nodes_could_complete(ydb_cluster):
+    database = '/Root/users/database'
+    ydb_cluster.create_database(
+        database,
+        storage_pool_units_count={
+            'hdd': 1
+        }
+    )
+    database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
+    ydb_cluster.wait_tenant_up(database)
+    time.sleep(1)
+
+    logger.debug("stop database nodes")
+    ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+    logger.debug("remove database")
+    ydb_cluster.remove_database(database)
+
+
 def test_create_tenant_then_exec_yql_empty_database_header(ydb_cluster, ydb_endpoint):
     database = '/Root/users/database'
 

@@ -89,61 +89,7 @@ public:
         }
     };
 
-    bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {
-        if (!decoder.Read(decoder.GetIdIdx(), Id, rawValue)) {
-            return false;
-        }
-        if (!decoder.Read(decoder.GetClassIdx(), Class, rawValue)) {
-            return false;
-        }
-        if (!decoder.Read(decoder.GetEnabledIdx(), EnabledFlag, rawValue)) {
-            return false;
-        }
-        if (!decoder.Read(decoder.GetExecutorIdIdx(), ExecutorId, rawValue)) {
-            return false;
-        }
-        if (!decoder.Read(decoder.GetLastPingIdx(), LastPing, rawValue)) {
-            return false;
-        }
-        if (!decoder.Read(decoder.GetStartInstantIdx(), StartInstant, rawValue)) {
-            return false;
-        }
-        if (!decoder.Read(decoder.GetConstructInstantIdx(), ConstructInstant, rawValue)) {
-            return false;
-        }
-        {
-            TString activityData;
-            if (!decoder.Read(decoder.GetActivityIdx(), activityData, rawValue)) {
-                return false;
-            }
-            if (!Activity.DeserializeFromString(activityData)) {
-                return false;
-            }
-            if (!Activity) {
-                ALS_ERROR(NKikimrServices::BG_TASKS) << "cannot parse task activity";
-                return false;
-            }
-        }
-        {
-            TString schedulerData;
-            if (!decoder.Read(decoder.GetSchedulerIdx(), schedulerData, rawValue)) {
-                return false;
-            }
-            if (!Scheduler.DeserializeFromString(schedulerData)) {
-                return false;
-            }
-        }
-        {
-            TString stateData;
-            if (!decoder.Read(decoder.GetStateIdx(), stateData, rawValue)) {
-                return false;
-            }
-            if (!State.DeserializeFromString(stateData)) {
-                return false;
-            }
-        }
-        return true;
-    }
+    bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue);
 };
 
 }

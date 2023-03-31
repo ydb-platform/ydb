@@ -55,7 +55,6 @@ message TMetadata {
 
 message TEvictMetadata {
     optional string TierName = 1;
-    optional uint32 TierVersion = 2;
 }
 
 message TEvWrite {
@@ -127,6 +126,12 @@ message TEvProposeTransaction {
 
     optional uint64 SchemeShardId = 5;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 6;
+}
+
+message TEvCheckPlannedTransaction {
+    optional NActorsProto.TActorId Source = 1;
+    optional uint64 Step = 2;
+    optional uint64 TxId = 3;
 }
 
 message TEvProposeTransactionResult {

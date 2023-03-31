@@ -177,7 +177,7 @@ private:
 
 struct TKqpCompileRequest {
     TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache,
-        const TString& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
         NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {})
         : Sender(sender)
         , Query(std::move(query))
@@ -193,7 +193,7 @@ struct TKqpCompileRequest {
     TKqpQueryId Query;
     TString Uid;
     bool KeepInCache = false;
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TInstant Deadline;
     TKqpDbCountersPtr DbCounters;
     TActorId CompileActor;
@@ -356,11 +356,40 @@ private:
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
+        bool enableKqpDataQueryStreamLookup = Config.GetEnableKqpDataQueryStreamLookup();
+        bool enableKqpScanQueryStreamLookup = Config.GetEnableKqpScanQueryStreamLookup();
+        bool enableKqpScanQueryStreamIdxLookupJoin = Config.GetEnableKqpScanQueryStreamIdxLookupJoin();
+
+        bool enableKqpDataQuerySourceRead = Config.GetEnableKqpDataQuerySourceRead();
+        bool enableKqpScanQuerySourceRead = Config.GetEnableKqpScanQuerySourceRead();
+
+        bool enableKqpDataQueryPredicateExtract = Config.GetEnablePredicateExtractForDataQueries();
+        bool enableKqpScanQueryPredicateExtract = Config.GetEnablePredicateExtractForScanQueries();
+
         Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+
+        if (Config.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
+            Config.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
+            Config.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
+            Config.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
+            Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
+            Config.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract || 
+            Config.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract)
+        {
+
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
+                "Iterator read flags was changed. StreamLookup from " << enableKqpDataQueryStreamLookup <<
+                " to " << Config.GetEnableKqpDataQueryStreamLookup() << " for data queries, from " <<
+                enableKqpScanQueryStreamLookup << " to " << Config.GetEnableKqpScanQueryStreamLookup() << " for scan queries."
+                << " Sources for data queries from " << enableKqpDataQuerySourceRead << " to " << Config.GetEnableKqpDataQuerySourceRead()
+                << "for scan queries from " << enableKqpScanQuerySourceRead << " to " << Config.GetEnableKqpScanQuerySourceRead());
+
+            QueryCache.Clear();
+        }
     }
 
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
@@ -411,7 +440,7 @@ private:
         *Counters->CompileQueryCacheSize = QueryCache.Size();
         *Counters->CompileQueryCacheBytes = QueryCache.Bytes();
 
-        auto userSid = NACLib::TUserToken(request.UserToken).GetUserSID();
+        auto userSid = request.UserToken->GetUserSID();
         auto dbCounters = request.DbCounters;
 
         if (request.Uid) {

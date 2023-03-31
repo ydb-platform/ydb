@@ -744,14 +744,6 @@ namespace {
 
 class TKikimrIcGateway : public IKqpGateway {
 private:
-    struct TUserTokenData {
-        TString Serialized;
-        NACLib::TUserToken Data;
-
-        TUserTokenData(const TString& serialized)
-            : Serialized(serialized)
-            , Data(serialized) {}
-    };
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 public:
@@ -782,11 +774,9 @@ public:
         return {};
     }
 
-    void SetToken(const TString& cluster, const TString& token) override {
+    void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
         YQL_ENSURE(cluster == Cluster);
-        if (!token.empty()) {
-            UserToken = TUserTokenData(token);
-        }
+        UserToken = token;
     }
 
     TVector<TString> GetCollectedSchemeData() override {
@@ -794,7 +784,7 @@ public:
     }
 
     TString GetTokenCompat() const {
-        return UserToken ? UserToken->Serialized : TString();
+        return UserToken ? UserToken->GetSerializedToken() : TString();
     }
 
     TFuture<TListPathResult> ListPath(const TString& cluster, const TString &path) override {
@@ -808,7 +798,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& describePath = *ev->Record.MutableDescribePath();
             describePath.SetPath(CanonizePath(path));
@@ -843,11 +833,8 @@ public:
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TTableMetadataResult>(cluster);
             }
-            if (UserToken) {
-                return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken->Data);
-            } else {
-                return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, Nothing());
-            }
+
+            return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken);
 
         } catch (yexception& e) {
             return MakeFuture(ResultFromException<TTableMetadataResult>(e));
@@ -903,7 +890,7 @@ public:
                     auto ev = MakeHolder<TRequest>();
                     ev->Record.SetDatabaseName(Database);
                     if (UserToken) {
-                        ev->Record.SetUserToken(UserToken->Serialized);
+                        ev->Record.SetUserToken(UserToken->GetSerializedToken());
                     }
                     auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
                     schemeTx.SetWorkingDir(pathPair.first);
@@ -993,7 +980,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1050,7 +1037,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpMoveTable);
@@ -1114,7 +1101,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1150,7 +1137,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1191,7 +1178,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1227,7 +1214,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
@@ -1260,7 +1247,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(database);
@@ -1303,7 +1290,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(database);
@@ -1346,7 +1333,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(database);
@@ -1386,12 +1373,8 @@ public:
         ui32 GetNodeId() const {
             return Owner.NodeId;
         }
-        TMaybe<NACLib::TUserToken> GetUserToken() const {
-            if (Owner.UserToken) {
-                return Owner.UserToken->Data;
-            } else {
-                return {};
-            }
+        TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken() const {
+            return Owner.UserToken;
         }
     public:
         IObjectModifier(TKikimrIcGateway& owner)
@@ -1506,7 +1489,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(database);
@@ -1556,7 +1539,7 @@ public:
                 auto ev = MakeHolder<TRequest>();
                 ev->Record.SetDatabaseName(database);
                 if (UserToken) {
-                    ev->Record.SetUserToken(UserToken->Serialized);
+                    ev->Record.SetUserToken(UserToken->GetSerializedToken());
                 }
                 auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
                 schemeTx.SetWorkingDir(database);
@@ -1638,7 +1621,7 @@ public:
             auto ev = MakeHolder<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(database);
@@ -1669,7 +1652,7 @@ public:
 
     TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request, TQueryData::TPtr params) override {
         YQL_ENSURE(!request.Transactions.empty());
-        YQL_ENSURE(request.Locks.empty());
+        YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
 
         auto containOnlyPureStages = [](const auto& request) {
@@ -1705,7 +1688,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1737,7 +1720,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1772,7 +1755,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1802,7 +1785,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1830,7 +1813,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1863,7 +1846,7 @@ public:
 
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -2096,76 +2079,6 @@ private:
         schema.SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
     }
 
-    static bool CheckLoadTableMetadataStatus(ui32 status, const TString& reason,
-        IKikimrGateway::TTableMetadataResult& error)
-    {
-        using TResult = IKikimrGateway::TTableMetadataResult;
-
-        switch (status) {
-            case NKikimrScheme::EStatus::StatusSuccess:
-            case NKikimrScheme::EStatus::StatusPathDoesNotExist:
-                return true;
-            case NKikimrScheme::EStatus::StatusSchemeError:
-                error = ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_ERROR, reason));
-                return false;
-            case NKikimrScheme::EStatus::StatusAccessDenied:
-                error = ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_ACCESS_DENIED, reason));
-                return false;
-            case NKikimrScheme::EStatus::StatusNotAvailable:
-                error = ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, reason));
-                return false;
-            default:
-                error = ResultFromError<TResult>(TStringBuilder() << status << ": " <<  reason);
-                return false;
-        }
-    }
-
-    static NYql::EYqlIssueCode KikimrProxyErrorStatus(ui32 proxyStatus) {
-        NYql::EYqlIssueCode status = TIssuesIds::DEFAULT_ERROR;
-
-        switch (proxyStatus) {
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:
-                status = TIssuesIds::KIKIMR_SCHEME_MISMATCH;
-                break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyNotReady:
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable:
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater:
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined:
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorOutdated:
-                status = TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
-                break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded:
-                status = TIssuesIds::KIKIMR_OVERLOADED;
-                break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResultUnavailable:
-                status = TIssuesIds::KIKIMR_RESULT_UNAVAILABLE;
-                break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied:
-                status = TIssuesIds::KIKIMR_ACCESS_DENIED;
-                break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout:
-                status = TIssuesIds::KIKIMR_TIMEOUT;
-                break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled:
-                status = TIssuesIds::KIKIMR_OPERATION_CANCELLED;
-                break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest:
-                status = TIssuesIds::KIKIMR_BAD_REQUEST;
-                break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown:
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorUnknown:
-                status = TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN;
-                break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted:
-                status = TIssuesIds::KIKIMR_OPERATION_ABORTED;
-                break;
-            default:
-                break;
-        }
-
-        return status;
-    }
-
     static void FillParameters(TQueryData::TPtr params, NKikimrMiniKQL::TParams& output) {
         if (!params) {
             return;
@@ -2268,7 +2181,6 @@ private:
         }
         return true;
     }
-
 
     // Convert TKikimrTableMetadata struct to public API proto
     static bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata,
@@ -2511,7 +2423,7 @@ private:
     ui32 NodeId;
     TKqpRequestCounters::TPtr Counters;
     TAlignedPagePoolCounters AllocCounters;
-    TMaybe<TUserTokenData> UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader;
 };
 

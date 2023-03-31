@@ -44,6 +44,7 @@ target_sources(ydb-core-persqueue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/metering_sink_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/mirrorer_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/pq_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/quota_tracker_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/sourceid_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/type_codecs_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/user_info_ut.cpp

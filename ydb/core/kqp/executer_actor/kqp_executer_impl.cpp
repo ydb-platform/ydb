@@ -52,6 +52,12 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnb
     auto serializer = NYql::NDq::TDqDataSerializer(
         AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
     auto buffer = serializer.Serialize(rows, txResult.MkqlItemType);
+    {
+        auto g = AllocState->TypeEnv.BindAllocator();
+        NKikimr::NMiniKQL::TUnboxedValueVector emptyVector;
+        emptyVector.swap(rows);
+    }
+
     serializer.Deserialize(buffer, txResult.MkqlItemType, txResult.Rows);
 }
 
@@ -139,15 +145,15 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters)
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
         YQL_ENSURE(request.EraseLocks);
-        return CreateKqpDataExecuter(std::move(request), database, userToken, counters);
+        return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerRetriesConfig);
     }
 
-    bool data = true; // `false` stands for Scan
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
     for (auto& tx : request.Transactions) {
         if (txsType) {
@@ -155,31 +161,23 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             YQL_ENSURE(*txsType == NKqpProto::TKqpPhyTx::TYPE_DATA, "Cannot execute multiple non-data physical txs.");
         } else {
             txsType = tx.Body->GetType();
-
-            switch (tx.Body->GetType()) {
-                case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-                case NKqpProto::TKqpPhyTx::TYPE_DATA:
-                    data = true;
-                    break;
-
-                case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-                    data = false;
-                    break;
-
-                case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
-                    // TODO: Use separate executer.
-                    data = false;
-                    break;
-
-                default:
-                    YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)tx.Body->GetType());
-            }
         }
     }
 
-    return data
-        ? CreateKqpDataExecuter(std::move(request), database, userToken, counters)
-        : CreateKqpScanExecuter(std::move(request), database, userToken, counters);
+    switch (*txsType) {
+        case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+        case NKqpProto::TKqpPhyTx::TYPE_DATA:
+            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerRetriesConfig);
+
+        case NKqpProto::TKqpPhyTx::TYPE_SCAN:
+            return CreateKqpScanExecuter(std::move(request), database, userToken, counters, executerRetriesConfig);
+
+        case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
+            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, true, executerRetriesConfig);
+
+        default:
+            YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);
+    }
 }
 
 } // namespace NKqp

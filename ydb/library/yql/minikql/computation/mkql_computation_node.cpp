@@ -36,7 +36,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     , TimeProvider(opts.TimeProvider)
     , ArrowMemoryPool(arrowMemoryPool)
     , WideFields(mutables.CurWideFieldsIndex, nullptr)
-    , TypeEnv(*opts.TypeEnv)
+    , TypeEnv(opts.TypeEnv)
 {
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
 

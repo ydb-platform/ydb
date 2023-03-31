@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/formats/arrow_batch_builder.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -488,6 +489,59 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
     delayedAcks.clear();
 }
 
+class TDataShard::TWaitVolatileDependencies final : public IVolatileTxCallback {
+public:
+    TWaitVolatileDependencies(
+            TDataShard* self, const absl::flat_hash_set<ui64>& dependencies,
+            const TActorId& target,
+            std::unique_ptr<IEventBase> event,
+            ui64 cookie)
+        : Self(self)
+        , Dependencies(dependencies)
+        , Target(target)
+        , Event(std::move(event))
+        , Cookie(cookie)
+    { }
+
+    void OnCommit(ui64 txId) override {
+        Dependencies.erase(txId);
+        if (Dependencies.empty()) {
+            Finish();
+        }
+    }
+
+    void OnAbort(ui64 txId) override {
+        Dependencies.erase(txId);
+        if (Dependencies.empty()) {
+            Finish();
+        }
+    }
+
+    void Finish() {
+        Self->Send(Target, Event.release(), 0, Cookie);
+    }
+
+private:
+    TDataShard* Self;
+    absl::flat_hash_set<ui64> Dependencies;
+    TActorId Target;
+    std::unique_ptr<IEventBase> Event;
+    ui64 Cookie;
+};
+
+void TDataShard::WaitVolatileDependenciesThenSend(
+        const absl::flat_hash_set<ui64>& dependencies,
+        const TActorId& target, std::unique_ptr<IEventBase> event,
+        ui64 cookie)
+{
+    Y_VERIFY(!dependencies.empty(), "Unexpected empty dependencies");
+    auto callback = MakeIntrusive<TWaitVolatileDependencies>(this, dependencies, target, std::move(event), cookie);
+    for (ui64 txId : dependencies) {
+        bool ok = VolatileTxManager.AttachVolatileTxCallback(txId, callback);
+        Y_VERIFY_S(ok, "Unexpected failure to attach callback to volatile tx " << txId);
+    }
+}
+
 class TDataShard::TSendVolatileResult final : public IVolatileTxCallback {
 public:
     TSendVolatileResult(
@@ -501,7 +555,7 @@ public:
         , TxId(txId)
     { }
 
-    void OnCommit() override {
+    void OnCommit(ui64) override {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                     "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
                     << " at tablet " << Self->TabletID() << " send result to client "
@@ -513,11 +567,11 @@ public:
         Self->Send(Target, Result.Release(), flags);
     }
 
-    void OnAbort() override {
+    void OnAbort(ui64 txId) override {
         Result->Record.ClearTxResult();
         Result->Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED);
         Result->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Distributed transaction aborted due to commit failure");
-        OnCommit();
+        OnCommit(txId);
     }
 
 private:
@@ -587,11 +641,11 @@ ui64 TDataShard::AllocateChangeRecordGroup(NIceDb::TNiceDb& db) {
 
 ui64 TDataShard::GetNextChangeRecordLockOffset(ui64 lockId) {
     auto it = LockChangeRecords.find(lockId);
-    if (it == LockChangeRecords.end() || it->second.empty()) {
+    if (it == LockChangeRecords.end() || it->second.Changes.empty()) {
         return 0;
     }
 
-    return it->second.back().LockOffset + 1;
+    return it->second.Changes.back().LockOffset + 1;
 }
 
 void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record) {
@@ -599,7 +653,8 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         << ": record: " << record
         << ", at tablet: " << TabletID());
 
-    if (record.GetLockId() == 0) {
+    ui64 lockId = record.GetLockId();
+    if (lockId == 0) {
         db.Table<Schema::ChangeRecords>().Key(record.GetOrder()).Update(
             NIceDb::TUpdate<Schema::ChangeRecords::Group>(record.GetGroup()),
             NIceDb::TUpdate<Schema::ChangeRecords::PlanStep>(record.GetStep()),
@@ -614,6 +669,43 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()));
     } else {
+        auto& state = LockChangeRecords[lockId];
+        Y_VERIFY(state.Changes.empty() || state.Changes.back().LockOffset < record.GetLockOffset(),
+            "Lock records must be added in their lock offset order");
+
+        if (state.Changes.size() == state.PersistentCount) {
+            db.GetDatabase().OnCommit([this, lockId] {
+                // We mark all added records as persistent
+                auto it = LockChangeRecords.find(lockId);
+                Y_VERIFY(it != LockChangeRecords.end());
+                it->second.PersistentCount = it->second.Changes.size();
+            });
+            db.GetDatabase().OnRollback([this, lockId] {
+                // We remove all change records that have not been committed
+                auto it = LockChangeRecords.find(lockId);
+                Y_VERIFY(it != LockChangeRecords.end());
+                it->second.Changes.erase(
+                    it->second.Changes.begin() + it->second.PersistentCount,
+                    it->second.Changes.end());
+                if (it->second.Changes.empty()) {
+                    LockChangeRecords.erase(it);
+                }
+            });
+        }
+
+        state.Changes.push_back(IDataShardChangeCollector::TChange{
+            .Order = record.GetOrder(),
+            .Group = record.GetGroup(),
+            .Step = record.GetStep(),
+            .TxId = record.GetTxId(),
+            .PathId = record.GetPathId(),
+            .BodySize = record.GetBody().size(),
+            .TableId = record.GetTableId(),
+            .SchemaVersion = record.GetSchemaVersion(),
+            .LockId = record.GetLockId(),
+            .LockOffset = record.GetLockOffset(),
+        });
+
         db.Table<Schema::LockChangeRecords>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
@@ -627,16 +719,36 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
     }
 }
 
-void TDataShard::PersistCommitLockChangeRecords(TTransactionContext& txc, ui64 order, ui64 lockId, ui64 group, const TRowVersion& rowVersion) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PersistCommitLockChangeRecords"
-        << ": order# " << order
-        << ", lockId# " << lockId
+bool TDataShard::HasLockChangeRecords(ui64 lockId) const {
+    auto it = LockChangeRecords.find(lockId);
+    return it != LockChangeRecords.end() && !it->second.Changes.empty();
+}
+
+void TDataShard::CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 group, const TRowVersion& rowVersion, TVector<IDataShardChangeCollector::TChange>& collected) {
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CommitLockChangeRecords"
+        << ": lockId# " << lockId
         << ", group# " << group
         << ", version# " << rowVersion
         << ", at tablet: " << TabletID());
 
     auto it = LockChangeRecords.find(lockId);
-    Y_VERIFY_S(it != LockChangeRecords.end() && !it->second.empty(), "Cannot commit lock " << lockId << " change records: there are no pending change records");
+    Y_VERIFY_S(it != LockChangeRecords.end() && !it->second.Changes.empty(), "Cannot commit lock " << lockId << " change records: there are no pending change records");
+
+    ui64 count = it->second.Changes.back().LockOffset + 1;
+    ui64 order = AllocateChangeRecordOrder(db, count);
+
+    // Transform uncommitted changes into their committed form
+    collected.reserve(collected.size() + it->second.Changes.size());
+    for (const auto& change : it->second.Changes) {
+        auto committed = change;
+        committed.Order = order + change.LockOffset;
+        committed.Group = group;
+        committed.Step = rowVersion.Step;
+        committed.TxId = rowVersion.TxId;
+        collected.push_back(committed);
+    }
+
+    Y_VERIFY_S(!CommittedLockChangeRecords.contains(lockId), "Cannot commit lock " << lockId << " more than once");
 
     auto& entry = CommittedLockChangeRecords[lockId];
     Y_VERIFY_S(entry.Order == Max<ui64>(), "Cannot commit lock " << lockId << " change records multiple times");
@@ -644,9 +756,7 @@ void TDataShard::PersistCommitLockChangeRecords(TTransactionContext& txc, ui64 o
     entry.Group = group;
     entry.Step = rowVersion.Step;
     entry.TxId = rowVersion.TxId;
-    entry.Count = it->second.size();
-
-    NIceDb::TNiceDb db(txc.DB);
+    entry.Count = it->second.Changes.size();
 
     db.Table<Schema::ChangeRecordCommits>().Key(order).Update(
         NIceDb::TUpdate<Schema::ChangeRecordCommits::LockId>(lockId),
@@ -654,12 +764,14 @@ void TDataShard::PersistCommitLockChangeRecords(TTransactionContext& txc, ui64 o
         NIceDb::TUpdate<Schema::ChangeRecordCommits::PlanStep>(rowVersion.Step),
         NIceDb::TUpdate<Schema::ChangeRecordCommits::TxId>(rowVersion.TxId));
 
-    txc.OnCommit([this, lockId]() {
+    db.GetDatabase().OnCommit([this, lockId]() {
         // We expect operation to enqueue transformed change records,
         // so we no longer need original uncommitted records.
-        LockChangeRecords.erase(lockId);
+        auto it = LockChangeRecords.find(lockId);
+        Y_VERIFY_S(it != LockChangeRecords.end(), "Unexpected failure to find lockId# " << lockId);
+        LockChangeRecords.erase(it);
     });
-    txc.OnRollback([this, lockId]() {
+    db.GetDatabase().OnRollback([this, lockId]() {
         CommittedLockChangeRecords.erase(lockId);
     });
 }
@@ -748,7 +860,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
 }
 
-void TDataShard::EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChange>&& records) {
+void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records) {
     if (!records) {
         return;
     }
@@ -785,48 +897,6 @@ void TDataShard::EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChang
 
     Y_VERIFY(OutChangeSender);
     Send(OutChangeSender, new TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
-}
-
-void TDataShard::AddLockChangeRecords(ui64 lockId, TVector<NMiniKQL::IChangeCollector::TChange>&& records) {
-    if (!records) {
-        return;
-    }
-
-    auto orderedByLockOffset = [](auto& records) -> bool {
-        auto it = records.begin();
-        ui64 prevOffset = it->LockOffset;
-        while (++it != records.end()) {
-            ui64 offset = it->LockOffset;
-            if (!(prevOffset < offset)) {
-                return false;
-            }
-        }
-        return true;
-    };
-    Y_VERIFY_DEBUG(orderedByLockOffset(records));
-
-    auto& lockChanges = LockChangeRecords[lockId];
-    if (lockChanges.empty()) {
-        lockChanges = std::move(records);
-        return;
-    }
-
-    Y_VERIFY_DEBUG(lockChanges.back().LockOffset < records.front().LockOffset);
-
-    lockChanges.reserve(lockChanges.size() + records.size());
-    for (auto& record : records) {
-        lockChanges.emplace_back(std::move(record));
-    }
-}
-
-const TVector<NMiniKQL::IChangeCollector::TChange>& TDataShard::GetLockChangeRecords(ui64 lockId) const {
-    auto it = LockChangeRecords.find(lockId);
-    if (it == LockChangeRecords.end()) {
-        static TVector<NMiniKQL::IChangeCollector::TChange> empty;
-        return empty;
-    }
-
-    return it->second;
 }
 
 void TDataShard::CreateChangeSender(const TActorContext& ctx) {
@@ -895,7 +965,7 @@ void TDataShard::SuspendChangeSender(const TActorContext& ctx) {
     OutChangeSenderSuspended = true;
 }
 
-bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records) {
+bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records) {
     using Schema = TDataShard::Schema;
 
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "LoadChangeRecords"
@@ -925,7 +995,7 @@ bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChang
             rowset.GetValue<Schema::ChangeRecords::TablePathId>()
         );
 
-        records.push_back(NMiniKQL::IChangeCollector::TChange{
+        records.push_back(IDataShardChangeCollector::TChange{
             .Order = order,
             .Group = group,
             .Step = step,
@@ -969,7 +1039,9 @@ bool TDataShard::LoadLockChangeRecords(NIceDb::TNiceDb& db) {
             rowset.GetValue<Schema::LockChangeRecords::TablePathId>()
         );
 
-        LockChangeRecords[lockId].push_back(NMiniKQL::IChangeCollector::TChange{
+        auto& state = LockChangeRecords[lockId];
+
+        state.Changes.push_back(IDataShardChangeCollector::TChange{
             .Order = Max<ui64>(),
             .Group = 0,
             .Step = 0,
@@ -981,6 +1053,7 @@ bool TDataShard::LoadLockChangeRecords(NIceDb::TNiceDb& db) {
             .LockId = lockId,
             .LockOffset = lockOffset,
         });
+        state.PersistentCount = state.Changes.size();
 
         if (!rowset.Next()) {
             return false;
@@ -990,7 +1063,7 @@ bool TDataShard::LoadLockChangeRecords(NIceDb::TNiceDb& db) {
     return true;
 }
 
-bool TDataShard::LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records) {
+bool TDataShard::LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records) {
     using Schema = TDataShard::Schema;
 
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "LoadChangeRecordCommits"
@@ -1016,8 +1089,8 @@ bool TDataShard::LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<NMiniKQL::
         entry.Step = step;
         entry.TxId = txId;
 
-        for (auto& record : LockChangeRecords[lockId]) {
-            records.push_back(NMiniKQL::IChangeCollector::TChange{
+        for (auto& record : LockChangeRecords[lockId].Changes) {
+            records.push_back(IDataShardChangeCollector::TChange{
                 .Order = order + record.LockOffset,
                 .Group = group,
                 .Step = step,
@@ -1073,6 +1146,11 @@ void TDataShard::ScheduleRemoveAbandonedLockChanges() {
         auto lock = SysLocksTable().GetRawLock(lockId);
         if (lock && lock->IsPersistent()) {
             // Skip lock changes attached to persistent locks
+            continue;
+        }
+
+        if (auto* info = VolatileTxManager.FindByCommitTxId(lockId)) {
+            // Skip lock changes attached to volatile transactions
             continue;
         }
 
@@ -2852,12 +2930,22 @@ void TDataShard::AbortExpectationsFromDeletedTablet(ui64 tabletId, THashMap<ui64
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev); Y_UNUSED(ctx);
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Server connected at tablet %s %" PRIu64 ,
-              Executor()->GetStats().IsFollower ? "follower" : "leader", ev->Get()->TabletId);
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Server connected at "
+        << (Executor()->GetStats().IsFollower ? "follower " : "leader ")
+        << "tablet# " << ev->Get()->TabletId
+        << ", clientId# " << ev->Get()->ClientId
+        << ", serverId# " << ev->Get()->ServerId
+        << ", sessionId# " << ev->InterconnectSession);
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev); Y_UNUSED(ctx);
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Server disconnected at "
+        << (Executor()->GetStats().IsFollower ? "follower " : "leader ")
+        << "tablet# " << ev->Get()->TabletId
+        << ", clientId# " << ev->Get()->ClientId
+        << ", serverId# " << ev->Get()->ServerId
+        << ", sessionId# " << ev->InterconnectSession);
 }
 
 void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx) {
@@ -3090,6 +3178,15 @@ bool TDataShard::RemoveExpectation(ui64 target, ui64 txId) {
         auto ctx = TActivationContext::ActorContextFor(SelfId());
         ResendReadSetPipeTracker.DetachTablet(Max<ui64>(), target, 0, ctx);
     }
+
+    // progress one more tx to force delayed schema operations
+    if (removed && OutReadSets.Empty() && Pipeline.HasSchemaOperation()) {
+        // TODO: wait for empty OutRS in a separate unit?
+        auto ctx = TActivationContext::ActorContextFor(SelfId());
+        Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
+        PlanQueue.Progress(ctx);
+    }
+
     return removed;
 }
 
@@ -3675,6 +3772,12 @@ void TDataShard::ScanComplete(NTable::EAbort,
                     << ", at: "<< TabletID());
 
                 InFlightCondErase.Clear();
+            } else if (CdcStreamScanManager.Has(cookie)) {
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Cdc stream scan complete"
+                    << ": cookie: " << cookie
+                    << ", at: "<< TabletID());
+
+                CdcStreamScanManager.Complete(cookie);
             } else if (!Pipeline.FinishStreamingTx(cookie)) {
                 LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
                             "Scan complete at " << TabletID() << " for unknown tx " << cookie);
@@ -3971,6 +4074,21 @@ void TEvDataShard::TEvReadResult::FillRecord() {
         Rows.clear();
         return;
     }
+}
+
+std::shared_ptr<arrow::RecordBatch> TEvDataShard::TEvReadResult::GetArrowBatch() const {
+    return const_cast<TEvDataShard::TEvReadResult*>(this)->GetArrowBatch();
+}
+
+std::shared_ptr<arrow::RecordBatch> TEvDataShard::TEvReadResult::GetArrowBatch() {
+    if (ArrowBatch)
+        return ArrowBatch;
+
+    if (Record.GetRowCount() == 0)
+        return nullptr;
+
+    ArrowBatch = NArrow::CreateNoColumnsBatch(Record.GetRowCount());
+    return ArrowBatch;
 }
 
 } // NKikimr

@@ -656,6 +656,9 @@ struct TEvTablet {
         TResourceProfilesPtr ResourceProfiles;
         TSharedQuotaPtr TxCacheQuota;
 
+        NMetrics::TTabletThroughputRawValue GroupReadBytes;
+        NMetrics::TTabletIopsRawValue GroupReadOps;
+
         TEvFBoot(ui64 tabletID, ui32 followerID, ui32 generation, TActorId launcher, const TEvFollowerUpdate &upd,
                  TIntrusivePtr<TTabletStorageInfo> info, TResourceProfilesPtr profiles = nullptr,
                  TSharedQuotaPtr txCacheQuota = nullptr)
@@ -671,7 +674,9 @@ struct TEvTablet {
 
         TEvFBoot(ui64 tabletID, ui32 followerID, ui32 generation, TActorId launcher, TDependencyGraph *dependencyGraph,
             TIntrusivePtr<TTabletStorageInfo> info, TResourceProfilesPtr profiles = nullptr,
-            TSharedQuotaPtr txCacheQuota = nullptr)
+            TSharedQuotaPtr txCacheQuota = nullptr,
+            NMetrics::TTabletThroughputRawValue&& read = NMetrics::TTabletThroughputRawValue(),
+            NMetrics::TTabletIopsRawValue&& readOps = NMetrics::TTabletIopsRawValue())
             : TabletID(tabletID)
             , FollowerID(followerID)
             , Generation(generation)
@@ -680,6 +685,8 @@ struct TEvTablet {
             , TabletStorageInfo(info)
             , ResourceProfiles(profiles)
             , TxCacheQuota(txCacheQuota)
+            , GroupReadBytes(std::move(read))
+            , GroupReadOps(std::move(readOps))
         {}
     };
 

@@ -223,6 +223,7 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
 }
 
 void TRunCommandConfigParser::SetupGlobalOpts(NLastGetopt::TOpts& opts) {
+
     opts.AddLongOption("cluster-name", "which cluster this node belongs to")
         .DefaultValue("unknown").OptionalArgument("STR").StoreResult(&GlobalOpts.ClusterName);
     opts.AddLongOption("log-level", "default logging level").OptionalArgument("1-7")

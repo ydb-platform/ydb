@@ -34,6 +34,7 @@ class TAsyncIndexChangeCollector: public TBaseChangeCollector {
     void FillKeyFromKey(NTable::TTag tag, NTable::TPos pos, TArrayRef<const TRawTypeValue> key);
     void FillKeyFromUpdate(NTable::TTag tag, NTable::TPos pos, TArrayRef<const NTable::TUpdateOp> updates);
     void FillKeyWithNull(NTable::TTag tag, NScheme::TTypeInfo type);
+    void FillDataFromRowState(NTable::TTag tag, NTable::TPos pos, const NTable::TRowState& rowState, NScheme::TTypeInfo type);
     void FillDataFromUpdate(NTable::TTag tag, NTable::TPos pos, TArrayRef<const NTable::TUpdateOp> updates);
     void FillDataWithNull(NTable::TTag tag, NScheme::TTypeInfo type);
 
@@ -46,17 +47,13 @@ class TAsyncIndexChangeCollector: public TBaseChangeCollector {
 public:
     using TBaseChangeCollector::TBaseChangeCollector;
 
+    void OnRestart() override;
     bool NeedToReadKeys() const override;
-    void SetReadVersion(const TRowVersion& readVersion) override;
 
     bool Collect(const TTableId& tableId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates) override;
 
-    void Reset() override;
-
 private:
-    TRowVersion ReadVersion;
-
     mutable THashMap<TTableId, TCachedTags> CachedTags;
 
     // reused between Collect() calls, cleared after every Clear() call

@@ -253,7 +253,7 @@ namespace NYdb::NConsoleClient {
         }
 
         settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
-        settings.RetentionStorageMb(RetentionStorageMb_);
+        settings.RetentionStorageMb(RetentionStorageMb_ / 1_MB);
 
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
         ThrowOnError(status);

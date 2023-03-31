@@ -46,14 +46,14 @@ public:
         size_t row_end,
         AggregateDataPtr __restrict place,
         const IColumn ** columns,
-        Arena *,
-        ssize_t if_argument_pos) const override
+        Arena *) const override
     {
-        if (if_argument_pos >= 0)
+        const auto & column = *columns[0];
+        if (auto * flags = column.null_bitmap_data())
         {
-            const auto & filter_column = assert_cast<const ColumnUInt8 &>(*columns[if_argument_pos]);
-            const auto & flags = filter_column.raw_values();
-            data(place).count += countBytesInFilter(flags, row_begin, row_end);
+            auto * condition_map = flags + column.offset();
+            auto length = row_end - row_begin;
+            data(place).count += arrow::internal::CountSetBits(condition_map, row_begin, length);
         }
         else
         {
@@ -69,12 +69,6 @@ public:
     void insertResultInto(AggregateDataPtr __restrict place, MutableColumn & to, Arena *) const override
     {
         assert_cast<MutableColumnUInt64 &>(to).Append(data(place).count).ok();
-    }
-
-    /// Reset the state to specified value. This function is not the part of common interface.
-    void set(AggregateDataPtr __restrict place, UInt64 new_count) const
-    {
-        data(place).count = new_count;
     }
 };
 

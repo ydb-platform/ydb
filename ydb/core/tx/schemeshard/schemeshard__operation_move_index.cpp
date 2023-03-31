@@ -589,9 +589,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveIndex(TOperationId nextId, 
         }
     }
 
-    result.push_back(CreateMoveTableIndex(TOperationId(nextId.GetTxId(),
-                                                       nextId.GetSubTxId() + result.size()),
-                                          MoveTableIndexTask(srcIndexPath, dstIndexPath)));
+    result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcIndexPath, dstIndexPath)));
 
     TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;
     TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
@@ -600,9 +598,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveIndex(TOperationId nextId, 
 
     TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-    result.push_back(CreateMoveTable(TOperationId(nextId.GetTxId(),
-                                                  nextId.GetSubTxId() + result.size()),
-                                     MoveTableTask(srcImplTable, dstImplTable)));
+    result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
     return result;
 }
 

@@ -220,7 +220,8 @@ void TKqpTableMetadataLoader::OnLoadedTableMetadata(TTableMetadataResult& loadTa
 
 
 NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMetadata(const TString& cluster, const TString& table,
-    const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database, const TMaybe<NACLib::TUserToken>& userToken)
+    const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
 {
     using TResult = TTableMetadataResult;
 
@@ -258,7 +259,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 }
 
 NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMetadata(
-    TTableMetadataResult& loadTableMetadataResult, const TString& database, const TMaybe<NACLib::TUserToken>& userToken) {
+    TTableMetadataResult& loadTableMetadataResult, const TString& database,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
+{
     auto tableMetadata = loadTableMetadataResult.Metadata;
     YQL_ENSURE(tableMetadata);
 
@@ -333,7 +336,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
 }
 
 NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMetadataByPathId(
-    const TString& cluster, const TIndexId& indexId, const TString& tableName, const TString& database, const TMaybe<NACLib::TUserToken>& userToken)
+    const TString& cluster, const TIndexId& indexId, const TString& tableName, const TString& database,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
 {
     using TResult = TTableMetadataResult;
 
@@ -372,8 +376,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
 
 // The type is TString or std::pair<TIndexId, TString>
 template<typename TPath>
-NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMetadataCache(const TString& cluster, const TPath& id,
-    TLoadTableMetadataSettings settings, const TString& database, const TMaybe<NACLib::TUserToken>& userToken)
+NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMetadataCache(
+    const TString& cluster, const TPath& id,
+    TLoadTableMetadataSettings settings, const TString& database,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
 {
     using TRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
     using TResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
@@ -391,8 +397,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     const TString& table = entry.second;
 
     navigate->DatabaseName = database;
-    if (userToken) {
-        navigate->UserToken = new NACLib::TUserToken(*userToken);
+    if (userToken && !userToken->GetSerializedToken().empty()) {
+        navigate->UserToken = userToken;
     }
 
     auto ev = MakeHolder<TRequest>(navigate.Release());

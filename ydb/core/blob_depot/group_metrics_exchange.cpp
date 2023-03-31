@@ -86,8 +86,6 @@ namespace NKikimr::NBlobDepot {
             wb.SetGroupID(Config.GetVirtualGroupId());
             wb.SetAllocatedSize(Data->GetTotalStoredDataSize());
             wb.SetAvailableSize(params->GetAvailableSize());
-            wb.SetReadThroughput(0);
-            wb.SetWriteThroughput(0);
             Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), ev.release());
 
             params->SetAllocatedSize(Data->GetTotalStoredDataSize());
@@ -98,6 +96,57 @@ namespace NKikimr::NBlobDepot {
                 params->GetAllocatedSize());
 
             SpaceMonitor->SetSpaceColor(dataColor, approximateFreeSpaceShare); // the best data channel space color works for the whole depot
+        }
+    }
+
+    void TBlobDepot::Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev) {
+        const auto& record = ev->Get()->Record;
+        BytesRead += record.GetBytesRead();
+        BytesWritten += record.GetBytesWritten();
+        MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
+        UpdateThroughputs(false);
+    }
+
+    void TBlobDepot::UpdateThroughputs(bool reschedule) {
+        static constexpr TDuration Window = TDuration::Seconds(3);
+
+        if (Config.HasVirtualGroupId() && !MetricsQ.empty()) {
+            const TMonotonic now = TActivationContext::Monotonic();
+            const TMonotonic left = now - Window;
+            const auto comp = [](TMonotonic x, const auto& y) { return x < std::get<0>(y); };
+            if (const auto it = std::upper_bound(MetricsQ.begin(), MetricsQ.end(), left, comp); it != MetricsQ.begin()) {
+                MetricsQ.erase(MetricsQ.begin(), std::prev(it)); // remove all obsolete entries
+                if (MetricsQ.size() >= 2) {
+                    auto& [xTimestamp, xRead, xWritten] = MetricsQ[0];
+                    const auto& [yTimestamp, yRead, yWritten] = MetricsQ[1];
+                    Y_VERIFY(xTimestamp <= left && left < yTimestamp);
+                    static constexpr ui64 scale = 1'000'000;
+                    const ui64 factor = (left - xTimestamp).MicroSeconds() * scale / (yTimestamp - xTimestamp).MicroSeconds();
+                    xTimestamp = left;
+                    xRead += (yRead - xRead) * factor / scale;
+                    xWritten += (yWritten - xWritten) * factor / scale;
+                }
+            }
+
+            ui64 readThroughput = 0;
+            ui64 writeThroughput = 0;
+            const auto& [ts, read, written] = MetricsQ.front();
+            if (ts + TDuration::Seconds(1) < now) {
+                readThroughput = (BytesRead - read) * 1'000'000 / (now - ts).MicroSeconds();
+                writeThroughput = (BytesWritten - written) * 1'000'000 / (now - ts).MicroSeconds();
+            }
+
+            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate>();
+            auto& wb = ev->Record;
+            wb.SetGroupID(Config.GetVirtualGroupId());
+            wb.SetReadThroughput(readThroughput);
+            wb.SetWriteThroughput(writeThroughput);
+            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), ev.release());
+        }
+
+        if (reschedule) {
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvUpdateThroughputs, 0,
+                SelfId(), {}, nullptr, 0));
         }
     }
 

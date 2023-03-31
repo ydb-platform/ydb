@@ -130,6 +130,7 @@ public:
         return FullModernName;
     }
 
+
 protected:
     /** Account will be set for federation topics without database only;
      * Generally used only for discovery purposes
@@ -140,6 +141,7 @@ protected:
      * Set database for topics specified via account-in-directory mode. Used for discovery purpose in metacache
      */
     void SetDatabase(const TString& database);
+    const TMaybe<TString>& GetDatabase() const { return Database;}
 
 
 protected:
@@ -230,6 +232,8 @@ public:
     /** Get logbroker logical path, 'account/dir/topic'. Generally this is not topic location path.
      * Identical for clientside name for 1st class */
     TString GetFederationPath() const;
+    TString GetFederationPathWithDC() const;
+
 
     /** Gets DC */
     const TString& GetCluster() const;
@@ -353,7 +357,6 @@ public:
     void SetLocalCluster(const TString& localCluster) { LocalDc = localCluster;}
     TString GetLocalCluster() const { return LocalDc; }
     bool GetNoDCMode() const { return NoDcMode; }
-
 
 private:
     void SetPQNormPrefix() {

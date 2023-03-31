@@ -151,7 +151,6 @@ namespace NKikimr::NBlobDepot {
     };
 
     using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;
-    using TResolvedValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TResolvedValueChain>;
 
     template<typename TCallback>
     void EnumerateBlobsForValueChain(const TValueChain& valueChain, ui64 tabletId, TCallback&& callback) {
@@ -168,6 +167,26 @@ namespace NKikimr::NBlobDepot {
                     locator.GetFooterLen()), 0, locator.GetTotalDataLen());
             }
         }
+    }
+
+    inline bool IsSameValueChain(const TValueChain& x, const TValueChain& y) {
+        if (x.size() != y.size()) {
+            return false;
+        }
+        for (int i = 0; i < x.size(); ++i) {
+            TString a;
+            bool success = x[i].SerializeToString(&a);
+            Y_VERIFY(success);
+
+            TString b;
+            success = y[i].SerializeToString(&b);
+            Y_VERIFY(success);
+
+            if (a != b) {
+                return false;
+            }
+        }
+        return true;
     }
 
     class TGenStep {

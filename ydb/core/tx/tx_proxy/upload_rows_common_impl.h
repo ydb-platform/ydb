@@ -105,7 +105,7 @@ private:
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
-    TInstant Deadline;
+    TInstant StartTime;
     TActorId TimeoutTimerActorId;
     bool WaitingResolveReply;
     bool Finished;
@@ -149,6 +149,7 @@ protected:
     TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvert;
+    THashMap<TString, NScheme::TTypeInfo> ColumnsToConvertInplace;
 
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
@@ -174,7 +175,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        Deadline = AppData(ctx)->TimeProvider->Now() + Timeout;
+        StartTime = TAppData::TimeProvider->Now();
         ResolveTable(GetTable(), ctx);
     }
 
@@ -189,6 +190,10 @@ public:
     }
 
 protected:
+    TInstant Deadline() const {
+        return StartTime + Timeout;
+    }
+
     const NSchemeCache::TSchemeCacheNavigate* GetResolveNameResult() const {
         return ResolveNamesResult.get();
     }
@@ -279,6 +284,11 @@ private:
         return res;
     }
 
+    static bool SameOrConvertableDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
+        bool ok = SameDstType(type1, type2, allowConvert);
+        return ok || NArrow::TArrowToYdbConverter::NeedInplaceConversion(type1, type2);
+    }
+
     bool BuildSchema(const NActors::TActorContext& ctx, TString& errorMessage, bool makeYqbSchema) {
         Y_UNUSED(ctx);
         Y_VERIFY(ResolveNamesResult);
@@ -354,12 +364,16 @@ private:
 
             if (typeInProto.type_id()) {
                 auto typeInRequest = NScheme::TTypeInfo(typeInProto.type_id());
-                bool ok = SameDstType(typeInRequest, ci.PType, GetSourceType() != EUploadSource::ProtoValues);
+                bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
+                bool ok = SameOrConvertableDstType(typeInRequest, ci.PType, sourceIsArrow); // TODO
                 if (!ok) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
                                            name.c_str(), NScheme::TypeName(ci.PType),
                                            NScheme::TypeName(typeInRequest));
                     return false;
+                }
+                if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
+                    ColumnsToConvertInplace[name] = ci.PType;
                 }
             } else if (typeInProto.has_decimal_type() && ci.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
                 int precision = typeInProto.decimal_type().precision();
@@ -471,7 +485,9 @@ private:
 
     void HandleTimeout(const TActorContext& ctx) {
         ShardRepliesLeft.clear();
-        return ReplyWithError(Ydb::StatusIds::TIMEOUT, "Request timed out", ctx);
+        return ReplyWithError(Ydb::StatusIds::TIMEOUT, TStringBuilder() << "Bulk upsert to table " << GetTable()
+            << " longTx " << LongTxId.ToString()
+            << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec", ctx);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
@@ -549,6 +565,9 @@ private:
                     if (!ExtractBatch(errorMessage)) {
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }
+                    if (!ColumnsToConvertInplace.empty()) {
+                        Batch = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                    }
                     // Explicit types conversion
                     if (!ColumnsToConvert.empty()) {
                         Batch = NArrow::ConvertColumns(Batch, ColumnsToConvert);
@@ -585,6 +604,7 @@ private:
         if (TableKind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
             ResolveShards(ctx);
         } else if (isColumnTable) {
+            // Batch is already converted
             WriteToColumnTable(ctx);
         } else {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
@@ -599,7 +619,7 @@ private:
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Bulk upsert to table " << GetTable()
-                    << " startint LongTx");
+                    << " starting LongTx");
 
         // Begin Long Tx for writing a batch into OLAP table
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
@@ -652,8 +672,9 @@ private:
             Y_VERIFY(batch);
 
 #if 1 // TODO: check we call ValidateFull() once over pipeline (upsert -> long tx -> shard insert)
-            if (!batch->ValidateFull().ok()) {
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Bad batch in bulk upsert data", ctx);
+            auto validationInfo = batch->ValidateFull();
+            if (!validationInfo.ok()) {
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Bad batch in bulk upsert data: " + validationInfo.message() + "; order:" + JoinSeq(", ", outputColumns), ctx);
             }
 #endif
 
@@ -716,7 +737,8 @@ private:
         Y_VERIFY(Batch);
 
         TBase::Become(&TThis::StateWaitWriteBatchResult);
-        TString dedupId = LongTxId.ToString(); // TODO: is this a proper dedup_id?
+        ui32 batchNo = 0;
+        TString dedupId = ToString(batchNo);
         NGRpcService::DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
             GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
     }
@@ -907,7 +929,7 @@ private:
             if (!ev) {
                 shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
-                ev->Record.SetCancelDeadlineMs(Deadline.MilliSeconds());
+                ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
 
                 ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                 for (const auto& fd : KeyColumnPositions) {

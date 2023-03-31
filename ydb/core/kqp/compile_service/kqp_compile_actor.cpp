@@ -42,7 +42,8 @@ public:
 
     TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
         const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-        TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
+        TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
@@ -186,6 +187,7 @@ private:
         replayMessage.InsertValue("query_database", Query.Database);
         replayMessage.InsertValue("query_cluster", Query.Cluster);
         replayMessage.InsertValue("query_plan", queryPlan);
+        replayMessage.InsertValue("query_type", ToString(Query.QueryType));
         TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: "
             << "Built the replay message " << message);
@@ -270,6 +272,9 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
+            if (Config->EnableLlvm.Get()) {
+                kqpResult.PreparingQuery->SetEnableLlvm(*Config->EnableLlvm.Get());
+            }
             KqpCompileResult->PreparedQuery = std::make_shared<const TPreparedQueryHolder>(
                 kqpResult.PreparingQuery.release(), AppData()->FunctionRegistry);
 
@@ -309,7 +314,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     TString Uid;
     TKqpQueryId Query;
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
     TDuration CompilationTimeout;
@@ -336,11 +341,16 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
 
     kqpConfig.EnableKqpDataQuerySourceRead = serviceConfig.GetEnableKqpDataQuerySourceRead();
     kqpConfig.EnableKqpScanQuerySourceRead = serviceConfig.GetEnableKqpScanQuerySourceRead();
+    kqpConfig.EnableKqpDataQueryStreamLookup = serviceConfig.GetEnableKqpDataQueryStreamLookup();
+    kqpConfig.EnableKqpScanQueryStreamLookup = serviceConfig.GetEnableKqpScanQueryStreamLookup();
+    kqpConfig.EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
+    kqpConfig.EnablePredicateExtractForDataQuery = serviceConfig.GetEnablePredicateExtractForDataQueries();
+    kqpConfig.EnablePredicateExtractForScanQuery = serviceConfig.GetEnablePredicateExtractForScanQueries();
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
+    TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
 {
     return new TKqpCompileActor(owner, kqpSettings, serviceConfig, moduleResolverState, counters, uid,

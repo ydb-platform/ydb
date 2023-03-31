@@ -1647,6 +1647,9 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
 
         TVector<ui32> followerNodes = client.GetFollowerNodes(server.GetRuntime(), tabletId);
+        while (followerNodes.empty()) {
+            followerNodes = client.GetFollowerNodes(server.GetRuntime(), tabletId);
+        }
         UNIT_ASSERT_VALUES_EQUAL(1, followerNodes.size());
         UNIT_ASSERT_VALUES_UNEQUAL(leaderNode, followerNodes[0]);
 

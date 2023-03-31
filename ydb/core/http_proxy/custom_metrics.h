@@ -157,7 +157,7 @@ void FillOutputCustomMetrics<GetRecordsResult>(const GetRecordsResult& result, c
                                      return sum + r.data().size() +
                                          r.partition_key().size() +
                                          r.sequence_number().size() +
-                                         sizeof(r.timestamp()) +
+                                         sizeof(r.approximate_arrival_timestamp()) +
                                          sizeof(r.encryption())
                                          ;
                                  });

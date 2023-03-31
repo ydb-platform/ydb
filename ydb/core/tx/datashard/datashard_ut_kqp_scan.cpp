@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
      * kill tablet after that. So in order to complete scan ComputeActor need to handle scan restart after
      * each ScanData.
      */
-    Y_UNIT_TEST_WITH_MVCC(ScanRetryRead) {
+    Y_UNIT_TEST(ScanRetryRead) {
         NKikimrConfig::TAppConfig appCfg;
 
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
@@ -59,7 +59,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetNodeCount(2)
             .SetAppConfig(appCfg)
             .SetUseRealThreads(false);
@@ -158,13 +157,12 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     /*
      * Force remote scans by meddling with EvShardsResolveStatus. Check that remote scan actually took place.
      */
-    Y_UNIT_TEST_WITH_MVCC(RemoteShardScan) {
+    Y_UNIT_TEST(RemoteShardScan) {
         NKikimrConfig::TAppConfig appCfg;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetNodeCount(2)
             .SetAppConfig(appCfg)
             .SetUseRealThreads(false);
@@ -224,7 +222,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 /*
                  * Check that remote scan actually happened.
                  */
-                case NKqp::TKqpComputeEvents::EvScanData: {
+                case NKqp::TKqpComputeEvents::EvScanData:
+                case TEvDataShard::EvRead: {
                     remoteScanDetected = remoteScanDetected || ev->Sender.NodeId() != ev->Recipient.NodeId();
                     break;
                 }
@@ -244,7 +243,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ScanDuringSplitThenMerge) {
+    Y_UNIT_TEST(ScanDuringSplitThenMerge) {
        NKikimrConfig::TAppConfig appCfg;
 
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
@@ -254,7 +253,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetNodeCount(2)
             .SetAppConfig(appCfg)
             .SetUseRealThreads(false);
@@ -377,7 +375,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ScanDuringSplit) {
+    Y_UNIT_TEST(ScanDuringSplit) {
        NKikimrConfig::TAppConfig appCfg;
 
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
@@ -387,7 +385,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetNodeCount(2)
             .SetAppConfig(appCfg)
             .SetUseRealThreads(false);
@@ -494,7 +491,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ScanRetryReadRanges) {
+    Y_UNIT_TEST(ScanRetryReadRanges) {
         Y_UNUSED(EnableLogging);
 
         NKikimrConfig::TAppConfig appCfg;
@@ -506,7 +503,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetNodeCount(2)
             .SetAppConfig(appCfg)
             .SetUseRealThreads(false);
@@ -549,6 +545,13 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                         incomingRangesSize = request.RangesSize();
                     }
 
+                    break;
+                }
+                case TEvDataShard::EvRead: {
+                    if (!incomingRangesSize) {
+                        auto& request = ev->Get<TEvDataShard::TEvRead>()->Record;
+                        incomingRangesSize = request.RangesSize();
+                    }
                     break;
                 }
 

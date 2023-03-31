@@ -4,6 +4,7 @@ package NKikimrGRpcService;
 
 message TEvSubscribeGrpcCancel {
     optional NActorsProto.TActorId Subscriber = 1;
-    optional uint64 WakeupTag = 2;
 };
 
+message TEvClientLost {
+};

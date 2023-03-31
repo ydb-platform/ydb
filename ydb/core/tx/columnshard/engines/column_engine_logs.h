@@ -215,6 +215,13 @@ public:
         LAST_TX_ID,
     };
 
+    enum class EStatsUpdateType {
+        DEFAULT = 0,
+        ERASE,
+        LOAD,
+        EVICT
+    };
+
     TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, const TCompactionLimits& limits = {});
 
     const TIndexInfo& GetIndexInfo() const override { return IndexInfo; }
@@ -241,16 +248,17 @@ public:
         return MarkType;
     }
 
-    bool Load(IDbWrapper& db, const THashSet<ui64>& pathsToDrop = {}) override;
+    bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
     std::shared_ptr<TColumnEngineChanges> StartInsert(TVector<TInsertedData>&& dataToIndex) override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
                                                           const TSnapshot& outdatedSnapshot) override;
-    std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot,
-                                                       THashSet<ui64>& pathsToDrop) override;
+    std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,
+                                                       ui32 maxRecords) override;
     std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) override;
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) override;
+    void FreeLocks(std::shared_ptr<TColumnEngineChanges> changes) override;
     void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) override;
     void UpdateCompactionLimits(const TCompactionLimits& limits) override { Limits = limits; }
     const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
@@ -334,7 +342,7 @@ private:
     }
 
     bool LoadGranules(IDbWrapper& db);
-    bool LoadColumns(IDbWrapper& db);
+    bool LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs);
     bool LoadCounters(IDbWrapper& db);
     bool ApplyChanges(IDbWrapper& db, const TChanges& changes, const TSnapshot& snapshot, bool apply);
 
@@ -343,9 +351,9 @@ private:
     bool UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
     bool ErasePortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
     void AddColumnRecord(const TColumnRecord& row);
-    void UpdatePortionStats(const TPortionInfo& portionInfo, bool isErase = false, bool isLoad = false);
+    void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT);
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
-                            bool isErase = false, bool isLoad = false) const;
+                            EStatsUpdateType updateType) const;
 
     bool CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const;
     TMap<TSnapshot, TVector<ui64>> GetOrderedPortions(ui64 granule, const TSnapshot& snapshot = TSnapshot::Max()) const;

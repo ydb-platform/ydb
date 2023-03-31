@@ -102,10 +102,17 @@ public:
         return SecurityToken;
     }
 
+    TIntrusiveConstPtr<NACLib::TUserToken> GetParsedToken() const {
+        if (AuthorizeTicketResult) {
+            return AuthorizeTicketResult->Token;
+        }
+        return nullptr;
+    }
+
     TString GetSerializedToken() const {
         if (AuthorizeTicketResult) {
-            if (AuthorizeTicketResult->SerializedToken) {
-                return AuthorizeTicketResult->SerializedToken;
+            if (AuthorizeTicketResult->Token) {
+                return AuthorizeTicketResult->Token->GetSerializedToken();
             }
         }
         return TString();
@@ -140,7 +147,7 @@ public:
         if (SecurityToken.empty()) {
             if (!GetDefaultUserSIDs().empty()) {
                 TIntrusivePtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(GetDefaultUserSIDs());
-                THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult = MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(TString(), userToken, userToken->SerializeAsString());
+                THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult = MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(TString(), userToken);
                 ctx.Send(ctx.SelfID, AuthorizeTicketResult.Release());
             } else {
                 return static_cast<TBootstrap*>(this)->Bootstrap(ctx);

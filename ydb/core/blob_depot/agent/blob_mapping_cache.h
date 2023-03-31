@@ -9,13 +9,14 @@ namespace NKikimr::NBlobDepot {
         : public TRequestSender
     {
         struct TCachedKeyItem : TIntrusiveListItem<TCachedKeyItem> {
-            TStringBuf Key;
-            TResolvedValueChain Values;
-            bool ResolveInFlight = false;
-            THashSet<ui64> PendingQueries;
+            TStringBuf Key; // key buffer (view of key part of the Cache set)
+            TResolvedValue Value; // recently resolved value, if any
+            ui32 OrdinaryResolvePending = 0;
+            ui32 MustRestoreFirstResolvePending = 0;
+            THashMap<ui64, bool> PendingQueries; // a set of queries waiting for this blob
 
             TCachedKeyItem(TStringBuf key)
-                : Key(std::move(key))
+                : Key(key)
             {}
         };
 
@@ -28,7 +29,9 @@ namespace NKikimr::NBlobDepot {
         {}
 
         void HandleResolveResult(ui64 tag, const NKikimrBlobDepot::TEvResolveResult& msg, TRequestContext::TPtr context);
-        const TResolvedValueChain *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context);
+        const TResolvedValue *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context, bool mustRestoreFirst);
+
+    private:
         void ProcessResponse(ui64 tag, TRequestContext::TPtr /*context*/, TResponse response) override;
     };
 

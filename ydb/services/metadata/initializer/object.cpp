@@ -20,8 +20,8 @@ bool TDBInitialization::DeserializeFromRecord(const TDecoder& decoder, const Ydb
 
 NInternal::TTableRecord TDBInitialization::SerializeToRecord() const {
     NInternal::TTableRecord result;
-    result.SetColumn(TDecoder::ComponentId, NInternal::TYDBValue::Bytes(ComponentId));
-    result.SetColumn(TDecoder::ModificationId, NInternal::TYDBValue::Bytes(ModificationId));
+    result.SetColumn(TDecoder::ComponentId, NInternal::TYDBValue::Utf8(ComponentId));
+    result.SetColumn(TDecoder::ModificationId, NInternal::TYDBValue::Utf8(ModificationId));
     result.SetColumn(TDecoder::Instant, NInternal::TYDBValue::UInt32(Instant.Seconds()));
     return result;
 }

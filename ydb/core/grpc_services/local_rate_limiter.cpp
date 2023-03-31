@@ -89,7 +89,7 @@ TActorId RateLimiterAcquireUseSameMailbox(
         return RateLimiterAcquireUseSameMailbox(
             std::move(request),
             reqCtx.GetDatabaseName().GetOrElse(""),
-            reqCtx.GetInternalToken(),
+            reqCtx.GetSerializedToken(),
             std::move(cb),
             ctx);
     }

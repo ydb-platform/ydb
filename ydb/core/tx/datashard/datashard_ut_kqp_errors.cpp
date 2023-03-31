@@ -34,12 +34,18 @@ bool HasIssue(const TIssues& issues, ui32 code, TStringBuf message, std::functio
 
 class TLocalFixture {
 public:
-    TLocalFixture() {
+    TLocalFixture(bool disableSnaphots = false) {
         TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
+        if (disableSnaphots) {
+            serverSettings.SetEnableMvccSnapshotReads(false);
+        }
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
 
         Server = new TServer(serverSettings);
         Runtime = Server->GetRuntime();
@@ -62,7 +68,7 @@ public:
         Runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NLog::PRI_NOTICE);
 //        Runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
 //        Runtime->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-//        Runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
+        Runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
 
         auto sender = Runtime->AllocateEdgeActor();
         InitRoot(Server, sender);
@@ -223,7 +229,7 @@ Y_UNIT_TEST(ProposeError) {
 }
 
 Y_UNIT_TEST(ProposeRequestUndelivered) {
-    TLocalFixture fixture;
+    TLocalFixture fixture(true);
     auto mitm = [&](TTestActorRuntimeBase& rt, TAutoPtr<IEventHandle> &ev) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto forwardEvent = ev.Get()->Get<TEvPipeCache::TEvForward>();
@@ -243,7 +249,7 @@ Y_UNIT_TEST(ProposeRequestUndelivered) {
     auto& record = ev->Get()->Record.GetRef();
     UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE, record.DebugString());
 
-    // Cerr << record.DebugString() << Endl;
+    Cerr << record.DebugString() << Endl;
 
     TIssues issues;
     IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
@@ -297,7 +303,7 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
 }
 
 Y_UNIT_TEST(ProposeResultLost_RoTx) {
-    TLocalFixture fixture;
+    TLocalFixture fixture(true);
     TestProposeResultLost(*fixture.Runtime, fixture.Client,
         Q_("select * from `/Root/table-1`"),
         [](const NKikimrKqp::TEvQueryResponse& record) {

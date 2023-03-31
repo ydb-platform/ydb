@@ -46,6 +46,21 @@ public:
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
+        if (params.HasDropSnapshot()) {
+            const auto& snapshot = params.GetDropSnapshot();
+            Y_VERIFY(snapshot.GetStep() != 0);
+
+            const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
+            DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
+        }
+
+        auto& scanManager = DataShard.GetCdcStreamScanManager();
+        scanManager.Forget(txc.DB, pathId, streamPathId);
+        if (const auto* info = scanManager.Get(streamPathId)) {
+            DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
+            scanManager.Complete(streamPathId);
+        }
+
         RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(streamPathId));
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

@@ -203,6 +203,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         setup1->EnableDataCenter("dc1");
 
         Cerr << "Wait for writes to complete\n";
+
         f.Wait();
         f2.Wait();
         //! Writer1 is not used any more.
@@ -221,7 +222,9 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         f = helper2->Write(false);
         Cerr << "Enable dc2\n";
         setup1->EnableDataCenter("dc2");
+
         f.Wait();
+
         helper2->EventLoop->AllowStop();
         helper2->Policy->ExpectBreakDown();
 

@@ -22,8 +22,16 @@ using TLogThis = TCtorLogger<NKikimrServices::BLOB_CACHE>;
 
 struct TReadBlobRangeOptions {
     bool CacheAfterRead;
-    bool Fallback;
+    bool ForceFallback;
     bool IsBackgroud;
+    bool WithDeadline = true;
+
+    TString ToString() const {
+        return TStringBuilder() << "cache: " << (ui32)CacheAfterRead
+            << " fallback: " << (ui32)ForceFallback
+            << " background: " << (ui32)IsBackgroud
+            << " dedlined: " << (ui32)WithDeadline;
+    }
 };
 
 struct TEvBlobCache {
@@ -59,7 +67,7 @@ struct TEvBlobCache {
             : BlobRanges(std::move(blobRanges))
             , ReadOptions(std::move(opts))
         {
-            if (opts.Fallback) {
+            if (opts.ForceFallback) {
                 for (const auto& blobRange : BlobRanges) {
                     Y_VERIFY(blobRange.BlobId == BlobRanges[0].BlobId);
                 }

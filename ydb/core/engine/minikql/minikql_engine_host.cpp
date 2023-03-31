@@ -215,8 +215,7 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
                 break;
             case TKeyDesc::ERowOperation::Update:
             case TKeyDesc::ERowOperation::Erase: {
-                const auto collector = GetChangeCollector(key.TableId);
-                if (collector && collector->NeedToReadKeys()) {
+                if (NeedToReadBeforeWrite(key.TableId)) {
                     columnOpFilter.insert(TKeyDesc::EColumnOperation::Set);
                     columnOpFilter.insert(TKeyDesc::EColumnOperation::InplaceUpdate);
                 }
@@ -309,9 +308,6 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     Counters.InvisibleRowSkips += stats.InvisibleRowSkips;
 
     if (NTable::EReady::Page == ready) {
-        if (auto collector = GetChangeCollector(tableId)) {
-            collector->Reset();
-        }
         throw TNotReadyTabletException();
     }
 
@@ -589,9 +585,6 @@ public:
             List.EngineHost.GetCounters().InvisibleRowSkips += std::exchange(Iter->Stats.InvisibleRowSkips, 0);
 
             if (Iter->Last() ==  NTable::EReady::Page) {
-                if (auto collector = List.EngineHost.GetChangeCollector(List.TableId)) {
-                    collector->Reset();
-                }
                 throw TNotReadyTabletException();
             }
 
@@ -898,27 +891,19 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
         valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
     }
 
+    auto* collector = GetChangeCollector(tableId);
+
     const ui64 writeTxId = GetWriteTxId(tableId);
-
-    if (auto collector = GetChangeCollector(tableId)) {
-        if (writeTxId == 0) {
-            collector->SetWriteVersion(GetWriteVersion(tableId));
-        } else {
-            collector->SetWriteTxId(writeTxId);
-        }
-        if (collector->NeedToReadKeys()) {
-            collector->SetReadVersion(GetReadVersion(tableId));
-        }
-
-        if (!collector->Collect(tableId, NTable::ERowOp::Upsert, key, ops)) {
-            collector->Reset();
+    if (writeTxId == 0) {
+        auto writeVersion = GetWriteVersion(tableId);
+        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeVersion)) {
             throw TNotReadyTabletException();
         }
-    }
-
-    if (writeTxId == 0) {
-        Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, GetWriteVersion(tableId));
+        Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, writeVersion);
     } else {
+        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeTxId)) {
+            throw TNotReadyTabletException();
+        }
         Db.UpdateTx(localTid, NTable::ERowOp::Upsert, key, ops, writeTxId);
     }
 
@@ -936,27 +921,19 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
     ui64 keyBytes = 0;
     ConvertTableKeys(Scheme, tableInfo, row, key, &keyBytes);
 
+    auto* collector = GetChangeCollector(tableId);
+
     const ui64 writeTxId = GetWriteTxId(tableId);
-
-    if (auto collector = GetChangeCollector(tableId)) {
-        if (writeTxId == 0) {
-            collector->SetWriteVersion(GetWriteVersion(tableId));
-        } else {
-            collector->SetWriteTxId(writeTxId);
-        }
-        if (collector->NeedToReadKeys()) {
-            collector->SetReadVersion(GetReadVersion(tableId));
-        }
-
-        if (!collector->Collect(tableId, NTable::ERowOp::Erase, key, {})) {
-            collector->Reset();
+    if (writeTxId == 0) {
+        auto writeVersion = GetWriteVersion(tableId);
+        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeVersion)) {
             throw TNotReadyTabletException();
         }
-    }
-
-    if (writeTxId == 0) {
-        Db.Update(localTid, NTable::ERowOp::Erase, key, { }, GetWriteVersion(tableId));
+        Db.Update(localTid, NTable::ERowOp::Erase, key, { }, writeVersion);
     } else {
+        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeTxId)) {
+            throw TNotReadyTabletException();
+        }
         Db.UpdateTx(localTid, NTable::ERowOp::Erase, key, { }, writeTxId);
     }
 

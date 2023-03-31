@@ -68,10 +68,26 @@ void OutputConfigHTML(IOutputStream &os, const NKikimrConfig::TAppConfig &config
                                 os << reflection->GetEnum(config, field)->name();
                                 break;
                             case ::google::protobuf::FieldDescriptor::CPPTYPE_STRING:
-                                os << reflection->GetString(config, field);
+                                if (field->is_repeated()) {
+                                    int count = reflection->FieldSize(config, field);
+                                    for (int index = 0; index < count; ++index) {
+                                        os << "[" << index << "]: "
+                                           << reflection->GetRepeatedString(config, field, index) << '\n';
+                                    }
+                                } else {
+                                    os << reflection->GetString(config, field);
+                                }
                                 break;
                             case ::google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE:
-                                os << reflection->GetMessage(config, field).DebugString();
+                                if (field->is_repeated()) {
+                                    int count = reflection->FieldSize(config, field);
+                                    for (int index = 0; index < count; ++index) {
+                                        os << "[" << index << "]:" << '\n'
+                                           << reflection->GetRepeatedMessage(config, field, index).DebugString();
+                                    }
+                                } else {
+                                    os << reflection->GetMessage(config, field).DebugString();
+                                }
                                 break;
                             default:
                                 os << "<unsupported value type>";

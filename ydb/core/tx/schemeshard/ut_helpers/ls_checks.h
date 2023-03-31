@@ -34,6 +34,9 @@ namespace NLs {
 
     TCheckFunc PathsInsideDomain(ui64 count);
     TCheckFunc PQPartitionsInsideDomain(ui64 count);
+    TCheckFunc TopicReservedStorage(ui64 expected);
+    TCheckFunc TopicAccountSize(ui64 expected);
+    TCheckFunc TopicUsedReserveSize(ui64 expected);
     TCheckFunc PathsInsideDomainOneOf(TSet<ui64> variants);
     TCheckFunc ShardsInsideDomain(ui64 count);
     TCheckFunc ShardsInsideDomainOneOf(TSet<ui64> variants);
@@ -92,7 +95,11 @@ namespace NLs {
     TCheckFunc FollowerGroups(const TVector<NKikimrHive::TFollowerGroup>& followerGroup = TVector<NKikimrHive::TFollowerGroup>{});
     TCheckFunc SizeToSplitEqual(ui32 size);
     TCheckFunc MinPartitionsCountEqual(ui32 count);
+    void HasMinPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void NoMinPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc MaxPartitionsCountEqual(ui32 count);
+    void HasMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void NoMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitioningByLoadStatus(bool status);
     TCheckFunc ColumnFamiliesCount(ui32 size);
     TCheckFunc ColumnFamiliesHas(ui32 familyId);
@@ -130,6 +137,7 @@ namespace NLs {
     void NoBackupInFly(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc BackupHistoryCount(ui64 count);
 
+    TCheckFunc HasOwner(const TString& owner);
     TCheckFunc HasEffectiveRight(const TString& right);
     TCheckFunc HasNotEffectiveRight(const TString& right);
 

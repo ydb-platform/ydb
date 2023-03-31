@@ -7,6 +7,7 @@
 
 
 add_subdirectory(agent)
+add_subdirectory(ut)
 
 add_library(ydb-core-blob_depot)
 target_link_libraries(ydb-core-blob_depot PUBLIC
@@ -22,7 +23,9 @@ target_sources(ydb-core-blob_depot PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/assimilator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blocks.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/coro_tx.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_decommit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_gc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_load.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_mon.cpp

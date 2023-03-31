@@ -123,22 +123,24 @@ bool TBlobManagerDb::LoadEvicted(THashMap<TEvictedBlob, TString>& evicted, THash
     while (!rowset.EndOfSet()) {
         TString strBlobId = rowset.GetValue<Schema::OneToOneEvictedBlobs::BlobId>();
         //ui64 size = rowset.GetValue<Schema::OneToOneEvictedBlobs::Size>();
-        ui8 state = rowset.GetValue<Schema::OneToOneEvictedBlobs::State>();
+        EEvictState state = (EEvictState)rowset.GetValue<Schema::OneToOneEvictedBlobs::State>();
         bool isDropped = rowset.GetValue<Schema::OneToOneEvictedBlobs::Dropped>();
         TString meta = rowset.GetValue<Schema::OneToOneEvictedBlobs::Metadata>();
         TString strExternId = rowset.GetValue<Schema::OneToOneEvictedBlobs::ExternBlobId>();
         // TODO: CachedBlob
 
-        Y_VERIFY(state != ui8(EEvictState::UNKNOWN));
+        Y_VERIFY(state != EEvictState::UNKNOWN);
 
         TUnifiedBlobId blobId = TUnifiedBlobId::ParseFromString(strBlobId, &dsGroupSelector, error);
         Y_VERIFY(blobId.IsValid(), "%s", error.c_str());
 
         TUnifiedBlobId externId = TUnifiedBlobId::ParseFromString(strExternId, nullptr, error);
-        Y_VERIFY((state == ui8(EEvictState::EVICTING) || externId.IsValid()), "%s", error.c_str());
+        if (NOlap::IsExported(state)) {
+            Y_VERIFY(externId.IsValid(), "%s", error.c_str());
+        }
 
         TEvictedBlob evict{
-            .State = (EEvictState)state,
+            .State = state,
             .Blob = std::move(blobId),
             .ExternBlob = std::move(externId),
         };
@@ -163,6 +165,7 @@ void TBlobManagerDb::UpdateEvictBlob(const TEvictedBlob& evict, const TString& m
 
     switch (evict.State) {
         case EEvictState::EVICTING:
+            Y_VERIFY(!meta.empty());
             db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Update(
                 NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::Size>(evict.Blob.BlobSize()),
                 NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::State>((ui8)evict.State),
@@ -181,7 +184,14 @@ void TBlobManagerDb::UpdateEvictBlob(const TEvictedBlob& evict, const TString& m
             );
             break;
         }
-        default:
+        case EEvictState::ERASING:
+            Y_VERIFY(meta.empty());
+            db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Update(
+                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::State>((ui8)evict.State)
+            );
+            break;
+        case EEvictState::UNKNOWN:
+        case EEvictState::CACHED:
             Y_VERIFY(false);
             break;
     }

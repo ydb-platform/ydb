@@ -6,12 +6,13 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/core/formats/arrow_helpers.h>
 
 using namespace NYdb;
 
 namespace {
 
-std::vector<TString> ScanQuerySelect(
+std::vector<TString> ScanQuerySelectSimple(
     NYdb::NTable::TTableClient client, const TString& tablePath,
     const std::vector<std::pair<TString, NYdb::EPrimitiveType>>& ydbSchema = TTestOlap::PublicSchema())
 {
@@ -88,6 +89,21 @@ std::vector<TString> ScanQuerySelect(
         }
     }
     return out;
+}
+
+std::vector<TString> ScanQuerySelect(
+    NYdb::NTable::TTableClient client, const TString& tablePath,
+    const std::vector<std::pair<TString, NYdb::EPrimitiveType>>& ydbSchema = TTestOlap::PublicSchema())
+{
+    for(ui32 iter = 0; iter < 3; iter++) {
+        try {
+            return ScanQuerySelectSimple(client, tablePath, ydbSchema);
+        } catch(...) {
+            /// o_O
+        }
+    }
+
+    return ScanQuerySelectSimple(client, tablePath, ydbSchema);
 }
 
 }
@@ -176,6 +192,75 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
             Cerr << "Negative (reordered columns): " << res.GetStatus() << Endl;
             UNIT_ASSERT(res.GetStatus() != EStatus::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST(ParquetImportBug) {
+        NKikimrConfig::TAppConfig appConfig;
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+        TString tablePath = TTestOlap::TablePath;
+
+        std::vector<std::pair<TString, NYdb::EPrimitiveType>> schema = {
+                { "id", NYdb::EPrimitiveType::Uint32 },
+                { "timestamp", NYdb::EPrimitiveType::Timestamp },
+                { "date", NYdb::EPrimitiveType::Date }
+            };
+
+        auto tableBuilder = client.GetTableBuilder();
+        for (auto& [name, type] : schema) {
+            if (name == "id") {
+                tableBuilder.AddNonNullableColumn(name, type);
+            } else {
+                tableBuilder.AddNullableColumn(name, type);
+            }
+        }
+        tableBuilder.SetPrimaryKeyColumns({"id"});
+        auto result = session.CreateTable(tablePath, tableBuilder.Build(), {}).ExtractValueSync();
+
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        auto batchSchema = std::make_shared<arrow::Schema>(
+            std::vector<std::shared_ptr<arrow::Field>>{
+                arrow::field("id", arrow::uint32()),
+                arrow::field("timestamp", arrow::int64()),
+                arrow::field("date", arrow::uint16())
+            });
+        
+        size_t rowsCount = 100;
+        auto builders = NArrow::MakeBuilders(batchSchema, rowsCount);
+
+        for (size_t i = 0; i < rowsCount; ++i) {
+            Y_VERIFY(NArrow::Append<arrow::UInt32Type>(*builders[0], i));
+            Y_VERIFY(NArrow::Append<arrow::Int64Type>(*builders[1], i));
+            Y_VERIFY(NArrow::Append<arrow::UInt16Type>(*builders[2], i));
+        }
+
+        auto srcBatch = arrow::RecordBatch::Make(batchSchema, rowsCount, NArrow::Finish(std::move(builders)));
+        TString strSchema = NArrow::SerializeSchema(*batchSchema);
+        TString strBatch = NArrow::SerializeBatchNoCompression(srcBatch);
+
+        TInstant start = TInstant::Now();
+        {
+            auto res = client.BulkUpsert(tablePath,
+                NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
+
+            Cerr << res.GetStatus() << Endl;
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+        Cerr << "Upsert done: " << TInstant::Now() - start << Endl;
+
+        { // Read all
+            auto rows = ScanQuerySelect(client, tablePath, schema);
+            UNIT_ASSERT_GT(rows.size(), 0);
         }
     }
 

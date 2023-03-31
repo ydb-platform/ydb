@@ -48,7 +48,7 @@ public:
                     const auto& snapshot = params.GetDropSnapshot();
                     Y_VERIFY(snapshot.GetStep() != 0);
 
-                    const TSnapshotKey key(pathId.OwnerId, pathId.LocalPathId, snapshot.GetStep(), snapshot.GetTxId());
+                    const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
                     DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
                 } else {
                     Y_VERIFY_DEBUG(false, "Absent snapshot");
@@ -66,6 +66,13 @@ public:
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
+
+        auto& scanManager = DataShard.GetCdcStreamScanManager();
+        scanManager.Forget(txc.DB, pathId, streamPathId);
+        if (const auto* info = scanManager.Get(streamPathId)) {
+            DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
+            scanManager.Complete(streamPathId);
         }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

@@ -133,7 +133,24 @@ Storage.prototype.appear = function() {
     if (!this.visible) {
         var row = $(this.domElement);
 
-        row.append($('<td>', {class: 'storage_erasure', text: this.ErasureSpecies}));
+        var erasureElem;
+
+        if (this.BlobDepotId === undefined) {
+            erasureElem = $('<td>', {class: 'storage_erasure', text: this.ErasureSpecies});
+        } else if (!this.BlobDepotId) {
+            erasureElem = $('<td>', {text: 'BlobDepot (error)'});
+        } else {
+            erasureElem = $('<td>');
+            var link = $('<a>', {
+                'href': '../../../tablets/app?TabletID=' + this.BlobDepotId,
+                'text': 'BlobDepot',
+                'title': this.BlobDepotId
+            });
+            erasureElem.html(link);
+        }
+
+        row.append(erasureElem);
+
         row.append(this.storageUnits = $('<td>', {class: 'storage_units'}));
         row.append(this.allocatedSize = $('<td>'));
         row.append(this.availableSize = $('<td>'));
@@ -273,6 +290,19 @@ Storage.prototype.update = function() {
         pDisk = this.pDiskMap.updatePDiskInfo(pDisk);
         this.vDisksByPDisks[pDisk.Id] = vDisk;
         this.pDisksByVDisks[vDisk.Id] = pDisk;
+    }
+
+    if (this.AllocatedSize !== undefined) {
+        allocatedSize = Number(this.AllocatedSize);
+    }
+    if (this.AvailableSize !== undefined) {
+        availableSize = Number(this.AvailableSize);
+    }
+    if (this.ReadThroughput !== undefined) {
+        readSpeed = Number(this.ReadThroughput);
+    }
+    if (this.WriteThroughput !== undefined) {
+        writeSpeed = Number(this.WriteThroughput);
     }
 
     this.vDiskMap.resizeVDisks();

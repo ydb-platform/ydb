@@ -22,7 +22,7 @@ public:
     }
 
     void Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev, const TActorContext& ctx) {
-        LOG_S_DEBUG("TEvReadBlobRangeResult (waiting " << BlobsToRead.size() << ") at tablet " << TabletId << " (export)");
+        LOG_S_TRACE("TEvReadBlobRangeResult (waiting " << BlobsToRead.size() << ") at tablet " << TabletId << " (export)");
 
         auto& event = *ev->Get();
         const TUnifiedBlobId& blobId = event.BlobRange.BlobId;
@@ -52,7 +52,7 @@ public:
         {
             auto it = Event->Blobs.find(blobId);
             Y_VERIFY(it != Event->Blobs.end());
-            it->second.Data = blobData;
+            it->second = blobData;
         }
 
         if (BlobsToRead.empty()) {
@@ -95,7 +95,7 @@ private:
 
         NBlobCache::TReadBlobRangeOptions readOpts {
             .CacheAfterRead = false,
-            .Fallback = false,
+            .ForceFallback = false,
             .IsBackgroud = true
         };
         Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, std::move(readOpts)));

@@ -128,10 +128,10 @@ namespace NActors {
             Y_FAIL("undefined pool id: %" PRIu32, (ui32)poolId);
         }
 
-        ui32 GetThreads(ui32 poolId) const {
+        std::optional<ui32> GetThreadsOptional(ui32 poolId) const {
             for (const auto& p : Basic) {
                 if (p.PoolId == poolId) {
-                    return p.Threads;
+                    return p.DefaultThreadCount;
                 }
             }
             for (const auto& p : IO) {
@@ -144,7 +144,13 @@ namespace NActors {
                     return p.Concurrency ? p.Concurrency : UnitedWorkers.CpuCount;
                 }
             }
-            Y_FAIL("undefined pool id: %" PRIu32, (ui32)poolId);
+            return {};
+        }
+
+        ui32 GetThreads(ui32 poolId) const {
+            auto result = GetThreadsOptional(poolId);
+            Y_VERIFY(result, "undefined pool id: %" PRIu32, (ui32)poolId);
+            return *result;
         }
     };
 

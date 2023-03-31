@@ -59,10 +59,10 @@ namespace NKikimr::NStorage {
         const bool donorMode = vdisk.Config.HasDonorMode();
 
         STLOG(PRI_DEBUG, BS_NODE, NW23, "StartLocalVDiskActor", (RestartInFlight, restartInFlight),
-            (SlayInFlight, vdisk.SlayInFlight), (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
+            (SlayInFlight, SlayInFlight.contains(vslotId)), (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
             (PDiskGuid, pdiskGuid), (DonorMode, donorMode));
 
-        if (restartInFlight || vdisk.SlayInFlight) {
+        if (restartInFlight || SlayInFlight.contains(vslotId)) {
             return;
         }
 
@@ -268,15 +268,16 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::Slay(TVDiskRecord& vdisk) {
+        const TVSlotId vslotId = vdisk.GetVSlotId();
         STLOG(PRI_INFO, BS_NODE, NW33, "Slay", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
-            (SlayInFlight, vdisk.SlayInFlight));
-        if (!vdisk.SlayInFlight) {
+            (SlayInFlight, SlayInFlight.contains(vslotId)));
+        if (!SlayInFlight.contains(vslotId)) {
             PoisonLocalVDisk(vdisk);
             const TVSlotId vslotId = vdisk.GetVSlotId();
             const TActorId pdiskServiceId = MakeBlobStoragePDiskID(vslotId.NodeId, vslotId.PDiskId);
-            Send(pdiskServiceId, new NPDisk::TEvSlay(vdisk.GetVDiskId(), NextLocalPDiskInitOwnerRound(),
-                vslotId.PDiskId, vslotId.VDiskSlotId));
-            vdisk.SlayInFlight = true;
+            const ui64 round = NextLocalPDiskInitOwnerRound();
+            Send(pdiskServiceId, new NPDisk::TEvSlay(vdisk.GetVDiskId(), round, vslotId.PDiskId, vslotId.VDiskSlotId));
+            SlayInFlight.emplace(vslotId, round);
         }
     }
 
@@ -300,6 +301,9 @@ namespace NKikimr::NStorage {
     void TNodeWarden::UpdateGroupInfoForDisk(TVDiskRecord& vdisk, const TIntrusivePtr<TBlobStorageGroupInfo>& newInfo) {
         if (!vdisk.RuntimeData) {
             return;
+        }
+        if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
+            return; // group is decomitted, VDisks will be deleted soon
         }
 
         TIntrusivePtr<TBlobStorageGroupInfo>& currentInfo = vdisk.RuntimeData->GroupInfo;

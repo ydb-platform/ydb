@@ -143,6 +143,7 @@ def do(args):
                 cmd.FailRealmIdx = vslot.FailRealmIdx
                 cmd.FailDomainIdx = vslot.FailDomainIdx
                 cmd.VDiskIdx = vslot.VDiskIdx
+                cmd.SuppressDonorMode = random.choice([True, False])
                 response = common.invoke_bsc_request(request)
                 if not response.Success:
                     if 'Error# failed to allocate group: no group options' in response.ErrorDescription:
@@ -180,7 +181,7 @@ def do(args):
         for vslot in base_config.VSlot:
             if common.is_dynamic_group(vslot.GroupId):
                 vslot_id = common.get_vslot_id(vslot.VSlotId)
-                if can_act_on_vslot(*vslot_id) and recent_restarts:
+                if can_act_on_vslot(*vslot_id) and (recent_restarts or args.disable_restarts):
                     vdisk_id = '[%08x:%d:%d:%d]' % (vslot.GroupId, vslot.FailRealmIdx, vslot.FailDomainIdx, vslot.VDiskIdx)
                     if not args.disable_evicts:
                         possible_actions.append(('evict vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_evict, vslot_id)))

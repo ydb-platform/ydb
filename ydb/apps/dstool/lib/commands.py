@@ -10,12 +10,15 @@ import ydb.apps.dstool.lib.dstool_cmd_vdisk_wipe as vdisk_wipe
 
 import ydb.apps.dstool.lib.dstool_cmd_group_add as group_add
 import ydb.apps.dstool.lib.dstool_cmd_group_check as group_check
+import ydb.apps.dstool.lib.dstool_cmd_group_decommit as group_decommit
 import ydb.apps.dstool.lib.dstool_cmd_group_list as group_list
 import ydb.apps.dstool.lib.dstool_cmd_group_show_blob_info as group_show_blob_info
 import ydb.apps.dstool.lib.dstool_cmd_group_show_usage_by_tablets as group_show_usage_by_tablets
 import ydb.apps.dstool.lib.dstool_cmd_group_state as group_state
 import ydb.apps.dstool.lib.dstool_cmd_group_take_snapshot as group_take_snapshot
+import ydb.apps.dstool.lib.dstool_cmd_group_virtual_create as group_virtual_create
 
+import ydb.apps.dstool.lib.dstool_cmd_pool_create_virtual as pool_create_virtual
 import ydb.apps.dstool.lib.dstool_cmd_pool_list as pool_list
 
 import ydb.apps.dstool.lib.dstool_cmd_box_list as box_list
@@ -37,8 +40,8 @@ modules = [
     cluster_balance, cluster_get, cluster_set, cluster_list, cluster_workload_run,
     node_list,
     box_list,
-    pool_list,
-    group_check, group_show_blob_info, group_show_usage_by_tablets, group_state, group_take_snapshot, group_add, group_list,
+    pool_list, pool_create_virtual,
+    group_check, group_decommit, group_show_blob_info, group_show_usage_by_tablets, group_state, group_take_snapshot, group_add, group_list, group_virtual_create,
     pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list,
     vdisk_remove_donor, vdisk_evict, vdisk_list, vdisk_wipe,
 ]
@@ -46,8 +49,8 @@ modules = [
 default_structure = [
     ('pdisk', ['add-by-serial', 'remove-by-serial', 'set', 'list']),
     ('vdisk', ['evict', 'remove-donor', 'wipe', 'list']),
-    ('group', ['add', 'check', ('show', ['blob-info', 'usage-by-tablets']), 'state', 'take-snapshot', 'list']),
-    ('pool', ['list']),
+    ('group', ['add', 'check', 'decommit', ('show', ['blob-info', 'usage-by-tablets']), 'state', 'take-snapshot', 'list', ('virtual', ['create'])]),
+    ('pool', ['list', ('create', ['virtual'])]),
     ('box', ['list']),
     ('node', ['list']),
     ('cluster', ['balance', 'get', 'set', ('workload', ['run']), 'list']),

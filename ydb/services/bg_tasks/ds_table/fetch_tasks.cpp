@@ -24,10 +24,10 @@ void TFetchTasksActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TR
 std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TFetchTasksActor::OnSessionId(const TString& sessionId) {
     Ydb::Table::ExecuteDataQueryRequest request;
     TStringBuilder sb;
-    sb << "DECLARE $executorId AS String;" << Endl;
+    sb << "DECLARE $executorId AS Utf8;" << Endl;
     sb << "DECLARE $lastPingCriticalBorder AS Uint32;" << Endl;
     if (CurrentTaskIds.size()) {
-        sb << "DECLARE $taskIds AS List<String>;" << Endl;
+        sb << "DECLARE $taskIds AS List<Utf8>;" << Endl;
     }
     sb << "SELECT * FROM `" + Controller->GetTableName() + "`" << Endl;
     sb << "WHERE executorId = $executorId" << Endl;
@@ -36,17 +36,17 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TFetchTasksActor
     if (CurrentTaskIds.size()) {
         sb << " AND id NOT IN $taskIds" << Endl;
         auto& idStrings = (*request.mutable_parameters())["$taskIds"];
-        idStrings.mutable_type()->mutable_list_type();
+        idStrings.mutable_type()->mutable_list_type()->mutable_item()->set_type_id(Ydb::Type::UTF8); 
         for (auto&& i : CurrentTaskIds) {
             auto* idString = idStrings.mutable_value()->add_items();
-            idString->set_bytes_value(i);
+            idString->set_text_value(i);
         }
     }
 
     {
         auto& param = (*request.mutable_parameters())["$executorId"];
-        param.mutable_value()->set_bytes_value(ExecutorId);
-        param.mutable_type()->set_type_id(Ydb::Type::STRING);
+        param.mutable_value()->set_text_value(ExecutorId);
+        param.mutable_type()->set_type_id(Ydb::Type::UTF8);
     }
     {
         auto& param = (*request.mutable_parameters())["$lastPingCriticalBorder"];

@@ -150,25 +150,33 @@ public:
         Y_VERIFY(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
         auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
 
+        TCdcStreamInfo::EState requiredState = TCdcStreamInfo::EState::ECdcStreamStateInvalid;
         TCdcStreamInfo::EState newState = TCdcStreamInfo::EState::ECdcStreamStateInvalid;
 
         switch (op.GetActionCase()) {
         case NKikimrSchemeOp::TAlterCdcStream::kDisable:
-            newState = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
+            requiredState = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
+            if (stream->State == TCdcStreamInfo::EState::ECdcStreamStateReady) {
+                newState = requiredState;
+            }
             break;
         case NKikimrSchemeOp::TAlterCdcStream::kGetReady:
+            requiredState = TCdcStreamInfo::EState::ECdcStreamStateReady;
             if (stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan) {
-                newState = TCdcStreamInfo::EState::ECdcStreamStateReady;
-            } else {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
-                    << "Cannot switch to ready state"
-                    << ": current# " << stream->State);
-                return result;
+                newState = requiredState;
             }
             break;
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
                 << "Unknown action: " << static_cast<ui32>(op.GetActionCase()));
+            return result;
+        }
+
+        if (newState == TCdcStreamInfo::EState::ECdcStreamStateInvalid) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                << "Cannot switch state"
+                << ": from# " << stream->State
+                << ", to# " << requiredState);
             return result;
         }
 
@@ -183,8 +191,6 @@ public:
 
         auto streamAlter = stream->CreateNextVersion();
         Y_VERIFY(streamAlter);
-
-        Y_VERIFY(newState != TCdcStreamInfo::EState::ECdcStreamStateInvalid);
         streamAlter->State = newState;
 
         Y_VERIFY(!context.SS->FindTx(OperationId));
@@ -278,40 +284,6 @@ public:
 
 }; // TConfigurePartsAtTableDropSnapshot
 
-class TProposeAtTableDropSnapshot: public NCdcStreamState::TProposeAtTable {
-public:
-    using NCdcStreamState::TProposeAtTable::TProposeAtTable;
-
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-        NCdcStreamState::TProposeAtTable::HandleReply(ev, context);
-
-        const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        const auto& pathId = txState->TargetPathId;
-
-        Y_VERIFY(context.SS->TablesWithSnapshots.contains(pathId));
-        const auto snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
-
-        auto it = context.SS->SnapshotTables.find(snapshotTxId);
-        if (it != context.SS->SnapshotTables.end()) {
-            it->second.erase(pathId);
-            if (it->second.empty()) {
-                context.SS->SnapshotTables.erase(it);
-            }
-        }
-
-        context.SS->SnapshotsStepIds.erase(snapshotTxId);
-        context.SS->TablesWithSnapshots.erase(pathId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistDropSnapshot(db, snapshotTxId, pathId);
-
-        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
-        return true;
-    }
-
-}; // TProposeAtTableDropSnapshot
-
 class TAlterCdcStreamAtTable: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::ConfigureParts;
@@ -344,7 +316,7 @@ class TAlterCdcStreamAtTable: public TSubOperation {
             }
         case TTxState::Propose:
             if (DropSnapshot) {
-                return MakeHolder<TProposeAtTableDropSnapshot>(OperationId);
+                return MakeHolder<NCdcStreamState::TProposeAtTableDropSnapshot>(OperationId);
             } else {
                 return MakeHolder<NCdcStreamState::TProposeAtTable>(OperationId);
             }

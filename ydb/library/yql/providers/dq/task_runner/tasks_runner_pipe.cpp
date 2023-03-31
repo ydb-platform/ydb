@@ -1244,10 +1244,9 @@ public:
         const TString& traceId)
         : TraceId(traceId)
         , Task(task)
-        , Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true)
-        , TypeEnv(Alloc)
-        , MemInfo("TDqTaskRunnerProxy")
-        , HolderFactory(Alloc.Ref(), MemInfo)
+        , Alloc(new NKikimr::NMiniKQL::TScopedAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true),
+            [](NKikimr::NMiniKQL::TScopedAlloc* ptr) { ptr->Acquire(); delete ptr; })
+        , AllocatedHolder(std::make_optional<TAllocatedHolder>(*Alloc, "TDqTaskRunnerProxy"))
         , Running(true)
         , Command(std::move(command))
         , StderrReader(MakeHolder<TThread>([this] () { ReadStderr(); }))
@@ -1256,13 +1255,15 @@ public:
         , TaskId(Task.GetId())
         , StageId(stageId)
     {
-        Alloc.Release();
+        Alloc->Release();
         StderrReader->Start();
         InitTaskMeta();
     }
 
     ~TTaskRunner() {
-        Alloc.Acquire();
+        Alloc->Acquire();
+        AllocatedHolder.reset();
+        Alloc->Release();
         Command->Kill();
         Command->Wait(TDuration::Seconds(0));
     }
@@ -1343,11 +1344,15 @@ public:
     }
 
     const NMiniKQL::TTypeEnvironment& GetTypeEnv() const override {
-        return TypeEnv;
+        return AllocatedHolder->TypeEnv;
     }
 
     const NMiniKQL::THolderFactory& GetHolderFactory() const override {
-        return HolderFactory;
+        return AllocatedHolder->HolderFactory;
+    }
+
+    std::shared_ptr<NMiniKQL::TScopedAlloc> GetAllocatorPtr() const {
+        return Alloc;
     }
 
     const THashMap<TString, TString>& GetSecureParams() const override {
@@ -1359,7 +1364,7 @@ public:
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
-        auto guard = TypeEnv.BindAllocator();
+        auto guard = AllocatedHolder->TypeEnv.BindAllocator();
         if (memoryLimit) {
             guard.GetMutex()->SetLimit(*memoryLimit);
         }
@@ -1367,7 +1372,7 @@ public:
     }
 
     bool IsAllocatorAttached() override {
-        return TypeEnv.GetAllocator().IsAttached();
+        return AllocatedHolder->TypeEnv.GetAllocator().IsAttached();
     }
 
     void Kill() override {
@@ -1435,10 +1440,20 @@ private:
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;
 
-    NKikimr::NMiniKQL::TScopedAlloc Alloc;
-    NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
-    NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
-    NKikimr::NMiniKQL::THolderFactory HolderFactory;
+    std::shared_ptr <NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+
+    struct TAllocatedHolder {
+        TAllocatedHolder(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TStringBuf& memInfoTitle)
+            : TypeEnv(alloc)
+            , MemInfo(memInfoTitle)
+            , HolderFactory(alloc.Ref(), MemInfo) {}
+
+        NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
+        NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
+        NKikimr::NMiniKQL::THolderFactory HolderFactory;
+    };
+
+    std::optional<TAllocatedHolder> AllocatedHolder;
 
     std::atomic<bool> Running;
     int Code = -1;
@@ -1565,6 +1580,10 @@ public:
         return Delegate->GetHolderFactory();
     }
 
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() const override {
+        return Delegate->GetAllocatorPtr();
+    }
+
     const THashMap<TString, TString>& GetSecureParams() const override {
         return Delegate->GetSecureParams();
     }
@@ -1586,6 +1605,29 @@ public:
     }
 
     void UpdateStats() override {
+    }
+
+    const TDqMeteringStats* GetMeteringStats() const override {
+        try {
+            NDqProto::TCommandHeader header;
+            header.SetVersion(3);
+            header.SetCommand(NDqProto::TCommandHeader::GET_METERING_STATS);
+            header.SetTaskId(Task.GetId());
+            header.Save(&Delegate->GetOutput());
+
+            NDqProto::TMeteringStatsResponse response;
+            response.Load(&Delegate->GetInput());
+
+            MeteringStats.Inputs.clear();
+            for (auto input : response.GetInputs()) {
+                auto i = MeteringStats.AddInputs();
+                i.RowsConsumed = input.GetRowsConsumed();
+                i.BytesConsumed = input.GetBytesConsumed();
+            }
+            return &MeteringStats;
+        } catch (...) {
+            Delegate->RaiseException();
+        }
     }
 
     const TDqTaskRunnerStats* GetStats() const override
@@ -1629,6 +1671,7 @@ private:
     TIntrusivePtr<TTaskRunner> Delegate;
     NDqProto::TDqTask Task;
     mutable TDqTaskRunnerStats Stats;
+    mutable TDqMeteringStats MeteringStats;
 
     THashMap<ui64, IDqInputChannel::TPtr> InputChannels;
     THashMap<ui64, IDqAsyncInputBuffer::TPtr> Sources;

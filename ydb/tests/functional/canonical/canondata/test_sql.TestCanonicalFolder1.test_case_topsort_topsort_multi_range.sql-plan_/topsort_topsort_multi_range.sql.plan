@@ -15,10 +15,25 @@
                         "Name"
                     ],
                     "scan_by": [
-                        "Group [10, +\u221e)",
-                        "Name [Name3, +\u221e)"
+                        "Group (10, +\u221e)",
+                        "Name (-\u221e, +\u221e)"
                     ],
                     "type": "Scan"
+                },
+                {
+                    "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ],
+                    "lookup_by": [
+                        "Group (10)"
+                    ],
+                    "scan_by": [
+                        "Name [Name3, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

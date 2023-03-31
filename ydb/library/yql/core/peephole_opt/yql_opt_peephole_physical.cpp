@@ -4461,8 +4461,8 @@ TExprNode::TPtr UnpickleInput(TExprNode::TPtr originalLambda, TListExpandMap& li
                                 inner
                                     .With(j)
                                         .Callable("Unpickle")
-                                            .Arg(0, "out", j)
-                                            .Add(1, ExpandType(originalLambda->Pos(), *it->second, ctx))
+                                            .Add(0, ExpandType(originalLambda->Pos(), *it->second, ctx))
+                                            .Arg(1, "out", j)
                                         .Seal()
                                     .Done()
                                     ;
@@ -4879,8 +4879,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         }
         const bool isUdf = node->IsCallable("Apply") && node->Head().IsCallable("Udf");
         if (isUdf) {
-            auto func = node->Head().Head().Content();
-            if (!func.StartsWith("ClickHouse.")) {
+            if (!GetSetting(*node->Head().Child(7), "blocks")) {
                 return true;
             }
         }
@@ -4923,7 +4922,6 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                     for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
                                         auto child = node->Child(i);
-                                        // TODO: check if ClickHouse UDF accepts ChunkedBlock as argument
                                         auto originalTypeNode = node->Head().Child(2)->Head().Child(i - 1);
                                         parent.Callable(i - 1, child->IsComplete() ? "ScalarType" : "BlockType")
                                             .Add(0, originalTypeNode)
@@ -4935,8 +4933,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                         .Seal()
                         .Callable(1, "StructType")
                         .Seal()
-                        .Callable(2, "TupleType")
-                        .Seal()
+                        .Add(2, node->Head().Child(2)->ChildPtr(2))
                     .Seal()
                     .Add(3, node->Head().ChildPtr(3))
                 .Seal()

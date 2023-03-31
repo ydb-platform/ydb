@@ -88,7 +88,7 @@ public:
         }
 
         auto pathId = path.Base()->PathId;
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(pathId);
+        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(pathId);
         Y_VERIFY(pqGroup);
 
         if (pqGroup->AlterData) {
@@ -111,23 +111,16 @@ public:
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
         Y_VERIFY(parseOk);
 
-        ui64 throughput = ((ui64)pqGroup->TotalPartitionCount) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+        const PQGroupReserve reserve(config, pqGroup->TotalPartitionCount);
 
-        const ui64 storage = [&config, &throughput]() {
-            if (config.GetPartitionConfig().HasStorageLimitBytes()) {
-                return config.GetPartitionConfig().GetStorageLimitBytes();
-            } else {
-                return throughput * config.GetPartitionConfig().GetLifetimeSeconds();
-            }
-        }();
-        
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();
         domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount);
-        domainInfo->DecPQReservedStorage(storage);
+        domainInfo->DecPQReservedStorage(reserve.Storage);
+        domainInfo->AggrDiskSpaceUsage({}, pqGroup->Stats);
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(throughput);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(storage);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(reserve.Throughput);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(reserve.Storage);
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Sub(pqGroup->TotalPartitionCount);
 

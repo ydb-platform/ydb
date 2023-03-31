@@ -16,6 +16,8 @@ namespace NKikimr::NBlobDepot {
             TString Buffer;
             ui32 BlockedGeneration = 0;
 
+            NKikimrBlobDepot::TEvResolve Resolve;
+
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
@@ -23,6 +25,7 @@ namespace NKikimr::NBlobDepot {
                 BDEV_QUERY(BDEV16, "TEvDiscover_begin", (U.TabletId, Request.TabletId), (U.ReadBody, Request.ReadBody),
                     (U.MinGeneration, Request.MinGeneration));
 
+                GenerateInitialResolve();
                 IssueResolve();
 
                 if (Request.DiscoverBlockedGeneration) {
@@ -37,13 +40,12 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            void IssueResolve() {
+            void GenerateInitialResolve() {
                 const ui8 channel = 0;
                 const TLogoBlobID from(Request.TabletId, Request.MinGeneration, 0, channel, 0, 0);
                 const TLogoBlobID to(Request.TabletId, Max<ui32>(), Max<ui32>(), channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
 
-                NKikimrBlobDepot::TEvResolve resolve;
-                auto *item = resolve.AddItems();
+                auto *item = Resolve.AddItems();
                 auto *range = item->MutableKeyRange();
                 range->SetBeginningKey(from.AsBinaryString());
                 range->SetIncludeBeginning(true);
@@ -53,24 +55,30 @@ namespace NKikimr::NBlobDepot {
                 range->SetReverse(true);
                 item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(true);
+            }
 
-                Agent.Issue(std::move(resolve), this, nullptr);
+            void IssueResolve() {
+                Agent.Issue(Resolve, this, nullptr);
             }
 
             void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override {
                 if (std::holds_alternative<TTabletDisconnected>(response)) {
                     return EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
-                    Agent.HandleGetResult(context, **p);
+                    TQuery::HandleGetResult(context, **p);
                 } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
-                    HandleResolveResult(id, std::move(context), **p);
+                    if (context) {
+                        TQuery::HandleResolveResult(std::move(context), **p);
+                    } else {
+                        HandleResolveResult(id, std::move(context), **p);
+                    }
                 } else {
                     Y_FAIL();
                 }
             }
 
             void OnUpdateBlock() override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnUpdateBlock", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnUpdateBlock", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()));
 
                 const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, Max<ui32>(), this, &BlockedGeneration);
@@ -85,7 +93,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, TEvBlobDepot::TEvResolveResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "HandleResolveResult", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Msg, msg.Record));
 
                 Agent.BlobMappingCache.HandleResolveResult(id, msg.Record, nullptr);
@@ -102,19 +110,23 @@ namespace NKikimr::NBlobDepot {
                             return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to resolve blob# " << Id
                                 << ": " << item.GetErrorReason());
                         }
-                        Y_VERIFY(item.ValueChainSize() == 1);
                         if (Request.ReadBody) {
+                            if (!item.ValueChainSize()) {
+                                // FIXME(alexvru): hypothetically this can be considered normal and we may continue scan
+                                return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "empty ValueChain");
+                            }
                             TReadArg arg{
-                                item.GetValueChain(),
+                                item,
                                 NKikimrBlobStorage::Discover,
                                 true,
-                                this,
                                 0,
                                 0,
                                 0,
-                                {}};
+                                {},
+                                item.GetKey(),
+                            };
                             TString error;
-                            if (!Agent.IssueRead(arg, error)) {
+                            if (!IssueRead(std::move(arg), error)) {
                                 return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to read discovered blob: "
                                     << error);
                             }
@@ -135,19 +147,29 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus status, TString dataOrErrorReason) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA20, "OnRead", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA20, "OnRead", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Status, status));
 
-                if (status == NKikimrProto::OK) {
-                    Buffer = std::move(dataOrErrorReason);
-                    DoneWithData = true;
-                    CheckIfDone();
-                } else if (status == NKikimrProto::NODATA) {
-                    // this may indicate a data race between locator and key value, we have to restart our resolution query
-                    IssueResolve();
-                    // FIXME: infinite cycle?
-                } else {
-                    EndWithError(status, dataOrErrorReason);
+                switch (status) {
+                    case NKikimrProto::OK:
+                        Buffer = std::move(dataOrErrorReason);
+                        DoneWithData = true;
+                        CheckIfDone();
+                        break;
+
+                    case NKikimrProto::NODATA: {
+                        // we are reading blob from the original group and it may be partially written -- it is totally
+                        // okay to have some; we need to advance to the next readable blob
+                        auto *range = Resolve.MutableItems(0)->MutableKeyRange();
+                        range->SetEndingKey(Id.AsBinaryString());
+                        range->ClearIncludeEnding();
+                        IssueResolve();
+                        break;
+                    }
+
+                    default:
+                        EndWithError(status, std::move(dataOrErrorReason));
+                        break;
                 }
             }
 

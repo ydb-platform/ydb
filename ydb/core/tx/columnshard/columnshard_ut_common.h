@@ -2,6 +2,7 @@
 
 #include "columnshard.h"
 #include "columnshard_impl.h"
+#include "blob_cache.h"
 
 #include <ydb/core/formats/arrow_batch_builder.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -12,6 +13,16 @@
 
 
 namespace NKikimr::NTxUT {
+
+// Private events of different actors reuse the same ES_PRIVATE range
+// So in order to capture the right private event we need to check its type via dynamic_cast
+template <class TPrivateEvent>
+inline TPrivateEvent* TryGetPrivateEvent(TAutoPtr<IEventHandle>& ev) {
+    if (ev->GetTypeRewrite() != TPrivateEvent::EventType) {
+        return nullptr;
+    }
+    return dynamic_cast<TPrivateEvent*>(ev->GetBase());
+}
 
 class TTester : public TNonCopyable {
 public:

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "utils.h"
+
 #include <util/system/hp_timer.h>
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -7,8 +9,10 @@
 #include <ydb/core/base/appdata.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -58,9 +62,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
             struct MaxPartsPerTablet : Column<41, NScheme::NTypeIds::Uint32> {};
             struct SchemeShardId : Column<42, NScheme::NTypeIds::Uint64> {};
             struct NextPartitionId : Column<43, NScheme::NTypeIds::Uint64> {};
+            struct SubDomainPathId : Column<44, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<Key>;
-            using TColumns = TableColumns<Key, PathId, Topic, Path, Version, Config, MaxPartsPerTablet, SchemeShardId, NextPartitionId>;
+            using TColumns = TableColumns<Key, PathId, Topic, Path, Version, Config, MaxPartsPerTablet, SchemeShardId, NextPartitionId, SubDomainPathId>;
         };
 
         struct Partitions : Table<33> {
@@ -68,9 +73,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
             struct TabletId : Column<33, NScheme::NTypeIds::Uint64> {};
 
             struct State : Column<34, NScheme::NTypeIds::Uint32> {};
+            struct DataSize : Column<35, NScheme::NTypeIds::Uint64> {};
+            struct UsedReserveSize : Column<36, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<Partition>;
-            using TColumns = TableColumns<Partition, TabletId, State>;
+            using TColumns = TableColumns<Partition, TabletId, State, DataSize, UsedReserveSize>;
         };
 
         struct Groups : Table<34> {
@@ -169,7 +176,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         void Complete(const TActorContext &ctx) override;
     };
 
-
     friend struct TTxWrite;
 
     void Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext &ctx) {
@@ -178,9 +184,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     }
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {
+        LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, TStringBuilder() << "TPersQueueReadBalancer::HandleWakeup");
+
         GetStat(ctx); //TODO: do it only on signals from outerspace right now
 
-        ctx.Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup()); //TODO: remove it
+        ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec()), new TEvents::TEvWakeup()); //TODO: remove it
     }
 
     void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
@@ -188,6 +196,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     }
 
     void Die(const TActorContext& ctx) override {
+        StopFindSubDomainPathId();
+        StopWatchingSubDomainPathId();
+        
         for (auto& pipe : TabletPipes) {
             NTabletPipe::CloseClient(ctx, pipe.second);
         }
@@ -217,6 +228,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     }
 
     void InitDone(const TActorContext &ctx) {
+        if (SubDomainPathId) {
+            StartWatchingSubDomainPathId();
+        } else {
+            StartFindSubDomainPathId(true);
+        }
 
         StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
 
@@ -242,7 +258,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         }
         RegisterEvents.clear();
 
-        ctx.Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup()); //TODO: remove it
+        Y_VERIFY(0 < AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec());
+        ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec()), new TEvents::TEvWakeup()); //TODO: remove it
         ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
     }
 
@@ -268,8 +285,12 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&);
 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
+
     TStringBuilder GetPrefix() const;
 
+    TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&);
     void RestartPipe(const ui64 tabletId, const TActorContext&);
     void CheckStat(const TActorContext&);
@@ -280,6 +301,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         const TActorContext &ctx);
     void CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &request, const NACLib::TUserToken& token, const TActorContext &ctx);
     void GetStat(const TActorContext&);
+    TEvPersQueue::TEvPeriodicTopicStats* GetStatsEvent();
     void GetACL(const TActorContext&);
     void AnswerWaitingRequests(const TActorContext& ctx);
 
@@ -287,12 +309,23 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvents::TEvPoisonPill &ev, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
 
     void RegisterSession(const TActorId& pipe, const TActorContext& ctx);
     struct TPipeInfo;
     void UnregisterSession(const TActorId& pipe, const TActorContext& ctx);
     void RebuildStructs();
+    ui64 PartitionReserveSize() {
+        return TopicPartitionReserveSize(TabletConfig);
+    }
+
+    void StopFindSubDomainPathId();
+    void StartFindSubDomainPathId(bool delayFirstRequest = true);
+
+    void StopWatchingSubDomainPathId();
+    void StartWatchingSubDomainPathId();
 
     bool Inited;
     ui64 PathId;
@@ -421,19 +454,58 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     THashMap<ui64, TActorId> TabletPipes;
 
-    THashSet<ui64> WaitingForStat;
     bool WaitingForACL;
-    ui64 TotalAvgSpeedSec;
-    ui64 MaxAvgSpeedSec;
-    ui64 TotalAvgSpeedMin;
-    ui64 MaxAvgSpeedMin;
-    ui64 TotalAvgSpeedHour;
-    ui64 MaxAvgSpeedHour;
-    ui64 TotalAvgSpeedDay;
-    ui64 MaxAvgSpeedDay;
+
+    struct TPartitionStats {
+        ui64 DataSize = 0;
+        ui64 UsedReserveSize = 0;
+    };
+
+    struct TPartitionMetrics {
+        ui64 TotalAvgWriteSpeedPerSec = 0;
+        ui64 MaxAvgWriteSpeedPerSec = 0;
+        ui64 TotalAvgWriteSpeedPerMin = 0;
+        ui64 MaxAvgWriteSpeedPerMin = 0;
+        ui64 TotalAvgWriteSpeedPerHour = 0;
+        ui64 MaxAvgWriteSpeedPerHour = 0;
+        ui64 TotalAvgWriteSpeedPerDay = 0;
+        ui64 MaxAvgWriteSpeedPerDay = 0;
+    };
+
+    struct TAggregatedStats {
+        THashMap<ui32, TPartitionStats> Stats;
+        THashMap<ui64, ui64> Cookies;
+
+        ui64 TotalDataSize = 0;
+        ui64 TotalUsedReserveSize = 0;
+
+        TPartitionMetrics Metrics;
+        TPartitionMetrics NewMetrics;
+
+        ui64 Round = 0;
+        ui64 NextCookie = 0;
+
+        void AggrStats(ui32 partition, ui64 dataSize, ui64 usedReserveSize);
+        void AggrStats(ui64 avgWriteSpeedPerSec, ui64 avgWriteSpeedPerMin, ui64 avgWriteSpeedPerHour, ui64 avgWriteSpeedPerDay);
+    };
+    TAggregatedStats AggregatedStats;
+
+    struct TTxWritePartitionStats;
+    bool TTxWritePartitionStatsScheduled = false;
+
+    ui64 StatsReportRound;
 
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
+
+    TActorId FindSubDomainPathIdActor;
+
+    std::optional<TPathId> SubDomainPathId;
+    std::optional<TPathId> WatchingSubDomainPathId;
+
+    friend struct TTxWriteSubDomainPathId;
+    bool SubDomainOutOfSpace = false;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_READ_BALANCER_ACTOR;
@@ -459,14 +531,7 @@ public:
         , NoGroupsInBase(true)
         , ResourceMetrics(nullptr)
         , WaitingForACL(false)
-        , TotalAvgSpeedSec(0)
-        , MaxAvgSpeedSec(0)
-        , TotalAvgSpeedMin(0)
-        , MaxAvgSpeedMin(0)
-        , TotalAvgSpeedHour(0)
-        , MaxAvgSpeedHour(0)
-        , TotalAvgSpeedDay(0)
-        , MaxAvgSpeedDay(0)
+        , StatsReportRound(0)
     {}
 
     STFUNC(StateInit) {
@@ -483,6 +548,8 @@ public:
             HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             HFunc(TEvPersQueue::TEvCheckACL, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             default:
                 StateInitImpl(ev, ctx);
                 break;
@@ -509,7 +576,11 @@ public:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvPersQueue::TEvStatusResponse, Handle);
+            HFunc(TEvPQ::TEvStatsWakeup, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+            HFunc(TEvPersQueue::TEvStatus, Handle);
 
             default:
                 HandleDefaultEvents(ev, ctx);

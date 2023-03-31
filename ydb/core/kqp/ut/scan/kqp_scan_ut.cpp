@@ -1137,7 +1137,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST_TWIN(PrunePartitionsByLiteral, WithPredicatesExtract) {
         auto cfg = AppCfg();
-        cfg.MutableFeatureFlags()->SetEnablePredicateExtractForScanQueries(WithPredicatesExtract);
+        cfg.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(WithPredicatesExtract);
         auto kikimr = DefaultKikimrRunner({}, cfg);
         auto db = kikimr.GetTableClient();
 
@@ -1693,7 +1693,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(SecondaryIndex) {
-        auto kikimr = DefaultKikimrRunner();
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1977,10 +1979,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForScanQueries(true);
-        settings.SetFeatureFlags(flags);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -1999,10 +1999,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForScanQueries(true);
-        settings.SetFeatureFlags(flags);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -2022,10 +2020,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForDataQueries(true);
-        settings.SetFeatureFlags(flags);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -2125,7 +2121,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(StreamLookupByFullPk) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
 
@@ -2178,13 +2176,15 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(StreamLookupTryGetDataBeforeSchemeInitialization) {
-        TPortManager tp;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
 
+        TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
             .SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableKqpScanQueryStreamLookup(true);
+            .SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
@@ -2274,7 +2274,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(LimitOverSecondaryIndexRead) {
-        auto kikimr = DefaultKikimrRunner();
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2301,6 +2303,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        if (!indexRead.IsDefined()) {
+            indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+        }
         UNIT_ASSERT(indexRead.IsDefined());
         auto indexTable = FindPlanNodeByKv(indexRead, "Table", "SecondaryComplexKeys/Index/indexImplTable");
         UNIT_ASSERT(indexTable.IsDefined());
@@ -2309,7 +2314,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(TopSortOverSecondaryIndexRead) {
-        auto kikimr = DefaultKikimrRunner();
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2336,6 +2343,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        if (!indexRead.IsDefined()) {
+            indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+        }
         UNIT_ASSERT(indexRead.IsDefined());
         auto indexTable = FindPlanNodeByKv(indexRead, "Table", "SecondaryComplexKeys/Index/indexImplTable");
         UNIT_ASSERT(indexTable.IsDefined());

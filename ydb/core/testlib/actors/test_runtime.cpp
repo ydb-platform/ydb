@@ -84,6 +84,11 @@ namespace NActors {
         CleanupNodes();
     }
 
+    void TTestActorRuntime::AddAppDataInit(std::function<void(ui32, NKikimr::TAppData&)> callback) {
+        Y_VERIFY(!IsInitialized, "Actor system is already initialized");
+        AppDataInit_.push_back(std::move(callback));
+    }
+
     void TTestActorRuntime::Initialize(TEgg egg) {
         IsInitialized = true;
 
@@ -147,6 +152,10 @@ namespace NActors {
                 nodeAppData->KeyConfig.CopyFrom(app0->KeyConfig);
             }
 
+            for (auto& callback : AppDataInit_) {
+                callback(nodeIndex, *nodeAppData);
+            }
+
             if (NeedMonitoring && !SingleSysEnv) {
                 ui16 port = GetPortManager().GetPort();
                 node->Mon.Reset(new NActors::TSyncHttpMon({
@@ -168,6 +177,8 @@ namespace NActors {
                 nodeAppData->Mon->Start();
             }
         }
+
+        AppDataInit_.clear();
     }
 
     ui16 TTestActorRuntime::GetMonPort(ui32 nodeIndex) const {

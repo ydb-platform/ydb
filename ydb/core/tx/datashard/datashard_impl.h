@@ -10,10 +10,11 @@
 #include "datashard_s3_downloads.h"
 #include "datashard_s3_uploads.h"
 #include "datashard_user_table.h"
-#include "datashard_build_index.h"
 #include "datashard_repl_offsets.h"
 #include "datashard_repl_offsets_client.h"
 #include "datashard_repl_offsets_server.h"
+#include "build_index.h"
+#include "cdc_stream_scan.h"
 #include "change_exchange.h"
 #include "change_record.h"
 #include "progress_queue.h"
@@ -217,6 +218,8 @@ class TDataShard
     class TTxRemoveLockChangeRecords;
     class TTxVolatileTxCommit;
     class TTxVolatileTxAbort;
+    class TTxCdcStreamScanRun;
+    class TTxCdcStreamScanProgress;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -262,6 +265,7 @@ class TDataShard
     friend class TSnapshotManager;
     friend class TSchemaSnapshotManager;
     friend class TVolatileTxManager;
+    friend class TCdcStreamScanManager;
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
 
@@ -271,6 +275,7 @@ class TDataShard
     friend class TBuildIndexScan;
     friend class TReadColumnsScan;
     friend class TCondEraseScan;
+    friend class TCdcStreamScan;
     friend class TDatashardKeySampler;
 
     friend class TS3UploadsManager;
@@ -282,7 +287,6 @@ class TDataShard
     friend class TTxStartMvccStateChange;
     friend class TTxExecuteMvccStateChange;
 
-    class TFindSubDomainPathIdActor;
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
 
@@ -296,6 +300,7 @@ class TDataShard
 
     class TTxApplyReplicationChanges;
 
+    class TWaitVolatileDependencies;
     class TSendVolatileResult;
 
     struct TEvPrivate {
@@ -317,12 +322,15 @@ class TDataShard
             EvPersistScanStateAck,
             EvConditionalEraseRowsRegistered,
             EvAsyncJobComplete,
-            EvSubDomainPathIdFound,
+            EvSubDomainPathIdFound, // unused
             EvRequestChangeRecords,
             EvRemoveChangeRecords,
             EvReplicationSourceOffsets,
             EvMediatorRestoreBackup,
             EvRemoveLockChangeRecords,
+            EvCdcStreamScanRegistered,
+            EvCdcStreamScanProgress,
+            EvCdcStreamScanContinue,
             EvEnd
         };
 
@@ -431,16 +439,6 @@ class TDataShard
             TAutoPtr<IDestructable> Prod;
         };
 
-        struct TEvSubDomainPathIdFound : public TEventLocal<TEvSubDomainPathIdFound, EvSubDomainPathIdFound> {
-            TEvSubDomainPathIdFound(ui64 schemeShardId, ui64 localPathId)
-                : SchemeShardId(schemeShardId)
-                , LocalPathId(localPathId)
-            { }
-
-            const ui64 SchemeShardId;
-            const ui64 LocalPathId;
-        };
-
         struct TEvRequestChangeRecords : public TEventLocal<TEvRequestChangeRecords, EvRequestChangeRecords> {};
         struct TEvRemoveChangeRecords : public TEventLocal<TEvRemoveChangeRecords, EvRemoveChangeRecords> {};
 
@@ -466,6 +464,44 @@ class TDataShard
         struct TEvMediatorRestoreBackup : public TEventLocal<TEvMediatorRestoreBackup, EvMediatorRestoreBackup> {};
 
         struct TEvRemoveLockChangeRecords : public TEventLocal<TEvRemoveLockChangeRecords, EvRemoveLockChangeRecords> {};
+
+        struct TEvCdcStreamScanRegistered : public TEventLocal<TEvCdcStreamScanRegistered, EvCdcStreamScanRegistered> {
+            explicit TEvCdcStreamScanRegistered(ui64 txId, const TActorId& actorId)
+                : TxId(txId)
+                , ActorId(actorId)
+            {
+            }
+
+            const ui64 TxId;
+            const TActorId ActorId;
+        };
+
+        struct TEvCdcStreamScanProgress : public TEventLocal<TEvCdcStreamScanProgress, EvCdcStreamScanProgress> {
+            explicit TEvCdcStreamScanProgress(
+                    const TPathId& tablePathId,
+                    const TPathId& streamPathId,
+                    const TRowVersion& readVersion,
+                    const TVector<ui32>& valueTags,
+                    TVector<std::pair<TSerializedCellVec, TSerializedCellVec>>&& rows,
+                    const TCdcStreamScanManager::TStats& stats)
+                : TablePathId(tablePathId)
+                , StreamPathId(streamPathId)
+                , ReadVersion(readVersion)
+                , ValueTags(valueTags)
+                , Rows(std::move(rows))
+                , Stats(stats)
+            {
+            }
+
+            const TPathId TablePathId;
+            const TPathId StreamPathId;
+            const TRowVersion ReadVersion;
+            const TVector<ui32> ValueTags;
+            TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> Rows;
+            const TCdcStreamScanManager::TStats Stats;
+        };
+
+        struct TEvCdcStreamScanContinue : public TEventLocal<TEvCdcStreamScanContinue, EvCdcStreamScanContinue> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -906,6 +942,31 @@ class TDataShard
             using TColumns = TableColumns<TxId, ShardId>;
         };
 
+        struct CdcStreamScans : Table<34> {
+            struct TableOwnerId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct TablePathId : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct StreamOwnerId : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct StreamPathId : Column<4, NScheme::NTypeIds::Uint64> {};
+            struct LastKey : Column<5, NScheme::NTypeIds::String> {};
+            struct SnapshotStep : Column<6, NScheme::NTypeIds::Uint64> {};
+            struct SnapshotTxId : Column<7, NScheme::NTypeIds::Uint64> {};
+            struct RowsProcessed : Column<8, NScheme::NTypeIds::Uint64> {};
+            struct BytesProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<TableOwnerId, TablePathId, StreamOwnerId, StreamPathId>;
+            using TColumns = TableColumns<
+                TableOwnerId,
+                TablePathId,
+                StreamOwnerId,
+                StreamPathId,
+                LastKey,
+                SnapshotStep,
+                SnapshotTxId,
+                RowsProcessed,
+                BytesProcessed
+            >;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
@@ -913,7 +974,7 @@ class TDataShard
             ReplicationSourceOffsets, ReplicationSources, DstReplicationSourceOffsetsReceived,
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
-            TxVolatileDetails, TxVolatileParticipants>;
+            TxVolatileDetails, TxVolatileParticipants, CdcStreamScans>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1117,6 +1178,9 @@ class TDataShard
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
@@ -1136,7 +1200,7 @@ class TDataShard
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPrivate::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     // change sending
@@ -1268,6 +1332,12 @@ public:
                       TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets);
     void ResendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
     void SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const;
+
+    void WaitVolatileDependenciesThenSend(
+            const absl::flat_hash_set<ui64>& dependencies,
+            const TActorId& target, std::unique_ptr<IEventBase> event,
+            ui64 cookie = 0);
+
     void SendResult(const TActorContext &ctx,
                     TOutputOpData::TResultPtr &result,
                     const TActorId &target,
@@ -1277,6 +1347,14 @@ public:
 
     void SetCounter(NDataShard::ESimpleCounters counter, ui64 num) const {
         TabletCounters->Simple()[counter].Set(num);
+    }
+
+    void DecCounter(NDataShard::ESimpleCounters counter, ui64 num = 1) const {
+        TabletCounters->Simple()[counter].Sub(num);
+    }
+
+    void IncCounter(NDataShard::ESimpleCounters counter, ui64 num = 1) const {
+        TabletCounters->Simple()[counter].Add(num);
     }
 
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
@@ -1627,24 +1705,28 @@ public:
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
     ui64 GetNextChangeRecordLockOffset(ui64 lockId);
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
-    void PersistCommitLockChangeRecords(TTransactionContext& txc, ui64 order, ui64 lockId, ui64 group, const TRowVersion& rowVersion);
+    bool HasLockChangeRecords(ui64 lockId) const;
+    void CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 group, const TRowVersion& rowVersion, TVector<IDataShardChangeCollector::TChange>& collected);
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId);
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
-    void EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChange>&& records);
-    void AddLockChangeRecords(ui64 lockId, TVector<NMiniKQL::IChangeCollector::TChange>&& records);
-    const TVector<NMiniKQL::IChangeCollector::TChange>& GetLockChangeRecords(ui64 lockId) const;
+    void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records);
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
     void SuspendChangeSender(const TActorContext& ctx);
     const TActorId& GetChangeSender() const { return OutChangeSender; }
-    bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records);
+    bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records);
     bool LoadLockChangeRecords(NIceDb::TNiceDb& db);
-    bool LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records);
+    bool LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records);
     void ScheduleRemoveLockChanges(ui64 lockId);
     void ScheduleRemoveAbandonedLockChanges();
 
+    static void PersistCdcStreamScanLastKey(NIceDb::TNiceDb& db, const TSerializedCellVec& value,
+        const TPathId& tablePathId, const TPathId& streamPathId);
+    static bool LoadCdcStreamScanLastKey(NIceDb::TNiceDb& db, TMaybe<TSerializedCellVec>& result,
+        const TPathId& tablePathId, const TPathId& streamPathId);
+    static void RemoveCdcStreamScanLastKey(NIceDb::TNiceDb& db, const TPathId& tablePathId, const TPathId& streamPathId);
 
     static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op);
     void NotifySchemeshard(const TActorContext& ctx, ui64 txId = 0);
@@ -1662,6 +1744,8 @@ public:
     TVolatileTxManager& GetVolatileTxManager() { return VolatileTxManager; }
     const TVolatileTxManager& GetVolatileTxManager() const { return VolatileTxManager; }
 
+    TCdcStreamScanManager& GetCdcStreamScanManager() { return CdcStreamScanManager; }
+    const TCdcStreamScanManager& GetCdcStreamScanManager() const { return CdcStreamScanManager; }
 
     template <typename... Args>
     bool PromoteCompleteEdge(Args&&... args) {
@@ -2284,6 +2368,7 @@ private:
     TSnapshotManager SnapshotManager;
     TSchemaSnapshotManager SchemaSnapshotManager;
     TVolatileTxManager VolatileTxManager;
+    TCdcStreamScanManager CdcStreamScanManager;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
@@ -2428,7 +2513,7 @@ private:
         {
         }
 
-        explicit TEnqueuedRecord(const NMiniKQL::IChangeCollector::TChange& record)
+        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record)
             : TEnqueuedRecord(record.BodySize, record.TableId,
                     record.SchemaVersion, record.LockId, record.LockOffset)
         {
@@ -2452,6 +2537,11 @@ private:
     TActorId OutChangeSender;
     bool OutChangeSenderSuspended = false;
 
+    struct TUncommittedLockChangeRecords {
+        TVector<IDataShardChangeCollector::TChange> Changes;
+        size_t PersistentCount = 0;
+    };
+
     struct TCommittedLockChangeRecords {
         ui64 Order = Max<ui64>();
         ui64 Group;
@@ -2462,7 +2552,7 @@ private:
         size_t Count = 0;
     };
 
-    THashMap<ui64, TVector<NMiniKQL::IChangeCollector::TChange>> LockChangeRecords; // ui64 is lock id
+    THashMap<ui64, TUncommittedLockChangeRecords> LockChangeRecords; // ui64 is lock id
     THashMap<ui64, TCommittedLockChangeRecords> CommittedLockChangeRecords; // ui64 is lock id
     TVector<ui64> PendingLockChangeRecordsToRemove;
 
@@ -2519,7 +2609,7 @@ public:
         return result;
     }
 
-    void SetLockChangeRecords(THashMap<ui64, TVector<NMiniKQL::IChangeCollector::TChange>>&& lockChangeRecords) {
+    void SetLockChangeRecords(THashMap<ui64, TUncommittedLockChangeRecords>&& lockChangeRecords) {
         LockChangeRecords = std::move(lockChangeRecords);
     }
 
@@ -2648,12 +2738,15 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
+            HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
+            HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
+            HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
             HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-            HFunc(TEvPrivate::TEvSubDomainPathIdFound, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);

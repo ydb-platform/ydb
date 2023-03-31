@@ -63,22 +63,15 @@ namespace NKikimr {
         }
 
         void THullHugeRecoveryLogPos::ParseFromArray(const char* data, size_t size) {
-            Y_UNUSED(size);
             const char *cur = data;
-            ChunkAllocationLsn = *(const ui64 *)cur;
-            cur += sizeof(ui64);
-            ChunkFreeingLsn = *(const ui64 *)cur;
-            cur += sizeof(ui64);
-            HugeBlobLoggedLsn = *(const ui64 *)cur;
-            cur += sizeof(ui64);
-            LogoBlobsDbSlotDelLsn = *(const ui64 *)cur;
-            cur += sizeof(ui64);
-            BlocksDbSlotDelLsn = *(const ui64 *)cur;
-            cur += sizeof(ui64);
-            BarriersDbSlotDelLsn = *(const ui64 *)cur;
-            cur += sizeof(ui64);
-            EntryPointLsn = *(const ui64 *)cur;
-            cur += sizeof(ui64);
+            const char *end = data + size;
+            for (ui64 *var : {&ChunkAllocationLsn, &ChunkFreeingLsn, &HugeBlobLoggedLsn, &LogoBlobsDbSlotDelLsn,
+                    &BlocksDbSlotDelLsn, &BarriersDbSlotDelLsn, &EntryPointLsn}) {
+                Y_VERIFY(static_cast<size_t>(end - cur) >= sizeof(*var));
+                memcpy(var, cur, sizeof(*var));
+                cur += sizeof(*var);
+            }
+            Y_VERIFY(cur == end);
         }
 
         bool THullHugeRecoveryLogPos::CheckEntryPoint(const TString &serialized) {

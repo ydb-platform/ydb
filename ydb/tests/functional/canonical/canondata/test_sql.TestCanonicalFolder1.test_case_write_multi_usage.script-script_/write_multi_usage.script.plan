@@ -64,10 +64,10 @@
                                                         "Limit": "1001"
                                                     },
                                                     {
-                                                        "ReadLimit": "1001",
-                                                        "ReadRanges": [
+                                                        "ReadRange": [
                                                             "Name (-\u221e, +\u221e)"
                                                         ],
+                                                        "ReadLimit": "1001",
                                                         "ReadColumns": [
                                                             "Name",
                                                             "Value"
@@ -118,11 +118,11 @@
                                                         "Limit": "1001"
                                                     },
                                                     {
-                                                        "ReadLimit": "1001",
-                                                        "ReadRanges": [
+                                                        "ReadRange": [
                                                             "Group (-\u221e, +\u221e)",
                                                             "Name (-\u221e, +\u221e)"
                                                         ],
+                                                        "ReadLimit": "1001",
                                                         "ReadColumns": [
                                                             "Amount",
                                                             "Comment",

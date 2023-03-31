@@ -25,77 +25,6 @@ using namespace NKqp;
 using TEvExecuteDataQueryRequest = TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest,
     Ydb::Table::ExecuteDataQueryResponse>;
 
-void SerializeQueryRequest(std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& in, NKikimrKqp::TEvQueryRequest* dst) noexcept {
-    auto req = TEvExecuteDataQueryRequest::GetProtoRequest(in);
-
-    SetAuthToken(*dst, *in.get());
-    SetDatabase(*dst, *in.get());
-
-    dst->MutableRequest()->SetSessionId(req->session_id());
-    dst->MutableRequest()->SetUsePublicResponseDataFormat(true);
-
-    if (auto traceId = in->GetTraceId()) {
-        dst->SetTraceId(traceId.GetRef());
-    }
-
-    if (auto requestType = in->GetRequestType()) {
-        dst->SetRequestType(requestType.GetRef());
-    }
-
-    const auto& operationParams = req->operation_params();
-    const auto& operationTimeout = GetDuration(operationParams.operation_timeout());
-    const auto& cancelAfter = GetDuration(operationParams.cancel_after());
-
-    dst->MutableRequest()->SetCancelAfterMs(cancelAfter.MilliSeconds());
-    dst->MutableRequest()->SetTimeoutMs(operationTimeout.MilliSeconds());
-
-    dst->MutableRequest()->MutableTxControl()->CopyFrom(req->tx_control());
-    dst->MutableRequest()->MutableQueryCachePolicy()->CopyFrom(req->query_cache_policy());
-    dst->MutableRequest()->SetStatsMode(GetKqpStatsMode(req->collect_stats()));
-    dst->MutableRequest()->SetCollectStats(req->collect_stats());
-
-    const auto& query = req->query();
-
-    switch (query.query_case()) {
-        case Query::kYqlText: {
-            dst->MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-            dst->MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-            dst->MutableRequest()->SetQuery(query.yql_text());
-            break;
-        }
-
-        case Query::kId: {
-            dst->MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED);
-            dst->MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_PREPARED_DML);
-
-            TString preparedQueryId;
-            try {
-                preparedQueryId = DecodePreparedQueryId(query.id());
-            } catch (const std::exception& ex) {
-                NYql::TIssues issues;
-                issues.AddIssue(NYql::ExceptionToIssue(ex));
-
-                dst->SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-                NYql::IssuesToMessage(issues, dst->MutableQueryIssues());
-                return;
-            }
-
-            dst->MutableRequest()->SetPreparedQuery(preparedQueryId);
-            break;
-        }
-
-        default: {
-            NYql::TIssues issues;
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected query option"));
-            dst->SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-            NYql::IssuesToMessage(issues, dst->MutableQueryIssues());
-            return;
-        }
-    }
-
-    dst->MutableRequest()->MutableYdbParameters()->insert(req->parameters().begin(), req->parameters().end());
-}
-
 class TExecuteDataQueryRPC : public TRpcKqpRequestActor<TExecuteDataQueryRPC, TEvExecuteDataQueryRequest> {
     using TBase = TRpcKqpRequestActor<TExecuteDataQueryRPC, TEvExecuteDataQueryRequest>;
 
@@ -153,6 +82,10 @@ public:
         }
 
         auto& query = req->query();
+        TString yqlText;
+        TString queryId;
+        NKikimrKqp::EQueryAction queryAction;
+        NKikimrKqp::EQueryType queryType;
 
         switch (query.query_case()) {
             case Query::kYqlText: {
@@ -160,6 +93,9 @@ public:
                 if (!CheckQuery(query.yql_text(), issues)) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
                 }
+                queryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
+                queryType = NKikimrKqp::QUERY_TYPE_SQL_DML;
+                yqlText = query.yql_text();
                 break;
             }
 
@@ -169,6 +105,18 @@ public:
                     issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty query id"));
                     return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
                 }
+
+                try {
+                    queryId = DecodePreparedQueryId(query.id());
+                } catch (const std::exception& ex) {
+                    NYql::TIssues issues;
+                    issues.AddIssue(NYql::ExceptionToIssue(ex));
+                    return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
+                    return;
+                }
+
+                queryAction = NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
+                queryType = NKikimrKqp::QUERY_TYPE_PREPARED_DML;
                 break;
             }
 
@@ -179,8 +127,19 @@ public:
             }
         }
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(Request_, SerializeQueryRequest, SelfId());
-        ev->PrepareRemote();
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+            Request_,
+            req->session_id(),
+            SelfId(),
+            std::move(yqlText),
+            std::move(queryId),
+            queryAction,
+            queryType,
+            &req->tx_control(),
+            &req->parameters(),
+            req->collect_stats(),
+            req->has_query_cache_policy() ? &req->query_cache_policy() : nullptr,
+            req->has_operation_params() ? &req->operation_params() : nullptr);
 
         ReportCostInfo_ = req->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
 

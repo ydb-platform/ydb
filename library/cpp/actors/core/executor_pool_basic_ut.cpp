@@ -339,7 +339,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PreemptedEvents, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].NonDeliveredEvents, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EmptyMailboxActivation, 0);
-        //UNIT_ASSERT_VALUES_EQUAL(stats[0].CpuNs, 0); // depends on total duration of test, so undefined
+        //UNIT_ASSERT_VALUES_EQUAL(stats[0].CpuUs, 0); // depends on total duration of test, so undefined
         UNIT_ASSERT(stats[0].ElapsedTicks > 0);
         UNIT_ASSERT(stats[0].ParkedTicks > 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].BlockedTicks, 0);

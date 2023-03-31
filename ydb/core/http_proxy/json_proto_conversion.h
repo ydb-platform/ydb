@@ -8,6 +8,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
+#include <ydb/library/http_proxy/error/error.h>
 
 #include <nlohmann/json.hpp>
 
@@ -128,11 +129,20 @@ inline void ProtoToJson(const NProtoBuf::Message& resp, NJson::TJsonValue& value
 
 void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* message, ui32 depth = 0) {
     Y_ENSURE(depth < 101, "Json depth is > 100");
-    Y_ENSURE(jsonValue.IsMap(), "Top level of json value is not a map");
+    Y_ENSURE_EX(
+        !jsonValue.IsNull(),
+        NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MISSING_PARAMETER) <<
+            "Top level of json value is not a map"
+    );
     auto* desc = message->GetDescriptor();
     auto* reflection = message->GetReflection();
     for (const auto& [key, value] : jsonValue.GetMap()) {
         auto* fieldDescriptor = desc->FindFieldByName(NNaming::CamelToSnakeCase(key));
+        Y_ENSURE_EX(
+            fieldDescriptor,
+            NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::INVALID_QUERY_PARAMETER) <<
+            "Unexpected json key: " << key
+        );
         Y_ENSURE(fieldDescriptor, "Unexpected json key: " + key);
         auto transformer = Ydb::DataStreams::V1::TRANSFORM_NONE;
         if (fieldDescriptor->options().HasExtension(Ydb::DataStreams::V1::FieldTransformer)) {
@@ -282,7 +292,11 @@ void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* message
 
 inline void NlohmannJsonToProto(const nlohmann::json& jsonValue, NProtoBuf::Message* message, ui32 depth = 0) {
     Y_ENSURE(depth < 101, "Json depth is > 100");
-    Y_ENSURE(jsonValue.is_object(), "Top level of json value is not a map");
+    Y_ENSURE_EX(
+        !jsonValue.is_null(),
+        NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MISSING_PARAMETER) <<
+            "Top level of json value is not a map"
+    );
     auto* desc = message->GetDescriptor();
     auto* reflection = message->GetReflection();
     for (const auto& [key, value] : jsonValue.get<std::unordered_map<std::string, nlohmann::json>>()) {

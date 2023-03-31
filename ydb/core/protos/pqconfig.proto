@@ -18,6 +18,7 @@ option java_package = "ru.yandex.kikimr.proto";
 message TPartitionMeta {
     optional uint64 StartOffset = 1;
     optional uint64 EndOffset = 2;
+    optional bool SubDomainOutOfSpace = 3 [default = false];
 }
 
 message TPartitionTxMeta {
@@ -173,10 +174,14 @@ message TPQConfig {
         optional bool LBFrontEnabled = 3 [default = true];
         optional bool UseLbAccountAlias = 4 [default = true];
         optional string LbUserDatabaseRoot = 5 [default = ""];
+        optional bool UseDynNodesMapping = 6 [default = false];
+        optional uint64 NodesMappingRescanIntervalMilliSeconds = 7 [default = 10000];
     }
     optional TPQDiscoveryConfig PQDiscoveryConfig = 46;
 
     optional uint32 MaxStorageNodePort = 50 [default = 19001];
+    optional uint32 MaxStorageNodeId = 53 [default = 999];
+
 
     message TMoveTopicActorConfig {
         repeated string AllowedUserSIDs = 1;
@@ -184,6 +189,8 @@ message TPQConfig {
 
     optional TMoveTopicActorConfig MoveTopicActorConfig = 51;
 
+    optional uint64 BalancerWakeupIntervalSec = 54 [default = 30];
+    optional uint64 BalancerStatsWakeupIntervalSec = 55 [default = 5];
 }
 
 message TChannelProfile {
@@ -384,6 +391,7 @@ message TUpdateBalancerConfig { //for schemeshard use only
     }
 
     repeated TTablet Tablets = 10;
+    optional uint64 SubDomainPathId = 13;
 }
 
 message TDescribe {
@@ -672,6 +680,8 @@ message TStatusResponse {
         repeated TErrorMessage Errors = 29;
 
         repeated TConsumerResult ConsumerResult = 30;
+
+        optional int64 UsedReserveSize = 31;
     }
 
     message TConsumerResult {
@@ -824,4 +834,20 @@ message TEvProposeTransactionResult {
 
 message TEvCancelTransactionProposal {
     required uint64 TxId = 1;
+};
+
+message TEvPeriodicTopicStats {
+    required uint64 PathId = 1;
+
+    required uint64 Generation = 2;
+    required uint64 Round = 3;
+
+    required uint64 DataSize = 4;
+    required uint64 UsedReserveSize = 5;
+
+    optional bool SubDomainOutOfSpace = 6;
+};
+
+message TEvSubDomainStatus {
+    required bool SubDomainOutOfSpace = 1;
 };

@@ -294,17 +294,11 @@ void TKqpCountersBase::ReportCloseSession(ui64 requestSize) {
     *YdbRequestBytes += requestSize;
 }
 
-void TKqpCountersBase::ReportQueryRequest(const NKikimrKqp::TQueryRequest& request) {
-    ReportQueryAction(request.GetAction());
-    ReportQueryType(request.GetType());
-
-    auto requestBytes = request.ByteSize();
-    auto parametersBytes = request.GetParameters().ByteSize();
-
+void TKqpCountersBase::ReportQueryRequest(ui64 requestBytes, ui64 parametersBytes, ui64 queryBytes) {
     *RequestBytes += requestBytes;
     *YdbRequestBytes += requestBytes;
 
-    *QueryBytes += request.GetQuery().size();
+    *QueryBytes += queryBytes;
 
     *ParametersBytes += parametersBytes;
     *YdbParametersBytes += parametersBytes;
@@ -770,6 +764,19 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     ScanQueryRateLimitLatency = KqpGroup->GetHistogram(
         "ScanQuery/RateLimitLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
 
+    /* iterator reads */
+    IteratorsShardResolve = KqpGroup->GetCounter("IteratorReads/ShardResolves", true);
+    IteratorsReadSplits = KqpGroup->GetCounter("IteratorReads/ReadSplits", true);
+    SentIteratorAcks = KqpGroup->GetCounter("IteratorReads/SentAcks", true);
+    SentIteratorCancels = KqpGroup->GetCounter("IteratorReads/SentCancels", true);
+    CreatedIterators = KqpGroup->GetCounter("IteratorReads/Created", true);
+    ReadActorsCount = KqpGroup->GetCounter("IteratorReads/ReadActorCount", false);
+    StreamLookupActorsCount = KqpGroup->GetCounter("IteratorReads/StreamLookupActorCount", false);
+    ReadActorRetries = KqpGroup->GetCounter("IteratorReads/Retries", true);
+    DataShardIteratorFails = KqpGroup->GetCounter("IteratorReads/DatashardFails", true);
+    DataShardIteratorMessages = KqpGroup->GetCounter("IteratorReads/DatashardMessages", true);
+    IteratorDeliveryProblems = KqpGroup->GetCounter("IteratorReads/DeliveryProblems", true);
+
     LiteralTxTotalTimeHistogram = KqpGroup->GetHistogram(
         "PhyTx/LiteralTxTotalTimeMs", NMonitoring::ExponentialHistogram(10, 2, 1));
     DataTxTotalTimeHistogram = KqpGroup->GetHistogram(
@@ -830,10 +837,24 @@ void TKqpCounters::ReportCloseSession(TKqpDbCountersPtr dbCounters, ui64 request
     }
 }
 
-void TKqpCounters::ReportQueryRequest(TKqpDbCountersPtr dbCounters, const NKikimrKqp::TQueryRequest& request) {
-    TKqpCountersBase::ReportQueryRequest(request);
+void TKqpCounters::ReportQueryAction(TKqpDbCountersPtr dbCounters, NKikimrKqp::EQueryAction action) {
+    TKqpCountersBase::ReportQueryAction(action);
     if (dbCounters) {
-        dbCounters->ReportQueryRequest(request);
+        dbCounters->ReportQueryAction(action);
+    }
+}
+
+void TKqpCounters::ReportQueryType(TKqpDbCountersPtr dbCounters, NKikimrKqp::EQueryType type) {
+    TKqpCountersBase::ReportQueryType(type);
+    if (dbCounters) {
+        dbCounters->ReportQueryType(type);
+    }
+}
+
+void TKqpCounters::ReportQueryRequest(TKqpDbCountersPtr dbCounters, ui64 requestBytes, ui64 parametersBytes, ui64 queryBytes) {
+    TKqpCountersBase::ReportQueryRequest(requestBytes, parametersBytes, queryBytes);
+    if (dbCounters) {
+        dbCounters->ReportQueryRequest(requestBytes, parametersBytes, queryBytes);
     }
 }
 

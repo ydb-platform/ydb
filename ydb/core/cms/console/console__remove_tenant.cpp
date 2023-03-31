@@ -102,7 +102,7 @@ public:
                                               Ydb::StatusIds::ABORTED, ctx);
 
             Self->ChangeTenantState(Tenant, TTenant::REMOVING_SUBDOMAIN, ctx);
-            Tenant->UserToken = Request->Get()->Record.GetUserToken();
+            Tenant->UserToken = NACLib::TUserToken(Request->Get()->Record.GetUserToken());
             Tenant->Worker = TActorId();
 
             Self->ProcessTenantActions(Tenant, ctx);

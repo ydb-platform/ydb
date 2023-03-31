@@ -95,6 +95,50 @@ size_t TAllocState::GetDeallocatedInPages() const {
     return deallocated;
 }
 
+void TAllocState::LockObject(::NKikimr::NUdf::TUnboxedValuePod value) {
+    if (!UseRefLocking) {
+        return;
+    }
+
+    void* obj;
+    if (value.IsString()) {
+       obj = value.AsStringRef().Data();
+    } else if (value.IsBoxed()) {
+       obj = value.AsBoxed().Get();
+    } else {
+       return;
+    }
+
+    auto [it, isNew] = LockedObjectsRefs.emplace(obj, TLockInfo{ 0, 0 });
+    if (isNew) {
+        it->second.OriginalRefs = value.LockRef();
+    }
+
+    ++it->second.Locks;
+}
+
+void TAllocState::UnlockObject(::NKikimr::NUdf::TUnboxedValuePod value) {
+    if (!UseRefLocking) {
+        return;
+    }
+
+    void* obj;
+    if (value.IsString()) {
+       obj = value.AsStringRef().Data();
+    } else if (value.IsBoxed()) {
+       obj = value.AsBoxed().Get();
+    } else {
+       return;
+    }
+
+    auto it = LockedObjectsRefs.find(obj);
+    Y_VERIFY(it != LockedObjectsRefs.end());
+    if (--it->second.Locks == 0) {
+       value.UnlockRef(it->second.OriginalRefs);
+       LockedObjectsRefs.erase(it);
+    }
+}
+
 void TScopedAlloc::Acquire() {
     if (!AttachedCount_) {
         PrevState_ = TlsAllocState;

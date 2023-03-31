@@ -909,6 +909,8 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
         } else if (page == "InternalTables") {
             const TString table = cgi.Has("table") ? cgi.Get("table") : "pdisks";
             RenderInternalTables(str, table);
+        } else if (page == "VirtualGroups") {
+            RenderVirtualGroups(str);
         } else if (page == "StopGivingGroups") {
             StopGivingGroups = true;
             str << "OK";
@@ -960,6 +962,7 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
         (SelfHealEnable ? "enabled" : "disabled") << ")<br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
+    out << "<a href='app?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
 
     HTML(out) {
@@ -1157,6 +1160,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         TABLEH() { out << "LifeStage"; }
                         TABLEH() { out << "Kind"; }
                         TABLEH() { out << "PDiskType"; }
+                        TABLEH() { out << "Path"; }
                     }
                 }
                 TABLEBODY() {
@@ -1169,6 +1173,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                             TABLED() { out << info->LifeStage; }
                             TABLED() { out << info->Kind; }
                             TABLED() { out << info->PDiskType; }
+                            TABLED() { out << PrintMaybe(info->Path); }
                         }
                     }
                 }
@@ -1191,7 +1196,7 @@ void TBlobStorageController::RenderGroupDetail(IOutputStream &out, TGroupId grou
                 std::vector<const TVSlotInfo*> donors;
                 for (const TVSlotInfo *slot : group->VDisksInGroup) {
                     RenderVSlotRow(out, *slot);
-                    for (const auto& [vslotId, vdiskId] : slot->Donors) {
+                    for (const TVSlotId& vslotId : slot->Donors) {
                         if (const auto *x = FindVSlot(vslotId)) {
                             donors.push_back(x);
                         }
@@ -1286,17 +1291,16 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
                 }
             }
             TABLED() {
-                if (vslot.AcceptorVSlotId != TVSlotId()) {
-                    if (const auto *x = FindVSlot(vslot.AcceptorVSlotId)) {
-                        out << "<strong>donor for <a href='#" << x->GetVDiskId() << "'>" << vslot.AcceptorVSlotId << "</a></strong>";
-                    } else {
-                        out << "?";
-                    }
+                if (vslot.Mood == TMood::Donor) {
+                    const auto *x = FindAcceptor(vslot);
+                    out << "<strong>donor for <a href='#" << x->GetVDiskId() << "'>" << x->VSlotId << "</a></strong>";
                 } else {
                     bool first = true;
-                    for (const auto& [vslotId, vdiskId] : vslot.Donors) {
+                    for (const TVSlotId& donorVSlotId : vslot.Donors) {
                         out << (std::exchange(first, false) ? "" : "<br/>");
-                        out << "<a href='#" << vdiskId.ToString() << "'>" << vdiskId << "</a> at " << vslotId;
+                        const TVSlotInfo *donor = FindVSlot(donorVSlotId);
+                        const TVDiskID vdiskId = donor->GetVDiskId();
+                        out << "<a href='#" << vdiskId.ToString() << "'>" << vdiskId << "</a> at " << donorVSlotId;
                     }
                 }
             }

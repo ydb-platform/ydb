@@ -84,8 +84,8 @@ namespace NKikimr {
             VDiskIncarnationGuid = g;
         }
 
-        TVDiskIncarnationGuid GetVDiskIncarnationGuid() const {
-            Y_VERIFY_DEBUG(VDiskIncarnationGuidSet);
+        TVDiskIncarnationGuid GetVDiskIncarnationGuid(bool allowUnset = false) const {
+            Y_VERIFY_DEBUG(VDiskIncarnationGuidSet || allowUnset);
             return VDiskIncarnationGuid;
         }
 

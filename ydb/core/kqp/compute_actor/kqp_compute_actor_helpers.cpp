@@ -25,37 +25,4 @@ bool FindSchemeErrorInIssues(const Ydb::StatusIds::StatusCode& status, const NYq
     return schemeError;
 }
 
-void FillTaskInputStats(const NYql::NDqProto::TDqTask& task, NYql::NDqProto::TDqTaskStats& taskStats) {
-    THashMap<ui32, TString> inputTables;
-
-    for (ui32 inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
-        const auto& taskInput = task.GetInputs(inputIndex);
-        if (taskInput.HasTransform()) {
-            const auto& transform = taskInput.GetTransform();
-            YQL_ENSURE(transform.GetType() == "StreamLookupInputTransformer",
-                "Unexpected input transform type: " << transform.GetType());
-
-            const google::protobuf::Any &settingsAny = transform.GetSettings();
-            YQL_ENSURE(settingsAny.Is<NKikimrKqp::TKqpStreamLookupSettings>(), "Expected settings type: "
-                << NKikimrKqp::TKqpStreamLookupSettings::descriptor()->full_name()
-                << " , but got: " << settingsAny.type_url());
-
-            NKikimrKqp::TKqpStreamLookupSettings settings;
-            YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings");
-
-            inputTables.insert({inputIndex, settings.GetTable().GetPath()});
-        }
-    }
-
-    for (const auto& transformerStats : taskStats.GetInputTransforms()) {
-        auto tableIt = inputTables.find(transformerStats.GetInputIndex());
-        YQL_ENSURE(tableIt != inputTables.end());
-
-        auto* tableStats = taskStats.AddTables();
-        tableStats->SetTablePath(tableIt->second);
-        tableStats->SetReadRows(transformerStats.GetRowsOut());
-        tableStats->SetReadBytes(transformerStats.GetBytes());
-    }
-}
-
 } // namespace NKikimr::NKqp::NComputeActor

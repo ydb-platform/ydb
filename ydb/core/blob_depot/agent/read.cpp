@@ -2,27 +2,48 @@
 
 namespace NKikimr::NBlobDepot {
 
-    struct TBlobDepotAgent::TReadContext : TRequestContext {
-        TQuery *Query;
-        const ui64 Tag;
+    struct TBlobDepotAgent::TQuery::TReadContext
+        : TRequestContext
+        , std::enable_shared_from_this<TReadContext>
+    {
+        TReadArg ReadArg;
         const ui64 Size;
         TString Buffer;
         bool Terminated = false;
+        bool StopProcessingParts = false;
         ui32 NumPartsPending = 0;
+        TLogoBlobID BlobWithoutData;
 
-        TReadContext(TQuery *query, ui64 tag, ui64 size)
-            : Query(query)
-            , Tag(tag)
+        TReadContext(TReadArg&& readArg, ui64 size)
+            : ReadArg(std::move(readArg))
             , Size(size)
         {}
 
-        void EndWithError(NKikimrProto::EReplyStatus status, TString errorReason) {
-            Query->OnRead(Tag, status, errorReason);
+        void Abort() {
             Terminated = true;
         }
 
-        void EndWithSuccess() {
-            Query->OnRead(Tag, NKikimrProto::OK, std::move(Buffer));
+        void EndWithSuccess(TQuery *query) {
+            Y_VERIFY(!Terminated);
+            query->OnRead(ReadArg.Tag, NKikimrProto::OK, std::move(Buffer));
+            Abort();
+        }
+
+        void EndWithError(TQuery *query, NKikimrProto::EReplyStatus status, TString errorReason) {
+            Y_VERIFY(!Terminated);
+            Y_VERIFY(status != NKikimrProto::NODATA && status != NKikimrProto::OK);
+            query->OnRead(ReadArg.Tag, status, errorReason);
+            Abort();
+        }
+
+        void EndWithNoData(TQuery *query) {
+            Y_VERIFY(!Terminated);
+            query->OnRead(ReadArg.Tag, NKikimrProto::NODATA, {});
+            Abort();
+        }
+
+        ui64 GetTag() const {
+            return ReadArg.Tag;
         }
 
         struct TPartContext : TRequestContext {
@@ -35,7 +56,11 @@ namespace NKikimr::NBlobDepot {
         };
     };
 
-    bool TBlobDepotAgent::IssueRead(const TReadArg& arg, TString& error) {
+    bool TBlobDepotAgent::TQuery::IssueRead(TReadArg&& arg, TString& error) {
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA34, "IssueRead", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
+            (ReadId, arg.Tag), (Key, Agent.PrettyKey(arg.Key)), (Offset, arg.Offset), (Size, arg.Size),
+            (Value, arg.Value));
+
         ui64 outputOffset = 0;
 
         struct TReadItem {
@@ -50,16 +75,17 @@ namespace NKikimr::NBlobDepot {
         ui64 offset = arg.Offset;
         ui64 size = arg.Size;
 
-        for (const auto& value : arg.Values) {
-            const ui32 groupId = value.GetGroupId();
-            const auto blobId = LogoBlobIDFromLogoBlobID(value.GetBlobId());
-            const ui64 begin = value.GetSubrangeBegin();
-            const ui64 end = value.HasSubrangeEnd() ? value.GetSubrangeEnd() : blobId.BlobSize();
+        for (const auto& value : arg.Value.Chain) {
+            const ui32 groupId = value.GroupId;
+            const auto& blobId = value.BlobId;
+            const ui32 begin = value.SubrangeBegin;
+            const ui32 end = value.SubrangeEnd;
 
             if (end <= begin || blobId.BlobSize() < end) {
                 error = "incorrect SubrangeBegin/SubrangeEnd pair";
-                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA24, error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
-                    (Values, FormatList(arg.Values)));
+                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA24, error, (AgentId, Agent.LogId), (QueryId, GetQueryId()),
+                    (ReadId, arg.Tag), (Key, Agent.PrettyKey(arg.Key)), (Offset, arg.Offset), (Size, arg.Size),
+                    (Value, arg.Value));
                 return false;
             }
 
@@ -90,14 +116,15 @@ namespace NKikimr::NBlobDepot {
 
         if (size) {
             error = "incorrect offset/size provided";
-            STLOG(PRI_ERROR, BLOB_DEPOT_AGENT, BDA25, error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
-                (Offset, arg.Offset), (Size, arg.Size), (Values, FormatList(arg.Values)));
+            STLOG(PRI_ERROR, BLOB_DEPOT_AGENT, BDA25, error, (AgentId, Agent.LogId), (QueryId, GetQueryId()),
+                (ReadId, arg.Tag), (Key, Agent.PrettyKey(arg.Key)), (Offset, arg.Offset), (Size, arg.Size),
+                (Value, arg.Value));
             return false;
         }
 
-        auto context = std::make_shared<TReadContext>(arg.Query, arg.Tag, outputOffset);
+        auto context = std::make_shared<TReadContext>(std::move(arg), outputOffset);
         if (!outputOffset) {
-            context->EndWithSuccess();
+            context->EndWithSuccess(this);
             return true;
         }
 
@@ -106,6 +133,7 @@ namespace NKikimr::NBlobDepot {
             TEvBlobStorage::TEvGet::TQuery query;
             query.Set(item.Id, item.Offset, item.Size);
             queriesPerGroup[item.GroupId].emplace_back(item.OutputOffset, query);
+            Agent.BytesRead += item.Size;
         }
 
         for (const auto& [groupId, queries] : queriesPerGroup) {
@@ -118,9 +146,11 @@ namespace NKikimr::NBlobDepot {
                 partContext->Offsets.push_back(outputOffset);
             }
 
-            auto event = std::make_unique<TEvBlobStorage::TEvGet>(q, sz, TInstant::Max(), arg.GetHandleClass, arg.MustRestoreFirst);
-            event->ReaderTabletData = arg.ReaderTabletData;
-            SendToProxy(groupId, std::move(event), arg.Query, std::move(partContext));
+            auto event = std::make_unique<TEvBlobStorage::TEvGet>(q, sz, TInstant::Max(), context->ReadArg.GetHandleClass);
+            event->ReaderTabletData = context->ReadArg.ReaderTabletData;
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA39, "issuing TEvGet", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
+                (ReadId, context->GetTag()), (Key, Agent.PrettyKey(context->ReadArg.Key)), (GroupId, groupId), (Msg, *event));
+            Agent.SendToProxy(groupId, std::move(event), this, std::move(partContext));
             ++context->NumPartsPending;
         }
 
@@ -129,43 +159,87 @@ namespace NKikimr::NBlobDepot {
         return true;
     }
 
-    void TBlobDepotAgent::HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg) {
+    void TBlobDepotAgent::TQuery::HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg) {
         auto& partContext = context->Obtain<TReadContext::TPartContext>();
         auto& readContext = *partContext.Read;
-        if (readContext.Terminated) {
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA41, "HandleGetResult", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
+            (ReadId, readContext.GetTag()), (Key, Agent.PrettyKey(readContext.ReadArg.Key)), (Msg, msg),
+            (Terminated, readContext.Terminated));
+        if (readContext.Terminated || readContext.StopProcessingParts) {
             return; // just ignore this read
         }
 
-        if (msg.Status != NKikimrProto::OK) {
-            readContext.EndWithError(msg.Status, std::move(msg.ErrorReason));
+        Y_VERIFY(msg.ResponseSz == partContext.Offsets.size());
+
+        for (ui32 i = 0; i < msg.ResponseSz; ++i) {
+            auto& blob = msg.Responses[i];
+            if (blob.Status == NKikimrProto::NODATA) {
+                NKikimrBlobDepot::TEvResolve resolve;
+                auto *item = resolve.AddItems();
+                item->SetExactKey(readContext.ReadArg.Key);
+                item->SetMustRestoreFirst(readContext.ReadArg.MustRestoreFirst);
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA48, "issuing extra resolve", (Agent, Agent.LogId), (QueryId, GetQueryId()),
+                    (ReadId, readContext.GetTag()), (Key, Agent.PrettyKey(readContext.ReadArg.Key)), (Msg, resolve));
+                Agent.Issue(std::move(resolve), this, readContext.shared_from_this());
+                readContext.StopProcessingParts = true;
+                readContext.BlobWithoutData = blob.Id;
+                return;
+            } else if (blob.Status != NKikimrProto::OK) {
+                return readContext.EndWithError(this, blob.Status, TStringBuilder() << "failed to read BlobId# " << blob.Id);
+            }
+
+            auto& buffer = readContext.Buffer;
+            const ui64 offset = partContext.Offsets[i];
+
+            Y_VERIFY(offset < readContext.Size && blob.Buffer.size() <= readContext.Size - offset);
+
+            if (!buffer && !offset) {
+                buffer = std::move(blob.Buffer);
+                buffer.resize(readContext.Size);
+            } else {
+                if (!buffer) {
+                    buffer = TString::Uninitialized(readContext.Size);
+                }
+                memcpy(buffer.Detach() + offset, blob.Buffer.data(), blob.Buffer.size());
+            }
+        }
+
+        if (!--readContext.NumPartsPending) {
+            readContext.EndWithSuccess(this);
+        }
+    }
+
+    void TBlobDepotAgent::TQuery::HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg) {
+        auto& readContext = context->Obtain<TReadContext>();
+        if (readContext.Terminated) {
+            return;
+        }
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA42, "HandleResolveResult", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
+            (ReadId, readContext.GetTag()), (Key, Agent.PrettyKey(readContext.ReadArg.Key)), (Msg, msg.Record));
+        if (msg.Record.GetStatus() != NKikimrProto::OK) {
+            readContext.EndWithError(this, msg.Record.GetStatus(), msg.Record.GetErrorReason());
+        } else if (msg.Record.ResolvedKeysSize() == 1) {
+            const auto& item = msg.Record.GetResolvedKeys(0);
+            if (TResolvedValue value(item); value.Supersedes(readContext.ReadArg.Value)) { // value chain has changed, we have to try again
+                readContext.ReadArg.Value = std::move(value);
+                TString error;
+                if (!IssueRead(std::move(readContext.ReadArg), error)) {
+                    readContext.EndWithError(this, NKikimrProto::ERROR, TStringBuilder() << "failed to restart read Error# " << error);
+                }
+            } else if (!item.GetReliablyWritten()) { // this was unassimilated value and we got NODATA for it
+                readContext.EndWithNoData(this);
+            } else {
+                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA40, "failed to read blob: data seems to be lost", (AgentId, Agent.LogId),
+                    (QueryId, GetQueryId()), (ReadId, readContext.GetTag()), (Key, Agent.PrettyKey(readContext.ReadArg.Key)),
+                    (BlobId, readContext.BlobWithoutData));
+                Y_VERIFY_DEBUG_S(false, "data seems to be lost AgentId# " << Agent.LogId << " QueryId# " << GetQueryId()
+                    << " ReadId# " << readContext.GetTag() << " BlobId# " << readContext.BlobWithoutData);
+                readContext.EndWithError(this, NKikimrProto::ERROR, TStringBuilder() << "failed to read BlobId# "
+                    << readContext.BlobWithoutData << ": data seems to be lost");
+            }
         } else {
-            Y_VERIFY(msg.ResponseSz == partContext.Offsets.size());
-
-            for (ui32 i = 0; i < msg.ResponseSz; ++i) {
-                auto& blob = msg.Responses[i];
-                if (blob.Status != NKikimrProto::OK) {
-                    return readContext.EndWithError(blob.Status, TStringBuilder() << "failed to read BlobId# " << blob.Id);
-                }
-
-                auto& buffer = readContext.Buffer;
-                const ui64 offset = partContext.Offsets[i];
-
-                Y_VERIFY(offset < readContext.Size && blob.Buffer.size() <= readContext.Size - offset);
-
-                if (!buffer && !offset) {
-                    buffer = std::move(blob.Buffer);
-                    buffer.resize(readContext.Size);
-                } else {
-                    if (!buffer) {
-                        buffer = TString::Uninitialized(readContext.Size);
-                    }
-                    memcpy(buffer.Detach() + offset, blob.Buffer.data(), blob.Buffer.size());
-                }
-            }
-
-            if (!--readContext.NumPartsPending) {
-                readContext.EndWithSuccess();
-            }
+            Y_VERIFY(!msg.Record.ResolvedKeysSize());
+            readContext.EndWithNoData(this);
         }
     }
 

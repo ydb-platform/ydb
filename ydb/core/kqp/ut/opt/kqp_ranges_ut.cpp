@@ -502,7 +502,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(UpdateWhereInNoFullScan) {
-        TKikimrRunner kikimr;
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -512,7 +513,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
         {
             NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT(result.IsSuccess());
@@ -707,14 +708,15 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(DateKeyPredicate) {
-        TKikimrRunner kikimr;
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         CreateSampleTables(session);
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT Value FROM `/Root/TestDate`
             WHERE Key = Date("2019-07-01")
@@ -726,10 +728,13 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
+
+        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
+        }
     }
 
     Y_UNIT_TEST(DuplicateKeyPredicateLiteral) {
@@ -892,7 +897,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(DeleteNotFullScan) {
-        TKikimrRunner kikimr;
+        TKikimrSettings serverSettings;
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -904,10 +910,12 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         )");
 
         NYdb::NTable::TExecDataQuerySettings settings;
-        settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        Cerr << result.GetQueryPlan() << Endl;
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
@@ -928,14 +936,15 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(LiteralOr) {
-        TKikimrRunner kikimr;
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         CreateSampleTables(session);
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/EightShard`
             WHERE Key = 101 OR Key = 302 OR Key = 403 OR Key = 705
@@ -950,10 +959,13 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 4);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 4);
+
+        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 4);
+        }
     }
 
     Y_UNIT_TEST(LiteralOrCompisite) {

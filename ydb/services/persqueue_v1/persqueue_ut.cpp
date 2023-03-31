@@ -660,7 +660,444 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kUpdateTokenResponse, resp);
         }
+
+        // write and read some more
+        {
+            auto writer = CreateSimpleWriter(*driver, "acc/topic1", "source");
+            for (int i = 17; i < 37; ++i) {
+                bool res = writer->Write("valuevaluevalue" + ToString(i), i);
+                UNIT_ASSERT(res);
+            }
+            bool res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_read_request()->set_bytes_size(1_MB);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+        // expect answer to read
+        resp.Clear();
+        UNIT_ASSERT(readStream->Read(&resp));
+        Cerr << "Got response " << resp << "\n";
+        UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
     }
+
+
+    Y_UNIT_TEST(StreamReadManyUpdateTokenAndRead) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+        MAKE_INSECURE_STUB(Ydb::Topic::V1::TopicService);
+        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });
+        server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
+        server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
+
+        auto readStream = StubP_->StreamRead(&rcontext);
+        UNIT_ASSERT(readStream);
+
+        // init read session
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_path("acc/topic1");
+
+            req.mutable_init_request()->set_consumer("user");
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+            // send some reads
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(2_KB);
+            // for (ui32 i = 0; i < 10; ++i) {
+                if (!readStream->Write(req)) {
+                    ythrow yexception() << "write fail";
+                }
+            // }
+        }
+
+        // await and confirm CreatePartitionStreamRequest from server
+        i64 assignId = 0;
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            //lock partition
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "acc/topic1");
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
+
+            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+            req.Clear();
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+        // write to partition in 1 session
+        auto driver = pqClient->GetDriver();
+        {
+            auto writer = CreateSimpleWriter(*driver, "acc/topic1", "source", /*partitionGroup=*/{}, /*codec=*/{"raw"});
+            for (int i = 1; i < 1000; ++i) {
+                bool res = writer->Write(TString(2_KB, 'x'), i);
+                UNIT_ASSERT(res);
+            }
+            bool res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        //check read results
+        Ydb::Topic::StreamReadMessage::FromClient req;
+        Ydb::Topic::StreamReadMessage::FromServer resp;
+
+        for (ui32 i = 0; i < 10; ++i) {
+            resp.Clear();
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Expect ReadResponse, got " << resp << "\n";
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+
+            // send update token request, await response
+            const TString token = TString("test_user_" + ToString(i) + "@") + BUILTIN_ACL_DOMAIN;;
+            req.Clear();
+            resp.Clear();
+            req.mutable_update_token_request()->set_token(token);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Expect UpdateTokenResponse, got response: " << resp.ShortDebugString() << Endl;
+
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kUpdateTokenResponse, resp);
+
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(2208);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TopicServiceCommitOffset) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+        MAKE_INSECURE_STUB(Ydb::Topic::V1::TopicService);
+        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });
+        server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
+        server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
+        server.EnablePQLogs({ NKikimrServices::PERSQUEUE }, NLog::EPriority::PRI_DEBUG);
+
+        auto driver = pqClient->GetDriver();
+        {
+            auto writer = CreateSimpleWriter(*driver, "acc/topic1", "source");
+            for (int i = 1; i < 17; ++i) {
+                bool res = writer->Write("valuevaluevalue" + ToString(i), i);
+                UNIT_ASSERT(res);
+            }
+            bool res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+
+        grpc::ClientContext readContext;
+        auto readStream = TopicStubP_ -> StreamRead(&readContext);
+        UNIT_ASSERT(readStream);
+
+        i64 assignId = 0;
+        // init read session
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_path("acc/topic1");
+
+            req.mutable_init_request()->set_consumer("user");
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+
+            req.Clear();
+            // await and confirm StartPartitionSessionRequest from server
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "acc/topic1");
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
+            UNIT_ASSERT(resp.start_partition_session_request().committed_offset() == 0);
+
+            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+            req.Clear();
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+
+            req.mutable_start_partition_session_response()->set_read_offset(0);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            //send some reads
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(1);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            resp.Clear();
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "Got read response " << resp << "\n";
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+            UNIT_ASSERT(resp.read_response().partition_data_size() == 1);
+            UNIT_ASSERT(resp.read_response().partition_data(0).batches_size() == 1);
+            UNIT_ASSERT(resp.read_response().partition_data(0).batches(0).message_data_size() >= 1);
+        }
+
+        // commit offset
+        {
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("acc/topic1");
+            req.set_consumer("user");
+            req.set_offset(5);
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+
+
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_read_request()->set_bytes_size(10000);
+
+            // auto commit = req.mutable_commit_offset_request()->add_commit_offsets();
+            // commit->set_partition_session_id(assignId);
+
+            // auto offsets = commit->add_offsets();
+            // offsets->set_start(0);
+            // offsets->set_end(7);
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "=== Got response (expect session expired): " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(resp.status(), Ydb::StatusIds::SESSION_EXPIRED);
+        }
+    }
+
+    Y_UNIT_TEST(TopicServiceCommitOffsetBadOffsets) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+        MAKE_INSECURE_STUB(Ydb::Topic::V1::TopicService);
+        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });
+        server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
+        server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
+        server.EnablePQLogs({ NKikimrServices::PERSQUEUE }, NLog::EPriority::PRI_DEBUG);
+
+        auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+
+        {
+            Ydb::Topic::CreateTopicRequest request;
+            Ydb::Topic::CreateTopicResponse response;
+            request.set_path(TStringBuilder() << "/Root/PQ/rt3.dc1--acc--topic2");
+
+            request.set_retention_storage_mb(1);
+
+            request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
+            request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_GZIP);
+
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->CreateTopic(&rcontext, request, &response);
+
+            UNIT_ASSERT(status.ok());
+            Ydb::Topic::CreateTopicResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << response << "\n" << res << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+
+            server.Server->AnnoyingClient->WaitTopicInit("acc/topic2");
+            server.Server->AnnoyingClient->AddTopic("acc/topic2");
+        }
+
+        auto driver = pqClient->GetDriver();
+        {
+            auto writer = CreateSimpleWriter(*driver, "acc/topic2", "source", /*partitionGroup=*/{}, /*codec=*/{"raw"});
+            TString blob{1_MB, 'x'};
+            for (int i = 1; i <= 20; ++i) {
+                bool res = writer->Write(blob + ToString(i), i);
+                UNIT_ASSERT(res);
+            }
+
+            bool res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        {
+            using namespace NYdb::NTopic;
+            auto settings = TDescribeTopicSettings().IncludeStats(true);
+            auto client = TTopicClient(server.Server->GetDriver());
+            auto desc = client.DescribeTopic("/Root/PQ/rt3.dc1--acc--topic2", settings)
+                            .ExtractValueSync()
+                            .GetTopicDescription();
+            Cerr << ">>>Describe result: partitions count is " << desc.GetTotalPartitionsCount() << Endl;
+            for (const auto& partInfo: desc.GetPartitions()) {
+                Cerr << ">>>Describe result: partition id = " << partInfo.GetPartitionId() << ", ";
+                auto stats = partInfo.GetPartitionStats();
+                UNIT_ASSERT(stats.Defined());
+                Cerr << "offsets: [ " << stats.Get()->GetStartOffset() << ", " << stats.Get()->GetEndOffset() << " )" << Endl;
+            }
+
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAddConsumer("first-consumer")
+                .EndAddConsumer()
+                .BeginAddConsumer("second-consumer").Important(true)
+                .EndAddConsumer();
+            auto res = client.AlterTopic("/Root/PQ/rt3.dc1--acc--topic2", alterSettings);
+            res.Wait();
+            Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+            UNIT_ASSERT(res.GetValue().IsSuccess());
+
+        }
+        // unimportant consumer
+        // commit to future - expect bad request
+        {
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("acc/topic2");
+            req.set_consumer("first-consumer");
+            req.set_offset(25);
+
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::GENERIC_ERROR);
+            // TODO: change to BAD_REQUEST
+            // UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        }
+
+        // commit to past - expect bad request
+        {
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("acc/topic2");
+            req.set_consumer("first-consumer");
+            req.set_offset(3);
+
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::GENERIC_ERROR);
+            // TODO: change to BAD_REQUEST
+            // UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        }
+
+        // commit to valid offset - expect successful commit
+        {
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("acc/topic2");
+            req.set_consumer("first-consumer");
+            req.set_offset(18);
+
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+
+        // important consumer
+        // normal commit - expect successful commit
+        {
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("acc/topic2");
+            req.set_consumer("second-consumer");
+            req.set_offset(18);
+
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+
+        // commit to past - expect error
+        {
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("acc/topic2");
+            req.set_consumer("second-consumer");
+            req.set_offset(3);
+
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::GENERIC_ERROR);
+            // TODO: change to BAD_REQUEST
+            // UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        }
+
+        // commit to future - expect bad request
+        {
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("acc/topic2");
+            req.set_consumer("second-consumer");
+            req.set_offset(25);
+
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::GENERIC_ERROR);
+            // TODO: change to BAD_REQUEST
+            // UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        }
+    }
+
 
     Y_UNIT_TEST(TopicServiceReadBudget) {
         TPersQueueV1TestServer server;
@@ -2577,27 +3014,27 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         UNIT_FAIL("incorrect mode");
     }
-    
+
     Y_UNIT_TEST(WhenTheTopicIsDeletedBeforeDataIsDecompressed_Compressed) {
         WhenTheTopicIsDeletedImpl(AFTER_WRITES, 1_MB + 1, true, 1_MB - 1_KB, 1050);
     }
-    
+
     Y_UNIT_TEST(WhenTheTopicIsDeletedAfterDecompressingTheData_Compressed) {
         WhenTheTopicIsDeletedImpl(AFTER_START_TASKS, 1_MB + 1, true, 1_MB - 1_KB, 1050);
     }
-    
+
     Y_UNIT_TEST(WhenTheTopicIsDeletedAfterReadingTheData_Compressed) {
         WhenTheTopicIsDeletedImpl(AFTER_DOREAD, 1_MB + 1, true, 1_MB - 1_KB, 1050);
     }
-    
+
     Y_UNIT_TEST(WhenTheTopicIsDeletedBeforeDataIsDecompressed_Uncompressed) {
         WhenTheTopicIsDeletedImpl(AFTER_WRITES, 1_MB + 1, false, 1_MB - 1_KB, 1_MB - 1_KB);
     }
-    
+
     Y_UNIT_TEST(WhenTheTopicIsDeletedAfterDecompressingTheData_Uncompressed) {
         WhenTheTopicIsDeletedImpl(AFTER_START_TASKS, 1_MB + 1, false, 1_MB - 1_KB, 1_MB - 1_KB);
     }
-    
+
     Y_UNIT_TEST(WhenTheTopicIsDeletedAfterReadingTheData_Uncompressed) {
         WhenTheTopicIsDeletedImpl(AFTER_DOREAD, 1_MB + 1, false, 1_MB - 1_KB, 1_MB - 1_KB);
     }
@@ -5702,7 +6139,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(partId == 1 || partId == 3);
         }
     }
-    
+
     Y_UNIT_TEST(LOGBROKER_7820) {
         //
         // 700 messages of 2000 characters are sent in the test

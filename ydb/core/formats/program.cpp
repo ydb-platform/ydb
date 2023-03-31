@@ -123,6 +123,12 @@ const char * GetFunctionName(EOperation op) {
             return "binary_length";
         case EOperation::MatchSubstring:
             return "match_substring";
+        case EOperation::MatchLike:
+            return "match_like";
+        case EOperation::StartsWith:
+            return "starts_with";
+        case EOperation::EndsWith:
+            return "ends_with";
 
         case EOperation::Acosh:
             return "acosh";
@@ -186,7 +192,6 @@ EOperation ValidateOperation(EOperation op, ui32 argsSize) {
         case EOperation::LessEqual:
         case EOperation::Greater:
         case EOperation::GreaterEqual:
-        case EOperation::MatchSubstring:
         case EOperation::And:
         case EOperation::Or:
         case EOperation::Xor:
@@ -228,6 +233,10 @@ EOperation ValidateOperation(EOperation op, ui32 argsSize) {
         case EOperation::Invert:
         case EOperation::Abs:
         case EOperation::Negate:
+        case EOperation::StartsWith:
+        case EOperation::EndsWith:
+        case EOperation::MatchSubstring:
+        case EOperation::MatchLike:
             if (argsSize == 1) {
                 return op;
             }

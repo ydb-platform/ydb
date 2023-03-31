@@ -255,6 +255,7 @@ public:
         auto &deps = *resp.MutableDependencies();
         FillDependencies(op->GetDependencies(), *deps.MutableDependencies());
         FillDependencies(op->GetDependents(), *deps.MutableDependents());
+        FillDependencies(op->GetVolatileDependencies(), *deps.MutableDependencies());
 
         if (op->IsExecuting() && !op->InReadSets().empty()) {
             auto &inData = *resp.MutableInputData();
@@ -295,6 +296,16 @@ public:
         for (auto &op : deps) {
             auto &dep = *arr.Add();
             dep.SetTarget(op->GetTxId());
+            dep.AddTypes("Data");
+        }
+    }
+
+    void FillDependencies(const absl::flat_hash_set<ui64> &deps,
+                          ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency> &arr)
+    {
+        for (ui64 txId : deps) {
+            auto &dep = *arr.Add();
+            dep.SetTarget(txId);
             dep.AddTypes("Data");
         }
     }

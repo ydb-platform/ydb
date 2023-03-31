@@ -61,22 +61,26 @@ namespace NKikimr {
             using TRecoveredBlobsQueue = TQueue<TRecoveredBlobInfo>;
 
             struct TPartSet {
+                const TLogoBlobID Id;
                 TDataPartSet PartSet;
                 ui32 DisksRepliedOK = 0;
                 ui32 DisksRepliedNODATA = 0;
                 ui32 DisksRepliedNOT_YET = 0;
                 ui32 DisksRepliedOther = 0;
 
-                TPartSet(TBlobStorageGroupType gtype) {
+                TPartSet(TLogoBlobID id, TBlobStorageGroupType gtype)
+                    : Id(id)
+                {
+                    PartSet.FullDataSize = Id.BlobSize();
                     PartSet.Parts.resize(gtype.TotalPartCount());
                 }
 
                 void AddData(ui32 diskIdx, const TLogoBlobID& id, NKikimrProto::EReplyStatus status, TString data) {
+                    Y_VERIFY(id.FullID() == Id);
                     switch (status) {
                         case NKikimrProto::OK: {
                             const ui8 partIdx = id.PartId() - 1;
                             Y_VERIFY(partIdx < PartSet.Parts.size());
-                            PartSet.FullDataSize = id.BlobSize();
                             PartSet.PartsMask |= 1 << partIdx;
                             PartSet.Parts[partIdx].ReferenceTo(data);
                             DisksRepliedOK |= 1 << diskIdx;
@@ -118,7 +122,8 @@ namespace NKikimr {
                 , Arena(&TRopeArenaBackend::Allocate)
             {}
 
-            bool Recover(const TLogoBlobID& id, TPartSet& partSet, TRecoveredBlobsQueue& rbq, NMatrix::TVectorType& parts) {
+            bool Recover(TPartSet& item, TRecoveredBlobsQueue& rbq, NMatrix::TVectorType& parts) {
+                const TLogoBlobID& id = item.Id;
                 Y_VERIFY(!id.PartId());
                 Y_VERIFY(!LastRecoveredId || *LastRecoveredId < id);
                 LastRecoveredId = id;
@@ -147,15 +152,15 @@ namespace NKikimr {
                 bool hasExactParts = false;
                 bool needToRestore = false;
                 for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
-                    if (partSet.PartSet.PartsMask & (1 << i)) {
+                    if (item.PartSet.PartsMask & (1 << i)) {
                         hasExactParts = true;
                     } else {
                         needToRestore = true;
                     }
                 }
 
-                Y_VERIFY_DEBUG((partSet.PartSet.PartsMask >> groupType.TotalPartCount()) == 0);
-                const ui32 presentParts = PopCount(partSet.PartSet.PartsMask);
+                Y_VERIFY_DEBUG((item.PartSet.PartsMask >> groupType.TotalPartCount()) == 0);
+                const ui32 presentParts = PopCount(item.PartSet.PartsMask);
                 bool canRestore = presentParts >= groupType.MinimalRestorablePartCount();
                 bool nonPhantom = true;
 
@@ -166,21 +171,19 @@ namespace NKikimr {
                     } else {
                         STLOG(PRI_INFO, BS_REPL, BSVR28, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "not enough data parts to recover"),
                             (BlobId, id), (NumPresentParts, presentParts), (MinParts, groupType.DataParts()),
-                            (PartSet, partSet.ToString()), (Ingress, lost.Ingress.ToString(ReplCtx->VCtx->Top.get(),
+                            (PartSet, item.ToString()), (Ingress, lost.Ingress.ToString(ReplCtx->VCtx->Top.get(),
                             ReplCtx->VCtx->ShortSelfVDisk, id)));
                         BlobDone(id, false, &TEvReplFinished::TInfo::ItemsNotRecovered);
                     }
                 } else {
                     // recover
                     try {
-                        Y_VERIFY(partSet.PartSet.FullDataSize == id.BlobSize());
+                        Y_VERIFY(item.PartSet.FullDataSize == id.BlobSize());
 
                         // PartSet contains some data, other data will be restored and written in the same PartSet
-                        TRope recoveredData;
                         if (canRestore && needToRestore) {
-                            groupType.RestoreData((TErasureType::ECrcMode)id.CrcMode(), partSet.PartSet, recoveredData,
-                                true, false, true);
-                            partSet.PartSet.PartsMask = (1 << groupType.TotalPartCount()) - 1;
+                            groupType.RestoreData((TErasureType::ECrcMode)id.CrcMode(), item.PartSet, true, false, true);
+                            item.PartSet.PartsMask = (1 << groupType.TotalPartCount()) - 1;
                         }
 
                         ui32 numSmallParts = 0, numMissingParts = 0, numHuge = 0;
@@ -188,7 +191,7 @@ namespace NKikimr {
                         NMatrix::TVectorType small(0, parts.GetSize());
 
                         for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
-                            if (~partSet.PartSet.PartsMask & (1 << i)) {
+                            if (~item.PartSet.PartsMask & (1 << i)) {
                                 ++numMissingParts; // ignore this missing part
                                 continue;
                             }
@@ -196,10 +199,10 @@ namespace NKikimr {
                             const ui32 partSize = groupType.PartSize(partId);
                             Y_VERIFY(partSize); // no metadata here
                             partsSize += partSize;
-                            TRope data(partSet.PartSet.Parts[i].OwnedString); // TODO(alexvru): employ rope in TDataPartSet
+                            TRope data(item.PartSet.Parts[i].OwnedString); // TODO(alexvru): employ rope in TDataPartSet
                             Y_VERIFY(data.GetSize() == partSize);
                             if (ReplCtx->HugeBlobCtx->IsHugeBlob(groupType, id)) {
-                                AddBlobToQueue(partId, TDiskBlob::Create(partSet.PartSet.FullDataSize, i + 1,
+                                AddBlobToQueue(partId, TDiskBlob::Create(id.BlobSize(), i + 1,
                                     groupType.TotalPartCount(), std::move(data), Arena), {}, true, rbq);
                                 ++numHuge;
                             } else {
@@ -211,7 +214,7 @@ namespace NKikimr {
                         if (numSmallParts) {
                             // fill in disk blob buffer
                             AddBlobToQueue(id, TDiskBlob::CreateFromDistinctParts(&partData[0], &partData[numSmallParts],
-                                small, partSet.PartSet.FullDataSize, Arena), small, false, rbq);
+                                small, id.BlobSize(), Arena), small, false, rbq);
                         }
 
                         ReplInfo->LogoBlobsRecovered += !!numSmallParts;

@@ -12,8 +12,6 @@ namespace NMiniKQL {
 
 class THolderFactory;
 
-NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, const THolderFactory& factory);
-
 // NOTE: TCell's can reference memomry from tupleValue
 bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const NKikimrMiniKQL::TValue& tupleValue,

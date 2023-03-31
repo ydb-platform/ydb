@@ -207,8 +207,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool PullUpFlatMapOverJoin = true;
     bool DeprecatedSQL = false;
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>,
-        std::tuple<const TTypeAnnotationNode*, const TTypeAnnotationNode*, const TTypeAnnotationNode*>>
-        UdfTypeCache; // (name,typecfg,type)->(type,run config type,new user type)
+        std::tuple<const TTypeAnnotationNode*, const TTypeAnnotationNode*, const TTypeAnnotationNode*, bool, bool>>
+        UdfTypeCache; // (name,typecfg,type)->(type,run config type,new user type, blocks, strict)
     bool UseTableMetaFromGraph = false;
     bool DiscoveryMode = false;
     bool ForceDq = false;

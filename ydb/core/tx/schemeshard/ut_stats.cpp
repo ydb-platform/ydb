@@ -297,4 +297,290 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         WaitAndCheckStatPersisted(runtime, env, newRowsCount, batchTimeout, eventAction);
     }
+
+    Y_UNIT_TEST(TopicAccountSizeAndUsedReserveSize) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto& appData = runtime.GetAppData();
+
+        ui64 txId = 100;
+
+        // disable batching
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        // apply config via reboot
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        const auto Assert = [&] (ui64 expectedAccountSize, ui64 expectedUsedReserveSize) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic1"),
+                               {NLs::Finished,
+                                NLs::TopicAccountSize(expectedAccountSize),
+                                NLs::TopicUsedReserveSize(expectedUsedReserveSize)});
+        };
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 13
+                    WriteSpeedInBytesPerSecond : 19
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        Assert(1 * 13 * 19, 0); // 247, 0
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic2"
+            TotalGroupCount: 3
+            PartitionPerTablet: 3
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 11
+                    WriteSpeedInBytesPerSecond : 17
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        Assert(1 * 13 * 19 + 3 * 11 * 17, 0); // 247 + 561 = 808, 0
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic3"
+            TotalGroupCount: 3
+            PartitionPerTablet: 3
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 11
+                    WriteSpeedInBytesPerSecond : 17
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        Assert(1 * 13 * 19 + 3 * 11 * 17 + 3 * 11 * 17, 0); // 247 + 561 + 561 = 1369, 0
+
+        ui64 topic1Id = DescribePath(runtime, "/MyRoot/Topic1").GetPathDescription().GetSelf().GetPathId();
+        ui64 topic2Id = DescribePath(runtime, "/MyRoot/Topic2").GetPathDescription().GetSelf().GetPathId();
+        ui64 topic3Id = DescribePath(runtime, "/MyRoot/Topic3").GetPathDescription().GetSelf().GetPathId();
+
+        ui64 generation = 1;
+        ui64 round = 1;
+
+        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, ++round, 101, 101);
+        Assert(1369, 101); // only reserve size
+
+        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, ++round, 383, 247);
+        Assert(1369 + (383 - 247), 247); // 1505, 247 reserve + exceeding the limit
+
+        SendTEvPeriodicTopicStats(runtime, topic2Id, generation, ++round, 113, 113);
+        Assert(1369 + (383 - 247), 247 + 113); // 1505, 360
+
+        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, ++round, 31, 31);
+        Assert(1369, 31 + 113); // only reserve, data size
+
+        TestDropPQGroup(runtime, ++txId, "/MyRoot", "Topic2");
+        env.TestWaitNotification(runtime, txId);
+        Assert(808, 31);
+
+        SendTEvPeriodicTopicStats(runtime, topic3Id, generation, ++round, 151, 151);
+        Assert(808, 31 + 151);
+
+        TestDeallocatePQ(runtime, ++txId, "/MyRoot", "Name: \"Topic3\"");
+        env.TestWaitNotification(runtime, txId);
+        Assert(247, 31);
+    }
+
+    Y_UNIT_TEST(TopicPeriodicStatMeteringModeReserved) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_TRACE);
+
+        auto& appData = runtime.GetAppData();
+
+        ui64 txId = 100;
+
+        // disable batching
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        appData.PQConfig.SetBalancerWakeupIntervalSec(1);
+
+        // apply config via reboot
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        TString topicPath = "/MyRoot/Topic1";
+
+        const auto Assert = [&] (ui64 expectedAccountSize, ui64 expectedUsedReserveSize) {
+            TestDescribeResult(DescribePath(runtime,topicPath),
+                               {NLs::Finished,
+                                NLs::TopicAccountSize(expectedAccountSize),
+                                NLs::TopicUsedReserveSize(expectedUsedReserveSize)});
+        };
+
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            TotalGroupCount: 3
+            PartitionPerTablet: 3
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 11
+                    WriteSpeedInBytesPerSecond : 17
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        Assert(3 * 11 * 17, 0); // 561, 0 
+
+        ui32 msgSeqNo = 100;
+        WriteToTopic(runtime, topicPath, msgSeqNo, "Message 100");
+
+        env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
+
+        Assert(3 * 11 * 17, 69); // 69 - it is unstable value. it can change if internal message store change
+    }
+
+    Y_UNIT_TEST(TopicPeriodicStatMeteringModeRequest) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_TRACE);
+
+        auto& appData = runtime.GetAppData();
+
+        ui64 txId = 100;
+
+        // disable batching
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        appData.PQConfig.SetBalancerWakeupIntervalSec(1);
+
+        // apply config via reboot
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        TString topicPath = "/MyRoot/Topic1";
+
+        const auto Assert = [&] (ui64 expectedAccountSize, ui64 expectedUsedReserveSize) {
+            TestDescribeResult(DescribePath(runtime,topicPath),
+                               {NLs::Finished,
+                                NLs::TopicAccountSize(expectedAccountSize),
+                                NLs::TopicUsedReserveSize(expectedUsedReserveSize)});
+        };
+
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            TotalGroupCount: 3
+            PartitionPerTablet: 3
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 11
+                    WriteSpeedInBytesPerSecond : 17
+                }
+                MeteringMode: METERING_MODE_REQUEST_UNITS
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        Assert(0, 0); // topic is empty
+
+        ui64 balancerId = DescribePath(runtime, "/MyRoot/Topic1").GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
+
+        auto stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        UNIT_ASSERT_EQUAL_C(0, stats->Record.GetDataSize(), "DataSize from ReadBalancer");
+        UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer");
+
+        ui32 msgSeqNo = 100;
+        WriteToTopic(runtime, topicPath, msgSeqNo, "Message 100");
+
+        env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
+
+        Assert(69, 0); //  69 - it is unstable value. it can change if internal message store change
+
+        stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        UNIT_ASSERT_EQUAL_C(69, stats->Record.GetDataSize(), "DataSize from ReadBalancer");
+        UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer");
+
+        appData.PQConfig.SetBalancerWakeupIntervalSec(30);
+
+        GracefulRestartTablet(runtime, balancerId, sender);
+
+        stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
+        UNIT_ASSERT_EQUAL_C(69, stats->Record.GetDataSize(), "DataSize from ReadBalancer after reload");
+        UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer after reload");
+    }
+
+    Y_UNIT_TEST(PeriodicTopicStatsReload) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto& appData = runtime.GetAppData();
+
+        ui64 txId = 100;
+
+        // disable batching
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        // apply config via reboot
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        const auto AssertTopicSize = [&] (ui64 expectedAccountSize, ui64 expectedUsedReserveSize) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic1"),
+                               {NLs::Finished,
+                                NLs::TopicAccountSize(expectedAccountSize),
+                                NLs::TopicUsedReserveSize(expectedUsedReserveSize)});
+        };
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 1
+                    WriteSpeedInBytesPerSecond : 7
+
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AssertTopicSize(7, 0);
+
+        ui64 topic1Id = DescribePath(runtime, "/MyRoot/Topic1").GetPathDescription().GetSelf().GetPathId();
+
+        ui64 generation = 1;
+        ui64 round = 97;
+
+        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, round, 17, 7);
+        AssertTopicSize(17, 7);
+
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        AssertTopicSize(17, 7); // loaded from db
+
+        SendTEvPeriodicTopicStats(runtime, topic1Id, generation, round - 1, 19, 7);
+
+        AssertTopicSize(17, 7); // not changed because round is less
+    }
+
 };

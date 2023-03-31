@@ -126,6 +126,9 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr MailboxPushedOutByEventCount;
         NMonitoring::TDynamicCounters::TCounterPtr WrongWakenedThreadCount;
         NMonitoring::TDynamicCounters::TCounterPtr CurrentThreadCount;
+        NMonitoring::TDynamicCounters::TCounterPtr PotentialMaxThreadCount;
+        NMonitoring::TDynamicCounters::TCounterPtr DefaultThreadCount;
+        NMonitoring::TDynamicCounters::TCounterPtr MaxThreadCount;
         NMonitoring::TDynamicCounters::TCounterPtr IsNeedy;
         NMonitoring::TDynamicCounters::TCounterPtr IsStarved;
         NMonitoring::TDynamicCounters::TCounterPtr IsHoggish;
@@ -178,6 +181,9 @@ private:
             MailboxPushedOutByEventCount = PoolGroup->GetCounter("MailboxPushedOutByEventCount", true);
             WrongWakenedThreadCount = PoolGroup->GetCounter("WrongWakenedThreadCount", true);
             CurrentThreadCount = PoolGroup->GetCounter("CurrentThreadCount", false);
+            PotentialMaxThreadCount = PoolGroup->GetCounter("PotentialMaxThreadCount", false);
+            DefaultThreadCount = PoolGroup->GetCounter("DefaultThreadCount", false);
+            MaxThreadCount = PoolGroup->GetCounter("MaxThreadCount", false);
             IsNeedy = PoolGroup->GetCounter("IsNeedy", false);
             IsStarved = PoolGroup->GetCounter("IsStarved", false);
             IsHoggish = PoolGroup->GetCounter("IsHoggish", false);
@@ -211,7 +217,7 @@ private:
             *NonDeliveredEvents = stats.NonDeliveredEvents;
             *DestroyedActors    = stats.PoolDestroyedActors;
             *EmptyMailboxActivation = stats.EmptyMailboxActivation;
-            *CpuMicrosec        = stats.CpuNs / 1000;
+            *CpuMicrosec        = stats.CpuUs;
             *ElapsedMicrosec    = ::NHPTimer::GetSeconds(stats.ElapsedTicks)*1000000;
             *ParkedMicrosec     = ::NHPTimer::GetSeconds(stats.ParkedTicks)*1000000;
             *ActorRegistrations = stats.PoolActorRegistrations;
@@ -222,6 +228,9 @@ private:
             *MailboxPushedOutByEventCount = stats.MailboxPushedOutByEventCount;
             *WrongWakenedThreadCount = poolStats.WrongWakenedThreadCount;
             *CurrentThreadCount = poolStats.CurrentThreadCount;
+            *PotentialMaxThreadCount = poolStats.PotentialMaxThreadCount;
+            *DefaultThreadCount = poolStats.DefaultThreadCount;
+            *MaxThreadCount = poolStats.MaxThreadCount;
             *IsNeedy = poolStats.IsNeedy;
             *IsStarved = poolStats.IsStarved;
             *IsHoggish = poolStats.IsHoggish;

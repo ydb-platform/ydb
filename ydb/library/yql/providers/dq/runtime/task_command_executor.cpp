@@ -244,6 +244,17 @@ public:
         }
         _exit(127);
     }
+    
+    NDqProto::TMeteringStatsResponse GetMeteringStats() {
+        NDqProto::TMeteringStatsResponse resp;
+        auto* stats = Runner->GetMeteringStats();
+        for (auto& input : stats->Inputs) {
+            auto* i = resp.AddInputs();
+            i->SetRowsConsumed(input->RowsConsumed);
+            i->SetBytesConsumed(input->BytesConsumed);
+        }
+        return resp;
+    }
 
     NDqProto::TGetStatsResponse GetStats(ui64 taskId) {
         const auto stats = Runner->GetStats();
@@ -583,6 +594,12 @@ public:
                 Y_ENSURE(header.GetVersion() >= 3);
                 Y_ENSURE(taskId == Runner->GetTaskId());
                 GetStats(taskId).Save(&output);
+                break;
+            }
+            case NDqProto::TCommandHeader::GET_METERING_STATS: {
+                Y_ENSURE(header.GetVersion() >= 3);
+                Y_ENSURE(taskId == Runner->GetTaskId());
+                GetMeteringStats().Save(&output);
                 break;
             }
             case NDqProto::TCommandHeader::GET_STATS_INPUT: {

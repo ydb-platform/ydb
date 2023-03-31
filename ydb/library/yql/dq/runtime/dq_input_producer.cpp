@@ -14,10 +14,12 @@ namespace {
 
 class TDqInputUnionStreamValue : public TComputationValue<TDqInputUnionStreamValue> {
 public:
-    TDqInputUnionStreamValue(TMemoryUsageInfo* memInfo, TVector<IDqInput::TPtr>&& inputs)
+    TDqInputUnionStreamValue(TMemoryUsageInfo* memInfo, TVector<IDqInput::TPtr>&& inputs, TDqMeteringStats::TInputStatsMeter stats)
         : TComputationValue<TDqInputUnionStreamValue>(memInfo)
         , Inputs(std::move(inputs))
-        , CurrentItemIndex(0) {}
+        , CurrentItemIndex(0)
+        , Stats(stats)
+    {}
 
 private:
     NUdf::EFetchStatus Fetch(NKikimr::NUdf::TUnboxedValue& result) final {
@@ -33,6 +35,9 @@ private:
         }
 
         result = std::move(CurrentBuffer[CurrentItemIndex]);
+        if (Stats) {
+            Stats.Add(result);
+        }
         ++CurrentItemIndex;
         return NUdf::EFetchStatus::Ok;
     }
@@ -56,15 +61,17 @@ private:
     TVector<IDqInput::TPtr> Inputs;
     TUnboxedValueVector CurrentBuffer;
     ui64 CurrentItemIndex;
+    TDqMeteringStats::TInputStatsMeter Stats;
 };
 
 class TDqInputMergeStreamValue : public TComputationValue<TDqInputMergeStreamValue> {
 public:
     TDqInputMergeStreamValue(TMemoryUsageInfo* memInfo, TVector<IDqInput::TPtr>&& inputs,
-        TVector<TSortColumnInfo>&& sortCols)
+        TVector<TSortColumnInfo>&& sortCols, TDqMeteringStats::TInputStatsMeter stats)
         : TComputationValue<TDqInputMergeStreamValue>(memInfo)
         , Inputs(std::move(inputs))
         , SortCols(std::move(sortCols))
+        , Stats(stats)
         {
             CurrentBuffers.resize(Inputs.size());
             CurrentItemIndexes.reserve(Inputs.size());
@@ -137,6 +144,9 @@ private:
         }
 
         result = std::move(FindResult());
+        if (Stats) {
+            Stats.Add(result);
+        }
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -211,20 +221,32 @@ private:
     TVector<TUnboxedValuesIterator> CurrentItemIndexes;
     ui32 InitializationIndex = 0;
     TMap<ui32, EDataSlot> SortColTypes;
+    TDqMeteringStats::TInputStatsMeter Stats;
 };
 
 } // namespace
 
+void TDqMeteringStats::TInputStatsMeter::Add(const NKikimr::NUdf::TUnboxedValue& val) {
+    Stats->RowsConsumed += 1;
+    if (InputType) {
+        NYql::NDq::TDqDataSerializer::TEstimateSizeSettings settings;
+        settings.DiscardUnsupportedTypes = true;
+        settings.WithHeaders = false;
+
+        Stats->BytesConsumed += Max<ui64>(TDqDataSerializer::EstimateSize(val, InputType, nullptr, settings), 8 /* billing size for count(*) */);
+    }
+}
+
 NUdf::TUnboxedValue CreateInputUnionValue(TVector<IDqInput::TPtr>&& inputs,
-    const NMiniKQL::THolderFactory& factory)
+    const NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats)
 {
-    return factory.Create<TDqInputUnionStreamValue>(std::move(inputs));
+    return factory.Create<TDqInputUnionStreamValue>(std::move(inputs), stats);
 }
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(TVector<IDqInput::TPtr>&& inputs,
-    TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory)
+    TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats)
 {
-    return factory.Create<TDqInputMergeStreamValue>(std::move(inputs), std::move(sortCols));
+    return factory.Create<TDqInputMergeStreamValue>(std::move(inputs), std::move(sortCols), stats);
 }
 
 } // namespace NYql::NDq

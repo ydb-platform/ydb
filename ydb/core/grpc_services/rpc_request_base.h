@@ -130,7 +130,7 @@ public:
         : Request(ev)
         , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())))
     {
-        if (const auto& userToken = Request->GetInternalToken()) {
+        if (const auto& userToken = Request->GetSerializedToken()) {
             UserToken = MakeHolder<NACLib::TUserToken>(userToken);
         }
     }

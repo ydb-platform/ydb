@@ -70,6 +70,10 @@ struct TDataSnapshotKey
         , TxId(txId)
     { }
 
+    TDataSnapshotKey(const TPathId& pathId, ui64 step, ui64 txId)
+        : TDataSnapshotKey(pathId.OwnerId, pathId.LocalPathId, step, txId)
+    { }
+
     auto ToTuple() const {
         return std::tuple_cat(TSnapshotTableKey::ToTuple(), std::make_tuple(Step, TxId));
     }

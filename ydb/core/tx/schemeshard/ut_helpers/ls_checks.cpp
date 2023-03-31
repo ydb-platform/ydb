@@ -13,6 +13,23 @@ namespace NLs {
 
 using namespace NKikimr;
 
+#define DESCRIBE_ASSERT_EQUAL(name, type, expression, description)                                                    \
+    TCheckFunc name(type expected) {                                                                                  \
+        return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {                                           \
+            UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());       \
+                                                                                                                      \
+            const auto& pathDescr = record.GetPathDescription();                                                      \
+            const auto& subdomain = pathDescr.GetDomainDescription();                                                 \
+            const auto& value = expression;                                                                           \
+                                                                                                                      \
+            UNIT_ASSERT_EQUAL_C(value, expected,                                                                      \
+                            description << " mismatch, subdomain with id " << subdomain.GetDomainKey().GetPathId() << \
+                                " has value " << value <<                                                             \
+                                " but expected " << expected);                                                        \
+    };                                                                                                                \
+}
+
+
 void NotInSubdomain(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     UNIT_ASSERT(record.HasPathDescription());
     NKikimrSchemeOp::TPathDescription descr = record.GetPathDescription();
@@ -604,6 +621,10 @@ TCheckFunc PQPartitionsInsideDomain(ui64 count) {
     };
 }
 
+DESCRIBE_ASSERT_EQUAL(TopicReservedStorage, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetReserveSize(), "Topic ReserveSize")
+DESCRIBE_ASSERT_EQUAL(TopicAccountSize, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetAccountSize(), "Topic AccountSize")
+DESCRIBE_ASSERT_EQUAL(TopicUsedReserveSize, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetUsedReserveSize(), "Topic UsedReserveSize")
+
 TCheckFunc PathsInsideDomainOneOf(TSet<ui64> variants) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
@@ -857,10 +878,26 @@ TCheckFunc MinPartitionsCountEqual(ui32 count) {
     };
 }
 
+void HasMinPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT(record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().HasMinPartitionsCount());
+}
+
+void NoMinPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT(!record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().HasMinPartitionsCount());
+}
+
 TCheckFunc MaxPartitionsCountEqual(ui32 count) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().GetMaxPartitionsCount(), count);
     };
+}
+
+void HasMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT(record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().HasMaxPartitionsCount());
+}
+
+void NoMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT(!record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().HasMaxPartitionsCount());
 }
 
 TCheckFunc PartitioningByLoadStatus(bool status) {
@@ -997,6 +1034,12 @@ TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tieringName) {
     };
 }
 
+TCheckFunc HasOwner(const TString& owner) {
+    return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSelf().GetOwner(), owner);
+    };
+}
+
 void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
     const auto& self = record.GetPathDescription().GetSelf();
     TSecurityObject src(self.GetOwner(), self.GetEffectiveACL(), false);
@@ -1067,6 +1110,8 @@ TCheckFunc PartitionKeys(TVector<TString> lastShardKeys) {
         }
     };
 }
+
+#undef DESCRIBE_ASSERT_EQUAL
 
 } // NLs
 } // NSchemeShardUT_Private

@@ -11,11 +11,10 @@ using namespace NDataShardReadTableTest;
 
 Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableSnapshot) {
+    Y_UNIT_TEST(ReadTableSnapshot) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -55,11 +54,10 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 3, value = 3\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableSplitAfter) {
+    Y_UNIT_TEST(ReadTableSplitAfter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -106,11 +104,10 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 4, value = 44\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableSplitBefore) {
+    Y_UNIT_TEST(ReadTableSplitBefore) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -159,11 +156,10 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 4, value = 44\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableSplitFinished) {
+    Y_UNIT_TEST(ReadTableSplitFinished) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -242,11 +238,10 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 6, value = 66\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableDropColumn) {
+    Y_UNIT_TEST(ReadTableDropColumn) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -296,11 +291,10 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "ERROR: ResolveError\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableDropColumnLatePropose) {
+    Y_UNIT_TEST(ReadTableDropColumnLatePropose) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -389,11 +383,10 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "ERROR: ResolveError\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableMaxRows) {
+    Y_UNIT_TEST(ReadTableMaxRows) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -461,11 +454,10 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(rowLimits[5], 1u);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableSplitNewTxIdResolveResultReorder) {
+    Y_UNIT_TEST(ReadTableSplitNewTxIdResolveResultReorder) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

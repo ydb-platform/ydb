@@ -14,17 +14,17 @@ NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuild
     const NYql::TObjectSettingsImpl& settings,
     const NMetadata::NModifications::IOperationsManager::TModificationContext& /*context*/) const {
     NMetadata::NInternal::TTableRecord result;
-    result.SetColumn(TTieringRule::TDecoder::TieringRuleId, NMetadata::NInternal::TYDBValue::Bytes(settings.GetObjectId()));
+    result.SetColumn(TTieringRule::TDecoder::TieringRuleId, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     {
         auto it = settings.GetFeatures().find(TTieringRule::TDecoder::DefaultColumn);
         if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TTieringRule::TDecoder::DefaultColumn, NMetadata::NInternal::TYDBValue::Bytes(it->second));
+            result.SetColumn(TTieringRule::TDecoder::DefaultColumn, NMetadata::NInternal::TYDBValue::Utf8(it->second));
         }
     }
     {
         auto it = settings.GetFeatures().find(TTieringRule::TDecoder::Description);
         if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TTieringRule::TDecoder::Description, NMetadata::NInternal::TYDBValue::Bytes(it->second));
+            result.SetColumn(TTieringRule::TDecoder::Description, NMetadata::NInternal::TYDBValue::Utf8(it->second));
         }
     }
     return result;

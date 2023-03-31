@@ -695,7 +695,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
             case TEvDataShard::EvCompactBorrowed:
                 // we should not compact borrowed to check that background compaction
                 // will not compact shard with borrowed parts as well
-                Y_UNUSED(ev.Release());
+                ev.Reset();
                 return TTestActorRuntime::EEventAction::DROP;
             default:
                 return originalObserver(runtime, ev);
@@ -744,7 +744,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCompactTableResult: {
-                Y_UNUSED(ev.Release());
+                ev.Reset();
                 ++compactionResultCount;
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -1070,7 +1070,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCompactBorrowed: {
-                Y_UNUSED(ev.Release());
+                ev.Reset();
                 ++borrowedRequests;
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -1139,7 +1139,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCompactBorrowed: {
-                Y_UNUSED(ev.Release());
+                ev.Reset();
                 ++borrowedRequests;
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -1222,7 +1222,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCompactBorrowed: {
-                Y_UNUSED(ev.Release());
+                ev.Reset();
                 ++borrowedRequests;
                 return TTestActorRuntime::EEventAction::DROP;
             }

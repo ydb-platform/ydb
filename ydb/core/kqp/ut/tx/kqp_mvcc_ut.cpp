@@ -10,10 +10,10 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST(TestSnapshotExpiration) {
-        TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
-            .SetKeepSnapshotTimeout(TDuration::Seconds(1)));
+        auto settings = TKikimrSettings()
+            .SetKeepSnapshotTimeout(TDuration::Seconds(1));
+
+        TKikimrRunner kikimr(settings);
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
@@ -50,10 +50,21 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
             if (result.GetStatus() == EStatus::SUCCESS)
                 continue;
 
-            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-                [](const NYql::TIssue& issue){
-                    return issue.GetMessage().Contains("stale snapshot");
-                }), result.GetIssues().ToString());
+            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQuerySourceRead()) {
+                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+                    [](const NYql::TIssue& issue){
+                        return issue.GetMessage().Contains("bellow low watermark");
+                    }), result.GetIssues().ToString());
+
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
+            } else {
+                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+                    [](const NYql::TIssue& issue){
+                        return issue.GetMessage().Contains("stale snapshot");
+                    }), result.GetIssues().ToString());
+
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+            }
 
             caught = true;
             break;
@@ -62,7 +73,11 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST(ReadOnlyTxCommitsOnConcurrentWrite) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetAppConfig(appConfig)
+        );
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -120,7 +135,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST(ReadOnlyTxWithIndexCommitsOnConcurrentWrite) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
+        TKikimrRunner kikimr;
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -181,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite1) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
+        TKikimrRunner kikimr;
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -218,7 +233,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite2) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
+        TKikimrRunner kikimr;
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -261,7 +276,12 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite3) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
+        TKikimrRunner kikimr(
+            TKikimrSettings()
+                .SetAppConfig(appConfig)
+        );
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);

@@ -91,6 +91,7 @@ namespace NKikimr {
             std::unique_ptr<TEvBlobStorage::TEvPutResult> result(
                     new TEvBlobStorage::TEvPutResult(NKikimrProto::ERROR, ev->Get()->Id, 0, GroupId, 0.f));
             result->ErrorReason = str.Str();
+            result->ExecutionRelay = std::move(ev->Get()->ExecutionRelay);
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
                     "HandleNormal ev# " << ev->Get()->Print(false)
                     << " result# " << result->Print(false)

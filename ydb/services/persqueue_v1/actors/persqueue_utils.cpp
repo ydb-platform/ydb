@@ -94,6 +94,7 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
             return Ydb::StatusIds::SUCCESS;
         case INITIALIZING:
         case CLUSTER_DISABLED:
+        case TABLET_PIPE_DISCONNECTED:
             return Ydb::StatusIds::UNAVAILABLE;
         case PREFERRED_CLUSTER_MISMATCHED:
             return Ydb::StatusIds::ABORTED;
@@ -114,6 +115,7 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
         case READ_ERROR_TOO_SMALL_OFFSET:
         case READ_ERROR_TOO_BIG_OFFSET:
         case SET_OFFSET_ERROR_COMMIT_TO_FUTURE:
+        case SET_OFFSET_ERROR_COMMIT_TO_PAST:
         case READ_NOT_DONE:
             return Ydb::StatusIds::GENERIC_ERROR;
         case TABLET_IS_DROPPED:

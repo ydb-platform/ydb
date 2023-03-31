@@ -3,6 +3,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/core/util/pb.h>
 
 namespace NKikimr {
@@ -19,6 +20,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TDeque<TPathId> BlockStoreVolumesToClean;
     TVector<ui64> ExportsToResume;
     TVector<ui64> ImportsToResume;
+    THashMap<TPathId, TVector<TPathId>> CdcStreamScansToResume;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -1534,7 +1536,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (row.IsValid()) {
                     version = row.GetValue<Schema::SubDomains::AlterVersion>();
                     rootLimits.MaxDepth = row.GetValueOrDefault<Schema::SubDomains::DepthLimit>(rootLimits.MaxDepth);
-                    rootLimits.MaxPaths = row.GetValueOrDefault<Schema::SubDomains::PathsLimit>(rootLimits.MaxPaths);
+                    rootLimits.MaxPaths = row.GetValueOrDefault<Schema::SubDomains::PathsLimit>(rootLimits.MaxPathsCompat);
                     rootLimits.MaxChildrenInDir = row.GetValueOrDefault<Schema::SubDomains::ChildrenLimit>(rootLimits.MaxChildrenInDir);
                     rootLimits.MaxAclBytesSize = row.GetValueOrDefault<Schema::SubDomains::AclByteSizeLimit>(rootLimits.MaxAclBytesSize);
                     rootLimits.MaxTableColumns = row.GetValueOrDefault<Schema::SubDomains::TableColumnsLimit>(rootLimits.MaxTableColumns);
@@ -2305,7 +2307,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueueGroups::PathId>();
                 TPathId pathId(selfId, localPathId);
 
-                TPersQueueGroupInfo::TPtr pqGroup = new TPersQueueGroupInfo();
+                TTopicInfo::TPtr pqGroup = new TTopicInfo();
                 pqGroup->TabletConfig = rowset.GetValue<Schema::PersQueueGroups::TabletConfig>();
                 pqGroup->MaxPartsPerTablet = rowset.GetValue<Schema::PersQueueGroups::MaxPQPerShard>();
                 pqGroup->AlterVersion = rowset.GetValue<Schema::PersQueueGroups::AlterVersion>();
@@ -2315,7 +2317,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const bool ok = pqGroup->FillKeySchema(pqGroup->TabletConfig);
                 Y_VERIFY(ok);
 
-                Self->PersQueueGroups[pathId] = pqGroup;
+                Self->Topics[pathId] = pqGroup;
                 Self->IncrementPathDbRefCount(pathId);
 
                 auto it = pqBalancers.find(pathId);
@@ -2338,7 +2340,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!rowset.IsReady())
                 return false;
             while (!rowset.EndOfSet()) {
-                TPQShardInfo::TPersQueueInfo pqInfo;
+                TTopicTabletInfo::TTopicPartitionInfo pqInfo;
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueues::PathId>();
                 TPathId pathId(selfId, localPathId);
                 pqInfo.PqId = rowset.GetValue<Schema::PersQueues::PqId>();
@@ -2363,10 +2365,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     pqInfo.KeyRange->ToBound = rowset.GetValue<Schema::PersQueues::RangeEnd>();
                 }
 
-                auto it = Self->PersQueueGroups.find(pathId);
-                Y_VERIFY(it != Self->PersQueueGroups.end());
+                auto it = Self->Topics.find(pathId);
+                Y_VERIFY(it != Self->Topics.end());
                 Y_VERIFY(it->second);
-                TPersQueueGroupInfo::TPtr pqGroup = it->second;
+                TTopicInfo::TPtr pqGroup = it->second;
                 if (pqInfo.AlterVersion <= pqGroup->AlterVersion)
                     ++pqGroup->TotalPartitionCount;
                 if (pqInfo.PqId >= pqGroup->NextPartitionId) {
@@ -2374,11 +2376,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     pqGroup->TotalGroupCount = pqInfo.PqId + 1;
                 }
 
-                TPQShardInfo::TPtr& pqShard = pqGroup->Shards[shardIdx];
+                TTopicTabletInfo::TPtr& pqShard = pqGroup->Shards[shardIdx];
                 if (!pqShard) {
-                    pqShard.Reset(new TPQShardInfo());
+                    pqShard.Reset(new TTopicTabletInfo());
                 }
-                pqShard->PQInfos.push_back(pqInfo);
+                pqShard->Partitions.push_back(pqInfo);
 
                 if (!rowset.Next())
                     return false;
@@ -2394,7 +2396,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueueGroupAlters::PathId>();
                 TPathId pathId(selfId, localPathId);
 
-                TPersQueueGroupInfo::TPtr alterData = new TPersQueueGroupInfo();
+                TTopicInfo::TPtr alterData = new TTopicInfo();
                 alterData->TabletConfig = rowset.GetValue<Schema::PersQueueGroupAlters::TabletConfig>();
                 alterData->MaxPartsPerTablet = rowset.GetValue<Schema::PersQueueGroupAlters::MaxPQPerShard>();
                 alterData->AlterVersion = rowset.GetValue<Schema::PersQueueGroupAlters::AlterVersion>();
@@ -2405,8 +2407,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const bool ok = alterData->FillKeySchema(alterData->TabletConfig);
                 Y_VERIFY(ok);
 
-                auto it = Self->PersQueueGroups.find(pathId);
-                Y_VERIFY(it != Self->PersQueueGroups.end());
+                auto it = Self->Topics.find(pathId);
+                Y_VERIFY(it != Self->Topics.end());
 
                 alterData->TotalPartitionCount = it->second->GetTotalPartitionCountWithAlter();
                 alterData->BalancerTabletID = it->second->BalancerTabletID;
@@ -2415,6 +2417,37 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!rowset.Next())
                     return false;
+            }
+        }
+
+        // Read PersQueue groups stats
+        {
+            auto rowset = db.Table<Schema::PersQueueGroupStats>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+            while (!rowset.EndOfSet()) {
+                TLocalPathId localPathId = rowset.GetValue<Schema::PersQueueGroupStats::PathId>();
+                TPathId pathId(selfId, localPathId);
+
+                auto it = Self->Topics.find(pathId);
+                if (it != Self->Topics.end()) {
+                    auto& topic = it->second;
+
+                    auto dataSize = rowset.GetValue<Schema::PersQueueGroupStats::DataSize>();
+                    auto usedReserveSize = rowset.GetValue<Schema::PersQueueGroupStats::UsedReserveSize>();
+                    if (dataSize >= usedReserveSize) {
+                        topic->Stats.SeqNo = TMessageSeqNo(rowset.GetValue<Schema::PersQueueGroupStats::SeqNoGeneration>(), rowset.GetValue<Schema::PersQueueGroupStats::SeqNoRound>());
+                        topic->Stats.DataSize = dataSize;
+                        topic->Stats.UsedReserveSize = usedReserveSize;
+
+                        Self->ResolveDomainInfo(pathId)->AggrDiskSpaceUsage(topic->Stats, {});
+                    }
+                }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
             }
         }
 
@@ -2825,6 +2858,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->CdcStreams[pathId] = new TCdcStreamInfo(alterVersion, mode, format, vt, state);
                 Self->IncrementPathDbRefCount(pathId);
 
+                if (state == NKikimrSchemeOp::ECdcStreamStateScan) {
+                    Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
+                        << ", cdc stream pathId: " << pathId
+                        << ", parent pathId: " << path->ParentPathId);
+                    CdcStreamScansToResume[path->ParentPathId].push_back(pathId);
+                }
+
                 if (!rowset.Next()) {
                     return false;
                 }
@@ -2882,6 +2922,38 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!rowset.Next()) {
                     return false;
+                }
+            }
+        }
+
+        // Read CdcStreamScanShardStatus
+        {
+            auto rowset = db.Table<Schema::CdcStreamScanShardStatus>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                auto pathId = TPathId(
+                    rowset.GetValue<Schema::CdcStreamScanShardStatus::OwnerPathId>(),
+                    rowset.GetValue<Schema::CdcStreamScanShardStatus::LocalPathId>()
+                );
+                auto shardIdx = TShardIdx(
+                    rowset.GetValue<Schema::CdcStreamScanShardStatus::OwnerShardIdx>(),
+                    rowset.GetValue<Schema::CdcStreamScanShardStatus::LocalShardIdx>()
+                );
+                auto status = rowset.GetValue<Schema::CdcStreamScanShardStatus::Status>();
+
+                Y_VERIFY_S(Self->CdcStreams.contains(pathId), "Cdc stream not found"
+                    << ": pathId# " << pathId);
+
+                auto stream = Self->CdcStreams.at(pathId);
+                stream->ScanShards.emplace(shardIdx, status);
+
+                if (status != NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                    stream->PendingShards.insert(shardIdx);
+                } else {
+                    stream->DoneShards.insert(shardIdx);
                 }
             }
         }
@@ -3326,6 +3398,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 // Remember which paths are still under operation
                 pathsUnderOperation.insert(txState.TargetPathId);
+
+                if (CdcStreamScansToResume.contains(txState.TargetPathId)) {
+                    CdcStreamScansToResume.erase(txState.TargetPathId);
+                }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Adjusted PathState"
@@ -3853,8 +3929,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Self->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Add(path->UserAttrs->Size());
 
             if (path->IsPQGroup()) {
-                auto pqGroup = Self->PersQueueGroups.at(path->PathId);
-                auto delta = pqGroup->AlterData ? pqGroup->AlterData->TotalGroupCount : pqGroup->TotalGroupCount;
+                auto pqGroup = Self->Topics.at(path->PathId);
+                auto delta = pqGroup->AlterData ? pqGroup->AlterData->TotalPartitionCount : pqGroup->TotalPartitionCount;
                 auto tabletConfig = pqGroup->AlterData ? (pqGroup->AlterData->TabletConfig.empty() ? pqGroup->TabletConfig : pqGroup->AlterData->TabletConfig)
                                                        : pqGroup->TabletConfig;
                 NKikimrPQ::TPQTabletConfig config;
@@ -3862,15 +3938,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
                 Y_VERIFY(parseOk);
 
-                ui64 throughput = ((ui64)delta) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-                ui64 storage = throughput * config.GetPartitionConfig().GetLifetimeSeconds();
+                const PQGroupReserve reserve(config, delta);
 
                 inclusiveDomainInfo->IncPQPartitionsInside(delta);
-                inclusiveDomainInfo->IncPQReservedStorage(storage);
+                inclusiveDomainInfo->IncPQReservedStorage(reserve.Storage);
 
                 Self->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(delta);
-                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput);
-                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage);
+                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(reserve.Throughput);
+                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(reserve.Storage);
             }
 
             if (path->PlannedToDrop()) {
@@ -4727,12 +4802,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             return;
         }
 
-        Self->ActivateAfterInitialization(
-            ctx,
-            std::move(delayPublications),
-            ExportsToResume, ImportsToResume,
-            std::move(TablesToClean), std::move(BlockStoreVolumesToClean)
-        );
+        // flatten
+        TVector<TPathId> cdcStreamScansToResume;
+        for (auto& [_, v] : CdcStreamScansToResume) {
+            std::move(v.begin(), v.end(), std::back_inserter(cdcStreamScansToResume));
+        }
+
+        Self->ActivateAfterInitialization(ctx, {
+            .DelayPublications = std::move(delayPublications),
+            .ExportIds = ExportsToResume,
+            .ImportsIds = ImportsToResume,
+            .CdcStreamScans = std::move(cdcStreamScansToResume),
+            .TablesToClean = std::move(TablesToClean),
+            .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
+        });
     }
 };
 

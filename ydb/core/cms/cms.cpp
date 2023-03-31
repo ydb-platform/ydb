@@ -208,6 +208,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         TActionOptions opts(permissionDuration);
         opts.TenantPolicy = request.GetTenantPolicy();
         opts.AvailabilityMode = request.GetAvailabilityMode();
+        opts.PartialPermissionAllowed = allowPartial;
 
         TErrorInfo error;
 
@@ -797,24 +798,25 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
         auto counters = CreateErasureCounter(ClusterInfo->BSGroup(groupId).Erasure.GetErasure(), vdisk, groupId);
         counters->CountGroupState(ClusterInfo, State->Config.DefaultRetryTime, duration, error);
 
-        if (counters->GroupAlreadyHasLockedDisks(error)) {
-            return false;
-        }
-
         switch (opts.AvailabilityMode) {
         case MODE_MAX_AVAILABILITY:
-            if (!counters->CheckForMaxAvailability(error, defaultDeadline)) {
-                Y_VERIFY(error.Code == TStatus::DISALLOW_TEMP);
+            if (!counters->CheckForMaxAvailability(error, defaultDeadline, opts.PartialPermissionAllowed)) {
                 return false;
             }
             break;
         case MODE_KEEP_AVAILABLE:
-            if (!counters->CheckForKeepAvailability(ClusterInfo, error, defaultDeadline)) {
-                Y_VERIFY(error.Code == TStatus::DISALLOW_TEMP);
+            if (!counters->CheckForKeepAvailability(ClusterInfo, error, defaultDeadline, opts.PartialPermissionAllowed)) {
                 return false;
             }
             break;
         case MODE_FORCE_RESTART:
+            if ( counters->GroupAlreadyHasLockedDisks() && opts.PartialPermissionAllowed) { 
+                error.Code = TStatus::DISALLOW_TEMP;
+                error.Reason = "You cannot get two or more disks from the same group at the same time" 
+                               " without specifying the PartialPermissionAllowed parameter";
+                error.Deadline = defaultDeadline;
+                return false;
+            }
             // Any number of down disks is OK for this mode.
             break;
         default:

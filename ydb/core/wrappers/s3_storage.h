@@ -53,13 +53,13 @@ private:
             const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context) {
                 const auto* ctx = static_cast<const TCtx*>(context.get());
 
-                LOG_NOTICE_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
+                LOG_INFO_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
                     << ": uuid# " << ctx->GetUUID()
                     << ", response# " << outcome);
                 ctx->Reply(request, outcome);
         };
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, "Request"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, "Request"
             << ": uuid# " << ctx->GetUUID()
             << ", request# " << ev->Get()->GetRequest());
         func(Client.Get(), ctx->PrepareRequest(ev), callback, ctx);

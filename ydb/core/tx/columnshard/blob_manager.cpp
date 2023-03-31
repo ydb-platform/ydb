@@ -515,7 +515,7 @@ bool TBlobManager::ExportOneToOne(const TUnifiedBlobId& blobId, const NKikimrTxC
         .Blob = blobId
     };
 
-    if (EvictedBlobs.count(evict)) {
+    if (EvictedBlobs.count(evict) || DroppedEvictedBlobs.count(evict)) {
         return false;
     }
 
@@ -564,6 +564,8 @@ bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool
     Y_VERIFY(extracted);
 
     switch (evict.State) {
+        case EEvictState::EVICTING:
+            Y_FAIL();
         case EEvictState::SELF_CACHED:
             Y_VERIFY(old.State == EEvictState::EVICTING);
             break;
@@ -593,7 +595,7 @@ bool TBlobManager::EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) 
     return DroppedEvictedBlobs.erase(evict);
 }
 
-bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db) {
+bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobId>& droppedEvicting) {
     EvictedBlobs.clear();
     DroppedEvictedBlobs.clear();
 
@@ -612,6 +614,10 @@ bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db) {
     }
 
     for (auto& [evict, metadata] : dropped) {
+        if (evict.IsEvicting()) {
+            droppedEvicting.insert(evict.Blob);
+        }
+
         NKikimrTxColumnShard::TEvictMetadata meta;
         Y_VERIFY(meta.ParseFromString(metadata));
 
@@ -639,6 +645,19 @@ TEvictedBlob TBlobManager::GetDropped(const TUnifiedBlobId& blobId, TEvictMetada
     return {};
 }
 
+void TBlobManager::GetCleanupBlobs(THashSet<TEvictedBlob>& cleanup) const {
+    TString strBlobs;
+    for (auto& [evict, _] : DroppedEvictedBlobs) {
+        if (evict.State != EEvictState::EVICTING) {
+            strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
+            cleanup.insert(evict);
+        }
+    }
+    if (!strBlobs.empty()) {
+        LOG_S_NOTICE("Cleanup evicted blobs " << strBlobs << "at tablet " << TabletInfo->TabletID);
+    }
+}
+
 void TBlobManager::DeleteSmallBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) {
     LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Small Blob " << blobId);
     db.EraseSmallBlob(blobId);
@@ -653,6 +672,10 @@ void TBlobManager::PerformDelayedDeletes(IBlobManagerDb& db) {
         db.EraseBlobToDelete(blobId);
     }
     SmallBlobsToDelete.clear();
+}
+
+bool TBlobManager::BlobInUse(const NOlap::TUnifiedBlobId& blobId) const {
+    return BlobsUseCount.count(blobId);
 }
 
 void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
@@ -691,11 +714,6 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
     }
 
     NBlobCache::ForgetBlob(blobId);
-}
-
-bool TBlobManager::IsEvicting(const TUnifiedBlobId& id) {
-    TEvictMetadata meta;
-    return GetEvicted(id, meta).State == EEvictState::EVICTING;
 }
 
 bool TBlobManager::ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped /*= false*/) {

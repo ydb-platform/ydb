@@ -1141,6 +1141,43 @@ std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::
     return arrow::RecordBatch::Make(batch->schema(), batch->num_rows(), columns);
 }
 
+static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<arrow::Array>& column,
+                                                   NScheme::TTypeInfo colType) {
+    switch (colType.GetTypeId()) {
+        case NScheme::NTypeIds::Timestamp: {
+            Y_VERIFY(arrow::is_primitive(column->type()->id()));
+            Y_VERIFY(arrow::bit_width(column->type()->id()) == 64);
+            return std::make_shared<arrow::TimestampArray>(column->data());
+        }
+        case NScheme::NTypeIds::Date: {
+            Y_VERIFY(arrow::is_primitive(column->type()->id()));
+            Y_VERIFY(arrow::bit_width(column->type()->id()) == 32);
+            return std::make_shared<arrow::Date32Array>(column->data());
+        }
+        default: 
+            return {};
+    }
+}
+
+std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                          const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert) {
+    std::vector<std::shared_ptr<arrow::Array>> columns = batch->columns();
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.reserve(batch->num_columns());
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
+        auto& colName = batch->column_name(i);
+        auto it = columnsToConvert.find(TString(colName.data(), colName.size()));
+        if (it != columnsToConvert.end()) {
+            columns[i] = InplaceConvertColumn(columns[i], it->second);
+        }
+        fields.push_back(std::make_shared<arrow::Field>(colName, columns[i]->type()));
+    }
+    auto resultSchemaFixed = std::make_shared<arrow::Schema>(fields);
+    auto convertedBatch = arrow::RecordBatch::Make(resultSchemaFixed, batch->num_rows(), columns);
+    Y_VERIFY(convertedBatch->ValidateFull() == arrow::Status::OK());
+    return convertedBatch;
+}
+
 bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& errorMessage) {
     std::vector<std::shared_ptr<arrow::Array>> allColumns;
     allColumns.reserve(YdbSchema.size());

@@ -29,15 +29,10 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     IndexingActor = ctx.Register(CreateIndexingActor(TabletID(), ctx.SelfID));
     CompactionActor = ctx.Register(CreateCompactionActor(TabletID(), ctx.SelfID));
     EvictionActor = ctx.Register(CreateEvictionActor(TabletID(), ctx.SelfID));
-    ui32 tieringsCount = 0;
     for (auto&& i : Tables) {
         ActivateTiering(i.first, i.second.TieringUsage);
-        tieringsCount += (i.second.TieringUsage ? 1 : 0);
     }
-    TieringWaiting = tieringsCount;
-    if (!TieringWaiting) {
-        SignalTabletActive(ctx);
-    }
+    SignalTabletActive(ctx);
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
@@ -192,7 +187,7 @@ void TColumnShard::UpdateInsertTableCounters() {
     SetCounter(COUNTER_COMMITTED_RECORDS, committed.Rows);
     SetCounter(COUNTER_COMMITTED_BYTES, committed.Bytes);
 
-    LOG_S_DEBUG("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows
+    LOG_S_INFO("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows
         << " records, committed: " << committed.Bytes << " in " << committed.Rows
         << " records at tablet " << TabletID());
 }
@@ -252,8 +247,15 @@ ui64 TColumnShard::MemoryUsage() const {
         PathsToDrop.size() * sizeof(ui64) +
         Ttl.PathsCount() * sizeof(TTtl::TDescription) +
         SchemaPresets.size() * sizeof(TSchemaPreset) +
+        BasicTxInfo.size() * sizeof(TBasicTxInfo) +
+        DeadlineQueue.size() * sizeof(TDeadlineQueueItem) +
+        (PlanQueue.size() + RunningQueue.size()) * sizeof(TPlanQueueItem) +
+        ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
         AltersInFlight.size() * sizeof(TAlterMeta) +
         CommitsInFlight.size() * sizeof(TCommitMeta) +
+        LongTxWrites.size() * (sizeof(TWriteId) + sizeof(TLongTxWriteInfo)) +
+        LongTxWritesByUniqueId.size() * (sizeof(TULID) + sizeof(void*)) +
+        (WaitingReads.size() + WaitingScans.size()) * (sizeof(TRowVersion) + sizeof(void*)) +
         TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
         TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
     if (PrimaryIndex) {

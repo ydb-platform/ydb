@@ -397,7 +397,22 @@ class TLongTxWriteBase : public TActorBootstrapped<TLongTxWriteImpl> {
     using TBase = TActorBootstrapped<TLongTxWriteImpl>;
 protected:
     using TThis = typename TBase::TThis;
+
 public:
+    struct TRetryData {
+        static const constexpr ui32 MaxRetriesPerShard = 10;
+        static const constexpr ui32 OverloadedDelayMs = 200;
+
+        ui64 TableId;
+        TString DedupId;
+        TString Data;
+        ui32 NumRetries;
+
+        static TDuration OverloadTimeout() {
+            return TDuration::MilliSeconds(OverloadedDelayMs);
+        }
+    };
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
     }
@@ -423,10 +438,6 @@ public:
     }
 
 protected:
-    void SetLongTxId(const TLongTxId& longTxId) {
-        LongTxId = longTxId;
-    }
-
     void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate& resp) {
         NWilson::TProfileSpan pSpan = ActorSpan.BuildChildrenSpan("ProceedWithSchema");
         if (resp.ErrorCount > 0) {
@@ -502,8 +513,37 @@ protected:
 
 private:
     void SendWriteRequest(ui64 shardId, ui64 tableId, const TString& dedupId, const TString& data) {
-        WaitShards.insert(shardId);
+        TRetryData retry{
+            .TableId = tableId,
+            .DedupId = dedupId,
+            .Data = data,
+            .NumRetries = 0
+        };
+        WaitShards.emplace(shardId, std::move(retry));
         SendToTablet(shardId, MakeHolder<TEvColumnShard::TEvWrite>(this->SelfId(), LongTxId, tableId, dedupId, data));
+    }
+
+    bool RetryWriteRequest(ui64 shardId, bool delayed = true) {
+        if (!WaitShards.count(shardId)) {
+            return false;
+        }
+
+        auto& retry = WaitShards[shardId];
+        if (retry.NumRetries < TRetryData::MaxRetriesPerShard) {
+            if (delayed) {
+                if (ShardsToRetry.empty()) {
+                    TimeoutTimerActorId = CreateLongTimer(TRetryData::OverloadTimeout(),
+                        new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup()));
+                }
+                ShardsToRetry.insert(shardId);
+            } else {
+                ++retry.NumRetries;
+                SendToTablet(shardId, MakeHolder<TEvColumnShard::TEvWrite>(this->SelfId(), LongTxId,
+                                                                           retry.TableId, retry.DedupId, retry.Data));
+            }
+            return true;
+        }
+        return false;
     }
 
     STFUNC(StateWrite) {
@@ -511,37 +551,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvColumnShard::TEvWriteResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-        }
-    }
-
-    // Expects NKikimrTxColumnShard::EResultStatus
-    static Ydb::StatusIds::StatusCode ConvertToYdbStatus(ui32 columnShardStatus) {
-        switch (columnShardStatus) {
-        case NKikimrTxColumnShard::UNSPECIFIED:
-            return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-
-        case NKikimrTxColumnShard::PREPARED:
-        case NKikimrTxColumnShard::SUCCESS:
-            return Ydb::StatusIds::SUCCESS;
-
-        case NKikimrTxColumnShard::ABORTED:
-            return Ydb::StatusIds::ABORTED;
-
-        case NKikimrTxColumnShard::ERROR:
-            return Ydb::StatusIds::GENERIC_ERROR;
-
-        case NKikimrTxColumnShard::TIMEOUT:
-            return Ydb::StatusIds::TIMEOUT;
-
-        case NKikimrTxColumnShard::SCHEMA_ERROR:
-        case NKikimrTxColumnShard::SCHEMA_CHANGED:
-            return Ydb::StatusIds::SCHEME_ERROR;
-
-        case NKikimrTxColumnShard::OVERLOADED:
-            return Ydb::StatusIds::OVERLOADED;
-
-        default:
-            return Ydb::StatusIds::GENERIC_ERROR;
+            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
@@ -551,10 +561,16 @@ private:
         ui64 shardId = msg->Record.GetOrigin();
         Y_VERIFY(WaitShards.count(shardId) || ShardsWrites.count(shardId));
 
-        auto status = msg->Record.GetStatus();
+        const auto status = (NKikimrTxColumnShard::EResultStatus)msg->Record.GetStatus();
+        if (status == NKikimrTxColumnShard::OVERLOADED) {
+            if (RetryWriteRequest(shardId)) {
+                return;
+            }
+        }
         if (status != NKikimrTxColumnShard::SUCCESS) {
-            auto ydbStatus = ConvertToYdbStatus(status);
-            return ReplyError(ydbStatus, "Write error");
+            auto ydbStatus = NColumnShard::ConvertToYdbStatus(status);
+            return ReplyError(ydbStatus,
+                TStringBuilder() << "Cannot write data into shard " << shardId << " in longTx " << LongTxId.ToString());
         }
 
         if (!WaitShards.count(shardId)) {
@@ -571,12 +587,31 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "DeliveryProblem");
         const auto* msg = ev->Get();
+        ui64 shardId = msg->TabletId;
 
-        if (msg->NotDelivered) {
-            return ReplyError(Ydb::StatusIds::UNAVAILABLE, "Shard unavailable");
-        } else {
-            return ReplyError(Ydb::StatusIds::UNDETERMINED, "Shard unavailable");
+        if (!WaitShards.count(shardId)) {
+            return;
         }
+
+        if (RetryWriteRequest(shardId)) {
+            return;
+        }
+
+        TString errMsg = TStringBuilder() << "Shard " << shardId << " is not available after "
+            << WaitShards[shardId].NumRetries << " retries";
+        if (msg->NotDelivered) {
+            return ReplyError(Ydb::StatusIds::UNAVAILABLE, errMsg);
+        } else {
+            return ReplyError(Ydb::StatusIds::UNDETERMINED, errMsg);
+        }
+    }
+
+    void HandleTimeout(const TActorContext& /*ctx*/) {
+        TimeoutTimerActorId = {};
+        for (ui64 shardId : ShardsToRetry) {
+            RetryWriteRequest(shardId, false);
+        }
+        ShardsToRetry.clear();
     }
 
 private:
@@ -636,13 +671,15 @@ protected:
     const TString DatabaseName;
     const TString Path;
     const TString DedupId;
-private:
     TLongTxId LongTxId;
+private:
     const TActorId LeaderPipeCache;
     std::optional<NACLib::TUserToken> UserToken;
-    THashSet<ui64> WaitShards;
+    THashMap<ui64, TRetryData> WaitShards;
     THashMap<ui64, ui64> ShardsWrites;
+    THashSet<ui64> ShardsToRetry;
     NWilson::TProfileSpan ActorSpan;
+    TActorId TimeoutTimerActorId;
 };
 
 
@@ -657,7 +694,7 @@ public:
     explicit TLongTxWriteRPC(std::unique_ptr<IRequestOpCtx> request)
         : TBase(request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())),
             TEvLongTxWriteRequest::GetProtoRequest(request)->path(),
-            request->GetInternalToken(),
+            request->GetSerializedToken(),
             TLongTxId(),
             TEvLongTxWriteRequest::GetProtoRequest(request)->dedup_id())
         , Request(std::move(request))
@@ -669,11 +706,9 @@ public:
         const auto* req = GetProtoRequest();
 
         TString errMsg;
-        TLongTxId longTxId;
-        if (!longTxId.ParseString(req->tx_id(), &errMsg)) {
+        if (!LongTxId.ParseString(req->tx_id(), &errMsg)) {
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg);
         }
-        SetLongTxId(longTxId);
 
         if (GetProtoRequest()->data().format() != Ydb::LongTx::Data::APACHE_ARROW) {
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Only APACHE_ARROW data format is supported");
@@ -829,7 +864,7 @@ class TLongTxReadRPC : public TActorBootstrapped<TLongTxReadRPC> {
     using TBase = TActorBootstrapped<TLongTxReadRPC>;
 
 private:
-    static const constexpr ui64 MaxRetriesPerShard = 10;
+    static const constexpr ui32 MaxRetriesPerShard = 10;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -850,7 +885,7 @@ public:
     void Bootstrap() {
         const auto* req = TEvLongTxReadRequest::GetProtoRequest(Request);
 
-        if (const TString& internalToken = Request->GetInternalToken()) {
+        if (const TString& internalToken = Request->GetSerializedToken()) {
             UserToken.emplace(internalToken);
         }
 
@@ -970,7 +1005,7 @@ private:
             ShardRetries[shard] = 0;
         }
 
-        ui64 retries = ++ShardRetries[shard];
+        ui32 retries = ++ShardRetries[shard];
         if (retries > MaxRetriesPerShard) {
             return ReplyError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Failed to connect to shard %lu", shard));
         }

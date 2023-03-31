@@ -5,7 +5,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA03, "TEvClientConnected", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA03, "TEvClientConnected", (AgentId, LogId),
             (TabletId, msg.TabletId), (Status, msg.Status), (ClientId, msg.ClientId), (ServerId, msg.ServerId));
         Y_VERIFY_DEBUG_S(msg.Status == NKikimrProto::OK, "Status# " << NKikimrProto::EReplyStatus_Name(msg.Status));
         if (msg.Status != NKikimrProto::OK) {
@@ -17,7 +17,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA04, "TEvClientDestroyed", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA04, "TEvClientDestroyed", (AgentId, LogId),
             (ClientId, msg.ClientId), (ServerId, msg.ServerId));
         PipeId = PipeServerId = {};
         OnDisconnect();
@@ -29,14 +29,14 @@ namespace NKikimr::NBlobDepot {
         PipeId = Register(NTabletPipe::CreateClient(SelfId(), TabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
         NextTabletRequestId = 1;
         const ui64 id = NextTabletRequestId++;
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA05, "ConnectToBlobDepot", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA05, "ConnectToBlobDepot", (AgentId, LogId),
             (PipeId, PipeId), (RequestId, id));
         NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvRegisterAgent(VirtualGroupId, AgentInstanceId), id);
         RegisterRequest(id, this, nullptr, {}, true);
     }
 
     void TBlobDepotAgent::Handle(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvRegisterAgentResult& msg) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA06, "TEvRegisterAgentResult", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA06, "TEvRegisterAgentResult", (AgentId, LogId),
             (Msg, msg));
         BlobDepotGeneration = msg.GetGeneration();
         DecommitGroupId = msg.HasDecommitGroupId() ? std::make_optional(msg.GetDecommitGroupId()) : std::nullopt;
@@ -68,7 +68,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         for (const NKikimrBlobDepot::TChannelKind::E kind : vanishedKinds) {
-            STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA07, "kind vanished", (VirtualGroupId, VirtualGroupId), (Kind, kind));
+            STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA07, "kind vanished", (AgentId, LogId), (Kind, kind));
             ChannelKinds.erase(kind);
         }
 
@@ -92,9 +92,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::IssueAllocateIdsIfNeeded(TChannelKind& kind) {
-        if (!kind.IdAllocInFlight && kind.GetNumAvailableItems() < 100 && PipeId) {
+        if (!kind.IdAllocInFlight && kind.GetNumAvailableItems() < 100 && IsConnected) {
             const ui64 id = NextTabletRequestId++;
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA08, "IssueAllocateIdsIfNeeded", (VirtualGroupId, VirtualGroupId),
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA08, "IssueAllocateIdsIfNeeded", (AgentId, LogId),
                 (ChannelKind, NKikimrBlobDepot::TChannelKind::E_Name(kind.Kind)),
                 (IdAllocInFlight, kind.IdAllocInFlight), (NumAvailableItems, kind.GetNumAvailableItems()),
                 (RequestId, id));
@@ -119,9 +119,11 @@ namespace NKikimr::NBlobDepot {
 
         if (msg.HasGivenIdRange()) {
             kind.IssueGivenIdRange(msg.GetGivenIdRange());
+        } else {
+            kind.ProcessQueriesWaitingForId(false);
         }
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA09, "TEvAllocateIdsResult", (VirtualGroupId, VirtualGroupId), (Msg, msg),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA09, "TEvAllocateIdsResult", (AgentId, LogId), (Msg, msg),
             (NumAvailableItems, kind.GetNumAvailableItems()));
     }
 
@@ -134,7 +136,7 @@ namespace NKikimr::NBlobDepot {
         while (!TabletRequestInFlight.empty()) {
             auto node = TabletRequestInFlight.extract(TabletRequestInFlight.begin());
             auto& requestInFlight = node.value();
-            requestInFlight.Sender->OnRequestComplete(requestInFlight, TTabletDisconnected{});
+            requestInFlight.Sender->OnRequestComplete(requestInFlight, TTabletDisconnected{}, nullptr);
         }
 
         for (auto& [_, kind] : ChannelKinds) {
@@ -174,7 +176,7 @@ namespace NKikimr::NBlobDepot {
 
     ui64 TBlobDepotAgent::Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context) {
         const ui64 id = NextTabletRequestId++;
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA10, "Issue", (VirtualGroupId, VirtualGroupId), (RequestId, id), (Msg, ev->ToString()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA10, "Issue", (AgentId, LogId), (RequestId, id), (Msg, ev->ToString()));
         NTabletPipe::SendData(SelfId(), PipeId, ev.release(), id);
         RegisterRequest(id, sender, std::move(context), {}, true);
         return id;
@@ -182,7 +184,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Handle(TEvBlobDepot::TEvPushNotify::TPtr ev) {
         auto& msg = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "TEvPushNotify", (VirtualGroupId, VirtualGroupId), (Msg, msg),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "TEvPushNotify", (AgentId, LogId), (Msg, msg),
             (Id, ev->Cookie), (Sender, ev->Sender), (PipeServerId, PipeServerId), (Match, ev->Sender == PipeServerId));
         if (ev->Sender != PipeServerId) {
             return; // race with previous connection
@@ -209,7 +211,7 @@ namespace NKikimr::NBlobDepot {
                 it->ToProto(response->Record.AddWritesInFlight());
             }
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA12, "TrimChannel", (VirtualGroupId, VirtualGroupId),
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA12, "TrimChannel", (AgentId, LogId),
                 (Channel, int(channel)), (NumAvailableItemsBefore, numAvailableItemsBefore),
                 (NumAvailableItemsAfter, kind.GetNumAvailableItems()));
         }
@@ -223,7 +225,7 @@ namespace NKikimr::NBlobDepot {
 
         // it is essential to send response through the pipe -- otherwise we can break order with, for example, commits:
         // this message can outrun previously sent commit and lead to data loss
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA33, "sending TEvPushNotifyResult", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA33, "sending TEvPushNotifyResult", (AgentId, LogId),
             (RequestId, NextTabletRequestId));
         NTabletPipe::SendData(SelfId(), PipeId, response.release(), NextTabletRequestId++);
 

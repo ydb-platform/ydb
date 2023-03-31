@@ -29,8 +29,8 @@ private:
     using TBase = Tests::NCS::THelper;
 public:
     using TBase::TBase;
-    void CreateTestOlapTable(TString tableName = "olapTable", TString storeName = "olapStore",
-        ui32 storeShardsCount = 4, ui32 tableShardsCount = 3,
+    void CreateTestOlapTable(TString tableName = "olapTable", ui32 tableShardsCount = 3,
+        TString storeName = "olapStore", ui32 storeShardsCount = 4,
         TString shardingFunction = "HASH_FUNCTION_CLOUD_LOGS") {
         TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
         CreateTestOlapStore(sender, Sprintf(R"(
@@ -295,13 +295,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 }
             }
             {
-                std::vector<NMetadata::NInternal::TTableRecord> patches;
-                {
-                    NMetadata::NInternal::TTableRecord patch;
-                    patch.SetColumn("ownerPath", NMetadata::NInternal::TYDBValue::Bytes("/Root/olapStore"));
-                    patch.SetColumn("tierName", NMetadata::NInternal::TYDBValue::Bytes("tier1"));
-                    patches.emplace_back(std::move(patch));
-                }
                 emulator->ResetConditions();
                 emulator->SetExpectedTieringsCount(0);
                 emulator->SetExpectedTiersCount(0);
@@ -491,14 +484,22 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             emulator->SetExpectedTiersCount(2);
             emulator->CheckRuntime(runtime);
         }
-        lHelper.CreateTestOlapTable("olapTable");
+        lHelper.CreateTestOlapTable("olapTable", 2);
         Cerr << "Wait tables" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(20));
         Cerr << "Initialization tables" << Endl;
-        Cerr << "Insert..." << Endl;
         const TInstant pkStart = Now() - TDuration::Days(15);
         ui32 idx = 0;
-        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", 0, (pkStart + TDuration::Seconds(2 * idx++)).GetValue(), 2000);
+
+        auto batch = lHelper.TestArrowBatch(0, (pkStart + TDuration::Seconds(2 * idx++)).GetValue(), 6000);
+        auto batchSize = NArrow::GetBatchDataSize(batch);
+        Cerr << "Inserting " << batchSize << " bytes..." << Endl;
+        UNIT_ASSERT(batchSize > 4 * 1024 * 1024); // NColumnShard::TLimits::MIN_BYTES_TO_INSERT
+        UNIT_ASSERT(batchSize < 8 * 1024 * 1024);
+
+        for (ui32 i = 0; i < 4; ++i) {
+            lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
+        }
         {
             const TInstant start = Now();
             bool check = false;
@@ -515,7 +516,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #endif
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
-            Y_VERIFY(check);
+            UNIT_ASSERT(check);
         }
 #ifdef S3_TEST_USAGE
         Cerr << "storage initialized..." << Endl;
@@ -538,10 +539,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #endif
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
-            Y_VERIFY(check);
+            UNIT_ASSERT(check);
         }
 #ifndef S3_TEST_USAGE
-        Y_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount() == 1);
+        UNIT_ASSERT_EQUAL(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount(), 1);
 #endif
     }
 

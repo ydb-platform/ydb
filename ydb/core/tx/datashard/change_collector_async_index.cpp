@@ -59,12 +59,12 @@ static THashMap<TTag, TPos> MakeTagToPos(const C& container, E extractor) {
     return tagToPos;
 }
 
-bool TAsyncIndexChangeCollector::NeedToReadKeys() const {
-    return true;
+void TAsyncIndexChangeCollector::OnRestart() {
+    TBaseChangeCollector::OnRestart();
 }
 
-void TAsyncIndexChangeCollector::SetReadVersion(const TRowVersion& readVersion) {
-    ReadVersion = readVersion;
+bool TAsyncIndexChangeCollector::NeedToReadKeys() const {
+    return true;
 }
 
 bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
@@ -162,9 +162,16 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 if (updatedTagToPos.contains(tag)) {
                     needUpdate = true;
                     FillDataFromUpdate(tag, updatedTagToPos.at(tag), updates);
-                } else if (rop == ERowOp::Reset) {
+                } else {
                     Y_VERIFY(userTable->Columns.contains(tag));
-                    FillDataWithNull(tag, userTable->Columns.at(tag).Type);
+                    const auto& column = userTable->Columns.at(tag);
+
+                    if (rop == ERowOp::Reset && !column.IsKey) {
+                        FillDataWithNull(tag, column.Type);
+                    } else {
+                        Y_VERIFY(tagToPos.contains(tag));
+                        FillDataFromRowState(tag, tagToPos.at(tag), row, column.Type);
+                    }
                 }
             }
 
@@ -177,10 +184,6 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     }
 
     return true;
-}
-
-void TAsyncIndexChangeCollector::Reset() {
-    TBaseChangeCollector::Reset();
 }
 
 auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
@@ -254,6 +257,11 @@ void TAsyncIndexChangeCollector::FillKeyWithNull(TTag tag, NScheme::TTypeInfo ty
     TagsSeen.insert(tag);
 }
 
+void TAsyncIndexChangeCollector::FillDataFromRowState(TTag tag, TPos pos, const TRowState& rowState, NScheme::TTypeInfo type) {
+    Y_VERIFY(pos < rowState.Size());
+    IndexDataVals.emplace_back(tag, ECellOp::Set, TRawTypeValue(rowState.Get(pos).AsRef(), type));
+}
+
 void TAsyncIndexChangeCollector::FillDataFromUpdate(TTag tag, TPos pos, TArrayRef<const TUpdateOp> updates) {
     Y_VERIFY(pos < updates.size());
 
@@ -272,7 +280,7 @@ void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId&
 {
     NKikimrChangeExchange::TChangeRecord::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
-    TBaseChangeCollector::Persist(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body);
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body);
 }
 
 void TAsyncIndexChangeCollector::Clear() {

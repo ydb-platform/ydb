@@ -24,6 +24,7 @@ target_link_libraries(core-ymq-base PUBLIC
   ydb-core-base
   ydb-core-protos
   core-ymq-proto
+  core-kqp-common
   ydb-library-aclib
   library-http_proxy-authorization
   library-http_proxy-error

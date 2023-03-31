@@ -124,11 +124,10 @@ static void DoUploadRows(
 
 Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadRows) {
+    Y_UNIT_TEST(TestUploadRows) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -148,11 +147,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::INT32, Ydb::StatusIds::SCHEME_ERROR);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadRowsDropColumnRace) {
+    Y_UNIT_TEST(TestUploadRowsDropColumnRace) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -207,11 +205,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SCHEME_ERROR);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadRowsLocks) {
+    Y_UNIT_TEST_TWIN(TestUploadRowsLocks, StreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
+
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetAppConfig(appConfig)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -252,11 +253,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         }
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRows) {
+    Y_UNIT_TEST(TestUploadShadowRows) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -317,11 +317,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
                 "key = 10, value = (empty maybe)\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowData) {
+    Y_UNIT_TEST(TestUploadShadowRowsShadowData) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -398,11 +397,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
                 "key = 10, value = (empty maybe)\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowDataSplitThenPublish) {
+    Y_UNIT_TEST(TestUploadShadowRowsShadowDataSplitThenPublish) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -497,11 +495,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
                 "key = 10, value = (empty maybe)\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowDataPublishThenSplit) {
+    Y_UNIT_TEST(TestUploadShadowRowsShadowDataPublishThenSplit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -599,11 +596,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
                 "key = 10, value = (empty maybe)\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowDataAlterSplitThenPublish) {
+    Y_UNIT_TEST(TestUploadShadowRowsShadowDataAlterSplitThenPublish) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

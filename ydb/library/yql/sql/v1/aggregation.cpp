@@ -35,6 +35,7 @@ static const THashSet<TString> AggApplyFuncs = {
     "avg_traits_factory",
     "min_traits_factory",
     "max_traits_factory",
+    "some_traits_factory",
 };
 
 class TAggregationFactory : public IAggregation {

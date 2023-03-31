@@ -26,8 +26,6 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
     const bool Decommission;
     TInstant StartTime;
 
-    TAutoPtr<TEvBlobStorage::TEvRangeResult> Reply;
-
     TMap<TLogoBlobID, TBlobStatusTracker> BlobStatus;
     TBlobStorageGroupInfo::TGroupVDisks FailedDisks;
 
@@ -285,7 +283,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
             Y_VERIFY(response.Id == BlobsToGet[i].BlobId);
 
             if (getResult.Responses[i].Status == NKikimrProto::OK) {
-                result->Responses.emplace_back(response.Id, response.Buffer);
+                result->Responses.emplace_back(response.Id, std::move(response.Buffer), response.Keep, response.DoNotKeep);
             } else if (getResult.Responses[i].Status != NKikimrProto::NODATA || BlobsToGet[i].RequiredToBePresent) {
                 // it's okay to get NODATA if blob wasn't confirmed -- this blob is simply thrown out of resulting
                 // set; otherwise we return error about lost data
@@ -301,7 +299,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         if (To < From) {
             std::reverse(result->Responses.begin(), result->Responses.end());
         }
-        A_LOG_LOG_S(true, PriorityForStatusOutbound(status), "DSR05", "Result# " << result->Print(false));
+        A_LOG_LOG_S(true, NLog::PRI_INFO, "DSR05", "Result# " << result->Print(false));
         SendReply(result);
     }
 
@@ -309,7 +307,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         std::unique_ptr<TEvBlobStorage::TEvRangeResult> result(new TEvBlobStorage::TEvRangeResult(
                     status, From, To, Info->GroupID));
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(true, PriorityForStatusOutbound(status), "DSR06", "Result# " << result->Print(false));
+        A_LOG_LOG_S(true, NLog::PRI_NOTICE, "DSR06", "Result# " << result->Print(false));
         SendReply(result);
     }
 
@@ -344,7 +342,7 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_RANGE, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, "DSProxy.Range")
+                ev->RestartCounter, "DSProxy.Range", std::move(ev->ExecutionRelay))
         , TabletId(ev->TabletId)
         , From(ev->From)
         , To(ev->To)

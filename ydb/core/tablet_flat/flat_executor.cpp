@@ -313,6 +313,8 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
     auto loadedState = BootLogic->ExtractState();
     BootLogic.Destroy();
 
+    Y_VERIFY(Counters, "Expected to have Counters initialized during Boot processing");
+
     Y_VERIFY(!GcLogic);
     Y_VERIFY(!LogicRedo);
     Y_VERIFY(!LogicAlter);
@@ -321,11 +323,6 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
     BorrowLogic = loadedState->Loans;
 
     Y_VERIFY(!CompactionLogic);
-    if (!Counters) {
-        Counters = MakeHolder<TExecutorCounters>();
-        CountersBaseline = MakeHolder<TExecutorCounters>();
-        Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
-    }
 
     CounterCacheFresh = new NMonitoring::TCounterForPtr;
     CounterCacheStaging = new NMonitoring::TCounterForPtr;
@@ -361,7 +358,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     auto loadedState = BootLogic->ExtractState();
     BootLogic.Destroy();
 
-    Counters = MakeHolder<TExecutorCounters>();
+    Y_VERIFY(Counters, "Expected to have Counters initialized during Boot processing");
 
     CommitManager = loadedState->CommitManager;
     Database = loadedState->Database;
@@ -377,8 +374,6 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
-    CountersBaseline = MakeHolder<TExecutorCounters>();
-    Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
 
     CounterCacheFresh = new NMonitoring::TCounterForPtr;
@@ -631,6 +626,12 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
             Owner->Info()->TenantPathId, Stats->IsFollower, SelfId());
     }
 
+    if (!Counters) {
+        Counters = MakeHolder<TExecutorCounters>();
+        CountersBaseline = MakeHolder<TExecutorCounters>();
+        Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
+    }
+
     RegisterTabletFlatProbes();
 
     Become(&TThis::StateBoot);
@@ -649,20 +650,11 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
 
     BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), Owner->Info(), maxBootBytesInFly));
 
-    ui64 totalBytes = 0;
-    for (auto& kv : msg->GroupReadBytes) {
-        totalBytes += kv.second;
-    }
-
-    ui64 totalOps = 0;
-    for (auto& kv : msg->GroupReadOps) {
-        totalOps += kv.second;
-    }
-
-    Send(SelfId(), new NBlockIO::TEvStat(NBlockIO::EDir::Read, NBlockIO::EPriority::Fast,
-        totalBytes, totalOps,
+    ProcessIoStats(
+        NBlockIO::EDir::Read, NBlockIO::EPriority::Fast,
         std::move(msg->GroupReadBytes),
-        std::move(msg->GroupReadOps)));
+        std::move(msg->GroupReadOps),
+        ctx);
 
     const auto res = BootLogic->ReceiveBoot(ev, std::move(executorCaches));
     return TranscriptBootOpResult(res, ctx);
@@ -672,6 +664,12 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
     Y_VERIFY(CurrentStateFunc() == &TThis::StateInit
         || CurrentStateFunc() == &TThis::StateFollowerBoot
         || CurrentStateFunc() == &TThis::StateFollower);
+
+    if (!Counters) {
+        Counters = MakeHolder<TExecutorCounters>();
+        CountersBaseline = MakeHolder<TExecutorCounters>();
+        Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
+    }
 
     RegisterTabletFlatProbes();
 
@@ -691,6 +689,13 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
     auto executorCaches = CleanupState();
 
     BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), Owner->Info(), maxBootBytesInFly));
+
+    ProcessIoStats(
+        NBlockIO::EDir::Read, NBlockIO::EPriority::Fast,
+        std::move(msg->GroupReadBytes),
+        std::move(msg->GroupReadOps),
+        ctx);
+
     const auto res = BootLogic->ReceiveFollowerBoot(ev, std::move(executorCaches));
     return TranscriptFollowerBootOpResult(res, ctx);
 }
@@ -941,45 +946,6 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
 void TExecutor::ApplyFollowerAuxUpdate(const TString &auxBody) {
     const TString aux = NPageCollection::TSlicer::Lz4()->Decode(auxBody);
     TProtoBox<NKikimrExecutorFlat::TFollowerAux> proto(aux);
-
-    for (const auto &x : proto.GetPageCollectionsTouched()) {
-        const TLogoBlobID &metaId = LogoBlobIDFromLogoBlobID(x.GetMetaInfoId());
-        TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(metaId);
-        if (!collectionInfo)
-            continue;
-
-        TVector<NTable::TPageId> pages;
-
-        for (ui32 pageId : x.GetTouchedPages()) {
-            auto* page = collectionInfo->EnsurePage(pageId);
-            switch (page->LoadState) {
-            case TPrivatePageCache::TPage::LoadStateNo:
-                pages.push_back(pageId);
-                page->LoadState = TPrivatePageCache::TPage::LoadStateRequestedAsync;
-                break;
-            case TPrivatePageCache::TPage::LoadStateRequested:
-            case TPrivatePageCache::TPage::LoadStateRequestedAsync:
-                break;
-            case TPrivatePageCache::TPage::LoadStateLoaded:
-                PrivatePageCache->Touch(pageId, collectionInfo);
-                break;
-            default:
-                Y_FAIL("unknown ELoadState");
-            }
-        }
-
-        if (auto logl = Logger->Log(ELnLev::Debug)) {
-            logl
-                << NFmt::Do(*this) << " refresh pageCollection " << metaId
-                << " " << pages.size() << " pages of " << x.TouchedPagesSize();
-        }
-
-        if (pages) {
-            auto *req = new NPageCollection::TFetch(0, collectionInfo->PageCollection, std::move(pages));
-
-            RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, EPageCollectionRequest::CacheSync);
-        }
-    }
 
     if (proto.HasUserAuxUpdate())
         Owner->OnLeaderUserAuxUpdate(std::move(proto.GetUserAuxUpdate()));
@@ -2381,22 +2347,6 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
         CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
     }
 
-    if (!Stats->IsFollower && HadFollowerAttached && env.Touches) {
-        NKikimrExecutorFlat::TFollowerAux proto;
-        proto.MutablePageCollectionsTouched()->Reserve(env.Touches.size());
-        for (auto &xpair : env.Touches) {
-            auto *px = proto.AddPageCollectionsTouched();
-            LogoBlobIDFromLogoBlobID(xpair.first->Id, px->MutableMetaInfoId());
-            px->MutableTouchedPages()->Reserve(xpair.second.size());
-            for (ui32 blockId : xpair.second)
-                px->AddTouchedPages(blockId);
-        }
-
-        auto coded = NPageCollection::TSlicer::Lz4()->Encode(proto.SerializeAsString());
-
-        Send(Owner->Tablet(), new TEvTablet::TEvAux(std::move(coded)));
-    }
-
     const ui64 bookkeepingTimeuS = ui64(1000000. * (currentBookkeepingTime + bookkeepingTimer.PassedReset()));
     const ui64 execTimeuS = ui64(1000000. * currentExecTime);
 
@@ -2884,20 +2834,11 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 
     CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels));
 
-    ui64 totalBytes = 0;
-    for (auto& kv : msg->GroupWrittenBytes) {
-        totalBytes += kv.second;
-    }
-
-    ui64 totalOps = 0;
-    for (auto& kv : msg->GroupWrittenOps) {
-        totalOps += kv.second;
-    }
-
-    Send(SelfId(), new NBlockIO::TEvStat(NBlockIO::EDir::Write, NBlockIO::EPriority::Fast,
-        totalBytes, totalOps,
+    ProcessIoStats(
+        NBlockIO::EDir::Write, NBlockIO::EPriority::Fast,
         std::move(msg->GroupWrittenBytes),
-        std::move(msg->GroupWrittenOps)));
+        std::move(msg->GroupWrittenOps),
+        ctx);
 
     ActiveTransaction = false;
     PlanTransactionActivation();
@@ -3006,46 +2947,85 @@ void TExecutor::StartScan(ui64 task, TResource *cookie) noexcept
     }
 }
 
-void TExecutor::Handle(NBlockIO::TEvStat::TPtr &ev, const TActorContext &ctx) {
-    auto *msg = ev->Get();
-
+void TExecutor::ProcessIoStats(
+        NBlockIO::EDir dir, NBlockIO::EPriority priority,
+        ui64 bytes, ui64 ops,
+        NBlockIO::TEvStat::TByCnGr&& groupBytes,
+        NBlockIO::TEvStat::TByCnGr&& groupOps,
+        const TActorContext& ctx)
+{
     if (auto *metrics = ResourceMetrics.Get()) {
-        auto &bandBytes = msg->Dir == NBlockIO::EDir::Read ? metrics->ReadThroughput : metrics->WriteThroughput;
+        auto &bandBytes = dir == NBlockIO::EDir::Read ? metrics->ReadThroughput : metrics->WriteThroughput;
 
-        for (auto &it: msg->GroupBytes)
+        for (auto &it: groupBytes)
             bandBytes[it.first].Increment(it.second, Time->Now());
 
-        auto &bandOps = msg->Dir == NBlockIO::EDir::Read ? metrics->ReadIops : metrics->WriteIops;
+        auto &bandOps = dir == NBlockIO::EDir::Read ? metrics->ReadIops : metrics->WriteIops;
 
-        for (auto &it: msg->GroupOps)
+        for (auto &it: groupOps)
             bandOps[it.first].Increment(it.second, Time->Now());
 
         metrics->TryUpdate(ctx);
     }
 
-    if (msg->Priority == NBlockIO::EPriority::Bulk) {
-        switch (msg->Dir) {
+    if (priority == NBlockIO::EPriority::Bulk) {
+        switch (dir) {
             case NBlockIO::EDir::Read:
-                Counters->Cumulative()[TExecutorCounters::COMP_BYTES_READ].Increment(msg->Bytes);
-                Counters->Cumulative()[TExecutorCounters::COMP_BLOBS_READ].Increment(msg->Ops);
+                Counters->Cumulative()[TExecutorCounters::COMP_BYTES_READ].Increment(bytes);
+                Counters->Cumulative()[TExecutorCounters::COMP_BLOBS_READ].Increment(ops);
                 break;
             case NBlockIO::EDir::Write:
-                Counters->Cumulative()[TExecutorCounters::COMP_BYTES_WRITTEN].Increment(msg->Bytes);
-                Counters->Cumulative()[TExecutorCounters::COMP_BLOBS_WRITTEN].Increment(msg->Ops);
+                Counters->Cumulative()[TExecutorCounters::COMP_BYTES_WRITTEN].Increment(bytes);
+                Counters->Cumulative()[TExecutorCounters::COMP_BLOBS_WRITTEN].Increment(ops);
                 break;
         }
     } else {
-        switch (msg->Dir) {
+        switch (dir) {
             case NBlockIO::EDir::Read:
-                Counters->Cumulative()[TExecutorCounters::TABLET_BYTES_READ].Increment(msg->Bytes);
-                Counters->Cumulative()[TExecutorCounters::TABLET_BLOBS_READ].Increment(msg->Ops);
+                Counters->Cumulative()[TExecutorCounters::TABLET_BYTES_READ].Increment(bytes);
+                Counters->Cumulative()[TExecutorCounters::TABLET_BLOBS_READ].Increment(ops);
                 break;
             case NBlockIO::EDir::Write:
-                Counters->Cumulative()[TExecutorCounters::TABLET_BYTES_WRITTEN].Increment(msg->Bytes);
-                Counters->Cumulative()[TExecutorCounters::TABLET_BLOBS_WRITTEN].Increment(msg->Ops);
+                Counters->Cumulative()[TExecutorCounters::TABLET_BYTES_WRITTEN].Increment(bytes);
+                Counters->Cumulative()[TExecutorCounters::TABLET_BLOBS_WRITTEN].Increment(ops);
                 break;
         }
     }
+}
+
+void TExecutor::ProcessIoStats(
+        NBlockIO::EDir dir, NBlockIO::EPriority priority,
+        NBlockIO::TEvStat::TByCnGr&& groupBytes,
+        NBlockIO::TEvStat::TByCnGr&& groupOps,
+        const TActorContext& ctx)
+{
+    ui64 totalBytes = 0;
+    for (auto& kv : groupBytes) {
+        totalBytes += kv.second;
+    }
+
+    ui64 totalOps = 0;
+    for (auto& kv : groupOps) {
+        totalOps += kv.second;
+    }
+
+    ProcessIoStats(
+        dir, priority,
+        totalBytes, totalOps,
+        std::move(groupBytes),
+        std::move(groupOps),
+        ctx);
+}
+
+void TExecutor::Handle(NBlockIO::TEvStat::TPtr &ev, const TActorContext &ctx) {
+    auto *msg = ev->Get();
+
+    ProcessIoStats(
+        msg->Dir, msg->Priority,
+        msg->Bytes, msg->Ops,
+        std::move(msg->GroupBytes),
+        std::move(msg->GroupOps),
+        ctx);
 }
 
 void TExecutor::UtilizeSubset(const NTable::TSubset &subset,
@@ -4206,7 +4186,14 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     for (size_t group : xrange(rowScheme->Families.size())) {
         auto familyId = rowScheme->Families[group];
-        auto* family = tableInfo->Families.FindPtr(familyId);
+        const auto* family = tableInfo->Families.FindPtr(familyId);
+        if (Y_UNLIKELY(!family)) {
+            // FIXME: workaround for KIKIMR-17222
+            // Column families with default settings may be missing in schema,
+            // so we have to use a static variable as a substitute
+            static const NTable::TScheme::TFamily defaultFamilySettings;
+            family = &defaultFamilySettings;
+        }
         Y_VERIFY(family, "Cannot find family %" PRIu32 " in table %" PRIu32, familyId, table);
 
         auto roomId = family->Room;

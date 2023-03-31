@@ -97,8 +97,7 @@ public:
         Table::VDiskIdx::Type VDiskIdx = 0;
         Table::Mood::Type Mood;
         TIndirectReferable<TGroupInfo>::TPtr Group; // group to which this VSlot belongs (or nullptr if it doesn't belong to any)
-        std::vector<std::pair<TVSlotId, TVDiskID>> Donors; // a set of alive donors for this disk
-        TVSlotId AcceptorVSlotId;
+        THashSet<TVSlotId> Donors; // a set of alive donors for this disk (which are not being deleted)
         TInstant LastSeenReady;
 
         // volatile state
@@ -214,10 +213,13 @@ public:
         void MakeDonorFor(TVSlotInfo *newSlot) {
             Y_VERIFY(newSlot);
             Y_VERIFY(!IsBeingDeleted());
+            Y_VERIFY(GroupId == newSlot->GroupId);
+            Y_VERIFY(GetShortVDiskId() == newSlot->GetShortVDiskId());
             Mood = TMood::Donor;
             Group = nullptr; // we are not part of this group anymore
-            Donors.emplace_back(VSlotId, GetVDiskId());
-            newSlot->Donors = std::exchange(Donors, {});
+            Donors.insert(VSlotId);
+            Donors.swap(newSlot->Donors);
+            Y_VERIFY(Donors.empty());
         }
 
         TVDiskID GetVDiskId() const {
@@ -508,7 +510,6 @@ public:
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
-        bool CommitInProgress = false;
 
         bool Down = false; // is group are down right now (not selectable)
         TVector<TIndirectReferable<TVSlotInfo>::TPtr> VDisksInGroup;
@@ -529,7 +530,7 @@ public:
         const ui32 NumVDisksPerFailDomain = 0;
 
         // topology according to the geometry
-        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
+        std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
 
         struct TGroupStatus {
             // status derived from the actual state of VDisks (IsReady() to be exact)
@@ -849,7 +850,7 @@ public:
 
     };
 
-    std::map<TString, TNodeId> NodeForSerial;
+    std::unordered_map<TString, TNodeId> NodeIdByDiskSerialNumber;
     TMap<ui32, TSet<ui32>> NodesAwaitingKeysForGroup;
 
     struct THostConfigInfo {
@@ -1285,6 +1286,7 @@ public:
         Table::Kind::Type Kind = 0;
         Table::PDiskType::Type PDiskType = PDiskTypeToPDiskType(NPDisk::DEVICE_TYPE_UNKNOWN);
         TMaybe<Table::PDiskConfig::Type> PDiskConfig;
+        TMaybe<Table::Path::Type> Path;
 
         TDriveSerialInfo() = default;
         TDriveSerialInfo(const TDriveSerialInfo&) = default;
@@ -1304,7 +1306,8 @@ public:
                     Table::LifeStage,
                     Table::Kind,
                     Table::PDiskType,
-                    Table::PDiskConfig
+                    Table::PDiskConfig,
+                    Table::Path
                 > adapter(
                     &TDriveSerialInfo::BoxId,
                     &TDriveSerialInfo::NodeId,
@@ -1313,7 +1316,8 @@ public:
                     &TDriveSerialInfo::LifeStage,
                     &TDriveSerialInfo::Kind,
                     &TDriveSerialInfo::PDiskType,
-                    &TDriveSerialInfo::PDiskConfig
+                    &TDriveSerialInfo::PDiskConfig,
+                    &TDriveSerialInfo::Path
                 );
             callback(&adapter);
         }
@@ -1500,6 +1504,17 @@ private:
 
     void ValidateInternalState();
 
+    const TVSlotInfo* FindAcceptor(const TVSlotInfo& donor) {
+        Y_VERIFY(donor.Mood == TMood::Donor);
+        TGroupInfo *group = FindGroup(donor.GroupId);
+        Y_VERIFY(group);
+        const ui32 orderNumber = group->Topology->GetOrderNumber(donor.GetShortVDiskId());
+        const TVSlotInfo *acceptor = group->VDisksInGroup[orderNumber];
+        Y_VERIFY(donor.GroupId == acceptor->GroupId && donor.GroupGeneration < acceptor->GroupGeneration &&
+            donor.GetShortVDiskId() == acceptor->GetShortVDiskId());
+        return acceptor;
+    }
+
     TVSlotInfo* FindVSlot(TVSlotId id) {
         auto it = VSlots.find(id);
         return it != VSlots.end() ? it->second.Get() : nullptr;
@@ -1646,6 +1661,7 @@ private:
     void RenderFooter(IOutputStream& out);
     void RenderMonPage(IOutputStream& out);
     void RenderInternalTables(IOutputStream& out, const TString& table);
+    void RenderVirtualGroups(IOutputStream& out);
     void RenderGroupDetail(IOutputStream &out, TGroupId groupId);
     void RenderGroupsInStoragePool(IOutputStream &out, const TBoxStoragePoolId& id);
     void RenderVSlotTable(IOutputStream& out, std::function<void()> callback);
@@ -1672,6 +1688,10 @@ public:
     // It interacts with BS_CONTROLLER and group observer (which provides information about group state on a per-vdisk
     // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
     IActor *CreateSelfHealActor();
+
+    bool IsGroupLayoutSanitizerEnabled() const {
+        return GroupLayoutSanitizer;
+    }
 
 private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2125,7 +2145,7 @@ public:
     void OnWardenDisconnected(TNodeId nodeId);
     void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo);
 
-    using TVSlotFinder = std::function<void(const TVSlotId&, const std::function<void(const TVSlotInfo&)>&)>;
+    using TVSlotFinder = std::function<void(TVSlotId, const std::function<void(const TVSlotInfo&)>&)>;
 
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
@@ -2138,7 +2158,7 @@ public:
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TVSlot *pb, const TVSlotInfo &vslot, const TVSlotFinder& finder);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group);
     static void SerializeDonors(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk *vdisk, const TVSlotInfo& vslot,
-        const TGroupInfo& group);
+        const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
         const TString& storagePoolName, const TMaybe<TKikimrScopeId>& scopeId);
 };

@@ -293,7 +293,8 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
 bool Insert(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap,
             TVector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
     TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
-    engine.Load(db);
+    THashSet<TUnifiedBlobId> lostBlobs;
+    engine.Load(db, lostBlobs);
 
     return Insert(engine, db, snap, std::move(dataToIndex), blobs, step);
 }
@@ -328,13 +329,14 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
 bool Compact(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange,
              TString>&& blobs, ui32& step, const TExpected& expected) {
     TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
-    engine.Load(db);
+    THashSet<TUnifiedBlobId> lostBlobs;
+    engine.Load(db, lostBlobs);
     return Compact(engine, db, snap, std::move(blobs), step, expected);
 }
 
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
     THashSet<ui64> pathsToDrop;
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop);
+    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop, 1000);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 
@@ -409,7 +411,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
 
         TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0);
-        engine.Load(db);
+        THashSet<TUnifiedBlobId> lostBlobs;
+        engine.Load(db, lostBlobs);
 
         // selects
 
@@ -507,7 +510,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
 
         TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
-        engine.Load(db);
+        THashSet<TUnifiedBlobId> lostBlobs;
+        engine.Load(db, lostBlobs);
 
         // read
 
@@ -576,7 +580,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui64 planStep = 1;
 
         TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
-        engine.Load(db);
+        THashSet<TUnifiedBlobId> lostBlobs;
+        engine.Load(db, lostBlobs);
 
         THashMap<TBlobRange, TString> blobs;
         ui64 numRows = 1000;
@@ -606,7 +611,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // check it's overloaded after reload
             TColumnEngineForLogs tmpEngine(TIndexInfo(tableInfo), 0, TestLimits());
-            tmpEngine.Load(db);
+            tmpEngine.Load(db, lostBlobs);
             UNIT_ASSERT(tmpEngine.GetOverloadedGranules(pathId));
         }
 
@@ -637,7 +642,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // check it's not overloaded after reload
             TColumnEngineForLogs tmpEngine(TIndexInfo(tableInfo), 0, TestLimits());
-            tmpEngine.Load(db);
+            tmpEngine.Load(db, lostBlobs);
             UNIT_ASSERT(!tmpEngine.GetOverloadedGranules(pathId));
         }
     }
@@ -678,7 +683,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
 
         TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
-        engine.Load(db);
+        THashSet<TUnifiedBlobId> lostBlobs;
+        engine.Load(db, lostBlobs);
 
         // read
         planStep = 3;
@@ -722,7 +728,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         // load
-        engine.Load(db);
+        engine.Load(db, lostBlobs);
         UNIT_ASSERT_VALUES_EQUAL(engine.GetTotalStats().EmptyGranules, 1);
 
         { // full scan

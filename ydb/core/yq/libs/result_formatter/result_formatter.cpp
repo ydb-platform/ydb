@@ -331,6 +331,7 @@ template <typename F>
 NJson::TJsonValue GenericFormatColumnValue(
     const NYdb::TValue& value,
     NKikimr::NMiniKQL::TType* type,
+    const TTypeEnvironment& typeEnv,
     const THolderFactory& holderFactory,
     F f)
 {
@@ -353,6 +354,7 @@ NJson::TJsonValue GenericFormatColumnValue(
     auto unboxed = ImportValueFromProto(
         type,
         rawProtoValue,
+        typeEnv,
         holderFactory);
 
     return f(unboxed);
@@ -361,9 +363,10 @@ NJson::TJsonValue GenericFormatColumnValue(
 NJson::TJsonValue FormatColumnValue(
     const NYdb::TValue& value,
     NKikimr::NMiniKQL::TType* type,
+    const TTypeEnvironment& typeEnv,
     const THolderFactory& holderFactory)
 {
-    return GenericFormatColumnValue(value, type, holderFactory, [type](auto unboxed) {
+    return GenericFormatColumnValue(value, type, typeEnv, holderFactory, [type](auto unboxed) {
         NJson::TJsonValue v;
         NJson::ReadJsonTree(
             NJson2Yson::ConvertYson2Json(NYql::NCommon::WriteYsonValue(unboxed, type)),
@@ -375,6 +378,7 @@ NJson::TJsonValue FormatColumnValue(
 NJson::TJsonValue FormatColumnPrettyValue(
     const NYdb::TValue& value,
     NKikimr::NMiniKQL::TType* type,
+    const TTypeEnvironment& typeEnv,
     const THolderFactory& holderFactory)
 {
 
@@ -382,7 +386,7 @@ NJson::TJsonValue FormatColumnPrettyValue(
 
     static const TValueConvertPolicy convertPolicy{ UNSAFE_NUMBER_AS_STRING };
 
-    return GenericFormatColumnValue(value, type, holderFactory, [type](auto unboxed) {
+    return GenericFormatColumnValue(value, type, typeEnv, holderFactory, [type](auto unboxed) {
         NJson::TJsonValue v;
         TStringStream out;
         NJson::TJsonWriter jsonWriter(&out, MakeJsonConfig());
@@ -440,8 +444,8 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet,
         for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
             const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
             NJson::TJsonValue v = prettyValueFormat
-                ? FormatColumnPrettyValue(rsParser.GetValue(columnNum), columnTypes[columnNum].MiniKQLType, holderFactory)
-                : FormatColumnValue(rsParser.GetValue(columnNum), columnTypes[columnNum].MiniKQLType, holderFactory);
+                ? FormatColumnPrettyValue(rsParser.GetValue(columnNum), columnTypes[columnNum].MiniKQLType, typeEnv, holderFactory)
+                : FormatColumnValue(rsParser.GetValue(columnNum), columnTypes[columnNum].MiniKQLType, typeEnv, holderFactory);
             if (prettyValueFormat) {
                 row.AppendValue(std::move(v));
             } else {

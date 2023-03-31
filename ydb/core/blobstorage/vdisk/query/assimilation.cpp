@@ -133,15 +133,13 @@ namespace NKikimr {
                 const TMemRecBarrier& memRec = iter;
                 if (next.TabletId != key.TabletId || next.Channel != key.Channel) {
                     break;
+                } else if (memRec.Ingress.IsQuorum(Snap.HullCtx->IngressCache.Get())) {
+                    auto *value = next.Hard ? pb->MutableHard() : pb->MutableSoft();
+                    value->SetRecordGeneration(next.Gen);
+                    value->SetPerGenerationCounter(next.GenCounter);
+                    value->SetCollectGeneration(memRec.CollectGen);
+                    value->SetCollectStep(memRec.CollectStep);
                 }
-
-                auto *value = next.Hard ? pb->MutableHard() : pb->MutableSoft();
-                value->SetRecordGeneration(next.Gen);
-                value->SetPerGenerationCounter(next.GenCounter);
-                // TODO(alexvru): should we obtain quorum here? it looks not, because as the GC command was issued, then
-                // all the keep flags already have been set, so we can choose the latest issued barrier for the tablet
-                value->SetCollectGeneration(memRec.CollectGen);
-                value->SetCollectStep(memRec.CollectStep);
             }
 
             using T = NKikimrBlobStorage::TEvVAssimilateResult::TBarrier;

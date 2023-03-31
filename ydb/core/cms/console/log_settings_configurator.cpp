@@ -7,6 +7,7 @@
 #include <util/system/fs.h>
 #include <util/stream/file.h>
 #include <google/protobuf/text_format.h>
+#include <ydb/core/cms/console/grpc_library_helper.h>
 
 namespace NKikimr::NConsole {
 
@@ -189,6 +190,10 @@ void TLogSettingsConfigurator::ApplyComponentSettings(const TVector<NLog::TCompo
                 ? NLog::PRI_ERROR : NLog::PRI_NOTICE;
             LOG_LOG_S(ctx, logPrio, NKikimrServices::CMS_CONFIGS,
                       "TLogSettingsConfigurator: " << msg);
+
+            if (i == NKikimrServices::GRPC_LIBRARY) {
+                NConsole::SetGRpcLibraryLogVerbosity(prio);
+            }
         }
         if (curSettings.Raw.X.SamplingLevel != settings[i].Raw.X.SamplingLevel) {
             NLog::EPriority prio = static_cast<NLog::EPriority>(settings[i].Raw.X.SamplingLevel);

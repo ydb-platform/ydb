@@ -136,6 +136,13 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
             tableAggr->SetWriteBytes(tableAggr->GetWriteBytes() + table.GetWriteBytes());
             tableAggr->SetEraseRows(tableAggr->GetEraseRows() + table.GetEraseRows());
             tableAggr->SetAffectedPartitions(tableAggr->GetAffectedPartitions() + table.GetAffectedPartitions());
+
+            NKqpProto::TKqpReadActorTableAggrExtraStats tableExtraStats;
+            if (table.GetExtra().UnpackTo(&tableExtraStats)) {
+                for (const auto& shardId : tableExtraStats.GetAffectedShards()) {
+                    AffectedShards.insert(shardId);
+                }
+            }
         }
     }
 

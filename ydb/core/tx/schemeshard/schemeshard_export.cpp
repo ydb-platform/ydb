@@ -38,16 +38,10 @@ namespace {
             Ydb::Export::ExportItemProgress& itemProgress) {
 
         Y_VERIFY(itemIdx < exportInfo->Items.size());
-
         const auto& item = exportInfo->Items.at(itemIdx);
-        if (item.WaitTxId == InvalidTxId) {
-            return;
-        }
 
-        const TOperationId opId(item.WaitTxId, FirstSubTxId);
-        const TPath path = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
-
-        if (ss->TxInFlight.contains(opId)) {
+        const auto opId = TOperationId(item.WaitTxId, FirstSubTxId);
+        if (item.WaitTxId != InvalidTxId && ss->TxInFlight.contains(opId)) {
             const auto& txState = ss->TxInFlight.at(opId);
             if (txState.TxType != TTxState::TxBackup) {
                 return;
@@ -56,17 +50,25 @@ namespace {
             itemProgress.set_parts_total(txState.Shards.size());
             itemProgress.set_parts_completed(txState.Shards.size() - txState.ShardsInProgress.size());
             *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(txState.StartTime.Seconds());
-        } else if (path.IsResolved()) {
-            if (!ss->Tables.contains(path.Base()->PathId)) {
+        } else {
+            const auto path = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
+            if (!path.IsResolved() || !ss->Tables.contains(path.Base()->PathId)) {
                 return;
             }
 
             auto table = ss->Tables.at(path.Base()->PathId);
-            if (!table->BackupHistory.contains(item.WaitTxId)) {
+            auto it = table->BackupHistory.end();
+            if (item.WaitTxId != InvalidTxId) {
+                it = table->BackupHistory.find(item.WaitTxId);
+            } else if (table->BackupHistory.size() == 1) {
+                it = table->BackupHistory.begin();
+            }
+
+            if (it == table->BackupHistory.end()) {
                 return;
             }
 
-            const auto& backupResult = table->BackupHistory.at(item.WaitTxId);
+            const auto& backupResult = it->second;
             itemProgress.set_parts_total(backupResult.TotalShardCount);
             itemProgress.set_parts_completed(backupResult.TotalShardCount);
             *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(backupResult.StartDateTime);

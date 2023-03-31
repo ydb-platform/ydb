@@ -113,6 +113,10 @@ public:
         return FinishPromise_.GetFuture();
     }
 
+    bool IsClientLost() const override {
+        return ClientLost_.load();
+    }
+
     TString GetPeer() const override {
         return TString(this->Context.peer());
     }
@@ -496,6 +500,7 @@ private:
 
     void OnFinish(EQueueEventStatus evStatus) {
         if (this->Context.IsCancelled()) {
+            ClientLost_.store(true);
             FinishPromise_.SetValue(EFinishStatus::CANCEL);
         } else {
             FinishPromise_.SetValue(evStatus == EQueueEventStatus::OK ? EFinishStatus::OK : EFinishStatus::ERROR);
@@ -556,6 +561,7 @@ private:
     NThreading::TPromise<EFinishStatus> FinishPromise_;
     bool SkipUpdateCountersOnError = false;
     IStreamAdaptor::TPtr StreamAdaptor_;
+    std::atomic<bool> ClientLost_ = false;
 };
 
 template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter=google::protobuf::TextFormat::Printer, typename TOutProtoPrinter=google::protobuf::TextFormat::Printer>

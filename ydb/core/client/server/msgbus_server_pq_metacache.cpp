@@ -14,6 +14,9 @@
 #include <ydb/core/persqueue/pq_database.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
 
+#include <library/cpp/actors/protos/actors.pb.h>
+#include <library/cpp/actors/core/mon.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NKikimr::NMsgBusProxy {
 
@@ -94,6 +97,19 @@ public:
         if (!metaCacheConfig.GetLBFrontEnabled()) {
             return;
         }
+        if (metaCacheConfig.GetUseDynNodesMapping()) {
+            TStringBuf tenant = AppData(ctx)->TenantName;
+            tenant.SkipPrefix("/");
+            tenant.ChopSuffix("/");
+            if (tenant != "Root") {
+                LOG_NOTICE_S(ctx, NKikimrServices::PQ_METACACHE, "Started on tenant = '" << tenant << "', will not request hive");
+                OnDynNode = true;
+            } else {
+                StartHivePipe(ctx);
+                ProcessNodesInfoWork(ctx);
+            }
+        }
+
         SkipVersionCheck = metaCacheConfig.GetCacheSkipVersionCheck();
         TStringBuf root = AppData(ctx)->PQConfig.GetRoot();
         root.SkipPrefix("/");
@@ -113,7 +129,6 @@ public:
     }
 
 private:
-
     void Reset(const TActorContext& ctx, bool error = true) {
         if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || !AppData(ctx)->PQConfig.GetPQDiscoveryConfig().GetLBFrontEnabled()) {
             return;
@@ -123,7 +138,20 @@ private:
         LastTopicKey = {};
         Type = EQueryType::ECheckVersion;
         //TODO: on start there will be additional delay for VersionCheckInterval
-        ctx.Schedule(error ? QueryRetryInterval : VersionCheckInterval, new NActors::TEvents::TEvWakeup());
+        ctx.Schedule(
+                error ? QueryRetryInterval : VersionCheckInterval,
+                new NActors::TEvents::TEvWakeup(static_cast<ui32>(EWakeupTag::WakeForQuery))
+        );
+    }
+
+    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        auto tag = static_cast<EWakeupTag>(ev->Get()->Tag);
+        switch (tag) {
+            case EWakeupTag::WakeForQuery:
+                return StartQuery(ctx);
+            case EWakeupTag::WakeForHive:
+                return ProcessNodesInfoWork(ctx);
+        }
     }
 
     void SubscribeToClustersUpdate(const TActorContext& ctx) {
@@ -151,6 +179,36 @@ private:
        Reset(ctx);
     }
 
+    void StartHivePipe(const TActorContext& ctx) {
+        auto hiveTabletId = GetHiveTabletId(ctx);
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Start pipe to hive tablet: " << hiveTabletId);
+        auto pipeRetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        pipeRetryPolicy.MaxRetryTime = TDuration::Seconds(1);
+        NTabletPipe::TClientConfig pipeConfig{pipeRetryPolicy};
+        HivePipeClient = ctx.RegisterWithSameMailbox(
+                NTabletPipe::CreateClient(ctx.SelfID, hiveTabletId, pipeConfig)
+        );
+    }
+
+    void HandlePipeConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        switch (ev->Get()->Status) {
+            case NKikimrProto::EReplyStatus::OK:
+            case NKikimrProto::EReplyStatus::ALREADY:
+                break;
+            default:
+                return HandlePipeDestroyed(ctx);
+        }
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Hive pipe connected");
+        ProcessNodesInfoWork(ctx);
+    }
+
+    void HandlePipeDestroyed(const TActorContext& ctx) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Hive pipe destroyed");
+        NTabletPipe::CloseClient(ctx, HivePipeClient);
+        HivePipeClient = TActorId();
+        StartHivePipe(ctx);
+        ResetHiveRequestState(ctx);
+    }
 
     void RunQuery(EQueryType type, const TActorContext& ctx) {
         auto req = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
@@ -343,8 +401,8 @@ private:
             return Result;
         };
 
-        TVector<TString> GetTopics() const {
-            TVector<TString> ret;
+        TVector<std::pair<TString, TString>> GetTopics() const {
+            TVector<std::pair<TString, TString>> ret;
             if (FirstRequestDone) {
                 for (auto i: SecondTryTopics) {
                     auto account = Topics[i]->GetAccount_();
@@ -358,18 +416,28 @@ private:
                     if (!second.Defined()) {
                         continue;
                     }
-                    ret.push_back(*second);
+                    ret.push_back(std::make_pair(*second, Topics[i]->GetDatabase().GetOrElse("")));
                 }
             } else {
                 for (auto& t : Topics) {
-                    ret.push_back(t->GetPrimaryPath());
+                    ret.push_back(std::make_pair(t->GetPrimaryPath(), t->GetDatabase().GetOrElse("")));
                 }
             }
             return ret;
         }
     };
 
+    enum class EWakeupTag {
+        WakeForQuery = 1,
+        WakeForHive = 2
+    };
 private:
+    static ui64 GetHiveTabletId(const TActorContext& ctx) {
+        TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
+        auto hiveTabletId = domainsInfo->GetHive(domainsInfo->GetDefaultHiveUid(domainsInfo->Domains.begin()->first));
+        return hiveTabletId;
+    }
+
     void HandleDescribeTopics(TEvPqNewMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Handle describe topics");
         const auto& msg = *ev->Get();
@@ -391,6 +459,11 @@ private:
             return;
         }
         return ProcessDescribeAllTopics(ev->Sender, ctx);
+    }
+
+    void HandleGetNodesMapping(TEvPqNewMetaCache::TEvGetNodesMappingRequest::TPtr& ev, const TActorContext& ctx) {
+        NodesMappingWaiters.emplace(std::move(ev->Sender));
+        ProcessNodesInfoWork(ctx);
     }
 
     void ProcessDescribeAllTopics(const TActorId& waiter, const TActorContext& ctx) {
@@ -423,6 +496,7 @@ private:
         }
         auto reqId = ++RequestId;
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(reqId);
+
         auto inserted = DescribeTopicsWaiters.insert(std::make_pair(reqId, waiter)).second;
         Y_VERIFY(inserted);
 
@@ -430,7 +504,7 @@ private:
                             << (waiter->Type == EWaiterType::DescribeAllTopics ? " all " : "") << waiter->GetTopics().size()
                             << " topics, got " << DescribeTopicsWaiters.size() << " requests infly");
 
-        for (const auto& path : waiter->GetTopics()) {
+        for (const auto& [path, database] : waiter->GetTopics()) {
             auto split = NKikimr::SplitPath(path);
             Y_VERIFY(!split.empty());
             TSchemeCacheNavigate::TEntry entry;
@@ -439,6 +513,7 @@ private:
             entry.SyncVersion = waiter->SyncVersion;
             entry.ShowPrivatePath = waiter->ShowPrivate;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
         }
 
@@ -504,6 +579,11 @@ private:
             auto& navigate = waiter->GetResult();
 
             Y_VERIFY(waiter->Topics.size() == navigate->ResultSet.size());
+            for (auto& entry : navigate->ResultSet) {
+                if (entry.Status == TSchemeCacheNavigate::EStatus::Ok && entry.Kind == TSchemeCacheNavigate::KindTopic) {
+                    Y_VERIFY(entry.PQGroupInfo);
+                }
+            }
             CheckEntrySetHasTopicPath(navigate.get());
             auto *response = new TEvPqNewMetaCache::TEvDescribeTopicsResponse{
                     std::move(waiter->Topics), navigate
@@ -529,6 +609,109 @@ private:
         ctx.Send(recipient, response);
     }
 
+    void ResetHiveRequestState(const TActorContext& ctx) {
+        if (NextHiveRequestDeadline == TInstant::Zero()) {
+            NextHiveRequestDeadline = ctx.Now() + TDuration::Seconds(5);
+        }
+        RequestedNodesInfo = false;
+        ctx.Schedule(
+                TDuration::Seconds(5),
+                new NActors::TEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::WakeForHive))
+        );
+    }
+
+    void ProcessNodesInfoWork(const TActorContext& ctx) {
+        if (OnDynNode) {
+            ProcessNodesInfoWaitersQueue(false, ctx);
+            return;
+        }
+        if (DynamicNodesMapping != nullptr && LastNodesInfoUpdate != TInstant::Zero()) {
+            const auto nextNodesUpdateTs = LastNodesInfoUpdate + TDuration::MilliSeconds(
+                    AppData(ctx)->PQConfig.GetPQDiscoveryConfig().GetNodesMappingRescanIntervalMilliSeconds()
+            );
+            if (ctx.Now() < nextNodesUpdateTs)
+                return ProcessNodesInfoWaitersQueue(true, ctx);
+        }
+        if (RequestedNodesInfo)
+            return;
+
+        if (NextHiveRequestDeadline != TInstant::Zero() && ctx.Now() < NextHiveRequestDeadline) {
+            ResetHiveRequestState(ctx);
+            return;
+        }
+        NextHiveRequestDeadline = ctx.Now() + TDuration::Seconds(5);
+        RequestedNodesInfo = true;
+
+        NActorsProto::TRemoteHttpInfo info;
+        {
+            auto* param = info.AddQueryParams();
+            param->SetKey("page");
+            param->SetValue("MemStateNodes");
+        }
+        {
+            auto* param = info.AddQueryParams();
+            param->SetKey("format");
+            param->SetValue("json");
+        }
+        info.SetPath("/app");
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Send Hive nodes state request");
+        NTabletPipe::SendData(ctx, HivePipeClient, new NActors::NMon::TEvRemoteHttpInfo(info));
+    }
+
+    void HandleHiveMonResponse(NMon::TEvRemoteJsonInfoRes::TPtr& ev, const TActorContext& ctx) {
+        ResetHiveRequestState(ctx);
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Got Hive landing data response: '" << ev->Get()->Json << "'");
+        TStringInput input(ev->Get()->Json);
+        auto jsonValue = NJson::ReadJsonTree(&input, true);
+        const auto& rootMap = jsonValue.GetMap();
+        ui32 aliveNodes = rootMap.find("AliveNodes")->second.GetUInteger();
+        if (!aliveNodes) {
+            return;
+        }
+        const auto& nodes = rootMap.find("Nodes")->second.GetArray();
+        TSet<ui32> staticNodeIds;
+        TVector<ui32> dynamicNodes;
+        ui64 maxStaticNodeId = 0;
+        for (const auto& node : nodes) {
+            const auto& nodeMap = node.GetMap();
+            ui64 nodeId = nodeMap.find("Id")->second.GetUInteger();
+            if (nodeMap.find("Domain")->second.GetString() == "/Root") {
+                maxStaticNodeId = std::max(maxStaticNodeId, nodeId);
+                if (nodeMap.find("Alive")->second.GetBoolean() && !nodeMap.find("Down")->second.GetBoolean()) {
+                    staticNodeIds.insert(nodeId);
+                }
+            } else {
+                dynamicNodes.push_back(nodeId);
+            }
+        }
+        if (staticNodeIds.empty()) {
+            return;
+        }
+        DynamicNodesMapping.reset(new THashMap<ui32, ui32>());
+        for (auto& dynNodeId : dynamicNodes) {
+            ui32 hash_ = dynNodeId % (maxStaticNodeId + 1);
+            auto iter = staticNodeIds.lower_bound(hash_);
+            DynamicNodesMapping->insert(std::make_pair(
+                    dynNodeId,
+                    iter == staticNodeIds.end() ? *staticNodeIds.begin() : *iter
+            ));
+        }
+        LastNodesInfoUpdate = ctx.Now();
+        ProcessNodesInfoWaitersQueue(true, ctx);
+    }
+
+    void ProcessNodesInfoWaitersQueue(bool status, const TActorContext& ctx) {
+        if (DynamicNodesMapping == nullptr) {
+            Y_VERIFY(!status);
+            DynamicNodesMapping.reset(new THashMap<ui32, ui32>); 
+        }
+        while(!NodesMappingWaiters.empty()) {
+            ctx.Send(NodesMappingWaiters.front(),
+                     new TEvPqNewMetaCache::TEvGetNodesMappingResponse(DynamicNodesMapping, status));
+            NodesMappingWaiters.pop();
+        }
+    }
+
     void StartQuery(const TActorContext& ctx) {
         if (NewTopicsVersion > CurrentTopicsVersion) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Start topics rescan");
@@ -546,14 +729,19 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-          SFunc(NActors::TEvents::TEvWakeup, StartQuery)
+          HFunc(NActors::TEvents::TEvWakeup, HandleWakeup)
           HFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, HandleClustersUpdate)
           HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleQueryResponse);
           HFunc(NKqp::TEvKqp::TEvProcessResponse, HandleQueryResponse);
           HFunc(TEvPqNewMetaCache::TEvGetVersionRequest, HandleGetVersion)
           HFunc(TEvPqNewMetaCache::TEvDescribeTopicsRequest, HandleDescribeTopics)
           HFunc(TEvPqNewMetaCache::TEvDescribeAllTopicsRequest, HandleDescribeAllTopics)
+          HFunc(TEvPqNewMetaCache::TEvGetNodesMappingRequest, HandleGetNodesMapping)
           HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse)
+
+          HFunc(NMon::TEvRemoteJsonInfoRes, HandleHiveMonResponse)
+          SFunc(TEvTabletPipe::TEvClientDestroyed, HandlePipeDestroyed)
+          HFunc(TEvTabletPipe::TEvClientConnected, HandlePipeConnected)
     )
 
 private:
@@ -579,6 +767,7 @@ private:
     TInstant LastVersionUpdate = TInstant::Zero();
 
     TQueue<TActorId> ListTopicsWaiters;
+    TQueue<TActorId> NodesMappingWaiters;
     THashMap<ui64, std::shared_ptr<TWaiter>> DescribeTopicsWaiters;
     TQueue<std::shared_ptr<TWaiter>> DescribeAllTopicsWaiters;
     bool HaveDescribeAllTopicsInflight = false;
@@ -593,6 +782,14 @@ private:
     TString LocalCluster;
     TString DbRoot;
     NPersQueue::TConverterFactoryPtr ConverterFactory;
+
+    TActorId HivePipeClient;
+    bool RequestedNodesInfo = false;
+    TInstant NextHiveRequestDeadline = TInstant::Zero();
+    TInstant LastNodesInfoUpdate = TInstant::Now();
+    bool OnDynNode = false;
+
+    std::shared_ptr<THashMap<ui32, ui32>> DynamicNodesMapping;
 
 };
 

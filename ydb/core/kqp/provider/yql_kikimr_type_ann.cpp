@@ -465,7 +465,7 @@ private:
             auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
             if (!column) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
-                    << "Column '" << column->Name << "' does not exist in table '" << node.Table().Value() << "'."));
+                    << "Column '" << item->GetName() << "' does not exist in table '" << node.Table().Value() << "'."));
                 return TStatus::Error;
             }
             if (column->NotNull && item->HasOptionalOrNull()) {

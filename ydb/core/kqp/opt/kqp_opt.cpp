@@ -68,6 +68,12 @@ bool IsKqpPureInputs(const TExprList& inputs) {
             return true;
         }
 
+        if (auto source = TExprBase(node).Maybe<TDqSource>()) {
+            if (source.Cast().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
+                return true;
+            }
+        }
+
         return false;
     });
 }

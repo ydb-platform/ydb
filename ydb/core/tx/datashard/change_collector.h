@@ -13,7 +13,28 @@ class IDataShardUserDb;
 
 class IDataShardChangeCollector : public NMiniKQL::IChangeCollector {
 public:
-    virtual void CommitLockChanges(ui64 lockId, const TVector<TChange>& changes, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+    // basic change record's info
+    struct TChange {
+        ui64 Order;
+        ui64 Group;
+        ui64 Step;
+        ui64 TxId;
+        TPathId PathId;
+        ui64 BodySize;
+        TPathId TableId;
+        ui64 SchemaVersion;
+        ui64 LockId = 0;
+        ui64 LockOffset = 0;
+    };
+
+public:
+    virtual void OnRestart() = 0;
+    virtual bool NeedToReadKeys() const = 0;
+
+    virtual void CommitLockChanges(ui64 lockId, const TRowVersion& writeVersion) = 0;
+
+    virtual const TVector<TChange>& GetCollected() const = 0;
+    virtual TVector<TChange>&& GetCollected() = 0;
 };
 
 IDataShardChangeCollector* CreateChangeCollector(TDataShard& dataShard, IDataShardUserDb& userDb, NTable::TDatabase& db, const TUserTable& table, bool isImmediateTx);

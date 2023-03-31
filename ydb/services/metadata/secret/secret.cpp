@@ -21,9 +21,9 @@ bool TSecret::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& r
 
 NInternal::TTableRecord TSecret::SerializeToRecord() const {
     NInternal::TTableRecord result;
-    result.SetColumn(TDecoder::OwnerUserId, NInternal::TYDBValue::Bytes(OwnerUserId));
-    result.SetColumn(TDecoder::SecretId, NInternal::TYDBValue::Bytes(SecretId));
-    result.SetColumn(TDecoder::Value, NInternal::TYDBValue::Bytes(Value));
+    result.SetColumn(TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(OwnerUserId));
+    result.SetColumn(TDecoder::SecretId, NInternal::TYDBValue::Utf8(SecretId));
+    result.SetColumn(TDecoder::Value, NInternal::TYDBValue::Utf8(Value));
     return result;
 }
 

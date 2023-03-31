@@ -1,4 +1,3 @@
-
 option cc_enable_arenas = true;
 
 import "library/cpp/actors/protos/actors.proto";
@@ -241,6 +240,10 @@ message TKqpTransaction {
     optional bool UseGenericReadSets = 7 [default = false];
 }
 
+message TEvKqpInputActorResultInfo {
+    repeated TLock Locks = 1;
+}
+
 message TKqpReadRangesSourceSettings {
     optional TKqpTransaction.TTableMeta Table = 1;
 
@@ -252,12 +255,17 @@ message TKqpReadRangesSourceSettings {
     repeated TKqpTransaction.TColumnMeta Columns = 4;
     optional uint64 ItemsLimit = 5;
     optional bool Reverse = 6;
-    repeated string SkipNullKeys = 7;
+
     repeated uint32 KeyColumnTypes = 8;
+    repeated NKikimrProto.TTypeInfo KeyColumnTypeInfos = 15;
+
     optional EScanDataFormat DataFormat = 9;
     optional NKikimrProto.TRowVersion Snapshot = 10;
     optional uint64 ShardIdHint = 11;
     optional bool Sorted = 12;
+
+    optional uint64 LockTxId = 13;
+    optional uint32 LockNodeId = 14;
 }
 
 message TKqpTaskInfo {
@@ -418,6 +426,7 @@ message TDropCdcStreamNotice {
     optional NKikimrProto.TPathID PathId = 1;
     optional uint64 TableSchemaVersion = 2;
     optional NKikimrProto.TPathID StreamPathId = 3;
+    optional TSnapshot DropSnapshot = 4;
 }
 
 message TAsyncIndexInfo {
@@ -1416,6 +1425,46 @@ message TEvBuildIndexProgressResponse {
     optional uint64 RequestSeqNoRound = 13;
 }
 
+message TEvCdcStreamScanRequest {
+    message TLimits {
+        optional uint32 BatchMaxBytes = 1 [default = 512000];
+        optional uint32 BatchMinRows = 2 [default = 10];
+        optional uint32 BatchMaxRows = 3 [default = 1000];
+    };
+
+    optional NKikimrProto.TPathID TablePathId = 1; // which table should be scanned
+    optional uint64 TableSchemaVersion = 2;
+    optional NKikimrProto.TPathID StreamPathId = 3;
+    optional uint64 SnapshotStep = 4;
+    optional uint64 SnapshotTxId = 5;
+    optional TLimits Limits = 6;
+}
+
+message TEvCdcStreamScanResponse {
+    enum EStatus {
+        PENDING = 0;
+        ACCEPTED = 1;
+        IN_PROGRESS = 2;
+        DONE = 3;
+        BAD_REQUEST = 4;
+        SCHEME_ERROR = 5;
+        OVERLOADED = 6;
+        ABORTED = 7;
+    }
+
+    message TStats {
+        optional uint64 RowsProcessed = 1;
+        optional uint64 BytesProcessed = 2;
+    }
+
+    optional uint64 TabletId = 1;
+    optional NKikimrProto.TPathID TablePathId = 2;
+    optional NKikimrProto.TPathID StreamPathId = 3;
+    optional EStatus Status = 4;
+    optional string ErrorDescription = 5;
+    optional TStats Stats = 6;
+}
+
 message TEvKqpScan {
     optional uint64 TxId = 1;
     optional uint64 ScanId = 2;
@@ -1553,7 +1602,12 @@ message TEvRead {
     // must not be set
     optional TTableId TableId = 2;
 
-    // A list of column ids that are returned in the result set
+    // A list of column ids that are returned in the result set. Empty columns can be used to Count(*) rows.
+    // * In case of CellVec and empty columns: result will
+    // contain an empty CellVec for each read row.
+    // * In case of Arrow and empty Columns: ArrowBatch is a batch with single column of type NullType
+    // and with num_rows equal rowsCount. All values are null.
+    // In all cases RowCount can be checked with GetRowsCount() call (return RowCount field).
     repeated uint32 Columns = 3;
 
     // An optional snapshot for point in time queries
@@ -1653,6 +1707,8 @@ message TEvReadResult {
 
     repeated TLock TxLocks = 10;
     repeated TLock BrokenTxLocks = 11;
+
+    optional uint64 RowCount = 12;
 
     // Data for the possibly partial result
     oneof ReadResult {

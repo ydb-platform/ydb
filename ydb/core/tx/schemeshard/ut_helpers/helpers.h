@@ -6,6 +6,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -522,5 +523,8 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false);
 
     NKikimrPQ::TDescribeResponse GetDescribeFromPQBalancer(TTestActorRuntime& runtime, ui64 balancerId);
+
+    void SendTEvPeriodicTopicStats(TTestActorRuntime& runtime, ui64 topicId, ui64 generation, ui64 round, ui64 dataSize, ui64 usedReserveSize);
+    void WriteToTopic(TTestActorRuntime& runtime, const TString& path, ui32& msgSeqNo, const TString& message);
 
 } //NSchemeShardUT_Private

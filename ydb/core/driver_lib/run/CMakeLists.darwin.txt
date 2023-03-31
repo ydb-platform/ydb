@@ -65,6 +65,7 @@ target_link_libraries(run PUBLIC
   ydb-core-kqp
   core-kqp-rm_service
   ydb-core-load_test
+  ydb-core-log_backend
   ydb-core-metering
   ydb-core-mind
   core-mind-address_classification
@@ -141,7 +142,6 @@ target_sources(run PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/dummy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/factories.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/kikimr_services_initializers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/log_backend.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/run.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/service_initializer.cpp

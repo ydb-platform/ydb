@@ -12,7 +12,7 @@ void PassSubscription(const TEvSubscribeGrpcCancel* ev, IRequestCtxMtSafe* reque
     NActors::TActorSystem* as);
 
 void SubscribeRemoteCancel(const NActors::TActorId& service, const NActors::TActorId& subscriber,
-    ui64 wakeupTag, NActors::TActorSystem* as);
+    NActors::TActorSystem* as);
 
 }
 }

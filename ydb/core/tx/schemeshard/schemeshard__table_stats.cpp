@@ -1,4 +1,6 @@
 #include "schemeshard_impl.h"
+#include "schemeshard__stats_impl.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/protos/sys_view.pb.h>
@@ -61,7 +63,7 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
     return ev;
 }
 
-class TTxStorePartitionStats: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+class TTxStoreTableStats: public TTxStoreStats<TEvDataShard::TEvPeriodicTableStats> {
     TSideEffects MergeOpSideEffects;
 
     struct TMessage {
@@ -77,23 +79,19 @@ class TTxStorePartitionStats: public NTabletFlatExecutor::TTransactionBase<TSche
     TVector<TMessage> PendingMessages;
 
 public:
-    TTxStorePartitionStats(TSelf* self)
-        : TBase(self)
+    TTxStoreTableStats(TSchemeShard* ss, TStatsQueue<TEvDataShard::TEvPeriodicTableStats>& queue, bool& persistStatsPending)
+        : TTxStoreStats(ss, queue, persistStatsPending)
     {
     }
 
-    virtual ~TTxStorePartitionStats() = default;
+    virtual ~TTxStoreTableStats() = default;
 
-    TTxType GetTxType() const override {
-        return TXTYPE_STORE_PARTITION_STATS;
-    }
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
 
     // returns true to continue batching
-    bool PersistSingleStats(TTransactionContext& txc, const TActorContext& ctx);
+    bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvDataShard::TEvPeriodicTableStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
 };
+
 
 THolder<TProposeRequest> MergeRequest(
     TSchemeShard* ss, TTxId& txId, TPathId& pathId, const TVector<TShardIdx>& shardsToMerge)
@@ -122,53 +120,10 @@ THolder<TProposeRequest> MergeRequest(
     return std::move(request);
 }
 
-bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    Self->PersistStatsPending = false;
-
-    if (Self->StatsQueue.empty())
-        return true;
-
-    TMonotonic start = TMonotonic::Now();
-
-    const ui32 maxBatchSize = Self->StatsMaxBatchSize ? Self->StatsMaxBatchSize : 1;
-    ui32 batchSize = 0;
-    while (batchSize < maxBatchSize && !Self->StatsQueue.empty()) {
-        ++batchSize;
-        if (!PersistSingleStats(txc, ctx))
-            break;
-
-        if ((TMonotonic::Now() - start) >= Self->StatsMaxExecuteTime)
-            break;
-    }
-
-    Self->TabletCounters->Cumulative()[COUNTER_STATS_WRITTEN].Increment(batchSize);
-
-    bool isBatchingDisabled = Self->StatsMaxBatchSize == 0;
-    if (isBatchingDisabled) {
-        // there will be per stat transaction, don't need to schedule additional one
-        return true;
-    }
-
-    if (!Self->StatsQueue.empty()) {
-        Self->ScheduleStatsBatch(ctx);
-    }
-
-    return true;
-}
-
-bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const TActorContext& ctx) {
-    auto item = Self->StatsQueue.front();
-    Self->StatsQueue.pop_front();
-
-    auto timeInQueue = AppData()->MonotonicTimeProvider->Now() - item.Ts;
-    Self->TabletCounters->Percentile()[COUNTER_STATS_BATCH_LATENCY].IncrementFor(timeInQueue.MicroSeconds());
-
+bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
+    const TStatsQueueItem<TEvDataShard::TEvPeriodicTableStats>& item, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
     const auto& rec = item.Ev->Get()->Record;
     auto datashardId = TTabletId(rec.GetDatashardId());
-    const TPathId& pathId = item.PathId;
-
-    TSchemeShard::TStatsId statsId(pathId, datashardId);
-    Self->StatsMap.erase(statsId);
 
     const auto& tableStats = rec.GetTableStats();
     const auto& tabletMetrics = rec.GetTabletMetrics();
@@ -434,7 +389,7 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
     return true;
 }
 
-void TTxStorePartitionStats::Complete(const TActorContext& ctx) {
+void TTxStoreTableStats::Complete(const TActorContext& ctx) {
     MergeOpSideEffects.ApplyOnComplete(Self, ctx);
 
     for (auto& m: PendingMessages) {
@@ -442,7 +397,7 @@ void TTxStorePartitionStats::Complete(const TActorContext& ctx) {
         ctx.Send(m.Actor, m.Event.Release());
     }
 
-    Self->TabletCounters->Simple()[COUNTER_STATS_QUEUE_SIZE].Set(Self->StatsQueue.size());
+    Queue.WriteQueueSizeMetric();
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
@@ -468,81 +423,48 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
                                                      << " cpuUsage " << tabletMetrics.GetCPU()/10000.0);
 
     TStatsId statsId(pathId, datashardId);
-    TStatsMap::insert_ctx insertCtx;
-    auto it = StatsMap.find(statsId, insertCtx);
-    if (it == StatsMap.end()) {
-        StatsQueue.emplace_back(ev.Release(), pathId);
-        StatsMap.emplace_direct(insertCtx, statsId, &StatsQueue.back());
-    } else {
-        // already in queue, just update
-        it->second->Ev = ev.Release();
-    }
+    
+    switch(TableStatsQueue.Add(statsId, ev.Release())) {
+        case READY:
+            ExecuteTableStatsBatch(ctx);
+            break;
 
-    TabletCounters->Simple()[COUNTER_STATS_QUEUE_SIZE].Set(StatsQueue.size());
-    ScheduleStatsBatch(ctx);
+        case NOT_READY:
+            ScheduleTableStatsBatch(ctx);
+            break;
+
+        default:
+          Y_FAIL("Unknown batch status");
+    }
 }
 
-void TSchemeShard::ScheduleStatsBatch(const TActorContext& ctx) {
-    if (StatsQueue.empty())
-        return;
-
-    bool isBatchingDisabled = StatsMaxBatchSize == 0;
-    if (isBatchingDisabled) {
-        PersistStatsPending = true;
-        Execute(new TTxStorePartitionStats(this), ctx);
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Will execute TTxStorePartitionStats without batch");
-        return;
-    }
-
-    if (PersistStatsPending)
-        return;
-
-    if (StatsQueue.size() >= StatsMaxBatchSize || !StatsBatchTimeout) {
-        // note that we don't care if already scheduled
-        PersistStatsPending = true;
-        Execute(new TTxStorePartitionStats(this), ctx);
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Will execute TTxStorePartitionStats, queue# " << StatsQueue.size());
-        return;
-    }
-
-    const auto& oldestItem = StatsQueue.front();
-    auto age = AppData()->MonotonicTimeProvider->Now() - oldestItem.Ts;
-    if (age >= StatsBatchTimeout) {
-        PersistStatsPending = true;
-        Execute(new TTxStorePartitionStats(this), ctx);
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Will execute TTxStorePartitionStats because of age, queue# " << StatsQueue.size());
-        return;
-    }
-
-    if (StatsBatchScheduled)
-        return;
-
-    auto delay = StatsBatchTimeout - age;
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Will delay TTxStorePartitionStats on# " << delay << ", queue# " << StatsQueue.size());
-
-    ctx.Schedule(delay, new TEvPrivate::TEvPersistStats());
-    StatsBatchScheduled = true;
-}
-
-void TSchemeShard::Handle(TEvPrivate::TEvPersistStats::TPtr&, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvPrivate::TEvPersistTableStats::TPtr&, const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Started TEvPersistStats at tablet " << TabletID() << ", queue size# " << StatsQueue.size());
+           "Started TEvPersistStats at tablet " << TabletID() << ", queue size# " << TableStatsQueue.Size());
 
-    StatsBatchScheduled = false;
+    TableStatsBatchScheduled = false;
+    ExecuteTableStatsBatch(ctx);
+}
 
-    if (PersistStatsPending) {
-        return;
+void TSchemeShard::ExecuteTableStatsBatch(const TActorContext& ctx) {
+    if (!TablePersistStatsPending && !TableStatsQueue.Empty()) {
+        TablePersistStatsPending = true;
+        Execute(new TTxStoreTableStats(this, TableStatsQueue, TablePersistStatsPending), ctx);
+        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Will execute TTxStoreStats, queue# " << TableStatsQueue.Size());
+        ScheduleTableStatsBatch(ctx);
     }
+}
 
-    if (StatsQueue.empty()) {
-        return;
+void TSchemeShard::ScheduleTableStatsBatch(const TActorContext& ctx) {
+    if (!TableStatsBatchScheduled && !TableStatsQueue.Empty()) {
+        TDuration delay = TableStatsQueue.Delay();
+        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Will delay TTxStoreTableStats on# " << delay << ", queue# " << TableStatsQueue.Size());
+
+        ctx.Schedule(delay, new TEvPrivate::TEvPersistTableStats());
+        TableStatsBatchScheduled = true;
     }
-
-    PersistStatsPending = true;
-    Execute(new TTxStorePartitionStats(this), ctx);
 }
 
 }}

@@ -256,6 +256,11 @@ void TKikimrRunner::CreateSampleTables() {
             PRIMARY KEY (Key)
         );
 
+        CREATE TABLE `KeyValueLargePartition` (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
 
         CREATE TABLE `Test` (
             Group Uint32,
@@ -289,6 +294,32 @@ void TKikimrRunner::CreateSampleTables() {
     )").GetValueSync());
 
     AssertSuccessResult(session.ExecuteDataQuery(R"(
+
+        REPLACE INTO `KeyValueLargePartition` (Key, Value) VALUES
+            (101u, "Value1"),
+            (102u, "Value2"),
+            (103u, "Value3"),
+            (201u, "Value1"),
+            (202u, "Value2"),
+            (203u, "Value3"),
+            (301u, "Value1"),
+            (302u, "Value2"),
+            (303u, "Value3"),
+            (401u, "Value1"),
+            (402u, "Value2"),
+            (403u, "Value3"),
+            (501u, "Value1"),
+            (502u, "Value2"),
+            (503u, "Value3"),
+            (601u, "Value1"),
+            (602u, "Value2"),
+            (603u, "Value3"),
+            (701u, "Value1"),
+            (702u, "Value2"),
+            (703u, "Value3"),
+            (801u, "Value1"),
+            (802u, "Value2"),
+            (803u, "Value3");
 
         REPLACE INTO `TwoShard` (Key, Value1, Value2) VALUES
             (1u, "One", -1),
@@ -509,7 +540,7 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
     const TString& expectedYson)
 {
     NYdb::NTable::TExecDataQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+    settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
     TDataQueryResult result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, settings)
             .ExtractValueSync();

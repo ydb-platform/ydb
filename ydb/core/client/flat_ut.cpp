@@ -3011,7 +3011,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     void WriteKVRow(TFlatMsgBusClient& annoyingClient, ui32 key, TString value) {
-            Cerr << key << Endl;
+            Cerr << "WriteKVRow: " << key << Endl;
             TString insertRowQuery = R"___(
                     (
                     (let key '('('Key (Uint32 '%u))))
@@ -3024,13 +3024,15 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                     )___";
 
             int retryCnt = 20;
+            TDuration delay = TDuration::MilliSeconds(5);
             while (retryCnt--) {
                 TFlatMsgBusClient::TFlatQueryOptions opts;
                 NKikimrClient::TResponse response;
                 annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), key, value.data(), "T1"), opts, response);
                 ui32 responseStatus = response.GetStatus();
                 if (responseStatus == NMsgBusProxy::MSTATUS_REJECTED) {
-                    Sleep(TDuration::Seconds(1));
+                    Sleep(delay);
+                    delay = Min(delay * 2, TDuration::Seconds(1));
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL(responseStatus, NMsgBusProxy::MSTATUS_OK);
                     break;
@@ -3039,7 +3041,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     void EraseKVRow(TFlatMsgBusClient& annoyingClient, ui32 key) {
-            Cerr << key << Endl;
+            Cerr << "EraseKVRow: " << key << Endl;
             TString query = R"___(
                     (
                     (let key '('('Key (Uint32 '%u))))
@@ -3051,13 +3053,15 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                     )___";
 
             int retryCnt = 20;
+            TDuration delay = TDuration::MilliSeconds(5);
             while (retryCnt--) {
                 TFlatMsgBusClient::TFlatQueryOptions opts;
                 NKikimrClient::TResponse response;
                 annoyingClient.FlatQueryRaw(Sprintf(query.data(), key, "T1"), opts, response);
                 ui32 responseStatus = response.GetStatus();
                 if (responseStatus == NMsgBusProxy::MSTATUS_REJECTED) {
-                    Sleep(TDuration::Seconds(1));
+                    Sleep(delay);
+                    delay = Min(delay * 2, TDuration::Seconds(1));
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL(responseStatus, NMsgBusProxy::MSTATUS_OK);
                     break;
@@ -3175,7 +3179,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(AutoSplitMergeQueue) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableMvcc(false));
+        TServer cleverServer = TServer(TServerSettings(port).SetKeepSnapshotTimeout(TDuration::Seconds(1)));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_ERROR);
@@ -3204,6 +3208,14 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                       ReadAheadLoThreshold: 100000
                       MinDataPageSize: 7168
                       SnapBrokerQueue: 0
+                      Generation {
+                        GenerationId: 0
+                        SizeToCompact: 10000
+                        CountToCompact: 2
+                        ForceCountToCompact: 2
+                        ForceSizeToCompact: 20000
+                        KeepInCache: true
+                      }
                     }
                 }
             )___";

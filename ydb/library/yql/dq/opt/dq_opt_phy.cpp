@@ -577,8 +577,14 @@ TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
         return node;
     }
 
-    auto innerConnections = FindDqConnections(flatmap.Lambda());
-    if (innerConnections.empty()) {
+    if (!IsDqSelfContainedExpr(flatmap.Input())) {
+        return node;
+    }
+
+    bool isPure;
+    TVector<TDqConnection> innerConnections;
+    FindDqConnections(flatmap.Lambda(), innerConnections, isPure);
+    if (!isPure || innerConnections.empty()) {
         return node;
     }
 
@@ -617,7 +623,12 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
         return node;
     }
 
-    auto innerConnections = FindDqConnections(flatmap.Lambda());
+    bool isPure;
+    TVector<TDqConnection> innerConnections;
+    FindDqConnections(flatmap.Lambda(), innerConnections, isPure);
+    if (!isPure) {
+        return node;
+    }
 
     TMaybeNode<TDqStage> flatmapStage;
     if (!innerConnections.empty()) {
@@ -839,11 +850,11 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
         return node;
     }
 
-    if (!CanPushDqExpr(combine.PreMapLambda(), dqUnion) ||
-        !CanPushDqExpr(combine.KeySelectorLambda(), dqUnion) ||
-        !CanPushDqExpr(combine.InitHandlerLambda(), dqUnion) ||
-        !CanPushDqExpr(combine.UpdateHandlerLambda(), dqUnion) ||
-        !CanPushDqExpr(combine.FinishHandlerLambda(), dqUnion))
+    if (!IsDqPureExpr(combine.PreMapLambda()) ||
+        !IsDqPureExpr(combine.KeySelectorLambda()) ||
+        !IsDqPureExpr(combine.InitHandlerLambda()) ||
+        !IsDqPureExpr(combine.UpdateHandlerLambda()) ||
+        !IsDqPureExpr(combine.FinishHandlerLambda()))
     {
         return node;
     }
@@ -876,6 +887,26 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
                     .Value("Agg")
                 .Build()
             .Build()
+            .Done();
+    }
+
+    if (IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.KeySelectorLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.InitHandlerLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.UpdateHandlerLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.FinishHandlerLambda(), dqUnion.Output().Stage()))
+    {
+        return Build<TDqCnUnionAll>(ctx, combine.Pos())
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                        .Add(dqUnion)
+                        .Build()
+                    .Program(lambda)
+                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+                    .Build()
+                .Index().Build("0")
+                .Build()
             .Done();
     }
 
@@ -2485,15 +2516,19 @@ TExprBase DqPrecomputeToInput(const TExprBase& node, TExprContext& ctx) {
     TExprNode::TListType newArgs;
     TNodeOnNodeOwnedMap replaces;
 
+    TNodeOnNodeOwnedMap inputsReplaces;
+
     for (ui64 i = 0; i < stage.Inputs().Size(); ++i) {
         newInputs.push_back(stage.Inputs().Item(i).Ptr());
         auto arg = stage.Program().Args().Arg(i).Raw();
         newArgs.push_back(ctx.NewArgument(arg->Pos(), arg->Content()));
         replaces[arg] = newArgs.back();
+
+        inputsReplaces[arg] = stage.Inputs().Item(i).Ptr();
     }
 
     for (auto& precompute: innerPrecomputes) {
-        newInputs.push_back(precompute);
+        newInputs.push_back(ctx.ReplaceNodes(TExprNode::TPtr(precompute), inputsReplaces));
         newArgs.push_back(ctx.NewArgument(precompute->Pos(), TStringBuilder() << "_dq_precompute_" << newArgs.size()));
         replaces[precompute.Get()] = newArgs.back();
     }

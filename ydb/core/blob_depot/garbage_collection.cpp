@@ -184,8 +184,6 @@ namespace NKikimr::NBlobDepot {
             .HardGenCtr = hardGenCtr,
             .Hard = hard,
         };
-
-        Self->BarrierServer->ValidateBlobInvariant(tabletId, channel);
     }
 
     bool TBlobDepot::TBarrierServer::AddBarrierOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBarrier& barrier,
@@ -275,8 +273,9 @@ namespace NKikimr::NBlobDepot {
             const TData::TKey last(TLogoBlobID(tabletId, barrierGenStep.Generation(), barrierGenStep.Step(),
                 channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId,
                 TLogoBlobID::MaxCrcMode));
-            Self->Data->ScanRange(&first, &last, TData::EScanFlags::INCLUDE_BEGIN | TData::EScanFlags::INCLUDE_END,
-                    [&](const TData::TKey& key, const TData::TValue& value) {
+
+            TData::TScanRange r{first, last, TData::EScanFlags::INCLUDE_BEGIN | TData::EScanFlags::INCLUDE_END};
+            Self->Data->ScanRange(r, nullptr, nullptr, [&](const TData::TKey& key, const TData::TValue& value) {
                 // there must be no blobs under the hard barrier and no blobs with mode other than Keep under the soft one
                 Y_VERIFY_S(!hard && value.KeepState == NKikimrBlobDepot::EKeepState::Keep, "Key# " << key.ToString()
                     << " Value# " << value.ToString());
@@ -284,7 +283,8 @@ namespace NKikimr::NBlobDepot {
             });
         }
 #   if 0
-        Self->Data->ScanRange(nullptr, nullptr, {}, [&](const TData::TKey& key, const TData::TValue& value) {
+        TData::TScanRange r{TData::TKey::Min(), TData::TKey::Max()};
+        Self->Data->ScanRange(r, nullptr, nullptr, [&](const TData::TKey& key, const TData::TValue& value) {
             bool underSoft, underHard;
             Self->BarrierServer->GetBlobBarrierRelation(key.GetBlobId(), &underSoft, &underHard);
             Y_VERIFY(!underHard && (!underSoft || value.KeepState == NKikimrBlobDepot::EKeepState::Keep));

@@ -9,7 +9,7 @@ namespace NPersQueue {
 TVector<NPersQueue::TPQLabelsInfo> GetLabels(const TTopicConverterPtr& topic);
 //TVector<NPersQueue::TPQLabelsInfo> GetLabelsForLegacyName(const TString& topic);
 TVector<NPersQueue::TPQLabelsInfo> GetLabelsForCustomCluster(const TTopicConverterPtr& topic, TString cluster);
-TVector<NPersQueue::TPQLabelsInfo> GetLabelsForTopic(const TTopicConverterPtr& topic, const TString& cloudId,
+TVector<std::pair<TString, TString>> GetSubgroupsForTopic(const TTopicConverterPtr& topic, const TString& cloudId,
                                                       const TString& dbId, const TString& dbPath,
                                                       const TString& folderId);
 

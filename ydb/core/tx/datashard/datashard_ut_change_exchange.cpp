@@ -786,7 +786,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }; 
 
-
     TShardedTableOptions SimpleTable() {
         return TShardedTableOptions()
             .Columns({
@@ -795,31 +794,38 @@ Y_UNIT_TEST_SUITE(Cdc) {
             });
     }
 
-    TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool vt = false) {
+    TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
         return TCdcStream{
             .Name = name,
             .Mode = NKikimrSchemeOp::ECdcStreamModeKeysOnly,
             .Format = format,
-            .VirtualTimestamps = vt,
         };
     }
 
-    TCdcStream Updates(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool vt = false) {
+    TCdcStream Updates(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
         return TCdcStream{
             .Name = name,
             .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
             .Format = format,
-            .VirtualTimestamps = vt,
         };
     }
 
-    TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool vt = false) {
+    TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
         return TCdcStream{
             .Name = name,
             .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
             .Format = format,
-            .VirtualTimestamps = vt,
         };
+    }
+
+    TCdcStream WithVirtualTimestamps(TCdcStream streamDesc) {
+        streamDesc.VirtualTimestamps = true;
+        return streamDesc;
+    }
+
+    TCdcStream WithInitialScan(TCdcStream streamDesc) {
+        streamDesc.InitialState = NKikimrSchemeOp::ECdcStreamStateScan;
+        return streamDesc;
     }
 
     TString CalcPartitionKey(const TString& data) {
@@ -1093,7 +1099,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
-
     #define Y_UNIT_TEST_TRIPLET(N, VAR1, VAR2, VAR3)                                                                   \
         template<typename TRunner> void N(NUnitTest::TTestContext&);                                                   \
         struct TTestRegistration##N {                                                                                  \
@@ -1164,7 +1169,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST_TRIPLET(VirtualTimestamps, PqRunner, YdsRunner, TopicRunner) {
-        TRunner::Read(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson, "Stream", true), {R"(
+        TRunner::Read(SimpleTable(), WithVirtualTimestamps(KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson)), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
             (2, 20),
@@ -1914,6 +1919,130 @@ Y_UNIT_TEST_SUITE(Cdc) {
             });
             runtime.DispatchEvents(opts);
         }
+    }
+
+    Y_UNIT_TEST(InitialScan) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+        });
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )");
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"update":{"value":100},"key":[1]})",
+            R"({"update":{"value":200},"key":[2]})",
+            R"({"update":{"value":300},"key":[3]})",
+        });
+    }
+
+    Y_UNIT_TEST(InitialScanUpdatedRows) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        TVector<THolder<IEventHandle>> delayed;
+        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
+                delayed.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        if (delayed.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) {
+                return !delayed.empty();
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (4, 40);
+        )");
+
+        ExecSQL(server, edgeActor, R"(
+            DELETE FROM `/Root/Table` WHERE key = 2;
+        )");
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":100},"key":[1]})",
+            R"({"update":{"value":40},"key":[4]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"erase":{},"key":[2]})",
+        });
+
+        runtime.SetObserverFunc(prevObserver);
+        for (auto& ev : std::exchange(delayed, TVector<THolder<IEventHandle>>())) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":100},"key":[1]})",
+            R"({"update":{"value":40},"key":[4]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"erase":{},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+        });
     }
 
 } // Cdc

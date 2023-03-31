@@ -29,17 +29,17 @@ NModifications::TOperationParsingResult TAccessManager::DoBuildPatchFromSettings
     if (!sb.TrySplit(':', l, r)) {
         return "incorrect objectId format (secretId:accessSID)";
     }
-    result.SetColumn(TAccess::TDecoder::SecretId, NInternal::TYDBValue::Bytes(l));
-    result.SetColumn(TAccess::TDecoder::AccessSID, NInternal::TYDBValue::Bytes(r));
+    result.SetColumn(TAccess::TDecoder::SecretId, NInternal::TYDBValue::Utf8(l));
+    result.SetColumn(TAccess::TDecoder::AccessSID, NInternal::TYDBValue::Utf8(r));
     if (!context.GetUserToken()) {
         auto it = settings.GetFeatures().find(TAccess::TDecoder::OwnerUserId);
         if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TAccess::TDecoder::OwnerUserId, NInternal::TYDBValue::Bytes(it->second));
+            result.SetColumn(TAccess::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(it->second));
         } else {
             return "OwnerUserId not defined";
         }
     } else {
-        result.SetColumn(TAccess::TDecoder::OwnerUserId, NInternal::TYDBValue::Bytes(context.GetUserToken()->GetUserSID()));
+        result.SetColumn(TAccess::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(context.GetUserToken()->GetUserSID()));
     }
     return result;
 }
@@ -49,12 +49,12 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
     if (!context.GetUserToken()) {
         auto it = settings.GetFeatures().find(TSecret::TDecoder::OwnerUserId);
         if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TSecret::TDecoder::OwnerUserId, NInternal::TYDBValue::Bytes(it->second));
+            result.SetColumn(TSecret::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(it->second));
         } else {
             return "OwnerUserId not defined";
         }
     } else {
-        result.SetColumn(TSecret::TDecoder::OwnerUserId, NInternal::TYDBValue::Bytes(context.GetUserToken()->GetUserSID()));
+        result.SetColumn(TSecret::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(context.GetUserToken()->GetUserSID()));
     }
     for (auto&& c : settings.GetObjectId()) {
         if (c >= '0' && c <= '9') {
@@ -72,12 +72,12 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
         return "incorrect character for secret id: '" + TString(c) + "'";
     }
     {
-        result.SetColumn(TSecret::TDecoder::SecretId, NInternal::TYDBValue::Bytes(settings.GetObjectId()));
+        result.SetColumn(TSecret::TDecoder::SecretId, NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     }
     {
         auto it = settings.GetFeatures().find(TSecret::TDecoder::Value);
         if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TSecret::TDecoder::Value, NInternal::TYDBValue::Bytes(it->second));
+            result.SetColumn(TSecret::TDecoder::Value, NInternal::TYDBValue::Utf8(it->second));
         }
     }
     return result;

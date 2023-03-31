@@ -83,125 +83,106 @@ namespace NKikimr::NBlobDepot {
 
     class TData::TTxResolve : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         std::unique_ptr<TEvBlobDepot::TEvResolve::THandle> Request;
-        std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs;
-        std::vector<std::tuple<TLogoBlobID, TLogoBlobID>> Errors;
-
-        bool KeysLoaded = false;
-        int ItemIndex = 0;
-        std::optional<TKey> LastScannedKey;
-        ui32 NumKeysRead = 0; // number of keys already read for this item
-
-        // final state
+        THashSet<TLogoBlobID> ResolutionErrors;
+        size_t ItemIndex = 0;
+        std::optional<TScanRange> Range;
         TResolveResultAccumulator Result;
-        bool SuccessorTx = false;
         std::deque<TKey> Uncertainties;
+
+        bool SuccessorTx = false;
 
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_RESOLVE; }
 
-        TTxResolve(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr request,
-                std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob>&& decommitBlobs = {},
-                std::vector<std::tuple<TLogoBlobID, TLogoBlobID>>&& errors = {})
+        TTxResolve(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr request, THashSet<TLogoBlobID>&& resolutionErrors)
             : TTransactionBase(self)
             , Request(request.Release())
-            , DecommitBlobs(std::move(decommitBlobs))
-            , Errors(std::move(errors))
+            , ResolutionErrors(std::move(resolutionErrors))
             , Result(*Request)
         {}
 
         TTxResolve(TTxResolve& predecessor)
             : TTransactionBase(predecessor.Self)
             , Request(std::move(predecessor.Request))
-            , DecommitBlobs(std::move(predecessor.DecommitBlobs))
-            , Errors(std::move(predecessor.Errors))
-            , KeysLoaded(predecessor.KeysLoaded)
+            , ResolutionErrors(std::move(predecessor.ResolutionErrors))
             , ItemIndex(predecessor.ItemIndex)
-            , LastScannedKey(std::move(predecessor.LastScannedKey))
-            , NumKeysRead(predecessor.NumKeysRead)
+            , Range(std::move(predecessor.Range))
             , Result(std::move(predecessor.Result))
+            , Uncertainties(std::move(predecessor.Uncertainties))
         {}
-
-        bool GetScanParams(const NKikimrBlobDepot::TEvResolve::TItem& item, std::optional<TKey> *begin,
-                std::optional<TKey> *end, TScanFlags *flags, ui64 *maxKeys) {
-            switch (item.GetKeyDesignatorCase()) {
-                case NKikimrBlobDepot::TEvResolve::TItem::kKeyRange: {
-                    const auto& range = item.GetKeyRange();
-                    *flags = TScanFlags()
-                        | (range.GetIncludeBeginning() ? EScanFlags::INCLUDE_BEGIN : TScanFlags())
-                        | (range.GetIncludeEnding() ? EScanFlags::INCLUDE_END : TScanFlags())
-                        | (range.GetReverse() ? EScanFlags::REVERSE : TScanFlags());
-                    if (range.HasBeginningKey()) {
-                        begin->emplace(TKey::FromBinaryKey(range.GetBeginningKey(), Self->Config));
-                    } else {
-                        begin->reset();
-                    }
-                    if (range.HasEndingKey()) {
-                        end->emplace(TKey::FromBinaryKey(range.GetEndingKey(), Self->Config));
-                    } else {
-                        end->reset();
-                    }
-                    *maxKeys = range.GetMaxKeys();
-                    return true;
-                }
-
-                case NKikimrBlobDepot::TEvResolve::TItem::kExactKey:
-                    begin->emplace(TKey::FromBinaryKey(item.GetExactKey(), Self->Config));
-                    end->emplace(begin->value());
-                    *flags = EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END;
-                    *maxKeys = 1;
-                    return true;
-
-                case NKikimrBlobDepot::TEvResolve::TItem::KEYDESIGNATOR_NOT_SET:
-                    return false;
-            }
-
-            return false;
-        }
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT22, "TTxResolve::Execute", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie), (ItemIndex, ItemIndex),
-                (LastScannedKey, LastScannedKey), (DecommitBlobs.size, DecommitBlobs.size()));
+                (Sender, Request->Sender), (Cookie, Request->Cookie), (ItemIndex, ItemIndex));
 
             bool progress = false;
-            if (!KeysLoaded && !LoadKeys(txc, progress)) {
-                return progress;
-            } else {
-                KeysLoaded = true;
-            }
 
-            for (ui32 numItemsRemain = 10'000; !DecommitBlobs.empty(); DecommitBlobs.pop_front()) {
-                if (numItemsRemain) {
-                    const auto& blob = DecommitBlobs.front();
-                    if (Self->Data->LastAssimilatedBlobId < blob.Id) {
-                        numItemsRemain -= Self->Data->AddDataOnDecommit(DecommitBlobs.front(), txc, this);
-                    }
-                } else {
-                    SuccessorTx = true;
-                    return true;
+            const auto& record = Request->Get()->Record;
+            for (; ItemIndex < record.ItemsSize(); ++ItemIndex) {
+                const auto& item = record.GetItems(ItemIndex);
+                std::optional<ui64> cookie = item.HasCookie() ? std::make_optional(item.GetCookie()) : std::nullopt;
+                std::optional<bool> status;
+                switch (item.GetKeyDesignatorCase()) {
+                    case NKikimrBlobDepot::TEvResolve::TItem::kKeyRange:
+                        status = ProcessKeyRange(item.GetKeyRange(), txc, progress, cookie, item.GetMustRestoreFirst());
+                        break;
+
+                    case NKikimrBlobDepot::TEvResolve::TItem::kExactKey:
+                        status = ProcessExactKey(item.GetExactKey(), txc, progress, cookie, item.GetMustRestoreFirst());
+                        break;
+
+                    case NKikimrBlobDepot::TEvResolve::TItem::KEYDESIGNATOR_NOT_SET:
+                        Y_VERIFY_DEBUG(false, "incorrect query field");
+                        break;
+                }
+                if (status) {
+                    return *status;
                 }
             }
 
-            const auto& record = Request->Get()->Record;
-            for (const auto& item : record.GetItems()) {
-                std::optional<ui64> cookie = item.HasCookie() ? std::make_optional(item.GetCookie()) : std::nullopt;
-
-                std::optional<TKey> begin;
-                std::optional<TKey> end;
-                TScanFlags flags;
-                ui64 maxKeys;
-                const bool success = GetScanParams(item, &begin, &end, &flags, &maxKeys);
-                Y_VERIFY_DEBUG(success);
-
-                // we have everything we need contained in memory, generate response from memory
-                auto callback = [&](const TKey& key, const TValue& value) {
-                    IssueResponseItem(cookie, key, value);
-                    return --maxKeys != 0;
-                };
-                Self->Data->ScanRange(begin, end, flags, callback);
-            }
-
             return true;
+        }
+
+        std::optional<bool> ProcessKeyRange(const NKikimrBlobDepot::TEvResolve::TKeyRange& range,
+                TTransactionContext& txc, bool& progress, const std::optional<ui64>& cookie, bool mustRestoreFirst) {
+            if (!Range) {
+                Range.emplace();
+                Range->Begin = range.HasBeginningKey()
+                    ? TKey::FromBinaryKey(range.GetBeginningKey(), Self->Config)
+                    : TKey::Min();
+                Range->End = range.HasEndingKey()
+                    ? TKey::FromBinaryKey(range.GetEndingKey(), Self->Config)
+                    : TKey::Max();
+                Range->Flags = TScanFlags()
+                    | (range.GetIncludeBeginning() ? EScanFlags::INCLUDE_BEGIN : TScanFlags())
+                    | (range.GetIncludeEnding() ? EScanFlags::INCLUDE_END : TScanFlags())
+                    | (range.GetReverse() ? EScanFlags::REVERSE : TScanFlags());
+                Range->MaxKeys = range.GetMaxKeys();
+            }
+            auto callback = [&](const TKey& key, const TValue& value) {
+                IssueResponseItem(cookie, key, value, mustRestoreFirst);
+                return true;
+            };
+            if (Self->Data->ScanRange(*Range, &txc, &progress, callback)) {
+                Range.reset();
+                return std::nullopt;
+            } else {
+                return SuccessorTx = progress;
+            }
+        }
+
+        std::optional<bool> ProcessExactKey(const TString& exactKey, TTransactionContext& txc, bool& progress,
+                const std::optional<ui64>& cookie, bool mustRestoreFirst) {
+            const auto key = TKey::FromBinaryKey(exactKey, Self->Config);
+            if (!Self->Data->EnsureKeyLoaded(key, txc)) {
+                return SuccessorTx = progress;
+            }
+            const TValue *value = Self->Data->FindKey(key);
+            if (value || (!ResolutionErrors.empty() && ResolutionErrors.contains(key.GetBlobId()))) {
+                static const TValue zero;
+                IssueResponseItem(cookie, key, value ? *value : zero, mustRestoreFirst);
+            }
+            return std::nullopt;
         }
 
         void Complete(const TActorContext&) override {
@@ -220,123 +201,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        bool LoadKeys(TTransactionContext& txc, bool& progress) {
-            NIceDb::TNiceDb db(txc.DB);
-
-            if (Self->Data->Loaded) {
-                return true;
-            }
-
-            const auto& record = Request->Get()->Record;
-            const auto& items = record.GetItems();
-            for (; ItemIndex < items.size(); ++ItemIndex, LastScannedKey.reset(), NumKeysRead = 0) {
-                const auto& item = items[ItemIndex];
-
-                std::optional<TKey> begin;
-                std::optional<TKey> end;
-                TScanFlags flags;
-                ui64 maxKeys;
-                const bool success = GetScanParams(item, &begin, &end, &flags, &maxKeys);
-                Y_VERIFY_DEBUG(success);
-
-                // adjust range according to actually generated data
-                if (LastScannedKey) {
-                    if (flags & EScanFlags::REVERSE) { // reverse scan
-                        end = *LastScannedKey;
-                        flags &= ~EScanFlags::INCLUDE_END;
-                    } else { // direct scan
-                        begin = *LastScannedKey;
-                        flags &= ~EScanFlags::INCLUDE_BEGIN;
-                    }
-                }
-
-                if (end && Self->Data->LastLoadedKey && *end <= *Self->Data->LastLoadedKey) {
-                    continue; // key is already loaded
-                }
-
-                if (Self->Data->LastLoadedKey && begin <= Self->Data->LastLoadedKey && !(flags & EScanFlags::REVERSE)) {
-                    Y_VERIFY(!end || *Self->Data->LastLoadedKey < *end);
-
-                    // special case -- forward scan and we have some data in memory
-                    auto callback = [&](const TKey& key, const TValue& /*value*/) {
-                        LastScannedKey = key;
-                        return ++NumKeysRead != maxKeys;
-                    };
-                    if (!Self->Data->ScanRange(begin, Self->Data->LastLoadedKey, flags | EScanFlags::INCLUDE_END, callback)) {
-                        continue; // we have read all the keys required (MaxKeys limit hit)
-                    }
-
-                    // adjust range beginning
-                    begin = Self->Data->LastLoadedKey;
-                    flags &= ~EScanFlags::INCLUDE_BEGIN;
-                }
-
-                auto processRange = [&](auto table) {
-                    for (auto rowset = table.Select();; rowset.Next()) {
-                        if (!rowset.IsReady()) {
-                            return false;
-                        } else if (!rowset.IsValid()) {
-                            // no more keys in our direction
-                            return true;
-                        }
-                        auto key = TKey::FromBinaryKey(rowset.template GetValue<Schema::Data::Key>(), Self->Config);
-                        if (key != LastScannedKey) {
-                            LastScannedKey = key;
-                            progress = true;
-
-                            if (!Self->Data->IsKeyLoaded(key)) {
-                                Self->Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
-                                    rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>(), true);
-                            }
-
-                            const bool matchBegin = !begin || (flags & EScanFlags::INCLUDE_BEGIN ? *begin <= key : *begin < key);
-                            const bool matchEnd = !end || (flags & EScanFlags::INCLUDE_END ? key <= *end : key < *end);
-                            if (matchBegin && matchEnd) {
-                                const TValue *value = Self->Data->FindKey(key);
-                                Y_VERIFY(value); // value must exist as it was just loaded into memory and exists in the database
-                                if (++NumKeysRead == maxKeys) {
-                                    // we have hit the MaxItems limit, exit
-                                    return true;
-                                }
-                            } else if (flags & EScanFlags::REVERSE ? !matchBegin : !matchEnd) {
-                                // we have exceeded the opposite boundary, exit
-                                return true;
-                            }
-                        }
-                    }
-                };
-
-                auto applyEnd = [&](auto&& x) {
-                    return end
-                        ? processRange(x.LessOrEqual(end->MakeBinaryKey()))
-                        : processRange(std::forward<std::decay_t<decltype(x)>>(x));
-                };
-                auto applyBegin = [&](auto&& x) {
-                    return begin
-                        ? applyEnd(x.GreaterOrEqual(begin->MakeBinaryKey()))
-                        : applyEnd(std::forward<std::decay_t<decltype(x)>>(x));
-                };
-                auto applyReverse = [&](auto&& x) {
-                    return flags & EScanFlags::REVERSE
-                        ? applyBegin(x.Reverse())
-                        : applyBegin(std::forward<std::decay_t<decltype(x)>>(x));
-                };
-                if (applyReverse(db.Table<Schema::Data>())) {
-                    continue; // all work done for this item
-                } else if (progress) {
-                    // we have already done something, so let's finish this transaction and start a new one, continuing
-                    // the job
-                    SuccessorTx = true;
-                    return true;
-                } else {
-                    return false; // we'll have to restart this transaction to fetch some data
-                }
-            }
-
-            return true;
-        }
-
-        void IssueResponseItem(std::optional<ui64> cookie, const TKey& key, const TValue& value) {
+        void IssueResponseItem(std::optional<ui64> cookie, const TKey& key, const TValue& value, bool reliablyWritten) {
             NKikimrBlobDepot::TEvResolveResult::TResolvedKey item;
 
             if (cookie) {
@@ -348,6 +213,7 @@ namespace NKikimr::NBlobDepot {
                 auto *out = item.AddValueChain();
                 out->SetGroupId(Self->Config.GetVirtualGroupId());
                 LogoBlobIDFromLogoBlobID(key.GetBlobId(), out->MutableBlobId());
+                item.SetReliablyWritten(reliablyWritten);
             } else {
                 EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](const TLogoBlobID& id, ui32 begin, ui32 end) {
                     if (begin != end) {
@@ -362,28 +228,23 @@ namespace NKikimr::NBlobDepot {
                         }
                     }
                 });
+                item.SetReliablyWritten(true);
             }
             if (value.Meta) {
                 item.SetMeta(value.Meta.data(), value.Meta.size());
             }
 
-            bool foundError = false;
-
-            if (!Errors.empty()) {
-                const TLogoBlobID id = key.GetBlobId();
-                for (const auto& [from, to] : Errors) {
-                    if (from <= id && id <= to) {
-                        foundError = true;
-                        break;
-                    }
-                }
-            }
-
-            if (foundError) {
+            if (!ResolutionErrors.empty() && ResolutionErrors.contains(key.GetBlobId())) {
                 item.SetErrorReason("item resolution error");
-            } else if (!item.ValueChainSize()) {
-                STLOG(PRI_WARN, BLOB_DEPOT, BDT48, "empty ValueChain on Resolve", (Id, Self->GetLogId()),
-                    (Key, key), (Value, value), (Item, item), (Sender, Request->Sender), (Cookie, Request->Cookie));
+                item.ClearValueChain();
+            } else {
+                if (!item.ValueChainSize()) {
+                    STLOG(PRI_WARN, BLOB_DEPOT, BDT48, "empty ValueChain on Resolve", (Id, Self->GetLogId()),
+                        (Key, key), (Value, value), (Item, item), (Sender, Request->Sender), (Cookie, Request->Cookie));
+                }
+                if (item.GetValueVersion() != value.ValueVersion) {
+                    item.SetValueVersion(value.ValueVersion);
+                }
             }
 
             Result.AddItem(std::move(item), Self->Config);
@@ -398,107 +259,14 @@ namespace NKikimr::NBlobDepot {
             (Sender, ev->Sender), (Cookie, ev->Cookie), (LastAssimilatedBlobId, LastAssimilatedBlobId));
 
         if (Self->Config.GetIsDecommittingGroup() && Self->DecommitState <= EDecommitState::BlobsFinished) {
-            std::vector<std::tuple<ui64, bool, TLogoBlobID, TLogoBlobID>> queries;
-
-            for (const auto& item : ev->Get()->Record.GetItems()) {
-                if (!item.HasTabletId()) {
-                   STLOG(PRI_CRIT, BLOB_DEPOT, BDT42, "incorrect request", (Id, Self->GetLogId()), (Item, item));
-                   auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, NKikimrProto::ERROR,
-                        "incorrect request");
-                   TActivationContext::Send(response.release());
-                   return;
-                }
-
-                const ui64 tabletId = item.GetTabletId();
-                if (LastAssimilatedBlobId && tabletId < LastAssimilatedBlobId->TabletID()) {
-                    continue; // fast path
-                }
-
-                TLogoBlobID minId(tabletId, 0, 0, 0, 0, 0);
-                TLogoBlobID maxId(tabletId, Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel, TLogoBlobID::MaxBlobSize,
-                    TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode);
-
-                switch (item.GetKeyDesignatorCase()) {
-                    case NKikimrBlobDepot::TEvResolve::TItem::kKeyRange: {
-                        const auto& range = item.GetKeyRange();
-                        if (range.HasBeginningKey()) {
-                            minId = TKey::FromBinaryKey(range.GetBeginningKey(), Self->Config).GetBlobId();
-                        }
-                        if (range.HasEndingKey()) {
-                            maxId = TKey::FromBinaryKey(range.GetEndingKey(), Self->Config).GetBlobId();
-                        }
-                        break;
-                    }
-
-                    case NKikimrBlobDepot::TEvResolve::TItem::kExactKey:
-                        minId = maxId = TKey::FromBinaryKey(item.GetExactKey(), Self->Config).GetBlobId();
-                        break;
-
-                    case NKikimrBlobDepot::TEvResolve::TItem::KEYDESIGNATOR_NOT_SET:
-                        Y_VERIFY_DEBUG(false);
-                        break;
-                }
-
-                Y_VERIFY_DEBUG(minId.TabletID() == tabletId);
-                Y_VERIFY_DEBUG(maxId.TabletID() == tabletId);
-
-                if (!LastAssimilatedBlobId || *LastAssimilatedBlobId < maxId) {
-                    if (LastAssimilatedBlobId && minId < *LastAssimilatedBlobId) {
-                        minId = *LastAssimilatedBlobId;
-                    }
-                    if (minId == maxId) {
-                        const auto it = Data.find(TKey(minId));
-                        if (it != Data.end() && !it->second.GoingToAssimilate) {
-                            continue; // fast path for extreme queries
-                        }
-                    }
-                    queries.emplace_back(tabletId, item.GetMustRestoreFirst(), minId, maxId);
-                }
-            }
-
-            if (!queries.empty()) {
-                const ui64 id = ++LastRangeId;
-                for (const auto& [tabletId, mustRestoreFirst, minId, maxId] : queries) {
-                    auto ev = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, minId, maxId, mustRestoreFirst,
-                        TInstant::Max(), true);
-                    ev->Decommission = true;
-
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT46, "going to TEvRange", (Id, Self->GetLogId()), (TabletId, tabletId),
-                        (MinId, minId), (MaxId, maxId), (MustRestoreFirst, mustRestoreFirst), (Cookie, id));
-                    SendToBSProxy(Self->SelfId(), Self->Config.GetVirtualGroupId(), ev.release(), id);
-                }
-                ResolveDecommitContexts[id] = {ev, (ui32)queries.size()};
-                return;
-            }
+            Self->RegisterWithSameMailbox(CreateResolveDecommitActor(ev));
+        } else {
+            ExecuteTxResolve(ev);
         }
-
-        Self->Execute(std::make_unique<TTxResolve>(Self, ev));
     }
 
-    void TData::Handle(TEvBlobStorage::TEvRangeResult::TPtr ev) {
-        auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT50, "TEvRangeResult", (Id, Self->GetLogId()), (Msg, msg), (Cookie, ev->Cookie));
-
-        auto& contexts = Self->Data->ResolveDecommitContexts;
-        if (const auto it = contexts.find(ev->Cookie); it != contexts.end()) {
-            auto& context = it->second;
-
-            if (msg.Status == NKikimrProto::OK) {
-                for (const auto& response : msg.Responses) {
-                    if (LastAssimilatedBlobId < response.Id) {
-                        context.DecommitBlobs.push_back({response.Id, response.Keep, response.DoNotKeep});
-                    }
-                }
-            } else {
-                context.Errors.emplace_back(msg.From, msg.To);
-            }
-
-            if (!--context.NumRangesInFlight) {
-                Self->Execute(std::make_unique<TTxResolve>(Self, context.Ev, std::move(context.DecommitBlobs),
-                    std::move(context.Errors)));
-                contexts.erase(it);
-            }
-        }
+    void TData::ExecuteTxResolve(TEvBlobDepot::TEvResolve::TPtr ev, THashSet<TLogoBlobID>&& resolutionErrors) {
+        Self->Execute(std::make_unique<TTxResolve>(Self, ev, std::move(resolutionErrors)));
     }
 
 } // NKikimr::NBlobDepot

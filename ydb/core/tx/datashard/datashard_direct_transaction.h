@@ -22,7 +22,7 @@ public:
     virtual ~IDirectTx() = default;
     virtual bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) = 0;
     virtual TDirectTxResult GetResult(TDataShard* self) = 0;
-    virtual TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const = 0;
+    virtual TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const = 0;
 };
 
 class TDirectTransaction : public TOperation {
@@ -35,7 +35,7 @@ public:
 private:
     bool Execute(TDataShard* self, TTransactionContext& txc);
     void SendResult(TDataShard* self, const TActorContext& ctx);
-    TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;
+    TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
 
     friend class TDirectOpUnit;
 

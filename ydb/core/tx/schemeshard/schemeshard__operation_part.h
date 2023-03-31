@@ -386,8 +386,8 @@ ISubOperationBase::TPtr CreateAlterCdcStreamAtTable(TOperationId id, TTxState::E
 TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperationBase::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot);
+ISubOperationBase::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot);
 
 ISubOperationBase::TPtr CreateBackup(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateBackup(TOperationId id, TTxState::ETxState state);

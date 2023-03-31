@@ -804,6 +804,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
 
+        SetEnableMoveIndex(runtime, env, TTestTxConfig::SchemeShard, false);
+
         TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Sync", "MovedSync", false, {NKikimrScheme::StatusPreconditionFailed});
         env.TestWaitNotification(runtime, txId);
 

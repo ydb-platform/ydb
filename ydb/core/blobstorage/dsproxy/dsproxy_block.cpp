@@ -139,7 +139,7 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_BLOCK, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                "DSProxy.Block")
+                "DSProxy.Block", std::move(ev->ExecutionRelay))
         , TabletId(ev->TabletId)
         , Generation(ev->Generation)
         , Deadline(ev->Deadline)

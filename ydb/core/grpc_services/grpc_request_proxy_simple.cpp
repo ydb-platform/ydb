@@ -189,7 +189,7 @@ void LogRequest(const TEvent& event) {
     };
 
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
-        LOG_NOTICE(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
+        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
     }
     else {
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());

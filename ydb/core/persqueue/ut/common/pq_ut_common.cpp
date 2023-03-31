@@ -282,7 +282,11 @@ void PQTabletRestart(TTestActorRuntime& runtime, ui64 tabletId, TActorId edge) {
 }
 
 TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, bool force) {
-    TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.TabletId, tc.Edge, 0, GetPipeConfigWithRetries());
+    return SetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition, owner, force);
+}
+
+TActorId SetOwner(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender, const ui32 partition, const TString& owner, bool force) {
+    TActorId pipeClient = runtime->ConnectToPipe(tabletId, sender, 0, GetPipeConfigWithRetries());
 
     THolder<TEvPersQueue::TEvRequest> request;
 
@@ -293,7 +297,7 @@ TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, 
     req->MutableCmdGetOwnership()->SetForce(force);
     ActorIdToProto(pipeClient, req->MutablePipeClient());
 
-    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
+    runtime->SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
     return pipeClient;
 }
 
@@ -376,34 +380,38 @@ void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, con
 }
 
 std::pair<TString, TActorId> CmdSetOwner(const ui32 partition, TTestContext& tc, const TString& owner, bool force) {
+    return CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition, owner, force);
+}
+
+std::pair<TString, TActorId> CmdSetOwner(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender, const ui32 partition, const TString& owner, bool force) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
     TString cookie;
     TActorId pipeClient;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-            tc.Runtime->ResetScheduledCount();
+            runtime->ResetScheduledCount();
 
-            pipeClient = SetOwner(partition, tc, owner, force);
+            pipeClient = SetOwner(runtime, tabletId, sender, partition, owner, force);
 
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
             if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
-                tc.Runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
+                runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
                 retriesLeft = 3;
                 continue;
             }
 
             if (result->Record.GetErrorReason().StartsWith("ownership session is killed by another session with id ")) {
-                result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+                result = runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
                 UNIT_ASSERT(result);
                 UNIT_ASSERT(result->Record.HasStatus());
             }
 
             if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
-                tc.Runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
+                runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
                 retriesLeft = 3;
                 continue;
             }
@@ -477,8 +485,13 @@ void WritePartDataWithBigMsg(const ui32 partition, const TString& sourceId, cons
 
 void WriteData(const ui32 partition, const TString& sourceId, const TVector<std::pair<ui64, TString>> data, TTestContext& tc,
                const TString& cookie, i32 msgSeqNo, i64 offset, bool disableDeduplication) {
+    WriteData(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition, sourceId, data, cookie, msgSeqNo, offset, disableDeduplication);
+}
+
+void WriteData(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender, const ui32 partition, const TString& sourceId,
+               const TVector<std::pair<ui64, TString>> data, const TString& cookie, i32 msgSeqNo, i64 offset, bool disableDeduplication) {
     THolder<TEvPersQueue::TEvRequest> request;
-    tc.Runtime->ResetScheduledCount();
+    runtime->ResetScheduledCount();
     request.Reset(new TEvPersQueue::TEvRequest);
     auto req = request->Record.MutablePartitionRequest();
     req->SetPartition(partition);
@@ -493,7 +506,7 @@ void WriteData(const ui32 partition, const TString& sourceId, const TVector<std:
         write->SetData(p.second);
         write->SetDisableDeduplication(disableDeduplication);
     }
-    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+    runtime->SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 }
 
 void CmdWrite(const ui32 partition, const TString& sourceId, const TVector<std::pair<ui64, TString>> data,
@@ -501,16 +514,26 @@ void CmdWrite(const ui32 partition, const TString& sourceId, const TVector<std::
               bool isFirst, const TString& ownerCookie, i32 msn, i64 offset,
               bool treatWrongCookieAsError, bool treatBadOffsetAsError,
               bool disableDeduplication) {
+    CmdWrite(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition, sourceId, tc.MsgSeqNoMap[partition],
+            data, error, alreadyWrittenSeqNo, isFirst, ownerCookie, msn, offset, treatWrongCookieAsError, treatBadOffsetAsError, disableDeduplication);
+
+}
+
+void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender, const ui32 partition,
+              const TString& sourceId, ui32& msgSeqNo, const TVector<std::pair<ui64, TString>> data,
+              bool error, const THashSet<ui32>& alreadyWrittenSeqNo,
+              bool isFirst, const TString& ownerCookie, i32 msn, i64 offset,
+              bool treatWrongCookieAsError, bool treatBadOffsetAsError,
+              bool disableDeduplication) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
 
-    ui32& msgSeqNo = tc.MsgSeqNoMap[partition];
     if (msn != -1) msgSeqNo = msn;
     TString cookie = ownerCookie;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-            WriteData(partition, sourceId, data, tc, cookie, msgSeqNo, offset, disableDeduplication);
-            result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+            WriteData(runtime, tabletId, sender, partition, sourceId, data, cookie, msgSeqNo, offset, disableDeduplication);
+            result = runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
                 [](const TEvPersQueue::TEvResponse& ev){
                     if (ev.Record.HasPartitionResponse() &&
                         ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0 ||
@@ -522,14 +545,14 @@ void CmdWrite(const ui32 partition, const TString& sourceId, const TVector<std::
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
             if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
-                tc.Runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
+                runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
                 retriesLeft = 3;
                 continue;
             }
 
             if (!treatWrongCookieAsError &&
                 result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE) {
-                cookie = CmdSetOwner(partition, tc).first;
+                cookie = CmdSetOwner(runtime, tabletId, sender, partition).first;
                 msgSeqNo = 0;
                 retriesLeft = 3;
                 continue;
@@ -802,7 +825,7 @@ TVector<TString> CmdSourceIdRead(TTestContext& tc) {
             sourceIds.clear();
             auto read = request->Record.AddCmdReadRange();
             auto range = read->MutableRange();
-            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkSourceId);
+            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkProtoSourceId);
             range->SetFrom(ikeyFrom.Data(), ikeyFrom.Size());
             range->SetIncludeFrom(true);
             NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkUserDeprecated);
@@ -812,6 +835,7 @@ TVector<TString> CmdSourceIdRead(TTestContext& tc) {
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
             result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
             UNIT_ASSERT(result);
+            Cout << result->ToString() << Endl;
             UNIT_ASSERT(result->Record.HasStatus());
             UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
             for (ui64 idx = 0; idx < result->Record.ReadRangeResultSize(); ++idx) {
@@ -940,6 +964,15 @@ void FillDeprecatedUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, co
     TBuffer idataDeprecated = NPQ::NDeprecatedUserData::Serialize(offset, gen, step, session);
     write->SetKey(ikeyDeprecated.Data(), ikeyDeprecated.Size());
     write->SetValue(idataDeprecated.Data(), idataDeprecated.Size());
+}
+
+THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId) {
+    runtime.ResetScheduledCount();
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(balancerId, sender, new TEvPersQueue::TEvStatus(), 0, GetPipeConfigWithRetries());
+
+    return runtime.GrabEdgeEvent<TEvPersQueue::TEvPeriodicTopicStats>(TDuration::Seconds(2));
 }
 
 } // namespace NKikimr::NPQ

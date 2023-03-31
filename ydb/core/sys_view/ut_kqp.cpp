@@ -591,10 +591,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         TYsonFieldChecker check(ysonString, 29);
 
+        bool iterators = env.GetSettings()->AppConfig.GetTableServiceConfig().GetEnableKqpDataQuerySourceRead();
+
         check.Uint64GreaterOrEquals(0); // CPUTime
         check.Uint64GreaterOrEquals(0); // CompileCPUTime
         check.Int64GreaterOrEquals(0); // CompileDuration
-        check.Uint64(1); // ComputeNodesCount
+        check.Uint64(iterators ? 4 : 1); // ComputeNodesCount
         check.Uint64(0); // DeleteBytes
         check.Uint64(0); // DeleteRows
         check.Int64Greater(0); // Duration
@@ -613,7 +615,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(0); // ReadBytes
         check.Uint64(0); // ReadRows
         check.Uint64Greater(0); // RequestUnits
-        check.Uint64(3); // ShardCount
+
+        // https://a.yandex-team.ru/arcadia/ydb/core/sys_view/query_stats/query_stats.cpp?rev=r9637451#L356
+        check.Uint64(iterators ? 0 : 3); // ShardCount
         check.Uint64GreaterOrEquals(0); // SumComputeCPUTime
         check.Uint64GreaterOrEquals(0); // SumShardCPUTime
         check.String("data"); // Type
@@ -766,7 +770,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(QueryStatsAllTables) {
         auto check = [&] (const TString& queryText) {
-            TTestEnv env;
+            TTestEnv env{TTestEnv::DisableSourcesTag};
             CreateRootTable(env);
 
             TTableClient client(env.GetDriver());
@@ -793,7 +797,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(QueryStatsRetries) {
-        TTestEnv env;
+        TTestEnv env{TTestEnv::DisableSourcesTag};
         CreateRootTable(env);
 
         TString queryText("SELECT * FROM `Root/Table0`");

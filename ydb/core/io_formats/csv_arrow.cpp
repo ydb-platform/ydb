@@ -99,6 +99,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
 
     std::vector<std::shared_ptr<arrow::Array>> resultColumns;
     std::set<std::string> columnsFilter(ResultColumns.begin(), ResultColumns.end());
+    arrow::SchemaBuilder sBuilderFixed;
     for (auto&& f : schema->fields()) {
         auto fArr = parsedBatch->GetColumnByName(f->name());
         std::shared_ptr<arrow::DataType> originalType;
@@ -106,8 +107,9 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
             auto it = OriginalColumnTypes.find(f->name());
             Y_VERIFY(it != OriginalColumnTypes.end());
             originalType = it->second;
+            Y_VERIFY(sBuilderFixed.AddField(std::make_shared<arrow::Field>(f->name(), originalType)).ok());
         } else {
-            originalType = f->type();
+            continue;
         }
         if (fArr->type()->Equals(originalType)) {
             resultColumns.emplace_back(fArr);
@@ -148,7 +150,9 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
         }
     }
 
-    return arrow::RecordBatch::Make(schema, parsedBatch->num_rows(), resultColumns);
+    auto resultSchemaFixed = sBuilderFixed.Finish();
+    Y_VERIFY(resultSchemaFixed.ok());
+    return arrow::RecordBatch::Make(*resultSchemaFixed, parsedBatch->num_rows(), resultColumns);
 }
 
 std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TString& errString) {

@@ -248,7 +248,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
                 if (const auto token = request.update_token_request().token()) { // TODO: refresh token here
                     ctx.Send(ctx.SelfID, new TEvPQProxy::TEvAuth(token));
                 }
-                break;
+                return (void)ReadFromStreamOrDie(ctx);
             }
 
             default: {
@@ -662,6 +662,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
             return ::google::protobuf::util::TimeUtil::TimestampToMilliseconds(settings.read_from());
         }
     };
+    auto database = Request->GetDatabaseName().GetOrElse(TString());
 
     for (const auto& topic : init.topics_read_settings()) {
         const TString path = getTopicPath(topic);
@@ -677,7 +678,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         TopicsToResolve.insert(path);
     }
 
-    if (Request->GetInternalToken().empty()) {
+    if (Request->GetSerializedToken().empty()) {
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             return CloseSession(PersQueue::ErrorCode::ACCESS_DENIED,
                 "unauthenticated access is forbidden, please provide credentials", ctx);
@@ -685,11 +686,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     } else {
         Y_VERIFY(Request->GetYdbToken());
         Auth = *(Request->GetYdbToken());
-        Token = new NACLib::TUserToken(Request->GetInternalToken());
+        Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal,
-        Request->GetDatabaseName().GetOrElse(TString()));
+    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database);
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason, ctx);
@@ -813,16 +813,16 @@ void TReadSessionActor<UseMigrationProtocol>::SetupTopicCounters(const NPersQueu
 {
     auto& topicCounters = TopicCounters[topic->GetInternalName()];
     auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
-    auto aggr = NPersQueue::GetLabelsForTopic(topic, cloudId, dbId, dbPath, folderId);
-    const TVector<std::pair<TString, TString>> cons{{"consumer", ClientPath}};
+    auto subgroups = NPersQueue::GetSubgroupsForTopic(topic, cloudId, dbId, dbPath, folderId);
+    subgroups.push_back({"consumer", ClientPath});
 
-    topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.started"}, true, "name");
-    topicCounters.PartitionsReleased     = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.stopped"}, true, "name");
-    topicCounters.PartitionsToBeReleased = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.stopping_count"}, false, "name");
-    topicCounters.PartitionsToBeLocked   = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.starting_count"}, false, "name");
-    topicCounters.PartitionsInfly        = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.count"}, false, "name");
-    topicCounters.Errors                 = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.errors"}, true, "name");
-    topicCounters.Commits                = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.commits"}, true, "name");
+    topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.started"}, true, "name");
+    topicCounters.PartitionsReleased     = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.stopped"}, true, "name");
+    topicCounters.PartitionsToBeReleased = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.stopping_count"}, false, "name");
+    topicCounters.PartitionsToBeLocked   = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.starting_count"}, false, "name");
+    topicCounters.PartitionsInfly        = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.count"}, false, "name");
+    topicCounters.Errors                 = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.errors"}, true, "name");
+    topicCounters.Commits                = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.commits"}, true, "name");
 
     topicCounters.CommitLatency          = CommitLatency;
     topicCounters.SLIBigLatency          = SLIBigLatency;
@@ -1074,8 +1074,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
             result.mutable_assigned()->set_read_offset(ev->Get()->Offset);
             result.mutable_assigned()->set_end_offset(ev->Get()->EndOffset);
         } else {
-            // TODO: GetFederationPath() -> GetFederationPathWithDC()
-            result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetFederationPath());
+            auto database = Request->GetDatabaseName().GetOrElse(AppData(ctx)->PQConfig.GetRoot());
+
+            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetRoot()) {
+                result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetFederationPathWithDC());
+            } else {
+                result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetModernName());
+            }
+
             result.mutable_start_partition_session_request()->mutable_partition_session()->set_partition_id(ev->Get()->Partition.Partition);
             result.mutable_start_partition_session_request()->mutable_partition_session()->set_partition_session_id(it->first);
 
@@ -1402,8 +1408,8 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessBalancerDead(ui64 tabletId,
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr& ev , const TActorContext& ctx) {
-    if (ev->Get()->Authenticated && !ev->Get()->InternalToken.empty()) {
-        Token = new NACLib::TUserToken(ev->Get()->InternalToken);
+    if (ev->Get()->Authenticated && ev->Get()->InternalToken && !ev->Get()->InternalToken->GetSerializedToken().empty()) {
+        Token = ev->Get()->InternalToken;
         ForceACLCheck = true;
 
         if constexpr (!UseMigrationProtocol) {

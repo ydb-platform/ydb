@@ -1,0 +1,49 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-blob_depot-ut)
+target_include_directories(ydb-core-blob_depot-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot
+)
+target_link_libraries(ydb-core-blob_depot-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-core-blob_depot
+)
+target_link_options(ydb-core-blob_depot-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-core-blob_depot-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/closed_interval_set_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/given_id_range_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-blob_depot-ut
+  COMMAND
+  ydb-core-blob_depot-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-blob_depot-ut)

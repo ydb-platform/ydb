@@ -2,15 +2,18 @@
 
 #include "kqp_executer.h"
 #include "kqp_executer_stats.h"
+#include "kqp_planner.h"
 #include "kqp_partition_helper.h"
 #include "kqp_table_resolver.h"
 #include "kqp_shards_resolver.h"
+
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/wilson.h>
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -74,14 +77,51 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 
 template <class TDerived, EExecType ExecType>
 class TKqpExecuterBase : public TActorBootstrapped<TDerived> {
+protected:
+    struct TEvPrivate {
+        enum EEv {
+            EvRetry = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvResourcesSnapshot,
+            EvReattachToShard,
+        };
+
+        struct TEvRetry : public TEventLocal<TEvRetry, EEv::EvRetry> {
+            ui32 RequestId;
+            TActorId Target;
+
+            TEvRetry(ui64 requestId, const TActorId& target)
+                : RequestId(requestId)
+                , Target(target) {}
+        };
+
+        struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EEv::EvResourcesSnapshot> {
+            TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
+
+            TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
+                : Snapshot(std::move(snapshot)) {}
+        };
+
+        struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
+            const ui64 TabletId;
+
+            explicit TEvReattachToShard(ui64 tabletId)
+                : TabletId(tabletId) {}
+        };
+    };
+
 public:
-    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
-        TKqpRequestCounters::TPtr counters, ui64 spanVerbosity = 0, TString spanName = "no_name")
+    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+        TKqpRequestCounters::TPtr counters,
+        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+        ui64 spanVerbosity = 0, TString spanName = "no_name")
         : Request(std::move(request))
         , Database(database)
         , UserToken(userToken)
         , Counters(counters)
         , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
+        , Planner(nullptr)
+        , ExecuterRetriesConfig(executerRetriesConfig)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
         ResponseEv->Orbit = std::move(Request.Orbit);
@@ -230,6 +270,7 @@ protected:
                 if (Stats) {
                     Stats->AddComputeActorStats(computeActor.NodeId(), std::move(*state.MutableStats()));
                 }
+                ExtraData[computeActor].Swap(state.MutableExtraData());
 
                 LastTaskId = taskId;
                 LastComputeActorId = computeActor.ToString();
@@ -365,11 +406,24 @@ protected:
         return false;
     }
 
+    void InvalidateNode(ui64 node) {
+        for (auto tablet : ShardsOnNode[node]) {
+            auto ev = MakeHolder<TEvPipeCache::TEvForcePipeReconnect>(tablet);
+            this->Send(MakePipePeNodeCacheID(false), ev.Release());
+        }
+    }
+
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
         ui32 eventType = ev->Get()->SourceType;
         auto reason = ev->Get()->Reason;
         switch (eventType) {
             case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
+                if (reason == TEvents::TEvUndelivered::EReason::ReasonActorUnknown) {
+                    LOG_D("Schedule a retry by ActorUnknown reason, nodeId:" << ev->Sender.NodeId() << " requestId: " << ev->Cookie);
+                    this->Schedule(TDuration::MilliSeconds(Planner->GetCurrentRetryDelay(ev->Cookie)), new typename TEvPrivate::TEvRetry(ev->Cookie, ev->Sender));
+                    return;
+                }
+                InvalidateNode(ev->Sender.NodeId());
                 return InternalError(TStringBuilder()
                     << "TEvKqpNode::TEvStartKqpTasksRequest lost: " << reason);
             }
@@ -377,6 +431,15 @@ protected:
                 LOG_E("Event lost, type: " << eventType << ", reason: " << reason);
             }
         }
+    }
+
+    void HandleRetry(typename TEvPrivate::TEvRetry::TPtr& ev) {
+        if (Planner && Planner->SendStartKqpTasksRequest(ev->Get()->RequestId, ev->Get()->Target)) {
+            return;
+        }
+        InvalidateNode(Target.NodeId());
+        return InternalError(TStringBuilder()
+            << "TEvKqpNode::TEvStartKqpTasksRequest lost: ActorUnknown");
     }
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -410,19 +473,19 @@ protected:
             switch (reason) {
                 case NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY: {
                     ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED,
-                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, "Not enough memory to execute query"));
+                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, message));
                     break;
                 }
 
                 case NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS: {
                     ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED,
-                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, "Not enough computation units to execute query"));
+                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, message));
                     break;
                 }
 
                 case NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED: {
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
-                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded"));
+                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, message));
                     break;
                 }
 
@@ -588,8 +651,7 @@ protected:
         }
 
         if (Request.RlPath) {
-            auto actorId = ReportToRl(ru, Database, UserToken.GetOrElse(""),
-                Request.RlPath.GetRef());
+            auto actorId = ReportToRl(ru, Database, UserToken->GetSerializedToken(), Request.RlPath.GetRef());
 
             LOG_D("Resource usage for last stat interval: " << consumption
                   << " ru: " << ru << " rl path: " << Request.RlPath.GetRef()
@@ -650,7 +712,7 @@ protected:
         }
     }
 
-    void BuildScanTasksFromSource(TStageInfo& stageInfo) {
+    size_t BuildScanTasksFromSource(TStageInfo& stageInfo, IKqpGateway::TKqpSnapshot snapshot, const TMaybe<ui64> lockTxId = {}) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -669,14 +731,11 @@ protected:
         auto columns = BuildKqpColumns(source, table);
         auto partitions = PrunePartitions(TableKeys, source, stageInfo, HolderFactory(), TypeEnv());
 
-        bool reverse = false;
         ui64 itemsLimit = 0;
 
         TString itemsLimitParamName;
         NYql::NDqProto::TData itemsLimitBytes;
         NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
-
-        YQL_ENSURE(!source.GetReverse(), "reverse not supported yet");
 
         for (auto& [shardId, shardInfo] : partitions) {
             YQL_ENSURE(!shardInfo.KeyWriteRanges);
@@ -695,11 +754,14 @@ protected:
 
             NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
             FillTableMeta(stageInfo, settings.MutableTable());
-            for (auto& key : source.GetSkipNullKeys()) {
-                settings.AddSkipNullKeys(key);
-            }
 
             for (auto& keyColumn : keyTypes) {
+                auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(keyColumn);
+                if (columnType.TypeInfo) {
+                    *settings.AddKeyColumnTypeInfos() = *columnType.TypeInfo;
+                } else {
+                    *settings.AddKeyColumnTypeInfos() = NKikimrProto::TTypeInfo();
+                }
                 settings.AddKeyColumnTypes(static_cast<ui32>(keyColumn.GetTypeId()));
             }
 
@@ -720,18 +782,29 @@ protected:
                 settings.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
             }
 
-            settings.MutableSnapshot()->SetStep(Request.Snapshot.Step);
-            settings.MutableSnapshot()->SetTxId(Request.Snapshot.TxId);
+            if (snapshot.IsValid()) {
+                settings.MutableSnapshot()->SetStep(snapshot.Step);
+                settings.MutableSnapshot()->SetTxId(snapshot.TxId);
+            }
 
             shardInfo.KeyReadRanges->SerializeTo(&settings);
-            settings.SetReverse(reverse);
+            settings.SetReverse(source.GetReverse());
             settings.SetSorted(source.GetSorted());
 
             settings.SetShardIdHint(shardId);
+            if (Stats) {
+                Stats->AffectedShards.insert(shardId);
+            }
 
             ExtractItemsLimit(stageInfo, source.GetItemsLimit(), Request.TxAlloc->HolderFactory,
                 Request.TxAlloc->TypeEnv, itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
             settings.SetItemsLimit(itemsLimit);
+
+            auto self = static_cast<TDerived*>(this)->SelfId();
+            if (lockTxId) {
+                settings.SetLockTxId(*lockTxId);
+                settings.SetLockNodeId(self.NodeId());
+            }
 
             const auto& stageSource = stage.GetSources(0);
             auto& input = task.Inputs[stageSource.GetInputIndex()];
@@ -741,6 +814,7 @@ protected:
             taskSourceSettings->PackFrom(settings);
             input.SourceType = NYql::KqpReadRangesSourceName;
         }
+        return partitions.size();
     }
 
 protected:
@@ -983,6 +1057,35 @@ protected:
         return true;
     }
 
+    IActor* GetOrCreateChannelProxy(const NYql::NDq::TChannel& channel) {
+        IActor* proxy;
+
+        if (ResponseEv->TxResults[0].IsStream) {
+            if (!ResultChannelProxies.empty()) {
+                return ResultChannelProxies.begin()->second;
+            }
+
+            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, ResponseEv->TxResults[0].MkqlItemType,
+                ResponseEv->TxResults[0].ColumnOrder, Target, Stats.get(), this->SelfId());
+        } else {
+            YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
+
+            auto channelIt = ResultChannelProxies.find(channel.Id);
+
+            if (channelIt != ResultChannelProxies.end()) {
+                return channelIt->second;
+            }
+
+            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats.get(), this->SelfId(),
+                channel.DstInputIndex, ResponseEv.get());
+        }
+
+        this->RegisterWithSameMailbox(proxy);
+        ResultChannelProxies.emplace(std::make_pair(channel.Id, proxy));
+
+        return proxy;
+    }
+
 protected:
     void PassAway() override {
         LOG_D("terminate execution.");
@@ -1041,7 +1144,7 @@ protected:
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
     const TString Database;
-    const TMaybe<TString> UserToken;
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant StartTime;
@@ -1058,6 +1161,9 @@ protected:
     TActorId KqpTableResolverId;
     TActorId KqpShardsResolverId;
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
+    THashMap<TActorId, NYql::NDqProto::TComputeActorExtraData> ExtraData;
+    std::unordered_map<ui64, IActor*> ResultChannelProxies;
+
     TVector<TProgressStat> LastStats;
 
     TInstant StartResolveTime;
@@ -1074,19 +1180,23 @@ protected:
 
     ui64 LastTaskId = 0;
     TString LastComputeActorId = "";
+
+    std::unique_ptr<TKqpPlanner> Planner;
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig ExecuterRetriesConfig;
+
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-IActor* CreateKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters);
-
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
 
 } // namespace NKqp
 } // namespace NKikimr

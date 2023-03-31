@@ -110,7 +110,7 @@ struct TEvPrivate {
             }
         }
 
-        bool NeedWrites() const {
+        bool NeedDataReadWrite() const {
             return (TxEvent->PutStatus != NKikimrProto::OK);
         }
     };
@@ -124,46 +124,58 @@ struct TEvPrivate {
     };
 
     struct TEvExport : public TEventLocal<TEvExport, EvExport> {
-        struct TExportBlobInfo {
-            const ui64 PathId = 0;
-            TString Data;
-            bool Evicting = false;
-            TExportBlobInfo(const ui64 pathId)
-                : PathId(pathId)
-            {
-
-            }
-        };
-        using TBlobDataMap = THashMap<TUnifiedBlobId, TExportBlobInfo>;
+        using TBlobDataMap = THashMap<TUnifiedBlobId, TString>;
 
         NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
         ui64 ExportNo = 0;
         TString TierName;
+        ui64 PathId = 0;
         TActorId DstActor;
-        TBlobDataMap Blobs;
+        TBlobDataMap Blobs; // src: blobId -> data map; dst: exported blobIds set
         THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
         TMap<TString, TString> ErrorStrings;
 
-        explicit TEvExport(ui64 exportNo, const TString& tierName, TBlobDataMap&& tierBlobs)
+        explicit TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, TBlobDataMap&& tierBlobs)
             : ExportNo(exportNo)
             , TierName(tierName)
+            , PathId(pathId)
             , Blobs(std::move(tierBlobs))
         {
             Y_VERIFY(ExportNo);
             Y_VERIFY(!TierName.empty());
+            Y_VERIFY(PathId);
             Y_VERIFY(!Blobs.empty());
         }
 
-        TEvExport(ui64 exportNo, const TString& tierName, TActorId dstActor, TBlobDataMap&& blobs)
+        TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, TActorId dstActor, TBlobDataMap&& blobs)
             : ExportNo(exportNo)
             , TierName(tierName)
+            , PathId(pathId)
             , DstActor(dstActor)
             , Blobs(std::move(blobs))
         {
             Y_VERIFY(ExportNo);
             Y_VERIFY(!TierName.empty());
+            Y_VERIFY(PathId);
             Y_VERIFY(DstActor);
             Y_VERIFY(!Blobs.empty());
+        }
+
+        void AddResult(const TUnifiedBlobId& blobId, const TString& key, const bool hasError, const TString& errStr) {
+            if (hasError) {
+                Status = NKikimrProto::ERROR;
+                Y_VERIFY(ErrorStrings.emplace(key, errStr).second, "%s", key.data());
+                Blobs.erase(blobId);
+            } else if (!ErrorStrings.count(key)) { // (OK + !OK) == !OK
+                Y_VERIFY(Blobs.count(blobId));
+                if (Status == NKikimrProto::UNKNOWN) {
+                    Status = NKikimrProto::OK;
+                }
+            }
+        }
+
+        bool Finished() const {
+            return (Blobs.size() + ErrorStrings.size()) == SrcToDstBlobs.size();
         }
 
         TString SerializeErrorsToString() const {

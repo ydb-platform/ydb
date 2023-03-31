@@ -113,10 +113,11 @@ public:
 
 private:
     static int Compare(const TContiguousSpan& x, const TContiguousSpan& y) {
-        if (int res = std::memcmp(x.data(), y.data(), std::min(x.size(), y.size())); res) {
-            return res;
+        int res = 0;
+        if (const size_t common = std::min(x.size(), y.size())) {
+            res = std::memcmp(x.data(), y.data(), common);
         }
-        return x.size() - y.size();
+        return res ? res : x.size() - y.size();
     }
 };
 

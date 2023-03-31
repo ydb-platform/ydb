@@ -23,6 +23,7 @@ public:
 
 private:
     void BuildDependencies(const TOperation::TPtr &op);
+    bool BuildVolatileDependencies(const TOperation::TPtr &op);
 };
 
 TBuildAndWaitDependenciesUnit::TBuildAndWaitDependenciesUnit(TDataShard &dataShard,
@@ -42,7 +43,9 @@ bool TBuildAndWaitDependenciesUnit::HasDirectBlockers(const TOperation::TPtr& op
 {
     Y_VERIFY_DEBUG(op->IsWaitingDependencies());
 
-    return !op->GetDependencies().empty() || !op->GetSpecialDependencies().empty();
+    return !op->GetDependencies().empty()
+        || !op->GetSpecialDependencies().empty()
+        || op->HasVolatileDependencies();
 }
 
 bool TBuildAndWaitDependenciesUnit::IsReadyToExecute(TOperation::TPtr op) const
@@ -66,6 +69,7 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
     // Build dependencies if not yet.
     if (!op->IsWaitingDependencies()) {
         BuildDependencies(op);
+        BuildVolatileDependencies(op);
 
         // After dependencies are built we can add operation to active ops.
         // For planned operations it means we can load and process the next
@@ -107,6 +111,10 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
 
             return EExecutionStatus::Continue;
         }
+    } else if (BuildVolatileDependencies(op)) {
+        // We acquired new volatile dependencies, wait for them too
+        Y_VERIFY(!IsReadyToExecute(op));
+        return EExecutionStatus::Continue;
     }
 
     DataShard.IncCounter(COUNTER_WAIT_DEPENDENCIES_LATENCY_MS, op->GetCurrentElapsedAndReset().MilliSeconds());
@@ -166,6 +174,24 @@ void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr &op
     }
 
     op->ResetCurrentTimer();
+}
+
+bool TBuildAndWaitDependenciesUnit::BuildVolatileDependencies(const TOperation::TPtr &op) {
+    // Scheme operations need to wait for all volatile transactions below them
+    if (op->IsSchemeTx()) {
+        TRowVersion current(op->GetStep(), op->GetTxId());
+        for (auto* info : DataShard.GetVolatileTxManager().GetVolatileTxByVersion()) {
+            if (current < info->Version) {
+                break;
+            }
+            op->AddVolatileDependency(info->TxId);
+            bool added = DataShard.GetVolatileTxManager()
+                .AttachWaitingRemovalOperation(info->TxId, op->GetTxId());
+            Y_VERIFY(added);
+        }
+    }
+
+    return op->HasVolatileDependencies();
 }
 
 void TBuildAndWaitDependenciesUnit::Complete(TOperation::TPtr,

@@ -445,7 +445,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     UserAgent = "pqv1 server";
     LogSession(ctx);
 
-    if (Request->GetInternalToken().empty()) { // session without auth
+    if (Request->GetSerializedToken().empty()) { // session without auth
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
             Die(ctx);
@@ -531,12 +531,11 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& clou
 
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
-    auto aggr = NPersQueue::GetLabelsForTopic(FullConverter, cloudId, dbId, dbPath, folderId);
+    auto subgroups = NPersQueue::GetSubgroupsForTopic(FullConverter, cloudId, dbId, dbPath, folderId);
 
-    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.grpc.topic.stream_write.sessions_created"}, true, "name");
-    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.grpc.topic.stream_write.sessions_active_count"}, false, "name");
-    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.grpc.topic.stream_write.errors"}, true, "name");
-
+    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.sessions_created"}, true, "name");
+    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.sessions_active_count"}, false, "name");
+    Errors = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.errors"}, true, "name");
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
@@ -577,6 +576,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         return;
     }
+    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !description.GetPQTabletConfig().GetLocalDC()) {
+        errorReason = Sprintf("Write to mirrored topic '%s' is forbidden", DiscoveryConverter->GetPrintableString().c_str());
+        CloseSession(errorReason, PersQueue::ErrorCode::BAD_REQUEST, ctx);
+        return;
+    }
+
     FullConverter = DiscoveryConverter->UpgradeToFullConverter(InitialPQTabletConfig,
                                                                AppData(ctx)->PQConfig.GetTestDatabaseRoot());
     InitAfterDiscovery(ctx);
@@ -608,7 +613,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
 
     SetMeteringMode(meteringMode);
 
-    if (Request->GetInternalToken().empty()) { // session without auth
+    if (Request->GetSerializedToken().empty()) { // session without auth
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
             Die(ctx);
@@ -620,7 +625,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     } else {
         Y_VERIFY(Request->GetYdbToken());
         Auth = *Request->GetYdbToken();
-        Token = new NACLib::TUserToken(Request->GetInternalToken());
+        Token = new NACLib::TUserToken(Request->GetSerializedToken());
 
         if (FirstACLCheck && IsQuotaRequired()) {
             Y_VERIFY(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
@@ -1247,7 +1252,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr&, const TActorContext& ctx) {
-    CloseSession("pipe to partition's tablet is dead", PersQueue::ErrorCode::ERROR, ctx);
+    CloseSession("pipe to partition's tablet is dead", PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
 
 template<bool UseMigrationProtocol>
@@ -1255,7 +1260,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientCo
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     //TODO: add here retries for connecting to PQRB
     if (msg->Status != NKikimrProto::OK) {
-        CloseSession(TStringBuilder() << "pipe to tablet is dead " << msg->TabletId, PersQueue::ErrorCode::ERROR, ctx);
+        CloseSession(TStringBuilder() << "pipe to tablet is dead " << msg->TabletId, PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
         return;
     }
 }
@@ -1263,7 +1268,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientCo
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
     //TODO: add here retries for connecting to PQRB
-    CloseSession(TStringBuilder() << "pipe to tablet is dead " << ev->Get()->TabletId, PersQueue::ErrorCode::ERROR, ctx);
+    CloseSession(TStringBuilder() << "pipe to tablet is dead " << ev->Get()->TabletId, PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
 
 template<bool UseMigrationProtocol>
@@ -1271,7 +1276,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     if (!PendingRequest) {
         PendingRequest = new TWriteRequestInfo(++NextRequestCookie);
     }
-   
+
     auto& request = PendingRequest->PartitionWriteRequest->Record;
     ui64 payloadSize = 0;
 
@@ -1396,8 +1401,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
     Y_UNUSED(ctx);
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "updating token");
 
-    if (ev->Get()->Authenticated && !ev->Get()->InternalToken.empty()) {
-        Token = new NACLib::TUserToken(ev->Get()->InternalToken);
+    if (ev->Get()->Authenticated && ev->Get()->InternalToken && !ev->Get()->InternalToken->GetSerializedToken().empty()) {
+        Token = ev->Get()->InternalToken;
         Request->SetInternalToken(ev->Get()->InternalToken);
         UpdateTokenAuthenticated = true;
         if (!ACLCheckInProgress) {

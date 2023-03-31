@@ -46,6 +46,7 @@ message TPersQueuePartitionRequest {
         optional string SessionId = 4; // if not set, then no checks
 
         optional bool MirrorerRequest = 10 [default = false];
+        optional bool Strict = 11 [default = false];
     }
 
     message TCmdGetClientOffset {

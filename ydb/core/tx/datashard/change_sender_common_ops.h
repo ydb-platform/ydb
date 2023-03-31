@@ -8,6 +8,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/mon.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
@@ -104,6 +105,8 @@ protected:
 
     explicit TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver* resolver,
         const TDataShardId& dataShard, const TPathId& pathId);
+
+    void RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
 private:
     IActorOps* const ActorOps;

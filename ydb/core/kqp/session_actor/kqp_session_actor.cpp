@@ -957,6 +957,8 @@ public:
             request.TopicOperations = std::move(txCtx.TopicOperations);
         } else if (txCtx.ShouldAcquireLocks(query, QueryState->Commit)) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
+            // TODO: Use immediate effects only if tx contains uncommitted changes reading (KIKIMR-17576)
+            request.UseImmediateEffects = Config->FeatureFlags.GetEnableKqpImmediateEffects();
         }
 
         LWTRACK(KqpSessionPhyQueryProposeTx,

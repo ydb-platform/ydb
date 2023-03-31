@@ -24,6 +24,7 @@ void BuildLocks(NKikimrMiniKQL::TResult& result, const TVector<NKikimrTxDataShar
     setMemberDataType(*structType.AddMember(), "LockId", NKikimr::NUdf::TDataType<ui64>::Id);
     setMemberDataType(*structType.AddMember(), "PathId", NKikimr::NUdf::TDataType<ui64>::Id);
     setMemberDataType(*structType.AddMember(), "SchemeShard", NKikimr::NUdf::TDataType<ui64>::Id);
+    setMemberDataType(*structType.AddMember(), "HasWrites", NKikimr::NUdf::TDataType<bool>::Id);
 
     auto& value = *result.MutableValue();
     for (auto& lock : locks) {
@@ -34,6 +35,7 @@ void BuildLocks(NKikimrMiniKQL::TResult& result, const TVector<NKikimrTxDataShar
         item.AddStruct()->SetUint64(lock.GetLockId());
         item.AddStruct()->SetUint64(lock.GetPathId());
         item.AddStruct()->SetUint64(lock.GetSchemeShard());
+        item.AddStruct()->SetBool(lock.GetHasWrites());
     }
 }
 
@@ -50,13 +52,14 @@ NKikimrTxDataShard::TLock ExtractLock(const NYql::NDq::TMkqlValueRef& lock) {
     YQL_ENSURE(type.GetKind() == NKikimrMiniKQL::ETypeKind::Struct);
     auto& structType = type.GetStruct();
 
-    YQL_ENSURE(structType.MemberSize() == 6);
+    YQL_ENSURE(structType.MemberSize() == 7);
     ensureMemberDataType(structType.GetMember(0), "Counter", NKikimr::NUdf::TDataType<ui64>::Id);
     ensureMemberDataType(structType.GetMember(1), "DataShard", NKikimr::NUdf::TDataType<ui64>::Id);
     ensureMemberDataType(structType.GetMember(2), "Generation", NKikimr::NUdf::TDataType<ui32>::Id);
     ensureMemberDataType(structType.GetMember(3), "LockId", NKikimr::NUdf::TDataType<ui64>::Id);
     ensureMemberDataType(structType.GetMember(4), "PathId", NKikimr::NUdf::TDataType<ui64>::Id);
     ensureMemberDataType(structType.GetMember(5), "SchemeShard", NKikimr::NUdf::TDataType<ui64>::Id);
+    ensureMemberDataType(structType.GetMember(6), "HasWrites", NKikimr::NUdf::TDataType<bool>::Id);
 
     NKikimrTxDataShard::TLock dsLock;
     dsLock.SetCounter(value.GetStruct(0).GetUint64());
@@ -65,6 +68,7 @@ NKikimrTxDataShard::TLock ExtractLock(const NYql::NDq::TMkqlValueRef& lock) {
     dsLock.SetLockId(value.GetStruct(3).GetUint64());
     dsLock.SetPathId(value.GetStruct(4).GetUint64());
     dsLock.SetSchemeShard(value.GetStruct(5).GetUint64());
+    dsLock.SetHasWrites(value.GetStruct(6).GetBool());
 
     return dsLock;
 }

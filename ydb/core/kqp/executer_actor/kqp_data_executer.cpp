@@ -139,6 +139,8 @@ public:
         if (Request.Snapshot.IsValid()) {
             YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE);
         }
+
+        ReadOnlyTx = IsReadOnlyTx();
     }
 
     void CheckExecutionComplete() {
@@ -1274,6 +1276,28 @@ private:
     }
 
 private:
+    bool IsReadOnlyTx() const {
+        if (Request.TopicOperations.HasOperations()) {
+            YQL_ENSURE(!Request.UseImmediateEffects);
+            return false;
+        }
+
+        if (Request.ValidateLocks && Request.EraseLocks) {
+            YQL_ENSURE(!Request.UseImmediateEffects);
+            return false;
+        }
+
+        for (const auto& tx : Request.Transactions) {
+            for (const auto& stage : tx.Body->GetStages()) {
+                if (stage.GetIsEffectsStage()) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     void FillGeneralReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse) {
         if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) {
             // Validate parameters
@@ -1548,7 +1572,7 @@ private:
             const ui32 flags =
                 (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |
                 (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
-            if (Snapshot.IsValid() && (ReadOnlyTx || AppData()->FeatureFlags.GetEnableKqpImmediateEffects())) {
+            if (Snapshot.IsValid() && (ReadOnlyTx || Request.UseImmediateEffects)) {
                 ev.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),
@@ -1624,7 +1648,6 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         size_t readActors = 0;
-        ReadOnlyTx = !Request.TopicOperations.HasOperations();
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
 
@@ -1652,8 +1675,6 @@ private:
                 }
 
                 LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
-
-                ReadOnlyTx &= !stage.GetIsEffectsStage();
 
                 if (stage.SourcesSize() > 0) {
                     switch (stage.GetSources(0).GetTypeCase()) {
@@ -1859,8 +1880,9 @@ private:
                 break;
         }
 
-        if ((ReadOnlyTx || AppData()->FeatureFlags.GetEnableKqpImmediateEffects()) && Request.Snapshot.IsValid()) {
+        if ((ReadOnlyTx || Request.UseImmediateEffects) && Request.Snapshot.IsValid()) {
             // Snapshot reads are always immediate
+            // Uncommitted writes are executed without coordinators, so they can be immediate
             YQL_ENSURE(!VolatileTx);
             Snapshot = Request.Snapshot;
             ImmediateTx = true;
@@ -2092,13 +2114,21 @@ private:
                 if (!locksList.empty()) {
                     auto* protoLocks = tx.MutableLocks()->MutableLocks();
                     protoLocks->Reserve(locksList.size());
+                    bool hasWrites = false;
                     for (auto& lock : locksList) {
+                        hasWrites = hasWrites || lock.GetHasWrites();
                         protoLocks->Add()->Swap(&lock);
                     }
 
                     if (needCommit) {
                         // We also send the result on commit
                         sendingShardsSet.insert(shardId);
+
+                        if (hasWrites) {
+                            // Tx with uncommitted changes can be aborted due to conflicts,
+                            // so shards with write locks should receive readsets
+                            receivingShardsSet.insert(shardId);
+                        }
                     }
                 }
             }

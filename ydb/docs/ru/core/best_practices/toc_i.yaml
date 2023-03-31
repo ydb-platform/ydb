@@ -3,6 +3,8 @@ items:
   href: index.md
 - name: Выбор первичного ключа для максимальной производительности
   href: pk_scalability.md
+- name: Выбор первичного ключа для максимальной производительности аналитических таблиц
+  href: pk_olap_scalability.md  
 - name: Проектирование схемы
   href: schema_design.md
   hidden: true

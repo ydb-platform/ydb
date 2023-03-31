@@ -5,7 +5,6 @@
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
-#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 
 #include <library/cpp/actors/core/log.h>
 

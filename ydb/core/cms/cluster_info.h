@@ -15,8 +15,6 @@
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/console.pb.h>
 
-#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
-
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 

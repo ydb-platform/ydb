@@ -62,7 +62,7 @@ private:
     bool ShowPermissions = false;
     // Table options
     bool ShowKeyShardBoundaries = false;
-    bool ShowTableStats = false;
+    bool ShowStats = false;
     bool ShowPartitionStats = false;
 };
 

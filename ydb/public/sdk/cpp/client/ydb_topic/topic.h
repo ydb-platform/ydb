@@ -62,15 +62,51 @@ private:
     TVector<ECodec> SupportedCodecs_;
 };
 
+
+class TTopicStats {
+public:
+    TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats);
+
+    ui64 GetStoreSizeBytes() const;
+    TDuration GetMaxWriteTimeLag() const;
+    TInstant GetMinLastWriteTime() const;
+    ui64 GetBytesWrittenPerMinute() const;
+    ui64 GetBytesWrittenPerHour() const;
+    ui64 GetBytesWrittenPerDay() const;
+
+private:
+    ui64 StoreSizeBytes_;
+    TInstant MinLastWriteTime_;
+    TDuration MaxWriteTimeLag_;
+    ui64 BytesWrittenPerMinute_;
+    ui64 BytesWrittenPerHour_;
+    ui64 BytesWrittenPerDay_;
+};
+
+
 class TPartitionStats {
 public:
     TPartitionStats(const Ydb::Topic::PartitionStats& partitionStats);
 
     ui64 GetStartOffset() const;
     ui64 GetEndOffset() const;
+    ui64 GetStoreSizeBytes() const;
+    TDuration GetMaxWriteTimeLag() const;
+    TInstant GetLastWriteTime() const;
+    ui64 GetBytesWrittenPerMinute() const;
+    ui64 GetBytesWrittenPerHour() const;
+    ui64 GetBytesWrittenPerDay() const;
+
 private:
     ui64 StartOffset_;
     ui64 EndOffset_;
+    ui64 StoreSizeBytes_;
+    TInstant LastWriteTime_;
+    TDuration MaxWriteTimeLag_;
+    ui64 BytesWrittenPerMinute_;
+    ui64 BytesWrittenPerHour_;
+    ui64 BytesWrittenPerDay_;
+
 };
 
 class TPartitionConsumerStats {
@@ -152,6 +188,8 @@ public:
 
     EMeteringMode GetMeteringMode() const;
 
+    const TTopicStats& GetTopicStats() const;
+
     void SerializeTo(Ydb::Topic::CreateTopicRequest& request) const;
 private:
 
@@ -169,6 +207,7 @@ private:
     EMeteringMode MeteringMode_;
     TMap<TString, TString> Attributes_;
     TVector<TConsumer> Consumers_;
+    TTopicStats TopicStats_;
 
     TString Owner_;
     TVector<NScheme::TPermissions> Permissions_;

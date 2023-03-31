@@ -6,45 +6,55 @@
 
 namespace NKikimr::NArrow {
 
-bool SplitBySize(const std::shared_ptr<arrow::RecordBatch>& batch, std::vector<std::shared_ptr<arrow::RecordBatch>>& result, const ui32 sizeLimit) {
+TSplitBlobResult SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 sizeLimit) {
+    std::vector<TSerializedBatch> resultLocal;
+    TString errorMessage;
     if (GetBatchDataSize(batch) <= sizeLimit) {
-        result = { batch };
-        return true;
+        if (!TSerializedBatch::BuildWithLimit(batch, sizeLimit, resultLocal, &errorMessage)) {
+            return TSplitBlobResult("full batch splitting: " + errorMessage);
+        } else {
+            return TSplitBlobResult(std::move(resultLocal));
+        }
     }
-    TRowSizeCalculator rowCalculator;
+    TRowSizeCalculator rowCalculator(8);
     if (!rowCalculator.InitBatch(batch)) {
-        return false;
+        return TSplitBlobResult("unexpected column type on batch initialization for row size calculator");
     }
-    std::vector<std::shared_ptr<arrow::RecordBatch>> resultLocal;
     ui32 currentSize = 0;
     ui32 startIdx = 0;
     for (ui32 i = 0; i < batch->num_rows(); ++i) {
         const ui32 rowSize = rowCalculator.GetRowBytesSize(i);
-        if (currentSize + rowSize > sizeLimit) {
+        if (rowSize > sizeLimit) {
+            return TSplitBlobResult("there is row with size more then limit (" + ::ToString(sizeLimit) + ")");
+        }
+        if (rowCalculator.GetApproxSerializeSize(currentSize + rowSize) > sizeLimit) {
             if (!currentSize) {
-                return false;
+                return TSplitBlobResult("there is row with size + metadata more then limit (" + ::ToString(sizeLimit) + ")");
             }
-            resultLocal.emplace_back(batch->Slice(startIdx, i - startIdx));
+            if (!TSerializedBatch::BuildWithLimit(batch->Slice(startIdx, i - startIdx), sizeLimit, resultLocal, &errorMessage)) {
+                return TSplitBlobResult("cannot build blobs for batch slice (" + ::ToString(i - startIdx) + " rows): " + errorMessage);
+            }
             currentSize = 0;
             startIdx = i;
         }
         currentSize += rowSize;
     }
     if (currentSize) {
-        resultLocal.emplace_back(batch->Slice(startIdx, batch->num_rows() - startIdx));
+        if (!TSerializedBatch::BuildWithLimit(batch->Slice(startIdx, batch->num_rows() - startIdx), sizeLimit, resultLocal, &errorMessage)) {
+            return TSplitBlobResult("cannot build blobs for last batch slice (" + ::ToString(batch->num_rows() - startIdx) + " rows): " + errorMessage);
+        }
     }
-    std::swap(resultLocal, result);
-    return true;
+    return TSplitBlobResult(std::move(resultLocal));
 }
 
 ui32 TRowSizeCalculator::GetRowBitWidth(const ui32 row) const {
     Y_VERIFY(Prepared);
     ui32 result = CommonSize;
     for (auto&& c : BinaryColumns) {
-        result += c->GetView(row).size() * 8;
+        result += GetBitWidthAligned(c->GetView(row).size() * 8);
     }
     for (auto&& c : StringColumns) {
-        result += c->GetView(row).size() * 8;
+        result += GetBitWidthAligned(c->GetView(row).size() * 8);
     }
     return result;
 }
@@ -58,7 +68,7 @@ bool TRowSizeCalculator::InitBatch(const std::shared_ptr<arrow::RecordBatch>& ba
     for (ui32 i = 0; i < (ui32)Batch->num_columns(); ++i) {
         auto fSize = std::dynamic_pointer_cast<arrow::FixedWidthType>(Batch->column(i)->type());
         if (fSize) {
-            CommonSize += fSize->bit_width();
+            CommonSize += GetBitWidthAligned(fSize->bit_width());
         } else {
             auto c = Batch->column(i);
             if (c->type()->id() == arrow::Type::BINARY) {
@@ -157,6 +167,53 @@ ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
 
     Y_VERIFY_DEBUG(success, "Unsupported arrow type %s", type->ToString().data());
     return bytes;
+}
+
+NKikimr::NArrow::TSerializedBatch TSerializedBatch::Build(std::shared_ptr<arrow::RecordBatch> batch) {
+    return TSerializedBatch(NArrow::SerializeBatchNoCompression(batch), batch->num_rows());
+}
+
+bool TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage) {
+    TSerializedBatch sb = TSerializedBatch::Build(batch);
+    const ui32 length = batch->num_rows();
+    if (sb.GetSize() <= sizeLimit) {
+        sbL = std::move(sb);
+        return true;
+    } else if (length == 1) {
+        if (errorMessage) {
+            *errorMessage = TStringBuilder() << "original batch too big: " << sb.GetSize() << " and contains 1 row (cannot be splitted)";
+        }
+        return false;
+    } else {
+        const ui32 delta = length / 2;
+        TSerializedBatch localSbL = TSerializedBatch::Build(batch->Slice(0, delta));
+        TSerializedBatch localSbR = TSerializedBatch::Build(batch->Slice(delta, length - delta));
+        if (localSbL.GetSize() > sizeLimit || localSbR.GetSize() > sizeLimit) {
+            if (errorMessage) {
+                *errorMessage = TStringBuilder() << "original batch too big: " << sb.GetSize() << " and after 2 parts split we have: " <<
+                    localSbL.GetSize() << " / " << localSbR.GetSize() << " part sizes. Its unexpected";
+            }
+            return false;
+        }
+        sbL = std::move(localSbL);
+        sbR = std::move(localSbR);
+        return true;
+    }
+}
+
+bool TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::vector<TSerializedBatch>& result, TString* errorMessage) {
+    std::optional<TSerializedBatch> sbL;
+    std::optional<TSerializedBatch> sbR;
+    if (!TSerializedBatch::BuildWithLimit(batch, sizeLimit, sbL, sbR, errorMessage)) {
+        return false;
+    }
+    if (sbL) {
+        result.emplace_back(std::move(*sbL));
+    }
+    if (sbR) {
+        result.emplace_back(std::move(*sbR));
+    }
+    return true;
 }
 
 }

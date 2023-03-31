@@ -62,10 +62,6 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
     this->SetValidClusters(clusters);
     this->Dispatch(config.GetDefaultSettings());
 
-    if (typeCtx->UseBlocks) {
-        YQL_ENSURE(UseBlocksSource.Get().GetOrElse(true), "Scalar Source is not compatible with Blocks engine");
-    }
-
     for (const auto& cluster: config.GetClusterMapping()) {
         this->Dispatch(cluster.GetName(), cluster.GetSettings());
         auto& settings = Clusters[cluster.GetName()];

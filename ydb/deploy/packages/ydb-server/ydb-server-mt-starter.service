@@ -1,6 +1,6 @@
 [Unit]
 Description=YDB MultiTenancy starter service
-AssertFileNotEmpty=/opt/ydb/cfg/config.yaml
+AssertFileNotEmpty=/opt/ydb/cfg/config-mt.yaml
 AssertPathIsDirectory=/opt/ydb-tenant
 After=network-online.target rc-local.service
 

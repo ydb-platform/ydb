@@ -25,6 +25,43 @@ namespace NActors {
         TActorIdentity SelfActorId = TActorIdentity(TActorId());
         TActorId ParentActorId;
 
+        // Pre-leave and pre-enter hook functions are called by coroutine actor code to conserve the state of required TLS
+        // variables.
+        //
+        // They are called in the following order:
+        //
+        // 1. coroutine executes WaitForEvent
+        // 2. StoreTlsState() is called
+        // 3. control is returned to the actor system
+        // 4. some event is received, handler called (now in different thread, unconserved TLS variables are changed!)
+        // 5. handler transfers control to the coroutine
+        // 6. RestoreTlsState() is called
+        //
+        // These hooks may be used in the following way:
+        //
+        // thread_local TMyClass *MyObject = nullptr;
+        //
+        // class TMyCoroImpl : public TActorCoroImpl {
+        //     TMyClass *SavedMyObject;
+        //     ...
+        // public:
+        //     TMyCoroImpl()
+        //         : TActorCoroImpl(...)
+        //     {
+        //         StoreTlsState = RestoreTlsState = &TMyCoroImpl::ConserveState;
+        //     }
+        //
+        //     static void ConserveState(TActorCoroImpl *p) {
+        //         TMyCoroImpl *my = static_cast<TMyCoroImpl*>(p);
+        //         std::swap(my->SavedMyObject, MyObject);
+        //     }
+        //
+        //     ...
+        // }
+        void (*StoreTlsState)(TActorCoroImpl*) = nullptr;
+        void (*RestoreTlsState)(TActorCoroImpl*) = nullptr;
+
+
     private:
         template <typename TFirstEvent, typename... TOtherEvents>
         struct TIsOneOf: public TIsOneOf<TOtherEvents...> {

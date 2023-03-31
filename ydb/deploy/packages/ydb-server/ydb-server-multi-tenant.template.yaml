@@ -13,6 +13,7 @@ description: |
   YDB is an open-source Distributed SQL Database that combines
   high availability and scalability with strong consistency and ACID transactions.
   This package provides multi tenancy systemd services and configuration.
+  This package ensures that configuration for ydb multi tenancy node located in /opt/ydb/cfg/config-mt.yaml file
 
 provides: []
 depends:

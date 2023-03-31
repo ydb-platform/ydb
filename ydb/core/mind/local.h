@@ -356,12 +356,14 @@ struct TLocalConfig : public TThrRefBase {
     struct TTabletClassInfo {
         TTabletSetupInfo::TPtr SetupInfo;
         ui64 MaxCount = 0; // maximum allowed number of running tablets, 0 means unlimited
+        i32 Priority = 0;
 
         TTabletClassInfo()
         {}
 
-        TTabletClassInfo(TTabletSetupInfo::TPtr setupInfo)
+        TTabletClassInfo(TTabletSetupInfo::TPtr setupInfo, i32 priority = 0)
             : SetupInfo(setupInfo)
+            , Priority(priority)
         {}
     };
 

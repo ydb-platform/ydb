@@ -12,14 +12,14 @@ namespace NKikimr::NColumnShard {
 using TLogThis = TCtorLogger<NKikimrServices::TX_COLUMNSHARD>;
 
 struct TLimits {
-    static constexpr const ui64 MAX_BLOB_SIZE = 8 * 1024 * 1024;
     static constexpr const ui32 MIN_SMALL_BLOBS_TO_INSERT = 200;
     static constexpr const ui32 MIN_BYTES_TO_INSERT = 4 * 1024 * 1024;
     static constexpr const ui64 MAX_BYTES_TO_INSERT = 16 * 1024 * 1024;
     static constexpr const ui32 MAX_TX_RECORDS = 100000;
 
-    static ui64 GetBlobSizeForSplit();
-    static void SetBlobSizeForSplit(const ui64 value);
+    static ui64 GetBlobSizeLimit();
+    static ui64 GetMaxBlobSize();
+    static void SetMaxBlobSize(const ui64 value);
 
     TControlWrapper MinInsertBytes;
     TControlWrapper MaxInsertBytes;

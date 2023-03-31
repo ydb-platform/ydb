@@ -120,7 +120,13 @@ namespace NActors {
     void TActorCoroImpl::ReturnToActorSystem() {
         TExceptionSafeContext* returnContext = std::exchange(ActorSystemContext, nullptr);
         Y_VERIFY(returnContext);
+        if (StoreTlsState) {
+            StoreTlsState(this);
+        }
         FiberContext.SwitchTo(returnContext);
+        if (RestoreTlsState) {
+            RestoreTlsState(this);
+        }
         if (!PendingEvent) {
             // we have returned from the actor system and it kindly asks us to terminate the coroutine as it is being
             // stopped

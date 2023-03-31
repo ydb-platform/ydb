@@ -29,17 +29,9 @@ message TKqpReadActorTableAggrExtraStats {
     repeated uint64 AffectedShards = 1;
 }
 
-message TKqpScanTableExtraStats {
-    // IScan stats
-    uint64 IScanStartTimeMs = 1;     // start IScan timestamp
-    uint64 IScanFinishTimeMs = 2;    // finish IScan timestamp
-    uint64 IScanCpuTimeUs = 3;       // IScan::Feed time
-    uint64 IScanWaitTimeUs = 4;      // wait for row inside IScan object
-    uint64 IScanPageFaults = 5;      // IScan page faults count
-
-    // Network stats
-    uint64 Messages = 6;
-    uint64 MessagesByPageFault = 7;
+// extra for NYql.NDqProto.TDqTableStats
+message TKqpTableExtraStats {
+    TKqpReadActorTableAggrExtraStats ReadActorTableAggrExtraStats = 1;
 }
 
 // extra for NYql.NDqProto.TDqComputeActorStats
@@ -49,7 +41,16 @@ message TKqpComputeActorExtraStats {
 // extra for NYql.NDqProto.TDqStageStats
 message TKqpStageExtraStats {
     repeated NYql.NDqProto.TDqTaskStats DatashardTasks = 1;
-};
+}
+
+message TKqpScanTaskExtraStats {
+    uint32 RetriesCount = 1;
+}
+
+// extra for NYql.NDqProto.TDqTaskStats
+message TKqpTaskExtraStats {
+    TKqpScanTaskExtraStats ScanTaskExtraStats = 1;
+}
 
 // extra for NYql.NDqProto.TDqExecutionStats
 message TKqpExecutionExtraStats {

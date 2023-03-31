@@ -895,8 +895,8 @@ private:
     TLocksCache* Cache = nullptr;
     ILocksDb* Db = nullptr;
 
-    TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId) const;
-    TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId) const;
+    TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const;
+    TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const;
 
     static ui64 GetLockId(const TArrayRef<const TCell>& key) {
         ui64 lockId;

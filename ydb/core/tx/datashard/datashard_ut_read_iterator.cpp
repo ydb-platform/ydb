@@ -4,6 +4,7 @@
 #include "read_iterator.h"
 
 #include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/converter.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>

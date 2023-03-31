@@ -137,6 +137,7 @@ public:
     bool IsAllowedToRunTablet(TTabletDebugState* debugState = nullptr) const;
     bool IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
     bool IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
+    i32 GetPriorityForTablet(const TTabletInfo& tablet) const;
     ui64 GetMaxTabletsScheduled() const;
 
     bool IsAbleToScheduleTablet() const {

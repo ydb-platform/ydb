@@ -197,7 +197,7 @@ namespace NKikimr::NBsController {
             // GROUP OPERATIONS
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            void ApplyGroupCreated(const TGroupId& /*groupId*/, const TGroupInfo &groupInfo) {
+            void ApplyGroupCreated(const TGroupId& groupId, const TGroupInfo &groupInfo) {
                 if (!groupInfo.VDisksInGroup && groupInfo.VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::WORKING) {
                     return; // do not report virtual groups that are not properly created yet
                 }
@@ -207,6 +207,11 @@ namespace NKikimr::NBsController {
                 for (const TVSlotInfo *vslot : groupInfo.VDisksInGroup) {
                     Y_VERIFY(vslot->GroupGeneration == groupInfo.Generation);
                     nodes.insert(vslot->VSlotId.NodeId);
+                }
+                for (auto it = Self->GroupToNode.lower_bound(std::make_tuple(groupId, Min<TNodeId>()));
+                        it != Self->GroupToNode.end() && *it <= std::make_tuple(groupId, Max<TNodeId>()); ++it) {
+                    const auto [groupId, nodeId] = *it;
+                    nodes.insert(nodeId);
                 }
 
                 // check tenant id, if necessary
@@ -239,11 +244,6 @@ namespace NKikimr::NBsController {
             void ApplyGroupDiff(const TGroupId &groupId, const TGroupInfo &prev, const TGroupInfo &cur) {
                 if (prev.Generation != cur.Generation) {
                     ApplyGroupCreated(groupId, cur);
-                    for (const auto& [key, info] : *State.HostRecords) {
-                        auto *meta = Services[info.NodeId].AddGroupMetadata();
-                        meta->SetGroupId(groupId);
-                        meta->SetCurrentGeneration(cur.Generation);
-                    }
                 }
                 Y_VERIFY(prev.VDisksInGroup.size() == cur.VDisksInGroup.size() ||
                     (cur.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE));
@@ -418,6 +418,18 @@ namespace NKikimr::NBsController {
                     overlay->second->PutInVSlotReadyTimestampQ(now);
                 } else {
                     Y_VERIFY_DEBUG(overlay->second->IsReady || overlay->second->IsInVSlotReadyTimestampQ());
+                }
+            }
+
+            for (auto&& [base, overlay] : state.Groups.Diff()) {
+                if (!overlay->second) { // deleted group
+                    auto begin = GroupToNode.lower_bound(std::make_tuple(overlay->first, Min<TNodeId>()));
+                    auto end = GroupToNode.upper_bound(std::make_tuple(overlay->first, Max<TNodeId>()));
+                    for (auto it = begin; it != end; ++it) {
+                        const auto [groupId, nodeId] = *it;
+                        GetNode(nodeId).GroupsRequested.erase(groupId);
+                    }
+                    GroupToNode.erase(begin, end);
                 }
             }
 

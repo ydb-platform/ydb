@@ -104,7 +104,7 @@ public:
 private:
     static void OnResult(NThreading::TPromise<TString> promise, IHTTPGateway::TResult&& result) {
         try {
-            promise.SetValue(std::move(std::get<IHTTPGateway::TContent>(result).Extract()));
+            promise.SetValue(result.Content.Extract());
         } catch (const std::exception& e) {
             promise.SetException(std::current_exception());
         }

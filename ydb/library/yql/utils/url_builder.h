@@ -14,7 +14,7 @@ public:
     explicit TUrlBuilder(const TString& uri);
 
     // Assuming name is already escaped, do not use strings from user input
-    TUrlBuilder& AddUrlParam(const TString& name, const TString& value);
+    TUrlBuilder& AddUrlParam(const TString& name, const TString& value = "");
     TUrlBuilder& AddPathComponent(const TString& value);
 
     TString Build() const;

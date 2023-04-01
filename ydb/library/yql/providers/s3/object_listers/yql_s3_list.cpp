@@ -272,6 +272,12 @@ public:
 
 private:
     static void SubmitRequestIntoGateway(TListingContext& ctx) {
+        IHTTPGateway::THeaders headers;
+        if (!ctx.ListingRequest.Token.empty()) {
+            headers.emplace_back("X-YaCloud-SubjectToken:" + ctx.ListingRequest.Token);
+        }
+        headers.emplace_back(TString{"X-Request-ID:"} + ctx.RequestId);
+
         TUrlBuilder urlBuilder(ctx.ListingRequest.Url);
         urlBuilder.AddUrlParam("list-type", "2")
             .AddUrlParam("prefix", ctx.ListingRequest.Prefix)
@@ -292,7 +298,7 @@ private:
         auto retryPolicy = ctx.RetryPolicy;
         gateway->Download(
             urlBuilder.Build(),
-            IHTTPGateway::MakeYcHeaders(ctx.RequestId, ctx.ListingRequest.Token),
+            headers,
             0U,
             0U,
             CallbackFactoryMethod(std::move(ctx)),
@@ -310,82 +316,72 @@ private:
         if (!gateway) {
             ythrow yexception() << "Gateway disappeared";
         }
-        switch (result.index()) {
-            case 0U: {
-                auto xmlString =
-                    std::get<IHTTPGateway::TContent>(std::move(result)).Extract();
-                const NXml::TDocument xml(xmlString, NXml::TDocument::String);
-                auto parsedResponse = ParseListObjectV2Response(xml, ctx.RequestId);
-                YQL_CLOG(DEBUG, ProviderS3)
-                    << "Listing of " << ctx.ListingRequest.Url
-                    << ctx.ListingRequest.Prefix << ": have " << ctx.Output->Size()
-                    << " entries, got another " << parsedResponse.KeyCount
-                    << " entries, request id: [" << ctx.RequestId << "]";
+        if (!result.Issues) {
+            auto xmlString = result.Content.Extract();
+            const NXml::TDocument xml(xmlString, NXml::TDocument::String);
+            auto parsedResponse = ParseListObjectV2Response(xml, ctx.RequestId);
+            YQL_CLOG(DEBUG, ProviderS3)
+                << "Listing of " << ctx.ListingRequest.Url
+                << ctx.ListingRequest.Prefix << ": have " << ctx.Output->Size()
+                << " entries, got another " << parsedResponse.KeyCount
+                << " entries, request id: [" << ctx.RequestId << "]";
 
-                auto earlyStop = false;
-                for (const auto& content : parsedResponse.Contents) {
-                    if (content.Path.EndsWith('/')) {
-                        // skip 'directories'
-                        continue;
-                    }
-                    TVector<TString> matchedGlobs;
-                    if (ctx.Filter(content.Path, matchedGlobs)) {
-                        auto& object = ctx.Output->Objects.emplace_back();
-                        object.Path = content.Path;
-                        object.Size = content.Size;
-                        object.MatchedGlobs.swap(matchedGlobs);
-                    }
-                    if (ctx.EarlyStopChecker(content.Path)) {
-                        earlyStop = true;
-                    }
+            auto earlyStop = false;
+            for (const auto& content : parsedResponse.Contents) {
+                if (content.Path.EndsWith('/')) {
+                    // skip 'directories'
+                    continue;
                 }
-                for (const auto& prefix : parsedResponse.CommonPrefixes) {
-                    auto& directory = ctx.Output->Directories.emplace_back();
-                    directory.Path = prefix;
-                    directory.MatchedRegexp = ctx.Filter(prefix, directory.MatchedGlobs);
+                TVector<TString> matchedGlobs;
+                if (ctx.Filter(content.Path, matchedGlobs)) {
+                    auto& object = ctx.Output->Objects.emplace_back();
+                    object.Path = content.Path;
+                    object.Size = content.Size;
+                    object.MatchedGlobs.swap(matchedGlobs);
                 }
-
-                if (parsedResponse.IsTruncated && !earlyStop) {
-                    YQL_CLOG(DEBUG, ProviderS3) << "Listing of " << ctx.ListingRequest.Url
-                                                << ctx.ListingRequest.Prefix
-                                                << ": got truncated flag, will continue";
-
-                    auto newCtx = TListingContext{
-                        ctx.Filter,
-                        ctx.EarlyStopChecker,
-                        NewPromise<TListResult>(),
-                        NewPromise<TMaybe<TListingContext>>(),
-                        std::make_shared<TListEntries>(),
-                        ctx.GatewayWeak,
-                        GetHTTPDefaultRetryPolicy(),
-                        CreateGuidAsString(),
-                        ctx.ListingRequest,
-                        ctx.Delimiter,
-                        parsedResponse.ContinuationToken,
-                        parsedResponse.MaxKeys};
-
-                    ctx.NextRequestPromise.SetValue(TMaybe<TListingContext>(newCtx));
-                } else {
-                    ctx.NextRequestPromise.SetValue(Nothing());
+                if (ctx.EarlyStopChecker(content.Path)) {
+                    earlyStop = true;
                 }
-                ctx.Promise.SetValue(std::move(*ctx.Output));
-                break;
             }
-            case 1U: {
-                auto issues = std::get<TIssues>(std::move(result));
-                issues = NS3Util::AddParentIssue(
-                    TStringBuilder{} << "request id: [" << ctx.RequestId << "]",
-                    std::move(issues));
-                YQL_CLOG(INFO, ProviderS3)
-                    << "Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
-                    << ": got error from http gateway: " << issues.ToString(true);
-                ctx.Promise.SetValue(std::move(issues));
+            for (const auto& prefix : parsedResponse.CommonPrefixes) {
+                auto& directory = ctx.Output->Directories.emplace_back();
+                directory.Path = prefix;
+                directory.MatchedRegexp = ctx.Filter(prefix, directory.MatchedGlobs);
+            }
+
+            if (parsedResponse.IsTruncated && !earlyStop) {
+                YQL_CLOG(DEBUG, ProviderS3) << "Listing of " << ctx.ListingRequest.Url
+                                            << ctx.ListingRequest.Prefix
+                                            << ": got truncated flag, will continue";
+
+                auto newCtx = TListingContext{
+                    ctx.Filter,
+                    ctx.EarlyStopChecker,
+                    NewPromise<TListResult>(),
+                    NewPromise<TMaybe<TListingContext>>(),
+                    std::make_shared<TListEntries>(),
+                    ctx.GatewayWeak,
+                    GetHTTPDefaultRetryPolicy(),
+                    CreateGuidAsString(),
+                    ctx.ListingRequest,
+                    ctx.Delimiter,
+                    parsedResponse.ContinuationToken,
+                    parsedResponse.MaxKeys};
+
+                ctx.NextRequestPromise.SetValue(TMaybe<TListingContext>(newCtx));
+            } else {
                 ctx.NextRequestPromise.SetValue(Nothing());
-                break;
             }
-            default:
-                ythrow yexception() << "Undefined variant index: " << result.index()
-                                    << ", request id: [" << ctx.RequestId << "]";
+            ctx.Promise.SetValue(std::move(*ctx.Output));
+        } else {
+            auto issues = NS3Util::AddParentIssue(
+                TStringBuilder{} << "request id: [" << ctx.RequestId << "]",
+                std::move(result.Issues));
+            YQL_CLOG(INFO, ProviderS3)
+                << "Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
+                << ": got error from http gateway: " << issues.ToString(true);
+            ctx.Promise.SetValue(std::move(issues));
+            ctx.NextRequestPromise.SetValue(Nothing());
         }
     } catch (const std::exception& ex) {
         YQL_CLOG(INFO, ProviderS3)

@@ -33,6 +33,8 @@
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.h>
+#include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -78,6 +80,7 @@
 #include <util/system/hostname.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
+#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 
@@ -371,6 +374,7 @@ private:
         hFunc(TEvents::TEvForwardPingResponse, HandleFinish);
         hFunc(NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse, HandleFinish);
         hFunc(NFq::TEvInternalService::TEvDeleteRateLimiterResourceResponse, HandleFinish);
+        hFunc(TEvents::TEvEffectApplicationResult, HandleFinish);
 
         // Ignore tail of action events after normal work.
         IgnoreFunc(TEvents::TEvAsyncContinue);
@@ -713,6 +717,7 @@ private:
             s3ReadDefaultInflightLimit = 200_MB;
         }
 
+        TMap<TString, NYql::NS3::TEffect> effects;
         for (NYql::NDqProto::TDqTask& task : *graphParams.MutableTasks()) {
             if (task.GetInitialTaskMemoryLimit() == 0) {
                 ui64 limitTotal = mkqlDefaultLimit;
@@ -722,6 +727,34 @@ private:
                     }
                 }
                 task.SetInitialTaskMemoryLimit(limitTotal);
+            }
+            for (auto& output : *task.MutableOutputs()) {
+                if (output.HasSink() && output.GetSink().GetType() == "S3Sink") {
+                    NS3::TSink s3SinkSettings;
+                    YQL_ENSURE(output.GetSink().GetSettings().UnpackTo(&s3SinkSettings));   
+                    if (s3SinkSettings.GetAtomicUploadCommit()) {
+                        auto prefix = s3SinkSettings.GetUrl() + s3SinkSettings.GetPath();
+                        const auto& [it, isNew] = S3Prefixes.insert(prefix);
+                        if (isNew) {
+                            auto& sinkEffect = effects[prefix];
+                            auto& cleanupEffect = *sinkEffect.MutableCleanup();
+                            cleanupEffect.SetUrl(s3SinkSettings.GetUrl());
+                            cleanupEffect.SetPrefix(s3SinkSettings.GetPath());
+                            sinkEffect.SetToken(s3SinkSettings.GetToken());
+                        }
+                    }
+                }
+            }
+        }
+        if (!effects.empty()) {
+            auto& stateExEffect = GetExternalEffects("S3Sink");
+            for (auto& [prefix, sinkEffect] : effects) {
+                TString data;
+                YQL_ENSURE(sinkEffect.SerializeToString(&data));
+                NYql::NDqProto::TEffect effect;
+                effect.SetId(prefix);
+                effect.SetData(data);
+                *stateExEffect.AddEffects() = effect;
             }
         }
     }
@@ -767,6 +800,18 @@ private:
             FinalizingStatusIsWritten = true;
             ContinueFinish();
         }
+    }
+
+    void HandleFinish(TEvents::TEvEffectApplicationResult::TPtr ev) {
+        if (ev->Get()->FatalError) {
+            // TODO: special fatal error handling
+        }
+        if (ev->Get()->Issues) {
+            LOG_W("Effect Issues: " << ev->Get()->Issues.ToOneLineString());
+            Issues.AddIssues(ev->Get()->Issues);
+        }
+        ++EffectApplicatorFinished;
+        ContinueFinish();
     }
 
     TString CheckLimitsOfDqGraphs() {
@@ -1082,6 +1127,17 @@ private:
             QueryStateUpdateRequest.set_statistics(statistics);
         }
         KillExecuter();
+    }
+
+    NYql::NDqProto::TExternalEffect& GetExternalEffects(const TString& providerName) {
+        for (auto& exEffect : *QueryStateUpdateRequest.mutable_resources()->mutable_external_effects()) {
+            if (exEffect.GetProviderName() == providerName) {
+                return exEffect;
+            }
+        }
+        auto& result = *QueryStateUpdateRequest.mutable_resources()->add_external_effects();
+        result.SetProviderName(providerName);
+        return result;
     }
 
     bool HandleEvalQueryResponse(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
@@ -1586,7 +1642,44 @@ private:
         ContinueFinish();
     }
 
-    void ContinueFinish() {
+    void StartEffectApplicators() {
+        LOG_D("Apply effects with status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        for (const auto& externalEffect : QueryStateUpdateRequest.resources().external_effects()) {
+            auto providerName = externalEffect.GetProviderName();
+            if (providerName == "S3Sink") {
+                EffectApplicatorCount++;
+
+                THashMap<TString, TString> mergedSecureParams;
+                for (auto& graphParams : DqGraphParams) {
+                    for (auto& [name, value] : graphParams.GetSecureParams()) {
+                        mergedSecureParams[name] = value;
+                    }
+                }
+
+                Register(NYql::NDq::MakeS3ApplicatorActor(SelfId()
+                                            , Params.S3Gateway
+                                            , Params.QueryId
+                                            , Params.JobId
+                                            , Params.RestartCount
+                                            , Params.Status == FederatedQuery::QueryMeta::COMPLETING || Params.Status == FederatedQuery::QueryMeta::ABORTING_BY_USER
+                                            , mergedSecureParams
+                                            , Params.CredentialsFactory
+                                            , externalEffect).Release()
+                );
+
+                if (Params.Status == FederatedQuery::QueryMeta::ABORTING_BY_USER) {
+                    for (auto& prefix : S3Prefixes) {
+                        LOG_W("Partial results are possible with prefix: " << prefix);
+                        Issues.AddIssue(TIssue(TStringBuilder() << "Partial results are possible with prefix: " << prefix));
+                    }
+                }
+            } else {
+                LOG_E("Unknown effect applicator: " << providerName);
+            }
+        }
+    }
+
+     void ContinueFinish() {
         bool notFinished = false;
         if (NeedDeleteReadRules() && !ConsumersAreDeleted) {
             if (CanRunReadRulesDeletionActor()) {
@@ -1597,6 +1690,13 @@ private:
 
         if (!RateLimiterResourceWasDeleted && Params.Config.GetRateLimiter().GetEnabled()) {
             StartRateLimiterResourceDeleterIfCan();
+            notFinished = true;
+        }
+
+        if (EffectApplicatorCount == 0 && !QueryStateUpdateRequest.resources().external_effects().empty()) {
+            StartEffectApplicators();
+            notFinished = true;
+        } else if (EffectApplicatorFinished < EffectApplicatorCount) {
             notFinished = true;
         }
 
@@ -2027,6 +2127,10 @@ private:
     bool QueryResponseArrived = false;
     FederatedQuery::QueryMeta::ComputeStatus FinalQueryStatus = FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED; // Status that will be assigned to query after it finishes.
     NYql::NDqProto::StatusIds::StatusCode QueryEvalStatusCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
+
+    ui64 EffectApplicatorCount = 0;
+    ui64 EffectApplicatorFinished = 0;
+    TSet<TString> S3Prefixes;
 
     // Cookies for pings
     enum : ui64 {

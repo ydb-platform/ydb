@@ -19,6 +19,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, ArrowParallelRowGroupCount).Lower(1);
     REGISTER_SETTING(*this, ArrowRowGroupReordering);
     REGISTER_SETTING(*this, UseBlocksSource);
+    REGISTER_SETTING(*this, AtomicUploadCommit);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {

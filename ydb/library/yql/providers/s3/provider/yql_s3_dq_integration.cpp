@@ -360,6 +360,7 @@ public:
                 sinkDesc.SetCompression(TString(compression));
 
             sinkDesc.SetMultipart(GetMultipart(settings.Settings().Ref()));
+            sinkDesc.SetAtomicUploadCommit(State_->Configuration->AtomicUploadCommit.Get().GetOrElse(false));
 
             protoSettings.PackFrom(sinkDesc);
             sinkType = "S3Sink";

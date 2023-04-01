@@ -22,8 +22,7 @@ target_link_libraries(ydb-library-yql-sql-pg-ut PUBLIC
   library-yql-sql
 )
 target_link_options(ydb-library-yql-sql-pg-ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
 )

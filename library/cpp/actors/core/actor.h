@@ -619,32 +619,27 @@ namespace NActors {
     class TActor: public IActorCallback {
     private:
         template <typename T, typename = const char*>
-        struct HasActorName: std::false_type { };
+        struct HasActorName: std::false_type {};
         template <typename T>
-        struct HasActorName<T, decltype((void)T::ActorName, (const char*)nullptr)>: std::true_type { };
+        struct HasActorName<T, decltype((void)T::ActorName, (const char*)nullptr)>: std::true_type {};
+
+        template <typename T, typename = const char*>
+        struct HasActorActivityType: std::false_type {};
+        template <typename T>
+        struct HasActorActivityType<T, decltype((void)T::ActorActivityType, (const char*)nullptr)>: std::true_type {};
 
         static ui32 GetActivityTypeIndex() {
             if constexpr(HasActorName<TDerived>::value) {
                 return TLocalProcessKey<TActorActivityTag, TDerived::ActorName>::GetIndex();
-            } else {
+            } else if constexpr (HasActorActivityType<TDerived>::value) {
                 using TActorActivity = decltype(((TDerived*)nullptr)->ActorActivityType());
-                // if constexpr(std::is_enum<TActorActivity>::value) {
-                    return TEnumProcessKey<TActorActivityTag, TActorActivity>::GetIndex(
-                    TDerived::ActorActivityType());
-                //} else {
-                    // for int, ui32, ...
-                //    return TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetIndex(
-                //        static_cast<IActor::EActorActivity>(TDerived::ActorActivityType()));
-                //}
+                return TEnumProcessKey<TActorActivityTag, TActorActivity>::GetIndex(TDerived::ActorActivityType());
+            } else {
+                return TLocalProcessExtKey<TActorActivityTag, TDerived>::GetIndex();
             }
         }
 
     protected:
-        //* Comment this function to find unmarked activities
-        static constexpr IActor::EActivityType ActorActivityType() {
-            return IActorCallback::EActorActivity::OTHER;
-        } //*/
-
         // static constexpr char ActorName[] = "UNNAMED";
 
         TActor(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev, const TActorContext&), ui32 activityType = GetActivityTypeIndex())

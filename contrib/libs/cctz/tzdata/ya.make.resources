@@ -13,15 +13,15 @@ RESOURCE(
     generated/a87061b72790e27d9f155644521d8cce /cctz/tzdata/Africa/Blantyre
     generated/89de77d185e9a76612bd5f9fb043a9c2 /cctz/tzdata/Africa/Brazzaville
     generated/a87061b72790e27d9f155644521d8cce /cctz/tzdata/Africa/Bujumbura
-    generated/39d0994d5956e55a919f2945ccd7c0bf /cctz/tzdata/Africa/Cairo
-    generated/e442d2de2cc0849a5f375c905d88d9f9 /cctz/tzdata/Africa/Casablanca
+    generated/8dcab26c06fc82939d77511b0c7c24b2 /cctz/tzdata/Africa/Cairo
+    generated/12de6e9419a748db0e69972d23a640c2 /cctz/tzdata/Africa/Casablanca
     generated/00636062cbcd94f2ead5a75cc197675a /cctz/tzdata/Africa/Ceuta
     generated/796a57137d718e4fa3db8ef611f18e61 /cctz/tzdata/Africa/Conakry
     generated/796a57137d718e4fa3db8ef611f18e61 /cctz/tzdata/Africa/Dakar
     generated/fe54394a3dcf951bad3c293980109dd2 /cctz/tzdata/Africa/Dar_es_Salaam
     generated/fe54394a3dcf951bad3c293980109dd2 /cctz/tzdata/Africa/Djibouti
     generated/89de77d185e9a76612bd5f9fb043a9c2 /cctz/tzdata/Africa/Douala
-    generated/247c3c527e0314c20b0c4e76b937c31c /cctz/tzdata/Africa/El_Aaiun
+    generated/8ba86418f34ed83656d38bcfb19f85ea /cctz/tzdata/Africa/El_Aaiun
     generated/796a57137d718e4fa3db8ef611f18e61 /cctz/tzdata/Africa/Freetown
     generated/a87061b72790e27d9f155644521d8cce /cctz/tzdata/Africa/Gaborone
     generated/a87061b72790e27d9f155644521d8cce /cctz/tzdata/Africa/Harare
@@ -116,7 +116,7 @@ RESOURCE(
     generated/9208172103191bf0d660e0023b358ea1 /cctz/tzdata/America/Fort_Wayne
     generated/c72cd4fac2e9b8659f6b5bb2392b9ae5 /cctz/tzdata/America/Fortaleza
     generated/8f9746ead1fc03c962cdd7ddacde663d /cctz/tzdata/America/Glace_Bay
-    generated/fbd3d4c9e5e2690c8809a3534e9412e9 /cctz/tzdata/America/Godthab
+    generated/acff9e84de94eeb7b58120a56d50cc50 /cctz/tzdata/America/Godthab
     generated/7c49d7ec95c93d0934a7a98b1a1ae66f /cctz/tzdata/America/Goose_Bay
     generated/eac76eb95be7b5cc25a41e0485b58c41 /cctz/tzdata/America/Grand_Turk
     generated/92d3b867243120ea811c24c038e5b053 /cctz/tzdata/America/Grenada
@@ -176,7 +176,7 @@ RESOURCE(
     generated/b72620d427a1898ea97232aeba51c2dc /cctz/tzdata/America/North_Dakota/Beulah
     generated/511edb5c79692d730d309f4424bbaa0e /cctz/tzdata/America/North_Dakota/Center
     generated/6e5fd4a73872524a21354303cdfff0f8 /cctz/tzdata/America/North_Dakota/New_Salem
-    generated/fbd3d4c9e5e2690c8809a3534e9412e9 /cctz/tzdata/America/Nuuk
+    generated/acff9e84de94eeb7b58120a56d50cc50 /cctz/tzdata/America/Nuuk
     generated/ed478f9e09d75276d125fb7e61188b5f /cctz/tzdata/America/Ojinaga
     generated/595e67b4c97fda031a90e5ef80813e7d /cctz/tzdata/America/Panama
     generated/b8248a79b8e4c6de4f23c59e360d333e /cctz/tzdata/America/Pangnirtung
@@ -221,7 +221,7 @@ RESOURCE(
     generated/5fa937049e86ffbf52d4348c6c43b0ad /cctz/tzdata/America/Whitehorse
     generated/1ee6e72e10673d4a16b6e24671f793ec /cctz/tzdata/America/Winnipeg
     generated/3ee52913271777c67f23d5a918bb0f7c /cctz/tzdata/America/Yakutat
-    generated/adf42576f67375fc546a85c5a7c75ce0 /cctz/tzdata/America/Yellowknife
+    generated/beb91df50b24718aed963a509c0c2958 /cctz/tzdata/America/Yellowknife
     generated/4d5e4576a979e0cdeb6a7d0e81989b4e /cctz/tzdata/Antarctica/Casey
     generated/b61230343294608431fbbd939bb6971d /cctz/tzdata/Antarctica/Davis
     generated/bcf8aa818432d7ae244087c7306bcb23 /cctz/tzdata/Antarctica/DumontDUrville
@@ -265,9 +265,9 @@ RESOURCE(
     generated/667e494c45d181f0706bd07b211c850b /cctz/tzdata/Asia/Dubai
     generated/7d4619fed11db15c54153613fcf23bda /cctz/tzdata/Asia/Dushanbe
     generated/4cd70a6fdc80b1b15c0b9f7c3b807107 /cctz/tzdata/Asia/Famagusta
-    generated/7b5546923cbe71b5979be7b1b289e039 /cctz/tzdata/Asia/Gaza
+    generated/2910f8ef0c04e980cb9fac5f8f62b334 /cctz/tzdata/Asia/Gaza
     generated/dff9cd919f10d25842d1381cdff9f7f7 /cctz/tzdata/Asia/Harbin
-    generated/2a2bf6f414052cf8de24f4967703456b /cctz/tzdata/Asia/Hebron
+    generated/6853ddd2f1d2e3899a8433b015ed726a /cctz/tzdata/Asia/Hebron
     generated/009a0575634eab075d7e8a15b2e443ae /cctz/tzdata/Asia/Ho_Chi_Minh
     generated/f729c88451bacd2895fc1c8d29064c46 /cctz/tzdata/Asia/Hong_Kong
     generated/3c4a6f9840f3d89534c5f511329704e8 /cctz/tzdata/Asia/Hovd
@@ -389,7 +389,7 @@ RESOURCE(
     generated/19ef27aa43febb679c0795f8c5dedc0f /cctz/tzdata/EET
     generated/b33eb6506380f950ad798d4d788d136a /cctz/tzdata/EST
     generated/5fbedfd64bddc3ec7790a4eb0f22b66c /cctz/tzdata/EST5EDT
-    generated/39d0994d5956e55a919f2945ccd7c0bf /cctz/tzdata/Egypt
+    generated/8dcab26c06fc82939d77511b0c7c24b2 /cctz/tzdata/Egypt
     generated/1917c051a13995cc4c32d2ce05bc3e7b /cctz/tzdata/Eire
     generated/e7577ad74319a942781e7153a97d7690 /cctz/tzdata/Etc/GMT
     generated/e7577ad74319a942781e7153a97d7690 /cctz/tzdata/Etc/GMT+0

@@ -25,6 +25,7 @@ public:
         explicit TMark(const std::shared_ptr<arrow::Scalar>& s)
             : Border(s)
         {
+            Y_VERIFY(Border);
             Y_VERIFY_DEBUG(NArrow::IsGoodScalar(Border));
         }
 
@@ -43,20 +44,14 @@ public:
         TMark& operator = (const TMark& m) = default;
 
         bool operator == (const TMark& m) const {
-            Y_VERIFY(Border);
-            Y_VERIFY(m.Border);
             return Border->Equals(*m.Border);
         }
 
         bool operator < (const TMark& m) const {
-            Y_VERIFY(Border);
-            Y_VERIFY(m.Border);
             return NArrow::ScalarLess(*Border, *m.Border);
         }
 
         bool operator <= (const TMark& m) const {
-            Y_VERIFY(Border);
-            Y_VERIFY(m.Border);
             return Border->Equals(*m.Border) || NArrow::ScalarLess(*Border, *m.Border);
         }
 

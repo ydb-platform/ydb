@@ -16,7 +16,6 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
-// #define DBG_TRACE
 
 void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo) {
     LOG_DEBUG_S(ctx, NKikimrServices::KQP_EXECUTER, stageInfo.DebugString());
@@ -330,7 +329,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tabl
     }
 }
 
-bool IsCrossShardChannel(TKqpTasksGraph& tasksGraph, const TChannel& channel) {
+bool IsCrossShardChannel(const TKqpTasksGraph& tasksGraph, const TChannel& channel) {
     YQL_ENSURE(channel.SrcTask);
 
     if (!channel.DstTask) {
@@ -399,10 +398,6 @@ void TShardKeyRanges::MakeFull(TSerializedPointOrRange&& pointOrRange) {
 
 
 void TShardKeyRanges::MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeInfo>& keyTypes) {
-#ifdef DBG_TRACE
-    Cerr << (TStringBuilder() << "-- merge " << ToString(keyTypes, *AppData()->TypeRegistry)
-        << " with " << other.ToString(keyTypes, *AppData()->TypeRegistry) << Endl);
-#endif
 
     if (IsFullRange()) {
         return;
@@ -441,24 +436,11 @@ void TShardKeyRanges::MergeWritePoints(TShardKeyRanges&& other, const TVector<NS
         YQL_ENSURE(std::holds_alternative<TSerializedCellVec>(x));
         YQL_ENSURE(std::holds_alternative<TSerializedCellVec>(y));
 
-#if 1
         // common case for multi-effects transactions
         cmp = CompareTypedCellVectors(
             std::get<TSerializedCellVec>(x).GetCells().data(),
             std::get<TSerializedCellVec>(y).GetCells().data(),
             keyTypes.data(), keyTypes.size());
-#else
-        if (x.IsPoint() && y.IsPoint()) {
-            // common case for multi-effects transactions
-            cmp = CompareTypedCellVectors(x.From.GetCells().data(), y.From.GetCells().data(), keyTypes.data(), keyTypes.size());
-        } else if (x.IsPoint()) {
-            cmp = ComparePointAndRange(x.From.GetCells(), y.ToTableRange(), keyTypes, keyTypes);
-        } else if (y.IsPoint()) {
-            cmp = -ComparePointAndRange(y.From.GetCells(), x.ToTableRange(), keyTypes, keyTypes);
-        } else {
-            cmp = CompareRanges(x.ToTableRange(), y.ToTableRange(), keyTypes);
-        }
-#endif
 
         if (cmp < 0) {
             result.emplace_back(std::move(x));
@@ -470,77 +452,10 @@ void TShardKeyRanges::MergeWritePoints(TShardKeyRanges&& other, const TVector<NS
             result.emplace_back(std::move(x));
             ++i;
             ++j;
-#if 0
-            if (CompareTypedCellVectors(x.From.GetCells().data(), y.From.GetCells().data(), keyTypes.data(), keyTypes.size()) == 0 &&
-                x.FromInclusive == y.FromInclusive &&
-                CompareTypedCellVectors(x.To.GetCells().data(), y.To.GetCells().data(), keyTypes.data(), keyTypes.size()) == 0 &&
-                x.ToInclusive == y.ToInclusive)
-            {
-                result.emplace_back(std::move(x));
-                ++i;
-                ++j;
-            } else if (x.Point) {
-                YQL_ENSURE(!y.Point);
-                result.emplace_back(TSerializedTableRange(y.From.GetCells(), y.FromInclusive, x.From.GetCells(), true));
-                ++i;
-                y.From = x.From;
-                y.FromInclusive = false;
-            } else if (y.Point) {
-                YQL_ENSURE(!x.Point);
-                result.emplace_back(TSerializedTableRange(x.From.GetCells(), x.FromInclusive, y.From.GetCells(), true));
-                ++j;
-                x.From = y.From;
-                x.FromInclusive = false;
-            } else {
-                YQL_ENSURE(!x.Point && !y.Point);
-
-                int cmpLeft = CompareBorders<true, true>(x.From.GetCells(), y.From.GetCells(), x.FromInclusive, y.FromInclusive, keyTypes);
-                int cmpRight = CompareBorders<false, false>(x.From.GetCells(), y.From.GetCells(), x.FromInclusive, y.FromInclusive, keyTypes);
-
-                if (cmpLeft <= 0 && cmpRight >= 0) {
-                    // y \in x
-                    result.emplace_back(std::move(x));
-                    ++i;
-                    ++j;
-                } else if (cmpLeft >= 0 && cmpRight <= 0) {
-                    // x \in y
-                    result.emplace_back(std::move(y));
-                    ++i;
-                    ++j;
-                } else if (cmpLeft < 0) {
-                    result.emplace_back(TSerializedTableRange(x.From.GetCells(), x.FromInclusive, y.From.GetCells(), !y.FromInclusive));
-                    x.From = y.From;
-                    x.FromInclusive = y.FromInclusive;
-                } else if (cmpLeft > 0) {
-                    result.emplace_back(TSerializedTableRange(y.From.GetCells(), y.FromInclusive, x.From.GetCells(), !x.FromInclusive));
-                    y.From = x.From;
-                    y.FromInclusive = x.FromInclusive;
-                } else /* cmpLeft == cmpRight */ {
-                    if (cmpRight < 0) {
-                        y.From = x.To;
-                        y.FromInclusive = !x.ToInclusive;
-                        result.emplace_back(std::move(x));
-                        ++i;
-                    } else if (cmpRight > 0) {
-                        x.From = y.To;
-                        x.FromInclusive = !y.ToInclusive;
-                        result.emplace_back(std::move(y));
-                        ++j;
-                    } else {
-                        // x == y
-                        YQL_ENSURE(false);
-                    }
-                }
-            }
-#endif
         }
     }
 
     Ranges = std::move(result);
-
-#ifdef DBG_TRACE
-    Cerr << (TStringBuilder() << "--- merge result: " << ToString(keyTypes, *AppData()->TypeRegistry) << Endl);
-#endif
 }
 
 TString TShardKeyRanges::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
@@ -655,6 +570,168 @@ std::pair<const TSerializedCellVec*, bool> TShardKeyRanges::GetRightBorder() con
 
     const auto& lastRange = std::get<TSerializedTableRange>(last);
     return !lastRange.Point ? std::make_pair(&lastRange.To, lastRange.ToInclusive) : std::make_pair(&lastRange.From, true);
+}
+
+
+void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
+    if (task.ComputeActorId) {
+        ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
+    } else if (task.Meta.ShardId) {
+        endpoint.SetTabletId(task.Meta.ShardId);
+    }
+}
+
+void FillChannelDesc(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, NDqProto::TChannel& channelDesc, const TChannel& channel) {
+    channelDesc.SetId(channel.Id);
+    channelDesc.SetSrcTaskId(channel.SrcTask);
+    channelDesc.SetDstTaskId(channel.DstTask);
+
+    YQL_ENSURE(channel.SrcTask);
+    const auto& srcTask = tasksGraph.GetTask(channel.SrcTask);
+    FillEndpointDesc(*channelDesc.MutableSrcEndpoint(), srcTask);
+
+    if (channel.DstTask) {
+        FillEndpointDesc(*channelDesc.MutableDstEndpoint(), tasksGraph.GetTask(channel.DstTask));
+    } else if (!resultChannelProxies.empty()) {
+        auto it = resultChannelProxies.find(channel.Id);
+        YQL_ENSURE(it != resultChannelProxies.end());
+        ActorIdToProto(it->second->SelfId(), channelDesc.MutableDstEndpoint()->MutableActorId());
+    } else {
+        // For non-stream execution, collect results in executer and forward with response.
+        ActorIdToProto(srcTask.Meta.ExecuterId, channelDesc.MutableDstEndpoint()->MutableActorId());
+    }
+
+    channelDesc.SetIsPersistent(IsCrossShardChannel(tasksGraph, channel));
+    channelDesc.SetInMemory(channel.InMemory);
+}
+
+
+NYql::NDqProto::TDqTask SerializeTaskToProto(
+    const TKqpTasksGraph& tasksGraph,
+    const std::unordered_map<ui64, IActor*>& resultChannelProxies,
+    const TTask& task, const NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    auto& stageInfo = tasksGraph.GetStageInfo(task.StageId);
+    NYql::NDqProto::TDqTask result;
+    result.SetId(task.Id);
+    result.SetStageId(stageInfo.Id.StageId);
+
+    for (const auto& input : task.Inputs) {
+        FillInputDesc(tasksGraph, resultChannelProxies, *result.AddInputs(), input);
+    }
+
+    for (const auto& output : task.Outputs) {
+        FillOutputDesc(tasksGraph, resultChannelProxies, *result.AddOutputs(), output);
+    }
+
+    const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+    result.MutableProgram()->CopyFrom(stage.GetProgram());
+    auto g = typeEnv.BindAllocator();
+    for (auto& paramName : stage.GetProgramParameters()) {
+        auto& dqParams = *result.MutableParameters();
+        if (auto* taskParam = task.Meta.Params.FindPtr(paramName)) {
+            dqParams[paramName] = *taskParam;
+        } else {
+            dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
+        }
+    }
+    return result;
+}
+
+void FillOutputDesc(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output) {
+    switch (output.Type) {
+        case TTaskOutputType::Map:
+            YQL_ENSURE(output.Channels.size() == 1);
+            outputDesc.MutableMap();
+            break;
+
+        case TTaskOutputType::HashPartition: {
+            auto& hashPartitionDesc = *outputDesc.MutableHashPartition();
+            for (auto& column : output.KeyColumns) {
+                hashPartitionDesc.AddKeyColumns(column);
+            }
+            hashPartitionDesc.SetPartitionsCount(output.PartitionsCount);
+            break;
+        }
+
+        case TKqpTaskOutputType::ShardRangePartition: {
+            auto& rangePartitionDesc = *outputDesc.MutableRangePartition();
+            auto& columns = *rangePartitionDesc.MutableKeyColumns();
+            for (auto& column : output.KeyColumns) {
+                *columns.Add() = column;
+            }
+
+            auto& partitionsDesc = *rangePartitionDesc.MutablePartitions();
+            for (auto& pair : output.Meta.ShardPartitions) {
+                auto& range = *pair.second->Range;
+                auto& partitionDesc = *partitionsDesc.Add();
+                partitionDesc.SetEndKeyPrefix(range.EndKeyPrefix.GetBuffer());
+                partitionDesc.SetIsInclusive(range.IsInclusive);
+                partitionDesc.SetIsPoint(range.IsPoint);
+                partitionDesc.SetChannelId(pair.first);
+            }
+            break;
+        }
+
+        case TTaskOutputType::Broadcast: {
+            outputDesc.MutableBroadcast();
+            break;
+        }
+
+        case TTaskOutputType::Effects: {
+            outputDesc.MutableEffects();
+            break;
+        }
+
+        default: {
+            YQL_ENSURE(false, "Unexpected task output type " << output.Type);
+        }
+    }
+
+    for (auto& channel : output.Channels) {
+        auto& channelDesc = *outputDesc.AddChannels();
+        FillChannelDesc(tasksGraph, resultChannelProxies, channelDesc, tasksGraph.GetChannel(channel));
+    }
+}
+
+void FillInputDesc(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input) {
+    switch (input.Type()) {
+        case NYql::NDq::TTaskInputType::Source:
+            inputDesc.MutableSource()->SetType(input.SourceType);
+            inputDesc.MutableSource()->SetWatermarksMode(input.WatermarksMode);
+            inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
+            break;
+        case NYql::NDq::TTaskInputType::UnionAll: {
+            inputDesc.MutableUnionAll();
+            break;
+        }
+        case NYql::NDq::TTaskInputType::Merge: {
+            auto& mergeProto = *inputDesc.MutableMerge();
+            YQL_ENSURE(std::holds_alternative<NYql::NDq::TMergeTaskInput>(input.ConnectionInfo));
+            auto& sortColumns = std::get<NYql::NDq::TMergeTaskInput>(input.ConnectionInfo).SortColumns;
+            for (const auto& sortColumn : sortColumns) {
+                auto newSortCol = mergeProto.AddSortColumns();
+                newSortCol->SetColumn(sortColumn.Column.c_str());
+                newSortCol->SetAscending(sortColumn.Ascending);
+            }
+            break;
+        }
+        default:
+            YQL_ENSURE(false, "Unexpected task input type: " << (int) input.Type());
+    }
+
+    for (ui64 channel : input.Channels) {
+        auto& channelDesc = *inputDesc.AddChannels();
+        FillChannelDesc(tasksGraph, resultChannelProxies, channelDesc, tasksGraph.GetChannel(channel));
+    }
+
+    if (input.Transform) {
+        auto* transformProto = inputDesc.MutableTransform();
+        transformProto->SetType(input.Transform->Type);
+        transformProto->SetInputType(input.Transform->InputType);
+        transformProto->SetOutputType(input.Transform->OutputType);
+        *transformProto->MutableSettings() = input.Transform->Settings;
+    }
 }
 
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const

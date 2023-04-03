@@ -1319,6 +1319,7 @@ private:
                 return TasksGraph.GetTask(it->second);
             }
             auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.ExecuterId = SelfId();
             task.Meta.ShardId = shardId;
             shardTasks.emplace(shardId, task.Id);
             return task;
@@ -1506,6 +1507,7 @@ private:
 
         for (ui32 i = 0; i < partitionsCount; ++i) {
             auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.ExecuterId = SelfId();
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
     }
@@ -1713,9 +1715,13 @@ private:
         THashMap<ui64, TVector<NDqProto::TDqTask>> remoteComputeTasks;  // shardId -> [task]
         TVector<NDqProto::TDqTask> computeTasks;
 
+        if (StreamResult) {
+            InitializeChannelProxies();
+        }
+
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-            NDqProto::TDqTask taskDesc = PrepareKqpTaskParameters(stageInfo, task, TypeEnv());
+            NDqProto::TDqTask taskDesc = SerializeTaskToProto(TasksGraph, ResultChannelProxies, task, TypeEnv());
             ActorIdToProto(SelfId(), taskDesc.MutableExecuter()->MutableActorId());
 
             if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
@@ -1823,6 +1829,12 @@ private:
                 } else {
                     computeTasks.emplace_back(std::move(taskDesc));
                 }
+            }
+        }
+
+        for(const auto& channel: TasksGraph.GetChannels()) {
+            if (IsCrossShardChannel(TasksGraph, channel)) {
+                HasPersistentChannels = true;
             }
         }
 
@@ -2380,41 +2392,6 @@ private:
         }
 
         TBase::PassAway();
-    }
-
-public:
-    static void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
-        if (task.ComputeActorId) {
-            ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
-        } else if (task.Meta.ShardId) {
-            endpoint.SetTabletId(task.Meta.ShardId);
-        }
-    }
-
-    void FillChannelDesc(NDqProto::TChannel& channelDesc, const TChannel& channel) {
-        channelDesc.SetId(channel.Id);
-        channelDesc.SetSrcTaskId(channel.SrcTask);
-        channelDesc.SetDstTaskId(channel.DstTask);
-
-        YQL_ENSURE(channel.SrcTask, "" << this->DebugString());
-        FillEndpointDesc(*channelDesc.MutableSrcEndpoint(), TasksGraph.GetTask(channel.SrcTask));
-
-        if (channel.DstTask) {
-            FillEndpointDesc(*channelDesc.MutableDstEndpoint(), TasksGraph.GetTask(channel.DstTask));
-        } else if (StreamResult) {
-            auto proxy = GetOrCreateChannelProxy(channel);
-            ActorIdToProto(proxy->SelfId(), channelDesc.MutableDstEndpoint()->MutableActorId());
-        } else {
-            // For non-stream execution, collect results in executer and forward with response.
-            ActorIdToProto(SelfId(), channelDesc.MutableDstEndpoint()->MutableActorId());
-        }
-
-        channelDesc.SetIsPersistent(IsCrossShardChannel(TasksGraph, channel));
-        channelDesc.SetInMemory(channel.InMemory);
-
-        if (channelDesc.GetIsPersistent()) {
-            HasPersistentChannels = true;
-        }
     }
 
 private:

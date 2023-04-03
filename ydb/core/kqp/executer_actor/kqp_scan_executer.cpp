@@ -154,6 +154,7 @@ private:
     }
 
 private:
+
     void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse, bool sorted,
         NKikimr::NMiniKQL::TType* resultType, const TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>& readOlapRange)
     {
@@ -248,6 +249,7 @@ private:
         ui64 nodeId = ShardIdToNodeId.at(shardId);
         if (stageInfo.Meta.IsOlap() && sorted) {
             auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.ExecuterId = SelfId();
             task.Meta.NodeId = nodeId;
             return task;
         }
@@ -516,10 +518,12 @@ private:
 
         TVector<NYql::NDqProto::TDqTask> computeTasks;
 
+        InitializeChannelProxies();
+
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
 
-            NYql::NDqProto::TDqTask taskDesc = PrepareKqpTaskParameters(stageInfo, task, TypeEnv());
+            NYql::NDqProto::TDqTask taskDesc = SerializeTaskToProto(TasksGraph, ResultChannelProxies, task, TypeEnv());
             ActorIdToProto(SelfId(), taskDesc.MutableExecuter()->MutableActorId());
 
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
@@ -768,31 +772,6 @@ private:
         Counters->Counters->ScanTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
 
         TBase::PassAway();
-    }
-public:
-    void FillEndpointDesc(NYql::NDqProto::TEndpoint& endpoint, const TTask& task) {
-        if (task.ComputeActorId) {
-            ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
-        }
-    }
-
-    void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const TChannel& channel) {
-        channelDesc.SetId(channel.Id);
-        channelDesc.SetSrcTaskId(channel.SrcTask);
-        channelDesc.SetDstTaskId(channel.DstTask);
-
-        YQL_ENSURE(channel.SrcTask);
-        FillEndpointDesc(*channelDesc.MutableSrcEndpoint(), TasksGraph.GetTask(channel.SrcTask));
-
-        if (channel.DstTask) {
-            FillEndpointDesc(*channelDesc.MutableDstEndpoint(), TasksGraph.GetTask(channel.DstTask));
-        } else {
-            auto proxy = GetOrCreateChannelProxy(channel);
-            ActorIdToProto(proxy->SelfId(), channelDesc.MutableDstEndpoint()->MutableActorId());
-        }
-
-        channelDesc.SetIsPersistent(IsCrossShardChannel(TasksGraph, channel));
-        channelDesc.SetInMemory(channel.InMemory);
     }
 private:
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;

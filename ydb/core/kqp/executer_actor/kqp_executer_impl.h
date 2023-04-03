@@ -570,7 +570,7 @@ protected:
             auto& record = channelsInfoEv->Record;
 
             for (auto& channelId : channelIds) {
-                static_cast<TDerived*>(this)->FillChannelDesc(*record.AddUpdate(), TasksGraph.GetChannel(channelId));
+                FillChannelDesc(TasksGraph, ResultChannelProxies, *record.AddUpdate(), TasksGraph.GetChannel(channelId));
             }
 
             LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
@@ -640,6 +640,7 @@ protected:
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.ExecuterId = this->SelfId();
             TShardKeyRanges keyRanges;
 
             switch (op.GetTypeCase()) {
@@ -702,6 +703,7 @@ protected:
             YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
             auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.ExecuterId = this->SelfId();
             if (auto ptr = ShardIdToNodeId.FindPtr(shardId)) {
                 task.Meta.NodeId = *ptr;
             } else {
@@ -779,133 +781,6 @@ protected:
     }
 
 protected:
-    // in derived classes
-    // void FillEndpointDesc(NYql::NDqProto::TEndpoint& endpoint, const TTask& task);
-    // void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const TChannel& channel);
-
-    void FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input) {
-        switch (input.Type()) {
-            case NYql::NDq::TTaskInputType::Source:
-                inputDesc.MutableSource()->SetType(input.SourceType);
-                inputDesc.MutableSource()->SetWatermarksMode(input.WatermarksMode);
-                inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
-                break;
-            case NYql::NDq::TTaskInputType::UnionAll: {
-                inputDesc.MutableUnionAll();
-                break;
-            }
-            case NYql::NDq::TTaskInputType::Merge: {
-                auto& mergeProto = *inputDesc.MutableMerge();
-                YQL_ENSURE(std::holds_alternative<NYql::NDq::TMergeTaskInput>(input.ConnectionInfo));
-                auto& sortColumns = std::get<NYql::NDq::TMergeTaskInput>(input.ConnectionInfo).SortColumns;
-                for (const auto& sortColumn : sortColumns) {
-                    auto newSortCol = mergeProto.AddSortColumns();
-                    newSortCol->SetColumn(sortColumn.Column.c_str());
-                    newSortCol->SetAscending(sortColumn.Ascending);
-                }
-                break;
-            }
-            default:
-                YQL_ENSURE(false, "Unexpected task input type: " << (int) input.Type() << Endl << this->DebugString());
-        }
-
-        for (ui64 channel : input.Channels) {
-            auto& channelDesc = *inputDesc.AddChannels();
-            static_cast<TDerived*>(this)->FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
-        }
-
-        if (input.Transform) {
-            auto* transformProto = inputDesc.MutableTransform();
-            transformProto->SetType(input.Transform->Type);
-            transformProto->SetInputType(input.Transform->InputType);
-            transformProto->SetOutputType(input.Transform->OutputType);
-            *transformProto->MutableSettings() = input.Transform->Settings;
-        }
-    }
-
-    void FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output) {
-        switch (output.Type) {
-            case TTaskOutputType::Map:
-                YQL_ENSURE(output.Channels.size() == 1, "" << this->DebugString());
-                outputDesc.MutableMap();
-                break;
-
-            case TTaskOutputType::HashPartition: {
-                auto& hashPartitionDesc = *outputDesc.MutableHashPartition();
-                for (auto& column : output.KeyColumns) {
-                    hashPartitionDesc.AddKeyColumns(column);
-                }
-                hashPartitionDesc.SetPartitionsCount(output.PartitionsCount);
-                break;
-            }
-
-            case TKqpTaskOutputType::ShardRangePartition: {
-                auto& rangePartitionDesc = *outputDesc.MutableRangePartition();
-                auto& columns = *rangePartitionDesc.MutableKeyColumns();
-                for (auto& column : output.KeyColumns) {
-                    *columns.Add() = column;
-                }
-
-                auto& partitionsDesc = *rangePartitionDesc.MutablePartitions();
-                for (auto& pair : output.Meta.ShardPartitions) {
-                    auto& range = *pair.second->Range;
-                    auto& partitionDesc = *partitionsDesc.Add();
-                    partitionDesc.SetEndKeyPrefix(range.EndKeyPrefix.GetBuffer());
-                    partitionDesc.SetIsInclusive(range.IsInclusive);
-                    partitionDesc.SetIsPoint(range.IsPoint);
-                    partitionDesc.SetChannelId(pair.first);
-                }
-                break;
-            }
-
-            case TTaskOutputType::Broadcast: {
-                outputDesc.MutableBroadcast();
-                break;
-            }
-
-            case TTaskOutputType::Effects: {
-                outputDesc.MutableEffects();
-                break;
-            }
-
-            default: {
-                YQL_ENSURE(false, "Unexpected task output type " << output.Type << Endl << this->DebugString());
-            }
-        }
-
-        for (auto& channel : output.Channels) {
-            auto& channelDesc = *outputDesc.AddChannels();
-            static_cast<TDerived*>(this)->FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
-        }
-    }
-
-    NYql::NDqProto::TDqTask PrepareKqpTaskParameters(const TStageInfo& stageInfo, const TTask& task, const NMiniKQL::TTypeEnvironment& typeEnv) {
-        NYql::NDqProto::TDqTask result;
-        result.SetId(task.Id);
-        result.SetStageId(stageInfo.Id.StageId);
-
-        for (auto& input : task.Inputs) {
-            FillInputDesc(*result.AddInputs(), input);
-        }
-
-        for (auto& output : task.Outputs) {
-            FillOutputDesc(*result.AddOutputs(), output);
-        }
-
-        const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-        result.MutableProgram()->CopyFrom(stage.GetProgram());
-        auto g = typeEnv.BindAllocator();
-        for (auto& paramName : stage.GetProgramParameters()) {
-            auto& dqParams = *result.MutableParameters();
-            if (auto* taskParam = task.Meta.Params.FindPtr(paramName)) {
-                dqParams[paramName] = *taskParam;
-            } else {
-                dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
-            }
-        }
-        return result;
-    }
-
     void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta) {
         meta->SetTablePath(stageInfo.Meta.TablePath);
         meta->MutableTableId()->SetTableId(stageInfo.Meta.TableId.PathId.LocalPathId);
@@ -1049,7 +924,17 @@ protected:
         return true;
     }
 
-    IActor* GetOrCreateChannelProxy(const NYql::NDq::TChannel& channel) {
+    void InitializeChannelProxies() {
+        for(const auto& channel: TasksGraph.GetChannels()) {
+            if (channel.DstTask) {
+                continue;
+            }
+
+            CreateChannelProxy(channel);
+        }
+    }
+
+    IActor* CreateChannelProxy(const NYql::NDq::TChannel& channel) {
         IActor* proxy;
 
         if (ResponseEv->TxResults[0].IsStream) {

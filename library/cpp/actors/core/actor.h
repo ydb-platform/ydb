@@ -156,11 +156,6 @@ namespace NActors {
         bool Forward(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) const;
         template <ESendingType SendingType = ESendingType::Common>
         bool Forward(THolder<IEventHandle>& ev, const TActorId& recipient) const;
-        template <ESendingType SendingType = ESendingType::Common, typename TEventHandle>
-        bool Forward(TAutoPtr<TEventHandle>& ev, const TActorId& recipient) const {
-            TAutoPtr<IEventHandle> evi(ev.Release());
-            return Forward(evi, recipient);
-        }
 
         TInstant Now() const;
         TMonotonic Monotonic() const;
@@ -549,7 +544,7 @@ namespace NActors {
         template <typename TEventHandle>
         static bool Forward(TAutoPtr<TEventHandle>& ev, const TActorId& recipient) {
             TAutoPtr<IEventHandle> evi(ev.Release());
-            return Forward(evi, recipient);
+            return TActivationContext::Forward(evi, recipient);
         }
 
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;

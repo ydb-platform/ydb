@@ -28,13 +28,8 @@ void TDSAccessorRefresher::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& 
     }
 }
 
-void TDSAccessorRefresher::OnIncorrectSnapshotFromYQL(const TString& errorMessage) {
-    TBase::OnIncorrectSnapshotFromYQL(errorMessage);
-    Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
-}
-
-void TDSAccessorRefresher::OnSnapshotEnrichingError(const TString& errorMessage) {
-    TBase::OnSnapshotEnrichingError(errorMessage);
+void TDSAccessorRefresher::OnConstructSnapshotError(const TString& errorMessage) {
+    TBase::OnConstructSnapshotError(errorMessage);
     Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
 }
 

@@ -29,8 +29,9 @@ constexpr static size_t PERFORMANCE_COUNT = 0x1000;
 constexpr static size_t PERFORMANCE_COUNT = NSan::PlainOrUnderSanitizer(0x4000000, 0x1000);
 #endif
 
-template<bool UseCodegen>
+template<bool UseCodegen, bool Fast>
 class TMiniKQLComputationNodePackTest: public TTestBase {
+    using TValuePackerType = std::conditional_t<Fast, TValuePackerFast, TValuePacker>;
 protected:
     TMiniKQLComputationNodePackTest()
         : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
@@ -292,23 +293,25 @@ protected:
     }
 
     void ValidateEmbeddedLength(const TStringBuf& buf, const TString& info) {
-        if (buf.size() > 8) {
-            UNIT_ASSERT_VALUES_EQUAL_C(*(const ui32*)buf.data() + 4, buf.size(), info);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(((ui32(*buf.data()) & 0x0f) >> 1) + 1, buf.size(), info);
+        if constexpr (!Fast) {
+            if (buf.size() > 8) {
+                UNIT_ASSERT_VALUES_EQUAL_C(*(const ui32*)buf.data() + 4, buf.size(), info);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(((ui32(*buf.data()) & 0x0f) >> 1) + 1, buf.size(), info);
+            }
         }
     }
 
     void TestPackPerformance(TType* type, const NUdf::TUnboxedValuePod& uValue)
     {
-        TValuePacker packer(false, type, UseCodegen);
+        TValuePackerType packer(false, type, UseCodegen);
         const THPTimer timer;
         for (size_t i = 0U; i < PERFORMANCE_COUNT; ++i)
             packer.Pack(uValue);
         Cout << timer.Passed() << Endl;
     }
 
-    NUdf::TUnboxedValue TestPackUnpack(TValuePacker& packer, const NUdf::TUnboxedValuePod& uValue,
+    NUdf::TUnboxedValue TestPackUnpack(TValuePackerType& packer, const NUdf::TUnboxedValuePod& uValue,
         const TString& additionalMsg, const std::optional<ui32>& expectedLength = {})
     {
         TStringBuf packedValue = packer.Pack(uValue);
@@ -322,12 +325,12 @@ protected:
     NUdf::TUnboxedValue TestPackUnpack(TType* type, const NUdf::TUnboxedValuePod& uValue, const TString& additionalMsg,
         const std::optional<ui32>& expectedLength = {})
     {
-        TValuePacker packer(false, type, UseCodegen);
+        TValuePackerType packer(false, type, UseCodegen);
         return TestPackUnpack(packer, uValue, additionalMsg, expectedLength);
     }
 
     template <typename T>
-    void TestNumericValue(T value, TValuePacker& packer, const TString& typeDesc) {
+    void TestNumericValue(T value, TValuePackerType& packer, const TString& typeDesc) {
         TString additionalMsg = TStringBuilder() << typeDesc << ", Value:" << value;
         auto uValue = TestPackUnpack(packer, NUdf::TUnboxedValuePod(value), additionalMsg);
         UNIT_ASSERT_VALUES_EQUAL_C(uValue.template Get<T>(), value, additionalMsg);
@@ -336,7 +339,7 @@ protected:
     template <typename T>
     void TestNumericType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePacker packer(false, PgmBuilder.NewDataType(schemeType), UseCodegen);
+        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType), UseCodegen);
 
         TestNumericValue<T>(Max<T>(), packer, typeDesc);
         TestNumericValue<T>(Min<T>(), packer, typeDesc);
@@ -345,7 +348,7 @@ protected:
     }
 
     template <typename T>
-    void TestOptionalNumericValue(std::optional<T> value, TValuePacker& packer, const TString& typeDesc,
+    void TestOptionalNumericValue(std::optional<T> value, TValuePackerType& packer, const TString& typeDesc,
         const std::optional<ui32>& expectedLength = {})
     {
         TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? ToString(*value) : TString("null"));
@@ -361,7 +364,7 @@ protected:
     template <typename T>
     void TestOptionalNumericType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:Optional(" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePacker packer(false, PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(schemeType)), UseCodegen);
+        TValuePackerType packer(false, PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(schemeType)), UseCodegen);
         TestOptionalNumericValue<T>(std::optional<T>(Max<T>()), packer, typeDesc);
         TestOptionalNumericValue<T>(std::optional<T>(Min<T>()), packer, typeDesc);
         TestOptionalNumericValue<T>(std::optional<T>(), packer, typeDesc, 1);
@@ -369,7 +372,7 @@ protected:
         TestOptionalNumericValue<T>(std::optional<T>(1), packer, typeDesc);
     }
 
-    void TestStringValue(const std::string_view& value, TValuePacker& packer, const TString& typeDesc, ui32 expectedLength) {
+    void TestStringValue(const std::string_view& value, TValuePackerType& packer, const TString& typeDesc, ui32 expectedLength) {
         TString additionalMsg = TStringBuilder() << typeDesc << ", Value:" << value;
         const auto v = NUdf::TUnboxedValue(MakeString(value));
         const auto uValue = TestPackUnpack(packer, v, additionalMsg, expectedLength);
@@ -378,22 +381,22 @@ protected:
 
     void TestStringType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePacker packer(false, PgmBuilder.NewDataType(schemeType), UseCodegen);
+        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType), UseCodegen);
         TestStringValue("0123456789012345678901234567890123456789", packer, typeDesc, 40 + 4);
-        TestStringValue("[]", packer, typeDesc, 2 + 1);
-        TestStringValue("1234567", packer, typeDesc, 7 + 1);
-        TestStringValue("", packer, typeDesc, 1);
+        TestStringValue("[]", packer, typeDesc, Fast ? (2 + 4) : (2 + 1));
+        TestStringValue("1234567", packer, typeDesc, Fast ? (7 + 4) : (7 + 1));
+        TestStringValue("", packer, typeDesc, Fast ? (0 + 4) : (0 + 1));
         TestStringValue("12345678", packer, typeDesc, 8 + 4);
     }
 
     void TestUuidType() {
         auto schemeType = NUdf::TDataType<NUdf::TUuid>::Id;
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePacker packer(false, PgmBuilder.NewDataType(schemeType), false);
-        TestStringValue("0123456789abcdef", packer, typeDesc, 16 + 4);
+        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType), false);
+        TestStringValue("0123456789abcdef", packer, typeDesc, Fast ? 16 : (16 + 4));
     }
 
-    void TestOptionalStringValue(std::optional<std::string_view> value, TValuePacker& packer, const TString& typeDesc, ui32 expectedLength) {
+    void TestOptionalStringValue(std::optional<std::string_view> value, TValuePackerType& packer, const TString& typeDesc, ui32 expectedLength) {
         TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? *value : TString("null"));
         const auto v = value ? NUdf::TUnboxedValue(MakeString(*value)) : NUdf::TUnboxedValue();
         const auto uValue = TestPackUnpack(packer, v, additionalMsg, expectedLength);
@@ -406,13 +409,13 @@ protected:
 
     void TestOptionalStringType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:Optional(" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePacker packer(false, PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(schemeType)), UseCodegen);
-        TestOptionalStringValue("0123456789012345678901234567890123456789", packer, typeDesc, 40 + 4);
+        TValuePackerType packer(false, PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(schemeType)), UseCodegen);
+        TestOptionalStringValue("0123456789012345678901234567890123456789", packer, typeDesc, Fast ? (40 + 4 + 1) : (40 + 4));
         TestOptionalStringValue(std::nullopt, packer, typeDesc, 1);
-        TestOptionalStringValue("[]", packer, typeDesc, 2 + 1);
-        TestOptionalStringValue("1234567", packer, typeDesc, 7 + 1);
-        TestOptionalStringValue("", packer, typeDesc, 1);
-        TestOptionalStringValue("12345678", packer, typeDesc, 8 + 4);
+        TestOptionalStringValue("[]", packer, typeDesc, Fast ? (2 + 4 + 1) : (2 + 1));
+        TestOptionalStringValue("1234567", packer, typeDesc, Fast ? (7 + 4 + 1) : (7 + 1));
+        TestOptionalStringValue("", packer, typeDesc, Fast ? (0 + 4 + 1) : 1);
+        TestOptionalStringValue("12345678", packer, typeDesc, Fast ? (8 + 4 + 1) : (8 + 4));
     }
 
     void TestVariantTypeImpl(TType* variantType) {
@@ -502,7 +505,7 @@ private:
     THolderFactory HolderFactory;
 };
 
-class TMiniKQLComputationNodePackCodegenTest: public TMiniKQLComputationNodePackTest<true> {
+class TMiniKQLComputationNodePackCodegenTest: public TMiniKQLComputationNodePackTest<true, false> {
     UNIT_TEST_SUITE(TMiniKQLComputationNodePackCodegenTest);
         UNIT_TEST(TestNumericTypes);
         UNIT_TEST(TestOptionalNumericTypes);
@@ -523,8 +526,30 @@ class TMiniKQLComputationNodePackCodegenTest: public TMiniKQLComputationNodePack
     UNIT_TEST_SUITE_END();
 };
 
-class TMiniKQLComputationNodePackBySwitchTest: public TMiniKQLComputationNodePackTest<false> {
+class TMiniKQLComputationNodePackBySwitchTest: public TMiniKQLComputationNodePackTest<false, false> {
     UNIT_TEST_SUITE(TMiniKQLComputationNodePackBySwitchTest);
+        UNIT_TEST(TestNumericTypes);
+        UNIT_TEST(TestOptionalNumericTypes);
+        UNIT_TEST(TestStringTypes);
+        UNIT_TEST(TestUuidType);
+        UNIT_TEST(TestOptionalStringTypes);
+        UNIT_TEST(TestListType);
+        UNIT_TEST(TestListOfOptionalsType);
+        UNIT_TEST(TestTupleType);
+        UNIT_TEST(TestStructType);
+        UNIT_TEST(TestOptionalType);
+        UNIT_TEST(TestDictType);
+        UNIT_TEST(TestVariantTypeOverStruct);
+        UNIT_TEST(TestVariantTypeOverTuple);
+        UNIT_TEST(TestIntegerPackPerformance);
+        UNIT_TEST(TestShortStringPackPerformance);
+        UNIT_TEST(TestPairPackPerformance);
+        UNIT_TEST(TestTuplePackPerformance);
+    UNIT_TEST_SUITE_END();
+};
+
+class TMiniKQLComputationNodeFastPackBySwitchTest: public TMiniKQLComputationNodePackTest<false, true> {
+    UNIT_TEST_SUITE(TMiniKQLComputationNodeFastPackBySwitchTest);
         UNIT_TEST(TestNumericTypes);
         UNIT_TEST(TestOptionalNumericTypes);
         UNIT_TEST(TestStringTypes);
@@ -549,6 +574,6 @@ class TMiniKQLComputationNodePackBySwitchTest: public TMiniKQLComputationNodePac
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodePackCodegenTest);
 #endif
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodePackBySwitchTest);
-
+UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeFastPackBySwitchTest);
 }
 }

@@ -1,5 +1,6 @@
 #include <Core/Defines.h>
 #include <Common/hex.h>
+#include <Common/Exception.h>
 #include <Common/PODArray.h>
 #include <Common/memcpySmall.h>
 #include <Formats/FormatSettings.h>
@@ -11,6 +12,7 @@
 #include <stdlib.h>
 
 #include <util/datetime/base.h>
+#include <util/string/builder.h>
 
 #ifdef __SSE2__
     #include <emmintrin.h>
@@ -1180,7 +1182,7 @@ void readDateTimeTextISO(time_t & x, ReadBuffer & istr) {
             return;
         }
     }
-    throw yexception() << "error in datetime parsing. Input data: " << prefix;
+    throw ParsingException(TStringBuilder() << "Error in datetime parsing. Input data: " << prefix, ErrorCodes::CANNOT_PARSE_DATETIME);
 }
 
 int formatMinLength(const String& format)
@@ -1212,7 +1214,7 @@ char* readDateTimeTextFormat(time_t & x, char* str, const String& format)
     input_tm.tm_mday = 1;
     auto ptr = strptime(str, format.c_str(), &input_tm);
     if (ptr == nullptr) {
-        ythrow yexception() << "Can't parse date " << str << " in " << format << " format";
+        throw ParsingException(TStringBuilder() << "Can't parse date " << str << " in " << format << " format", ErrorCodes::CANNOT_PARSE_DATETIME);
     }
     x = TimeGM(&input_tm);
     return ptr;
@@ -1223,7 +1225,7 @@ void readDateTimeTextFormat(time_t & x, ReadBuffer & istr, const String& format)
     int min_length = formatMinLength(format);
     int max_length = formatMaxLength(format);
     if (min_length <= 0 || max_length <= 0) {
-        ythrow yexception() << "Can't parse date, too long format: " << format;
+        throw ParsingException(TStringBuilder() << "Can't parse date, too long format: " << format, ErrorCodes::CANNOT_PARSE_DATETIME);
     }
     char prefix[100] = {};
     int offset = 0;
@@ -1238,7 +1240,7 @@ void readDateTimeTextFormat(time_t & x, ReadBuffer & istr, const String& format)
         x = TimeGM(&input_tm);
         return;
     }
-    ythrow yexception() << "Can't parse date " << prefix << " in " << format << " format";
+    throw ParsingException(TStringBuilder() << "Can't parse date " << prefix << " in " << format << " format", ErrorCodes::CANNOT_PARSE_DATETIME);
 }
 
 void readDateTimeTextPOSIX(time_t & x, ReadBuffer & istr)
@@ -1260,7 +1262,7 @@ void readTimestampTextISO(DateTime64 & x, ReadBuffer & istr) {
             return;
         }
     }
-    throw yexception() << "error in timestamp parsing. Input data: " << prefix;
+    throw ParsingException(TStringBuilder() << "Error in timestamp parsing. Input data: " << prefix, ErrorCodes::CANNOT_PARSE_DATETIME);
 }
 
 char* readTimestampTextFormat(DateTime64 & x, char* str, const String& format)
@@ -1270,7 +1272,7 @@ char* readTimestampTextFormat(DateTime64 & x, char* str, const String& format)
     input_tm.tm_mday = 1;
     auto ptr = strptime(str, format.c_str(), &input_tm);
     if (ptr == nullptr) {
-        ythrow yexception() << "Can't parse date " << str << " in " << format << " format";
+        throw ParsingException(TStringBuilder() << "Can't parse date " << str << " in " << format << " format", ErrorCodes::CANNOT_PARSE_DATETIME);
     }
     x = TimeGM(&input_tm) * 1000000;
     return ptr;

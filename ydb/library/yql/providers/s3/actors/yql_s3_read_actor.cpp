@@ -1989,12 +1989,7 @@ private:
                     // Just to avoid parser error after transport failure
                     LOG_CORO_D("S3 read ERROR");
                 } catch (const NDB::Exception& ex) {
-                    TStringBuilder msgBuilder;
-                    msgBuilder << ex.message();
-                    if (ex.code()) {
-                        msgBuilder << " (code: " << ex.code() << ")";
-                    }
-                    Issues.AddIssue(TIssue(msgBuilder));
+                    Issues.AddIssue(TIssue(ex.message()));
                     fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
                 }

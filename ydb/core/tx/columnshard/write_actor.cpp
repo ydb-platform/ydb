@@ -47,7 +47,7 @@ public:
 
 
         if (status != NKikimrProto::OK) {
-            LOG_S_WARN("Unsuccessful TEvPutResult for blob " << msg->Id.ToString()
+            LOG_S_ERROR("Unsuccessful TEvPutResult for blob " << msg->Id.ToString()
                 << " status: " << status << " reason: " << msg->ErrorReason);
             SendResultAndDie(ctx, status);
             return;

@@ -19,9 +19,10 @@ struct TS3Settings {
     NCommon::TConfSetting<ui64, false> JsonListSizeLimit; // Limit of elements count in json list written to S3 file. Default: 10'000. Max: 100'000.
     NCommon::TConfSetting<bool, false> ArrowThreadPool;
     NCommon::TConfSetting<ui64, false> ArrowParallelRowGroupCount; // Number of parquet row groups to read in parallel, min == 1
-    NCommon::TConfSetting<bool, false> ArrowRowGroupReordering;    // Allow to push rows from file in any order, default false, but usually it is OK 
-    NCommon::TConfSetting<bool, false> UseBlocksSource;            // Use blocks source (if exists) for scalar MKQL mode 
-    NCommon::TConfSetting<bool, false> AtomicUploadCommit;         // Commit each file independently, w/o transaction semantic over all files 
+    NCommon::TConfSetting<bool, false> ArrowRowGroupReordering;    // Allow to push rows from file in any order, default false, but usually it is OK
+    NCommon::TConfSetting<bool, false> UseBlocksSource;            // Use blocks source (if exists) for scalar MKQL mode
+    NCommon::TConfSetting<bool, false> AtomicUploadCommit;         // Commit each file independently, w/o transaction semantic over all files
+    NCommon::TConfSetting<bool, false> UseConcurrentDirectoryLister;
 };
 
 struct TS3ClusterSettings {
@@ -52,6 +53,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     ui64 MaxReadSizePerQuery;
     ui64 MaxInflightListsPerQuery;
     bool AllowLocalFiles;
+    bool AllowConcurrentListings;
 };
 
 } // NYql

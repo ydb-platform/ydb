@@ -7,8 +7,6 @@
 #include <ydb/library/yql/utils/url_builder.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <contrib/libs/re2/re2/re2.h>
-
 #ifdef THROW
 #undef THROW
 #endif
@@ -39,9 +37,13 @@ using TPathFilter =
     std::function<bool(const TString& path, std::vector<TString>& matchedGlobs)>;
 using TEarlyStopChecker = std::function<bool(const TString& path)>;
 
-std::pair<TPathFilter, TEarlyStopChecker> MakeFilterRegexp(const TString& regex) {
-    auto re = std::make_shared<RE2>(re2::StringPiece(regex), RE2::Options());
-    YQL_ENSURE(re->ok());
+std::pair<TPathFilter, TEarlyStopChecker> MakeFilterRegexp(const TString& regex, const TSharedListingContextPtr& sharedCtx) {
+    std::shared_ptr<RE2> re;
+    if (sharedCtx) {
+        sharedCtx->GetOrCreate(regex);
+    } else {
+        re = std::make_shared<RE2>(re2::StringPiece(regex), RE2::Options());
+    }
 
     const size_t numGroups = re->NumberOfCapturingGroups();
     YQL_CLOG(DEBUG, ProviderS3)
@@ -80,7 +82,7 @@ std::pair<TPathFilter, TEarlyStopChecker> MakeFilterRegexp(const TString& regex)
     return std::make_pair(std::move(filter), std::move(checker));
 }
 
-std::pair<TPathFilter, TEarlyStopChecker> MakeFilterWildcard(const TString& pattern) {
+std::pair<TPathFilter, TEarlyStopChecker> MakeFilterWildcard(const TString& pattern, const TSharedListingContextPtr& sharedCtx) {
     auto regexPatternPrefix = pattern.substr(0, NS3::GetFirstWildcardPos(pattern));
     if (regexPatternPrefix == pattern) {
         // just match for equality
@@ -98,15 +100,15 @@ std::pair<TPathFilter, TEarlyStopChecker> MakeFilterWildcard(const TString& patt
     YQL_CLOG(DEBUG, ProviderS3) << "Got prefix: '" << regexPatternPrefix << "', regex: '"
                                 << regex << "' from original pattern '" << pattern << "'";
 
-    return MakeFilterRegexp(regex);
+    return MakeFilterRegexp(regex, sharedCtx);
 }
 
-std::pair<TPathFilter, TEarlyStopChecker> MakeFilter(const TString& pattern, ES3PatternType patternType) {
+std::pair<TPathFilter, TEarlyStopChecker> MakeFilter(const TString& pattern, ES3PatternType patternType, const TSharedListingContextPtr& sharedCtx) {
     switch (patternType) {
         case ES3PatternType::Wildcard:
-            return MakeFilterWildcard(pattern);
+            return MakeFilterWildcard(pattern, sharedCtx);
         case ES3PatternType::Regexp:
-            return MakeFilterRegexp(pattern);
+            return MakeFilterRegexp(pattern, sharedCtx);
         default:
             ythrow yexception() << "Unknown 'patternType': " << int(patternType);
     }
@@ -165,7 +167,8 @@ public:
     TLocalS3Lister(const TListingRequest& listingRequest, const TMaybe<TString>& delimiter)
         : ListingRequest(listingRequest) {
         Y_ENSURE(!delimiter.Defined(), "delimiter is not supported for local files");
-        Filter = MakeFilter(listingRequest.Pattern, listingRequest.PatternType).first;
+        Filter =
+            MakeFilter(listingRequest.Pattern, listingRequest.PatternType, nullptr).first;
     }
 
     TFuture<TListResult> Next() override {
@@ -215,6 +218,7 @@ private:
 class TS3Lister : public IS3Lister {
 public:
     struct TListingContext {
+        TSharedListingContextPtr SharedCtx;
         // Filter
         const TPathFilter Filter;
         const TEarlyStopChecker EarlyStopChecker;
@@ -236,15 +240,17 @@ public:
         IHTTPGateway::TPtr httpGateway,
         const TListingRequest& listingRequest,
         const TMaybe<TString>& delimiter,
-        size_t maxFilesPerQuery = 1000)
+        size_t maxFilesPerQuery = 1000,
+        TSharedListingContextPtr sharedCtx = nullptr)
         : MaxFilesPerQuery(maxFilesPerQuery) {
         Y_ENSURE(
             listingRequest.Url.substr(0, 7) != "file://",
             "This lister does not support reading local files");
 
-        auto [filter, checker] = MakeFilter(listingRequest.Pattern, listingRequest.PatternType);
+        auto [filter, checker] = MakeFilter(listingRequest.Pattern, listingRequest.PatternType, sharedCtx);
 
         auto ctx = TListingContext{
+            std::move(sharedCtx),
             std::move(filter),
             std::move(checker),
             NewPromise<TListResult>(),
@@ -295,13 +301,24 @@ private:
             ythrow yexception() << "Gateway disappeared";
         }
 
+
+        auto sharedCtx = ctx.SharedCtx;
         auto retryPolicy = ctx.RetryPolicy;
+        auto callback = CallbackFactoryMethod(std::move(ctx));
         gateway->Download(
             urlBuilder.Build(),
             headers,
             0U,
             0U,
-            CallbackFactoryMethod(std::move(ctx)),
+            [sharedCtx = std::move(sharedCtx),
+             cb = std::move(callback)](IHTTPGateway::TResult&& result) {
+                if (sharedCtx) {
+                    sharedCtx->SubmitCallbackProcessing(
+                        [cb, &result]() { cb(std::move(result)); });
+                } else {
+                    cb(std::move(result));
+                }
+            },
             /*data=*/"",
             retryPolicy);
     }
@@ -355,18 +372,19 @@ private:
                                             << ": got truncated flag, will continue";
 
                 auto newCtx = TListingContext{
-                    ctx.Filter,
-                    ctx.EarlyStopChecker,
-                    NewPromise<TListResult>(),
-                    NewPromise<TMaybe<TListingContext>>(),
-                    std::make_shared<TListEntries>(),
-                    ctx.GatewayWeak,
-                    GetHTTPDefaultRetryPolicy(),
-                    CreateGuidAsString(),
-                    ctx.ListingRequest,
-                    ctx.Delimiter,
-                    parsedResponse.ContinuationToken,
-                    parsedResponse.MaxKeys};
+                    ctx.SharedCtx,
+                        ctx.Filter,
+                        ctx.EarlyStopChecker,
+                        NewPromise<TListResult>(),
+                        NewPromise<TMaybe<TListingContext>>(),
+                        std::make_shared<TListEntries>(),
+                        ctx.GatewayWeak,
+                        GetHTTPDefaultRetryPolicy(),
+                        CreateGuidAsString(),
+                        ctx.ListingRequest,
+                        ctx.Delimiter,
+                        parsedResponse.ContinuationToken,
+                        parsedResponse.MaxKeys};
 
                 ctx.NextRequestPromise.SetValue(TMaybe<TListingContext>(newCtx));
             } else {
@@ -416,15 +434,74 @@ private:
     TFuture<TMaybe<TListingContext>> NextRequestCtx;
 };
 
+class TS3ParallelLimitedListerFactory : public IS3ListerFactory {
+public:
+    using TPtr = std::shared_ptr<TS3ParallelLimitedListerFactory>;
+
+    explicit TS3ParallelLimitedListerFactory(
+        size_t maxParallelOps = 1, TSharedListingContextPtr sharedCtx = nullptr)
+        : SharedCtx(std::move(sharedCtx))
+        , Semaphore(TAsyncSemaphore::Make(std::max<size_t>(1, maxParallelOps))) { }
+
+    TFuture<NS3Lister::IS3Lister::TPtr> Make(
+        const IHTTPGateway::TPtr& httpGateway,
+        const NS3Lister::TListingRequest& listingRequest,
+        const TMaybe<TString>& delimiter,
+        bool allowLocalFiles) override {
+        auto acquired = Semaphore->AcquireAsync();
+        return acquired.Apply(
+            [ctx = SharedCtx, httpGateway, listingRequest, delimiter, allowLocalFiles](const auto& f) {
+                return std::shared_ptr<NS3Lister::IS3Lister>(new TListerLockReleaseWrapper{
+                    NS3Lister::MakeS3Lister(
+                        httpGateway, listingRequest, delimiter, allowLocalFiles, ctx),
+                    std::make_unique<TAsyncSemaphore::TAutoRelease>(
+                        f.GetValue()->MakeAutoRelease())});
+            });
+    }
+
+private:
+    class TListerLockReleaseWrapper : public NS3Lister::IS3Lister {
+    public:
+        using TLockPtr = std::unique_ptr<TAsyncSemaphore::TAutoRelease>;
+
+        TListerLockReleaseWrapper(NS3Lister::IS3Lister::TPtr listerPtr, TLockPtr lock)
+            : ListerPtr(std::move(listerPtr))
+            , Lock(std::move(lock)) {
+            if (ListerPtr == nullptr) {
+                Lock.reset();
+            }
+        }
+
+        TFuture<NS3Lister::TListResult> Next() override { return ListerPtr->Next(); }
+        bool HasNext() override {
+            auto hasNext = ListerPtr->HasNext();
+            if (!hasNext) {
+                Lock.reset();
+            }
+            return ListerPtr->HasNext();
+        }
+
+    private:
+        NS3Lister::IS3Lister::TPtr ListerPtr;
+        TLockPtr Lock;
+    };
+
+private:
+    TSharedListingContextPtr SharedCtx;
+    const TAsyncSemaphore::TPtr Semaphore;
+};
+
 } // namespace
 
 IS3Lister::TPtr MakeS3Lister(
     const IHTTPGateway::TPtr& httpGateway,
     const TListingRequest& listingRequest,
     const TMaybe<TString>& delimiter,
-    bool allowLocalFiles) {
+    bool allowLocalFiles,
+    TSharedListingContextPtr sharedCtx) {
     if (listingRequest.Url.substr(0, 7) != "file://") {
-        return std::make_shared<TS3Lister>(httpGateway, listingRequest, delimiter);
+        return std::make_shared<TS3Lister>(
+            httpGateway, listingRequest, delimiter, 1000, std::move(sharedCtx));
     }
 
     if (!allowLocalFiles) {
@@ -432,6 +509,16 @@ IS3Lister::TPtr MakeS3Lister(
                             << listingRequest.Url;
     }
     return std::make_shared<TLocalS3Lister>(listingRequest, delimiter);
+}
+
+IS3ListerFactory::TPtr MakeS3ListerFactory(
+    size_t maxParallelOps,
+    size_t callbackThreadCount,
+    size_t callbackPerThreadQueueSize,
+    size_t regexpCacheSize) {
+    auto sharedCtx = std::make_shared<TSharedListingContext>(
+        callbackThreadCount, callbackPerThreadQueueSize, regexpCacheSize);
+    return std::make_shared<TS3ParallelLimitedListerFactory>(maxParallelOps);
 }
 
 } // namespace NYql::NS3Lister

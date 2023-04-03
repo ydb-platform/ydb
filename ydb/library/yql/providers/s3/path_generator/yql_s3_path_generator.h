@@ -72,6 +72,6 @@ struct IPathGenerator {
 
 using TPathGeneratorPtr = std::shared_ptr<const IPathGenerator>;
 
-TPathGeneratorPtr CreatePathGenerator(const TString& projection, const std::vector<TString>& partitionedBy, const TMap<TString, NUdf::EDataSlot>& columns = {}, size_t pathsLimit = 2000);
+TPathGeneratorPtr CreatePathGenerator(const TString& projection, const std::vector<TString>& partitionedBy, const TMap<TString, NUdf::EDataSlot>& columns = {}, size_t pathsLimit = 1'000'000);
 
 }

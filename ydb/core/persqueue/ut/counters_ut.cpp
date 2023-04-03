@@ -315,6 +315,18 @@ Y_UNIT_TEST(PartitionFirstClass) {
         {
             auto counters = tc.Runtime->GetAppData(0).Counters;
             auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+
+            auto group = dbGroup->GetSubgroup("host", "")->GetSubgroup("database", "/Root")->GetSubgroup("cloud_id", "cloud_id")->GetSubgroup("folder_id", "folder_id")
+                                ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
+            group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
+            group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
+            group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
+            group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
+            group = group->GetSubgroup("consumer", "client");
+            group->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
+            group->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(30000);
+            group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
+
             TStringStream countersStr;
             dbGroup->OutputHtml(countersStr);
             const TString referenceCounters = NResource::Find(TStringBuf("counters_topics.html"));

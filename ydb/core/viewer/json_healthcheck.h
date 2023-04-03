@@ -30,6 +30,7 @@ class TJsonHealthCheck : public TActorBootstrapped<TJsonHealthCheck> {
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     HealthCheckResponseFormat Format;
+    TString Database;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -60,7 +61,7 @@ public:
         }
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         THolder<NHealthCheck::TEvSelfCheckRequest> request = MakeHolder<NHealthCheck::TEvSelfCheckRequest>();
-        request->Database = params.Get("tenant");
+        request->Database = Database = params.Get("tenant");
         request->Request.set_return_verbose_status(FromStringWithDefault<bool>(params.Get("verbose"), false));
         request->Request.set_maximum_level(FromStringWithDefault<ui32>(params.Get("max_level"), 0));
         SetDuration(TDuration::MilliSeconds(Timeout), *request->Request.mutable_operation_params()->mutable_operation_timeout());
@@ -128,21 +129,37 @@ public:
         
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        auto filterDatabase = Database ? Database : "/" + domain->Name;
         e->OnStreamBegin();
-        for (auto& recordCounter : *recordCounters) {
+        if (recordCounters->size() > 0) {
+            for (auto& recordCounter : *recordCounters) {
+                e->OnMetricBegin(EMetricType::IGAUGE);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "HC_" + domain->Name);
+                    e->OnLabel("DATABASE", recordCounter.first.Database ? recordCounter.first.Database : filterDatabase);
+                    e->OnLabel("MESSAGE", recordCounter.first.Message);
+                    e->OnLabel("STATUS", recordCounter.first.Status);
+                    e->OnLabel("TYPE", recordCounter.first.Type);
+                    e->OnLabelsEnd();
+                }
+                e->OnInt64(TInstant::Zero(), recordCounter.second);
+                e->OnMetricEnd();
+            }
+        } else {
+            const auto *descriptor = Ydb::Monitoring::SelfCheck_Result_descriptor();
+            auto result = descriptor->FindValueByNumber(ev->Get()->Result.self_check_result())->name();
             e->OnMetricBegin(EMetricType::IGAUGE);
             {
                 e->OnLabelsBegin();
                 e->OnLabel("sensor", "HC_" + domain->Name);
-                if (recordCounter.first.Database) {
-                    e->OnLabel("DATABASE", recordCounter.first.Database);
-                }
-                e->OnLabel("MESSAGE", recordCounter.first.Message);
-                e->OnLabel("STATUS", recordCounter.first.Status);
-                e->OnLabel("TYPE", recordCounter.first.Type);
+                e->OnLabel("DATABASE", filterDatabase);
+                e->OnLabel("MESSAGE", result);
+                e->OnLabel("STATUS", result);
+                e->OnLabel("TYPE", "ALL");
                 e->OnLabelsEnd();
             }
-            e->OnInt64(TInstant::Zero(), recordCounter.second);
+            e->OnInt64(TInstant::Zero(), 1);
             e->OnMetricEnd();
         }
 

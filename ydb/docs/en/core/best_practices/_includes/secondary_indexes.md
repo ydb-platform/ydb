@@ -19,13 +19,13 @@ The [`table index add` command](../../reference/ydb-cli/commands/secondary_index
 Since an index contains its own data derived from table data, when creating an index on an existing table with data, an operation is performed to initially build an index. This may take a long time. This operation is executed in the background and you can keep working with the table while it's in progress. However, you can't use the new index until it's created.
 
 An index can only be used in the order of the fields included in it. If an index contains two fields, such as `a` and `b`, you can effectively use it for queries such as:
-* `WHERE a = $var1 AND b = $var2`;
-* `WHERE a = $var1`;
+* `WHERE a = $var1 AND b = $var2`.
+* `WHERE a = $var1`.
 * `WHERE a > $var1` and other comparison operators.
 * `WHERE a = $var1 AND b > $var2` and any other comparison operators in which the first field must be checked for equality.
 
 This index can't be used in the following queries:
-* `WHERE b = $var1`;
+* `WHERE b = $var1`.
 * `WHERE a > $var1 AND b > $var2`, which is equivalent to `WHERE a > $var1` in terms of applying the index.
 * `WHERE b > $var1`.
 
@@ -81,6 +81,12 @@ SELECT series_id
 FROM series VIEW views_index
 WHERE views = 0;
 ```
+
+## Atomic replacement of a secondary index {#atomic-index-replacement}
+
+You can atomically replace a secondary index. This can be useful if you want your index to become [covering](../../concepts/secondary_indexes.md#covering). This operation is totally transparent for your running applications: when you replace the index, the compiled queries are invalidated.
+
+To replace an existing index atomically, use the YDB CLI command [{{ ydb-cli }} table index rename](../../reference/ydb-cli/commands/secondary_index.md#rename) with the  `--replace` parameter.
 
 ## Performance of data writes to tables with secondary indexes {#write_performance}
 

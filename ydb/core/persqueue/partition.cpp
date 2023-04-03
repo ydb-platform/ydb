@@ -2256,6 +2256,25 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
                 << " PartitionConfig" << Config.GetPartitionConfig();
     );
 
+    UpdateCounters(ctx);
+    if (PartitionCountersLabeled) {
+        auto* ac = result.MutableAggregatedCounters();
+        for (ui32 i = 0; i < PartitionCountersLabeled->GetCounters().Size(); ++i) {
+            ac->AddValues(PartitionCountersLabeled->GetCounters()[i].Get());
+        }
+        for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
+            auto& userInfo = userInfoPair.second;
+            if (!userInfo.LabeledCounters)
+                continue;
+            if (!userInfo.HasReadRule && !userInfo.Important)
+                continue;
+            auto* cac = ac->AddConsumerAggregatedCounters();
+            cac->SetConsumer(userInfo.User);
+            for (ui32 i = 0; i < userInfo.LabeledCounters->GetCounters().Size(); ++i) {
+                cac->AddValues(userInfo.LabeledCounters->GetCounters()[i].Get());
+            }
+        }
+    }
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result));
 }
 
@@ -3428,9 +3447,9 @@ ui64 TPartition::GetSizeLag(i64 offset) {
 }
 
 
-void TPartition::ReportCounters(const TActorContext& ctx) {
+bool TPartition::UpdateCounters(const TActorContext& ctx) {
     if (!PartitionCountersLabeled) {
-        return;
+        return false;
     }
     // per client counters
     const auto now = ctx.Now();
@@ -3637,8 +3656,11 @@ void TPartition::ReportCounters(const TActorContext& ctx) {
         haveChanges = true;
         PartitionCountersLabeled->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Set(timeLag);
     }
+    return haveChanges;
+}
 
-    if (haveChanges) {
+void TPartition::ReportCounters(const TActorContext& ctx) {
+    if (UpdateCounters(ctx)) {
         ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
 }

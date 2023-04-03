@@ -216,7 +216,7 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
             request->Record.SetPathId(1);
             request->Record.SetVersion(version);
             request->Record.SetTopicName(topic);
-            request->Record.SetPath("path");
+            request->Record.SetPath("/Root/" + topic);
             request->Record.SetSchemeShardId(ssId);
             request->Record.MutableTabletConfig()->AddReadRules("client");
             request->Record.MutableTabletConfig()->SetRequireAuthWrite(requireAuth);

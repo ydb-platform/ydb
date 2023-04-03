@@ -1446,6 +1446,8 @@ void TPartition::CancelAllWritesOnIdle(const TActorContext& ctx) {
     Requests.clear();
     Y_VERIFY(Responses.empty());
 
+    WriteCycleSize = 0;
+
     ProcessReserveRequests(ctx);
 }
 
@@ -4877,6 +4879,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         decReservedSize = it->second.DecReservedSize();
     }
 
+    ReservedSize -= decReservedSize;
+
     TMaybe<ui64> offset = ev->Get()->Offset;
 
     if (WriteInflightSize > Config.GetPartitionConfig().GetMaxWriteInflightSize()) {
@@ -4935,7 +4939,6 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     }
     WriteInflightSize += size;
 
-    ReservedSize -= decReservedSize;
     // TODO: remove decReservedSize == 0
     Y_VERIFY(size <= decReservedSize || decReservedSize == 0);
     TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
@@ -5102,6 +5105,8 @@ void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::T
     request->Record.Clear();
     PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
     CompactedKeys.clear();
+
+    WriteCycleSize = 0;
 }
 
 

@@ -47,6 +47,9 @@ class TJsonCompute : public TViewerPipeClient<TJsonCompute> {
     TTabletId RootHiveId = 0;
     bool RootHiveRequested = false;
     NKikimrViewer::TComputeInfo Result;
+    ui32 UptimeSeconds = 0;
+    bool ProblemNodesOnly = false;
+    TString Filter;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -86,6 +89,9 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
         Path = params.Get("path");
+        UptimeSeconds = FromStringWithDefault<ui32>(params.Get("uptime"), 0);
+        ProblemNodesOnly = FromStringWithDefault<bool>(params.Get("problems_only"), ProblemNodesOnly);
+        Filter = params.Get("filter");
 
         SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
 
@@ -265,6 +271,33 @@ public:
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
     }
 
+    bool CheckNodeFilters(TNodeId nodeId) {
+        auto itSysInfo = NodeSysInfo.find(nodeId);
+        if (itSysInfo != NodeSysInfo.end()) {
+            if (itSysInfo->second.SystemStateInfoSize() == 1) {
+                const NKikimrWhiteboard::TSystemStateInfo& sysInfo = itSysInfo->second.GetSystemStateInfo(0);
+                if (UptimeSeconds > 0 && sysInfo.HasStartTime() && sysInfo.HasChangeTime()
+                        && sysInfo.GetChangeTime() - sysInfo.GetStartTime() > UptimeSeconds * 1000) {
+                    return false;
+                }
+                if (ProblemNodesOnly && sysInfo.HasSystemState()
+                        && GetViewerFlag(sysInfo.GetSystemState()) == NKikimrViewer::EFlag::Green) {
+                    return false;
+                }
+                if (Filter) {
+                    if (sysInfo.HasHost() && sysInfo.GetHost().Contains(Filter)) {
+                        return true;
+                    }
+                    if (std::to_string(nodeId).contains(Filter)) {
+                        return true;
+                    }
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     void ReplyAndPassAway() {
         THashMap<TNodeId, TVector<const NKikimrWhiteboard::TTabletStateInfo*>> tabletInfoIndex;
         NKikimrWhiteboard::TEvTabletStateResponse tabletInfo;
@@ -295,6 +328,8 @@ public:
                 TPathId subDomainKey(itSubDomainKey->second);
                 const NKikimrViewer::TTenant& tenantBySubDomainKey(TenantBySubDomainKey[subDomainKey]);
                 for (TNodeId nodeId : tenantBySubDomainKey.GetNodeIds()) {
+                    if (!CheckNodeFilters(nodeId))
+                        continue;
                     NKikimrViewer::TComputeNodeInfo& computeNodeInfo = *computeTenantInfo.AddNodes();
                     computeNodeInfo.SetNodeId(nodeId);
                     auto itSysInfo = NodeSysInfo.find(nodeId);
@@ -410,7 +445,10 @@ struct TJsonRequestParameters<TJsonCompute> {
         return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
                       {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
                       {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
+                      {"name":"uptime","in":"query","description":"return only nodes with less uptime in sec.","required":false,"type":"integer"},
+                      {"name":"problems_only","in":"query","description":"return only problem nodes","required":false,"type":"boolean"},
+                      {"name":"filter","in":"query","description":"filter nodes by id or host","required":false,"type":"string"}])___";
     }
 };
 

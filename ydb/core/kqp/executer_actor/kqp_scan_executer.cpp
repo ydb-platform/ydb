@@ -234,9 +234,11 @@ private:
     ui32 GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount) const {
         if (AggregationSettings.HasAggregationComputeThreads()) {
             return std::max<ui32>(1, AggregationSettings.GetAggregationComputeThreads());
-        } else {
+        } else if (nodesCount) {
             const TStagePredictor& predictor = stageInfo.Meta.Tx.Body->GetCalculationPredictor(stageInfo.Id.StageId);
             return predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), previousTasksCount / nodesCount) * nodesCount;
+        } else {
+            return 1;
         }
     }
 

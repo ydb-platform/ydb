@@ -214,7 +214,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 HTML(html) {
                     DL_CLASS("dl-horizontal") {
                         TermDesc(html, "PartitionId", PartitionId);
-                        TermDesc(html, "ShardId", ShardId);
+                        TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId));
                         TermDesc(html, "SourceId", SourceId);
                         TermDesc(html, "Writer", Writer);
                         TermDesc(html, "MaxSeqNo", MaxSeqNo);

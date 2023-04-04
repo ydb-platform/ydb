@@ -205,7 +205,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
             SimplePanel(html, "Info", [this](IOutputStream& html) {
                 HTML(html) {
                     DL_CLASS("dl-horizontal") {
-                        TermDesc(html, "ShardId", ShardId);
+                        TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId));
                         TermDesc(html, "IndexTablePathId", IndexTablePathId);
                         TermDesc(html, "LeaderPipeCache", LeaderPipeCache);
                         TermDesc(html, "LastRecordOrder", LastRecordOrder);

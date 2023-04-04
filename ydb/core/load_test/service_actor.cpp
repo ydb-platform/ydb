@@ -351,6 +351,7 @@ public:
         for (const auto& [actorId, _] : ev->Get()->InfoEntries) {
             dynNodesIds.push_back(actorId.NodeId());
         }
+        SortUnique(dynNodesIds);
 
         for (const auto& cmd : AllNodesLoadConfigs) {
             for (const auto& id : dynNodesIds) {

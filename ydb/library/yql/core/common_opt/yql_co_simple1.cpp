@@ -5080,7 +5080,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                     flatMapInput = flatMapInput->Child(0);
                 }
 
-                if (flatMapInput != lambda->Head().Child(0)) { // FlatMap input == Switch lambda arg
+                if (&SkipCallables(*flatMapInput, {"Unordered"}) != &lambda->Head().Head()) { // FlatMap input == Switch lambda arg
                     return node;
                 }
 

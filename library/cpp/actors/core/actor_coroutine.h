@@ -7,18 +7,35 @@
 #include "executor_thread.h"
 #include "event_local.h"
 
+#include <thread>
+
 namespace NActors {
 
     class TActorCoro;
 
+#ifndef CORO_THROUGH_THREADS
+#   ifdef _tsan_enabled_
+#       define CORO_THROUGH_THREADS 1
+#   else
+#       define CORO_THROUGH_THREADS 0
+#   endif
+#endif
+
     class TActorCoroImpl : public ITrampoLine {
-        TMappedAllocation Stack;
-        bool AllowUnhandledDtor;
+        const bool AllowUnhandledDtor;
         bool Finished = false;
         bool InvokedFromDtor = false;
+#if CORO_THROUGH_THREADS
+        TAutoEvent InEvent;
+        TAutoEvent OutEvent;
+        TActivationContext *ActivationContext = nullptr;
+        std::thread WorkerThread;
+#else
+        TMappedAllocation Stack;
         TContClosure FiberClosure;
         TExceptionSafeContext FiberContext;
         TExceptionSafeContext* ActorSystemContext = nullptr;
+#endif
         THolder<IEventHandle> PendingEvent;
 
     protected:
@@ -185,8 +202,8 @@ namespace NActors {
     private:
         /* Resume() function goes to actor coroutine context and continues (or starts) to execute it until actor finishes
          * his job or it is blocked on WaitForEvent. Then the function returns. */
-        void Resume();
-        void ReturnToActorSystem();
+        void Resume(THolder<IEventHandle> ev);
+        THolder<IEventHandle> ReturnToActorSystem();
         void DoRun() override final;
     };
 

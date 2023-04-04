@@ -55,9 +55,7 @@ target_compile_options(clickhouse_client_udf.global PRIVATE
   -DDBMS_VERSION_MINOR=18
   -DDBMS_VERSION_PATCH=0
   -Wno-unused-parameter
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=27
-  -DUDF_ABI_VERSION_PATCH=0
+  -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(clickhouse_client_udf.global PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/dragonbox

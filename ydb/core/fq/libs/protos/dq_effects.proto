@@ -1,0 +1,13 @@
+package NYql.NDqProto;
+option cc_enable_arenas = true;
+
+message TEffect {
+    optional string Id = 1;  // Unique ID per Provider name, used for dedup
+    optional bytes Data = 2; // Additional data if ID is not enough
+}
+
+
+message TExternalEffect {
+    optional string ProviderName = 1;
+    repeated TEffect Effects = 2;
+}

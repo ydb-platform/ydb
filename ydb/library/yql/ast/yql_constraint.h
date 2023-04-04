@@ -299,6 +299,7 @@ public:
 
     const TMapType& GetColumnMapping() const;
     TMapType GetColumnMapping(const std::string_view& asField) const;
+    TMapType GetColumnMapping(TExprContext& ctx, const std::string_view& prefix) const;
 
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
@@ -360,15 +361,17 @@ public:
     }
 
     const TMapType& GetColumnMapping() const;
-    TReverseMapType GetReverseMapping() const;
+    TMapType GetColumnMapping(const std::string_view& asField) const;
+    TMapType GetColumnMapping(TExprContext& ctx, const std::string_view& prefix) const;
 
-    TMapType GetMappingForField(const std::string_view& field) const;
+    TReverseMapType GetReverseMapping() const;
 
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
     void Out(IOutputStream& out) const override;
     void ToJson(NJson::TJsonWriter& out) const override;
 
+    static void UniqueMerge(TMapType& output, TMapType&& input);
     const TPassthroughConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
 
     static const TPassthroughConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);

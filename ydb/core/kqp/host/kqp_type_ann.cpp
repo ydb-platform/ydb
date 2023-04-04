@@ -1389,7 +1389,7 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckQueryTransformer() {
 
             auto query = TKqlQuery(input);
             for (const auto& result : query.Results()) {
-                if (!EnsureTupleSize(result.Ref(), 2, ctx)) {
+                if (!EnsureTupleSize(result.MutableRef(), 2, ctx)) {
                     return TStatus::Error;
                 }
                 if (!EnsureListType(result.Value().Ref(), ctx)) {

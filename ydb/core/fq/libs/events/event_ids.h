@@ -41,6 +41,7 @@ struct TEventIds {
         EvRaiseTransientIssues,
         EvSchemaCreated,
         EvCallback,
+        EvEffectApplicationResult,
 
         EvCreateRateLimiterResourceRequest,
         EvCreateRateLimiterResourceResponse,

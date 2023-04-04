@@ -34,6 +34,7 @@ struct TDqSettings {
         static constexpr ui64 ParallelOperationsLimit = 16;
         static constexpr double HashShuffleTasksRatio = 0.5;
         static constexpr ui32 HashShuffleMaxTasks = 24;
+        static constexpr bool UseFastPickleTransport = false;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -91,6 +92,7 @@ struct TDqSettings {
     NCommon::TConfSetting<ui32, false> HashShuffleMaxTasks;
 
     NCommon::TConfSetting<bool, false> UseWideChannels;
+    NCommon::TConfSetting<bool, false> UseFastPickleTransport;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -138,6 +140,7 @@ struct TDqSettings {
         SAVE_SETTING(HashShuffleTasksRatio);
         SAVE_SETTING(HashShuffleMaxTasks);
         SAVE_SETTING(UseWideChannels);
+        SAVE_SETTING(UseFastPickleTransport);
 #undef SAVE_SETTING
     }
 

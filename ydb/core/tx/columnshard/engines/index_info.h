@@ -1,9 +1,11 @@
 #pragma once
+
 #include "defs.h"
 #include "scalars.h"
 #include "tier_info.h"
-#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
+
 #include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 
 namespace arrow {
     class Array;
@@ -17,45 +19,16 @@ namespace NKikimr::NArrow {
 
 namespace NKikimr::NOlap {
 
-template <typename T>
-static std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const T& ids) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(ids.size());
-
-    for (ui32 id: ids) {
-        auto it = columns.find(id);
-        if (it == columns.end()) {
-            return {};
-        }
-
-        const auto& column = it->second;
-        std::string colName(column.Name.data(), column.Name.size());
-        fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType)));
-    }
-
-    return std::make_shared<arrow::Schema>(fields);
-}
-
-inline
-TVector<std::pair<TString, NScheme::TTypeInfo>>
-GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const TVector<ui32>& ids) {
-    TVector<std::pair<TString, NScheme::TTypeInfo>> out;
-    out.reserve(ids.size());
-    for (ui32 id : ids) {
-        Y_VERIFY(tableSchema.Columns.count(id));
-        auto& column = tableSchema.Columns.find(id)->second;
-        out.emplace_back(column.Name, column.PType);
-    }
-    return out;
-}
-
 struct TInsertedData;
+
+using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 
 /// Column engine index description in terms of tablet's local table.
 /// We have to use YDB types for keys here.
 struct TIndexInfo : public NTable::TScheme::TTableSchema {
-    static constexpr const char * SPEC_COL_PLAN_STEP = "_yql_plan_step";
-    static constexpr const char * SPEC_COL_TX_ID = "_yql_tx_id";
+public:
+    static constexpr const char* SPEC_COL_PLAN_STEP = "_yql_plan_step";
+    static constexpr const char* SPEC_COL_TX_ID = "_yql_tx_id";
     static const TString STORE_INDEX_STATS_TABLE;
     static const TString TABLE_INDEX_STATS_TABLE;
 
@@ -64,68 +37,44 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
         TX_ID,
     };
 
-    TIndexInfo(const TString& name, ui32 id)
-        : NTable::TScheme::TTableSchema()
-        , Id(id)
-        , Name(name)
-    {}
+    /// Appends the special columns to the batch.
+    static std::shared_ptr<arrow::RecordBatch> AddSpecialColumns(
+        const std::shared_ptr<arrow::RecordBatch>& batch,
+        const ui64 platStep,
+        const ui64 txId);
 
-    ui32 GetId() const {
+    /// Makes schema as set of the special columns.
+    static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot();
+
+    /// Matches name of the filed with names of the special columns.
+    static bool IsSpecialColumn(const arrow::Field& field);
+
+public:
+    TIndexInfo(const TString& name, ui32 id);
+
+    /// Returns id of the index.
+    ui32 GetId() const noexcept {
         return Id;
     }
 
-    ui32 GetColumnId(const TString& name) const {
-        if (!ColumnNames.count(name)) {
-            if (name == SPEC_COL_PLAN_STEP) {
-                return (ui32)ESpecialColumn::PLAN_STEP;
-            } else if (name == SPEC_COL_TX_ID) {
-                return (ui32)ESpecialColumn::TX_ID;
-            }
-            Y_VERIFY(false);
-        }
-        return ColumnNames.find(name)->second;
-    }
+    /// Returns an id of the column located by name. The name should exists in the schema.
+    ui32 GetColumnId(const TString& name) const;
 
-    TString GetColumnName(ui32 id, bool required = true) const {
-        switch (ESpecialColumn(id)) {
-            case ESpecialColumn::PLAN_STEP:
-                return SPEC_COL_PLAN_STEP;
-            case ESpecialColumn::TX_ID:
-                return SPEC_COL_TX_ID;
-            default:
-                break;
-        }
+    /// Returns a name of the column located by id.
+    TString GetColumnName(ui32 id, bool required = true) const;
 
-        if (!required && !Columns.count(id)) {
-            return {};
-        }
+    /// Returns names of columns defined by the specific ids.
+    TVector<TString> GetColumnNames(const TVector<ui32>& ids) const;
 
-        Y_VERIFY(Columns.count(id));
-        return Columns.find(id)->second.Name;
-    }
+    /// Returns info of columns defined by specific ids.
+    TVector<TNameTypeInfo> GetColumns(const TVector<ui32>& ids) const;
 
-    TVector<TString> GetColumnNames(const TVector<ui32>& ids) const {
-        TVector<TString> out;
-        out.reserve(ids.size());
-        for (ui32 id : ids) {
-            Y_VERIFY(Columns.count(id));
-            out.push_back(Columns.find(id)->second.Name);
-        }
-        return out;
-    }
-
-    TVector<std::pair<TString, NScheme::TTypeInfo>> GetColumns(const TVector<ui32>& ids) const {
-        return NOlap::GetColumns(*this, ids);
-    }
-
-    // Traditional Primary Key (includes uniqueness, search and sorting logic)
-    TVector<std::pair<TString, NScheme::TTypeInfo>> GetPK() const {
+    /// Traditional Primary Key (includes uniqueness, search and sorting logic)
+    TVector<TNameTypeInfo> GetPrimaryKey() const {
         return GetColumns(KeyColumns);
     }
 
-    static TVector<std::pair<TString, NScheme::TTypeInfo>> SchemaIndexStats(ui32 version = 0);
-    static TVector<std::pair<TString, NScheme::TTypeInfo>> SchemaIndexStatsKey(ui32 version = 0);
-
+    /// Returns id of the first column of the primary key.
     ui32 GetPKFirstColumnId() const {
         Y_VERIFY(KeyColumns.size());
         return KeyColumns[0];
@@ -139,6 +88,7 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
     const std::shared_ptr<arrow::Schema>& GetExtendedKey() const { return ExtendedKey; }
     const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return IndexKey; }
 
+    /// Initializes sorting, replace, index and extended keys.
     void SetAllKeys();
 
     void CheckTtlColumn(const TString& ttlColumn) const {
@@ -146,12 +96,11 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
         Y_VERIFY(MinMaxIdxColumnsIds.count(GetColumnId(ttlColumn)));
     }
 
-    TVector<TRawTypeValue> ExtractKey(const THashMap<ui32, TCell>& fields, bool allowNulls = false) const;
     std::shared_ptr<arrow::Schema> ArrowSchema() const;
     std::shared_ptr<arrow::Schema> ArrowSchemaWithSpecials() const;
-    std::shared_ptr<arrow::Schema> AddColumns(std::shared_ptr<arrow::Schema> schema,
+    std::shared_ptr<arrow::Schema> AddColumns(const std::shared_ptr<arrow::Schema>& schema,
                                               const TVector<TString>& columns) const;
-    static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot();
+
     std::shared_ptr<arrow::Schema> ArrowSchema(const TVector<ui32>& columnIds) const;
     std::shared_ptr<arrow::Schema> ArrowSchema(const TVector<TString>& columnNames) const;
     std::shared_ptr<arrow::Field> ArrowColumnField(ui32 columnId) const;
@@ -168,15 +117,14 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
 
     bool AllowTtlOverColumn(const TString& name) const;
 
+    /// Returns whether the sorting keys defined.
     bool IsSorted() const { return SortingKey.get(); }
+
+     /// Returns whether the replace keys defined.
     bool IsReplacing() const { return ReplaceKey.get(); }
 
     std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
-
-    static bool IsSpecialColumn(const arrow::Field& field);
-    static std::shared_ptr<arrow::RecordBatch> AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                                 ui64 platStep, ui64 txId);
 
     void SetDefaultCompression(const TCompression& compression) { DefaultCompression = compression; }
     const TCompression& GetDefaultCompression() const { return DefaultCompression; }
@@ -198,21 +146,11 @@ private:
     THashSet<ui32> MinMaxIdxColumnsIds;
     TCompression DefaultCompression;
     THashMap<ui64, TTiering> PathTiering;
-
-    void AddRequiredColumns(const TVector<TString>& columns) {
-        for (auto& name: columns) {
-            RequiredColumns.insert(name);
-        }
-    }
-
-    static TVector<TString> NamesOnly(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
-        TVector<TString> out;
-        out.reserve(columns.size());
-        for (auto& [name, type] : columns) {
-            out.push_back(name);
-        }
-        return out;
-    }
 };
 
-}
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const TVector<ui32>& ids);
+
+/// Extracts columns with the specific ids from the schema.
+TVector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const TVector<ui32>& ids);
+
+} // namespace NKikimr::NOlap

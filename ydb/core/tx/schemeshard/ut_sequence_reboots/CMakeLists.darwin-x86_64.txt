@@ -31,8 +31,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_sequence_reboots PUBLIC
   udf-service-exception_policy
 )
 target_link_options(ydb-core-tx-schemeshard-ut_sequence_reboots PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

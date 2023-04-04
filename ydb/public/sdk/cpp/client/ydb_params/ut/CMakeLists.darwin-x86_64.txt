@@ -21,8 +21,7 @@ target_link_libraries(ydb-public-sdk-cpp-client-ydb_params-ut PUBLIC
   public-lib-yson_value
 )
 target_link_options(ydb-public-sdk-cpp-client-ydb_params-ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

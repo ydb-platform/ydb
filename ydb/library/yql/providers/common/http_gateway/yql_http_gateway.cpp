@@ -53,7 +53,7 @@ int curlTrace(CURL *handle, curl_infotype type,
     default:
         return 0;
     }
-    
+
     Cerr << sb;
 
     return 0;
@@ -88,11 +88,32 @@ public:
         DELETE
     };
 
-    TEasyCurl(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes, TString url, IHTTPGateway::THeaders headers, EMethod method, size_t offset = 0ULL, size_t sizeLimit = 0, size_t bodySize = 0, const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
-        : Headers(headers), Method(method), Offset(offset), SizeLimit(sizeLimit), BodySize(bodySize), Counter(counter), DownloadedBytes(downloadedBytes), UploadedBytes(uploadedBytes), Config(config), ErrorBuffer(static_cast<size_t>(CURL_ERROR_SIZE), '\0'), DnsCache(dnsCache), Url(url)
-    {
-        InitHandles();
-        Counter->Inc();
+    TEasyCurl(
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes,
+        TString url,
+        IHTTPGateway::THeaders headers,
+        EMethod method,
+        size_t offset = 0ULL,
+        size_t sizeLimit = 0,
+        size_t bodySize = 0,
+        const TCurlInitConfig& config = TCurlInitConfig(),
+        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
+        : Headers(headers)
+        , Method(method)
+        , Offset(offset)
+        , SizeLimit(sizeLimit)
+        , BodySize(bodySize)
+        , Counter(counter)
+        , DownloadedBytes(downloadedBytes)
+        , UploadedBytes(uploadedBytes)
+        , Config(config)
+        , ErrorBuffer(static_cast<size_t>(CURL_ERROR_SIZE), '\0')
+        , DnsCache(dnsCache)
+        , Url(url) {
+    InitHandles();
+    Counter->Inc();
     }
 
     virtual ~TEasyCurl() {
@@ -124,6 +145,8 @@ public:
 
         // does nothing if CURLOPT_VERBOSE is not set to 1
         curl_easy_setopt(Handle, CURLOPT_DEBUGFUNCTION, curlTrace);
+        // We can do this because we are using async DNS resolver (c-ares). https://curl.se/libcurl/c/CURLOPT_NOSIGNAL.html
+        curl_easy_setopt(Handle, CURLOPT_NOSIGNAL, 1L);
 
         // for local debug only
         // will print tokens in HTTP headers
@@ -146,8 +169,14 @@ public:
         }
 
         if (!Headers.empty()) {
-            CurlHeaders = std::accumulate(Headers.cbegin(), Headers.cend(), CurlHeaders,
-                std::bind(&curl_slist_append, std::placeholders::_1, std::bind(&TString::c_str, std::placeholders::_2)));
+            CurlHeaders = std::accumulate(
+                Headers.cbegin(),
+                Headers.cend(),
+                CurlHeaders,
+                std::bind(
+                    &curl_slist_append,
+                    std::placeholders::_1,
+                    std::bind(&TString::c_str, std::placeholders::_2)));
             curl_easy_setopt(Handle, CURLOPT_HTTPHEADER, CurlHeaders);
         }
 
@@ -254,15 +283,69 @@ public:
     using TPtr = std::shared_ptr<TEasyCurlBuffer>;
     using TWeakPtr = std::weak_ptr<TEasyCurlBuffer>;
 
-    TEasyCurlBuffer(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t sizeLimit, IHTTPGateway::TOnResult callback, IRetryPolicy<long>::IRetryState::TPtr retryState, const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
-        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, method, offset, sizeLimit, data.size(), std::move(config), std::move(dnsCache)), Data(std::move(data)), Input(Data), Output(Buffer), HeaderOutput(Header), RetryState(std::move(retryState))
-    {
+    TEasyCurlBuffer(
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
+        TString url,
+        EMethod method,
+        TString data,
+        IHTTPGateway::THeaders headers,
+        size_t offset,
+        size_t sizeLimit,
+        IHTTPGateway::TOnResult callback,
+        IRetryPolicy<long>::IRetryState::TPtr retryState,
+        const TCurlInitConfig& config = TCurlInitConfig(),
+        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
+        : TEasyCurl(
+              counter,
+              downloadedBytes,
+              uploadededBytes,
+              url,
+              headers,
+              method,
+              offset,
+              sizeLimit,
+              data.size(),
+              std::move(config),
+              std::move(dnsCache))
+        , Data(std::move(data))
+        , Input(Data)
+        , Output(Buffer)
+        , HeaderOutput(Header)
+        , RetryState(std::move(retryState)) {
         Output.Reserve(sizeLimit);
         Callbacks.emplace(std::move(callback));
     }
 
-    static TPtr Make(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t sizeLimit, IHTTPGateway::TOnResult callback, IRetryPolicy<long>::IRetryState::TPtr retryState, const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr) {
-        return std::make_shared<TEasyCurlBuffer>(counter, downloadedBytes, uploadededBytes, std::move(url), method, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), std::move(retryState), std::move(config), std::move(dnsCache));
+    static TPtr Make(
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
+        TString url,
+        EMethod method,
+        TString data,
+        IHTTPGateway::THeaders headers,
+        size_t offset,
+        size_t sizeLimit,
+        IHTTPGateway::TOnResult callback,
+        IRetryPolicy<long>::IRetryState::TPtr retryState,
+        const TCurlInitConfig& config = TCurlInitConfig(),
+        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr) {
+        return std::make_shared<TEasyCurlBuffer>(
+            counter,
+            downloadedBytes,
+            uploadededBytes,
+            std::move(url),
+            method,
+            std::move(data),
+            std::move(headers),
+            offset,
+            sizeLimit,
+            std::move(callback),
+            std::move(retryState),
+            std::move(config),
+            std::move(dnsCache));
     }
 
     // return true if callback successfully added to this work
@@ -712,7 +795,6 @@ private:
                 }
                 Allocated.erase(it);
             }
-
         }
         if (easy) {
             easy->Done(result, httpResponseCode);
@@ -724,7 +806,7 @@ private:
         {
             const std::unique_lock lock(Sync);
 
-            for (const auto& item : Allocated) {
+            for (auto& item : Allocated) {
                 works.emplace(std::move(item.second));
             }
 
@@ -970,7 +1052,7 @@ IHTTPGateway::THeaders IHTTPGateway::MakeYcHeaders(const TString& requestId, con
     if (!contentType.empty()) {
         result.push_back(TString("Content-Type:") + contentType);
     }
-        
+
     return result;
 }
 

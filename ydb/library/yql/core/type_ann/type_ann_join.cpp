@@ -357,8 +357,8 @@ namespace NTypeAnnImpl {
             }
         }
 
-        const auto& leftRenames = *input->Child(4);
-        const auto& rightRenames = *input->Child(5);
+        auto& leftRenames = *input->Child(4);
+        auto& rightRenames = *input->Child(5);
         if (!EnsureTupleOfAtoms(leftRenames, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -515,8 +515,8 @@ namespace NTypeAnnImpl {
 
         const auto joinKind = input->Child(2)->Content();
 
-        const auto& leftKeyColumns = *input->Child(3);
-        const auto& rightKeyColumns = *input->Child(4);
+        auto& leftKeyColumns = *input->Child(3);
+        auto& rightKeyColumns = *input->Child(4);
 
         if (!EnsureTupleOfAtoms(leftKeyColumns, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -527,8 +527,8 @@ namespace NTypeAnnImpl {
         }
 
 
-        const auto& leftRenames = *input->Child(5);
-        const auto& rightRenames = *input->Child(6);
+        auto& leftRenames = *input->Child(5);
+        auto& rightRenames = *input->Child(6);
 
         if (!EnsureTupleOfAtoms(leftRenames, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;

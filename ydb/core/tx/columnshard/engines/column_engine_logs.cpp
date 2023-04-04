@@ -8,7 +8,7 @@ namespace NKikimr::NOlap {
 
 std::shared_ptr<arrow::Array> GetFirstPKColumn(const TIndexInfo& indexInfo,
                                                const std::shared_ptr<arrow::RecordBatch>& batch) {
-    TString columnName = indexInfo.GetPK()[0].first;
+    TString columnName = indexInfo.GetPrimaryKey()[0].first;
     return batch->GetColumnByName(std::string(columnName.data(), columnName.size()));
 }
 
@@ -392,7 +392,7 @@ SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, const TCompactionLimits& limits)
-    : IndexInfo(info)
+    : IndexInfo(std::move(info))
     , Limits(limits)
     , TabletId(tabletId)
     , LastPortion(0)

@@ -22,15 +22,6 @@ public:
         : TActionActor(sourceSqsRequest, isBatch ? EAction::ChangeMessageVisibilityBatch : EAction::ChangeMessageVisibility, std::move(cb))
         , IsBatch_(isBatch)
     {
-        if (IsBatch_) {
-            CopyAccountName(BatchRequest());
-            Response_.MutableChangeMessageVisibilityBatch()->SetRequestId(RequestId_);
-            CopySecurityToken(BatchRequest());
-        } else {
-            CopyAccountName(Request());
-            Response_.MutableChangeMessageVisibility()->SetRequestId(RequestId_);
-            CopySecurityToken(Request());
-        }
     }
 
 protected:

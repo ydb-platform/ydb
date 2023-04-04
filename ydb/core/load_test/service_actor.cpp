@@ -2,9 +2,11 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/load_test/ycsb/test_load_actor.h>
+
+#include <ydb/public/lib/base/msgbus.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/json/json_writer.h>
@@ -21,11 +23,11 @@ namespace NKikimr {
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
 
 namespace NKqpConstants {
-    const TString DEFAULT_PROTO = R"_(
+    const char* DEFAULT_PROTO = R"_(
 KqpLoad: {
     DurationSeconds: 30
     WindowDuration: 1
-    WorkingDir: "/slice/db"
+    WorkingDir: "%s"
     NumOfSessions: 64
     UniformPartitionsCount: 1000
     DeleteTableOnFinish: 1
@@ -322,11 +324,46 @@ public:
         }
     }
 
-    void RunRecordOnAllNodes(const auto& record) {
+    bool RunRecordOnAllNodes(const auto& record) {
         AllNodesLoadConfigs.push_back(record);
-        const TActorId nameserviceId = GetNameserviceActorId();
-        bool sendStatus = Send(nameserviceId, new TEvInterconnect::TEvListNodes());
-        LOG_D("TEvListNodes have sent, status: " << sendStatus);
+
+        if (AppData()->DomainsInfo->Domains.empty()) {
+            return false;
+        }
+        auto domainInfo = AppData()->DomainsInfo->Domains.begin()->second;
+        auto name = AppData()->TenantName;
+        RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(name),
+                                                        SelfId(),
+                                                        domainInfo->DefaultStateStorageGroup,
+                                                        EBoardLookupMode::Second,
+                                                        false,
+                                                        false));
+        return true;
+    }
+
+    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        if (ev->Get()->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            LOG_E("Error status for TEvStateStorage::TEvBoardInfo");
+            // TODO Reply error to user
+            return;
+        }
+        TVector<ui32> dynNodesIds;
+        for (const auto& [actorId, _] : ev->Get()->InfoEntries) {
+            dynNodesIds.push_back(actorId.NodeId());
+        }
+        SortUnique(dynNodesIds);
+
+        for (const auto& cmd : AllNodesLoadConfigs) {
+            for (const auto& id : dynNodesIds) {
+                LOG_D("sending load request to: " << id);
+                auto msg = MakeHolder<TEvLoad::TEvLoadTestRequest>();
+                msg->Record = cmd;
+                msg->Record.SetCookie(id);
+                Send(MakeLoadServiceID(id), msg.Release());
+            }
+        }
+
+        AllNodesLoadConfigs.clear();
     }
 
     static TString GetAccept(const NMonitoring::IMonHttpRequest& request) {
@@ -411,8 +448,12 @@ public:
             if (record) {
                 if (params.Has("all_nodes") && params.Get("all_nodes") == "true") {
                     LOG_N("running on all nodes");
-                    RunRecordOnAllNodes(*record);
-                    tag = NextTag; // may be datarace here
+                    bool ok = RunRecordOnAllNodes(*record);
+                    if (ok) {
+                        tag = NextTag; // may be datarace here
+                    } else {
+                        errorMsg = "error while retrieving domain nodes info";
+                    }
                 } else {
                     try {
                         LOG_N("running on node: " << SelfId().NodeId());
@@ -469,29 +510,6 @@ public:
             default:
                 Y_FAIL();
         }
-    }
-
-    void Handle(const TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        TAppData* appDataPtr = AppData();
-
-        TVector<ui32> dyn_node_ids;
-        for (const auto& nodeInfo : ev->Get()->Nodes) {
-            if (nodeInfo.NodeId >= appDataPtr->DynamicNameserviceConfig->MaxStaticNodeId) {
-                dyn_node_ids.push_back(nodeInfo.NodeId);
-            }
-        }
-
-        for (const auto& cmd : AllNodesLoadConfigs) {
-            for (const auto& id : dyn_node_ids) {
-                LOG_D("sending load request to: " << id);
-                auto msg = MakeHolder<TEvLoad::TEvLoadTestRequest>();
-                msg->Record = cmd;
-                msg->Record.SetCookie(id);
-                Send(MakeLoadServiceID(id), msg.Release());
-            }
-        }
-
-        AllNodesLoadConfigs.clear();
     }
 
     void Handle(NMon::TEvHttpInfoRes::TPtr& ev) {
@@ -601,7 +619,8 @@ public:
                     </script>
                 )___";
                 str << R"_(
-                    <textarea id="config" name="config" rows="20" cols="50">)_" << NKqpConstants::DEFAULT_PROTO << R"_(
+                    <textarea id="config" name="config" rows="20" cols="50">)_" << Sprintf(NKqpConstants::DEFAULT_PROTO, AppData()->TenantName.data())
+                    << R"_(
                     </textarea>
                     <br><br>
                     <button onClick='sendStartRequest(this, false)' name='startNewLoadOneNode' class='btn btn-default'>Start new load on current node</button>
@@ -674,7 +693,7 @@ public:
         hFunc(TEvLoad::TEvLoadTestFinished, Handle)
         hFunc(NMon::TEvHttpInfo, Handle)
         hFunc(NMon::TEvHttpInfoRes, Handle)
-        hFunc(TEvInterconnect::TEvNodesInfo, Handle)
+        hFunc(TEvStateStorage::TEvBoardInfo, Handle)
     )
 };
 

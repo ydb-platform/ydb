@@ -20,8 +20,7 @@ target_link_libraries(ydb-core-cms-console-yaml_config-ut PUBLIC
   cms-console-yaml_config
 )
 target_link_options(ydb-core-cms-console-yaml_config-ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

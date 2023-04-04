@@ -51,7 +51,7 @@ target_sources(ydb-core-persqueue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/sourceid_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/type_codecs_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/user_info_ut.cpp
-  ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/3af3a3a0fb89a603529db7e6dfaff0b5.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/20fb34d39c23be7518eb4226481d815e.cpp
 )
 set_property(
   TARGET
@@ -94,15 +94,17 @@ set_yunittest_property(
   600
 )
 resources(ydb-core-persqueue-ut
-  ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/3af3a3a0fb89a603529db7e6dfaff0b5.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/20fb34d39c23be7518eb4226481d815e.cpp
   INPUTS
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_datastreams.html
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_pqproxy_firstclass.html
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_topics.html
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_pqproxy.html
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_labeled.json
   KEYS
   counters_datastreams.html
   counters_pqproxy_firstclass.html
+  counters_topics.html
   counters_pqproxy.html
   counters_labeled.json
 )

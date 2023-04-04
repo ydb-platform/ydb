@@ -100,7 +100,7 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
         data.emplace_back(std::move(array));
     }
 
-    auto schema = std::make_shared<arrow::Schema>(columns);
+    auto schema = std::make_shared<arrow::Schema>(std::move(columns));
     auto recordBatch = arrow::RecordBatch::Make(schema, 1, data);
 
     return std::make_pair<TString, TString>(
@@ -133,12 +133,13 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+    NYql::IHTTPGateway::TPtr httpGateway)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
         YQL_ENSURE(request.EraseLocks);
-        return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerRetriesConfig);
+        return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerRetriesConfig, std::move(httpGateway));
     }
 
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
@@ -154,13 +155,13 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     switch (*txsType) {
         case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
         case NKqpProto::TKqpPhyTx::TYPE_DATA:
-            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerRetriesConfig);
+            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerRetriesConfig, std::move(httpGateway));
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
             return CreateKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig);
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
-            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, true, executerRetriesConfig);
+            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, true, executerRetriesConfig, std::move(httpGateway));
 
         default:
             YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);

@@ -114,7 +114,7 @@ std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::
             }
         }
     }
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), batch->num_rows(), columns);
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), batch->num_rows(), std::move(columns));
 }
 
 static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<arrow::Array>& column,
@@ -157,8 +157,8 @@ std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<
         }
         fields.push_back(std::make_shared<arrow::Field>(colName, columns[i]->type()));
     }
-    auto resultSchemaFixed = std::make_shared<arrow::Schema>(fields);
-    auto convertedBatch = arrow::RecordBatch::Make(resultSchemaFixed, batch->num_rows(), columns);
+    auto resultSchemaFixed = std::make_shared<arrow::Schema>(std::move(fields));
+    auto convertedBatch = arrow::RecordBatch::Make(resultSchemaFixed, batch->num_rows(), std::move(columns));
     Y_VERIFY(convertedBatch->ValidateFull() == arrow::Status::OK());
     return convertedBatch;
 }

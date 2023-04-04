@@ -83,14 +83,15 @@ inline i16 UnpackInt16(TStringBuf& buf) {
 
 template <typename T>
 void PutRawData(T val, TBuffer& buf) {
-    buf.Append(reinterpret_cast<const char*>(&val), sizeof(T));
+    buf.Advance(sizeof(T));
+    std::memcpy(buf.Pos() - sizeof(T), &val, sizeof(T));
 }
 
 template <typename T>
 T GetRawData(TStringBuf& buf) {
     MKQL_ENSURE(sizeof(T) <= buf.size(), "Bad packed data. Buffer too small");
-    T val = 0;
-    memcpy(&val, buf.data(), sizeof(T));
+    T val;
+    std::memcpy(&val, buf.data(), sizeof(T));
     buf.Skip(sizeof(T));
     return val;
 }

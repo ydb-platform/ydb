@@ -90,7 +90,7 @@ protected:
 
 public:
     // Lazily export blob to external object store. Keep it available via blobId.
-    virtual bool ExportOneToOne(const TUnifiedBlobId& blobId, const TEvictMetadata& meta, IBlobManagerDb& db) = 0;
+    virtual bool ExportOneToOne(TEvictedBlob&& evict, const TEvictMetadata& meta, IBlobManagerDb& db) = 0;
     virtual bool DropOneToOne(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
     virtual bool UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) = 0;
     virtual bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) = 0;
@@ -234,7 +234,7 @@ public:
     void DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
 
     // Implementation of IBlobExporter
-    bool ExportOneToOne(const TUnifiedBlobId& blobId, const TEvictMetadata& meta, IBlobManagerDb& db) override;
+    bool ExportOneToOne(TEvictedBlob&& evict, const TEvictMetadata& meta, IBlobManagerDb& db) override;
     bool DropOneToOne(const TUnifiedBlobId& blob, IBlobManagerDb& db) override;
     bool UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) override;
     bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) override;

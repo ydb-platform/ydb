@@ -3,6 +3,8 @@ option cc_enable_arenas = true;
 
 package Fq.Private;
 
+import "ydb/core/fq/libs/protos/dq_effects.proto";
+
 import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
 
 import "ydb/public/api/protos/ydb_operation.proto";
@@ -35,6 +37,7 @@ message TaskResources {
     ResourceState rate_limiter = 1;
     ResourceState compilation = 2;
     ResourceState topic_consumers_state = 3;
+    repeated NYql.NDqProto.TExternalEffect external_effects = 4;
 
     string rate_limiter_path = 10;
     repeated TopicConsumer topic_consumers = 11;

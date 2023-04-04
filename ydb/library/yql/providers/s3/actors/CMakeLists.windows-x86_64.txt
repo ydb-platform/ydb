@@ -25,6 +25,7 @@ target_link_libraries(providers-s3-actors PUBLIC
   cpp-string_utils-base64
   cpp-string_utils-quote
   cpp-xml-document
+  fq-libs-events
   yql-minikql-computation
   yql-public-types
   dq-actors-compute
@@ -41,6 +42,7 @@ target_link_libraries(providers-s3-actors PUBLIC
 )
 target_sources(providers-s3-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_actors_util.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_source_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_write_actor.cpp

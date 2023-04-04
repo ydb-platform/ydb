@@ -29,8 +29,7 @@ target_link_libraries(ydb-services-console-ut PUBLIC
   ydb-services-cms
 )
 target_link_options(ydb-services-console-ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

@@ -1958,16 +1958,17 @@ bool EnsureCallable(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
-bool EnsureTuple(const TExprNode& node, TExprContext& ctx) {
+bool EnsureTuple(TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::List) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tuple, but got: " << node.Type()));
         return false;
     }
 
+    node.SetLiteralList(true);
     return true;
 }
 
-bool EnsureTupleOfAtoms(const TExprNode& node, TExprContext& ctx) {
+bool EnsureTupleOfAtoms(TExprNode& node, TExprContext& ctx) {
     if (!EnsureTuple(node, ctx)) {
         return false;
     }
@@ -1980,7 +1981,7 @@ bool EnsureTupleOfAtoms(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
-bool EnsureValidSettings(const TExprNode& node,
+bool EnsureValidSettings(TExprNode& node,
     const THashSet<TStringBuf>& supportedSettings,
     const TSettingNodeValidator& validator,
     TExprContext& ctx)
@@ -2012,7 +2013,7 @@ bool EnsureValidSettings(const TExprNode& node,
 }
 
 
-bool EnsureValidUserSchemaSetting(const TExprNode& node, TExprContext& ctx) {
+bool EnsureValidUserSchemaSetting(TExprNode& node, TExprContext& ctx) {
     if (!EnsureTupleMinSize(node, 2, ctx)) {
         return false;
     }
@@ -2068,7 +2069,7 @@ bool EnsureValidUserSchemaSetting(const TExprNode& node, TExprContext& ctx) {
 
 
 TSettingNodeValidator RequireSingleValueSettings(const TSettingNodeValidator& validator) {
-    return [validator](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
+    return [validator](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
         if (setting.ChildrenSize() != 2) {
             ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
                                 TStringBuilder() << "Option '" << name << "' requires single argument"));
@@ -2078,7 +2079,7 @@ TSettingNodeValidator RequireSingleValueSettings(const TSettingNodeValidator& va
     };
 }
 
-bool EnsureTupleSize(const TExprNode& node, ui32 expectedSize, TExprContext& ctx) {
+bool EnsureTupleSize(TExprNode& node, ui32 expectedSize, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::List) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tuple, but got: " << node.Type()));
         return false;
@@ -2090,10 +2091,11 @@ bool EnsureTupleSize(const TExprNode& node, ui32 expectedSize, TExprContext& ctx
         return false;
     }
 
+    node.SetLiteralList(true);
     return true;
 }
 
-bool EnsureTupleMinSize(const TExprNode& node, ui32 minSize, TExprContext& ctx) {
+bool EnsureTupleMinSize(TExprNode& node, ui32 minSize, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::List) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tuple, but got: " << node.Type()));
         return false;
@@ -2105,10 +2107,11 @@ bool EnsureTupleMinSize(const TExprNode& node, ui32 minSize, TExprContext& ctx) 
         return false;
     }
 
+    node.SetLiteralList(true);
     return true;
 }
 
-bool EnsureTupleMaxSize(const TExprNode& node, ui32 maxSize, TExprContext& ctx) {
+bool EnsureTupleMaxSize(TExprNode& node, ui32 maxSize, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::List) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tuple, but got: " << node.Type()));
         return false;
@@ -2120,6 +2123,7 @@ bool EnsureTupleMaxSize(const TExprNode& node, ui32 maxSize, TExprContext& ctx) 
         return false;
     }
 
+    node.SetLiteralList(true);
     return true;
 }
 

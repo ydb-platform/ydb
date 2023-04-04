@@ -20,8 +20,7 @@ target_link_libraries(ydb-library-yql-utils-log-ut PUBLIC
   yql-utils-log
 )
 target_link_options(ydb-library-yql-utils-log-ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
 )

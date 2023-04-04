@@ -26,10 +26,6 @@ public:
     TCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::CountQueues, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableCountQueues()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:

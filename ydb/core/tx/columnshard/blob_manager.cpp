@@ -507,14 +507,9 @@ void TBlobManager::DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) 
     }
 }
 
-bool TBlobManager::ExportOneToOne(const TUnifiedBlobId& blobId, const NKikimrTxColumnShard::TEvictMetadata& meta,
+bool TBlobManager::ExportOneToOne(TEvictedBlob&& evict, const NKikimrTxColumnShard::TEvictMetadata& meta,
                                   IBlobManagerDb& db)
 {
-    NOlap::TEvictedBlob evict{
-        .State = EEvictState::EVICTING,
-        .Blob = blobId
-    };
-
     if (EvictedBlobs.count(evict) || DroppedEvictedBlobs.count(evict)) {
         return false;
     }

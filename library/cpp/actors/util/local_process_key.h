@@ -12,6 +12,8 @@ class TLocalProcessKeyState {
 
 template <typename U, const char* Name>
 friend class TLocalProcessKey;
+template <typename U, class TClass>
+friend class TLocalProcessExtKey;
 template <typename U, typename EnumT>
 friend class TEnumProcessKey;
 
@@ -88,6 +90,22 @@ public:
 
 private:
     inline static size_t Index = TLocalProcessKeyState<T>::GetInstance().Register(Name);
+};
+
+template <typename T, class TClass>
+class TLocalProcessExtKey {
+public:
+    static TStringBuf GetName() {
+        return Name;
+    }
+
+    static size_t GetIndex() {
+        return Index;
+    }
+
+private:
+    static const inline TString Name = TypeName<TClass>();
+    inline static size_t Index = TLocalProcessKeyState<T>::GetInstance().Register(TypeName<TClass>());
 };
 
 template <typename T, typename EnumT>

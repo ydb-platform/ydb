@@ -666,6 +666,8 @@ struct TInMemorySubscription : public TThrRefBase {
     ui64 YamlConfigVersion = 0;
     TMap<ui64, ui64> VolatileYamlConfigHashes;
 
+    bool FirstUpdateSent = false;
+
     TActorId Worker;
 };
 

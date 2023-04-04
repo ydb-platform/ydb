@@ -21,10 +21,6 @@ public:
     TListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListDeadLetterSourceQueues, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableListDeadLetterSourceQueues()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
     static constexpr bool NeedExistingQueue() {

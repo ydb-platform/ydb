@@ -35,7 +35,7 @@ bool ValidateS3PackedPaths(TPositionHandle pos, TStringBuf blob, bool isTextEnco
     return true;
 }
 
-bool ValidateS3Paths(const TExprNode& node, const TStructExprType*& extraColumnsType, TExprContext& ctx) {
+bool ValidateS3Paths(TExprNode& node, const TStructExprType*& extraColumnsType, TExprContext& ctx) {
     if (!EnsureTupleMinSize(node, 1, ctx)) {
         return false;
     }
@@ -444,7 +444,7 @@ public:
         }));
 
         if (input->ChildrenSize() > TS3ReadObject::idx_ColumnOrder) {
-            const auto& order = *input->Child(TS3ReadObject::idx_ColumnOrder);
+            auto& order = *input->Child(TS3ReadObject::idx_ColumnOrder);
             if (!EnsureTupleOfAtoms(order, ctx)) {
                 return TStatus::Error;
             }
@@ -506,7 +506,7 @@ public:
             bool hasDateTimeFormatName = false;
             bool hasTimestampFormat = false;
             bool hasTimestampFormatName = false;
-            auto validator = [&](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
+            auto validator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
                 if (name != "partitionedby"sv && name != "directories"sv && setting.ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
                         TStringBuilder() << "Expected single value setting for " << name << ", but got " << setting.ChildrenSize() - 1));

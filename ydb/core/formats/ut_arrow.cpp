@@ -113,7 +113,7 @@ struct TDataRow {
             //arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
         };
 
-        return std::make_shared<arrow::Schema>(fields);
+        return std::make_shared<arrow::Schema>(std::move(fields));
     }
 
     static TVector<std::pair<TString, TTypeInfo>> MakeYdbSchema() {

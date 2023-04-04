@@ -32,15 +32,6 @@ public:
         : TActionActor(sourceSqsRequest, isBatch ? EAction::SendMessageBatch : EAction::SendMessage, std::move(cb))
         , IsBatch_(isBatch)
     {
-        if (IsBatch_) {
-            CopyAccountName(BatchRequest());
-            Response_.MutableSendMessageBatch()->SetRequestId(RequestId_);
-            CopySecurityToken(BatchRequest());
-        } else {
-            CopyAccountName(Request());
-            Response_.MutableSendMessage()->SetRequestId(RequestId_);
-            CopySecurityToken(Request());
-        }
     }
 
 private:

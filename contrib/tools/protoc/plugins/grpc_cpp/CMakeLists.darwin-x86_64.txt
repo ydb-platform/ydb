@@ -24,8 +24,7 @@ target_link_libraries(grpc_cpp PUBLIC
   src-compiler-grpc_plugin_support
 )
 target_link_options(grpc_cpp PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
 )

@@ -137,6 +137,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
             default:
                 Y_FAIL("Unknown scheme");
             }
+
+            if (const auto region = importInfo->Settings.region()) {
+                restoreSettings.SetRegion(region);
+            }
         }
         break;
     }

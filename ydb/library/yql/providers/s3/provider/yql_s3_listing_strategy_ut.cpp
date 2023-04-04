@@ -6,7 +6,7 @@ namespace NYql {
 
 class TMockS3Lister : public NS3Lister::IS3Lister {
 public:
-    TMockS3Lister(std::vector<NS3Lister::TListResult> batches)
+    explicit TMockS3Lister(std::vector<NS3Lister::TListResult> batches)
         : Batches(std::move(batches)) { }
 
     TFuture<NS3Lister::TListResult> Next() override {
@@ -29,7 +29,7 @@ private:
 
 class TMockS3ExceptionLister : public NS3Lister::IS3Lister {
 public:
-    TMockS3ExceptionLister(TString exceptionMessage)
+    explicit TMockS3ExceptionLister(TString exceptionMessage)
         : ExceptionMessage(std::move(exceptionMessage)) { }
 
     TFuture<NS3Lister::TListResult> Next() override {
@@ -97,9 +97,10 @@ void UnitAssertListResultEquals(
 Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
     auto strategy = TCollectingS3ListingStrategy{
         10,
-        [](const NS3Lister::TListingRequest& listingRequest, ES3ListingOptions options) {
+        [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
-            UNIT_ASSERT_VALUES_EQUAL(options, ES3ListingOptions::NoOptions);
+            UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
+            UNIT_ASSERT_VALUES_EQUAL(options.IsConcurrentListing, false);
             return MakeFuture(std::static_pointer_cast<NS3Lister::IS3Lister>(
                 std::make_shared<TMockS3Lister>(std::vector<NS3Lister::TListResult>{
                     NS3Lister::TListEntries{
@@ -118,7 +119,7 @@ Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
         "TTest"};
 
     auto actualResultFuture = strategy.List(
-        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, ES3ListingOptions::NoOptions);
+        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{});
     auto expectedResult = NS3Lister::TListResult{NS3Lister::TListEntries{
         .Objects = std::vector<NS3Lister::TObjectListEntry>{
             NS3Lister::TObjectListEntry{
@@ -136,9 +137,10 @@ Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
 Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
     auto strategy = TCollectingS3ListingStrategy{
         1,
-        [](const NS3Lister::TListingRequest& listingRequest, ES3ListingOptions options) {
+        [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
-            UNIT_ASSERT_VALUES_EQUAL(options, ES3ListingOptions::NoOptions);
+            UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
+            UNIT_ASSERT_VALUES_EQUAL(options.IsConcurrentListing, false);
             return MakeFuture(std::static_pointer_cast<NS3Lister::IS3Lister>(
                 std::make_shared<TMockS3Lister>(std::vector<NS3Lister::TListResult>{
                     NS3Lister::TListEntries{
@@ -157,8 +159,7 @@ Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
         "TTest"};
 
     auto actualResultFuture = strategy.List(
-        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"},
-        ES3ListingOptions::NoOptions);
+        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{});
     auto expectedResult = NS3Lister::TListResult{TIssues{MakeLimitExceededIssue()}};
     const auto& actualResult = actualResultFuture.GetValue();
     UnitAssertListResultEquals(expectedResult, actualResult);
@@ -167,10 +168,10 @@ Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
 Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
     auto strategy = TCollectingS3ListingStrategy{
         1,
-        [](const NS3Lister::TListingRequest& listingRequest,
-           ES3ListingOptions options) {
+        [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
-            UNIT_ASSERT_VALUES_EQUAL(options, ES3ListingOptions::NoOptions);
+            UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
+            UNIT_ASSERT_VALUES_EQUAL(options.IsConcurrentListing, false);
             return MakeFuture(std::static_pointer_cast<NS3Lister::IS3Lister>(
                 std::make_shared<TMockS3Lister>(std::vector<NS3Lister::TListResult>{
                     NS3Lister::TListEntries{
@@ -184,8 +185,7 @@ Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
         "TTest"};
 
     auto actualResultFuture = strategy.List(
-        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"},
-        ES3ListingOptions::NoOptions);
+        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{});
     auto expectedResult = NS3Lister::TListResult{TIssues{TIssue("TEST_ISSUE")}};
     const auto& actualResult = actualResultFuture.GetValue();
     UnitAssertListResultEquals(expectedResult, actualResult);
@@ -194,17 +194,17 @@ Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
 Y_UNIT_TEST(IfExceptionIsReturnedFromIteratorThanItShouldCovertItToIssue) {
     auto strategy = TCollectingS3ListingStrategy{
         10,
-        [](const NS3Lister::TListingRequest& listingRequest, ES3ListingOptions options) {
+        [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
-            UNIT_ASSERT_VALUES_EQUAL(options, ES3ListingOptions::NoOptions);
+            UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
+            UNIT_ASSERT_VALUES_EQUAL(options.IsConcurrentListing, false);
             return MakeFuture(std::static_pointer_cast<NS3Lister::IS3Lister>(
                 std::make_shared<TMockS3ExceptionLister>("EXCEPTION MESSAGE")));
         },
         "TTest"};
 
     auto actualResultFuture = strategy.List(
-        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"},
-        ES3ListingOptions::NoOptions);
+        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{});
     UNIT_ASSERT(actualResultFuture.HasValue());
     auto expectedResult = NS3Lister::TListResult{TIssues{TIssue("EXCEPTION MESSAGE")}};
     const auto& actualResult = actualResultFuture.GetValue();

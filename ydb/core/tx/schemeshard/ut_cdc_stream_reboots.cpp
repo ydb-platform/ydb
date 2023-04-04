@@ -343,4 +343,49 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
+    Y_UNIT_TEST(RacySplitAndDropTable) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                      Name: "Stream"
+                      Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
+            }
+
+            TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary {
+                    KeyPrefix {
+                        Tuple { Optional { Uint64: 2 } }
+                    }
+                }
+            )", TTestTxConfig::FakeHiveTablets));
+            TestDropTable(runtime, ++t.TxId, "/MyRoot", "Table");
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                    NLs::PathNotExist,
+                });
+            }
+        });
+    }
+
 } // TCdcStreamWithRebootsTests

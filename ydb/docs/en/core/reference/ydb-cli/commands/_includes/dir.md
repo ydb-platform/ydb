@@ -1,6 +1,6 @@
 # Directories
 
-The {{ ydb-short-name }} database maintains an internal hierarchical structure of [directories](../../../../concepts/datamodel/dir.md) that can host database objects.
+The {{ ydb-short-name }} database supports an internal [directory structure](../../../../concepts/datamodel/dir.md) that can host database objects.
 
 {{ ydb-short-name }} CLI supports operations to change the directory structure and to access schema objects by their directory name.
 
@@ -20,46 +20,96 @@ If the destination directory had already existed at the path, then the command e
 
 ```text
 Status: SUCCESS
-Issues: 
-<main>: Error: dst path fail checks, path: /<database>/<path>: path exist, request accepts it, 
+Issues:
+<main>: Error: dst path fail checks, path: /<database>/<path>: path exist, request accepts it,
 pathId: [OwnerId: <some>, LocalPathId: <some>], path type: EPathTypeDir, path state: EPathStateNoChanges
 ```
 
-The full path syntax starting with a `/` character is also supported. The full path must begin with the [database location](../../../../concepts/connect.md#database) specified in the connection parameters or with which operations are allowed via the established connection to the cluster.
+It also supports the syntax of a full path beginning with `/`. The full path must begin with the [path to the database](../../../../concepts/connect.md#database) specified in the connection parameters or allowed by the current connection to the cluster.
 
 Examples:
 
 - Creating a directory at the database root
 
-  ```bash
-  {{ ydb-cli }} --profile db1 scheme mkdir dir1
-  ```
+   ```bash
+   {{ ydb-cli }} --profile db1 scheme mkdir dir1
+   ```
 
 - Creating directories at the specified path from the database root
 
-  ```bash
-  {{ ydb-cli }} --profile db1 scheme mkdir dir1/dir2/dir3
-  ```
+   ```bash
+   {{ ydb-cli }} --profile db1 scheme mkdir dir1/dir2/dir3
+   ```
 
 ## Deleting a directory {#rmdir}
 
 The `scheme rmdir` command deletes a directory:
 
 ```bash
-{{ ydb-cli }} [connection options] scheme rmdir <path>
+{{ ydb-cli }} [global options...] scheme rmdir [options...] <path>
 ```
 
-{% include [conn_options_ref.md](conn_options_ref.md) %}
+* `global options`: [Global parameters](../../commands/global-options.md).
+* `options`: [Parameters of the subcommand](#rmdir-options).
+* `path`: Path to the deleted directory.
 
-In the `path` parameter, specify the relative path to the directory to be deleted. This directory must not contain objects (including tables and subdirectories), otherwise the command will fail with an error:
+Look up the description of the directory deletion command:
+
+```bash
+{{ ydb-cli }} scheme rmdir --help
+```
+
+### Parameters of the subcommand {#rmdir-options}
+
+| Name | Description |
+---|---
+| `-r`, `--recursive` | This option deletes the directory recursively, which all its child objects (subdirectories, tables, topics). If you use this option, the confirmation prompt is shown by default. |
+| `-f`, `--force` | Do not prompt for confirmation. |
+| `-i` | Prompt for deletion confirmation on each object. |
+| `-I` | Show a single confirmation prompt. |
+| `--timeout <value>` | Operation timeout, ms. |
+
+If you try to delete a non-empty directory without the `-r` or `--recursive` option, the command fails with an error.
 
 ```text
 Status: SCHEME_ERROR
-Issues: 
-<main>: Error: path table fail checks, path: /<database>/<path>: path has children, request 
-doesn't accept it, pathId: [OwnerId: <some>, LocalPathId: <some>], path type: 
+Issues:
+<main>: Error: path table fail checks, path: /<database>/<path>: path has children, request
+doesn't accept it, pathId: [OwnerId: <some>, LocalPathId: <some>], path type:
 EPathTypeDir, path state: EPathStateNoChanges, alive children: <count>
 ```
+
+### Examples {#rmdir-examples}
+
+- Deleting an empty directory:
+
+   ```bash
+   {{ ydb-cli }} scheme rmdir dir1
+   ```
+
+- Deleting an empty directory with a confirmation prompt:
+
+   ```bash
+   {{ ydb-cli }} scheme rmdir -I dir1
+   ```
+
+- Recursively deleting a non-empty directory with a confirmation prompt:
+
+   ```bash
+   {{ ydb-cli }} scheme rmdir -r dir1
+   ```
+
+- Recursively deleting a non-empty directory without a confirmation prompt:
+
+   ```bash
+   {{ ydb-cli }} scheme rmdir -rf dir1
+   ```
+
+- Recursively deleting a non-empty directory, showing a confirmation prompt on each object:
+
+   ```bash
+   {{ ydb-cli }} scheme rmdir -ri dir1
+   ```
 
 ## Using directories in other CLI commands {#use}
 
@@ -77,9 +127,8 @@ The [`scheme ls`](../scheme-ls.md) command supports passing the path to the dire
 
 ## Using directories in YQL {#yql}
 
-Names of objects issued in [YQL](../../../../yql/reference/index.md) queries may contain a path to the object directory. This path will be concatenated with the path prefix from the [`TablePathPrefix` pragma](../../../../yql/reference/syntax/pragma.md#table-path-prefix). If the pragma is omitted, the object name is resolved relative to the database root.
+Names of objects used in [YQL queries](../../../../yql/reference/index.md) may contain paths to directories hosting such objects. This path will be concatenated with the path prefix from the [`TablePathPrefix` pragma](../../../../yql/reference/syntax/pragma.md#table-path-prefix). If the pragma is omitted, the object name is resolved relative to the database root.
 
 ## Implicit creation of directories during import {#import}
 
 The data import command creates a directory tree mirroring the original imported catalog.
-

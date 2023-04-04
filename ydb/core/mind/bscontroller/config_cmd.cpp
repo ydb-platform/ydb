@@ -286,6 +286,7 @@ namespace NKikimr::NBsController {
 
             void ExecuteStep(TConfigState& state, const NKikimrBlobStorage::TConfigRequest::TCommand& cmd,
                     NKikimrBlobStorage::TConfigResponse::TStatus& status) {
+                state.SanitizingRequests.clear();
                 state.ExplicitReconfigureMap.clear();
                 state.SuppressDonorMode.clear();
                 switch (cmd.GetCommandCase()) {

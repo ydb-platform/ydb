@@ -177,22 +177,30 @@ public:
             return;
         }
 
+        bool notChanged = true;
+
         if (ServeYaml) {
             if (!(rec.HasYamlConfigNotChanged() && rec.GetYamlConfigNotChanged())) {
                 if (rec.HasYamlConfig()) {
                     YamlConfig = rec.GetYamlConfig();
                     YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
                 }
+                notChanged = false;
+            }
+
+            if (rec.VolatileConfigsSize() != VolatileYamlConfigs.size()) {
+                notChanged = false;
             }
 
             TMap<ui64, TString> newVolatileYamlConfigs;
             TMap<ui64, ui64> newVolatileYamlConfigHashes;
-            for (auto &volatileConfig : *rec.MutableVolatileConfigs()) {
+            for (auto &volatileConfig : rec.GetVolatileConfigs()) {
                 if (volatileConfig.HasNotChanged() && volatileConfig.GetNotChanged()) {
                     Y_ASSERT(VolatileYamlConfigs.contains(volatileConfig.GetId()));
                     newVolatileYamlConfigs[volatileConfig.GetId()] = std::move(VolatileYamlConfigs[volatileConfig.GetId()]);
                     newVolatileYamlConfigHashes[volatileConfig.GetId()] = VolatileYamlConfigHashes[volatileConfig.GetId()];
                 } else {
+                    notChanged = false;
                     newVolatileYamlConfigs[volatileConfig.GetId()] = volatileConfig.GetConfig();
                     newVolatileYamlConfigHashes[volatileConfig.GetId()] = THash<TString>()(volatileConfig.GetConfig());
                 }
@@ -222,8 +230,14 @@ public:
         else
             CurrentConfig.MutableVersion()->Swap(&newVersion);
 
-        Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(Generation, CurrentConfig, changes, YamlConfig, VolatileYamlConfigs),
-             IEventHandle::FlagTrackDelivery, Cookie);
+        notChanged &= changes.empty();
+
+        if (!notChanged || !FirstUpdateSent) {
+            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(Generation, CurrentConfig, changes, YamlConfig, VolatileYamlConfigs),
+                IEventHandle::FlagTrackDelivery, Cookie);
+
+            FirstUpdateSent = true;
+        }
 
         LastOrder++;
     }
@@ -335,6 +349,7 @@ private:
     const TActorId OwnerId;
     ui64 Cookie;
     const TVector<ui32> Kinds;
+    bool FirstUpdateSent = false;
 
     ui64 Generation;
     ui64 NextGeneration;

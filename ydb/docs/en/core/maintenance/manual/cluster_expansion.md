@@ -1,106 +1,106 @@
 # Cluster extension
 
-You can extend a {{ ydb-short-name }} cluster by adding new nodes to its configuration. The instructions to extend the {{ ydb-short-name }} cluster installed manually on virtual machines or bare metal servers are provided below. {{ ydb-short-name }} cluster extension in a Kubernetes environment is performed by adjusting the {{ ydb-short-name }} Kubernetes operator configuration.
+You can expand a {{ ydb-short-name }} cluster by adding new nodes to its configuration. Below is the list of actions for expanding a {{ ydb-short-name }} cluster installed manually on VM instances or physical servers. In the Kubernetes environment, clusters are expanded by adjusting the {{ ydb-short-name }} controller settings for Kubernetes.
 
-{{ ydb-short-name }} cluster extension is performed without suspending user access to the hosted databases. The expansion procedure includes the rolling restart of the cluster components, which is needed to apply the configuration changes. Some of the transactions running on the cluster at the moment may fail, and need to be repeated. Failing transactions are repeated automatically by the built-in error control and retry logic of  {{ ydb-short-name }} SDK.
+When expanding your {{ ydb-short-name }} cluster, you do not have to pause user access to databases. When the cluster is expanded, its components are restarted to apply the updated configurations. This means that any transactions that were in progress at the time of expansion may need to be executed again on the cluster. The transactions are rerun automatically because the applications leverage the {{ ydb-short-name }} SDK features for error control and transaction rerun.
 
 ## Preparing new servers
 
-When new servers are used to host the static and dynamic nodes being added, each new {{ ydb-short-name }} server needs to be prepared in accordance to the procedures defined in the [cluster deployment instruction](../../deploy/manual/deploy-ydb-on-premises.md). In particular, the following actions need to be performed:
+If you deploy new static or dynamic nodes of the cluster on new servers added to the expanded {{ ydb-short-name }} cluster, on each new server, you need to install the {{ ydb-short-name }} software according to the procedures described in the [cluster deployment instructions](../../deploy/manual/deploy-ydb-on-premises.md). Among other things, you need to:
 
-1. create the operating system user account to run {{ ydb-short-name }} processes;
-1. install the {{ ydb-short-name }} software;
-1. prepare and install the TLS key and certificate for the server;
-1. copy the current {{ ydb-short-name }} cluster configuration file to the server.
+1. Create an account and a group in the operating system to enable {{ ydb-short-name }} operation.
+1. Install the {{ ydb-short-name }} software.
+1. Generate the appropriate TLS key and certificate for the software and add them to the server.
+1. Copy the up-to-date configuration file for the {{ ydb-short-name }} cluster to the server.
 
-New servers' TLS certificates must be prepared according to the [defined requirements](../../deploy/manual/deploy-ydb-on-premises.md#tls-certificates), and must be signed by the Certification Authority (CA) trusted by the existing hosts of the {{ ydb-short-name }} cluster being expanded.
+The TLS certificates used on the new servers must meet the [requirements for filling out the fields](../../deploy/manual/deploy-ydb-on-premises.md#tls-certificates) and be signed by the same trusted certification authority that signed the certificates for the existing servers of the expanded {{ ydb-short-name }} cluster.
 
 ## Adding dynamic nodes
 
-Adding dynamic nodes to the cluster allows to increase the amount of compute resources (processor cores and RAM) used to execute user queries by {{ ydb-short-name }} cluster.
+By adding dynamic nodes, you can expand the available computing resources (CPU cores and RAM) needed for your {{ ydb-short-name }} cluster to process user queries.
 
-To add the dynamic node to the cluster, it is sufficient to start the operating system process serving that node, passing the path to the cluster configuration file, databasae name and the addresses of any three {{ ydb-short-name }} static nodes as command line parameters, as shown in the [cluster deployment instruction](../../deploy/manual/deploy-ydb-on-premises.md#start-dynnode).
+To add a dynamic node to the cluster, run the process that serves this node, passing to it, in the command line parameters, the name of the served database and the addresses of any three static nodes of the {{ ydb-short-name }} cluster, as shown in the [cluster deployment instructions](../../deploy/manual/deploy-ydb-on-premises.md#start-dynnode).
 
-After the successful start of the dynamic node, the information about it will be available on the [cluster monitoring page in the embedded UI](../embedded_monitoring/ydb_monitoring.md).
+Once you have added the dynamic node to the cluster, the information about it becomes available on the [cluster monitoring page in the built-in UI](../embedded_monitoring/ydb_monitoring.md).
 
-To remove the dynamic node from the cluster, it is enough to stop its process.
+To remove a dynamic node from the cluster, stop the process on the dynamic node.
 
 ## Adding static nodes
 
-Adding static nodes to the cluster allow to increase the input-output throughput and data storage capacity in the {{ ydb-short-name }} cluster.
+By adding static nodes, you can increase the throughput of your I/O operations and increase the available storage capacity in your {{ ydb-short-name }} cluster.
 
-To add the additional static nodes, perform the following sequence of steps:
+To add static nodes to the cluster, perform the following steps:
 
-1. Format the disks intended for {{ ydb-short-name }} data storage, using the procedure described in the [cluster deployment instruction](../../deploy/manual/deploy-ydb-on-premises.md#prepare-disks).
+1. Format the disks that will be used to store the {{ ydb-short-name }} data by following the [procedure for the cluster deployment step](../../deploy/manual/deploy-ydb-on-premises.md#prepare-disks)
 
-1. Update the [cluster configuration file](../../deploy/manual/deploy-ydb-on-premises.md#config):
-    * include the definition of the hosts being added (into the `hosts` section) and their disk layouts (into the `host_configs` section);
-    * specify the configuration version number as the `storage_config_generation: K` top-level parameter, where `K` is a change number (`K=0` or not specified at the initial installation, `K=1` at the first cluster expansion, `K=2` at the second expansion, and so on).
+1. Edit the [cluster's configuration file](../../deploy/manual/deploy-ydb-on-premises.md#config):
+   * Add, to the configuration, the description of the added nodes (in the `hosts` section) and disks used by them (in the `host_configs` section).
+   * Use the `storage_config_generation: K` parameter to set the ID of the configuration update at the top level, where `K` is the integer update ID (for the initial config, `K=0` or omitted; for the first expansion, `K=1`; for the second expansion, `K=2`; and so on).
 
-1. Distribute the updated cluster configuration file on all existing and new cluster nodes, replacing the older version of that file.
+1. Copy the updated cluster's configuration file to all the existing and added servers in the cluster, overwriting the old version of the configuration file.
 
-1. Perform the rolling restart of all existing static nodes, waiting for each node being restarted to come up and recover before restarting the next one.
+1. Restart all the existing static nodes in the cluster one-by-one, waiting for each restarted node to initialize and become fully operational.
 
-1. Perform the rolling restart of all existing dynamic nodes.
+1. Restart all the existing static nodes in the cluster one-by-one.
 
-1. Start the new static nodes on their corresponding servers.
+1. Start the processes that serve the new static nodes in the cluster, on the appropriate servers.
 
-1. Ensure that the new static nodes are shown on the [cluster monitoring page in the embedded UI](../embedded_monitoring/ydb_monitoring.md).
+1. Make sure that all the new static nodes now show up on the [cluster monitoring page in the built-in UI](../embedded_monitoring/ydb_monitoring.md).
 
-1. Obtain the authentication token to run the administrative commands using the {{ ydb-short-name }} CLI, for example:
+1. Issue an authentication token using the {{ ydb-short-name }} CLI, for example:
 
-    ```bash
-    ydb -e grpcs://<node1.ydb.tech>:2135 -d /Root --ca-file ca.crt \
-        --user root auth get-token --force >ydbd-token-file
-    ```
+   ```bash
+   ydb -e grpcs://<node1.ydb.tech>:2135 -d /Root --ca-file ca.crt \
+       --user root auth get-token --force >token-file
+   ```
 
-    The following parameters are used in the command above:
-    * `node1.ydb.tech` - FQDN of any server hosting the existing static nodes;
-    * `2135` - grpcs port number for the static nodes in the cluster;
-    * `ca.crt` - path to CA certificate file being used;
-    * `root` - administrative user login;
-    * `ydbd-token-file` - file name to put the authentication token.
+   The command example above uses the following parameters:
+   * `node1.ydb.tech`: The FQDN of any server hosting the cluster's static nodes.
+   * `2135`: Port number of the gRPCs service for the static nodes.
+   * `ca.crt`: Name of the file with the certificate authority certificate.
+   * `root`: The name of a user who has administrative rights.
+   * `token-file`: name of the file where the authentication token is saved for later use.
 
-    {{ ydb-short-name }} CLI will interactively ask for password to authenticate the user account specified.
+   When you run the above command, {{ ydb-short-name }} CLI will request the password to authenticate the given user.
 
-1. Allow the {{ ydb-short-name }} cluster to use the disks on the new static nodes for data storage, by running the following command on any cluster node:
+1. Allow the {{ ydb-short-name }} cluster to use disks to store data on the new static nodes. For this, run the following command on any cluster node:
 
-    ```bash
-    export LD_LIBRARY_PATH=/opt/ydb/lib
-    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
-        admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
-    echo $?
-    ```
+   ```bash
+   export LD_LIBRARY_PATH=/opt/ydb/lib
+   /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+       admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
+   echo $?
+   ```
 
-    The following parameters are used in the command above:
-    * `ydbd-token-file` - path to file containing the authentication token;
-    * `2135` - grpcs port number for the static nodes in the cluster;
-    * `ca.crt` - path to CA certificate file being used.
+   The command example above uses the following parameters:
+   * `ydbd-token-file`: File name of the previously issued authentication token.
+   * `2135`: Port number of the gRPCs service for the static nodes.
+   * `ca.crt`: Name of the file with the certificate authority certificate.
 
-    If the command listed above returns the error relating to the configuration version number mismatch, that means that the field `storage_config_generation` was not correctly specified in the cluster configuration file, and needs to be updated. Error message contains the expected configuration version number, which can be used to fix the cluster configuration file. The example error message looks like the following:
+   If the above command results in the error of the configuration ID mismatch, it means that you made an error editing the `storage_config_generation` field in the cluster configuration file. In the error text, you can find the expected configuration ID that can be used to edit the cluster configuration file. Sample error message for the configuration ID mismatch:
 
-    ```protobuf
-    ErrorDescription: "ItemConfigGeneration mismatch ItemConfigGenerationProvided# 0 ItemConfigGenerationExpected# 1"
-    ```
+   ```protobuf
+   ErrorDescription: "ItemConfigGeneration mismatch ItemConfigGenerationProvided# 0 ItemConfigGenerationExpected# 1"
+   ```
 
-1.  Add the additional storage groups to one or more database(s) within the cluster, by running the following command:
+2. Add additional storage groups to one or more databases by running the following commands on any cluster node:
 
-    ```bash
-    export LD_LIBRARY_PATH=/opt/ydb/lib
-    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
-        admin database /Root/testdb pools add ssd:1
-    echo $?
-    ```
+   ```bash
+   export LD_LIBRARY_PATH=/opt/ydb/lib
+   /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+       admin database /Root/testdb pools add ssd:1
+   echo $?
+   ```
 
-    The following parameters are used in the command above:
-    * `ydbd-token-file` - path to file containing the authentication token;
-    * `2135` - grpcs port number for the static nodes in the cluster;
-    * `ca.crt` - path to CA certificate file being used;
-    * `/Root/testdb` - full path to the database;
-    * `ssd:1` - name of the storage pool and the number of storage groups to be added.
+   The command example above uses the following parameters:
+   * `ydbd-token-file`: File name of the previously issued authentication token.
+   * `2135`: Port number of the gRPCs service for the static nodes.
+   * `ca.crt`: Name of the file with the certificate authority certificate.
+   * `/Root/testdb` : Full path to the database.
+   * `ssd:1`: Name of the storage pool and the number of storage groups allocated.
 
-1.  Ensure that the newly added storage groups are visible on the [cluster monitoring page in the embedded UI](../embedded_monitoring/ydb_monitoring.md).
+3. Make sure that all the new storage groups now show up on the [cluster monitoring page in the built-in UI](../embedded_monitoring/ydb_monitoring.md).
 
-The removal of static nodes from the {{ ydb-short-name }} cluster is performed using the [documented decomissioning procedure](../../administration/decommissioning.md).
+To remove a static node from the {{ ydb-short-name }} cluster, use the [documented decommissioning procedure](../../administration/decommissioning.md).
 
-In the event of fatal damage to the server supporting the static node, it has to be replaced with another server, having the same or larger storage capacity.
+If the server running the static cluster node is damaged or becomes irreparable, deploy the unavailable static node on a new server with the same or higher number of disks.

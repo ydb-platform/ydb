@@ -480,7 +480,7 @@ namespace {
     }
 
     IGraphTransformer::TStatus ValidateCalcOverWindowArgs(TVector<const TItemExprType*>& outputStructType,
-        const TStructExprType& inputStructType, const TExprNode& partitionBy, const TExprNode& sortSpec, const TExprNode& winList,
+        const TStructExprType& inputStructType, TExprNode& partitionBy, const TExprNode& sortSpec, TExprNode& winList,
         const TExprNode::TPtr& sessionSpec, const TExprNode::TPtr& sessionColumns, TExprContext& ctx)
     {
         YQL_ENSURE(sessionSpec ? bool(sessionColumns) : !sessionColumns);

@@ -3,7 +3,7 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/initializer/accessor_init.h>
-#include <ydb/services/metadata/request/request_actor.h>
+#include <ydb/services/metadata/request/request_actor_cb.h>
 #include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr::NMetadata::NProvider {
@@ -21,17 +21,6 @@ public:
 
 class TEvRefresh: public NActors::TEventLocal<TEvRefresh, EEvents::EvRefresh> {
 public:
-};
-
-class TEvYQLResponse: public NActors::TEventLocal<TEvYQLResponse, EEvents::EvYQLResponse> {
-private:
-    YDB_READONLY_DEF(NRequest::TDialogYQLRequest::TResponse, Response);
-public:
-    TEvYQLResponse(const NRequest::TDialogYQLRequest::TResponse& r)
-        : Response(r)
-    {
-
-    }
 };
 
 class TEvEnrichSnapshotResult: public NActors::TEventLocal<TEvEnrichSnapshotResult, EEvents::EvEnrichSnapshotResult> {
@@ -55,13 +44,15 @@ public:
 };
 
 class TRefreshInternalController: public NFetcher::ISnapshotAcceptorController,
-    public NRequest::IQueryOutput,
+    public NRequest::TNaiveExternalController<NRequest::TDialogYQLRequest>,
     public TTableExistsActor::TEvController {
 private:
+    using TBaseRequestController = NRequest::TNaiveExternalController<NRequest::TDialogYQLRequest>;
     const TActorIdentity ActorId;
 public:
     TRefreshInternalController(const TActorIdentity& actorId)
-        : TTableExistsActor::TEvController(actorId)
+        : TBaseRequestController(actorId)
+        , TTableExistsActor::TEvController(actorId)
         , ActorId(actorId) {
 
     }
@@ -72,10 +63,6 @@ public:
 
     virtual void OnSnapshotEnriched(NFetcher::ISnapshot::TPtr enrichedSnapshot) override {
         ActorId.Send(ActorId, new TEvEnrichSnapshotResult(enrichedSnapshot));
-    }
-
-    virtual void OnYQLQueryReply(const NRequest::TDialogYQLRequest::TResponse& response) override {
-        ActorId.Send(ActorId, new TEvYQLResponse(response));
     }
 };
 
@@ -96,14 +83,14 @@ protected:
     }
     virtual void OnNewEnrichedSnapshot(NFetcher::ISnapshot::TPtr snapshot) = 0;
     virtual void OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& qResult, NFetcher::ISnapshot::TPtr snapshot);
-    virtual void OnIncorrectSnapshotFromYQL(const TString& errorMessage);
-    virtual void OnSnapshotEnrichingError(const TString& errorMessage);
+    virtual void OnConstructSnapshotError(const TString& errorMessage);
     void StartSnapshotsFetching();
 
     void Handle(TEvRecheckExistence::TPtr& ev);
     void Handle(TEvEnrichSnapshotResult::TPtr& ev);
     void Handle(TEvEnrichSnapshotProblem::TPtr& ev);
-    void Handle(TEvYQLResponse::TPtr& ev);
+    void Handle(NRequest::TEvRequestResult<NRequest::TDialogYQLRequest>::TPtr& ev);
+    void Handle(NRequest::TEvRequestFailed::TPtr& ev);
     void Handle(TTableExistsActor::TEvController::TEvError::TPtr& ev);
     void Handle(TTableExistsActor::TEvController::TEvResult::TPtr& ev);
 public:
@@ -111,7 +98,8 @@ public:
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvYQLResponse, Handle);
+            hFunc(NRequest::TEvRequestResult<NRequest::TDialogYQLRequest>, Handle);
+            hFunc(NRequest::TEvRequestFailed, Handle);
             hFunc(TEvEnrichSnapshotResult, Handle);
             hFunc(TEvEnrichSnapshotProblem, Handle);
             hFunc(TTableExistsActor::TEvController::TEvError, Handle);

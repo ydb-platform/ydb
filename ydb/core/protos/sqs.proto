@@ -1,7 +1,9 @@
 package NKikimr.NSQS;
 
 message TAuthentification {
-    optional string UserName = 1;
+    optional string UserName = 1; // Account or CloudId
+    optional string FolderId = 2; // Cloud only
+    optional string UserSID = 3;
 }
 
 message TCredentials {

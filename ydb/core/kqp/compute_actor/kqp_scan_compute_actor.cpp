@@ -169,6 +169,14 @@ public:
         settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
         settings.AllowGeneratorsInUnboxedValues = false;
 
+        for (const auto& [paramsName, paramsValue] : GetTask().GetTaskParams()) {
+            settings.TaskParams[paramsName] = paramsValue;
+        }
+
+        for (const auto& [paramsName, paramsValue] : GetTask().GetSecureParams()) {
+            settings.SecureParams[paramsName] = paramsValue;
+        }
+
         NDq::TLogFunc logger;
         if (IsDebugLogEnabled(actorSystem, NKikimrServices::KQP_TASKS_RUNNER)) {
             logger = [actorSystem, txId = GetTxId(), taskId = GetTask().GetId()](const TString& message) {

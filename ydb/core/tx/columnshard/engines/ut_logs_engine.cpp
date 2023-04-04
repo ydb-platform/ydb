@@ -361,7 +361,7 @@ std::shared_ptr<TPredicate> MakePredicate(int64_t ts, NArrow::EOperation op) {
     auto res = arrow::MakeArrayFromScalar(arrow::TimestampScalar(ts, type), 1);
 
     std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("timestamp", type) };
-    p->Batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), 1, {*res});
+    p->Batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), 1, {*res});
     return p;
 }
 
@@ -373,11 +373,11 @@ std::shared_ptr<TPredicate> MakeStrPredicate(const std::string& key, NArrow::EOp
     auto res = arrow::MakeArrayFromScalar(arrow::StringScalar(key), 1);
 
     std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("resource_type", type) };
-    p->Batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), 1, {*res});
+    p->Batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), 1, {*res});
     return p;
 }
 
-}
+} // namespace
 
 
 Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {

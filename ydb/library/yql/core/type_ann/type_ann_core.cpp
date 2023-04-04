@@ -11180,7 +11180,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        const auto& tupleOfAtomsNode = input->Tail();
+        auto& tupleOfAtomsNode = input->Tail();
         if (!EnsureTupleMinSize(tupleOfAtomsNode, 1, ctx.Expr) || !EnsureTupleOfAtoms(tupleOfAtomsNode, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }

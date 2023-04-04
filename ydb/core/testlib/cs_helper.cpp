@@ -110,7 +110,7 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() {
     if (GetWithJsonDocument()) {
         fields.emplace_back(arrow::field("json_payload", arrow::utf8()));
     }
-    return std::make_shared<arrow::Schema>(fields);
+    return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
 std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {

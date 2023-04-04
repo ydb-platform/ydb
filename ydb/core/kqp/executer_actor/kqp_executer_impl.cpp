@@ -100,7 +100,7 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
         data.emplace_back(std::move(array));
     }
 
-    auto schema = std::make_shared<arrow::Schema>(columns);
+    auto schema = std::make_shared<arrow::Schema>(std::move(columns));
     auto recordBatch = arrow::RecordBatch::Make(schema, 1, data);
 
     return std::make_pair<TString, TString>(

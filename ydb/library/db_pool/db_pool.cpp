@@ -15,15 +15,40 @@ using namespace NActors;
 using namespace NYql;
 
 class TDbPoolActor : public NActors::TActor<TDbPoolActor> {
+
+    struct TCounters {
+        const ::NMonitoring::TDynamicCounterPtr Counters;
+        const NMonitoring::THistogramPtr QueueSize;
+        const ::NMonitoring::TDynamicCounters::TCounterPtr TotalInFlight;
+        const NMonitoring::THistogramPtr RequestsTime;
+        const ::NMonitoring::TDynamicCounterPtr StatusSubgroup;
+        TMap<TString, ::NMonitoring::TDynamicCounters::TCounterPtr> Status;
+
+        TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
+            : Counters(counters)
+            , QueueSize(counters->GetSubgroup("subcomponent", "DbPool")->GetHistogram("InFlight",  NMonitoring::ExponentialHistogram(10, 2, 10)))
+            , TotalInFlight(counters->GetSubgroup("subcomponent",  "DbPool")->GetCounter("TotalInflight"))
+            , RequestsTime(counters->GetSubgroup("subcomponent", "DbPool")->GetHistogram("RequestTimeMs", NMonitoring::ExponentialHistogram(6, 3, 100)))
+            , StatusSubgroup(counters->GetSubgroup("subcomponent", "DbPool")->GetSubgroup("component", "status"))
+        {}
+
+        ::NMonitoring::TDynamicCounters::TCounterPtr GetStatus(const NYdb::TStatus& status) {
+            const TString statusStr = ToString(status.GetStatus());
+            auto& counter = Status[statusStr];
+            if (counter) {
+                return counter;
+            }
+            return counter = StatusSubgroup->GetCounter(statusStr, true);
+        }
+    };
+
 public:
     TDbPoolActor(
         const NYdb::NTable::TTableClient& tableClient,
         const ::NMonitoring::TDynamicCounterPtr& counters)
         : TActor(&TThis::WorkingState)
         , TableClient(tableClient)
-        , QueueSize(counters->GetSubgroup("subcomponent", "DbPool")->GetHistogram("InFlight",  NMonitoring::ExponentialHistogram(10, 2, 10)))
-        , TotalInFlight(counters->GetSubgroup("subcomponent",  "DbPool")->GetCounter("TotalInflight"))
-        , RequestsTime(counters->GetSubgroup("subcomponent", "DbPool")->GetHistogram("RequestTimeMs", NMonitoring::ExponentialHistogram(6, 3, 100)))
+        , Counters(counters)
     {}
 
     static constexpr char ActorName[] = "YQ_DB_POOL";
@@ -53,11 +78,11 @@ public:
     }
 
     void ProcessQueue() {
-        QueueSize->Collect(Requests.size());
+        Counters.QueueSize->Collect(Requests.size());
         if (Requests.empty() || RequestInProgress) {
             return;
         }
-        TotalInFlight->Inc();
+        Counters.TotalInFlight->Inc();
 
         RequestInProgress = true;
         RequestInProgressTimestamp = TInstant::Now();
@@ -112,15 +137,16 @@ public:
 
     void PopFromQueueAndProcess() {
         RequestInProgress = false;
-        RequestsTime->Collect(TInstant::Now().MilliSeconds() - RequestInProgressTimestamp.MilliSeconds());
+        Counters.RequestsTime->Collect(TInstant::Now().MilliSeconds() - RequestInProgressTimestamp.MilliSeconds());
         Requests.pop_front();
-        TotalInFlight->Dec();
+        Counters.TotalInFlight->Dec();
         ProcessQueue();
     }
 
     void HandleResponse(TEvents::TEvDbResponse::TPtr& ev) {
         LOG_T("TDbPoolActor: TEvDbResponse " << SelfId() << " Queue size = " << Requests.size());
         const auto& request = Requests.front();
+        Counters.GetStatus(ev.Get()->Get()->Status)->Inc();
         TActivationContext::Send(ev->Forward(std::visit([](const auto& arg) { return arg.Sender; }, request)));
         PopFromQueueAndProcess();
     }
@@ -135,6 +161,7 @@ public:
     void HandleResponse(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         LOG_T("TDbPoolActor: TEvDbFunctionResponse " << SelfId() << " Queue size = " << Requests.size());
         const auto& request = Requests.front();
+        Counters.GetStatus(ev.Get()->Get()->Status)->Inc();
         TActivationContext::Send(ev->Forward(std::visit([](const auto& arg) { return arg.Sender; }, request)));
         PopFromQueueAndProcess();
     }
@@ -172,13 +199,12 @@ private:
     };
 
     NYdb::NTable::TTableClient TableClient;
+    TCounters Counters;
     TDeque<std::variant<TRequest, TFunctionRequest>> Requests;
     bool RequestInProgress = false;
     TInstant RequestInProgressTimestamp = TInstant::Now();
     std::shared_ptr<int> State = std::make_shared<int>();
-    const NMonitoring::THistogramPtr QueueSize;
-    const ::NMonitoring::TDynamicCounters::TCounterPtr TotalInFlight;
-    const NMonitoring::THistogramPtr RequestsTime;
+
 };
 
 TDbPool::TDbPool(

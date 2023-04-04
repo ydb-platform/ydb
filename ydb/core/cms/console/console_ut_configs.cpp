@@ -3584,6 +3584,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
 
+        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
+
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
 
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
@@ -3609,14 +3611,14 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         TActorId edgeId = runtime.Sender;
 
-        auto subscriber = NConsole::CreateConfigsSubscriber(edgeId, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), NKikimrConfig::TAppConfig());
-
-        runtime.Register(subscriber);
-
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
 
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeAddAction(ITEM_DOMAIN_LOG_1));
+
+        auto subscriber = NConsole::CreateConfigsSubscriber(edgeId, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), NKikimrConfig::TAppConfig());
+
+        runtime.Register(subscriber);
 
         NKikimrConfig::TAppConfig config;
         config.MutableLogConfig()->SetClusterName("cluster-1");
@@ -3641,6 +3643,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         auto subscriber = NConsole::CreateConfigsSubscriber(edgeId, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), NKikimrConfig::TAppConfig());
 
         runtime.Register(subscriber);
+
+        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         for (int i = 0; i < 100; i++) {
             ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName(TStringBuilder() << "cluster-" << i);
@@ -3678,6 +3682,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         auto subscriber = NConsole::CreateConfigsSubscriber(edgeId, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), NKikimrConfig::TAppConfig());
 
         runtime.Register(subscriber);
+
+        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         ui64 id = 0;
         for (int i = 0; i < 100; i++) {
@@ -3730,6 +3736,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options1);
 
+        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
+
         runtime.Send(new IEventHandle(clientId, edgeId, new TEvents::TEvPoisonPill()), 0, true);
 
         TDispatchOptions options2;
@@ -3743,19 +3751,19 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         TActorId edgeId = runtime.AllocateEdgeActor(1);
 
-        auto subscriber = NConsole::CreateConfigsSubscriber(edgeId, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), NKikimrConfig::TAppConfig());
-        runtime.Register(subscriber, 1);
-
-        TDispatchOptions options1;
-        options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
-        runtime.DispatchEvents(options1);
-
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
 
         auto ids = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1));
 
         AssignIds(ids, ITEM_DOMAIN_LOG_1);
+
+        auto subscriber = NConsole::CreateConfigsSubscriber(edgeId, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), NKikimrConfig::TAppConfig());
+        runtime.Register(subscriber, 1);
+
+        TDispatchOptions options1;
+        options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        runtime.DispatchEvents(options1);
 
         NKikimrConfig::TAppConfig config1;
         config1.MutableLogConfig()->SetClusterName("cluster-1");
@@ -3816,9 +3824,11 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
             false);
         runtime.Register(subscriber, 1);
 
-       TDispatchOptions options1;
+        TDispatchOptions options1;
         options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options1);
+
+        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
 
@@ -3863,6 +3873,11 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         TActorId edgeId = runtime.AllocateEdgeActor(1);
 
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_1));
+
         auto subscriber = NConsole::CreateConfigsSubscriber(
             edgeId,
             TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
@@ -3874,11 +3889,6 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         TDispatchOptions options1;
         options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options1);
-
-        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
-
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
-                       MakeAddAction(ITEM_DOMAIN_LOG_1));
 
         NKikimrConfig::TAppConfig config;
         config.MutableLogConfig()->SetClusterName("cluster-1");
@@ -3976,6 +3986,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.SetServeYaml(true);
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
+
+        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
         auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
@@ -4109,7 +4121,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
 
-        // Nothing changed so no notification
+        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         generation = 2;
 

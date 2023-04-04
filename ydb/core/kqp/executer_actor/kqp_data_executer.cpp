@@ -1334,7 +1334,6 @@ private:
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
             auto columns = BuildKqpColumns(op, table);
             switch (op.GetTypeCase()) {
-                case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
@@ -1436,6 +1435,11 @@ private:
                         }
                     }
                     break;
+                }
+
+                case NKqpProto::TKqpPhyTableOperation::kReadOlapRange: {
+                    YQL_ENSURE(false, "The previous check did not work! Data query read does not support column shard tables." << Endl
+                        << this->DebugString());
                 }
 
                 default: {
@@ -1672,6 +1676,18 @@ private:
                         LOG_E(*error);
                         ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, *error));
+                        return;
+                    }
+                }
+
+                for (auto& op : stage.GetTableOps()) {
+                    if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange
+                        && tx.Body->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA)
+                    {
+                        auto error = TStringBuilder() << "Data query read does not support column shard tables.";
+                        LOG_E(error);
+                        ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
+                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
                         return;
                     }
                 }

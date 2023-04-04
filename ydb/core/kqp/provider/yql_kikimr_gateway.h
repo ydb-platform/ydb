@@ -450,6 +450,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
         }
         return {nullptr, TIndexDescription::EIndexState::Invalid};
     }
+
+    bool IsOlap() const {
+        return Kind == EKikimrTableKind::Olap;
+    }
 };
 
 struct TCreateUserSettings {

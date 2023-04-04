@@ -816,8 +816,8 @@ private:
 
         for (const auto& operation : queryBlock.Operations()) {
             auto& tableData = SessionCtx->Tables().ExistingTable(operation.Cluster(), operation.Table());
-            if (!tableData.Metadata->SysView.empty()) {
-                // Always use ScanQuery for queries with system tables.
+            if (tableData.Metadata->IsOlap() || !tableData.Metadata->SysView.empty()) {
+                // Always use ScanQuery for queries with OLAP and system tables.
                 return true;
             }
         }

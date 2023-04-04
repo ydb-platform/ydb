@@ -42,6 +42,7 @@ void CreateBucketWithObject(const TString& bucket, const TString& object, const 
     {
         Aws::S3::Model::CreateBucketRequest req;
         req.SetBucket(bucket);
+        req.SetACL(Aws::S3::Model::BucketCannedACL::public_read_write);
         const Aws::S3::Model::CreateBucketOutcome result = s3Client.CreateBucket(req);
         UNIT_ASSERT_C(result.IsSuccess(), "Error creating bucket \"" << bucket << "\": " << result.GetError().GetExceptionName() << ": " << result.GetError().GetMessage());
     }
@@ -83,22 +84,22 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             Sleep(TDuration::MilliSeconds(50));
             TAsyncFetchScriptResultsResult future = db.FetchScriptResults(executeScrptsResult.Metadata().ExecutionId);
             results.ConstructInPlace(future.ExtractValueSync());
-            ////////////////////////////////////////////////////////////////////////// tmp return; // YQ-1636
-            if (results->GetStatus() == NYdb::EStatus::INTERNAL_ERROR) {
-                UNIT_ASSERT_STRING_CONTAINS(results->GetIssues().ToOneLineString(), "unsupported source type");
-                return;
-            }
-            ////////////////////////////////////////////////////////////////////////// tmp return; // YQ-1636
             if (!results->IsSuccess()) {
                 UNIT_ASSERT_C(results->GetStatus() == NYdb::EStatus::BAD_REQUEST, results->GetStatus() << ": " << results->GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(results->GetIssues().ToOneLineString(), "Results are not ready");
             }
         } while (!results->HasResultSet());
         TResultSetParser resultSet(results->ExtractResultSet());
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
         UNIT_ASSERT(resultSet.TryNextRow());
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "trololo");
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "2");
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "hello world");
     }
 }
 

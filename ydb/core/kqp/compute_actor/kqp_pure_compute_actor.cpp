@@ -80,6 +80,14 @@ public:
         settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
         settings.AllowGeneratorsInUnboxedValues = false;
 
+        for (const auto& [paramsName, paramsValue] : GetTask().GetTaskParams()) {
+            settings.TaskParams[paramsName] = paramsValue;
+        }
+
+        for (const auto& [paramsName, paramsValue] : GetTask().GetSecureParams()) {
+            settings.SecureParams[paramsName] = paramsValue;
+        }
+
         auto taskRunner = MakeDqTaskRunner(execCtx, settings, logger);
         SetTaskRunner(taskRunner);
 

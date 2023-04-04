@@ -30,6 +30,7 @@
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -674,6 +675,26 @@ protected:
         }
     }
 
+    void BuildReadTasksFromSource(TStageInfo& stageInfo) {
+        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+        YQL_ENSURE(stage.GetSources(0).HasExternalSource());
+        YQL_ENSURE(stage.InputsSize() == 0 && stage.SourcesSize() == 1, "multiple sources or sources mixed with connections");
+
+        const auto& stageSource = stage.GetSources(0);
+        const auto& externalSource = stageSource.GetExternalSource();
+        for (const TString& partitionParam : externalSource.GetPartitionedTaskParams()) {
+            auto& task = TasksGraph.AddTask(stageInfo);
+
+            auto& input = task.Inputs[stageSource.GetInputIndex()];
+            input.ConnectionInfo = NYql::NDq::TSourceInput{};
+            input.SourceSettings = externalSource.GetSettings();
+            input.SourceType = externalSource.GetType();
+
+            task.Meta.DqTaskParams.emplace(externalSource.GetTaskParamKey(), partitionParam);
+        }
+    }
+
     size_t BuildScanTasksFromSource(TStageInfo& stageInfo, IKqpGateway::TKqpSnapshot snapshot, const TMaybe<ui64> lockTxId = {}) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
@@ -1061,7 +1082,7 @@ private:
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::IHTTPGateway::TPtr httpGateway);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

@@ -616,6 +616,14 @@ NYql::NDqProto::TDqTask SerializeTaskToProto(
     result.SetId(task.Id);
     result.SetStageId(stageInfo.Id.StageId);
 
+    for (const auto& [paramName, paramValue] : task.Meta.DqTaskParams) {
+        (*result.MutableTaskParams())[paramName] = paramValue;
+    }
+
+    for (const auto& [paramName, paramValue] : task.Meta.DqSecureParams) {
+        (*result.MutableSecureParams())[paramName] = paramValue;
+    }
+
     for (const auto& input : task.Inputs) {
         FillInputDesc(tasksGraph, resultChannelProxies, *result.AddInputs(), input);
     }

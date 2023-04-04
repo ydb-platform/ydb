@@ -863,8 +863,13 @@ private:
             for (const auto& input : expr.Cast<TDqStageBase>().Inputs()) {
                 if (auto source = input.Maybe<TDqSource>()) {
                     auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>();
-                    YQL_ENSURE(settings.IsValid(), "only readranges sources are supported");
-                    Visit(settings.Cast(), stagePlanNode);
+                    if (settings.IsValid()) {
+                        Visit(settings.Cast(), stagePlanNode);
+                    } else {
+                        TOperator op;
+                        op.Properties["Name"] = TString(source.Cast().DataSource().Cast<TCoDataSource>().Category().Value());
+                        AddOperator(stagePlanNode, "Source", op);
+                    }
                 } else {
                     auto inputCn = input.Cast<TDqConnection>();
 

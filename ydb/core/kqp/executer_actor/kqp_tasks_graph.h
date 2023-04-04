@@ -124,6 +124,8 @@ struct TTaskMeta {
     TActorId ExecuterId;
 
     TMap<TString, NYql::NDqProto::TData> Params;
+    THashMap<TString, TString> DqTaskParams; // Params for sources/sinks
+    THashMap<TString, TString> DqSecureParams;
 
     struct TColumn {
         ui32 Id = 0;

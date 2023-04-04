@@ -300,9 +300,9 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                         TABLED() { str << ci.second.Group;}
                                         TABLED() { str << pp.second.TabletId;}
                                         TABLED() { str << (ui32)pp.second.State;}
-                                        auto it = ci.second.SessionsInfo.find(std::make_pair(pp.second.Session, ci.second.RandomNumber));
-                                        Y_VERIFY((it == ci.second.SessionsInfo.end()) == (pp.second.State == EPS_FREE));
-                                        TABLED() { str << (pp.second.State != EPS_FREE ? it->second.Session : "");}
+                                        auto* session = ci.second.FindSession(pp.second.Session);
+                                        Y_VERIFY((session == nullptr) == (pp.second.State == EPS_FREE));
+                                        TABLED() { str << (pp.second.State != EPS_FREE ? session->Session : "");}
                                     }
                                 }
                             }
@@ -605,7 +605,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     PartitionsInfo = partitionsInfo;
 
     for (auto& p : ClientsInfo) {
-        auto mainGroup = p.second.ClientGroupsInfo.find(0);
+        auto mainGroup = p.second.ClientGroupsInfo.find(TClientInfo::MAIN_GROUP);
         for (auto& part : newPartitions) {
             ui32 group = part.second.Group;
             auto it = p.second.SessionsWithGroup ? p.second.ClientGroupsInfo.find(group) : mainGroup;
@@ -1037,7 +1037,7 @@ TPersQueueReadBalancer::TClientGroupInfo& TPersQueueReadBalancer::TClientInfo::A
     clientInfo.Generation = Generation;
     clientInfo.Step = &Step;
 
-    clientInfo.RandomNumber = TAppData::RandomProvider->GenRand64();
+    clientInfo.SessionKeySalt = TAppData::RandomProvider->GenRand64();
     return clientInfo;
 }
 
@@ -1065,7 +1065,7 @@ void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 group, const THa
 
     auto it = ClientGroupsInfo.find(group);
     it->second.SessionsInfo.insert({
-        std::make_pair(pipe, it->second.RandomNumber),
+        it->second.SessionKey(pipe),
         TClientGroupInfo::TSessionInfo(
             record.GetSession(), sender,
             record.HasClientNode() ? record.GetClientNode() : "none",
@@ -1144,7 +1144,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     if (!groups.empty()) {
         auto jt = it->second.ClientGroupsInfo.find(0);
         if (jt != it->second.ClientGroupsInfo.end()) {
-            it->second.KillGroup(0, ctx);
+            it->second.KillSessionsWithoutGroup(ctx);
         }
         for (auto g : groups) {
             it->second.AddSession(g, PartitionsInfo, ev->Sender, record);
@@ -1176,13 +1176,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
                 auto pi = response->Record.AddPartitionInfo();
                 pi->SetPartition(p.first);
                 if (p.second.State == EPS_ACTIVE) {
-                    auto jt = c.second.SessionsInfo.find(std::make_pair(p.second.Session, c.second.RandomNumber));
-                    Y_VERIFY(jt != c.second.SessionsInfo.end());
-                    pi->SetClientNode(jt->second.ClientNode);
-                    pi->SetProxyNodeId(jt->second.ProxyNodeId);
-                    pi->SetSession(jt->second.Session);
-                    pi->SetTimestamp(jt->second.Timestamp.Seconds());
-                    pi->SetTimestampMs(jt->second.Timestamp.MilliSeconds());
+                    auto* session = c.second.FindSession(p.second.Session);
+                    Y_VERIFY(session != nullptr);
+                    pi->SetClientNode(session->ClientNode);
+                    pi->SetProxyNodeId(session->ProxyNodeId);
+                    pi->SetSession(session->Session);
+                    pi->SetTimestamp(session->Timestamp.Seconds());
+                    pi->SetTimestampMs(session->Timestamp.MilliSeconds());
                 } else {
                     pi->SetClientNode("");
                     pi->SetProxyNodeId(0);
@@ -1203,9 +1203,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
 }
 
 
-void TPersQueueReadBalancer::TClientInfo::KillGroup(const ui32 group, const TActorContext& ctx) {
-    Y_VERIFY(group == 0);
-    auto it = ClientGroupsInfo.find(group);
+void TPersQueueReadBalancer::TClientInfo::KillSessionsWithoutGroup(const TActorContext& ctx) {
+    auto it = ClientGroupsInfo.find(MAIN_GROUP);
     Y_VERIFY(it != ClientGroupsInfo.end());
     for (auto& s : it->second.SessionsInfo) {
         THolder<TEvPersQueue::TEvError> response(new TEvPersQueue::TEvError);
@@ -1222,14 +1221,14 @@ void TPersQueueReadBalancer::TClientInfo::MergeGroups(const TActorContext& ctx) 
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " merge groups");
 
-    auto& clientInfo = AddGroup(0);
+    auto& clientInfo = AddGroup(MAIN_GROUP);
 
     ui32 numSessions = 0;
     ui32 numGroups = 0;
 
     for (auto it = ClientGroupsInfo.begin(); it != ClientGroupsInfo.end();) {
         auto jt = it++;
-        if (jt->first == 0) {
+        if (jt->first == MAIN_GROUP) {
             continue;
         }
         ++numGroups;
@@ -1239,7 +1238,7 @@ void TPersQueueReadBalancer::TClientInfo::MergeGroups(const TActorContext& ctx) 
         }
         for (auto& si : jt->second.SessionsInfo) {
             auto key = si.first;
-            key.second = clientInfo.RandomNumber;
+            key.second = clientInfo.SessionKeySalt;
             auto it = clientInfo.SessionsInfo.find(key);
             if (it == clientInfo.SessionsInfo.end()) {
                 clientInfo.SessionsInfo.insert(std::make_pair(key, si.second)); //there must be all sessions in all groups
@@ -1296,18 +1295,17 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
 
     auto jt = cit->second.PartitionsInfo.find(record.GetPartition());
 
-    auto kt = cit->second.SessionsInfo.find(std::make_pair(sender, cit->second.RandomNumber));
-    if (kt == cit->second.SessionsInfo.end()) { //already dead session
+    auto* session = cit->second.FindSession(sender);
+    if (session == nullptr) { //already dead session
         return;
     }
-    Y_VERIFY(kt != cit->second.SessionsInfo.end());
     Y_VERIFY(jt != cit->second.PartitionsInfo.end());
     jt->second.Session = TActorId();
     jt->second.State = EPS_FREE;
     cit->second.FreePartitions.push_back(jt->first);
 
-    --kt->second.NumActive;
-    --kt->second.NumSuspended;
+    --session->NumActive;
+    --session->NumSuspended;
 
     cit->second.ScheduleBalance(ctx);
 }
@@ -1339,23 +1337,43 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
     const TString& clientId = it->second.ClientId;
     auto jt = ClientsInfo.find(clientId);
     Y_VERIFY(jt != ClientsInfo.end());
-    for (auto& c : jt->second.ClientGroupsInfo) {
-        for (auto& p : c.second.PartitionsInfo) { //TODO: reverse map
+    TClientInfo& clientInfo = jt->second;
+    for (auto& c : clientInfo.ClientGroupsInfo) {
+        TClientGroupInfo& groupInfo = c.second;
+        for (auto& p : groupInfo.PartitionsInfo) { //TODO: reverse map
             if (p.second.Session == pipe) {
                 p.second.Session = TActorId();
                 p.second.State = EPS_FREE;
-                c.second.FreePartitions.push_back(p.first);
+                groupInfo.FreePartitions.push_back(p.first);
             }
         }
-        bool res = c.second.SessionsInfo.erase(std::make_pair(pipe, c.second.RandomNumber));
+
+        bool res = groupInfo.EraseSession(pipe);
         if (res)
             c.second.ScheduleBalance(ctx);
     }
-    if (it->second.WithGroups && --jt->second.SessionsWithGroup == 0) {
-        jt->second.MergeGroups(ctx);
+    if (it->second.WithGroups && --clientInfo.SessionsWithGroup == 0) {
+        clientInfo.MergeGroups(ctx);
     }
 
     PipesInfo.erase(pipe);
+}
+
+
+std::pair<TActorId, ui64> TPersQueueReadBalancer::TClientGroupInfo::SessionKey(const TActorId pipe) const {
+    return std::make_pair(pipe, SessionKeySalt);
+}
+
+bool TPersQueueReadBalancer::TClientGroupInfo::EraseSession(const TActorId pipe) {
+    return SessionsInfo.erase(SessionKey(pipe));
+}
+
+TPersQueueReadBalancer::TClientGroupInfo::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::FindSession(const TActorId pipe) {
+    auto it = SessionsInfo.find(SessionKey(pipe));
+    if (it == SessionsInfo.end()) {
+        return nullptr;
+    }
+    return &(it->second);
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::ScheduleBalance(const TActorContext& ctx) {
@@ -1421,7 +1439,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
 
 void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe, ui32 partition, const TActorContext& ctx) {
 
-    auto jt = SessionsInfo.find(std::make_pair(pipe, RandomNumber));
+    auto jt = SessionsInfo.find(SessionKey(pipe));
     Y_VERIFY(jt != SessionsInfo.end());
 
     auto& pipeInfo = jt->second;
@@ -1452,7 +1470,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe
 
 void TPersQueueReadBalancer::TClientGroupInfo::ReleasePartition(const TActorId pipe, const ui32 group, const ui32 count, const TActorContext& ctx) {
 
-    auto it = SessionsInfo.find(std::make_pair(pipe, RandomNumber));
+    auto it = SessionsInfo.find(SessionKey(pipe));
     Y_VERIFY(it != SessionsInfo.end());
     auto& sessionInfo = it->second;
 

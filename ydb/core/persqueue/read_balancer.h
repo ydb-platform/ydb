@@ -404,7 +404,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui64 TabletId;
         TString Path;
         ui32 Generation = 0;
-        ui64 RandomNumber = 0;
+        ui64 SessionKeySalt = 0;
         ui32* Step = nullptr;
 
         ui32 Group = 0;
@@ -412,6 +412,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         THashMap<ui32, TPartitionInfo> PartitionsInfo; // partitionId -> info
         std::deque<ui32> FreePartitions;
         THashMap<std::pair<TActorId, ui64>, TSessionInfo> SessionsInfo; //map from ActorID and random value - need for reordering sessions in different topics
+
+        std::pair<TActorId, ui64> SessionKey(const TActorId pipe) const;
+        bool EraseSession(const TActorId pipe);
+        TSessionInfo* FindSession(const TActorId pipe);
 
         void ScheduleBalance(const TActorContext& ctx);
         void Balance(const TActorContext& ctx);
@@ -436,6 +440,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
 
     struct TClientInfo {
+        constexpr static ui32 MAIN_GROUP = 0;
+
         THashMap<ui32, TClientGroupInfo> ClientGroupsInfo; //map from group to info
         ui32 SessionsWithGroup = 0;
 
@@ -446,7 +452,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui32 Generation = 0;
         ui32 Step = 0;
 
-        void KillGroup(const ui32 group, const TActorContext& ctx);
+        void KillSessionsWithoutGroup(const TActorContext& ctx);
         void MergeGroups(const TActorContext& ctx);
         TClientGroupInfo& AddGroup(const ui32 group);
         void FillEmptyGroup(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo);

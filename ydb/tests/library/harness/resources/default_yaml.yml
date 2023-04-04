@@ -129,7 +129,6 @@ log_config:
 grpc_config:
   host: "{ydb_grpc_host}"
   services:
-  - "experimental"
   - "legacy"
   - "yql"
   - "discovery"
@@ -142,7 +141,6 @@ grpc_config:
   - "topic"
   - "datastreams"
   - "scripting"
-  - "s3_internal"
   - "clickhouse_internal"
   - "rate_limiter"
   - "analytics"

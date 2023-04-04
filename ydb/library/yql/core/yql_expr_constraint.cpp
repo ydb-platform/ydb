@@ -523,6 +523,12 @@ private:
                     input->AddConstraint(filtered);
                 }
             }
+
+            if (const auto part = input->Head().GetConstraint<TPartOfDistinctConstraintNode>()) {
+                if (const auto filtered = part->FilterFields(ctx, filter)) {
+                    input->AddConstraint(filtered);
+                }
+            }
         }
 
         return TStatus::Ok;
@@ -2286,7 +2292,9 @@ private:
                     return {};
 
                 const auto it = renames.find(path.front());
-                if (renames.cend() == it || it->second.empty())
+                if (renames.cend() == it)
+                    return {path};
+                if (it->second.empty())
                     return {};
 
                 std::vector<TConstraintNode::TPathType> res(it->second.size());

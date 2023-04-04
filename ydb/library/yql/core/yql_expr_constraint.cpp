@@ -112,6 +112,7 @@ public:
         Functions["ExtractMembers"] = &TCallableConstraintTransformer::ExtractMembersWrap;
         Functions["RemoveSystemMembers"] = &TCallableConstraintTransformer::RemovePrefixMembersWrap;
         Functions["RemovePrefixMembers"] = &TCallableConstraintTransformer::RemovePrefixMembersWrap;
+        Functions["FlattenMembers"] = &TCallableConstraintTransformer::FlattenMembersWrap;
         Functions["SelectMembers"] = &TCallableConstraintTransformer::SelectMembersWrap;
         Functions["FilterMembers"] = &TCallableConstraintTransformer::SelectMembersWrap;
         Functions["CastStruct"] = &TCallableConstraintTransformer::SelectMembersWrap;
@@ -1366,13 +1367,8 @@ private:
         for (auto i = 0U; i < input->ChildrenSize(); ++i) {
             const auto child = input->Child(i);
             const auto& name = ctx.GetIndexAsString(i);
-            if (const auto pass = child->GetConstraint<TPassthroughConstraintNode>()) {
-                for (auto part : pass->GetColumnMapping()) {
-                    std::transform(part.second.cbegin(), part.second.cend(), std::back_inserter(passthrough[part.first ? part.first : pass]), [&name](TPassthroughConstraintNode::TPartType::value_type item) {
-                        item.first.emplace_front(name);
-                        return item;
-                    });
-                }
+            if (const auto part = child->GetConstraint<TPassthroughConstraintNode>()) {
+                TPassthroughConstraintNode::UniqueMerge(passthrough, part->GetColumnMapping(name));
             }
 
             if (const auto part = child->GetConstraint<TPartOfSortedConstraintNode>()) {
@@ -1421,13 +1417,8 @@ private:
         std::vector<const TConstraintSet*> structConstraints;
         for (const auto& child : input->Children()) {
             const auto& name = child->Head().Content();
-            if (const auto pass = child->Tail().GetConstraint<TPassthroughConstraintNode>()) {
-                for (auto part : pass->GetColumnMapping()) {
-                    std::transform(part.second.cbegin(), part.second.cend(), std::back_inserter(passthrough[part.first ? part.first : pass]), [&name](TPassthroughConstraintNode::TPartType::value_type item) {
-                        item.first.emplace_front(name);
-                        return item;
-                    });
-                }
+            if (const auto part = child->Tail().GetConstraint<TPassthroughConstraintNode>()) {
+                TPassthroughConstraintNode::UniqueMerge(passthrough, part->GetColumnMapping(name));
             }
 
             if (const auto part = child->Tail().GetConstraint<TPartOfSortedConstraintNode>()) {
@@ -1462,6 +1453,42 @@ private:
             input->AddConstraint(varIndex);
         }
 
+        return TStatus::Ok;
+    }
+
+    TStatus FlattenMembersWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        TPassthroughConstraintNode::TMapType passthrough;
+        TPartOfSortedConstraintNode::TMapType sorted;
+        TPartOfUniqueConstraintNode::TMapType uniques;
+        TPartOfDistinctConstraintNode::TMapType distincts;
+
+        for (const auto& child : input->Children()) {
+            const auto& prefix = child->Head().Content();
+            if (const auto part = child->Tail().GetConstraint<TPassthroughConstraintNode>()) {
+                TPassthroughConstraintNode::UniqueMerge(passthrough, part->GetColumnMapping(ctx, prefix));
+            }
+            if (const auto part = child->Tail().GetConstraint<TPartOfSortedConstraintNode>()) {
+                TPartOfSortedConstraintNode::UniqueMerge(sorted, part->GetColumnMapping(ctx, prefix));
+            }
+            if (const auto part = child->Tail().GetConstraint<TPartOfUniqueConstraintNode>()) {
+                TPartOfUniqueConstraintNode::UniqueMerge(uniques, part->GetColumnMapping(ctx, prefix));
+            }
+            if (const auto part = child->Tail().GetConstraint<TPartOfDistinctConstraintNode>()) {
+                TPartOfDistinctConstraintNode::UniqueMerge(distincts, part->GetColumnMapping(ctx, prefix));
+            }
+        }
+        if (!passthrough.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(passthrough)));
+        }
+        if (!sorted.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TPartOfSortedConstraintNode>(std::move(sorted)));
+        }
+        if (!uniques.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TPartOfUniqueConstraintNode>(std::move(uniques)));
+        }
+        if (!distincts.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TPartOfDistinctConstraintNode>(std::move(distincts)));
+        }
         return TStatus::Ok;
     }
 
@@ -2636,9 +2663,9 @@ private:
 
         TPassthroughConstraintNode::TMapType passthrough;
         if (const auto keysPassthrough = GetConstraintFromLambda<TPassthroughConstraintNode, false>(*input->Child(1), ctx))
-            passthrough.merge(keysPassthrough->GetMappingForField(ctx.GetIndexAsString(0U)));
+            passthrough.merge(keysPassthrough->GetColumnMapping(ctx.GetIndexAsString(0U)));
         if (const auto paysPassthrough = GetConstraintFromLambda<TPassthroughConstraintNode, false>(*input->Child(2), ctx))
-            passthrough.merge(paysPassthrough->GetMappingForField(ctx.GetIndexAsString(1U)));
+            passthrough.merge(paysPassthrough->GetColumnMapping(ctx.GetIndexAsString(1U)));
 
         if (!passthrough.empty())
             input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(passthrough)));

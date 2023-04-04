@@ -17,10 +17,6 @@ public:
     TCreateUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::CreateUser, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableCreateUser()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:

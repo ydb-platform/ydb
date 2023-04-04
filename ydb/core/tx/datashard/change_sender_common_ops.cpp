@@ -39,11 +39,9 @@ void TBaseChangeSender::CreateSenders(const TVector<ui64>& partitionIds) {
 }
 
 void TBaseChangeSender::KillSenders() {
-    for (const auto& [_, sender] : Senders) {
+    for (const auto& [_, sender] : std::exchange(Senders, {})) {
         ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
     }
-
-    Senders.clear();
 }
 
 void TBaseChangeSender::EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
@@ -183,13 +181,7 @@ void TBaseChangeSender::OnReady(ui64 partitionId) {
     sender.Ready = true;
 
     if (sender.Pending) {
-        TVector<ui64> remove(Reserve(sender.Pending.size()));
-        for (const auto& record : sender.Pending) {
-            remove.push_back(record.Order);
-        }
-
-        ActorOps->Send(DataShard.ActorId, new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
-        sender.Pending.clear();
+        RemoveRecords(std::exchange(sender.Pending, {}));
     }
 
     SendRecords();
@@ -223,15 +215,15 @@ void TBaseChangeSender::RemoveRecords() {
 
     TVector<ui64> remove(Reserve(Enqueued.size() + PendingBody.size() + PendingSent.size() + pendingStatus));
 
-    for (const auto& record : Enqueued) {
+    for (const auto& record : std::exchange(Enqueued, {})) {
         remove.push_back(record.Order);
     }
 
-    for (const auto& record : PendingBody) {
+    for (const auto& record : std::exchange(PendingBody, {})) {
         remove.push_back(record.Order);
     }
 
-    for (const auto& [order, _] : PendingSent) {
+    for (const auto& [order, _] : std::exchange(PendingSent, {})) {
         remove.push_back(order);
     }
 

@@ -272,6 +272,11 @@ class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHel
             return;
         }
 
+        if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
+            LOG_N("Auto-ack (stream is planned to drop)");
+            return Ack();
+        }
+
         Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
 

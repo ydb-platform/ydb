@@ -515,6 +515,14 @@ class TCdcChangeSenderMain
             return;
         }
 
+        if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
+            LOG_D("Stream is planned to drop, waiting for the EvRemoveSender command");
+
+            RemoveRecords();
+            KillSenders();
+            return Become(&TThis::StatePendingRemove);
+        }
+
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
 
         Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
@@ -539,7 +547,7 @@ class TCdcChangeSenderMain
     STATEFN(StateResolveTopic) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopic);
-            sFunc(TEvents::TEvWakeup, ResolveTopic);
+            sFunc(TEvents::TEvWakeup, ResolveCdcStream);
         default:
             return StateBase(ev, TlsActivationContext->AsActorContext());
         }
@@ -641,7 +649,7 @@ class TCdcChangeSenderMain
     }
 
     void Resolve() override {
-        ResolveTopic();
+        ResolveCdcStream();
     }
 
     bool IsResolved() const override {
@@ -726,6 +734,11 @@ class TCdcChangeSenderMain
         PassAway();
     }
 
+    void AutoRemove(TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+        RemoveRecords(std::move(ev->Get()->Records));
+    }
+
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
         RenderHtmlPage(ESenderType::CdcStream, ev, ctx);
     }
@@ -758,6 +771,15 @@ public:
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             hFunc(TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(TEvChangeExchangePrivate::TEvGone, Handle);
+            HFunc(NMon::TEvRemoteHttpInfo, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+    STFUNC(StatePendingRemove) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvChangeExchange::TEvEnqueueRecords, AutoRemove);
+            hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }

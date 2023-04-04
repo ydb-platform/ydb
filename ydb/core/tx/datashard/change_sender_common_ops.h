@@ -93,6 +93,16 @@ class TBaseChangeSender: public IChangeSender {
     void SendRecords();
 
 protected:
+    template <typename T>
+    void RemoveRecords(TVector<T>&& records) {
+        TVector<ui64> remove(Reserve(records.size()));
+        for (const auto& record : records) {
+            remove.push_back(record.Order);
+        }
+
+        ActorOps->Send(DataShard.ActorId, new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
+    }
+
     void CreateSenders(const TVector<ui64>& partitionIds) override;
     void KillSenders() override;
     void RemoveRecords() override;

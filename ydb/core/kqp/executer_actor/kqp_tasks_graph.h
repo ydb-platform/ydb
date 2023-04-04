@@ -121,6 +121,7 @@ struct TShardKeyRanges {
 struct TTaskMeta {
     ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
+    bool ScanTask = false;
     TActorId ExecuterId;
 
     TMap<TString, NYql::NDqProto::TData> Params;
@@ -202,7 +203,10 @@ void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTx
 void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tableKeys, const TStageInfo& stageInfo,
     ui64 txId, bool enableSpilling);
 
-NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, const TTask& task, const NMiniKQL::TTypeEnvironment& typeEnv);
+NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task,
+    const TKqpTableKeys& tableKeys,
+    const std::unordered_map<ui64, IActor*>& resultChannelProxies, const NMiniKQL::TTypeEnvironment& typeEnv);
+void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);
 void FillChannelDesc(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel);
 void FillInputDesc(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input);
 void FillOutputDesc(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output);

@@ -802,16 +802,6 @@ protected:
     }
 
 protected:
-    void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta) {
-        meta->SetTablePath(stageInfo.Meta.TablePath);
-        meta->MutableTableId()->SetTableId(stageInfo.Meta.TableId.PathId.LocalPathId);
-        meta->MutableTableId()->SetOwnerId(stageInfo.Meta.TableId.PathId.OwnerId);
-        meta->SetSchemaVersion(stageInfo.Meta.TableId.SchemaVersion);
-        meta->SetSysViewInfo(stageInfo.Meta.TableId.SysViewInfo);
-        meta->SetTableKind((ui32)stageInfo.Meta.TableKind);
-    }
-
-protected:
     void TerminateComputeActors(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         for (const auto& task : this->TasksGraph.GetTasks()) {
             if (task.ComputeActorId) {

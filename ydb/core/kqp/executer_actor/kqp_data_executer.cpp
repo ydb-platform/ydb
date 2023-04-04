@@ -1742,107 +1742,11 @@ private:
 
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-            NDqProto::TDqTask taskDesc = SerializeTaskToProto(TasksGraph, ResultChannelProxies, task, TypeEnv());
-            ActorIdToProto(SelfId(), taskDesc.MutableExecuter()->MutableActorId());
+            NDqProto::TDqTask taskDesc = SerializeTaskToProto(TasksGraph, task, TableKeys, ResultChannelProxies, TypeEnv());
 
             if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
-                NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta protoTaskMeta;
-
-                FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
-
-                if (task.Meta.Reads) {
-                    for (auto& read : *task.Meta.Reads) {
-                        auto* protoReadMeta = protoTaskMeta.AddReads();
-                        read.Ranges.SerializeTo(protoReadMeta->MutableRange());
-                        for (auto& column : read.Columns) {
-                            auto* protoColumn = protoReadMeta->AddColumns();
-                            protoColumn->SetId(column.Id);
-                            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                            protoColumn->SetType(columnType.TypeId);
-                            if (columnType.TypeInfo) {
-                                *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
-                            }
-                            protoColumn->SetName(column.Name);
-                        }
-                        protoReadMeta->SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
-                        protoReadMeta->SetReverse(task.Meta.ReadInfo.Reverse);
-                    }
-                }
-                if (task.Meta.Writes) {
-                    auto* protoWrites = protoTaskMeta.MutableWrites();
-                    task.Meta.Writes->Ranges.SerializeTo(protoWrites->MutableRange());
-                    if (task.Meta.Writes->IsPureEraseOp()) {
-                        protoWrites->SetIsPureEraseOp(true);
-                    }
-
-                    for (const auto& [_, columnWrite] : task.Meta.Writes->ColumnWrites) {
-                        auto& protoColumnWrite = *protoWrites->AddColumns();
-
-                        auto& protoColumn = *protoColumnWrite.MutableColumn();
-                        protoColumn.SetId(columnWrite.Column.Id);
-                        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnWrite.Column.Type, columnWrite.Column.TypeMod);
-                        protoColumn.SetType(columnType.TypeId);
-                        if (columnType.TypeInfo) {
-                            *protoColumn.MutableTypeInfo() = *columnType.TypeInfo;
-                        }
-                        protoColumn.SetName(columnWrite.Column.Name);
-
-                        protoColumnWrite.SetMaxValueSizeBytes(columnWrite.MaxValueSizeBytes);
-                    }
-                }
-
-                taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
-                LOG_D("Task: " << task.Id << ", shard: " << task.Meta.ShardId << ", meta: " << protoTaskMeta.ShortDebugString());
-
                 datashardTasks[task.Meta.ShardId].emplace_back(std::move(taskDesc));
             } else if (stageInfo.Meta.IsSysView()) {
-                NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
-
-                FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
-
-                const auto& tableInfo = TableKeys.GetTable(stageInfo.Meta.TableId);
-                for (const auto& keyColumnName : tableInfo.KeyColumns) {
-                    const auto& keyColumn = tableInfo.Columns.at(keyColumnName);
-                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn.Type, keyColumn.TypeMod);
-                    protoTaskMeta.AddKeyColumnTypes(columnType.TypeId);
-                    if (columnType.TypeInfo) {
-                        *protoTaskMeta.AddKeyColumnTypeInfos() = *columnType.TypeInfo;
-                    }
-                }
-
-                for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {
-                    protoTaskMeta.AddSkipNullKeys(skipNullKey);
-                }
-
-                YQL_ENSURE(task.Meta.Reads);
-                YQL_ENSURE(!task.Meta.Writes);
-
-                for (auto& column : task.Meta.Reads->front().Columns) {
-                    auto* protoColumn = protoTaskMeta.AddColumns();
-                    protoColumn->SetId(column.Id);
-                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                    protoColumn->SetType(columnType.TypeId);
-                    if (columnType.TypeInfo) {
-                        *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
-                    }
-                    protoColumn->SetName(column.Name);
-                }
-
-                for (auto& read : *task.Meta.Reads) {
-                    auto* protoReadMeta = protoTaskMeta.AddReads();
-                    protoReadMeta->SetShardId(read.ShardId);
-                    read.Ranges.SerializeTo(protoReadMeta);
-
-                    YQL_ENSURE((int) read.Columns.size() == protoTaskMeta.GetColumns().size());
-                    for (ui64 i = 0; i < read.Columns.size(); ++i) {
-                        YQL_ENSURE(read.Columns[i].Id == protoTaskMeta.GetColumns()[i].GetId());
-                        YQL_ENSURE(read.Columns[i].Type.GetTypeId() == protoTaskMeta.GetColumns()[i].GetType());
-                    }
-                }
-
-                LOG_D("task: " << task.Id << ", node: " << task.Meta.NodeId << ", meta: " << protoTaskMeta.ShortDebugString());
-
-                taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
                 computeTasks.emplace_back(std::move(taskDesc));
             } else {
                 if (task.Meta.ShardId) {

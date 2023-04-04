@@ -6,6 +6,7 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 
 #include <library/cpp/actors/core/log.h>
 
@@ -19,6 +20,77 @@ using namespace NYql::NNodes;
 
 void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo) {
     LOG_DEBUG_S(ctx, NKikimrServices::KQP_EXECUTER, stageInfo.DebugString());
+}
+
+NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::EReadType ReadTypeToProto(const TTaskMeta::TReadInfo::EReadType& type) {
+    switch (type) {
+        case TTaskMeta::TReadInfo::EReadType::Rows:
+            return NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::ROWS;
+        case TTaskMeta::TReadInfo::EReadType::Blocks:
+            return NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::BLOCKS;
+    }
+
+    YQL_ENSURE(false, "Invalid read type in task meta.");
+}
+
+TTaskMeta::TReadInfo::EReadType ReadTypeFromProto(const NKqpProto::TKqpPhyOpReadOlapRanges::EReadType& type) {
+    switch (type) {
+        case NKqpProto::TKqpPhyOpReadOlapRanges::ROWS:
+            return TTaskMeta::TReadInfo::EReadType::Rows;
+        case NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS:
+            return TTaskMeta::TReadInfo::EReadType::Blocks;
+        default:
+            YQL_ENSURE(false, "Invalid read type from TKqpPhyOpReadOlapRanges protobuf.");
+    }
+}
+
+
+std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task)
+{
+    const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+    std::vector<std::shared_ptr<arrow::Field>> columns;
+    std::vector<std::shared_ptr<arrow::Array>> data;
+    auto& parameterNames = task.Meta.ReadInfo.OlapProgram.ParameterNames;
+
+    columns.reserve(parameterNames.size());
+    data.reserve(parameterNames.size());
+
+    for (auto& name : stage.GetProgramParameters()) {
+        if (!parameterNames.contains(name)) {
+            continue;
+        }
+
+        if (auto* taskParam = task.Meta.Params.FindPtr(name)) {
+            // This parameter is the list, holding type from task.Meta.ParamTypes
+            // Those parameters can't be used in Olap programs now
+            YQL_ENSURE(false, "OLAP program contains task parameter, not supported yet.");
+            continue;
+        }
+
+        auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(name);
+        YQL_ENSURE(NYql::NArrow::IsArrowCompatible(type), "Incompatible parameter type. Can't convert to arrow");
+
+        std::unique_ptr<arrow::ArrayBuilder> builder = NYql::NArrow::MakeArrowBuilder(type);
+        NYql::NArrow::AppendElement(value, builder.get(), type);
+
+        std::shared_ptr<arrow::Array> array;
+        auto status = builder->Finish(&array);
+
+        YQL_ENSURE(status.ok(), "Failed to build arrow array of variables.");
+
+        auto field = std::make_shared<arrow::Field>(name, array->type());
+
+        columns.emplace_back(std::move(field));
+        data.emplace_back(std::move(array));
+    }
+
+    auto schema = std::make_shared<arrow::Schema>(std::move(columns));
+    auto recordBatch = arrow::RecordBatch::Make(schema, 1, data);
+
+    return std::make_pair<TString, TString>(
+        NArrow::SerializeSchema(*schema),
+        NArrow::SerializeBatchNoCompression(recordBatch)
+    );
 }
 
 void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGateway::TPhysicalTxData>& txs) {
@@ -605,14 +677,171 @@ void FillChannelDesc(const TKqpTasksGraph& tasksGraph, const std::unordered_map<
     channelDesc.SetInMemory(channel.InMemory);
 }
 
+void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta) {
+    meta->SetTablePath(stageInfo.Meta.TablePath);
+    meta->MutableTableId()->SetTableId(stageInfo.Meta.TableId.PathId.LocalPathId);
+    meta->MutableTableId()->SetOwnerId(stageInfo.Meta.TableId.PathId.OwnerId);
+    meta->SetSchemaVersion(stageInfo.Meta.TableId.SchemaVersion);
+    meta->SetSysViewInfo(stageInfo.Meta.TableId.SysViewInfo);
+    meta->SetTableKind((ui32)stageInfo.Meta.TableKind);
+}
+
+void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, const TKqpTableKeys& tableKeys, NYql::NDqProto::TDqTask& taskDesc) {
+    if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
+        NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta protoTaskMeta;
+
+        FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
+
+        if (task.Meta.Reads) {
+            for (auto& read : *task.Meta.Reads) {
+                auto* protoReadMeta = protoTaskMeta.AddReads();
+                read.Ranges.SerializeTo(protoReadMeta->MutableRange());
+                for (auto& column : read.Columns) {
+                    auto* protoColumn = protoReadMeta->AddColumns();
+                    protoColumn->SetId(column.Id);
+                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
+                    protoColumn->SetType(columnType.TypeId);
+                    if (columnType.TypeInfo) {
+                        *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
+                    }
+                    protoColumn->SetName(column.Name);
+                }
+                protoReadMeta->SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
+                protoReadMeta->SetReverse(task.Meta.ReadInfo.Reverse);
+            }
+        }
+        if (task.Meta.Writes) {
+            auto* protoWrites = protoTaskMeta.MutableWrites();
+            task.Meta.Writes->Ranges.SerializeTo(protoWrites->MutableRange());
+            if (task.Meta.Writes->IsPureEraseOp()) {
+                protoWrites->SetIsPureEraseOp(true);
+            }
+
+            for (const auto& [_, columnWrite] : task.Meta.Writes->ColumnWrites) {
+                auto& protoColumnWrite = *protoWrites->AddColumns();
+
+                auto& protoColumn = *protoColumnWrite.MutableColumn();
+                protoColumn.SetId(columnWrite.Column.Id);
+                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnWrite.Column.Type, columnWrite.Column.TypeMod);
+                protoColumn.SetType(columnType.TypeId);
+                if (columnType.TypeInfo) {
+                    *protoColumn.MutableTypeInfo() = *columnType.TypeInfo;
+                }
+                protoColumn.SetName(columnWrite.Column.Name);
+
+                protoColumnWrite.SetMaxValueSizeBytes(columnWrite.MaxValueSizeBytes);
+            }
+        }
+
+        taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
+    }  else if (task.Meta.ScanTask || stageInfo.Meta.IsSysView()) {
+        NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
+
+        FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
+
+        const auto& tableInfo = tableKeys.GetTable(stageInfo.Meta.TableId);
+        for (const auto& keyColumnName : tableInfo.KeyColumns) {
+            const auto& keyColumn = tableInfo.Columns.at(keyColumnName);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn.Type, keyColumn.TypeMod);
+            protoTaskMeta.AddKeyColumnTypes(columnType.TypeId);
+            if (columnType.TypeInfo) {
+                *protoTaskMeta.AddKeyColumnTypeInfos() = *columnType.TypeInfo;
+            }
+        }
+
+        for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {
+            protoTaskMeta.AddSkipNullKeys(skipNullKey);
+        }
+
+        switch (tableInfo.TableKind) {
+            case ETableKind::Unknown:
+            case ETableKind::SysView: {
+                protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                break;
+            }
+            case ETableKind::Datashard: {
+                if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
+                    protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                } else {
+                    protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                }
+                break;
+            }
+            case ETableKind::Olap: {
+                protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                break;
+            }
+        }
+
+        YQL_ENSURE(!task.Meta.Writes);
+
+        if (!task.Meta.Reads->empty()) {
+            protoTaskMeta.SetReverse(task.Meta.ReadInfo.Reverse);
+            protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
+            protoTaskMeta.SetSorted(task.Meta.ReadInfo.Sorted);
+            protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
+
+            for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
+                auto* protoResultColumn = protoTaskMeta.AddResultColumns();
+                protoResultColumn->SetId(0);
+                auto protoColumnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnType, "");
+                protoResultColumn->SetType(protoColumnType.TypeId);
+                if (protoColumnType.TypeInfo) {
+                    *protoResultColumn->MutableTypeInfo() = *protoColumnType.TypeInfo;
+                }
+            }
+
+            if (tableInfo.TableKind == ETableKind::Olap) {
+                auto* olapProgram = protoTaskMeta.MutableOlapProgram();
+                olapProgram->SetProgram(task.Meta.ReadInfo.OlapProgram.Program);
+
+                auto [schema, parameters] = SerializeKqpTasksParametersForOlap(stageInfo, task);
+                olapProgram->SetParametersSchema(schema);
+                olapProgram->SetParameters(parameters);
+            } else {
+                YQL_ENSURE(task.Meta.ReadInfo.OlapProgram.Program.empty());
+            }
+
+            for (auto& column : task.Meta.Reads->front().Columns) {
+                auto* protoColumn = protoTaskMeta.AddColumns();
+                protoColumn->SetId(column.Id);
+                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, "");
+                protoColumn->SetType(columnType.TypeId);
+                if (columnType.TypeInfo) {
+                    *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
+                }
+                protoColumn->SetName(column.Name);
+            }
+        }
+
+        for (auto& read : *task.Meta.Reads) {
+            auto* protoReadMeta = protoTaskMeta.AddReads();
+            protoReadMeta->SetShardId(read.ShardId);
+            read.Ranges.SerializeTo(protoReadMeta);
+
+            YQL_ENSURE((int) read.Columns.size() == protoTaskMeta.GetColumns().size());
+            for (ui64 i = 0; i < read.Columns.size(); ++i) {
+                YQL_ENSURE(read.Columns[i].Id == protoTaskMeta.GetColumns()[i].GetId());
+                YQL_ENSURE(read.Columns[i].Type.GetTypeId() == protoTaskMeta.GetColumns()[i].GetType());
+            }
+        }
+
+
+        taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
+    }
+}
+
 
 NYql::NDqProto::TDqTask SerializeTaskToProto(
     const TKqpTasksGraph& tasksGraph,
+    const TTask& task,
+    const TKqpTableKeys& tableKeys,
     const std::unordered_map<ui64, IActor*>& resultChannelProxies,
-    const TTask& task, const NMiniKQL::TTypeEnvironment& typeEnv)
+    const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     auto& stageInfo = tasksGraph.GetStageInfo(task.StageId);
     NYql::NDqProto::TDqTask result;
+    ActorIdToProto(task.Meta.ExecuterId, result.MutableExecuter()->MutableActorId());
     result.SetId(task.Id);
     result.SetStageId(stageInfo.Id.StageId);
 
@@ -643,6 +872,9 @@ NYql::NDqProto::TDqTask SerializeTaskToProto(
             dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
         }
     }
+
+    FillTaskMeta(stageInfo, task, tableKeys, result);
+
     return result;
 }
 

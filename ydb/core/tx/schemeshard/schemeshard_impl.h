@@ -517,6 +517,7 @@ public:
 
     TTxState& CreateTx(TOperationId opId, TTxState::ETxType txType, TPathId targetPath, TPathId sourcePath = InvalidPathId);
     TTxState* FindTx(TOperationId opId);
+    TTxState* FindTxSafe(TOperationId opId, const TTxState::ETxType& txType);
     void RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb& db, TOperationId opId, TTxState* txState);
     static TPathElement::EPathState CalcPathState(TTxState::ETxType txType, TPathElement::EPathState oldState);
 

@@ -402,7 +402,7 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
         Y_VERIFY(storeInfo, "OlapStore not found");
 
         auto& preset = storeInfo->SchemaPresets.at(description->GetSchemaPresetId());
-        auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.ProtoIndex);
+        auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.GetProtoIndex());
         *description->MutableSchema() = presetProto.GetSchema();
         if (description->HasSchemaPresetVersionAdj()) {
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());

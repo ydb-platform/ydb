@@ -42,6 +42,11 @@ public:
         return Raw_;
     }
 
+    TExprNode* MutableRaw() const {
+        YQL_ENSURE(Node);
+        return Node.Get();
+    }
+
     TExprNode::TPtr Ptr() const {
         YQL_ENSURE(Node);
         return Node;
@@ -49,6 +54,11 @@ public:
 
     const TExprNode& Ref() const {
         return *Raw_;
+    }
+
+    TExprNode& MutableRef() const {
+        YQL_ENSURE(Node);
+        return *Node;
     }
 
     TExprBase NonOwning() const {
@@ -91,8 +101,20 @@ public:
         return *Raw_;
     }
 
+    TExprNode& MutableRef() const {
+        YQL_ENSURE(IsValid());
+        YQL_ENSURE(Node);
+        return *Node;
+    }
+
     const TExprNode* Raw() const {
         return Raw_;
+    }
+
+    TExprNode* MutableRaw() const {
+        YQL_ENSURE(IsValid());
+        YQL_ENSURE(Node);
+        return Node.Get();
     }
 
     bool IsValid() const {

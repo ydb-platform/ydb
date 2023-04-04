@@ -432,7 +432,7 @@ IGraphTransformer::TStatus BlockBitCastWrapper(const TExprNode::TPtr& input, TEx
 }
 
 bool ValidateBlockKeys(TPositionHandle pos, const TTypeAnnotationNode::TListType& inputItems,
-    const TExprNode& keys, TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx) {
+    TExprNode& keys, TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx) {
     if (!EnsureTupleMinSize(keys, 1, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -454,7 +454,7 @@ bool ValidateBlockKeys(TPositionHandle pos, const TTypeAnnotationNode::TListType
     return true;
 }
 
-bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType& inputItems, const TExprNode& aggs,
+bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType& inputItems, TExprNode& aggs,
     TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx, bool overState, bool many) {
     if (!EnsureTuple(aggs, ctx)) {
         return false;

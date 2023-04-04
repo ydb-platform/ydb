@@ -66,23 +66,23 @@ bool EnsureCallableMinArgsCount(const TPositionHandle& pos, ui32 args, ui32 expe
 bool EnsureCallableMaxArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx);
 bool EnsureAtom(const TExprNode& node, TExprContext& ctx);
 bool EnsureCallable(const TExprNode& node, TExprContext& ctx);
-bool EnsureTuple(const TExprNode& node, TExprContext& ctx);
-bool EnsureTupleOfAtoms(const TExprNode& node, TExprContext& ctx);
+bool EnsureTuple(TExprNode& node, TExprContext& ctx);
+bool EnsureTupleOfAtoms(TExprNode& node, TExprContext& ctx);
 
-using TSettingNodeValidator = std::function<bool (TStringBuf name, const TExprNode& setting, TExprContext& ctx)>;
-bool EnsureValidSettings(const TExprNode& node,
+using TSettingNodeValidator = std::function<bool (TStringBuf name, TExprNode& setting, TExprContext& ctx)>;
+bool EnsureValidSettings(TExprNode& node,
     const THashSet<TStringBuf>& supportedSettings,
     const TSettingNodeValidator& validator,
     TExprContext& ctx);
-bool EnsureValidUserSchemaSetting(const TExprNode& node, TExprContext& ctx);
+bool EnsureValidUserSchemaSetting(TExprNode& node, TExprContext& ctx);
 TSettingNodeValidator RequireSingleValueSettings(const TSettingNodeValidator& validator);
 
 bool EnsureLambda(const TExprNode& node, TExprContext& ctx);
 IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, ui32 argumentsCount, ui32 maxArgumentsCount = Max<ui32>(),
     bool withTypes = true);
-bool EnsureTupleSize(const TExprNode& node, ui32 expectedSize, TExprContext& ctx);
-bool EnsureTupleMinSize(const TExprNode& node, ui32 minSize, TExprContext& ctx);
-bool EnsureTupleMaxSize(const TExprNode& node, ui32 maxSize, TExprContext& ctx);
+bool EnsureTupleSize(TExprNode& node, ui32 expectedSize, TExprContext& ctx);
+bool EnsureTupleMinSize(TExprNode& node, ui32 minSize, TExprContext& ctx);
+bool EnsureTupleMaxSize(TExprNode& node, ui32 maxSize, TExprContext& ctx);
 bool EnsureTupleType(const TExprNode& node, TExprContext& ctx);
 bool EnsureTupleType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureTupleTypeSize(const TExprNode& node, ui32 expectedSize, TExprContext& ctx);

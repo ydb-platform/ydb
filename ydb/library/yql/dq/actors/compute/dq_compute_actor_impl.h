@@ -1952,8 +1952,8 @@ public:
             // More accurate cpu time counter:
             if (TDerived::HasAsyncTaskRunner) {
                 protoTask->SetCpuTimeUs(BasicStats->CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
-                protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
             }
+            protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
 
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
 

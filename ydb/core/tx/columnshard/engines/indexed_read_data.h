@@ -3,9 +3,59 @@
 #include "column_engine.h"
 #include "column_engine_logs.h" // for TColumnEngineForLogs::TMark
 #include "predicate.h"
+#include <ydb/core/tx/conveyor/usage/abstract.h>
 
 namespace NKikimr::NColumnShard {
 class TScanIteratorBase;
+}
+
+namespace NKikimr::NOlap {
+class TIndexedReadData;
+}
+
+namespace NKikimr::NColumnShard {
+
+class IDataTasksProcessor;
+
+class IDataPreparationTask: public NConveyor::ITask {
+private:
+    std::shared_ptr<IDataTasksProcessor> OwnerOperator;
+protected:
+    virtual bool DoApply(NOlap::TIndexedReadData& indexedDataRead) const = 0;
+    virtual bool DoExecuteImpl() = 0;
+
+    virtual bool DoExecute() override final;
+public:
+    IDataPreparationTask(std::shared_ptr<IDataTasksProcessor> ownerOperator)
+        : OwnerOperator(ownerOperator)
+    {
+
+    }
+    using TPtr = std::shared_ptr<IDataPreparationTask>;
+    virtual ~IDataPreparationTask() = default;
+    bool Apply(NOlap::TIndexedReadData& indexedDataRead) const {
+        return DoApply(indexedDataRead);
+    }
+};
+
+class IDataTasksProcessor {
+protected:
+    virtual bool DoAdd(IDataPreparationTask::TPtr task) = 0;
+    std::atomic<bool> Stopped = false;
+public:
+    void Stop() {
+        Stopped = true;
+    }
+    bool IsStopped() const {
+        return Stopped;
+    }
+
+    using TPtr = std::shared_ptr<IDataTasksProcessor>;
+    virtual ~IDataTasksProcessor() = default;
+    bool Add(IDataPreparationTask::TPtr task) {
+        return DoAdd(task);
+    }
+};
 }
 
 namespace NKikimr::NOlap {
@@ -207,16 +257,50 @@ public:
         NotIndexed[batchNo] = MakeNotIndexedBatch(batch, planStep, txId);
     }
 
-    void AddIndexed(const TBlobRange& blobRange, const TString& column);
+    void AddIndexed(const TBlobRange& blobRange, const TString& column, NColumnShard::IDataTasksProcessor::TPtr processor);
     size_t NumPortions() const { return PortionBatch.size(); }
     bool HasIndexRead() const { return WaitIndexed.size() || Indexed.size(); }
-
+    bool IsIndexedBlob(const TBlobRange& blobRange) const {
+        return IndexedBlobs.contains(blobRange);
+    }
+    void ForceFinishWaiting() {
+        WaitIndexed.clear();
+    }
+    bool HasWaitIndexed() const {
+        return WaitIndexed.size();
+    }
 private:
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     ui32 FirstIndexedBatch{0};
     THashMap<TBlobRange, TString> Data;
     std::vector<std::shared_ptr<arrow::RecordBatch>> NotIndexed;
     THashMap<ui32, std::shared_ptr<arrow::RecordBatch>> Indexed;
+
+    class TAssembledNotFiltered: public NColumnShard::IDataPreparationTask {
+    private:
+        using TBase = NColumnShard::IDataPreparationTask;
+        std::shared_ptr<arrow::RecordBatch> Batch;
+        std::shared_ptr<arrow::RecordBatch> FilteredBatch;
+        NOlap::TReadMetadata::TConstPtr ReadMetadata;
+        ui32 BatchNo = 0;
+        bool AllowEarlyFilter = false;
+    protected:
+        virtual bool DoApply(TIndexedReadData& owner) const override;
+        virtual bool DoExecuteImpl() override;
+    public:
+        TAssembledNotFiltered(std::shared_ptr<arrow::RecordBatch> batch, NOlap::TReadMetadata::TConstPtr readMetadata,
+            const ui32 batchNo, const bool allowEarlyFilter, NColumnShard::IDataTasksProcessor::TPtr processor)
+            : TBase(processor)
+            , Batch(batch)
+            , ReadMetadata(readMetadata)
+            , BatchNo(batchNo)
+            , AllowEarlyFilter(allowEarlyFilter)
+        {
+
+        }
+    };
+    void PortionFinished(const ui32 batchNo, std::shared_ptr<arrow::RecordBatch> batch);
+
     THashMap<ui32, THashSet<TBlobRange>> WaitIndexed;
     THashMap<TBlobRange, ui32> IndexedBlobs; // blobId -> batchNo
     ui32 ReadyNotIndexed{0};
@@ -251,7 +335,8 @@ private:
 
     std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(
         const std::shared_ptr<arrow::RecordBatch>& batch, ui64 planStep, ui64 txId) const;
-    std::shared_ptr<arrow::RecordBatch> AssembleIndexedBatch(ui32 batchNo);
+
+    NColumnShard::IDataPreparationTask::TPtr AssembleIndexedBatch(ui32 batchNo, NColumnShard::IDataTasksProcessor::TPtr processor);
     void UpdateGranuleWaits(ui32 batchNo);
     std::shared_ptr<arrow::RecordBatch> MergeNotIndexed(
         std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const;

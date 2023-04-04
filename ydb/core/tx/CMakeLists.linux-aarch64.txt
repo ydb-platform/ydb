@@ -8,6 +8,7 @@
 
 add_subdirectory(balance_coverage)
 add_subdirectory(columnshard)
+add_subdirectory(conveyor)
 add_subdirectory(coordinator)
 add_subdirectory(datashard)
 add_subdirectory(long_tx_service)

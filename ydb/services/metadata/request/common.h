@@ -133,6 +133,11 @@ public:
 
     }
 
+    TMaybeResult(const TResult& result)
+        : Result(result) {
+
+    }
+
     const TResult& operator*() const {
         Y_ENSURE(!ErrorMessage, yexception() << "incorrect object for result request");
         return Result;

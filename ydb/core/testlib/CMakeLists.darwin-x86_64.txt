@@ -86,6 +86,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   ydb-services-datastreams
   ydb-services-discovery
   services-ext_index-service
+  tx-conveyor-service
   ydb-services-fq
   ydb-services-kesus
   ydb-services-persqueue_cluster_discovery

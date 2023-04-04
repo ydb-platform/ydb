@@ -160,6 +160,7 @@ struct TKikimrEvents : TEvents {
         ES_GRPC_CANCELATION,
         ES_DISCOVERY,
         ES_EXT_INDEX,
+        ES_CONVEYOR,
     };
 };
 

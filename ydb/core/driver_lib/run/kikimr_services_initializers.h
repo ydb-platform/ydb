@@ -383,6 +383,12 @@ private:
     std::shared_ptr<TModuleFactories> Factories;
 };
 
+class TConveyorInitializer: public IKikimrServicesInitializer {
+public:
+    TConveyorInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TExternalIndexInitializer: public IKikimrServicesInitializer {
 public:
     TExternalIndexInitializer(const TKikimrRunConfig& runConfig);

@@ -114,6 +114,33 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
 
 }
 
+bool TIndexedReadData::TAssembledNotFiltered::DoExecuteImpl() {
+    /// @warning The replace logic is correct only in assumption that predicate is applyed over a part of ReplaceKey.
+    /// It's not OK to apply predicate before replacing key duplicates otherwise.
+    /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
+    auto filtered = NOlap::FilterPortion(Batch, *ReadMetadata);
+    if (filtered.Batch) {
+        Y_VERIFY(filtered.Valid());
+        filtered.ApplyFilter();
+    }
+#if 1 // optimization
+    if (filtered.Batch && ReadMetadata->Program && AllowEarlyFilter) {
+        filtered = NOlap::EarlyFilter(filtered.Batch, ReadMetadata->Program);
+    }
+    if (filtered.Batch) {
+        Y_VERIFY(filtered.Valid());
+        filtered.ApplyFilter();
+    }
+#endif
+    FilteredBatch = filtered.Batch;
+    return true;
+}
+
+bool TIndexedReadData::TAssembledNotFiltered::DoApply(TIndexedReadData& owner) const {
+    owner.PortionFinished(BatchNo, FilteredBatch);
+    return true;
+}
+
 std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan() const {
     return std::make_unique<NColumnShard::TColumnShardScanIterator>(this->shared_from_this());
 }
@@ -218,27 +245,34 @@ THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGr
     return out;
 }
 
-void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& column) {
+void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& data, NColumnShard::IDataTasksProcessor::TPtr processor) {
     Y_VERIFY(IndexedBlobs.count(blobRange));
     ui32 batchNo = IndexedBlobs[blobRange];
     if (!WaitIndexed.count(batchNo)) {
         return;
     }
     auto& waitingFor = WaitIndexed[batchNo];
-    waitingFor.erase(blobRange);
+    if (waitingFor.erase(blobRange) != 1) {
+        return;
+    }
 
-    Data[blobRange] = column;
+    Data[blobRange] = data;
 
     if (waitingFor.empty()) {
-        WaitIndexed.erase(batchNo);
-        if (auto batch = AssembleIndexedBatch(batchNo)) {
-            Indexed[batchNo] = batch;
+        if (auto batch = AssembleIndexedBatch(batchNo, processor)) {
+            if (processor) {
+                processor->Add(batch);
+            } else {
+                batch->Execute();
+                batch->Apply(*this);
+            }
+        } else {
+            WaitIndexed.erase(batchNo);
         }
-        UpdateGranuleWaits(batchNo);
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> TIndexedReadData::AssembleIndexedBatch(ui32 batchNo) {
+NColumnShard::IDataPreparationTask::TPtr TIndexedReadData::AssembleIndexedBatch(ui32 batchNo, NColumnShard::IDataTasksProcessor::TPtr processor) {
     auto& portionInfo = Portion(batchNo);
     Y_VERIFY(portionInfo.Produced());
 
@@ -250,24 +284,7 @@ std::shared_ptr<arrow::RecordBatch> TIndexedReadData::AssembleIndexedBatch(ui32 
         Data.erase(blobRange);
     }
 
-    /// @warning The replace logic is correct only in assumption that predicate is applyed over a part of ReplaceKey.
-    /// It's not OK to apply predicate before replacing key duplicates otherwise.
-    /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
-    auto filtered = NOlap::FilterPortion(batch, *ReadMetadata);
-    if (filtered.Batch) {
-        Y_VERIFY(filtered.Valid());
-        filtered.ApplyFilter();
-    }
-#if 1 // optimization
-    if (filtered.Batch && ReadMetadata->Program && portionInfo.AllowEarlyFilter()) {
-        filtered = NOlap::EarlyFilter(filtered.Batch, ReadMetadata->Program);
-    }
-    if (filtered.Batch) {
-        Y_VERIFY(filtered.Valid());
-        filtered.ApplyFilter();
-    }
-#endif
-    return filtered.Batch;
+    return std::make_shared<TAssembledNotFiltered>(batch, ReadMetadata, batchNo, portionInfo.AllowEarlyFilter(), processor);
 }
 
 void TIndexedReadData::UpdateGranuleWaits(ui32 batchNo) {
@@ -590,4 +607,23 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
     return out;
 }
 
+void TIndexedReadData::PortionFinished(const ui32 batchNo, std::shared_ptr<arrow::RecordBatch> batch) {
+    WaitIndexed.erase(batchNo);
+    if (batch) {
+        Y_VERIFY(Indexed.emplace(batchNo, batch).second);
+    }
+    UpdateGranuleWaits(batchNo);
+}
+
+}
+
+namespace NKikimr::NColumnShard {
+
+bool IDataPreparationTask::DoExecute() {
+    if (OwnerOperator && OwnerOperator->IsStopped()) {
+        return true;
+    } else {
+        return DoExecuteImpl();
+    }
+}
 }

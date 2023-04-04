@@ -69,7 +69,8 @@ union TBasicKikimrServicesMask {
         bool EnableMetadataProvider:1;
         bool EnableReplicationService:1;
         bool EnableBackgroundTasks:1;
-        bool ExternalIndex:1;
+        bool EnableExternalIndex: 1;
+        bool EnableConveyor: 1;
     };
 
     ui64 Raw;

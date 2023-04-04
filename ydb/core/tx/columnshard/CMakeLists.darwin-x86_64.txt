@@ -36,6 +36,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   ydb-core-tablet_flat
   tx-columnshard-engines
   core-tx-tiering
+  tx-conveyor-usage
   tx-long_tx_service-public
   ydb-core-util
   api-protos

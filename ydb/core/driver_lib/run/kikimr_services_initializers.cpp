@@ -157,6 +157,10 @@
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
 
+#include <ydb/core/tx/conveyor/usage/config.h>
+#include <ydb/core/tx/conveyor/service/service.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
+
 #include <ydb/services/bg_tasks/ds_table/executor.h>
 #include <ydb/services/bg_tasks/service.h>
 #include <ydb/services/ext_index/common/config.h>
@@ -2341,6 +2345,28 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
+TConveyorInitializer::TConveyorInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NConveyor::TConfig serviceConfig;
+    if (Config.HasConveyorConfig()) {
+        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetConveyorConfig()));
+    }
+
+    if (serviceConfig.IsEnabled()) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_CONVEYOR");
+
+        auto service = NConveyor::CreateService(serviceConfig, conveyorGroup);
+
+        setup->LocalServices.push_back(std::make_pair(
+            NConveyor::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }
 

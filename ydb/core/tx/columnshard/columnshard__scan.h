@@ -9,7 +9,10 @@ class TScanIteratorBase {
 public:
     virtual ~TScanIteratorBase() = default;
 
-    virtual void AddData(const NBlobCache::TBlobRange& /*blobRange*/, TString /*data*/) {}
+    virtual void Apply(IDataPreparationTask::TPtr /*processor*/) {
+
+    }
+    virtual void AddData(const NBlobCache::TBlobRange& /*blobRange*/, TString /*data*/, IDataTasksProcessor::TPtr /*processor*/) {}
     virtual bool Finished() const = 0;
     virtual NOlap::TPartialReadResult GetBatch() = 0;
     virtual NBlobCache::TBlobRange GetNextBlobToRead() { return NBlobCache::TBlobRange(); }

@@ -10,22 +10,25 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor/usage/events.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/services/metadata/request/common.h>
 
 namespace NKikimr::NColumnShard {
 
 using namespace NKqp;
 using NBlobCache::TBlobRange;
 
-class TTxScan : public TTxReadBase {
+class TTxScan: public TTxReadBase {
 public:
     using TReadMetadataPtr = NOlap::TReadMetadataBase::TConstPtr;
 
     TTxScan(TColumnShard* self, TEvColumnShard::TEvScan::TPtr& ev)
         : TTxReadBase(self)
-        , Ev(ev)
-    {}
+        , Ev(ev) {
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
@@ -42,9 +45,24 @@ private:
 
 
 constexpr ui64 INIT_BATCH_ROWS = 1000;
-constexpr i64 DEFAULT_READ_AHEAD_BYTES = 100*1024*1024;
+constexpr i64 DEFAULT_READ_AHEAD_BYTES = 100 * 1024 * 1024;
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
 constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
+
+class TLocalDataTasksProcessor: public IDataTasksProcessor {
+private:
+    const TActorIdentity OwnerActorId;
+protected:
+    virtual bool DoAdd(IDataPreparationTask::TPtr task) override {
+        OwnerActorId.Send(NConveyor::MakeServiceId(OwnerActorId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task));
+        return true;
+    }
+public:
+    TLocalDataTasksProcessor(const TActorIdentity& ownerActorId)
+        : OwnerActorId(ownerActorId)
+    {
+    }
+};
 
 class TColumnShardScan : public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter {
 public:
@@ -84,6 +102,9 @@ public:
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
         Send(ScanComputeActorId, new TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen), IEventHandle::FlagTrackDelivery);
+        if (NConveyor::TServiceOperator::IsEnabled()) {
+            DataTasksProcessor = std::make_shared<TLocalDataTasksProcessor>(SelfId());
+        }
 
         Become(&TColumnShardScan::StateScan);
     }
@@ -96,6 +117,7 @@ private:
             hFunc(TEvKqp::TEvAbortExecution, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
+            hFunc(NConveyor::TEvExecution::TEvTaskProcessedResult, HandleScan);
             default:
                 Y_FAIL("TColumnShardScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
@@ -135,7 +157,23 @@ private:
         return true;
     }
 
+    void HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
+        ALS_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN) << SelfId();
+        Stats.TaskProcessed();
+        if (ev->Get()->GetErrorMessage()) {
+            DataTasksProcessor->Stop();
+            SendScanError(ev->Get()->GetErrorMessage());
+            Finish();
+        } else {
+            auto t = dynamic_pointer_cast<IDataPreparationTask>(ev->Get()->GetResult());
+            Y_VERIFY(t);
+            ScanIterator->Apply(t);
+        }
+        ContinueProcessing();
+    }
+
     void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
+        Stats.TaskProcessed();
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " got ScanDataAck"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
@@ -156,6 +194,7 @@ private:
     }
 
     void HandleScan(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) {
+        auto g = Stats.MakeGuard("EvResult");
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " blobs response:"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
@@ -188,7 +227,10 @@ private:
             << " prevFreeSpace: " << PeerFreeSpace);
 
         if (ScanIterator) {
-            ScanIterator->AddData(blobRange, event.Data);
+            {
+                auto g = Stats.MakeGuard("AddData");
+                ScanIterator->AddData(blobRange, event.Data, DataTasksProcessor);
+            }
             ContinueProcessing();
         }
     }
@@ -324,6 +366,7 @@ private:
             // * or there is an in-flight blob read or ScanData message for which
             //   we will get a reply and will be able to proceed futher
             if  (!ScanIterator || InFlightScanDataMessages != 0 || InFlightReads != 0) {
+                Stats.StartWait();
                 return;
             }
         }
@@ -332,6 +375,7 @@ private:
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " is hanging"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+        Stats.StartWait();
     }
 
     void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) {
@@ -391,6 +435,7 @@ private:
     }
 
     void NextReadMetadata() {
+        auto g = Stats.MakeGuard("NextReadMetadata");
         ScanIterator.reset();
 
         ++ReadMetadataIndex;
@@ -561,6 +606,8 @@ private:
     i64 InFlightScanDataMessages = 0;
     bool Finished = false;
 
+    IDataTasksProcessor::TPtr DataTasksProcessor;
+
     class TBlobStats {
     private:
         ui64 PartsCount = 0;
@@ -598,11 +645,25 @@ private:
         TBlobStats CacheBlobs;
         TBlobStats MissBlobs;
         THashMap<TString, TDuration> GuardedDurations;
+        THashMap<TString, TInstant> StartGuards;
+        std::optional<TInstant> FirstReceived;
+        TInstant LastWaitStart;
+        TDuration WaitReceive;
     public:
+
+        void StartWait() {
+            Y_VERIFY_DEBUG(!LastWaitStart);
+            LastWaitStart = Now();
+        }
 
         TString DebugString() const {
             TStringBuilder sb;
             sb << "SCAN_STATS;";
+            sb << "start=" << StartInstant << ";";
+            if (FirstReceived) {
+                sb << "frw=" << *FirstReceived - StartInstant << ";";
+            }
+            sb << "srw=" << WaitReceive << ";";
             sb << "d=" << FinishInstant - StartInstant << ";";
             if (RequestsCount) {
                 sb << "req:{count=" << RequestsCount << ";bytes=" << RequestedBytes << ";bytes_avg=" << RequestedBytes / RequestsCount << "};";
@@ -612,7 +673,12 @@ private:
                 sb << "NO_REQUESTS;";
             }
             for (auto&& i : GuardedDurations) {
-                sb << i.first << "=" << i.second << ";";
+                auto it = StartGuards.find(i.first);
+                TDuration delta;
+                if (it != StartGuards.end()) {
+                    delta = Now() - it->second;
+                }
+                sb << i.first << "=" << i.second + delta << ";";
             }
             return sb;
         }
@@ -621,17 +687,18 @@ private:
         private:
             TScanStats& Owner;
             const TInstant Start = Now();
-            TString SectionName;
+            const TString SectionName;
         public:
             TGuard(const TString& sectionName, TScanStats& owner)
                 : Owner(owner)
                 , SectionName(sectionName)
             {
-
+                Y_VERIFY(Owner.StartGuards.emplace(SectionName, Start).second);
             }
 
             ~TGuard() {
                 Owner.GuardedDurations[SectionName] += Now() - Start;
+                Owner.StartGuards.erase(SectionName);
             }
         };
 
@@ -648,7 +715,21 @@ private:
             }
         }
 
+        void TaskProcessed() {
+            if (LastWaitStart) {
+                WaitReceive += Now() - LastWaitStart;
+                LastWaitStart = TInstant::Zero();
+            }
+        }
+
         void BlobReceived(const NBlobCache::TBlobRange& br, const bool fromCache, const TInstant replyInstant) {
+            if (!FirstReceived) {
+                FirstReceived = Now();
+            }
+            if (LastWaitStart) {
+                WaitReceive += Now() - LastWaitStart;
+                LastWaitStart = TInstant::Zero();
+            }
             auto it = StartBlobRequest.find(br);
             Y_VERIFY(it != StartBlobRequest.end());
             const TDuration d = replyInstant - it->second;

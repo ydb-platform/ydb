@@ -200,16 +200,12 @@ public:
             ui64 pathId = 0;
             if (!Path.empty() && result.Self) {
                 switch (result.Self->Info.GetPathType()) {
-                    case NKikimrSchemeOp::EPathTypeTable:
-                    case NKikimrSchemeOp::EPathTypePersQueueGroup:
-                    case NKikimrSchemeOp::EPathTypeTableIndex:
-                    case NKikimrSchemeOp::EPathTypeColumnTable:
-                    case NKikimrSchemeOp::EPathTypeColumnStore:
-                    case NKikimrSchemeOp::EPathTypeCdcStream:
-                    case NKikimrSchemeOp::EPathTypeKesus:
-                        pathId = result.Self->Info.GetPathId();
+                    case NKikimrSchemeOp::EPathTypeSubDomain:
+                    case NKikimrSchemeOp::EPathTypeExtSubDomain:
+                        pathId = 0;
                         break;
                     default:
+                        pathId = result.Self->Info.GetPathId();
                         break;
                 }
             }

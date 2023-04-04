@@ -1653,6 +1653,10 @@ private:
         TTabletExecutedFlat::Execute(tx, TActivationContext::AsActorContext());
     }
 
+    void Execute(std::unique_ptr<ITransaction> tx) {
+        TTabletExecutedFlat::Execute(tx.release(), TActivationContext::AsActorContext());
+    }
+
     void OnActivateExecutor(const TActorContext&) override;
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;

@@ -15,8 +15,6 @@ public:
     TModifyPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ModifyPermissions, std::move(cb))
     {
-        Response_.MutableModifyPermissions()->SetRequestId(RequestId_);
-        CopySecurityToken(Request());
     }
 
     static constexpr bool NeedExistingQueue() {

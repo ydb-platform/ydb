@@ -24,8 +24,7 @@ target_link_libraries(quoter_service_bandwidth_test PUBLIC
   core-testlib-default
 )
 target_link_options(quoter_service_bandwidth_test PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

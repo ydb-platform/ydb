@@ -129,6 +129,7 @@ public:
         NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
         bool NeedTxId = true;
+        bool UseImmediateEffects = false;
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;

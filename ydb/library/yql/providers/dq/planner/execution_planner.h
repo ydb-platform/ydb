@@ -39,7 +39,8 @@ namespace NYql::NDqs {
 
     class TDqsExecutionPlanner: public IDqsExecutionPlanner {
     public:
-        explicit TDqsExecutionPlanner(TIntrusivePtr<TTypeAnnotationContext> typeContext,
+        explicit TDqsExecutionPlanner(const TDqSettings::TPtr& settings,
+                                      TIntrusivePtr<TTypeAnnotationContext> typeContext,
                                       NYql::TExprContext& exprContext,
                                       const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
                                       NYql::TExprNode::TPtr dqExprRoot,
@@ -52,7 +53,7 @@ namespace NYql::NDqs {
             return _MaxDataSizePerJob;
         }
         ui64 StagesCount();
-        ui32 PlanExecution(const TDqSettings::TPtr& settings, bool canFallback = false);
+        ui32 PlanExecution(bool canFallback = false);
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
         TVector<NDqProto::TDqTask>& GetTasks() override;
 
@@ -64,7 +65,7 @@ namespace NYql::NDqs {
         }
 
     private:
-        bool BuildReadStage(const TDqSettings::TPtr& settings, const NNodes::TDqPhyStage& stage, bool dqSource, bool canFallback);
+        bool BuildReadStage(const NNodes::TDqPhyStage& stage, bool dqSource, bool canFallback);
         void BuildConnections(const NNodes::TDqPhyStage& stage);
         THashMap<NDq::TStageId, std::tuple<TString,ui64,ui64>> BuildAllPrograms();
         void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel);
@@ -76,6 +77,7 @@ namespace NYql::NDqs {
         bool IsEgressTask(const TDqsTasksGraph::TTaskType& task) const;
 
     private:
+        const TDqSettings::TPtr Settings;
         TIntrusivePtr<TTypeAnnotationContext> TypeContext;
         NYql::TExprContext& ExprContext;
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;

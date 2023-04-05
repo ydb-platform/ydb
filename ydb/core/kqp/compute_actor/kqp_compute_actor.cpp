@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -50,10 +52,12 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 
 namespace NKqp {
 
-NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(TIntrusivePtr<TKqpCounters> counters) {
+NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(TIntrusivePtr<TKqpCounters> counters, const NYql::IHTTPGateway::TPtr& httpGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterStreamLookupActorFactory(*factory, counters);
     RegisterKqpReadActor(*factory, counters);
+    RegisterS3ReadActorFactory(*factory, nullptr, httpGateway);
+    RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);
     return factory;
 }
 
@@ -93,4 +97,3 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
 }
 }
 } // namespace NKikimr
-

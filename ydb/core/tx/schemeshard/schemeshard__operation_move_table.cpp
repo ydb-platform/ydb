@@ -229,7 +229,6 @@ public:
         // copy table info
         context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
         context.SS->PersistTable(db, dstPath.Base()->PathId);
-        context.SS->PersistTablePartitioning(db, dstPath.Base()->PathId, tableInfo);
         context.SS->PersistTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
         context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "move table info");
 

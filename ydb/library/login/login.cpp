@@ -537,7 +537,6 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
         }
 
         for (const auto& pbPublicKey : state.GetPublicKeys()) {
-            Y_VERIFY(Keys.empty() || pbPublicKey.GetKeyId() == Keys.back().KeyId + 1);
             Keys.push_back({
                 .KeyId = pbPublicKey.GetKeyId(),
                 .PublicKey = pbPublicKey.GetKeyDataPEM(),

@@ -300,7 +300,7 @@ enum EServiceKikimr {
     STREAMS_META_STORAGE_SERVICE = 1019;
     STREAMS_GRAPH_LEADER = 1020;
 
-    // YandexQuery
+    // FederatedQuery
     YQ_CONTROL_PLANE_STORAGE = 1021;
     YQ_CONTROL_PLANE_PROXY= 1022;
     YQ_TEST_CONNECTION = 1023;

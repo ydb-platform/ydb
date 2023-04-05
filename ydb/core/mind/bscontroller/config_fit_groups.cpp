@@ -2,6 +2,7 @@
 #include "config.h"
 #include "group_mapper.h"
 #include "group_geometry_info.h"
+#include "layout_helpers.h"
 
 namespace NKikimr {
     namespace NBsController {
@@ -151,13 +152,25 @@ namespace NKikimr {
                 }
 
                 TGroupMapper::TGroupDefinition group;
+                bool layoutIsValid = true;
 
                 auto getGroup = [&]() -> TGroupMapper::TGroupDefinition& {
                     if (!group) {
+                        NLayoutChecker::TDomainMapper domainMapper;
+                        std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdiskLocations;
+
                         Geometry.ResizeGroup(group);
                         for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
                             const TPDiskId& pdiskId = vslot->VSlotId.ComprisingPDiskId();
                             group[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = pdiskId;
+                            const auto loc = State.HostRecords->GetLocation(pdiskId.NodeId);
+
+                            pdiskLocations[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc, pdiskId, Geometry);
+                        }
+
+                        TString errorReason;
+                        if (!CheckLayoutByGroupDefinition(group, pdiskLocations, Geometry, errorReason)) {
+                            layoutIsValid = false;
                         }
                     }
 
@@ -170,6 +183,7 @@ namespace NKikimr {
                 // mapping for audit log
                 TMap<TVDiskIdShort, TVSlotId> replacedSlots;
                 i64 requiredSpace = Min<i64>();
+
                 bool sanitizingRequest = (State.SanitizingRequests.find(groupId) != State.SanitizingRequests.end());
 
                 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -179,6 +193,7 @@ namespace NKikimr {
                     const auto it = State.ExplicitReconfigureMap.find(vslot->VSlotId);
                     bool replace = it != State.ExplicitReconfigureMap.end();
                     const TPDiskId targetPDiskId = replace ? it->second : TPDiskId();
+
                     if (!replace) {
                         // check status
                         switch (vslot->PDisk->Status) {
@@ -223,7 +238,10 @@ namespace NKikimr {
                 }
 
                 if (sanitizingRequest) {
-                    // resize group definition
+                    if (groupInfo->VDisksInGroup.empty()) {
+                        throw TExFitGroupError() << "Group has been decommitted and cannot be sanitized"
+                                << " GroupId# " << groupId;
+                    }
                     getGroup();
                 }
 
@@ -259,8 +277,12 @@ namespace NKikimr {
                                 forbid.insert(vslotId.ComprisingPDiskId());
                             }
                         }
-                        if ((replacedSlots.empty() && sanitizingRequest) ||
-                                (State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1 && hasMissingSlots)) {
+
+                        if ((State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1 && hasMissingSlots && !layoutIsValid) ||
+                                (replacedSlots.empty() && sanitizingRequest)) {
+
+                            STLOG(PRI_INFO, BS_CONTROLLER, BSCFG01, "Attempt to sanitize group layout", (GroupId, groupId));
+                            // Use group layout sanitizing algorithm on direct requests or when initial group layout is invalid
                             auto result = SanitizeGroup(groupId, group, std::move(forbid), requiredSpace, AllowUnusableDisks);
 
                             if (replacedSlots.empty()) {

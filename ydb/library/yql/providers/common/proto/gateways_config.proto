@@ -385,6 +385,7 @@ message TS3GatewayConfig {
     optional uint64 MaxInflightListsPerQuery = 7;
     optional uint64 MaxDirectoriesAndFilesPerQuery = 8;
     optional uint64 MinDesiredDirectoriesOfFilesPerQuery = 9;
+    optional bool AllowConcurrentListings = 11 [default = false];
 
     repeated TAttr DefaultSettings = 100;
 }

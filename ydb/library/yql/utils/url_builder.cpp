@@ -38,7 +38,10 @@ TString TUrlBuilder::Build() const {
     res << MainUri << "?";
     TStringBuf separator = ""sv;
     for (const auto& p : Params) {
-        res << separator << p.Name  << "=" << CGIEscapeRet(p.Value);
+        res << separator << p.Name;
+        if (p.Value) {
+            res << "=" << CGIEscapeRet(p.Value);
+        }
         separator = "&"sv;
     }
     return std::move(res);

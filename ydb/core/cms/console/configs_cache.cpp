@@ -105,6 +105,10 @@ void TConfigsCache::Bootstrap(const TActorContext &ctx) {
 void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev) {
     auto &rec = ev->Get()->Record;
 
+    if (rec.AffectedKindsSize() == 0) {
+        return;
+    }
+
     CurrentConfig.Swap(rec.MutableConfig());
 
     BLOG_DEBUG("Saving configuration: " << CurrentConfig.ShortDebugString());

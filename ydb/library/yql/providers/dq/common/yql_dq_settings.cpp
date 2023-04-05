@@ -60,6 +60,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, HashShuffleMaxTasks).Lower(1).Upper(1000);
 
     REGISTER_SETTING(*this, UseWideChannels);
+    REGISTER_SETTING(*this, UseFastPickleTransport);
 }
 
 } // namespace NYql

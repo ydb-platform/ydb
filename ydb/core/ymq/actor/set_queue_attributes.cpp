@@ -28,14 +28,9 @@ public:
     TSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::SetQueueAttributes, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableSetQueueAttributes()->SetRequestId(RequestId_);
-
         for (const auto& attr : Request().attributes()) {
             Attributes_[attr.GetName()] = attr.GetValue();
         }
-
-        CopySecurityToken(Request());
     }
 
 private:

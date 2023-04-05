@@ -62,7 +62,12 @@ public:
     };
 
     using THeaders = TSmallVec<TString>;
-    using TResult = std::variant<TContent, TIssues>;
+    struct TResult {
+        TResult(TContent&& content) : Content(std::move(content)) {}
+        TResult(const TIssues& issues) : Content(""), Issues(issues) {}
+        TContent Content;
+        TIssues Issues;
+    };
     using TOnResult = std::function<void(TResult&&)>;
 
     virtual void Upload(

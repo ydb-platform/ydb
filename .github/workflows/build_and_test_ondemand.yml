@@ -68,7 +68,7 @@ jobs:
     - name: Test
       uses: ./.github/actions/test
       with: 
-        log_suffix: X64
+        log_suffix: ${{format('{0}-{1}', 'X64', inputs.sanitizer)}}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}

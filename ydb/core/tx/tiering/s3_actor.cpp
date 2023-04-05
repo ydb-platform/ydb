@@ -36,7 +36,7 @@ public:
     }
 
     TUnifiedBlobId AddExported(const TUnifiedBlobId& srcBlob, const ui64 pathId) {
-        Event->SrcToDstBlobs[srcBlob] = TUnifiedBlobId(srcBlob, TUnifiedBlobId::S3_BLOB, pathId);
+        Event->SrcToDstBlobs[srcBlob] = srcBlob.MakeS3BlobId(pathId);
         return Event->SrcToDstBlobs[srcBlob];
     }
 

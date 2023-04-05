@@ -217,6 +217,7 @@ const TYdbOperations& KikimrDataOps();
 const TYdbOperations& KikimrModifyOps();
 const TYdbOperations& KikimrReadOps();
 
+TIssue AddDmlIssue(const TIssue& issue);
 bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
 
 class TKikimrTransactionContextBase : public TThrRefBase {
@@ -260,19 +261,15 @@ public:
     }
 
     template<class IterableKqpTableOps, class IterableKqpTableInfos>
-    bool ApplyTableOperations(const IterableKqpTableOps& operations,
-        const IterableKqpTableInfos& tableInfos, NKikimrKqp::EIsolationLevel isolationLevel,
-        bool enableImmediateEffects, EKikimrQueryType queryType, TExprContext& ctx)
+    std::pair<bool, TIssues> ApplyTableOperations(const IterableKqpTableOps& operations,
+        const IterableKqpTableInfos& tableInfos, bool enableImmediateEffects, EKikimrQueryType queryType)
     {
+        TIssues issues;
         if (IsClosed()) {
             TString message = TStringBuilder() << "Cannot perform operations on closed transaction.";
-            ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-            return false;
+            issues.AddIssue(YqlIssue({}, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+            return {false, issues};
         }
-
-        isolationLevel = EffectiveIsolationLevel
-            ? *EffectiveIsolationLevel
-            : isolationLevel;
 
         bool hasScheme = false;
         bool hasData = false;
@@ -299,50 +296,50 @@ public:
             if (!info) {
                 TString message = TStringBuilder()
                     << "Unable to find table info for table '" << table << "'";
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_SCHEME_ERROR, message));
-                return false;
+                issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_SCHEME_ERROR, message));
+                return {false, issues};
             }
 
             if (queryType == EKikimrQueryType::Dml && (newOp & KikimrSchemeOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in data query";
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                return false;
+                issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                return {false, issues};
             }
 
             if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, queryType) && (newOp & KikimrSchemeOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in query";
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                return false;
+                issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                return {false, issues};
             }
 
             if (queryType == EKikimrQueryType::Ddl && (newOp & KikimrDataOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in scheme query";
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                return false;
+                issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                return {false, issues};
             }
 
             if (queryType == EKikimrQueryType::Scan && (newOp & KikimrModifyOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in scan query";
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                return false;
+                issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                return {false, issues};
             }
 
             if (hasData && (newOp & KikimrSchemeOps()) ||
                 hasScheme && (newOp & KikimrDataOps()))
             {
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX));
-                return false;
+                issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX));
+                return {false, issues};
             }
 
             if (Readonly && (newOp & KikimrModifyOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in read only transaction";
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                return false;
+                issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                return {false, issues};
             }
 
             auto& currentOps = TableOperations[table];
@@ -351,22 +348,22 @@ public:
                 if (KikimrReadOps() & newOp) {
                     TString message = TStringBuilder() << "Data modifications previously made to table '" << table
                         << "' in current transaction won't be seen by operation: '" << newOp << "'";
-                    if (!AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message), ctx)) {
-                        return false;
-                    }
+                    auto newIssue = AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message));
+                    issues.AddIssue(newIssue);
+                    return {false, issues};
                 }
 
                 if (info->GetHasIndexTables()) {
                     TString message = TStringBuilder() << "Multiple modification of table with secondary indexes is not supported yet";
-                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                    return false;
+                    issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                    return {false, issues};
                 }
             }
 
             currentOps |= newOp;
         }
 
-        return true;
+        return {true, issues};
     }
 
     virtual ~TKikimrTransactionContextBase() = default;

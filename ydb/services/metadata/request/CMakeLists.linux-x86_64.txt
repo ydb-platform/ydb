@@ -20,6 +20,7 @@ target_link_libraries(services-metadata-request PUBLIC
 )
 target_sources(services-metadata-request PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/request_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/request_actor_cb.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/common.cpp
 )

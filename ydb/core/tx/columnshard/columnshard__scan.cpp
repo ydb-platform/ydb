@@ -845,7 +845,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     auto ydbKey = isIndexStats ?
         NOlap::GetColumns(PrimaryIndexStatsSchema, PrimaryIndexStatsSchema.KeyColumns) :
-        Self->PrimaryIndex->GetIndexInfo().GetPK();
+        Self->PrimaryIndex->GetIndexInfo().GetPrimaryKey();
 
     for (auto& range: record.GetRanges()) {
         FillPredicatesFromRange(read, range, ydbKey, Self->TabletID());

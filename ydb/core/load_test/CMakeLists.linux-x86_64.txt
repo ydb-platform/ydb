@@ -39,6 +39,7 @@ target_sources(ydb-core-load_test PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/service_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/group_write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/vdisk_write.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/yql_single_query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/bulk_mkql_upsert.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/info_collector.cpp

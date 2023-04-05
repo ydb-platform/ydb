@@ -17,9 +17,7 @@ private:
 
     virtual void OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& qResult, NFetcher::ISnapshot::TPtr snapshot) override final;
 
-    virtual void OnIncorrectSnapshotFromYQL(const TString& errorMessage) override final;
-
-    virtual void OnSnapshotEnrichingError(const TString& errorMessage) override final;
+    virtual void OnConstructSnapshotError(const TString& errorMessage) override final;
 protected:
     virtual void OnBootstrap() override;
     virtual void OnSnapshotModified() = 0;

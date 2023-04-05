@@ -796,10 +796,6 @@ protected:
                 }
             }
         }
-        // TODO: remove after migration (YQ-1467)
-        if (AppConfig.HasYandexQueryConfig()) {
-            AppConfig.MutableFederatedQueryConfig()->MergeFrom(AppConfig.GetYandexQueryConfig());
-        }
     }
 
     inline bool LoadBootstrapConfig(TConfig& config) {

@@ -11,6 +11,7 @@ enum ESimpleCounters {
  
     // 1 when local config differs from console
     COUNTER_BOOTSTRAP_DIFFERS = 1                        [(CounterOpts) = {Name: "BootstrapConfigDiffersFromConsole"}];
+    COUNTER_REQUESTS_QUEUE_SIZE = 2                      [(CounterOpts) = {Name: "RequestsQueueSize"}];
 }
 
 enum ECumulativeCounters {
@@ -19,11 +20,29 @@ enum ECumulativeCounters {
 
 enum EPercentileCounters {
     option (GlobalCounterOpts) = {
-        Ranges { Value: 0      Name: "0 ms"      }
-        Ranges { Value: 1      Name: "1 ms"      }
+        Ranges { Value: 100    Name: "100 ms" }
+        Ranges { Value: 500    Name: "500 ms" }
+        Ranges { Value: 1000   Name: "1 s" }
+        Ranges { Value: 2000   Name: "2 s" }
+        Ranges { Value: 5000   Name: "5 s" }
+        Ranges { Value: 10000  Name: "10 s" }
+        Ranges { Value: 15000  Name: "15 s" }
+        Ranges { Value: 30000  Name: "30 s" }
+        Ranges { Value: 45000  Name: "45 s" }
+        Ranges { Value: 60000  Name: "60 s"  }
+        Ranges { Value: 120000 Name: "120 s" }
+        Ranges { Value: 150000 Name: "150 s" }
+        Ranges { Value: 180000 Name: "180 s" }
+        Ranges { Value: 200000 Name: "200 s" }
     };
 
     COUNTER_PERCENTILE_IGNORE = 0;
+
+    COUNTER_LATENCY_INFO_COLLECTOR = 1                [(CounterOpts) = {Name: "LatencyInfoCollector"}];
+    COUNTER_LATENCY_REQUEST_QUEUING = 2               [(CounterOpts) = {Name: "LatencyRequestQueuing"}];
+
+    COUNTER_LATENCY_PERMISSION_REQUEST = 3            [(CounterOpts) = {Name: "LatencyPermissionRequest"}];
+    COUNTER_LATENCY_CHECK_REQUEST = 4                 [(CounterOpts) = {Name: "LatencyCheckRequest"}];
 }
 
 enum ETxTypes {

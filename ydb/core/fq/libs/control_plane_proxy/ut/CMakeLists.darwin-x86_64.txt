@@ -33,8 +33,7 @@ target_link_libraries(ydb-core-fq-libs-control_plane_proxy-ut PUBLIC
   library-folder_service-mock
 )
 target_link_options(ydb-core-fq-libs-control_plane_proxy-ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

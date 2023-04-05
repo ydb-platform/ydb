@@ -569,16 +569,6 @@ public:
         Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
     }
 
-    std::pair<bool, TIssues> ApplyTableOperations(TKqpTransactionContext* txCtx, const NKqpProto::TKqpPhyQuery& query) {
-        auto isolationLevel = *txCtx->EffectiveIsolationLevel;
-        bool enableImmediateEffects = Config->FeatureFlags.GetEnableKqpImmediateEffects();
-
-        TExprContext ctx;
-        bool success = txCtx->ApplyTableOperations(query.GetTableOps(), query.GetTableInfos(), isolationLevel,
-            enableImmediateEffects, EKikimrQueryType::Dml, ctx);
-        return {success, ctx.IssueManager.GetIssues()};
-    }
-
     bool PrepareQueryTransaction() {
         if (QueryState->HasTxControl()) {
             const auto& txControl = QueryState->GetTxControl();
@@ -623,7 +613,9 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        auto [success, issues] = ApplyTableOperations(QueryState->TxCtx.Get(), phyQuery);
+        bool enableImmediateEffects = Config->FeatureFlags.GetEnableKqpImmediateEffects();
+        auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
+            enableImmediateEffects, EKikimrQueryType::Dml);
         if (!success) {
             YQL_ENSURE(!issues.Empty());
             ReplyQueryError(GetYdbStatus(issues), "", MessageFromIssues(issues));
@@ -957,6 +949,8 @@ public:
             request.TopicOperations = std::move(txCtx.TopicOperations);
         } else if (txCtx.ShouldAcquireLocks(query, QueryState->Commit)) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
+            // TODO: Use immediate effects only if tx contains uncommitted changes reading (KIKIMR-17576)
+            request.UseImmediateEffects = Config->FeatureFlags.GetEnableKqpImmediateEffects();
         }
 
         LWTRACK(KqpSessionPhyQueryProposeTx,
@@ -983,7 +977,8 @@ public:
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
-            RequestCounters, Settings.Service.GetAggregationConfig(), Settings.Service.GetExecuterRetriesConfig());
+            RequestCounters, Settings.Service.GetAggregationConfig(), Settings.Service.GetExecuterRetriesConfig(),
+            HttpGateway);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);

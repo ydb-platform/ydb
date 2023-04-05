@@ -15,12 +15,14 @@
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config_units.pb.h>
+#include <ydb/core/protos/counters_cms.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
@@ -1255,13 +1257,16 @@ void TCms::EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx)
         ctx.Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvStartCollecting);
     }
 
-    NextQueue.push(ev);
+    NextQueue.emplace(ev, ctx.Now());
+    TabletCounters->Simple()[COUNTER_REQUESTS_QUEUE_SIZE].Add(1);
 }
 
 void TCms::StartCollecting(const TActorContext &ctx)
 {
     Y_VERIFY(Queue.empty());
     std::swap(NextQueue, Queue);
+
+    InfoCollectorStartTime = ctx.Now();
 
     auto collector = CreateInfoCollector(SelfId(), State->Config.InfoCollectionTimeout);
     ctx.ExecutorThread.RegisterActor(collector);
@@ -1339,7 +1344,10 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
 void TCms::ProcessQueue(const TActorContext &ctx)
 {
     while (!Queue.empty()) {
-        ProcessRequest(Queue.front(), ctx);
+        TabletCounters->Percentile()[COUNTER_LATENCY_REQUEST_QUEUING].IncrementFor((ctx.Now() - Queue.front().ArrivedTime).MilliSeconds());
+        TabletCounters->Simple()[COUNTER_REQUESTS_QUEUE_SIZE].Sub(1);
+
+        ProcessRequest(Queue.front().Request, ctx);
         Queue.pop();
     }
 
@@ -1389,6 +1397,8 @@ void TCms::Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContex
 
 void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx)
 {
+    TabletCounters->Percentile()[COUNTER_LATENCY_INFO_COLLECTOR].IncrementFor((ctx.Now() - InfoCollectorStartTime).MilliSeconds());
+
     if (!ev->Get()->Success) {
         LOG_NOTICE_S(ctx, NKikimrServices::CMS,
                      "Couldn't collect cluster state.");
@@ -1559,6 +1569,8 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
     auto &rec = ev->Get()->Record;
     TString user = rec.GetUser();
 
+    auto requestStartTime = TInstant::Now();
+
     auto actions(std::move(*rec.MutableActions()));
     rec.ClearActions();
 
@@ -1617,6 +1629,8 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
     }
+
+    TabletCounters->Percentile()[COUNTER_LATENCY_PERMISSION_REQUEST].IncrementFor((TInstant::Now() - requestStartTime).MilliSeconds());
 }
 
 void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
@@ -1641,6 +1655,8 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     auto &request = it->second;
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
     TRequestInfo scheduled;
+
+    auto requestStartTime = TInstant::Now();
 
     ClusterInfo->LogManager.PushRollbackPoint();
     for (const auto &scheduled_request : State->ScheduledRequests) {
@@ -1688,6 +1704,8 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
     }
+
+    TabletCounters->Percentile()[COUNTER_LATENCY_CHECK_REQUEST].IncrementFor((TInstant::Now() - requestStartTime).MilliSeconds());
 }
 
 bool TCms::CheckNotificationDeadline(const TAction &action, TInstant time,

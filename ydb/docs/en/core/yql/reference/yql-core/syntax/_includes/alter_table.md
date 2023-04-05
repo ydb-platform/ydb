@@ -46,6 +46,24 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 You can also add or remove a secondary index using the {{ ydb-short-name }} CLI [table index](https://ydb.tech/en/docs/reference/ydb-cli/commands/secondary_index) command.
 
+## Renaming a secondary index {#rename-secondary-index}
+
+`RENAME INDEX`: Renames the index with the specified name.
+
+If an index with the new name exists, an error is returned.
+
+{% if backend_name == YDB %}
+
+Replacement of atomic indexes under load is supported by the command [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) in the {{ ydb-short-name }} CLI and by {{ ydb-short-name }} SDK ad-hoc methods.
+
+{% endif %}
+
+Example of index renaming:
+
+```sql
+ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
+```
+
 {% endif %}
 
 {% if feature_changefeed %}

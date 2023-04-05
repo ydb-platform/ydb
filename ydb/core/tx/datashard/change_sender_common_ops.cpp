@@ -1,9 +1,12 @@
 #include "change_sender_common_ops.h"
+#include "change_sender_monitoring.h"
+
+#include <library/cpp/monlib/service/pages/mon_page.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/size_literals.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 void TBaseChangeSender::CreateSenders(const TVector<ui64>& partitionIds) {
     THashMap<ui64, TSender> senders;
@@ -36,11 +39,9 @@ void TBaseChangeSender::CreateSenders(const TVector<ui64>& partitionIds) {
 }
 
 void TBaseChangeSender::KillSenders() {
-    for (const auto& [_, sender] : Senders) {
+    for (const auto& [_, sender] : std::exchange(Senders, {})) {
         ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
     }
-
-    Senders.clear();
 }
 
 void TBaseChangeSender::EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
@@ -180,13 +181,7 @@ void TBaseChangeSender::OnReady(ui64 partitionId) {
     sender.Ready = true;
 
     if (sender.Pending) {
-        TVector<ui64> remove(Reserve(sender.Pending.size()));
-        for (const auto& record : sender.Pending) {
-            remove.push_back(record.Order);
-        }
-
-        ActorOps->Send(DataShard.ActorId, new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
-        sender.Pending.clear();
+        RemoveRecords(std::exchange(sender.Pending, {}));
     }
 
     SendRecords();
@@ -220,15 +215,15 @@ void TBaseChangeSender::RemoveRecords() {
 
     TVector<ui64> remove(Reserve(Enqueued.size() + PendingBody.size() + PendingSent.size() + pendingStatus));
 
-    for (const auto& record : Enqueued) {
+    for (const auto& record : std::exchange(Enqueued, {})) {
         remove.push_back(record.Order);
     }
 
-    for (const auto& record : PendingBody) {
+    for (const auto& record : std::exchange(PendingBody, {})) {
         remove.push_back(record.Order);
     }
 
-    for (const auto& [order, _] : PendingSent) {
+    for (const auto& [order, _] : std::exchange(PendingSent, {})) {
         remove.push_back(order);
     }
 
@@ -254,5 +249,154 @@ TBaseChangeSender::TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver*
 {
 }
 
-} // NDataShard
-} // NKikimr
+void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon::TEvRemoteHttpInfo::TPtr& ev,
+        const TActorContext& ctx)
+{
+    const auto& cgi = ev->Get()->Cgi();
+    if (const auto& str = cgi.Get("partitionId")) {
+        ui64 partitionId = 0;
+        if (TryFromString(str, partitionId)) {
+            auto it = Senders.find(partitionId);
+            if (it != Senders.end()) {
+                if (const auto& to = it->second.ActorId) {
+                    ctx.Send(ev->Forward(to));
+                } else {
+                    ActorOps->Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(TStringBuilder()
+                        << "Change sender '" << PathId << ":" << partitionId << "' is not running"));
+                }
+            } else {
+                ActorOps->Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
+            }
+        } else {
+            ActorOps->Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Invalid partitionId"));
+        }
+
+        return;
+    }
+
+    TStringStream html;
+
+    HTML(html) {
+        Header(html, TStringBuilder() << type << " change sender", DataShard.TabletId);
+
+        SimplePanel(html, "Partition senders", [this](IOutputStream& html) {
+            HTML(html) {
+                TABLE_CLASS("table table-hover") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { html << "#"; }
+                            TABLEH() { html << "PartitionId"; }
+                            TABLEH() { html << "Ready"; }
+                            TABLEH() { html << "Pending"; }
+                            TABLEH() { html << "Actor"; }
+                        }
+                    }
+                    TABLEBODY() {
+                        ui32 i = 0;
+                        for (const auto& [partitionId, sender] : Senders) {
+                            TABLER() {
+                                TABLED() { html << ++i; }
+                                TABLED() { html << partitionId; }
+                                TABLED() { html << sender.Ready; }
+                                TABLED() { html << sender.Pending.size(); }
+                                TABLED() { ActorLink(html, DataShard.TabletId, PathId, partitionId); }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        CollapsedPanel(html, "Enqueued", "enqueued", [this](IOutputStream& html) {
+            HTML(html) {
+                TABLE_CLASS("table table-hover") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { html << "#"; }
+                            TABLEH() { html << "Order"; }
+                            TABLEH() { html << "BodySize"; }
+                        }
+                    }
+                    TABLEBODY() {
+                        ui32 i = 0;
+                        for (const auto& record : Enqueued) {
+                            TABLER() {
+                                TABLED() { html << ++i; }
+                                TABLED() { html << record.Order; }
+                                TABLED() { html << record.BodySize; }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        CollapsedPanel(html, "PendingBody", "pendingBody", [this](IOutputStream& html) {
+            HTML(html) {
+                TABLE_CLASS("table table-hover") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { html << "#"; }
+                            TABLEH() { html << "Order"; }
+                            TABLEH() { html << "BodySize"; }
+                        }
+                    }
+                    TABLEBODY() {
+                        ui32 i = 0;
+                        for (const auto& record : PendingBody) {
+                            TABLER() {
+                                TABLED() { html << ++i; }
+                                TABLED() { html << record.Order; }
+                                TABLED() { html << record.BodySize; }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        CollapsedPanel(html, "PendingSent", "pendingSent", [this](IOutputStream& html) {
+            HTML(html) {
+                TABLE_CLASS("table table-hover") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { html << "#"; }
+                            TABLEH() { html << "Order"; }
+                            TABLEH() { html << "Group"; }
+                            TABLEH() { html << "Step"; }
+                            TABLEH() { html << "TxId"; }
+                            TABLEH() { html << "LockId"; }
+                            TABLEH() { html << "LockOffset"; }
+                            TABLEH() { html << "PathId"; }
+                            TABLEH() { html << "Kind"; }
+                            TABLEH() { html << "TableId"; }
+                            TABLEH() { html << "SchemaVersion"; }
+                        }
+                    }
+                    TABLEBODY() {
+                        ui32 i = 0;
+                        for (const auto& [order, record] : PendingSent) {
+                            TABLER() {
+                                TABLED() { html << ++i; }
+                                TABLED() { html << order; }
+                                TABLED() { html << record.GetGroup(); }
+                                TABLED() { html << record.GetStep(); }
+                                TABLED() { html << record.GetTxId(); }
+                                TABLED() { html << record.GetLockId(); }
+                                TABLED() { html << record.GetLockOffset(); }
+                                TABLED() { PathLink(html, record.GetPathId()); }
+                                TABLED() { html << record.GetKind(); }
+                                TABLED() { PathLink(html, record.GetTableId()); }
+                                TABLED() { html << record.GetSchemaVersion(); }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    ActorOps->Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
+}
+
+}

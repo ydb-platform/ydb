@@ -33,8 +33,7 @@ target_link_libraries(ydb-library-protobuf_printer-ut PUBLIC
   contrib-libs-protobuf
 )
 target_link_options(ydb-library-protobuf_printer-ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

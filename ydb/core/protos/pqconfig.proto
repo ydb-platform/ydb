@@ -622,6 +622,17 @@ message TClientInfo {
     optional uint64 TotalLagMs = 9;
 }
 
+
+message TAggregatedCounters {
+    repeated uint64 Values = 1;
+    repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
+
+    message TConsumerAggregatedCounters {
+        optional string Consumer = 1;
+        repeated uint64 Values = 2;
+    }
+}
+
 message TStatusResponse {
     enum EStatus {
         STATUS_OK = 0;
@@ -681,6 +692,7 @@ message TStatusResponse {
         repeated TConsumerResult ConsumerResult = 30;
 
         optional int64 UsedReserveSize = 31;
+        optional TAggregatedCounters AggregatedCounters = 32;
     }
 
     message TConsumerResult {

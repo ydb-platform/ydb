@@ -164,23 +164,25 @@ void TBlobManagerDb::UpdateEvictBlob(const TEvictedBlob& evict, const TString& m
     TString serializedBlobId = evict.Blob.ToStringNew();
 
     switch (evict.State) {
-        case EEvictState::EVICTING:
+        case EEvictState::EVICTING: {
             Y_VERIFY(!meta.empty());
-            db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Update(
-                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::Size>(evict.Blob.BlobSize()),
-                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::State>((ui8)evict.State),
-                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::Metadata>(meta)
-            );
-            break;
-        case EEvictState::SELF_CACHED:
-        case EEvictState::EXTERN: {
-            Y_VERIFY(meta.empty());
             Y_VERIFY(evict.ExternBlob.IsS3Blob());
             TString serializedExternId = evict.ExternBlob.ToStringNew();
 
             db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Update(
+                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::Size>(evict.Blob.BlobSize()),
                 NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::State>((ui8)evict.State),
+                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::Metadata>(meta),
                 NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::ExternBlobId>(serializedExternId)
+            );
+            break;
+        }
+        case EEvictState::SELF_CACHED:
+        case EEvictState::EXTERN: {
+            Y_VERIFY(meta.empty());
+            Y_VERIFY(evict.ExternBlob.IsS3Blob());
+            db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Update(
+                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::State>((ui8)evict.State)
             );
             break;
         }

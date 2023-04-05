@@ -603,7 +603,7 @@ arrow::Status TProgramStep::ApplyAggregates(
         res.Rows = gbBatch->num_rows();
     }
 
-    res.Schema = std::make_shared<arrow::Schema>(fields);
+    res.Schema = std::make_shared<arrow::Schema>(std::move(fields));
     batch = std::move(res);
     return arrow::Status::OK();
 }
@@ -701,7 +701,7 @@ arrow::Status TProgramStep::ApplyProjection(TDatumBatch& batch) const {
         newFields.push_back(batch.Schema->field(schemaFieldIndex));
         newDatums.push_back(batch.Datums[schemaFieldIndex]);
     }
-    batch.Schema = std::make_shared<arrow::Schema>(newFields);
+    batch.Schema = std::make_shared<arrow::Schema>(std::move(newFields));
     batch.Datums = std::move(newDatums);
     return arrow::Status::OK();
 }
@@ -718,7 +718,7 @@ arrow::Status TProgramStep::ApplyProjection(std::shared_ptr<arrow::RecordBatch>&
             return arrow::Status::Invalid("Wrong projection column '" + column + "'.");
         }
     }
-    batch = NArrow::ExtractColumns(batch, std::make_shared<arrow::Schema>(fields));
+    batch = NArrow::ExtractColumns(batch, std::make_shared<arrow::Schema>(std::move(fields)));
     return arrow::Status::OK();
 }
 

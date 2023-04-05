@@ -18,8 +18,7 @@ target_link_libraries(sqs PUBLIC
   core-ymq-proto
 )
 target_link_options(sqs PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

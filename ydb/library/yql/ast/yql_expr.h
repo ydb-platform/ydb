@@ -1638,6 +1638,16 @@ public:
         return !OuterLambda;
     }
 
+    bool IsLiteralList() const {
+        YQL_ENSURE(IsList());
+        return LiteralList;
+    }
+
+    void SetLiteralList(bool literal) {
+        YQL_ENSURE(IsList());
+        LiteralList = literal;
+    }
+
     void Ref() {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
@@ -2116,6 +2126,7 @@ private:
         ui8 UsedInDependsOn : 1;
         ui8 UnordChildren   : 1;
         ui8 ShallBeDisclosed: 1;
+        ui8 LiteralList     : 1;
     };
 };
 

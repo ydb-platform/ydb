@@ -114,6 +114,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   cpp-html-pcdata
   library-cpp-json
   cpp-json-yson
+  monlib-service-pages
   cpp-string_utils-base64
   cpp-string_utils-quote
   ydb-core-actorlib_impl
@@ -165,6 +166,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_async_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_cdc_stream.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_common_ops.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_monitoring.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_commit_writes_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_data_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_distributed_erase_tx_unit.cpp
@@ -372,6 +374,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   cpp-html-pcdata
   library-cpp-json
   cpp-json-yson
+  monlib-service-pages
   cpp-string_utils-base64
   cpp-string_utils-quote
   ydb-core-actorlib_impl

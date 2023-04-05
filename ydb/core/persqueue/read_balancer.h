@@ -12,6 +12,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -198,7 +199,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Die(const TActorContext& ctx) override {
         StopFindSubDomainPathId();
         StopWatchingSubDomainPathId();
-        
+
         for (auto& pipe : TabletPipes) {
             NTabletPipe::CloseClient(ctx, pipe.second);
         }
@@ -294,6 +295,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&);
     void RestartPipe(const ui64 tabletId, const TActorContext&);
     void CheckStat(const TActorContext&);
+    void UpdateCounters(const TActorContext&);
+
     void RespondWithACL(
         const TEvPersQueue::TEvCheckACL::TPtr &request,
         const NKikimrPQ::EAccess &access,
@@ -339,7 +342,13 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     NACLib::TSecurityObject ACL;
     TInstant LastACLUpdate;
 
-    THashSet<TString> Consumers;
+
+    struct TConsumerInfo {
+        TVector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+        THolder<TTabletLabeledCountersBase> Aggr;
+    };
+
+    THashMap<TString, TConsumerInfo> Consumers;
 
     ui64 TxId;
     ui32 NumActiveParts;
@@ -395,7 +404,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui64 TabletId;
         TString Path;
         ui32 Generation = 0;
-        ui64 RandomNumber = 0;
+        ui64 SessionKeySalt = 0;
         ui32* Step = nullptr;
 
         ui32 Group = 0;
@@ -403,6 +412,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         THashMap<ui32, TPartitionInfo> PartitionsInfo; // partitionId -> info
         std::deque<ui32> FreePartitions;
         THashMap<std::pair<TActorId, ui64>, TSessionInfo> SessionsInfo; //map from ActorID and random value - need for reordering sessions in different topics
+
+        std::pair<TActorId, ui64> SessionKey(const TActorId pipe) const;
+        bool EraseSession(const TActorId pipe);
+        TSessionInfo* FindSession(const TActorId pipe);
 
         void ScheduleBalance(const TActorContext& ctx);
         void Balance(const TActorContext& ctx);
@@ -425,7 +438,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui32 TotalGroups;
     bool NoGroupsInBase;
 
+
     struct TClientInfo {
+        constexpr static ui32 MAIN_GROUP = 0;
+
         THashMap<ui32, TClientGroupInfo> ClientGroupsInfo; //map from group to info
         ui32 SessionsWithGroup = 0;
 
@@ -436,14 +452,13 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui32 Generation = 0;
         ui32 Step = 0;
 
-        void KillGroup(const ui32 group, const TActorContext& ctx);
+        void KillSessionsWithoutGroup(const TActorContext& ctx);
         void MergeGroups(const TActorContext& ctx);
         TClientGroupInfo& AddGroup(const ui32 group);
         void FillEmptyGroup(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo);
         void AddSession(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo,
                         const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record);
         TStringBuilder GetPrefix() const;
-
     };
 
     THashMap<TString, TClientInfo> ClientsInfo; //map from userId -> to info
@@ -456,9 +471,18 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     bool WaitingForACL;
 
+    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+
+    TString DatabasePath;
+    TString DatabaseId;
+    TString FolderId;
+    TString CloudId;
+
     struct TPartitionStats {
         ui64 DataSize = 0;
         ui64 UsedReserveSize = 0;
+        NKikimrPQ::TAggregatedCounters Counters;
+        bool HasCounters = false;
     };
 
     struct TPartitionMetrics {

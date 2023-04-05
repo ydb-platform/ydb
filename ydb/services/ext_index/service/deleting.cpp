@@ -1,5 +1,6 @@
 #include "deleting.h"
 #include <ydb/services/metadata/initializer/common.h>
+#include <ydb/services/metadata/request/request_actor_cb.h>
 
 namespace NKikimr::NCSIndex {
 
@@ -42,8 +43,7 @@ void TDeleting::Start(std::shared_ptr<TDeleting> selfContainer) {
 }
 
 void TDeleting::OnModificationFinished(const TString& /*modificationId*/) {
-    TActivationContext::ActorSystem()->Register(new NMetadata::NRequest::TSessionedActorCallback<NMetadata::NRequest::TDialogYQLRequest>(
-        BuildDeleteRequest(), Config.GetRequestConfig(), NACLib::TSystemUsers::Metadata(), SelfContainer));
+    NMetadata::NRequest::TYQLRequestExecutor::Execute(BuildDeleteRequest(), NACLib::TSystemUsers::Metadata(), SelfContainer);
 }
 
 void TDeleting::OnModificationFailed(const TString& errorMessage, const TString& /*modificationId*/) {

@@ -1972,6 +1972,39 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(RacySplitAndDropTable) {
+        TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);
+        auto& runtime = *env.GetServer()->GetRuntime();
+
+        TVector<THolder<IEventHandle>> enqueued;
+        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvChangeExchange::EvEnqueueRecords) {
+                enqueued.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(
+            UPSERT INTO `/Root/Table` (key, value)
+            VALUES (1, 10);
+        )"); 
+
+        SetSplitMergePartCountLimit(&runtime, -1);
+        const auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+        AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 2);
+
+        const auto dropTxId = AsyncDropTable(env.GetServer(), env.GetEdgeActor(), "/Root", "Table");
+
+        runtime.SetObserverFunc(prevObserver);
+        for (auto& ev : std::exchange(enqueued, {})) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), dropTxId);
+    }
+
     Y_UNIT_TEST(RenameTable) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

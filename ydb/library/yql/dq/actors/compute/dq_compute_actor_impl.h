@@ -575,17 +575,21 @@ protected:
     void FillExtraData(NDqProto::TEvComputeActorState& state) {
         auto* extraData = state.MutableExtraData();
         for (auto& [index, input] : SourcesMap) {
-            if (auto data = input.AsyncInput->ExtraData()) {
-                auto* entry = extraData->AddSourcesExtraData();
-                entry->SetIndex(index);
-                entry->MutableData()->CopyFrom(*data);
+            if (input.AsyncInput) {
+                if (auto data = input.AsyncInput->ExtraData()) {
+                    auto* entry = extraData->AddSourcesExtraData();
+                    entry->SetIndex(index);
+                    entry->MutableData()->CopyFrom(*data);
+                }
             }
         }
         for (auto& [index, input] : InputTransformsMap) {
-            if (auto data = input.AsyncInput->ExtraData()) {
-                auto* entry = extraData->AddInputTransformsData();
-                entry->SetIndex(index);
-                entry->MutableData()->CopyFrom(*data);
+            if (input.AsyncInput) {
+                if (auto data = input.AsyncInput->ExtraData()) {
+                    auto* entry = extraData->AddInputTransformsData();
+                    entry->SetIndex(index);
+                    entry->MutableData()->CopyFrom(*data);
+                }
             }
         }
     }

@@ -17,8 +17,7 @@ target_link_libraries(bulk_upsert_simple PUBLIC
   cpp-client-ydb_table
 )
 target_link_options(bulk_upsert_simple PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

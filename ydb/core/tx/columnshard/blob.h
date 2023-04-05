@@ -152,6 +152,11 @@ public:
     TUnifiedBlobId(TUnifiedBlobId&& other) = default;
     TUnifiedBlobId& operator = (TUnifiedBlobId&& logoBlobId) = default;
 
+    TUnifiedBlobId MakeS3BlobId(ui64 pathId) const {
+        Y_VERIFY(IsDsBlob());
+        return TUnifiedBlobId(*this, TUnifiedBlobId::S3_BLOB, pathId);
+    }
+
     static TUnifiedBlobId ParseFromString(const TString& str,
         const IBlobGroupSelector* dsGroupSelector, TString& error);
 
@@ -320,6 +325,13 @@ inline bool IsExported(EEvictState state) {
     return state == EEvictState::SELF_CACHED ||
         state == EEvictState::EXTERN ||
         state == EEvictState::CACHED;
+}
+
+inline bool CouldBeExported(EEvictState state) {
+    return state == EEvictState::SELF_CACHED ||
+        state == EEvictState::EXTERN ||
+        state == EEvictState::CACHED ||
+        state == EEvictState::ERASING;
 }
 
 inline bool IsDeleted(EEvictState state) {

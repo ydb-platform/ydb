@@ -29,10 +29,6 @@ public:
     TReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ReceiveMessage, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableReceiveMessage()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:

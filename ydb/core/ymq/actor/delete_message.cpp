@@ -23,15 +23,6 @@ public:
         : TActionActor(sourceSqsRequest, isBatch ? EAction::DeleteMessageBatch : EAction::DeleteMessage, std::move(cb))
         , IsBatch_(isBatch)
     {
-        if (IsBatch_) {
-            CopyAccountName(BatchRequest());
-            Response_.MutableDeleteMessageBatch()->SetRequestId(RequestId_);
-            CopySecurityToken(BatchRequest());
-        } else {
-            CopyAccountName(Request());
-            Response_.MutableDeleteMessage()->SetRequestId(RequestId_);
-            CopySecurityToken(Request());
-        }
     }
 
     bool DoValidate() override {

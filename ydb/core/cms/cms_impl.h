@@ -17,9 +17,9 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
-
-#include <util/generic/stack.h>
+#include <util/datetime/base.h>
 #include <util/generic/queue.h>
+#include <util/generic/stack.h>
 
 namespace NKikimr::NCms {
 
@@ -107,6 +107,16 @@ private:
             , TenantPolicy(NKikimrCms::DEFAULT)
             , AvailabilityMode(NKikimrCms::MODE_MAX_AVAILABILITY)
             , PartialPermissionAllowed(false)
+        {}
+    };
+
+    struct TRequestsQueueItem {
+        TAutoPtr<IEventHandle> Request;
+        TInstant ArrivedTime;
+
+        TRequestsQueueItem(TAutoPtr<IEventHandle> req, TInstant arrivedTime)
+            : Request(std::move(req))
+            , ArrivedTime(arrivedTime)
         {}
     };
 
@@ -402,8 +412,8 @@ private:
     TString NotSupportedReason;
     TQueue<TAutoPtr<IEventHandle>> InitQueue;
 
-    TQueue<TAutoPtr<IEventHandle>> Queue;
-    TQueue<TAutoPtr<IEventHandle>> NextQueue;
+    TQueue<TRequestsQueueItem> Queue;
+    TQueue<TRequestsQueueItem> NextQueue;
 
     TCmsStatePtr State;
     TLogger Logger;
@@ -421,6 +431,8 @@ private:
     // Monitoring
     THolder<class NKikimr::TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
+
+    TInstant InfoCollectorStartTime;
 
 public:
     TCms(const TActorId &tablet, TTabletStorageInfo *info)

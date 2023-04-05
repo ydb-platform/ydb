@@ -117,12 +117,15 @@ struct TShardKeyRanges {
     std::pair<const TSerializedCellVec*, bool> GetRightBorder() const;
 };
 
-// TODO: use two different structs for scans and data queries
+
 struct TTaskMeta {
     ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
+    TActorId ExecuterId;
 
     TMap<TString, NYql::NDqProto::TData> Params;
+    THashMap<TString, TString> DqTaskParams; // Params for sources/sinks
+    THashMap<TString, TString> DqSecureParams;
 
     struct TColumn {
         ui32 Id = 0;
@@ -199,6 +202,11 @@ void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTx
 void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tableKeys, const TStageInfo& stageInfo,
     ui64 txId, bool enableSpilling);
 
+NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, const TTask& task, const NMiniKQL::TTypeEnvironment& typeEnv);
+void FillChannelDesc(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel);
+void FillInputDesc(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input);
+void FillOutputDesc(const TKqpTasksGraph& tasksGraph, const std::unordered_map<ui64, IActor*>& resultChannelProxies, NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output);
+
 template<typename Proto>
 TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, const TKqpTableKeys::TTable& table) {
     TVector<TTaskMeta::TColumn> columns;
@@ -226,7 +234,7 @@ struct TKqpTaskOutputType {
 
 void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo);
 
-bool IsCrossShardChannel(TKqpTasksGraph& tasksGraph, const NYql::NDq::TChannel& channel);
+bool IsCrossShardChannel(const TKqpTasksGraph& tasksGraph, const NYql::NDq::TChannel& channel);
 
 } // namespace NKqp
 } // namespace NKikimr

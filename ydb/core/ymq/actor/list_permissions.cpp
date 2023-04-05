@@ -18,8 +18,6 @@ public:
     TListPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListPermissions, std::move(cb))
     {
-        Response_.MutableListPermissions()->SetRequestId(RequestId_);
-        CopySecurityToken(Request());
     }
 
     static constexpr bool NeedExistingQueue() {

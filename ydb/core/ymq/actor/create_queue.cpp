@@ -27,11 +27,8 @@ public:
     TCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::CreateQueue, std::move(cb))
     {
-        CopyAccountName(Request()); // will be replaced during bootstrap for cloud mode
-        Response_.MutableCreateQueue()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
+
 protected:
     bool IsFifoQueue() const override {
         const TString& name = Request().GetCustomQueueName() ? Request().GetCustomQueueName() : Request().GetQueueName();

@@ -24,8 +24,7 @@ target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PUBLIC
   vdisk-hulldb-test
 )
 target_link_options(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

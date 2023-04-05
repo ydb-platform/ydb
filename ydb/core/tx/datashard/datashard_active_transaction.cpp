@@ -582,12 +582,19 @@ void TActiveTransaction::DbStoreLocksAccessLog(TDataShard * self,
     using Schema = TDataShard::Schema;
 
     NIceDb::TNiceDb db(txc.DB);
-    TVector<TSysTables::TLocksTable::TPersistentLock> vec;
+
+    using TLocksVector = TVector<TSysTables::TLocksTable::TPersistentLock>;
+    TLocksVector vec;
     vec.reserve(LocksAccessLog().Locks.size());
     for (auto &pr : LocksAccessLog().Locks)
         vec.emplace_back(pr.second);
+
+    // Historically C++ column type was TVector<TLock>
+    const char* vecDataStart = reinterpret_cast<const char*>(vec.data());
+    size_t vecDataSize = vec.size() * sizeof(TLocksVector::value_type);
+    TStringBuf vecData(vecDataStart, vecDataSize);
     db.Table<Schema::TxArtifacts>().Key(GetTxId())
-        .Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vec));
+        .Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Storing " << vec.size() << " locks for txid=" << GetTxId()

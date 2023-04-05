@@ -642,7 +642,7 @@ class TDataShard
             // Specify which tx artifacts have been stored to local DB and can be
             // reused on tx replay. See TActiveTransaction::EArtifactFlags.
             struct Flags :           Column<2, NScheme::NTypeIds::Uint64> {};
-            struct Locks :           Column<3, NScheme::NTypeIds::String> { using Type = TVector<TSysTables::TLocksTable::TPersistentLock>; };
+            struct Locks :           Column<3, NScheme::NTypeIds::String> { using Type = TStringBuf; };
 
             using TKey = TableKey<TxId>;
             using TColumns = TableColumns<TxId, Flags, Locks>;

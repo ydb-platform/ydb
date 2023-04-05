@@ -297,9 +297,6 @@ Y_UNIT_TEST(PartitionFirstClass) {
             auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
             TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
             tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
-//            auto balancerActor = ResolveTablet(*tc.Runtime, tc.BalancerTabletId);
-//            tc.Runtime->Send(new IEventHandle(balancerActor, tc.Edge, event.Release()));
-//            ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, tc.Edge, event.Release());
 
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
@@ -334,8 +331,6 @@ Y_UNIT_TEST(PartitionFirstClass) {
             Cerr << "COUNTERS: " << countersStr.Str() << "\n";
             UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
         }
-
-
     });
 }
 

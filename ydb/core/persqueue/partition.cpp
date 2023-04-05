@@ -4880,6 +4880,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     }
 
     ReservedSize -= decReservedSize;
+    TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
 
     TMaybe<ui64> offset = ev->Get()->Offset;
 
@@ -4941,7 +4942,6 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
     // TODO: remove decReservedSize == 0
     Y_VERIFY(size <= decReservedSize || decReservedSize == 0);
-    TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
     UpdateWriteBufferIsFullState(ctx.Now());
 }
 

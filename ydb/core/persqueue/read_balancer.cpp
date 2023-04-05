@@ -912,8 +912,6 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
 
     THolder<TTabletLabeledCountersBase> aggr(new TTabletLabeledCountersBase);
 
-    bool hasCounters = false;
-
     for (auto it = AggregatedStats.Stats.begin(); it != AggregatedStats.Stats.end(); ++it) {
         if (!it->second.HasCounters)
             continue;
@@ -929,16 +927,13 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             for (ui32 i = 0; i < consumerStats.ValuesSize() && i < labeledCounters->GetCounters().Size(); ++i) {
                 labeledConsumerCounters->GetCounters()[i] = consumerStats.GetValues(i);
             }
-            hasCounters = true;
             jt->second.Aggr->AggregateWith(*labeledConsumerCounters);
         }
 
     }
-    if (!hasCounters)
-        return;
 
     /*** show counters ***/
-    for (ui32 i = 0; i < aggr->GetCounters().Size(); ++i) {
+    for (ui32 i = 0; aggr->HasCounters() && i < aggr->GetCounters().Size(); ++i) {
         if (!AggregatedCounters[i])
             continue;
         const auto& type = aggr->GetCounterType(i);
@@ -950,7 +945,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     }
 
     for (auto& [consumer, info] : Consumers) {
-        for (ui32 i = 0; i < info.Aggr->GetCounters().Size(); ++i) {
+        for (ui32 i = 0; info.Aggr->HasCounters() && i < info.Aggr->GetCounters().Size(); ++i) {
             if (!info.AggregatedCounters[i])
                 continue;
             const auto& type = info.Aggr->GetCounterType(i);

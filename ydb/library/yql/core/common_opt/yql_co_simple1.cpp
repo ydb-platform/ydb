@@ -110,6 +110,8 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
                         parent.Callable(index++, "Bool")
                             .Atom(0, ToString(c.second), TNodeFlags::Default)
                         .Seal();
+                        if (1U < c.first.front().size())
+                            break;
                     }
                     return parent;
                 })
@@ -122,12 +124,14 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
                         for (auto c : constent) {
                             if (c.first.front().empty())
                                 parent.Arg(index++, "item");
-                            else {
-                                YQL_ENSURE(c.first.front().size() == 1U, "Just column expected.");
+                            else if (1U == c.first.front().size()) {
                                 parent.Callable(index++, "Member")
                                     .Arg(0, "item")
                                     .Atom(1, c.first.front().front())
                                 .Seal();
+                            } else {
+                                parent.Callable(index++, "Null").Seal();
+                                break;
                             }
                         }
                         return parent;

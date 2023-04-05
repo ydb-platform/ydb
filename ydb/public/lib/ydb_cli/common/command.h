@@ -6,6 +6,7 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
+#include <library/cpp/logger/priority.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
 #include <util/charset/utf8.h>
@@ -69,6 +70,8 @@ public:
             INFO = 2,
             DEBUG = 3,
         };
+
+        static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);
 
         int ArgC;
         char** ArgV;

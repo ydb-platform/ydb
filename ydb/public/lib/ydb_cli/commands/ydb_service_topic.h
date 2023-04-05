@@ -10,6 +10,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
 namespace NYdb::NConsoleClient {
+    TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs);
     TVector<NYdb::NTopic::ECodec> InitAllowedCodecs();
     const TVector<NYdb::NTopic::ECodec> AllowedCodecs = InitAllowedCodecs();
 

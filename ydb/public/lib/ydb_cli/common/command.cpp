@@ -98,6 +98,21 @@ TClientCommand::TClientCommand(const TString& name, const std::initializer_list<
     Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(TermWidth())));
 }
 
+ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientCommand::TConfig::EVerbosityLevel lvl) {
+    switch (lvl) {
+        case TClientCommand::TConfig::EVerbosityLevel::NONE:
+            return ELogPriority::TLOG_EMERG;
+        case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
+            return ELogPriority::TLOG_DEBUG;
+        case TClientCommand::TConfig::EVerbosityLevel::INFO:
+            return ELogPriority::TLOG_INFO;
+        case TClientCommand::TConfig::EVerbosityLevel::WARN:
+            return ELogPriority::TLOG_WARNING;
+        default:
+            return ELogPriority::TLOG_ERR;
+    }
+}
+
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
     int _argc = 1;
     int levels = 1;

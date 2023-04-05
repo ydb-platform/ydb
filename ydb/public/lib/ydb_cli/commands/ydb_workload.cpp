@@ -3,6 +3,7 @@
 #include "stock_workload.h"
 #include "kv_workload.h"
 #include "click_bench.h"
+#include "topic_workload/topic_workload.h"
 
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
@@ -38,6 +39,7 @@ TCommandWorkload::TCommandWorkload()
     AddCommand(std::make_unique<TCommandStock>());
     AddCommand(std::make_unique<TCommandKv>());
     AddCommand(std::make_unique<TCommandClickBench>());
+    AddCommand(std::make_unique<TCommandWorkloadTopic>());
 }
 
 TWorkloadCommand::TWorkloadCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(topic_workload)
 get_built_tool_path(
   TOOL_rescompiler_bin
   TOOL_rescompiler_dependency
@@ -25,6 +26,7 @@ target_link_libraries(clicommands PUBLIC
   ydb-library-workload
   public-lib-operation_id
   common
+  topic_workload
   lib-ydb_cli-dump
   lib-ydb_cli-import
   topic
@@ -79,6 +81,7 @@ target_link_libraries(clicommands.global PUBLIC
   ydb-library-workload
   public-lib-operation_id
   common
+  topic_workload
   lib-ydb_cli-dump
   lib-ydb_cli-import
   topic

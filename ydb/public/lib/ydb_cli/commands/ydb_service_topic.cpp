@@ -77,24 +77,9 @@ namespace NYdb::NConsoleClient {
         bool IsStreamingFormat(EMessagingFormat format) {
             return format == EMessagingFormat::NewlineDelimited || format == EMessagingFormat::Concatenated;
         }
-
-        ELogPriority VerbosityLevelToELogPriority(TClientCommand::TConfig::EVerbosityLevel lvl) {
-            switch (lvl) {
-                case TClientCommand::TConfig::EVerbosityLevel::NONE:
-                    return ELogPriority::TLOG_EMERG;
-                case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
-                    return ELogPriority::TLOG_DEBUG;
-                case TClientCommand::TConfig::EVerbosityLevel::INFO:
-                    return ELogPriority::TLOG_INFO;
-                case TClientCommand::TConfig::EVerbosityLevel::WARN:
-                    return ELogPriority::TLOG_WARNING;
-                default:
-                    return ELogPriority::TLOG_EMERG;
-            }
-        }
     } // namespace
 
-    namespace {
+
         TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs) {
             TStringStream description;
             description << descriptionPrefix << ". Available codecs: ";
@@ -109,20 +94,21 @@ namespace NYdb::NConsoleClient {
 
             return description.Str();
         }
+        
+namespace {
+            NTopic::ECodec ParseCodec(const TString& codecStr, const TVector<NTopic::ECodec>& allowedCodecs) {
+                auto exists = ExistingCodecs.find(to_lower(codecStr));
+                if (exists == ExistingCodecs.end()) {
+                    throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
+                }
 
-        NTopic::ECodec ParseCodec(const TString& codecStr, const TVector<NTopic::ECodec>& allowedCodecs) {
-            auto exists = ExistingCodecs.find(to_lower(codecStr));
-            if (exists == ExistingCodecs.end()) {
-                throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
+                if (std::find(allowedCodecs.begin(), allowedCodecs.end(), exists->second) == allowedCodecs.end()) {
+                    throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
+                }
+
+                return exists->second;
             }
-
-            if (std::find(allowedCodecs.begin(), allowedCodecs.end(), exists->second) == allowedCodecs.end()) {
-                throw TMisuseException() << "Codec " << codecStr << " is not available for this command";
-            }
-
-            return exists->second;
         }
-    }
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {
         TString description = PrepareAllowedCodecsDescription("Comma-separated list of supported codecs", supportedCodecs);
@@ -655,7 +641,7 @@ namespace NYdb::NConsoleClient {
         ValidateConfig();
 
         auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel))));
+            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
         NTopic::TTopicClient topicClient(*driver);
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
 
@@ -783,7 +769,7 @@ namespace NYdb::NConsoleClient {
         SetInterruptHandlers();
 
         auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel))));
+            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
         NTopic::TTopicClient topicClient(*driver);
 
         {

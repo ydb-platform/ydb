@@ -692,23 +692,19 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
 
     // Check if the blob is marked for delayed deletion
     if (blobId.IsSmallBlob()) {
-        if (SmallBlobsToDeleteDelayed.count(blobId)) {
+        if (SmallBlobsToDeleteDelayed.erase(blobId)) {
             LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delayed Small Blob " << blobId
                 << " is no longer in use" );
-            SmallBlobsToDeleteDelayed.erase(blobId);
             SmallBlobsToDelete.insert(blobId);
         }
     } else {
         TLogoBlobID logoBlobId = blobId.GetLogoBlobId();
-        auto delayedIt = BlobsToDeleteDelayed.find(logoBlobId);
-        if (delayedIt != BlobsToDeleteDelayed.end()) {
+        if (BlobsToDeleteDelayed.erase(logoBlobId)) {
             LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Delayed Blob " << blobId);
             BlobsToDelete.insert(logoBlobId);
-            BlobsToDeleteDelayed.erase(delayedIt);
+            NBlobCache::ForgetBlob(blobId);
         }
     }
-
-    NBlobCache::ForgetBlob(blobId);
 }
 
 bool TBlobManager::ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped /*= false*/) {

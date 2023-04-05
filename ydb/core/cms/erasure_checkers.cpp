@@ -2,13 +2,9 @@
 
 namespace NKikimr::NCms {
 
-bool TErasureCounterBase::IsDown(const TVDiskInfo& vdisk,
-                                 TClusterInfoPtr info,
-                                 TDuration& retryTime,
-                                 TErrorInfo& error)
-{
-    const auto& node = info->Node(vdisk.NodeId);
-    const auto& pdisk = info->PDisk(vdisk.PDiskId);
+bool TErasureCounterBase::IsDown(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration &retryTime, TErrorInfo &error) {
+    const auto &node = info->Node(vdisk.NodeId);
+    const auto &pdisk = info->PDisk(vdisk.PDiskId);
     const auto defaultDeadline = TActivationContext::Now() + retryTime;
 
     // Check we received info for PDisk.
@@ -23,14 +19,11 @@ bool TErasureCounterBase::IsDown(const TVDiskInfo& vdisk,
         || vdisk.IsDown(error, defaultDeadline);
 }
 
-bool TErasureCounterBase::IsLocked(const TVDiskInfo& vdisk,
-                                   TClusterInfoPtr info,
-                                   TDuration& retryTime,
-                                   TDuration& duration,
-                                   TErrorInfo& error)
+bool TErasureCounterBase::IsLocked(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration &retryTime,
+        TDuration &duration, TErrorInfo &error)
 {
-    const auto& node = info->Node(vdisk.NodeId);
-    const auto& pdisk = info->PDisk(vdisk.PDiskId);
+    const auto &node = info->Node(vdisk.NodeId);
+    const auto &pdisk = info->PDisk(vdisk.PDiskId);
 
     // Check we received info for VDisk.
     if (!vdisk.NodeId || !vdisk.PDiskId) {
@@ -45,15 +38,11 @@ bool TErasureCounterBase::IsLocked(const TVDiskInfo& vdisk,
         || vdisk.IsLocked(error, retryTime, TActivationContext::Now(), duration);
 }
 
-bool TErasureCounterBase::GroupAlreadyHasLockedDisks() const
-{
+bool TErasureCounterBase::GroupAlreadyHasLockedDisks() const {
     return HasAlreadyLockedDisks;
 }
 
-bool TErasureCounterBase::CheckForMaxAvailability(TErrorInfo& error,
-                                                  TInstant& defaultDeadline,
-                                                  bool allowPartial) const
-{
+bool TErasureCounterBase::CheckForMaxAvailability(TErrorInfo &error, TInstant &defaultDeadline, bool allowPartial) const {
     if (Locked + Down > 1) {
         if (HasAlreadyLockedDisks && !allowPartial) {
             error.Code = TStatus::DISALLOW;
@@ -71,11 +60,8 @@ bool TErasureCounterBase::CheckForMaxAvailability(TErrorInfo& error,
     return true;
 }
 
-void TDefaultErasureCounter::CountVDisk(const TVDiskInfo& vdisk,
-                                        TClusterInfoPtr info,
-                                        TDuration retryTime,
-                                        TDuration duration,
-                                        TErrorInfo& error)
+void TDefaultErasureCounter::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration retryTime,
+        TDuration duration, TErrorInfo &error)
 {
     Y_VERIFY_DEBUG(vdisk.VDiskId != VDisk.VDiskId);
 
@@ -100,10 +86,8 @@ void TDefaultErasureCounter::CountVDisk(const TVDiskInfo& vdisk,
     }
 }
 
-bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info,
-                                                      TErrorInfo& error,
-                                                      TInstant& defaultDeadline,
-                                                      bool allowPartial) const
+bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo &error,
+        TInstant &defaultDeadline, bool allowPartial) const
 {
     if (HasAlreadyLockedDisks && allowPartial) {
         error.Code = TStatus::DISALLOW_TEMP;
@@ -129,10 +113,8 @@ bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info,
     return true;
 }
 
-bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info,
-                                                 TErrorInfo& error,
-                                                 TInstant& defaultDeadline,
-                                                 bool allowPartial) const
+bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo &error,
+        TInstant &defaultDeadline, bool allowPartial) const
 {
     Y_UNUSED(info);
 
@@ -178,11 +160,8 @@ bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info,
     return false;
 }
 
-void TMirror3dcCounter::CountVDisk(const TVDiskInfo& vdisk,
-                                   TClusterInfoPtr info,
-                                   TDuration retryTime,
-                                   TDuration duration,
-                                   TErrorInfo& error)
+void TMirror3dcCounter::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration retryTime,
+        TDuration duration, TErrorInfo &error)
 {
     Y_VERIFY_DEBUG(vdisk.VDiskId != VDisk.VDiskId);
 
@@ -199,11 +178,7 @@ void TMirror3dcCounter::CountVDisk(const TVDiskInfo& vdisk,
     }
 }
 
-void TMirror3dcCounter::CountGroupState(TClusterInfoPtr info,
-                                        TDuration retryTime,
-                                        TDuration duration,
-                                        TErrorInfo &error)
-{
+void TMirror3dcCounter::CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo &error) {
     for (const auto &vdId : info->BSGroup(GroupId).VDisks) {
         if (vdId != VDisk.VDiskId)
             CountVDisk(info->VDisk(vdId), info, retryTime, duration, error);
@@ -216,11 +191,7 @@ void TMirror3dcCounter::CountGroupState(TClusterInfoPtr info,
     }
 }
 
-void TDefaultErasureCounter::CountGroupState(TClusterInfoPtr info,
-                                             TDuration retryTime,
-                                             TDuration duration,
-                                             TErrorInfo &error)
-{
+void TDefaultErasureCounter::CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo &error) {
     for (const auto &vdId : info->BSGroup(GroupId).VDisks) {
         if (vdId != VDisk.VDiskId)
             CountVDisk(info->VDisk(vdId), info, retryTime, duration, error);
@@ -231,9 +202,7 @@ void TDefaultErasureCounter::CountGroupState(TClusterInfoPtr info,
     ++Locked;
 }
 
-TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpecies es,
-                                                       const TVDiskInfo& vdisk, ui32 groupId)
-{
+TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpecies es, const TVDiskInfo &vdisk, ui32 groupId) {
     switch (es) {
         case TErasureType::ErasureNone:
         case TErasureType::ErasureMirror3:

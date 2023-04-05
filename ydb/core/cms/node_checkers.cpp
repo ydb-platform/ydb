@@ -1,7 +1,8 @@
 #include "node_checkers.h"
-#include "util/string/cast.h"
 
 #include <ydb/core/protos/cms.pb.h>
+
+#include <util/string/cast.h>
 
 namespace NKikimr::NCms {
 
@@ -126,6 +127,5 @@ bool TNodesStateBase::TryToLockNode(ui32 nodeId, bool isForceRestart) {
 
     return true;
 }
-
 
 } // namespace NKikimr::NCms

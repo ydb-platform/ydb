@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-
 #include "cluster_info.h"
 
 #include <ydb/core/erasure/erasure.h>
@@ -18,15 +17,8 @@ public:
     virtual bool GroupAlreadyHasLockedDisks() const = 0;
     virtual bool CheckForMaxAvailability(TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const = 0;
     virtual bool CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const = 0;
-    virtual void CountGroupState(TClusterInfoPtr info,  
-                                 TDuration retryTime, 
-                                 TDuration duration, 
-                                 TErrorInfo& error) = 0;
-    virtual void CountVDisk(const TVDiskInfo& vdisk,
-                            TClusterInfoPtr info,
-                            TDuration retryTime,
-                            TDuration duration,
-                            TErrorInfo& error) = 0;
+    virtual void CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo& error) = 0;
+    virtual void CountVDisk(const TVDiskInfo& vdisk, TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo& error) = 0;
 };
 
 class TErasureCounterBase: public IErasureCounter {
@@ -38,15 +30,8 @@ protected:
     bool HasAlreadyLockedDisks;
 
 protected:
-    bool IsDown(const TVDiskInfo& vdisk, 
-                TClusterInfoPtr info,
-                TDuration& retryTime, 
-                TErrorInfo& error);
-    bool IsLocked(const TVDiskInfo& vdisk, 
-                  TClusterInfoPtr info,
-                  TDuration& retryTime, 
-                  TDuration& duration, 
-                  TErrorInfo& error);
+    bool IsDown(const TVDiskInfo& vdisk, TClusterInfoPtr info, TDuration& retryTime, TErrorInfo& error);
+    bool IsLocked(const TVDiskInfo& vdisk, TClusterInfoPtr info, TDuration& retryTime, TDuration& duration, TErrorInfo& error);
 
 public:
     TErasureCounterBase(const TVDiskInfo& vdisk, ui32 groupId)
@@ -69,17 +54,9 @@ public:
     {
     }
 
-    void CountGroupState(TClusterInfoPtr info, TDuration retryTime,
-                         TDuration duration, TErrorInfo &error) override;
-    bool CheckForKeepAvailability(TClusterInfoPtr info, 
-                                  TErrorInfo& error, 
-                                  TInstant& defaultDeadline, 
-                                  bool allowPartial) const override;
-    void CountVDisk(const TVDiskInfo& vdisk, 
-                    TClusterInfoPtr info,
-                    TDuration retryTime, 
-                    TDuration duration, 
-                    TErrorInfo& error) override;
+    void CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo &error) override;
+    bool CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const override;
+    void CountVDisk(const TVDiskInfo& vdisk, TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo& error) override;
 };
 
 class TMirror3dcCounter: public TErasureCounterBase {
@@ -92,21 +69,11 @@ public:
     {
     }
 
-    void CountGroupState(TClusterInfoPtr info, TDuration retryTime,
-                         TDuration duration, TErrorInfo &error) override;
-    bool CheckForKeepAvailability(TClusterInfoPtr info, 
-                                  TErrorInfo& error, 
-                                  TInstant& defaultDeadline, 
-                                  bool allowPartial) const override;
-    void CountVDisk(const TVDiskInfo& vdisk, 
-                    TClusterInfoPtr info,
-                    TDuration retryTime, 
-                    TDuration duration, 
-                    TErrorInfo& error) override;
+    void CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo &error) override;
+    bool CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const override;
+    void CountVDisk(const TVDiskInfo& vdisk, TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo& error) override;
 };
 
-TSimpleSharedPtr<IErasureCounter>
-CreateErasureCounter(TErasureType::EErasureSpecies es, 
-                     const TVDiskInfo& vdisk, ui32 groupId);
+TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpecies es, const TVDiskInfo& vdisk, ui32 groupId);
 
 } // namespace NKikimr::NCms

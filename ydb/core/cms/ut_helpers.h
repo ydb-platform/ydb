@@ -1,39 +1,34 @@
 #pragma once
+
 #include "cms.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/library/aclib/aclib.h>
 
-namespace NKikimr {
-namespace NCmsTest {
+namespace NKikimr::NCmsTest {
 
-inline void AddServices(NKikimrCms::TAction &action, const TString &service)
-{
+inline void AddServices(NKikimrCms::TAction &action, const TString &service) {
     *action.AddServices() = service;
 }
 
-template<typename... Ts>
-void AddServices(NKikimrCms::TAction &action, const TString &service, Ts... services)
-{
+template <typename... Ts>
+void AddServices(NKikimrCms::TAction &action, const TString &service, Ts... services) {
     AddServices(action, service);
     AddServices(action, services...);
 }
 
-inline void AddDevices(NKikimrCms::TAction &action, const TString &device)
-{
+inline void AddDevices(NKikimrCms::TAction &action, const TString &device) {
     *action.AddDevices() = device;
 }
 
-template<typename... Ts>
-void AddDevices(NKikimrCms::TAction &action, const TString &device, Ts... devices)
-{
+template <typename... Ts>
+void AddDevices(NKikimrCms::TAction &action, const TString &device, Ts... devices) {
     AddDevices(action, device);
     AddDevices(action, devices...);
 }
 
-inline NKikimrCms::TAction MakeAction(NKikimrCms::TAction::EType type, const TString &host, ui64 duration)
-{
+inline NKikimrCms::TAction MakeAction(NKikimrCms::TAction::EType type, const TString &host, ui64 duration) {
     NKikimrCms::TAction action;
     action.SetType(type);
     action.SetHost(host);
@@ -41,14 +36,12 @@ inline NKikimrCms::TAction MakeAction(NKikimrCms::TAction::EType type, const TSt
     return action;
 }
 
-inline NKikimrCms::TAction MakeAction(NKikimrCms::TAction::EType type, ui32 nodeId, ui64 duration)
-{
+inline NKikimrCms::TAction MakeAction(NKikimrCms::TAction::EType type, ui32 nodeId, ui64 duration) {
     return MakeAction(type, ToString(nodeId), duration);
 }
 
-template<typename... Ts>
-NKikimrCms::TAction MakeAction(NKikimrCms::TAction::EType type, const TString &host, ui64 duration, Ts... items)
-{
+template <typename... Ts>
+NKikimrCms::TAction MakeAction(NKikimrCms::TAction::EType type, const TString &host, ui64 duration, Ts... items) {
     NKikimrCms::TAction action = MakeAction(type, host, duration);
     if (type == NKikimrCms::TAction::START_SERVICES
         || type == NKikimrCms::TAction::RESTART_SERVICES
@@ -59,29 +52,23 @@ NKikimrCms::TAction MakeAction(NKikimrCms::TAction::EType type, const TString &h
     return action;
 }
 
-template<typename... Ts>
-NKikimrCms::TAction MakeAction(NKikimrCms::TAction::EType type, ui32 nodeId, ui64 duration, Ts... items)
-{
+template <typename... Ts>
+NKikimrCms::TAction MakeAction(NKikimrCms::TAction::EType type, ui32 nodeId, ui64 duration, Ts... items) {
     return MakeAction(type, ToString(nodeId), duration, items...);
 }
 
-inline void AddActions(TAutoPtr<NCms::TEvCms::TEvPermissionRequest> &event,
-                       const NKikimrCms::TAction &action)
-{
+inline void AddActions(TAutoPtr<NCms::TEvCms::TEvPermissionRequest> &event, const NKikimrCms::TAction &action) {
     event->Record.AddActions()->CopyFrom(action);
 }
 
-template<typename... Ts>
-void AddActions(TAutoPtr<NCms::TEvCms::TEvPermissionRequest> &event,
-                const NKikimrCms::TAction &action, Ts... actions)
-{
+template <typename... Ts>
+void AddActions(TAutoPtr<NCms::TEvCms::TEvPermissionRequest> &event, const NKikimrCms::TAction &action, Ts... actions) {
     AddActions(event, action);
     AddActions(event, actions...);
 }
 
-template<typename... Ts>
-TAutoPtr<NCms::TEvCms::TEvPermissionRequest> MakePermissionRequest(const TString &user, bool partial, bool dry, bool schedule, Ts... actions)
-{
+template <typename... Ts>
+TAutoPtr<NCms::TEvCms::TEvPermissionRequest> MakePermissionRequest(const TString &user, bool partial, bool dry, bool schedule, Ts... actions) {
     TAutoPtr<NCms::TEvCms::TEvPermissionRequest> event = new NCms::TEvCms::TEvPermissionRequest;
     event->Record.SetUser(user);
     event->Record.SetPartialPermissionAllowed(partial);
@@ -92,67 +79,56 @@ TAutoPtr<NCms::TEvCms::TEvPermissionRequest> MakePermissionRequest(const TString
     return event;
 }
 
-inline void AddPermissions(TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> &ev,
-                           const TString &id)
-{
+inline void AddPermissions(TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> &ev, const TString &id) {
     *ev->Record.AddPermissions() = id;
 }
 
-template<typename... Ts>
-void AddPermissions(TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> &ev,
-                    const TString &id,
-                    Ts... ids)
-{
+template <typename... Ts>
+void AddPermissions(TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> &ev, const TString &id, Ts... ids) {
     AddPermissions(ev, id);
     AddPermissions(ev, ids...);
 }
 
 inline TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest>
-MakeManagePermissionRequest(const TString &user,
-                            NKikimrCms::TManagePermissionRequest::ECommand cmd,
-                            bool dry)
-{
-    TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> event
-        = new NCms::TEvCms::TEvManagePermissionRequest;
+MakeManagePermissionRequest(const TString &user, NKikimrCms::TManagePermissionRequest::ECommand cmd, bool dry) {
+    TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> event = new NCms::TEvCms::TEvManagePermissionRequest;
     event->Record.SetUser(user);
     event->Record.SetCommand(cmd);
     event->Record.SetDryRun(dry);
     return event;
 }
 
-template<typename... Ts>
-TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest>
-MakeManagePermissionRequest(const TString &user,
-                            NKikimrCms::TManagePermissionRequest::ECommand cmd,
-                            bool dry,
-                            Ts... ids)
+template <typename... Ts>
+TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> MakeManagePermissionRequest(
+        const TString &user,
+        NKikimrCms::TManagePermissionRequest::ECommand cmd,
+        bool dry,
+        Ts... ids)
 {
     auto event = MakeManagePermissionRequest(user, cmd, dry);
     AddPermissions(event, ids...);
     return event;
 }
 
-inline TAutoPtr<NCms::TEvCms::TEvManageRequestRequest>
-MakeManageRequestRequest(const TString &user,
-                         NKikimrCms::TManageRequestRequest::ECommand cmd,
-                         bool dry)
+inline TAutoPtr<NCms::TEvCms::TEvManageRequestRequest> MakeManageRequestRequest(
+        const TString &user,
+        NKikimrCms::TManageRequestRequest::ECommand cmd,
+        bool dry)
 {
-    TAutoPtr<NCms::TEvCms::TEvManageRequestRequest> event
-        = new NCms::TEvCms::TEvManageRequestRequest;
+    TAutoPtr<NCms::TEvCms::TEvManageRequestRequest> event = new NCms::TEvCms::TEvManageRequestRequest;
     event->Record.SetUser(user);
     event->Record.SetCommand(cmd);
     event->Record.SetDryRun(dry);
     return event;
 }
 
-inline TAutoPtr<NCms::TEvCms::TEvManageRequestRequest>
-MakeManageRequestRequest(const TString &user,
-                         NKikimrCms::TManageRequestRequest::ECommand cmd,
-                         const TString &id,
-                         bool dry)
+inline TAutoPtr<NCms::TEvCms::TEvManageRequestRequest> MakeManageRequestRequest(
+        const TString &user,
+        NKikimrCms::TManageRequestRequest::ECommand cmd,
+        const TString &id,
+        bool dry)
 {
-    TAutoPtr<NCms::TEvCms::TEvManageRequestRequest> event
-        = new NCms::TEvCms::TEvManageRequestRequest;
+    TAutoPtr<NCms::TEvCms::TEvManageRequestRequest> event = new NCms::TEvCms::TEvManageRequestRequest;
     event->Record.SetUser(user);
     event->Record.SetCommand(cmd);
     event->Record.SetRequestId(id);
@@ -160,11 +136,11 @@ MakeManageRequestRequest(const TString &user,
     return event;
 }
 
-inline TAutoPtr<NCms::TEvCms::TEvCheckRequest>
-MakeCheckRequest(const TString &user,
-                 const TString &id,
-                 bool dry,
-                 NKikimrCms::EAvailabilityMode availabilityMode = NKikimrCms::MODE_MAX_AVAILABILITY)
+inline TAutoPtr<NCms::TEvCms::TEvCheckRequest> MakeCheckRequest(
+        const TString &user,
+        const TString &id,
+        bool dry,
+        NKikimrCms::EAvailabilityMode availabilityMode = NKikimrCms::MODE_MAX_AVAILABILITY)
 {
     TAutoPtr<NCms::TEvCms::TEvCheckRequest> event = new NCms::TEvCms::TEvCheckRequest;
     event->Record.SetUser(user);
@@ -174,45 +150,34 @@ MakeCheckRequest(const TString &user,
     return event;
 }
 
-inline void AddHosts(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> &ev,
-                     ui32 node)
-{
+inline void AddHosts(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> &ev, ui32 node) {
     *ev->Record.AddHosts() = ToString(node);
 }
 
-template<typename... Ts>
-void AddHosts(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> &ev,
-              ui32 node,
-              Ts... nodes)
-{
+template <typename... Ts>
+void AddHosts(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> &ev, ui32 node, Ts... nodes) {
     AddHosts(ev, node);
     AddHosts(ev, nodes...);
 }
 
-inline void AddHosts(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> &ev,
-                     const TString &host)
-{
+inline void AddHosts(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> &ev, const TString &host) {
     *ev->Record.AddHosts() = host;
 }
 
-template<typename... Ts>
-void AddHosts(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> &ev,
-              const TString &host,
-              Ts... hosts)
-{
+template <typename... Ts>
+void AddHosts(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> &ev, const TString &host, Ts... hosts) {
     AddHosts(ev, host);
     AddHosts(ev, hosts...);
 }
 
-template<typename... Ts>
-TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest>
-MakeWalleCreateRequest(const TString &id,
-                       const TString &action,
-                       bool dry,
-                       Ts... hosts)
+template <typename... Ts>
+TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> MakeWalleCreateRequest(
+        const TString &id,
+        const TString &action,
+        bool dry,
+        Ts... hosts)
 {
-    TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> res
-        = new NCms::TEvCms::TEvWalleCreateTaskRequest;
+    TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> res = new NCms::TEvCms::TEvWalleCreateTaskRequest;
     res->Record.SetTaskId(id);
     res->Record.SetType("automated");
     res->Record.SetIssuer("UT");
@@ -222,27 +187,19 @@ MakeWalleCreateRequest(const TString &id,
     return res;
 }
 
-template<typename T>
-void AddHosts(NKikimrCms::TWalleTaskInfo &task,
-              T node)
-{
+template <typename T>
+void AddHosts(NKikimrCms::TWalleTaskInfo &task, T node) {
     *task.AddHosts() = ToString(node);
 }
 
-template<typename T, typename... Ts>
-void AddHosts(NKikimrCms::TWalleTaskInfo &task,
-              T node,
-              Ts... nodes)
-{
+template <typename T, typename... Ts>
+void AddHosts(NKikimrCms::TWalleTaskInfo &task, T node, Ts... nodes) {
     AddHosts(task, node);
     AddHosts(task, nodes...);
 }
 
-template<typename... Ts>
-NKikimrCms::TWalleTaskInfo MakeTaskInfo(const TString &id,
-                                        const TString &status,
-                                        Ts... nodes)
-{
+template <typename... Ts>
+NKikimrCms::TWalleTaskInfo MakeTaskInfo(const TString &id, const TString &status, Ts... nodes) {
     NKikimrCms::TWalleTaskInfo task;
     task.SetTaskId(id);
     task.SetStatus(status);
@@ -250,29 +207,19 @@ NKikimrCms::TWalleTaskInfo MakeTaskInfo(const TString &id,
     return task;
 }
 
-inline void AddActions(TAutoPtr<NCms::TEvCms::TEvNotification> &event,
-                       const NKikimrCms::TAction &action)
-{
+inline void AddActions(TAutoPtr<NCms::TEvCms::TEvNotification> &event, const NKikimrCms::TAction &action) {
     event->Record.AddActions()->CopyFrom(action);
 }
 
-template<typename... Ts>
-void AddActions(TAutoPtr<NCms::TEvCms::TEvNotification> &event,
-                const NKikimrCms::TAction &action,
-                Ts... actions)
-{
+template <typename... Ts>
+void AddActions(TAutoPtr<NCms::TEvCms::TEvNotification> &event, const NKikimrCms::TAction &action, Ts... actions) {
     AddActions(event, action);
     AddActions(event, actions...);
 }
 
-template<typename... Ts>
-TAutoPtr<NCms::TEvCms::TEvNotification>
-MakeNotification(const TString &user,
-                 TInstant when,
-                 Ts... actions)
-{
-    TAutoPtr<NCms::TEvCms::TEvNotification> event
-        = new NCms::TEvCms::TEvNotification;
+template <typename... Ts>
+TAutoPtr<NCms::TEvCms::TEvNotification> MakeNotification(const TString &user, TInstant when, Ts... actions) {
+    TAutoPtr<NCms::TEvCms::TEvNotification> event = new NCms::TEvCms::TEvNotification;
     if (user)
         event->Record.SetUser(user);
     event->Record.SetTime(when.GetValue());
@@ -280,47 +227,36 @@ MakeNotification(const TString &user,
     return event;
 }
 
-inline void AddItems(NKikimrCms::TItems &)
-{
+inline void AddItems(NKikimrCms::TItems &) {
 }
 
-inline void AddItem(NKikimrCms::TItems &items, const TString &host)
-{
+inline void AddItem(NKikimrCms::TItems &items, const TString &host) {
     items.AddHosts(host);
 }
 
-inline void AddItem(NKikimrCms::TItems &items, ui32 nodeId)
-{
+inline void AddItem(NKikimrCms::TItems &items, ui32 nodeId) {
     items.AddNodes(nodeId);
 }
 
-inline void AddItem(NKikimrCms::TItems &items, const NCms::TPDiskID &pdisk)
-{
+inline void AddItem(NKikimrCms::TItems &items, const NCms::TPDiskID &pdisk) {
     auto &rec = *items.AddPDisks();
     rec.SetNodeId(pdisk.NodeId);
     rec.SetDiskId(pdisk.DiskId);
 }
 
-inline void AddItem(NKikimrCms::TItems &items, const TVDiskID &vdisk)
-{
+inline void AddItem(NKikimrCms::TItems &items, const TVDiskID &vdisk) {
     VDiskIDFromVDiskID(vdisk, items.AddVDisks());
 }
 
-template<typename T, typename... Ts>
-void AddItems(NKikimrCms::TItems &items, T item, Ts... args)
-{
+template <typename T, typename... Ts>
+void AddItems(NKikimrCms::TItems &items, T item, Ts... args) {
     AddItem(items, item);
     AddItems(items, args...);
 }
 
-template<typename... Ts>
-TAutoPtr<NCms::TEvCms::TEvSetMarkerRequest>
-MakeSetMarkerRequest(NKikimrCms::EMarker marker,
-                     const TString &token,
-                     Ts... args)
-{
-    TAutoPtr<NCms::TEvCms::TEvSetMarkerRequest> event
-        = new NCms::TEvCms::TEvSetMarkerRequest;
+template <typename... Ts>
+TAutoPtr<NCms::TEvCms::TEvSetMarkerRequest> MakeSetMarkerRequest(NKikimrCms::EMarker marker, const TString &token, Ts... args) {
+    TAutoPtr<NCms::TEvCms::TEvSetMarkerRequest> event = new NCms::TEvCms::TEvSetMarkerRequest;
     event->Record.SetMarker(marker);
     AddItems(*event->Record.MutableItems(), args...);
     if (token) {
@@ -330,14 +266,9 @@ MakeSetMarkerRequest(NKikimrCms::EMarker marker,
     return event;
 }
 
-template<typename... Ts>
-TAutoPtr<NCms::TEvCms::TEvResetMarkerRequest>
-MakeResetMarkerRequest(NKikimrCms::EMarker marker,
-                       const TString &token,
-                       Ts... args)
-{
-    TAutoPtr<NCms::TEvCms::TEvResetMarkerRequest> event
-        = new NCms::TEvCms::TEvResetMarkerRequest;
+template <typename... Ts>
+TAutoPtr<NCms::TEvCms::TEvResetMarkerRequest> MakeResetMarkerRequest(NKikimrCms::EMarker marker, const TString &token, Ts... args) {
+    TAutoPtr<NCms::TEvCms::TEvResetMarkerRequest> event = new NCms::TEvCms::TEvResetMarkerRequest;
     event->Record.SetMarker(marker);
     AddItems(*event->Record.MutableItems(), args...);
     if (token) {
@@ -354,7 +285,7 @@ public:
     {
     }
 
-    bool operator()(IEventHandle& ev) {
+    bool operator()(IEventHandle &ev) {
         if (ev.GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest) {
             auto &rec = ev.Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record;
             if (rec.GetRequest().CommandSize()
@@ -369,16 +300,15 @@ private:
     NKikimrBlobStorage::EDriveStatus Status;
 };
 
-inline NKikimrWhiteboard::TSystemStateInfo MakeSystemStateInfo(const TString& version, const TVector<TString>& roles = {}) {
+inline NKikimrWhiteboard::TSystemStateInfo MakeSystemStateInfo(const TString &version, const TVector<TString>& roles = {}) {
     NKikimrWhiteboard::TSystemStateInfo result;
 
     result.SetVersion(version);
-    for (const auto& role : roles) {
+    for (const auto &role : roles) {
         result.AddRoles(role);
     }
 
     return result;
 }
 
-} // NCmsTest
-} // NKikimr
+}

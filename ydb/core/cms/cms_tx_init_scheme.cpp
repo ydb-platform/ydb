@@ -12,8 +12,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
-    {
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxInitScheme Execute");
 
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
@@ -21,16 +20,14 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
-    {
+    void Complete(const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxInitScheme Complete");
 
         Self->Execute(Self->CreateTxLoadState(), ctx);
     }
 };
 
-ITransaction* TCms::CreateTxInitScheme()
-{
+ITransaction *TCms::CreateTxInitScheme() {
     return new TTxInitScheme(this);
 }
 

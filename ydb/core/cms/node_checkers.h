@@ -49,6 +49,7 @@ public:
         , DownNodesCount(0)
     {
     }
+
     virtual ~TNodesStateBase() = default;
 
     void ApplyLimits(ui32 nodesLimit, ui32 ratioLimit) {
@@ -91,7 +92,6 @@ public:
         return reason.str();
     }
 };
-
 
 class TClusterNodesState : public TNodesStateBase {
 public:

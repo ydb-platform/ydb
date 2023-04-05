@@ -93,6 +93,18 @@ const TConstraintNode* TConstraintSet::RemoveConstraint(std::string_view name) {
     return res;
 }
 
+void TConstraintSet::Out(IOutputStream& out) const {
+    out.Write('{');
+    bool first = true;
+    for (const auto& c: Constraints_) {
+        if (!first)
+            out.Write(',');
+        out << *c;
+        first = false;
+    }
+    out.Write('}');
+}
+
 void TConstraintSet::ToJson(NJson::TJsonWriter& writer) const {
     writer.OpenMap();
     for (const auto& node : Constraints_) {
@@ -982,6 +994,24 @@ TPartOfConstraintNode<TOriginalConstraintNode>::GetColumnMapping(const std::stri
 }
 
 template<class TOriginalConstraintNode>
+typename TPartOfConstraintNode<TOriginalConstraintNode>::TMapType
+TPartOfConstraintNode<TOriginalConstraintNode>::GetColumnMapping(TExprContext& ctx, const std::string_view& prefix) const {
+    auto mapping = Mapping_;
+    if (!prefix.empty()) {
+        const TString str(prefix);
+        for (auto& item : mapping) {
+            for (auto& part : item.second) {
+                if (part.first.empty())
+                    part.first.emplace_front(prefix);
+                else
+                    part.first.front() = ctx.AppendString(str + part.first.front());
+            }
+        }
+    }
+    return mapping;
+}
+
+template<class TOriginalConstraintNode>
 const TPartOfConstraintNode<TOriginalConstraintNode>*
 TPartOfConstraintNode<TOriginalConstraintNode>::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx) {
     if (constraints.empty()) {
@@ -1262,6 +1292,17 @@ void TPassthroughConstraintNode::ToJson(NJson::TJsonWriter& out) const {
     out.CloseMap();
 }
 
+void TPassthroughConstraintNode::UniqueMerge(TMapType& output, TMapType&& input) {
+    output.merge(std::move(input));
+    while (!input.empty()) {
+        const auto exists = input.extract(input.cbegin());
+        auto& target = output[exists.key()];
+        target.reserve(target.size() + exists.mapped().size());
+        for (auto& item : exists.mapped())
+            target.insert_unique(std::move(item));
+    }
+}
+
 const TPassthroughConstraintNode* TPassthroughConstraintNode::ExtractField(TExprContext& ctx, const std::string_view& field) const {
     TMapType passtrought;
     for (const auto& part : Mapping_) {
@@ -1376,13 +1417,31 @@ const TPassthroughConstraintNode::TMapType& TPassthroughConstraintNode::GetColum
     return Mapping_;
 }
 
-TPassthroughConstraintNode::TMapType TPassthroughConstraintNode::GetMappingForField(const std::string_view& field) const {
+TPassthroughConstraintNode::TMapType TPassthroughConstraintNode::GetColumnMapping(const std::string_view& field) const {
     TMapType mapping(Mapping_.size());
     for (const auto& map : Mapping_) {
         TPartType part;
         part.reserve(map.second.size());
         std::transform(map.second.cbegin(), map.second.cend(), std::back_inserter(part), [&field](TPartType::value_type item) {
             item.first.emplace_front(field);
+            return item;
+        });
+        mapping.emplace(map.first ? map.first : this, std::move(part));
+    }
+    return mapping;
+}
+
+TPassthroughConstraintNode::TMapType TPassthroughConstraintNode::GetColumnMapping(TExprContext& ctx, const std::string_view& prefix) const {
+    TMapType mapping(Mapping_.size());
+    for (const auto& map : Mapping_) {
+        TPartType part;
+        part.reserve(map.second.size());
+        const TString str(prefix);
+        std::transform(map.second.cbegin(), map.second.cend(), std::back_inserter(part), [&](TPartType::value_type item) {
+            if (item.first.empty())
+                item.first.emplace_front(prefix);
+            else
+                item.first.front() = ctx.AppendString(str + item.first.front());
             return item;
         });
         mapping.emplace(map.first ? map.first : this, std::move(part));
@@ -1823,6 +1882,11 @@ void Out<NYql::TConstraintNode::TPathType>(IOutputStream& out, const NYql::TCons
 template<>
 void Out<NYql::TConstraintNode>(IOutputStream& out, const NYql::TConstraintNode& c) {
     c.Out(out);
+}
+
+template<>
+void Out<NYql::TConstraintSet>(IOutputStream& out, const NYql::TConstraintSet& s) {
+    s.Out(out);
 }
 
 template<>

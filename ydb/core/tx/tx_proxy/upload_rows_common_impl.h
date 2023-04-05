@@ -10,6 +10,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/formats/converter.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -376,8 +377,8 @@ private:
                 auto typeInRequest = NScheme::TTypeInfo(typeInProto.type_id());
                 bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
                 bool ok = SameOrConvertableDstType(typeInRequest, ci.PType, sourceIsArrow); // TODO
-                if (!ok) { 
-                    errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s", 
+                if (!ok) {
+                    errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
                                            name.c_str(), NScheme::TypeName(ci.PType).c_str(),
                                            NScheme::TypeName(typeInRequest).c_str());
                     return false;

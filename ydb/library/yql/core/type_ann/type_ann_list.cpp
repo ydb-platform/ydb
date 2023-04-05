@@ -480,7 +480,7 @@ namespace {
     }
 
     IGraphTransformer::TStatus ValidateCalcOverWindowArgs(TVector<const TItemExprType*>& outputStructType,
-        const TStructExprType& inputStructType, const TExprNode& partitionBy, const TExprNode& sortSpec, const TExprNode& winList,
+        const TStructExprType& inputStructType, TExprNode& partitionBy, const TExprNode& sortSpec, TExprNode& winList,
         const TExprNode::TPtr& sessionSpec, const TExprNode::TPtr& sessionColumns, TExprContext& ctx)
     {
         YQL_ENSURE(sessionSpec ? bool(sessionColumns) : !sessionColumns);
@@ -5286,6 +5286,11 @@ namespace {
         }
 
         auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (itemType->GetKind() == ETypeAnnotationKind::Unit) {
+            output = ctx.Expr.NewCallable(input->Pos(), "Void", {});
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         auto& lambda = input->ChildRef(2);
         const auto status = ConvertToLambda(lambda, ctx.Expr, 1);
         if (status.Level != IGraphTransformer::TStatus::Ok) {

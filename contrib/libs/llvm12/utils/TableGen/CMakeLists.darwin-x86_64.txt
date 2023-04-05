@@ -25,8 +25,7 @@ target_link_libraries(llvm-tblgen PUBLIC
   utils-TableGen-GlobalISel
 )
 target_link_options(llvm-tblgen PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
 )

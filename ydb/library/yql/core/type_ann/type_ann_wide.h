@@ -8,7 +8,7 @@
 namespace NYql {
 namespace NTypeAnnImpl {
     IGraphTransformer::TStatus ExpandMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-    bool ValidateWideTopKeys(const TExprNode& keys, const TTypeAnnotationNode::TListType& types, TExprContext& ctx);
+    bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& types, TExprContext& ctx);
 
     IGraphTransformer::TStatus WideMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus WideFilterWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

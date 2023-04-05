@@ -3,15 +3,21 @@
 namespace NKikimr::NColumnShard {
 
 namespace {
-    std::optional<ui64> BlobSizeForSplit;
+    const constexpr ui64 MAX_BLOB_SIZE_LIMIT = 8 * 1024 * 1024;
+    ui64 MaxBlobSize = MAX_BLOB_SIZE_LIMIT;
 }
 
-ui64 TLimits::GetBlobSizeForSplit() {
-    return BlobSizeForSplit.value_or(MAX_BLOB_SIZE * 0.95);
+ui64 TLimits::GetMaxBlobSize() {
+    return MaxBlobSize;
 }
 
-void TLimits::SetBlobSizeForSplit(const ui64 value) {
-    BlobSizeForSplit = value;
+ui64 TLimits::GetBlobSizeLimit() {
+    return MAX_BLOB_SIZE_LIMIT;
+}
+
+void TLimits::SetMaxBlobSize(const ui64 value) {
+    Y_VERIFY(value <= MAX_BLOB_SIZE_LIMIT);
+    MaxBlobSize = value;
 }
 
 }

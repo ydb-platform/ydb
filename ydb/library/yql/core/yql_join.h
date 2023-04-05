@@ -62,7 +62,7 @@ struct TJoinOptions {
 
 IGraphTransformer::TStatus ValidateEquiJoinOptions(
     TPositionHandle positionHandle,
-    const TExprNode& optionsNode,
+    TExprNode& optionsNode,
     TJoinOptions& options,
     TExprContext& ctx
 );
@@ -71,7 +71,7 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     TPositionHandle position,
     const TStructExprType*& resultType,
     const TJoinLabels& labels,
-    const TExprNode& joins,
+    TExprNode& joins,
     const TJoinOptions& options,
     TExprContext& ctx
 );
@@ -81,7 +81,7 @@ IGraphTransformer::TStatus EquiJoinConstraints(
     const TUniqueConstraintNode*& unique,
     const TDistinctConstraintNode*& distinct,
     const TJoinLabels& labels,
-    const TExprNode& joins,
+    TExprNode& joins,
     TExprContext& ctx
 );
 

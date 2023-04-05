@@ -2,6 +2,8 @@
 #include "read_session.h"
 #include "common.h"
 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -82,7 +84,7 @@ void TReadSession::Start() {
         return;
     }
 
-    Log.Write(TLOG_INFO, GetLogPrefix() << "Starting read session");
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Starting read session");
     if (Settings.DisableClusterDiscovery_) {
         ProceedWithoutClusterDiscovery();
     } else {
@@ -118,7 +120,7 @@ void TReadSession::StartClusterDiscovery() {
             return;
         }
 
-        Log.Write(TLOG_DEBUG, GetLogPrefix() << "Starting cluster discovery");
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Starting cluster discovery");
         ClusterDiscoveryDelayContext = nullptr;
     }
 
@@ -181,7 +183,7 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
         if (sessionSettings.MaxMemoryUsageBytes_ > clusterSessionsCount && sessionSettings.MaxMemoryUsageBytes_ != std::numeric_limits<size_t>::max()) {
             sessionSettings.MaxMemoryUsageBytes_ /= clusterSessionsCount;
         }
-        Log.Write(
+        LOG_LAZY(Log,
             TLOG_DEBUG,
             GetLogPrefix() << "Starting session to cluster " << clusterName
                 << " (" << clusterSessionInfo.ClusterEndpoint << ")"
@@ -225,7 +227,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
             }
             TMaybe<TDuration> retryDelay = ClusterDiscoveryRetryState->GetNextRetryDelay(status.GetStatus());
             if (retryDelay) {
-                Log.Write(
+                LOG_LAZY(Log,
                     TLOG_INFO,
                     GetLogPrefix() << "Cluster discovery request failed. Status: " << status.GetStatus()
                         << ". Issues: \"" << IssuesSingleLineString(status.GetIssues()) << "\""
@@ -237,7 +239,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
             return;
         }
 
-        Log.Write(TLOG_DEBUG, GetLogPrefix() << "Cluster discovery request succeeded");
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Cluster discovery request succeeded");
         ClusterDiscoveryRetryState = nullptr;
 
         // Init ClusterSessions.
@@ -317,7 +319,7 @@ void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions
     if (Aborting || Closing) {
         return;
     }
-    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Restart cluster discovery in " << delay);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Restart cluster discovery in " << delay);
     auto startCallback = [self = weak_from_this()](bool ok) {
         if (ok) {
             if (auto sharedSelf = self.lock()) {
@@ -337,7 +339,7 @@ void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions
 }
 
 bool TReadSession::Close(TDuration timeout) {
-    Log.Write(TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
     // Log final counters.
     DumpCountersToLog();
 
@@ -420,7 +422,7 @@ void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions<
 
     if (!Aborting) {
         Aborting = true;
-        Log.Write(TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
+        LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
         if (ClusterDiscoveryDelayContext) {
             ClusterDiscoveryDelayContext->Cancel();
             ClusterDiscoveryDelayContext.reset();
@@ -486,7 +488,7 @@ TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(bool block, size_t maxB
 }
 
 void TReadSession::StopReadingData() {
-    Log.Write(TLOG_INFO, GetLogPrefix() << "Stop reading data");
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Stop reading data");
     with_lock (Lock) {
         if (!DataReadingSuspended) {
             DataReadingSuspended = true;
@@ -501,7 +503,7 @@ void TReadSession::StopReadingData() {
 }
 
 void TReadSession::ResumeReadingData() {
-    Log.Write(TLOG_INFO, GetLogPrefix() << "Resume reading data");
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Resume reading data");
     with_lock (Lock) {
         if (DataReadingSuspended) {
             DataReadingSuspended = false;
@@ -516,7 +518,7 @@ void TReadSession::ResumeReadingData() {
 }
 
 void TReadSession::OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) {
-    Log.Write(TLOG_DEBUG, GetLogPrefix()
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix()
                           << "The application data is transferred to the client. Number of messages "
                           << messagesCount
                           << ", size "
@@ -574,7 +576,7 @@ void TReadSession::DumpCountersToLog(size_t timeNumber) {
         /**/
 
     if (logCounters) {
-        Log.Write(TLOG_INFO,
+        LOG_LAZY(Log, TLOG_INFO,
             GetLogPrefix() << "Counters: {"
             C(Errors)
             C(CurrentSessionLifetimeMs)

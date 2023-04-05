@@ -84,17 +84,18 @@ The following algorithm that is the same for all SDKs applies:
 
 If the last step of the algorithm is selecting the **Metadata** mode, you can deploy a working application on VMs and in {{ yandex-cloud }} Cloud Functions without setting any environment variables.
 
-## Python {{ ydb-short-name }} SDK v2 (deprecated) specifics
+## Peculiarities of {{ ydb-short-name }} Python SDK v2 (deprecated version)
 
 {% note warning %}
 
-The behavior of the Python SDK v2 (deprecated) differs from the one described above.
+The behavior of the {{ ydb-short-name }} Python SDK v2 (deprecated version) differs from the above-described version.
 
 {% endnote %}
 
-1. For python {{ ydb-short-name }} SDK v2 the algorithm for determining the authentication mode and the necessary parameters from the environment variables in the `construct_credentials_from_environ()` method differs from the one used in other SDKs:
+* The algorithm of the `construct_credentials_from_environ()` function from the {{ ydb-short-name }} Python SDK v2:
    - If the value of the `USE_METADATA_CREDENTIALS` environment variable is set to 1, the **Metadata** authentication mode is used.
    - Otherwise, if the value of the `YDB_TOKEN` environment variable is set, the **Access Token** authentication mode is used, where this variable value is passed.
    - Otherwise, if the value of the `SA_KEY_FILE` environment variable is set, the **System Account Key** authentication mode is used and the key is taken from the file whose name is specified in this variable.
    - Or else, no authentication information is added to requests.
-2. If no object responsible for generating tokens is passed when initializing the driver, the [general procedure](#env) for reading environment variables applies.
+* If no object responsible for generating tokens is passed when initializing the driver, the [general procedure](#env) for reading environment variables applies.
+

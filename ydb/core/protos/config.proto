@@ -602,6 +602,12 @@ message TInternalRequestConfig {
     optional uint32 RetryPeriodFinishSeconds = 2 [default = 30];
 }
 
+message TConveyorConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint32 WorkersCount = 2;
+    optional uint32 QueueSizeLimit = 3;
+}
+
 message TExternalIndexConfig {
     optional bool Enabled = 1 [default = true];
     optional TInternalRequestConfig RequestConfig = 2;
@@ -1799,8 +1805,7 @@ message TAppConfig {
     optional TClientCertificateAuthorization ClientCertificateAuthorization = 62;
     optional TExternalIndexConfig ExternalIndexConfig = 63;
     optional bool YamlConfigEnabled = 64;
-
-    optional NFq.NConfig.TConfig YandexQueryConfig = 50; // TODO: remove after migration to FederatedQueryConfig
+    optional TConveyorConfig ConveyorConfig = 65;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

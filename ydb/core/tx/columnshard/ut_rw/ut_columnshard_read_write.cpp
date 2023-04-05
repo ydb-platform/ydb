@@ -460,8 +460,8 @@ void TestWrite(const TestTableDescription& table) {
     // too much data
 
     TString bigData = MakeTestBlob({0, 150 * 1000}, ydbSchema);
-    UNIT_ASSERT(bigData.size() > NColumnShard::TLimits::MAX_BLOB_SIZE);
-    UNIT_ASSERT(bigData.size() < NColumnShard::TLimits::MAX_BLOB_SIZE + 2 * 1024 * 1024);
+    UNIT_ASSERT(bigData.size() > NColumnShard::TLimits::GetMaxBlobSize());
+    UNIT_ASSERT(bigData.size() < NColumnShard::TLimits::GetMaxBlobSize() + 2 * 1024 * 1024);
     ok = WriteData(runtime, sender, metaShard, writeId, tableId, bigData);
     UNIT_ASSERT(!ok);
 }
@@ -1067,7 +1067,7 @@ void TestCompactionInGranuleImpl(bool reboots,
     std::pair<ui64, ui64> triggerPortion = {0, triggerPortionSize};
     TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
     UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
-    UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::MAX_BLOB_SIZE);
+    UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
     static const ui32 portionSize = 1;
 
@@ -2027,7 +2027,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             std::pair<ui64, ui64> triggerPortion = {start, start + triggerPortionSize};
             TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
             UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
-            UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::MAX_BLOB_SIZE);
+            UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
             UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
 
@@ -2499,7 +2499,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         std::pair<ui64, ui64> triggerPortion = {0, triggerPortionSize};
         TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
         UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
-        UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::MAX_BLOB_SIZE);
+        UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
         ui64 planStep = 5000000;
         ui64 txId = 1000;

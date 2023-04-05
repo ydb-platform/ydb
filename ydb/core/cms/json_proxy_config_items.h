@@ -7,9 +7,8 @@
 namespace NKikimr::NCms {
 
 class TJsonProxyConfigItems : public TJsonProxyConsole<NConsole::TEvConsole::TEvGetConfigItemsRequest,
-                                                       NConsole::TEvConsole::TEvGetConfigItemsResponse> {
-private:
-
+                                                       NConsole::TEvConsole::TEvGetConfigItemsResponse>
+{
 public:
     TJsonProxyConfigItems(NMon::TEvHttpInfo::TPtr &event)
         : TJsonProxyConsole<NConsole::TEvConsole::TEvGetConfigItemsRequest,
@@ -17,8 +16,7 @@ public:
     {
     }
 
-    TAutoPtr<TRequest> PrepareRequest(const TActorContext &) override
-    {
+    TAutoPtr<TRequest> PrepareRequest(const TActorContext &) override {
         TAutoPtr<TRequest> request = new TRequest;
         const TCgiParameters& cgi = RequestEvent->Get()->Request.GetParams();
 

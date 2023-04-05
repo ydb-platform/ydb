@@ -13,4 +13,24 @@ message TSink {
     optional uint64 MaxFileSize_deprecated = 7;
     optional string Extension = 8;
     optional bool Multipart = 9;
+    bool AtomicUploadCommit = 10;
+}
+
+message TCommitEffect {
+    string Url = 1;           // url ( == prefix + subpath + name) to commit
+    string UploadId = 2;
+    repeated string ETag = 3;
+}
+
+message TCleanupEffect {
+    string Url = 1;            // bucket root url
+    string Prefix = 2;         // prefix in bucket
+}
+
+message TEffect {
+    oneof Action {
+        TCleanupEffect Cleanup = 1;        
+        TCommitEffect Commit = 2;
+    }
+    string Token = 3;
 }

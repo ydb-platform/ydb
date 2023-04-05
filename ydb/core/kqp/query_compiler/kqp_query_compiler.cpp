@@ -11,10 +11,13 @@
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -439,6 +442,7 @@ public:
         , TypeEnv(Alloc)
         , KqlCtx(cluster, tablesData, TypeEnv, FuncRegistry)
         , KqlCompiler(CreateKqlCompiler(KqlCtx, typesCtx))
+        , TypesCtx(typesCtx)
     {
         Alloc.Release();
     }
@@ -556,7 +560,7 @@ private:
 
             if (input.Maybe<TDqSource>()) {
                 auto* protoSource = stageProto.AddSources();
-                FillSource(input.Cast<TDqSource>(), protoSource, true, tablesMap);
+                FillSource(input.Cast<TDqSource>(), protoSource, true, tablesMap, ctx);
                 protoSource->SetInputIndex(inputIndex);
             } else {
                 YQL_ENSURE(input.Maybe<TDqConnection>());
@@ -805,7 +809,7 @@ private:
         }
     }
 
-    void FillSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
+    void FillKqpSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
     {
         if (auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>()) {
@@ -864,7 +868,37 @@ private:
                 }
             }
         } else {
-            YQL_ENSURE(false, "unsupported source type");
+            YQL_ENSURE(false, "Unsupported source type");
+        }
+    }
+
+    void FillSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx)
+    {
+        const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category().Value();
+        if (dataSourceCategory == NYql::KikimrProviderName || dataSourceCategory == NYql::YdbProviderName || dataSourceCategory == NYql::KqpReadRangesSourceName) {
+            FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
+        } else {
+            // Delegate source filling to dq integration of specific provider
+            const auto provider = TypesCtx.DataSourceMap.find(dataSourceCategory);
+            YQL_ENSURE(provider != TypesCtx.DataSourceMap.end(), "Unsupported data source category: \"" << dataSourceCategory << "\"");
+            NYql::IDqIntegration* dqIntegration = provider->second->GetDqIntegration();
+            YQL_ENSURE(dqIntegration, "Unsupported dq source for provider: \"" << dataSourceCategory << "\"");
+            auto& externalSource = *protoSource->MutableExternalSource();
+            google::protobuf::Any& settings = *externalSource.MutableSettings();
+            TString& sourceType = *externalSource.MutableType();
+            dqIntegration->FillSourceSettings(source.Ref(), settings, sourceType);
+            YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" did't fill dq source settings for its dq source node");
+            YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" did't fill dq source settings type for its dq source node");
+
+            // Partitioning
+            TVector<TString> partitionParams;
+            TString clusterName;
+            dqIntegration->Partition(NYql::TDqSettings(), NYql::TDqSettings::TDefault::MaxTasksPerStage, source.Ref(), partitionParams, &clusterName, ctx, false);
+            externalSource.SetTaskParamKey(TString(dataSourceCategory));
+            for (const TString& partitionParam : partitionParams) {
+                externalSource.AddPartitionedTaskParams(partitionParam);
+            }
         }
     }
 
@@ -999,6 +1033,7 @@ private:
     NMiniKQL::TTypeEnvironment TypeEnv;
     TKqlCompileContext KqlCtx;
     TIntrusivePtr<NCommon::IMkqlCallableCompiler> KqlCompiler;
+    TTypeAnnotationContext& TypesCtx;
 };
 
 } // namespace

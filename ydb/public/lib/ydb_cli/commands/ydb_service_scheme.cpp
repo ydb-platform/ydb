@@ -144,8 +144,8 @@ void TCommandDescribe::Config(TConfig& config) {
     // Table options
     config.Opts->AddLongOption("partition-boundaries", "[Table] Show partition key boundaries").StoreTrue(&ShowKeyShardBoundaries)
         .AddLongName("shard-boundaries");
-    config.Opts->AddLongOption("stats", "[Table] Show table statistics").StoreTrue(&ShowTableStats);
-    config.Opts->AddLongOption("partition-stats", "[Table] Show partition statistics").StoreTrue(&ShowPartitionStats);
+    config.Opts->AddLongOption("stats", "[Table|Topic] Show table/topic statistics").StoreTrue(&ShowStats);
+    config.Opts->AddLongOption("partition-stats", "[Table|Topic] Show partition statistics").StoreTrue(&ShowPartitionStats);
 
     AddDeprecatedJsonOption(config, "(Deprecated, will be removed soon. Use --format option instead) [Table] Output in json format");
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
@@ -213,6 +213,56 @@ namespace {
     }
 }
 
+namespace {
+
+    void PrintStatistics(const NTopic::TTopicDescription& topicDescription) {
+        Cout << Endl << "Topic stats:" << Endl;
+        auto& topicStats = topicDescription.GetTopicStats();
+        Cout << "Approximate size of topic: " << PrettySize(topicStats.GetStoreSizeBytes()) << Endl;
+        Cout << "Max partitions write time lag: " << FormatDuration(topicStats.GetMaxWriteTimeLag()) << Endl;
+        Cout << "Min partitions last write time: " << FormatTime(topicStats.GetMinLastWriteTime()) << Endl;
+        Cout << "Written size per minute: " << PrettySize(topicStats.GetBytesWrittenPerMinute()) << Endl;
+        Cout << "Written size per hour: " << PrettySize(topicStats.GetBytesWrittenPerHour()) << Endl;
+        Cout << "Written size per day: " << PrettySize(topicStats.GetBytesWrittenPerDay()) << Endl;
+
+    }
+
+    void PrintPartitionStatistics(const NTopic::TTopicDescription& topicDescription) {
+        Cout << Endl << "Topic partitions stats:" << Endl;
+
+        TVector<TString> columnNames = { "#" };
+        columnNames.push_back("Active");
+        columnNames.push_back("Start offset");
+        columnNames.push_back("End offset");
+        columnNames.push_back("Size");
+        columnNames.push_back("Last write time");
+        columnNames.push_back("Max write time lag");
+        columnNames.push_back("Written size per minute");
+        columnNames.push_back("Written size per hour");
+        columnNames.push_back("Written size per day");
+
+        TPrettyTable table(columnNames);
+        for (const auto& part : topicDescription.GetPartitions()) {
+            auto& row = table.AddRow();
+            row.Column(0, part.GetPartitionId());
+            row.Column(1, part.GetActive());
+            const auto& partStats = part.GetPartitionStats();
+            if (partStats) {
+                row.Column(2, partStats->GetStartOffset());
+                row.Column(3, partStats->GetEndOffset());
+                row.Column(4, PrettySize(partStats->GetStoreSizeBytes()));
+                row.Column(5, FormatTime(partStats->GetLastWriteTime()));
+                row.Column(6, FormatDuration(partStats->GetMaxWriteTimeLag()));
+                row.Column(7, PrettySize(partStats->GetBytesWrittenPerMinute()));
+                row.Column(8, PrettySize(partStats->GetBytesWrittenPerHour()));
+                row.Column(9, PrettySize(partStats->GetBytesWrittenPerDay()));
+            }
+        }
+        Cout << table;
+    }
+
+}
+
 int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& description) {
     Cout << Endl << "RetentionPeriod: " << description.GetRetentionPeriod().Hours() << " hours";
     if (description.GetRetentionStorageMb().Defined()) {
@@ -225,7 +275,14 @@ int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescrip
         Cout << Endl << "SupportedCodecs: " << FormatCodecs(description.GetSupportedCodecs()) << Endl;
     }
     PrintTopicConsumers(description.GetConsumers());
-    Cout << Endl;
+
+    if (ShowStats) {
+        PrintStatistics(description);
+    }
+    if (ShowPartitionStats){
+        PrintPartitionStatistics(description);
+    }
+
     return EXIT_SUCCESS;
 }
 
@@ -269,7 +326,10 @@ int TCommandDescribe::PrintTopicResponse(const NYdb::NTopic::TDescribeTopicResul
 
 int TCommandDescribe::DescribeTopic(TDriver& driver) {
     NYdb::NTopic::TTopicClient topicClient(driver);
-    auto describeResult = topicClient.DescribeTopic(Path).GetValueSync();
+    NYdb::NTopic::TDescribeTopicSettings settings;
+    settings.IncludeStats(ShowStats || ShowPartitionStats);
+
+    auto describeResult = topicClient.DescribeTopic(Path, settings).GetValueSync();
     ThrowOnError(describeResult);
     return PrintTopicResponse(describeResult);
 }
@@ -283,7 +343,7 @@ int TCommandDescribe::DescribeTable(TDriver& driver) {
         FillSettings(
             NTable::TDescribeTableSettings()
             .WithKeyShardBoundary(ShowKeyShardBoundaries)
-            .WithTableStatistics(ShowTableStats || ShowPartitionStats)
+            .WithTableStatistics(ShowStats || ShowPartitionStats)
             .WithPartitionStatistics(ShowPartitionStats)
         )
     ).GetValueSync();
@@ -299,7 +359,7 @@ int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
         Path,
         FillSettings(
             NTable::TDescribeTableSettings()
-            .WithTableStatistics(ShowTableStats)
+            .WithTableStatistics(ShowStats)
         )
     ).GetValueSync();
     ThrowOnError(result);
@@ -539,6 +599,8 @@ namespace {
         Cout << "Created: " << FormatTime(tableDescription.GetCreationTime()) << Endl;
     }
 
+
+
     void PrintPartitionInfo(const NTable::TTableDescription& tableDescription, bool showBoundaries, bool showStats) {
         const TVector<NTable::TKeyRange>& ranges = tableDescription.GetKeyRanges();
         const TVector<NTable::TPartitionStats>& stats = tableDescription.GetPartitionStats();
@@ -669,7 +731,7 @@ void TCommandDescribe::PrintResponsePretty(const NTable::TTableDescription& tabl
             tableDescription.GetEffectivePermissions()
         );
     }
-    if (ShowTableStats) {
+    if (ShowStats) {
         PrintStatistics(tableDescription);
     }
     if (ShowKeyShardBoundaries || ShowPartitionStats) {
@@ -696,12 +758,12 @@ int TCommandDescribe::PrintResponseProtoJsonBase64(const NTable::TTableDescripti
 }
 
 void TCommandDescribe::WarnAboutTableOptions() {
-    if (ShowKeyShardBoundaries || ShowTableStats || ShowPartitionStats || OutputFormat != EOutputFormat::Default) {
+    if (ShowKeyShardBoundaries || ShowStats || ShowPartitionStats || OutputFormat != EOutputFormat::Default) {
         TVector<TString> options;
         if (ShowKeyShardBoundaries) {
             options.emplace_back("\"partition-boundaries\"(\"shard-boundaries\")");
         }
-        if (ShowTableStats) {
+        if (ShowStats) {
             options.emplace_back("\"stats\"");
         }
         if (ShowPartitionStats) {

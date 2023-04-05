@@ -1,9 +1,11 @@
 #include "read_balancer.h"
 
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/base64/base64.h>
+
 
 namespace NKikimr {
 namespace NPQ {
@@ -60,7 +62,7 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
                 Y_VERIFY(res);
                 Self->Consumers.clear();
                 for (const auto& rr : Self->TabletConfig.GetReadRules()) {
-                    Self->Consumers.insert(rr);
+                    Self->Consumers[rr];
                 }
             }
             Self->Inited = true;
@@ -298,9 +300,9 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                         TABLED() { str << ci.second.Group;}
                                         TABLED() { str << pp.second.TabletId;}
                                         TABLED() { str << (ui32)pp.second.State;}
-                                        auto it = ci.second.SessionsInfo.find(std::make_pair(pp.second.Session, ci.second.RandomNumber));
-                                        Y_VERIFY((it == ci.second.SessionsInfo.end()) == (pp.second.State == EPS_FREE));
-                                        TABLED() { str << (pp.second.State != EPS_FREE ? it->second.Session : "");}
+                                        auto* session = ci.second.FindSession(pp.second.Session);
+                                        Y_VERIFY((session == nullptr) == (pp.second.State == EPS_FREE));
+                                        TABLED() { str << (pp.second.State != EPS_FREE ? session->Session : "");}
                                     }
                                 }
                             }
@@ -422,7 +424,7 @@ void TPersQueueReadBalancer::CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &req
     if (record.GetOperation() == NKikimrPQ::EOperation::READ_OP) {
         if (!Consumers.contains(user)) {
             RespondWithACL(request, NKikimrPQ::EAccess::DENIED, TStringBuilder() << "no read rule provided for consumer '"
-                    << (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() ? user : NPersQueue::ConvertOldConsumerName(user))
+                    << NPersQueue::ConvertOldConsumerName(user, ctx)
                     << "' that allows to read topic from original cluster '" << NPersQueue::GetDC(Topic)
                     << "'; may be there is read rule with mode all-original only and you are reading with mirrored topics. Change read-rule to mirror-to-<cluster> or options of reading process.", ctx);
             return;
@@ -431,7 +433,7 @@ void TPersQueueReadBalancer::CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &req
     if (ACL.CheckAccess(rights, token)) {
         RespondWithACL(request, NKikimrPQ::EAccess::ALLOWED, "", ctx);
     } else {
-        RespondWithACL(request, NKikimrPQ::EAccess::DENIED, TStringBuilder() << "access denied for consumer '" << NPersQueue::ConvertOldConsumerName(user) << "' : no " << (rights == NACLib::EAccessRights::SelectRow ? "ReadTopic" : "WriteTopic") << " permission" , ctx);
+        RespondWithACL(request, NKikimrPQ::EAccess::DENIED, TStringBuilder() << "access denied for consumer '" << NPersQueue::ConvertOldConsumerName(user, ctx) << "' : no " << (rights == NACLib::EAccessRights::SelectRow ? "ReadTopic" : "WriteTopic") << " permission" , ctx);
     }
 }
 
@@ -529,9 +531,15 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         SubDomainPathId.emplace(record.GetSchemeShardId(), record.GetSubDomainPathId());
     }
 
+    auto oldConsumers = std::move(Consumers);
     Consumers.clear();
     for (const auto& rr : TabletConfig.GetReadRules()) {
-        Consumers.insert(rr);
+        auto it = oldConsumers.find(rr);
+        if (it != oldConsumers.end()) {
+            Consumers[rr] = std::move(it->second);
+        } else {
+            Consumers[rr];
+        }
     }
 
     TVector<std::pair<ui32, TPartInfo>> newPartitions;
@@ -597,7 +605,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     PartitionsInfo = partitionsInfo;
 
     for (auto& p : ClientsInfo) {
-        auto mainGroup = p.second.ClientGroupsInfo.find(0);
+        auto mainGroup = p.second.ClientGroupsInfo.find(TClientInfo::MAIN_GROUP);
         for (auto& part : newPartitions) {
             ui32 group = part.second.Group;
             auto it = p.second.SessionsWithGroup ? p.second.ClientGroupsInfo.find(group) : mainGroup;
@@ -716,6 +724,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
     ui64 tabletId = record.GetTabletId();
     ui64 cookie = ev->Cookie;
 
+
     if ((0 != cookie && cookie != AggregatedStats.Cookies[tabletId]) || (0 == cookie && !AggregatedStats.Cookies.contains(tabletId))) {
         return;
     }
@@ -723,6 +732,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
     AggregatedStats.Cookies.erase(tabletId);
 
     for (const auto& partRes : record.GetPartResult()) {
+
         if (!PartitionsInfo.contains(partRes.GetPartition())) {
             continue;
         }
@@ -730,6 +740,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         AggregatedStats.AggrStats(partRes.GetPartition(), partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
         AggregatedStats.AggrStats(partRes.GetAvgWriteSpeedPerSec(), partRes.GetAvgWriteSpeedPerMin(), 
             partRes.GetAvgWriteSpeedPerHour(), partRes.GetAvgWriteSpeedPerDay());
+        AggregatedStats.Stats[partRes.GetPartition()].Counters = partRes.GetAggregatedCounters();
+        AggregatedStats.Stats[partRes.GetPartition()].HasCounters = true;
     }
     if (AggregatedStats.Cookies.empty()) {
         CheckStat(ctx);
@@ -826,7 +838,7 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
 
     AggregatedStats.Metrics = AggregatedStats.NewMetrics;
 
-    TEvPersQueue::TEvPeriodicTopicStats* ev = GetStatsEvent() ;
+    TEvPersQueue::TEvPeriodicTopicStats* ev = GetStatsEvent();
     LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, 
             TStringBuilder() << "Send TEvPeriodicTopicStats PathId: " << PathId
                              << " Generation: " << Generation
@@ -835,6 +847,120 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
                              << " UsedReserveSize: " << AggregatedStats.TotalUsedReserveSize);
 
     NTabletPipe::SendData(ctx, GetPipeClient(SchemeShardId, ctx), ev);
+
+
+    UpdateCounters(ctx);
+}
+
+void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
+    if (!AggregatedStats.Stats.size())
+        return;
+
+    if (!DatabasePath)
+        return;
+
+    using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
+    THolder<TPartitionLabeledCounters> labeledCounters;
+    using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
+    THolder<TConsumerLabeledCounters> labeledConsumerCounters;
+
+
+    labeledCounters.Reset(new TPartitionLabeledCounters("topic", 0, DatabasePath));
+    labeledConsumerCounters.Reset(new TConsumerLabeledCounters("topic|x|consumer", 0, DatabasePath));
+
+    auto counters = AppData(ctx)->Counters;
+    bool isServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
+
+    TStringBuf name = TStringBuf(Path);
+    name.SkipPrefix(DatabasePath);
+    name.SkipPrefix("/");
+    counters = counters->GetSubgroup("counters", isServerless ? "topics_serverless" : "topics")
+                ->GetSubgroup("host", "")
+                ->GetSubgroup("database", DatabasePath)
+                ->GetSubgroup("cloud_id", CloudId)
+                ->GetSubgroup("folder_id", FolderId)
+                ->GetSubgroup("database_id", DatabaseId)
+                ->GetSubgroup("topic", TString(name));
+
+    if (AggregatedCounters.empty()) {
+        for (ui32 i = 0; i < labeledCounters->GetCounters().Size(); ++i) {
+            TString name = labeledCounters->GetNames()[i];
+            TStringBuf nameBuf = name;
+            nameBuf.SkipPrefix("PQ/");
+            name = nameBuf;
+            AggregatedCounters.push_back(name.empty() ? nullptr : counters->GetExpiringNamedCounter("name", name, false));
+        }
+    }
+
+    for (auto& [consumer, info]: Consumers) {
+        info.Aggr.Reset(new TTabletLabeledCountersBase{});
+        if (info.AggregatedCounters.empty()) {
+            auto clientCounters = counters->GetSubgroup("consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx));
+            for (ui32 i = 0; i < labeledConsumerCounters->GetCounters().Size(); ++i) {
+                TString name = labeledConsumerCounters->GetNames()[i];
+                TStringBuf nameBuf = name;
+                nameBuf.SkipPrefix("PQ/");
+                name = nameBuf;
+                info.AggregatedCounters.push_back(name.empty() ? nullptr : clientCounters->GetExpiringNamedCounter("name", name, false));
+            }
+        }
+    }
+
+    /*** apply counters ****/
+
+    ui64 milliSeconds = TAppData::TimeProvider->Now().MilliSeconds();
+
+    THolder<TTabletLabeledCountersBase> aggr(new TTabletLabeledCountersBase);
+
+    bool hasCounters = false;
+
+    for (auto it = AggregatedStats.Stats.begin(); it != AggregatedStats.Stats.end(); ++it) {
+        if (!it->second.HasCounters)
+            continue;
+        for (ui32 i = 0; i < it->second.Counters.ValuesSize() && i < labeledCounters->GetCounters().Size(); ++i) {
+            labeledCounters->GetCounters()[i] = it->second.Counters.GetValues(i);
+        }
+        aggr->AggregateWith(*labeledCounters);
+
+        for (const auto& consumerStats : it->second.Counters.GetConsumerAggregatedCounters()) {
+            auto jt = Consumers.find(consumerStats.GetConsumer());
+            if (jt == Consumers.end())
+                continue;
+            for (ui32 i = 0; i < consumerStats.ValuesSize() && i < labeledCounters->GetCounters().Size(); ++i) {
+                labeledConsumerCounters->GetCounters()[i] = consumerStats.GetValues(i);
+            }
+            hasCounters = true;
+            jt->second.Aggr->AggregateWith(*labeledConsumerCounters);
+        }
+
+    }
+    if (!hasCounters)
+        return;
+
+    /*** show counters ***/
+    for (ui32 i = 0; i < aggr->GetCounters().Size(); ++i) {
+        if (!AggregatedCounters[i])
+            continue;
+        const auto& type = aggr->GetCounterType(i);
+        auto val = aggr->GetCounters()[i].Get();
+        if (type == TLabeledCounterOptions::CT_TIMELAG) {
+            val = val <= milliSeconds ? milliSeconds - val : 0;
+        }
+        AggregatedCounters[i]->Set(val);
+    }
+
+    for (auto& [consumer, info] : Consumers) {
+        for (ui32 i = 0; i < info.Aggr->GetCounters().Size(); ++i) {
+            if (!info.AggregatedCounters[i])
+                continue;
+            const auto& type = info.Aggr->GetCounterType(i);
+            auto val = info.Aggr->GetCounters()[i].Get();
+            if (type == TLabeledCounterOptions::CT_TIMELAG) {
+                val = val <= milliSeconds ? milliSeconds - val : 0;
+            }
+            info.AggregatedCounters[i]->Set(val);
+        }
+    }
 }
 
 TEvPersQueue::TEvPeriodicTopicStats* TPersQueueReadBalancer::GetStatsEvent() {
@@ -842,6 +968,7 @@ TEvPersQueue::TEvPeriodicTopicStats* TPersQueueReadBalancer::GetStatsEvent() {
     auto& rec = ev->Record;
     rec.SetPathId(PathId);
     rec.SetGeneration(Generation);
+
     rec.SetRound(++StatsReportRound);
     rec.SetDataSize(AggregatedStats.TotalDataSize);
     rec.SetUsedReserveSize(AggregatedStats.TotalUsedReserveSize);
@@ -860,6 +987,8 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
     AggregatedStats.NewMetrics = newMetrics;
 
     for (auto& p : PartitionsInfo) {
+        AggregatedStats.Stats[p.first].HasCounters = false;
+
         const ui64& tabletId = p.second.TabletId;
         if (AggregatedStats.Cookies.contains(tabletId)) { //already asked stat
             continue;
@@ -908,7 +1037,7 @@ TPersQueueReadBalancer::TClientGroupInfo& TPersQueueReadBalancer::TClientInfo::A
     clientInfo.Generation = Generation;
     clientInfo.Step = &Step;
 
-    clientInfo.RandomNumber = TAppData::RandomProvider->GenRand64();
+    clientInfo.SessionKeySalt = TAppData::RandomProvider->GenRand64();
     return clientInfo;
 }
 
@@ -936,7 +1065,7 @@ void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 group, const THa
 
     auto it = ClientGroupsInfo.find(group);
     it->second.SessionsInfo.insert({
-        std::make_pair(pipe, it->second.RandomNumber),
+        it->second.SessionKey(pipe),
         TClientGroupInfo::TSessionInfo(
             record.GetSession(), sender,
             record.HasClientNode() ? record.GetClientNode() : "none",
@@ -1015,7 +1144,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     if (!groups.empty()) {
         auto jt = it->second.ClientGroupsInfo.find(0);
         if (jt != it->second.ClientGroupsInfo.end()) {
-            it->second.KillGroup(0, ctx);
+            it->second.KillSessionsWithoutGroup(ctx);
         }
         for (auto g : groups) {
             it->second.AddSession(g, PartitionsInfo, ev->Sender, record);
@@ -1047,13 +1176,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
                 auto pi = response->Record.AddPartitionInfo();
                 pi->SetPartition(p.first);
                 if (p.second.State == EPS_ACTIVE) {
-                    auto jt = c.second.SessionsInfo.find(std::make_pair(p.second.Session, c.second.RandomNumber));
-                    Y_VERIFY(jt != c.second.SessionsInfo.end());
-                    pi->SetClientNode(jt->second.ClientNode);
-                    pi->SetProxyNodeId(jt->second.ProxyNodeId);
-                    pi->SetSession(jt->second.Session);
-                    pi->SetTimestamp(jt->second.Timestamp.Seconds());
-                    pi->SetTimestampMs(jt->second.Timestamp.MilliSeconds());
+                    auto* session = c.second.FindSession(p.second.Session);
+                    Y_VERIFY(session != nullptr);
+                    pi->SetClientNode(session->ClientNode);
+                    pi->SetProxyNodeId(session->ProxyNodeId);
+                    pi->SetSession(session->Session);
+                    pi->SetTimestamp(session->Timestamp.Seconds());
+                    pi->SetTimestampMs(session->Timestamp.MilliSeconds());
                 } else {
                     pi->SetClientNode("");
                     pi->SetProxyNodeId(0);
@@ -1074,9 +1203,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
 }
 
 
-void TPersQueueReadBalancer::TClientInfo::KillGroup(const ui32 group, const TActorContext& ctx) {
-    Y_VERIFY(group == 0);
-    auto it = ClientGroupsInfo.find(group);
+void TPersQueueReadBalancer::TClientInfo::KillSessionsWithoutGroup(const TActorContext& ctx) {
+    auto it = ClientGroupsInfo.find(MAIN_GROUP);
     Y_VERIFY(it != ClientGroupsInfo.end());
     for (auto& s : it->second.SessionsInfo) {
         THolder<TEvPersQueue::TEvError> response(new TEvPersQueue::TEvError);
@@ -1093,14 +1221,14 @@ void TPersQueueReadBalancer::TClientInfo::MergeGroups(const TActorContext& ctx) 
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " merge groups");
 
-    auto& clientInfo = AddGroup(0);
+    auto& clientInfo = AddGroup(MAIN_GROUP);
 
     ui32 numSessions = 0;
     ui32 numGroups = 0;
 
     for (auto it = ClientGroupsInfo.begin(); it != ClientGroupsInfo.end();) {
         auto jt = it++;
-        if (jt->first == 0) {
+        if (jt->first == MAIN_GROUP) {
             continue;
         }
         ++numGroups;
@@ -1110,7 +1238,7 @@ void TPersQueueReadBalancer::TClientInfo::MergeGroups(const TActorContext& ctx) 
         }
         for (auto& si : jt->second.SessionsInfo) {
             auto key = si.first;
-            key.second = clientInfo.RandomNumber;
+            key.second = clientInfo.SessionKeySalt;
             auto it = clientInfo.SessionsInfo.find(key);
             if (it == clientInfo.SessionsInfo.end()) {
                 clientInfo.SessionsInfo.insert(std::make_pair(key, si.second)); //there must be all sessions in all groups
@@ -1167,18 +1295,17 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
 
     auto jt = cit->second.PartitionsInfo.find(record.GetPartition());
 
-    auto kt = cit->second.SessionsInfo.find(std::make_pair(sender, cit->second.RandomNumber));
-    if (kt == cit->second.SessionsInfo.end()) { //already dead session
+    auto* session = cit->second.FindSession(sender);
+    if (session == nullptr) { //already dead session
         return;
     }
-    Y_VERIFY(kt != cit->second.SessionsInfo.end());
     Y_VERIFY(jt != cit->second.PartitionsInfo.end());
     jt->second.Session = TActorId();
     jt->second.State = EPS_FREE;
     cit->second.FreePartitions.push_back(jt->first);
 
-    --kt->second.NumActive;
-    --kt->second.NumSuspended;
+    --session->NumActive;
+    --session->NumSuspended;
 
     cit->second.ScheduleBalance(ctx);
 }
@@ -1210,23 +1337,43 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
     const TString& clientId = it->second.ClientId;
     auto jt = ClientsInfo.find(clientId);
     Y_VERIFY(jt != ClientsInfo.end());
-    for (auto& c : jt->second.ClientGroupsInfo) {
-        for (auto& p : c.second.PartitionsInfo) { //TODO: reverse map
+    TClientInfo& clientInfo = jt->second;
+    for (auto& c : clientInfo.ClientGroupsInfo) {
+        TClientGroupInfo& groupInfo = c.second;
+        for (auto& p : groupInfo.PartitionsInfo) { //TODO: reverse map
             if (p.second.Session == pipe) {
                 p.second.Session = TActorId();
                 p.second.State = EPS_FREE;
-                c.second.FreePartitions.push_back(p.first);
+                groupInfo.FreePartitions.push_back(p.first);
             }
         }
-        bool res = c.second.SessionsInfo.erase(std::make_pair(pipe, c.second.RandomNumber));
+
+        bool res = groupInfo.EraseSession(pipe);
         if (res)
             c.second.ScheduleBalance(ctx);
     }
-    if (it->second.WithGroups && --jt->second.SessionsWithGroup == 0) {
-        jt->second.MergeGroups(ctx);
+    if (it->second.WithGroups && --clientInfo.SessionsWithGroup == 0) {
+        clientInfo.MergeGroups(ctx);
     }
 
     PipesInfo.erase(pipe);
+}
+
+
+std::pair<TActorId, ui64> TPersQueueReadBalancer::TClientGroupInfo::SessionKey(const TActorId pipe) const {
+    return std::make_pair(pipe, SessionKeySalt);
+}
+
+bool TPersQueueReadBalancer::TClientGroupInfo::EraseSession(const TActorId pipe) {
+    return SessionsInfo.erase(SessionKey(pipe));
+}
+
+TPersQueueReadBalancer::TClientGroupInfo::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::FindSession(const TActorId pipe) {
+    auto it = SessionsInfo.find(SessionKey(pipe));
+    if (it == SessionsInfo.end()) {
+        return nullptr;
+    }
+    return &(it->second);
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::ScheduleBalance(const TActorContext& ctx) {
@@ -1292,7 +1439,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
 
 void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe, ui32 partition, const TActorContext& ctx) {
 
-    auto jt = SessionsInfo.find(std::make_pair(pipe, RandomNumber));
+    auto jt = SessionsInfo.find(SessionKey(pipe));
     Y_VERIFY(jt != SessionsInfo.end());
 
     auto& pipeInfo = jt->second;
@@ -1323,7 +1470,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe
 
 void TPersQueueReadBalancer::TClientGroupInfo::ReleasePartition(const TActorId pipe, const ui32 group, const ui32 count, const TActorContext& ctx) {
 
-    auto it = SessionsInfo.find(std::make_pair(pipe, RandomNumber));
+    auto it = SessionsInfo.find(SessionKey(pipe));
     Y_VERIFY(it != SessionsInfo.end());
     auto& sessionInfo = it->second;
 
@@ -1427,6 +1574,15 @@ void TPersQueueReadBalancer::StartWatchingSubDomainPathId() {
 
 void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
+    if (DatabasePath.empty()) {
+        DatabasePath = msg->Result->GetPath();
+        for (const auto& attr : msg->Result->GetPathDescription().GetUserAttributes()) {
+            if (attr.GetKey() == "folder_id") FolderId = attr.GetValue();
+            if (attr.GetKey() == "cloud_id") CloudId = attr.GetValue();
+            if (attr.GetKey() == "database_id") DatabaseId = attr.GetValue();
+        }
+    }
+
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
         const bool outOfSpace = msg->Result->GetPathDescription()
             .GetDomainDescription()

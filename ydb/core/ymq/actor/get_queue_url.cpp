@@ -21,10 +21,6 @@ public:
     TGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::GetQueueUrl, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableGetQueueUrl()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
     static constexpr bool NeedExistingQueue() {

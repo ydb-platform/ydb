@@ -26,8 +26,7 @@ target_link_libraries(ydb-core-kqp-ut-federated_query PUBLIC
   yql-sql-pg_dummy
 )
 target_link_options(ydb-core-kqp-ut-federated_query PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

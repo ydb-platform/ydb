@@ -23,7 +23,7 @@ namespace {
         bool Used = false;
     };
 
-    IGraphTransformer::TStatus ParseJoinKeys(const TExprNode& side, TVector<std::pair<TStringBuf, TStringBuf>>& keys,
+    IGraphTransformer::TStatus ParseJoinKeys(TExprNode& side, TVector<std::pair<TStringBuf, TStringBuf>>& keys,
         TVector<const TTypeAnnotationNode*>& keyTypes, const TJoinLabels& labels,
         TExprContext& ctx, bool isCross) {
         if (!EnsureTuple(side, ctx)) {
@@ -104,11 +104,11 @@ namespace {
     }
 
     IGraphTransformer::TStatus ParseJoins(const TJoinLabels& labels,
-        const TExprNode& joins, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
+        TExprNode& joins, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
         TGLobalJoinState& globalState, bool strictKeys, TExprContext& ctx, const TUniqueConstraintNode** unique = nullptr, const TDistinctConstraintNode** distinct = nullptr);
 
     IGraphTransformer::TStatus ParseJoinScope(const TJoinLabels& labels,
-        const TExprNode& side, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
+        TExprNode& side, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
         TGLobalJoinState& globalState, bool strictKeys, const TUniqueConstraintNode*& unique, const TDistinctConstraintNode*& distinct, TExprContext& ctx) {
         if (side.IsAtom()) {
             const auto label = side.Content();
@@ -153,7 +153,7 @@ namespace {
     }
 
     IGraphTransformer::TStatus ParseJoins(const TJoinLabels& labels,
-        const TExprNode& joins, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
+        TExprNode& joins, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
         TGLobalJoinState& globalState, bool strictKeys, TExprContext& ctx, const TUniqueConstraintNode** unique, const TDistinctConstraintNode** distinct) {
         if (!EnsureTupleSize(joins, 6, ctx)) {
             return IGraphTransformer::TStatus::Error;
@@ -679,7 +679,7 @@ TVector<TString> TJoinLabels::EnumerateColumns(const TStringBuf& table) const {
     return result;
 }
 
-IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandle, const TExprNode& optionsNode,
+IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandle, TExprNode& optionsNode,
     TJoinOptions& options, TExprContext& ctx)
 {
     auto position = ctx.GetPosition(positionHandle);
@@ -773,7 +773,7 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     TPositionHandle positionHandle,
     const TStructExprType*& resultType,
     const TJoinLabels& labels,
-    const TExprNode& joins,
+    TExprNode& joins,
     const TJoinOptions& options,
     TExprContext& ctx
 ) {
@@ -898,7 +898,7 @@ IGraphTransformer::TStatus EquiJoinConstraints(
     const TUniqueConstraintNode*& unique,
     const TDistinctConstraintNode*& distinct,
     const TJoinLabels& labels,
-    const TExprNode& joins,
+    TExprNode& joins,
     TExprContext& ctx
 ) {
     const auto position = ctx.GetPosition(positionHandle);

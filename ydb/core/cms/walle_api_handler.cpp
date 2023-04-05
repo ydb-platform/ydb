@@ -1,14 +1,14 @@
 #include "walle.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/cms.h>
+#include <ydb/core/mon/mon.h>
+
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/mon.h>
-#include <ydb/core/mon/mon.h>
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/cms/cms.h>
-
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -20,8 +20,7 @@ class TWalleCrateTaskHandler : public TActorBootstrapped<TWalleCrateTaskHandler>
 public:
     using TBase = TActorBootstrapped<TWalleCrateTaskHandler>;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
-    {
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::CMS_SERVICE_PROXY;
     }
 
@@ -30,12 +29,10 @@ public:
     {
     }
 
-    void Bootstrap(const TActorContext &ctx)
-    {
+    void Bootstrap(const TActorContext &ctx) {
         NMon::TEvHttpInfo *msg = RequestEvent->Get();
 
         TString path {msg->Request.GetPathInfo().substr(strlen(WALLE_API_URL_PREFIX))};
-
 
         if (path == "tasks") {
             if (msg->Request.GetMethod() == HTTP_METHOD_GET)
@@ -61,8 +58,7 @@ private:
     //////////////////////////////////////////////
     // Create task
     //////////////////////////////////////////////
-    void ProcessCreateTasksRequest(const NMonitoring::IMonHttpRequest &http, const TActorContext &ctx)
-    {
+    void ProcessCreateTasksRequest(const NMonitoring::IMonHttpRequest &http, const TActorContext &ctx) {
         NJson::TJsonValue json;
 
         try {
@@ -92,8 +88,7 @@ private:
         Become(&TThis::StateCreateTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
-    STFUNC(StateCreateTask)
-    {
+    STFUNC(StateCreateTask) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvWalleCreateTaskResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -105,8 +100,7 @@ private:
         }
     }
 
-    void Reply(const TWalleCreateTaskResponse &resp, const TActorContext &ctx)
-    {
+    void Reply(const TWalleCreateTaskResponse &resp, const TActorContext &ctx) {
         TString status;
         if (!CheckStatus(resp.GetStatus(), status, false, ctx))
             return;
@@ -123,24 +117,21 @@ private:
         Reply(WriteJson(map), ctx);
     }
 
-    void Handle(TEvCms::TEvWalleCreateTaskResponse::TPtr &ev, const TActorContext &ctx)
-    {
+    void Handle(TEvCms::TEvWalleCreateTaskResponse::TPtr &ev, const TActorContext &ctx) {
         Reply(ev->Get()->Record, ctx);
     }
 
     //////////////////////////////////////////////
     // List tasks
     //////////////////////////////////////////////
-    void ProcessListTasksRequest(const TActorContext &ctx)
-    {
+    void ProcessListTasksRequest(const TActorContext &ctx) {
         TAutoPtr<TEvCms::TEvWalleListTasksRequest> request = new TEvCms::TEvWalleListTasksRequest;
 
         SendToCms(request.Release(), ctx);
         Become(&TThis::StateListTasks, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
-    STFUNC(StateListTasks)
-    {
+    STFUNC(StateListTasks) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvWalleListTasksResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -152,8 +143,7 @@ private:
         }
     }
 
-    void Reply(const TWalleListTasksResponse &resp, const TActorContext &ctx)
-    {
+    void Reply(const TWalleListTasksResponse &resp, const TActorContext &ctx) {
         NJson::TJsonValue tasks(NJson::JSON_ARRAY);
         for (auto &task : resp.GetTasks()) {
             NJson::TJsonValue hosts(NJson::JSON_ARRAY);
@@ -173,16 +163,14 @@ private:
         Reply(WriteJson(res), ctx);
     }
 
-    void Handle(TEvCms::TEvWalleListTasksResponse::TPtr &ev, const TActorContext &ctx)
-    {
+    void Handle(TEvCms::TEvWalleListTasksResponse::TPtr &ev, const TActorContext &ctx) {
         Reply(ev->Get()->Record, ctx);
     }
 
     //////////////////////////////////////////////
     // Check task
     //////////////////////////////////////////////
-    void ProcessCheckTaskRequest(const TString &id, const TActorContext &ctx)
-    {
+    void ProcessCheckTaskRequest(const TString &id, const TActorContext &ctx) {
         TAutoPtr<TEvCms::TEvWalleCheckTaskRequest> request = new TEvCms::TEvWalleCheckTaskRequest;
         request->Record.SetTaskId(id);
 
@@ -190,8 +178,7 @@ private:
         Become(&TThis::StateCheckTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
-    STFUNC(StateCheckTask)
-    {
+    STFUNC(StateCheckTask) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvWalleCheckTaskResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -203,8 +190,7 @@ private:
         }
     }
 
-    void Reply(const TWalleCheckTaskResponse &resp, const TActorContext &ctx)
-    {
+    void Reply(const TWalleCheckTaskResponse &resp, const TActorContext &ctx) {
         TString status;
         if (!CheckStatus(resp.GetStatus(), status, true, ctx))
             return;
@@ -221,16 +207,14 @@ private:
         Reply(WriteJson(map), ctx);
     }
 
-    void Handle(TEvCms::TEvWalleCheckTaskResponse::TPtr &ev, const TActorContext &ctx)
-    {
+    void Handle(TEvCms::TEvWalleCheckTaskResponse::TPtr &ev, const TActorContext &ctx) {
         Reply(ev->Get()->Record, ctx);
     }
 
     //////////////////////////////////////////////
     // Remove task
     //////////////////////////////////////////////
-    void ProcessRemoveTaskRequest(const TString &id, const TActorContext &ctx)
-    {
+    void ProcessRemoveTaskRequest(const TString &id, const TActorContext &ctx) {
         TAutoPtr<TEvCms::TEvWalleRemoveTaskRequest> request = new TEvCms::TEvWalleRemoveTaskRequest;
         request->Record.SetTaskId(id);
 
@@ -238,8 +222,7 @@ private:
         Become(&TThis::StateRemoveTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
-    STFUNC(StateRemoveTask)
-    {
+    STFUNC(StateRemoveTask) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvWalleRemoveTaskResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -251,8 +234,7 @@ private:
         }
     }
 
-    void Reply(const TWalleRemoveTaskResponse &resp, const TActorContext &ctx)
-    {
+    void Reply(const TWalleRemoveTaskResponse &resp, const TActorContext &ctx) {
         TString status;
         if (!CheckStatus(resp.GetStatus(), status, true, ctx))
             return;
@@ -260,16 +242,14 @@ private:
         Reply("", ctx);
     }
 
-    void Handle(TEvCms::TEvWalleRemoveTaskResponse::TPtr &ev, const TActorContext &ctx)
-    {
+    void Handle(TEvCms::TEvWalleRemoveTaskResponse::TPtr &ev, const TActorContext &ctx) {
         Reply(ev->Get()->Record, ctx);
     }
 
     //////////////////////////////////////////////
     // Common section
     //////////////////////////////////////////////
-    bool CheckStatus(const TStatus &status, TString &out, bool use404, const TActorContext &ctx)
-    {
+    bool CheckStatus(const TStatus &status, TString &out, bool use404, const TActorContext &ctx) {
         if (status.GetCode() == TStatus::OK
             || status.GetCode() == TStatus::ALLOW) {
             out = "ok";
@@ -301,13 +281,11 @@ private:
         return false;
     }
 
-    void ReplyWithError(const TString &err, const TActorContext &ctx)
-    {
+    void ReplyWithError(const TString &err, const TActorContext &ctx) {
         return ReplyAndDie(err, ctx);
     }
 
-    void Reply(const TString &json, const TActorContext &ctx)
-    {
+    void Reply(const TString &json, const TActorContext &ctx) {
         const TString header = json ? NMonitoring::HTTPOKJSON : NMonitoring::HTTPNOCONTENT;
         return ReplyAndDie(header + json, ctx);
     }
@@ -318,19 +296,16 @@ private:
         Die(ctx);
     }
 
-    void Die(const TActorContext& ctx) override
-    {
+    void Die(const TActorContext &ctx) override {
         NTabletPipe::CloseClient(ctx, CmsPipe);
         TBase::Die(ctx);
     }
 
-    void Timeout(const TActorContext& ctx)
-    {
+    void Timeout(const TActorContext &ctx) {
         ReplyWithError(TString("HTTP/1.1 408 Request Timeout\r\n\r\nCMS request timeout"), ctx);
     }
 
-
-    void SendToCms(IEventBase* ev, const TActorContext &ctx) {
+    void SendToCms(IEventBase *ev, const TActorContext &ctx) {
         Y_VERIFY(!CmsPipe);
 
         ui32 domain = AppData(ctx)->DomainsInfo->Domains.begin()->first;
@@ -374,9 +349,7 @@ private:
     TActorId CmsPipe;
 };
 
-
-IActor *CreateWalleApiHandler(NMon::TEvHttpInfo::TPtr &event)
-{
+IActor *CreateWalleApiHandler(NMon::TEvHttpInfo::TPtr &event) {
     return new TWalleCrateTaskHandler(event);
 }
 

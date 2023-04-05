@@ -346,7 +346,7 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorConte
                                                 << " lock " << lock);
         }
         op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
-                                lock.SchemeShard, lock.PathId);
+                                lock.SchemeShard, lock.PathId, lock.HasWrites);
     }
     DataShard.SubscribeNewLocks(ctx);
 }

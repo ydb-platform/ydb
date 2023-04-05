@@ -20,8 +20,7 @@ target_link_libraries(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PUBLIC
   blobstorage-ut_blobstorage-lib
 )
 target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

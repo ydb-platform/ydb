@@ -89,8 +89,8 @@ void TBlobBatch::SendWriteRequest(const TActorContext& ctx, ui32 groupId, const 
 }
 
 TUnifiedBlobId TBlobBatch::SendWriteBlobRequest(const TString& blobData, TInstant deadline, const TActorContext& ctx) {
-    Y_VERIFY(blobData.size() <= TLimits::MAX_BLOB_SIZE, "Blob %" PRISZT" size exceeds the limit %" PRIu64,
-        blobData.size(), TLimits::MAX_BLOB_SIZE);
+    Y_VERIFY(blobData.size() <= TLimits::GetBlobSizeLimit(), "Blob %" PRISZT" size exceeds the limit %" PRIu64,
+        blobData.size(), TLimits::GetBlobSizeLimit());
 
     TUnifiedBlobId blobId = BatchInfo->NextBlobId(blobData.size());
     ui32 groupId = blobId.GetDsGroup();
@@ -507,14 +507,9 @@ void TBlobManager::DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) 
     }
 }
 
-bool TBlobManager::ExportOneToOne(const TUnifiedBlobId& blobId, const NKikimrTxColumnShard::TEvictMetadata& meta,
+bool TBlobManager::ExportOneToOne(TEvictedBlob&& evict, const NKikimrTxColumnShard::TEvictMetadata& meta,
                                   IBlobManagerDb& db)
 {
-    NOlap::TEvictedBlob evict{
-        .State = EEvictState::EVICTING,
-        .Blob = blobId
-    };
-
     if (EvictedBlobs.count(evict) || DroppedEvictedBlobs.count(evict)) {
         return false;
     }

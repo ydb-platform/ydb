@@ -148,10 +148,9 @@ public:
 
             const auto it = Results_.find(std::make_pair(cluster, table));
             if (Results_.cend() != it && it->second && *it->second) {
-                switch (const auto idx = (*it->second)->index()) {
-                case 0U: {
+                if (!(*it->second)->Issues) {
                     TClickHouseState::TTableMeta meta;
-                    if (const auto& parse = ParseTableMeta(std::get<IHTTPGateway::TContent>(std::move(**it->second)).Extract(), cluster, table, ctx, meta.ColumnOrder); parse.first) {
+                    if (const auto& parse = ParseTableMeta(std::move((*it->second)->Content.Extract()), cluster, table, ctx, meta.ColumnOrder); parse.first) {
                         meta.ItemType = parse.first;
                         State_->Timezones[read.DataSource().Cluster().Value()] = ctx.AppendString(parse.second);
                         if (const auto ins = replaces.emplace(read.Raw(), TExprNode::TPtr()); ins.second)
@@ -165,18 +164,11 @@ public:
                         State_->Tables.emplace(it->first, meta);
                     } else
                         bad = true;
-                    break;
-                }
-                case 1U:
-                    if (const auto issues = std::move(std::get<TIssues>(**it->second)))
-                        std::for_each(issues.begin(), issues.end(), std::bind(&TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
+                } else {
+                    const auto issues = std::move((*it->second)->Issues);
+                    std::for_each(issues.begin(), issues.end(), std::bind(&TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Error on load meta for " << cluster << '.' << table));
                     bad = true;
-                    break;
-                default:
-                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Unexpected variant index " << idx << " on load meta for " << cluster << '.' << table));
-                    bad = true;
-                    break;
                 }
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Not found result for " << cluster << '.' << table));

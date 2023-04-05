@@ -1,12 +1,8 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
 #include "change_sender_common_ops.h"
+#include "change_sender_monitoring.h"
 #include "datashard_user_table.h"
-
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/json/json_writer.h>
 
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -14,10 +10,15 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
-namespace NKikimr {
-namespace NDataShard {
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
+#include <library/cpp/json/json_writer.h>
+
+namespace NKikimr::NDataShard {
 
 using namespace NPQ;
+using ESenderType = TEvChangeExchange::ESenderType;
 
 class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderPartition> {
     TStringBuf GetLogPrefix() const {
@@ -165,7 +166,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            LOG_E("Error at 'Write"
+            LOG_E("Error at 'Write'"
                 << ": reason# " << result.GetError().Reason);
             return Leave();
         }
@@ -201,6 +202,30 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
 
         Ready();
+    }
+
+    void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
+        TStringStream html;
+
+        HTML(html) {
+            Header(html, "CdcStream partition change sender", DataShard.TabletId);
+
+            SimplePanel(html, "Info", [this](IOutputStream& html) {
+                HTML(html) {
+                    DL_CLASS("dl-horizontal") {
+                        TermDesc(html, "PartitionId", PartitionId);
+                        TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId));
+                        TermDesc(html, "SourceId", SourceId);
+                        TermDesc(html, "Writer", Writer);
+                        TermDesc(html, "MaxSeqNo", MaxSeqNo);
+                        TermDesc(html, "Pending", Pending.size());
+                        TermDesc(html, "Cookie", Cookie);
+                    }
+                }
+            });
+        }
+
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
     }
 
     void Leave() {
@@ -247,6 +272,7 @@ public:
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvPartitionWriter::TEvDisconnected, Leave);
+            hFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -267,11 +293,12 @@ private:
 
 }; // TCdcChangeSenderPartition
 
-class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
-                          , public TBaseChangeSender
-                          , public IChangeSenderResolver
-                          , private TSchemeCacheHelpers {
-
+class TCdcChangeSenderMain
+    : public TActorBootstrapped<TCdcChangeSenderMain>
+    , public TBaseChangeSender
+    , public IChangeSenderResolver
+    , private TSchemeCacheHelpers
+{
     struct TPQPartitionInfo {
         ui32 PartitionId;
         ui64 ShardId;
@@ -488,6 +515,14 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
             return;
         }
 
+        if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
+            LOG_D("Stream is planned to drop, waiting for the EvRemoveSender command");
+
+            RemoveRecords();
+            KillSenders();
+            return Become(&TThis::StatePendingRemove);
+        }
+
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
 
         Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
@@ -512,7 +547,7 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
     STATEFN(StateResolveTopic) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopic);
-            sFunc(TEvents::TEvWakeup, ResolveTopic);
+            sFunc(TEvents::TEvWakeup, ResolveCdcStream);
         default:
             return StateBase(ev, TlsActivationContext->AsActorContext());
         }
@@ -614,7 +649,7 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
     }
 
     void Resolve() override {
-        ResolveTopic();
+        ResolveCdcStream();
     }
 
     bool IsResolved() const override {
@@ -699,6 +734,15 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
         PassAway();
     }
 
+    void AutoRemove(TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+        RemoveRecords(std::move(ev->Get()->Records));
+    }
+
+    void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        RenderHtmlPage(ESenderType::CdcStream, ev, ctx);
+    }
+
     void PassAway() override {
         KillSenders();
         TActorBootstrapped::PassAway();
@@ -719,7 +763,7 @@ public:
         ResolveCdcStream();
     }
 
-    STATEFN(StateBase) {
+    STFUNC(StateBase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvEnqueueRecords, Handle);
             hFunc(TEvChangeExchange::TEvRecords, Handle);
@@ -727,6 +771,16 @@ public:
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             hFunc(TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(TEvChangeExchangePrivate::TEvGone, Handle);
+            HFunc(NMon::TEvRemoteHttpInfo, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+    STFUNC(StatePendingRemove) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvChangeExchange::TEvEnqueueRecords, AutoRemove);
+            hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
+            HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -745,5 +799,4 @@ IActor* CreateCdcStreamChangeSender(const TDataShardId& dataShard, const TPathId
     return new TCdcChangeSenderMain(dataShard, streamPathId);
 }
 
-} // NDataShard
-} // NKikimr
+}

@@ -33,7 +33,7 @@ ydbd_service_mon_port=$(read_config_value mon_port) || exit 2
 ydbd_service_database=$(read_config_value database) || exit 2
 
 exec "$YDBD_SERVICE_MAIN_DIR/bin/ydbd" server \
-  --yaml-config "$YDBD_SERVICE_MAIN_DIR/cfg/config.yaml" \
+  --yaml-config "$YDBD_SERVICE_MAIN_DIR/cfg/config-mt.yaml" \
   --log-level 3 \
   --syslog \
   --syslog-service-tag "$ydbd_service_syslog_tag" \

@@ -195,12 +195,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"),
                                {NLs::IsTable,
-                                NLs::PathVersionEqual(6),
+                                NLs::PathVersionEqual(5),
                                 NLs::CheckColumns("Table2", {"key", "value0", "value1"}, {}, {"key"})});
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Moved2"),
                                {NLs::IsTable,
-                                NLs::PathVersionEqual(6),
+                                NLs::PathVersionEqual(5),
                                 NLs::CheckColumns("Moved2", {"key", "value0", "value1"}, {}, {"key"})});
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -316,7 +316,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove1"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("TableMove1", {"key", "value"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"),
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove2"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("TableMove2", {"key", "value"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -402,7 +402,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"),
                            {NLs::IsTable,
                             NLs::PathIdEqual(12),
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("Dst", {"key", "value0", "value1"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
 
@@ -449,7 +449,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"),
                            {NLs::IsTable,
                             NLs::PathIdEqual(22),
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("Dst", {"key", "value0", "value1"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
 
@@ -523,12 +523,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/table2"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("table2", {"key", "value0", "value1"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/table3"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("table3", {"key", "value0", "value1"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -572,7 +572,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("TableMove", {"key", "value"}, {}, {"key"}),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(1)});
@@ -588,7 +588,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(7),
+                            NLs::PathVersionEqual(6),
                             NLs::CheckColumns("TableMove", {"key", "value", "add"}, {}, {"key"}),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(1)});
@@ -603,7 +603,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMoveTwice"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(10),
+                            NLs::PathVersionEqual(8),
                             NLs::CheckColumns("TableMoveTwice", {"key", "value", "add"}, {}, {"key"}),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(1)});
@@ -633,7 +633,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopyMove"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("TableCopyMove", {"key", "value", "add"}, {}, {"key"}),
                             NLs::PathsInsideDomain(2),
                             NLs::ShardsInsideDomain(2)});
@@ -747,7 +747,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("TableMove", {"key", "value0", "value1", "valueFloat"}, {}, {"key"})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -1156,14 +1156,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/TableMove"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("TableMove", {"key", "value"}, {}, {"key"})});
 
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/TableMove"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(6),
+                            NLs::PathVersionEqual(5),
                             NLs::CheckColumns("TableMove", {"key", "value"}, {}, {"key"})});
     }
 }

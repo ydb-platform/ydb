@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                                    {NLs::ChildrenCount(2),
                                     NLs::ShardsInsideDomain(1)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove"),
-                                   {NLs::PathVersionEqual(6),
+                                   {NLs::PathVersionEqual(5),
                                     NLs::IsTable});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                                    {NLs::PathNotExist});
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                                    {NLs::ChildrenCount(2),
                                     NLs::ShardsInsideDomain(1)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove"),
-                                   {NLs::PathVersionEqual(6),
+                                   {NLs::PathVersionEqual(5),
                                     NLs::IsTable});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                                    {NLs::PathNotExist});
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                                    {NLs::ChildrenCount(2),
                                     NLs::ShardsInsideDomainOneOf({1,2,3,4})});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
-                                   {NLs::PathVersionEqual(6),
+                                   {NLs::PathVersionEqual(5),
                                     NLs::IsTable});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/tmp"),
                                    {NLs::PathNotExist});
@@ -428,10 +428,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::ChildrenCount(3)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/backup"),
-                                   {NLs::PathVersionEqual(6),
+                                   {NLs::PathVersionEqual(5),
                                     NLs::IsTable});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
-                                   {NLs::PathVersionEqual(6),
+                                   {NLs::PathVersionEqual(5),
                                     NLs::IsTable});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/tmp"),
                                    {NLs::PathNotExist});
@@ -491,7 +491,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                                     NLs::ShardsInsideDomain(1)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove"),
                                    {NLs::IsTable,
-                                    NLs::PathVersionEqual(7),
+                                    NLs::PathVersionEqual(6),
                                     NLs::CheckColumns("TableMove", {"key", "value", "add"}, {}, {"key"}),
                                     NLs::PathsInsideDomain(2),
                                     NLs::ShardsInsideDomain(1)});

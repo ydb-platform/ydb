@@ -7,14 +7,8 @@ void TDSAccessorSimple::OnNewEnrichedSnapshot(NFetcher::ISnapshot::TPtr snapshot
     OutputController->OnSnapshotConstructionResult(snapshot);
 }
 
-void TDSAccessorSimple::OnIncorrectSnapshotFromYQL(const TString& errorMessage) {
-    TBase::OnIncorrectSnapshotFromYQL(errorMessage);
-    auto g = PassAwayGuard();
-    OutputController->OnSnapshotConstructionError(errorMessage);
-}
-
-void TDSAccessorSimple::OnSnapshotEnrichingError(const TString& errorMessage) {
-    TBase::OnSnapshotEnrichingError(errorMessage);
+void TDSAccessorSimple::OnConstructSnapshotError(const TString& errorMessage) {
+    TBase::OnConstructSnapshotError(errorMessage);
     auto g = PassAwayGuard();
     OutputController->OnSnapshotConstructionError(errorMessage);
 }

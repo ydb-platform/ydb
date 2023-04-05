@@ -127,32 +127,24 @@ private:
     }
 
     static void DiscoveryCallback(NYql::IHTTPGateway::TResult&& result, TActorId self, const TString& requestId, NActors::TActorSystem* as) {
-        switch (result.index()) {
-        case 0U: try {
-            const NXml::TDocument xml(std::get<NYql::IHTTPGateway::TContent>(std::move(result)).Extract(), NXml::TDocument::String);
-            if (const auto& root = xml.Root(); root.Name() == "Error") {
-                const auto& code = root.Node("Code", true).Value<TString>();
-                const auto& message = root.Node("Message", true).Value<TString>();
-                SendError(self, as, TStringBuilder() << message << ", code: " << code, requestId);
-                return;
-            } else if (root.Name() != "ListBucketResult") {
-                SendError(self, as, TStringBuilder() << "Unexpected response '" << root.Name() << "' on discovery.", requestId);
-                return;
-            } else {
-                break;
+        if (!result.Issues) {
+            try {
+                const NXml::TDocument xml(result.Content.Extract(), NXml::TDocument::String);
+                if (const auto& root = xml.Root(); root.Name() == "Error") {
+                    const auto& code = root.Node("Code", true).Value<TString>();
+                    const auto& message = root.Node("Message", true).Value<TString>();
+                    SendError(self, as, TStringBuilder() << message << ", code: " << code, requestId);
+                } else if (root.Name() != "ListBucketResult") {
+                    SendError(self, as, TStringBuilder() << "Unexpected response '" << root.Name() << "' on discovery.", requestId);
+                } else {
+                    SendOk(self, as, requestId);
+                }
+            } catch (const std::exception& ex) {
+                SendError(self, as, TStringBuilder() << "Exception occurred: " << ex.what(), requestId);
             }
-        } catch (const std::exception& ex) {
-            SendError(self, as, TStringBuilder() << "Exception occurred: " << ex.what(), requestId);
-            return;
+        } else {
+            SendError(self, as, TStringBuilder() << "Issues occurred: " << result.Issues.ToOneLineString(), requestId);
         }
-        case 1U:
-            SendError(self, as, TStringBuilder() << "Issues occurred: " << std::get<NYql::TIssues>(result).ToString(), requestId);
-            return;
-        default:
-            SendError(self, as, TStringBuilder() << "Undefined variant index: " << result.index(), requestId);
-            return;
-        }
-        SendOk(self, as, requestId);
     }
 
     static ERetryErrorClass RetryS3SlowDown(long httpResponseCode) {

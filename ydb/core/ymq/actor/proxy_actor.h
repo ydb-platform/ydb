@@ -25,7 +25,6 @@ public:
         , Cb_(std::move(cb))
     {
         Y_VERIFY(RequestId_);
-        RetrieveUserAndQueueParameters();
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

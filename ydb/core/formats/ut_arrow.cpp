@@ -1,5 +1,6 @@
 #include <ydb/core/formats/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/converter.h>
 #include <ydb/core/formats/one_batch_input_stream.h>
 #include <ydb/core/formats/merging_sorted_input_stream.h>
 #include <ydb/library/binary_json/write.h>
@@ -112,7 +113,7 @@ struct TDataRow {
             //arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
         };
 
-        return std::make_shared<arrow::Schema>(fields);
+        return std::make_shared<arrow::Schema>(std::move(fields));
     }
 
     static TVector<std::pair<TString, TTypeInfo>> MakeYdbSchema() {

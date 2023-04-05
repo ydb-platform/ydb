@@ -280,13 +280,25 @@ TExprNode::TPtr DropAggrOverSame(const TExprNode::TPtr& node) {
 
 TExprNode::TPtr OptimizeXor(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto children = node->ChildrenList();
-    DropDups(children);
+    TNodeSet set(children.size());
+    TNodeMap<TExprNode::TListType::const_iterator> map(children.size());
+    for (auto it = children.cbegin(); children.cend() != it;) {
+        if (set.emplace(it->Get()).second)
+            ++it;
+        else if (const auto ins = map.emplace(it->Get(), it); ins.second)
+            ++it;
+        else {
+            children.erase(it);
+            children.erase(ins.first->second);
+            set.clear();
+            map.clear();
+            it = children.cbegin();
+        }
+    }
+
     if (children.size() < node->ChildrenSize()) {
-        const bool inverse = (node->ChildrenSize() - children.size()) % 2U;
         YQL_CLOG(DEBUG, Core) << node->Content() << " over some dups";
-        return children.empty() ?
-            ctx.WrapByCallableIf(node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional, "Just", MakeBool(node->Pos(), inverse, ctx)):
-            ctx.WrapByCallableIf(inverse, "Not", ctx.ChangeChildren(*node, std::move(children)));
+        return ctx.ChangeChildren(*node, std::move(children));
     }
 
     return node;

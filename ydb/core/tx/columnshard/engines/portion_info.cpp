@@ -7,8 +7,7 @@ TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array
                                       const std::shared_ptr<arrow::Field>& field,
                                       const arrow::ipc::IpcWriteOptions& writeOptions)
 {
-    std::vector<std::shared_ptr<arrow::Field>> tmp{field};
-    auto schema = std::make_shared<arrow::Schema>(tmp);
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
     auto batch = arrow::RecordBatch::Make(schema, array->length(), {array});
     Y_VERIFY(batch);
 
@@ -19,8 +18,7 @@ namespace {
 
 std::shared_ptr<arrow::ChunkedArray> DeserializeBlobs(const TVector<TString>& blobs, std::shared_ptr<arrow::Field> field) {
     Y_VERIFY(!blobs.empty());
-    std::vector<std::shared_ptr<arrow::Field>> tmp{field};
-    auto schema = std::make_shared<arrow::Schema>(tmp);
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     batches.reserve(blobs.size());

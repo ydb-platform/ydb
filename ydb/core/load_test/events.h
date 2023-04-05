@@ -11,6 +11,7 @@ struct TEvLoad {
         EvLoadTestRequest = EventSpaceBegin(TKikimrEvents::ES_TEST_LOAD),
         EvLoadTestFinished,
         EvLoadTestResponse,
+        EvYqlSingleQueryResponse,
     };
 
     struct TEvLoadTestRequest : public TEventPB<TEvLoadTestRequest,
@@ -83,6 +84,14 @@ struct TEvLoad {
             : Tag(tag)
             , Report(report)
             , ErrorReason(errorReason)
+        {}
+    };
+
+    struct TEvYqlSingleQueryResponse : public TEventLocal<TEvYqlSingleQueryResponse, TEvLoad::EvYqlSingleQueryResponse> {
+        TMaybe<TString> ErrorMessage;
+        
+        TEvYqlSingleQueryResponse(TMaybe<TString> errorMessage)
+            : ErrorMessage(std::move(errorMessage))
         {}
     };
 };

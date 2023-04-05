@@ -80,6 +80,14 @@ public:
         settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
         settings.AllowGeneratorsInUnboxedValues = false;
 
+        for (const auto& [paramsName, paramsValue] : GetTask().GetTaskParams()) {
+            settings.TaskParams[paramsName] = paramsValue;
+        }
+
+        for (const auto& [paramsName, paramsValue] : GetTask().GetSecureParams()) {
+            settings.SecureParams[paramsName] = paramsValue;
+        }
+
         auto taskRunner = MakeDqTaskRunner(execCtx, settings, logger);
         SetTaskRunner(taskRunner);
 
@@ -180,17 +188,7 @@ public:
             }
 
             if (auto* x = ScanData->ProfileStats.get()) {
-                NKqpProto::TKqpScanTableExtraStats tableExtraStats;
-                // protoScanStats->SetIScanStartTimeMs()
-                // protoScanStats->SetIScanFinishTimeMs();
-                tableExtraStats.SetIScanCpuTimeUs(x->ScanCpuTime.MicroSeconds());
-                tableExtraStats.SetIScanWaitTimeUs(x->ScanWaitTime.MicroSeconds());
-                tableExtraStats.SetIScanPageFaults(x->PageFaults);
-
-                tableExtraStats.SetMessages(x->Messages);
-                tableExtraStats.SetMessagesByPageFault(x->MessagesByPageFault);
-
-                tableStats->MutableExtra()->PackFrom(tableExtraStats);
+                // save your profile stats here
             }
         }
     }

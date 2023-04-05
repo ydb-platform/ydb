@@ -44,8 +44,7 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   cpp-client-ydb_monitoring
 )
 target_link_options(ydb-services-ydb-ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

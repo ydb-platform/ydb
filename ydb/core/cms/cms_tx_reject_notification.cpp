@@ -15,8 +15,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_REJECT_NOTIFICATION; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
-    {
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRejectNotification Execute");
 
         auto &rec = Event->Get()->Record;
@@ -50,8 +49,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
-    {
+    void Complete(const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRejectNotification Complete");
 
         Self->Reply(Event, std::move(Response), ctx);
@@ -62,8 +60,7 @@ private:
     TAutoPtr<TEvCms::TEvManageNotificationResponse> Response;
 };
 
-ITransaction *TCms::CreateTxRejectNotification(TEvCms::TEvManageNotificationRequest::TPtr &ev)
-{
+ITransaction *TCms::CreateTxRejectNotification(TEvCms::TEvManageNotificationRequest::TPtr &ev) {
     return new TTxRejectNotification(this, ev.Release());
 }
 

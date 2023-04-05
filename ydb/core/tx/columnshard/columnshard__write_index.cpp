@@ -144,7 +144,13 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                         if (!blobsToExport.count(blobId)) {
                             NKikimrTxColumnShard::TEvictMetadata meta;
                             meta.SetTierName(tierName);
-                            if (Self->BlobManager->ExportOneToOne(blobId, meta, blobManagerDb)) {
+
+                            NOlap::TEvictedBlob evict{
+                                .State = EEvictState::EVICTING,
+                                .Blob = blobId,
+                                .ExternBlob = blobId.MakeS3BlobId(evictionFeatures.PathId)
+                            };
+                            if (Self->BlobManager->ExportOneToOne(std::move(evict), meta, blobManagerDb)) {
                                 blobsToExport.emplace(blobId, evictionFeatures);
                             } else {
                                 // TODO: support S3 -> S3 eviction

@@ -16,14 +16,18 @@ You can generate two types of load:
 | ` DurationSeconds` | Load duration. |
 | ` Tablets` | The load is generated on behalf of a tablet with the following parameters:<ul><li>` TabletId`: Tablet ID. It must be unique for each load actor.</li><li>` Channel`: Tablet channel.</li><li>` GroupId`: ID of the VDisk group to get loaded.</li><li>` Generation`: Tablet generation.</li></ul> |
 | ` WriteSizes` | Size of the data to write. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `WriteSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
-| ` WriteIntervals` | Interval between requests under interval load, in microseconds. It is selected randomly for each request from the `MinUs`-`MaxUs` range. You can set multiple `WriteIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
+| ` WriteIntervals` | Setting up the [parameters for probabilistic distribution](#params) of intervals between the records loaded at intervals (in milliseconds). You can set multiple `WriteIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
 | ` MaxInFlightWriteRequests` | Maximum number of simultaneously processed write requests. |
 | ` ReadSizes` | Size of the data to read. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `ReadSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
-| ` ReadIntervals` | Interval between requests under interval load, in microseconds. It is selected randomly for each request from the `MinUs`-`MaxUs` range. You can set multiple `ReadIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
+| ` ReadIntervals` | Setting up the [parameters for probabilistic distribution](#params) of intervals between the queries loaded by intervals (in milliseconds). You can set multiple `ReadIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
 | ` MaxInFlightReadRequests` | Maximum number of simultaneously processed read requests. |
-| ` FlushIntervals` | Interval between the requests to flush the data written by the StorageLoad actor, in microseconds. It is selected randomly from the `MinUs`-`MaxUs` range. You can set multiple `FlushIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
+| ` FlushIntervals` | Setting up the [parameters for probabilistic distribution](#params) of intervals (in microseconds) between the queries used to delete data written by the StorageLoad actor. You can set multiple `FlushIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
 | ` PutHandleClass` | Class of data writes to the disk subsystem. If the `TabletLog` value is set, the write operation has the highest priority. |
 | ` GetHandleClass` | Class of data reads from the disk subsystem. If the `FastRead` is set, the read operation is performed with the highest speed possible. |
+
+### Parameters of probabilistic distribution {#params}
+
+{% include [load-actors-params](../_includes/load-actors-interval.md) %}
 
 ## Examples {#examples}
 

@@ -44,7 +44,7 @@ TOlapStoreInfo::TPtr ParseParams(
 
         const ui32 presetId = alterData->SchemaPresetByName.at(presetName);
         auto& preset = alterData->SchemaPresets.at(presetId);
-        auto& presetProto = *alterData->Description.MutableSchemaPresets(preset.ProtoIndex);
+        auto& presetProto = *alterData->Description.MutableSchemaPresets(preset.GetProtoIndex());
         auto& schemaProto = *presetProto.MutableSchema();
 
         const auto& alterSchema = alterSchemaPreset.GetAlterSchema();
@@ -52,7 +52,7 @@ TOlapStoreInfo::TPtr ParseParams(
         THashSet<ui32> droppedColumns;
         for (const auto& dropColumn : alterSchema.GetDropColumns()) {
             const TString& columnName = dropColumn.GetName();
-            const auto* column = preset.FindColumnByName(columnName);
+            const auto* column = preset.GetColumnByName(columnName);
             if (!column) {
                 status = NKikimrScheme::StatusInvalidParameter;
                 errStr = TStringBuilder() << "Cannot drop non-existant column '" << columnName << "'";
@@ -225,16 +225,13 @@ public:
                    DebugHint() << " ProgressState"
                    << " at tabletId# " << ssId);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapStore);
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterOlapStore);
         TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores[txState->TargetPathId];
         Y_VERIFY(storeInfo);
         TOlapStoreInfo::TPtr alterData = storeInfo->AlterData;
         Y_VERIFY(alterData);
 
         txState->ClearShardsInProgress();
-
-        auto seqNo = context.SS->StartRound(*txState);
 
         TVector<ui32> droppedSchemaPresets;
         for (const auto& presetProto : storeInfo->Description.GetSchemaPresets()) {
@@ -257,6 +254,7 @@ public:
 
         TString columnShardTxBody;
         {
+            auto seqNo = context.SS->StartRound(*txState);
             NKikimrTxColumnShard::TSchemaTxBody tx;
             context.SS->FillSeqNo(tx, seqNo);
 

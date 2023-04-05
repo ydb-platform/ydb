@@ -139,7 +139,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     auto putStatus = ev->Get()->PutStatus;
 
     bool isWritable = IsTableWritable(tableId);
-    bool error = data.empty() || data.size() > TLimits::MAX_BLOB_SIZE || !PrimaryIndex || !isWritable;
+    bool error = data.empty() || data.size() > TLimits::GetMaxBlobSize() || !PrimaryIndex || !isWritable;
     bool errorReturned = (putStatus != NKikimrProto::OK) && (putStatus != NKikimrProto::UNKNOWN);
     bool isOutOfSpace = IsAnyChannelYellowStop();
 
@@ -157,6 +157,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
                 errCode = NKikimrTxColumnShard::EResultStatus::TIMEOUT;
             } else if (putStatus == NKikimrProto::TRYLATER || putStatus == NKikimrProto::OUT_OF_SPACE) {
                 errCode = NKikimrTxColumnShard::EResultStatus::OVERLOADED;
+            } else {
+                errCode = NKikimrTxColumnShard::EResultStatus::STORAGE_ERROR;
             }
             --WritesInFly; // write failed
         }

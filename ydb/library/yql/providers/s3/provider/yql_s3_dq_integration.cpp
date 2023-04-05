@@ -61,10 +61,8 @@ public:
     }
 
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
-        TString cluster;
         std::vector<std::vector<TPath>> parts;
         if (const TMaybeNode<TDqSource> source = &node) {
-            cluster = source.Cast().DataSource().Cast<TS3DataSource>().Cluster().Value();
             const auto settings = source.Cast().Settings().Cast<TS3SourceSettingsBase>();
             for (auto i = 0u; i < settings.Paths().Size(); ++i) {
                 const auto& packed = settings.Paths().Item(i);
@@ -182,6 +180,9 @@ public:
             auto format = s3ReadObject.Object().Format().Ref().Content();
             if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
                 bool supportedArrowTypes = false;
+                if (State_->Types->UseBlocks) {
+                    YQL_ENSURE(State_->Configuration->UseBlocksSource.Get().GetOrElse(true), "Scalar Source is not compatible with Blocks engine");
+                }
                 if (State_->Configuration->UseBlocksSource.Get().GetOrElse(State_->Types->UseBlocks) && State_->Types->ArrowResolver) {
                     TVector<const TTypeAnnotationNode*> allTypes;
                     for (const auto& x : rowType->Cast<TStructExprType>()->GetItems()) {
@@ -357,6 +358,7 @@ public:
                 sinkDesc.SetCompression(TString(compression));
 
             sinkDesc.SetMultipart(GetMultipart(settings.Settings().Ref()));
+            sinkDesc.SetAtomicUploadCommit(State_->Configuration->AtomicUploadCommit.Get().GetOrElse(false));
 
             protoSettings.PackFrom(sinkDesc);
             sinkType = "S3Sink";

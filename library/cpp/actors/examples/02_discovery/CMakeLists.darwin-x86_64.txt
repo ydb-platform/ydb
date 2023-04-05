@@ -32,8 +32,7 @@ target_link_libraries(example_02_discovery PUBLIC
   contrib-libs-protobuf
 )
 target_link_options(example_02_discovery PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

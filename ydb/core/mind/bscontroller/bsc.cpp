@@ -311,7 +311,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerConfigRequest: {
             auto *msg = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>();
             if (msg->SelfHeal) {
-                return 1; // locally-generated self-heal commands
+                return 2; // locally-generated self-heal commands
             }
             const auto& record = msg->Record;
             const auto& request = record.GetRequest();
@@ -348,6 +348,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDecommitGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kWipeVDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSanitizeGroup:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kCancelVirtualGroup:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

@@ -18,8 +18,7 @@ public:
 
      TTxType GetTxType() const override { return TXTYPE_LOAD_STATE; } 
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
-    {
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLoadState Execute");
 
         auto state = Self->State;
@@ -187,8 +186,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
-    {
+    void Complete(const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLoadState Complete");
         Self->Become(&TCms::StateWork);
         Self->SchedulePermissionsCleanup(ctx);
@@ -199,8 +197,7 @@ public:
     }
 };
 
-ITransaction* TCms::CreateTxLoadState()
-{
+ITransaction *TCms::CreateTxLoadState() {
     return new TTxLoadState(this);
 }
 

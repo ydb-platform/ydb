@@ -1044,15 +1044,16 @@ private:
         FlushCounter("FreezeUsedFiles");
         // copy-paste }
 
+        auto settings = std::make_shared<TDqSettings>(*State->Settings);
+
         auto executionPlanner = MakeHolder<TDqsExecutionPlanner>(
-            State->TypeCtx, ctx, State->FunctionRegistry,
+            settings, State->TypeCtx, ctx, State->FunctionRegistry,
             optimizedInput);
 
         // exprRoot must be DqCnResult or DqQuery
 
         executionPlanner->SetPublicIds(publicIds->Stage2publicId);
 
-        auto settings = std::make_shared<TDqSettings>(*State->Settings);
         auto tasksPerStage = settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
         const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
@@ -1077,7 +1078,7 @@ private:
         YQL_ENSURE(stagesCount <= maxTasksPerOperation);
 
         try {
-            while (executionPlanner->PlanExecution(settings, canFallback) > maxTasksPerOperation && tasksPerStage > 1) {
+            while (executionPlanner->PlanExecution(canFallback) > maxTasksPerOperation && tasksPerStage > 1) {
                 tasksPerStage /= 2;
                 settings->MaxTasksPerStage = tasksPerStage;
                 executionPlanner->Clear();
@@ -1531,15 +1532,15 @@ private:
             FlushCounter("FreezeUsedFiles");
             // copy-paste }
 
+            auto settings = std::make_shared<TDqSettings>(*commonSettings);
+
             auto executionPlanner = MakeHolder<TDqsExecutionPlanner>(
-                State->TypeCtx, ctx, State->FunctionRegistry,
+                settings, State->TypeCtx, ctx, State->FunctionRegistry,
                 optimizedInput);
 
             // exprRoot must be DqCnResult or DqQuery
 
             executionPlanner->SetPublicIds(publicIds->Stage2publicId);
-
-            auto settings = std::make_shared<TDqSettings>(*commonSettings);
 
             auto tasksPerStage = settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
             const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
@@ -1565,7 +1566,7 @@ private:
             YQL_ENSURE(stagesCount <= maxTasksPerOperation);
 
             try {
-                while (executionPlanner->PlanExecution(settings, canFallback) > maxTasksPerOperation && tasksPerStage > 1) {
+                while (executionPlanner->PlanExecution(canFallback) > maxTasksPerOperation && tasksPerStage > 1) {
                     tasksPerStage /= 2;
                     settings->MaxTasksPerStage = tasksPerStage;
                     executionPlanner->Clear();

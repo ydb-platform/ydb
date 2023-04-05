@@ -660,7 +660,7 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
         }
     }
 
-    if (affectedKinds.empty() && !yamlChanged) {
+    if (affectedKinds.empty() && !yamlChanged && subscription->FirstUpdateSent) {
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
                     "TConfigsProvider: no changes found for subscription"
                         << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation);
@@ -709,6 +709,8 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
     subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
 
     ctx.Send(subscription->Worker, request.Release());
+
+    subscription->FirstUpdateSent = true;
 }
 
 void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {

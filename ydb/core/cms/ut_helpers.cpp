@@ -1,13 +1,9 @@
 #include "ut_helpers.h"
 
-template<>
-void Out<NKikimrCms::TAction::EType>(IOutputStream &os, NKikimrCms::TAction::EType type)
-{
+Y_DECLARE_OUT_SPEC(, NKikimrCms::TAction::EType, os, type) {
     os << NKikimrCms::TAction::EType_Name(type);
 }
 
-template<>
-void Out<NKikimrWhiteboard::TTabletStateInfo::ETabletState>(IOutputStream &os, NKikimrWhiteboard::TTabletStateInfo::ETabletState state)
-{
+Y_DECLARE_OUT_SPEC(, NKikimrWhiteboard::TTabletStateInfo::ETabletState, os, state) {
     os << NKikimrWhiteboard::TTabletStateInfo::ETabletState_Name(state);
 }

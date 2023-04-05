@@ -863,8 +863,13 @@ private:
             for (const auto& input : expr.Cast<TDqStageBase>().Inputs()) {
                 if (auto source = input.Maybe<TDqSource>()) {
                     auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>();
-                    YQL_ENSURE(settings.IsValid(), "only readranges sources are supported");
-                    Visit(settings.Cast(), stagePlanNode);
+                    if (settings.IsValid()) {
+                        Visit(settings.Cast(), stagePlanNode);
+                    } else {
+                        TOperator op;
+                        op.Properties["Name"] = TString(source.Cast().DataSource().Cast<TCoDataSource>().Category().Value());
+                        AddOperator(stagePlanNode, "Source", op);
+                    }
                 } else {
                     auto inputCn = input.Cast<TDqConnection>();
 
@@ -1664,7 +1669,10 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         SetNonZero(node, "PendingInputTimeUs", taskStats.GetPendingInputTimeUs());
         SetNonZero(node, "PendingOutputTimeUs", taskStats.GetPendingOutputTimeUs());
 
-        SetNonZero(node, "ErrorsCount", taskStats.GetErrorsCount());
+        NKqpProto::TKqpTaskExtraStats taskExtraStats;
+        if (taskStats.GetExtra().UnpackTo(&taskExtraStats)) {
+            SetNonZero(node, "ScanRetries", taskExtraStats.GetScanTaskExtraStats().GetRetriesCount());
+        }
 
         for (auto& inputStats : taskStats.GetInputChannels()) {
             auto& inputNode = node["InputChannels"].AppendValue(NJson::TJsonValue());
@@ -1701,7 +1709,6 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["TotalInputBytes"] = (*stat)->GetInputBytes().GetSum();
                 stats["TotalOutputRows"] = (*stat)->GetOutputRows().GetSum();
                 stats["TotalOutputBytes"] = (*stat)->GetOutputBytes().GetSum();
-                stats["TotalErrosCount"] = (*stat)->GetTotalErrorsCount();
 
                 for (auto& caStats : (*stat)->GetComputeActors()) {
                     auto& caNode = stats["ComputeNodes"].AppendValue(NJson::TJsonValue());

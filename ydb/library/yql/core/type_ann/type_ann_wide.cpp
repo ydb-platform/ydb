@@ -667,7 +667,7 @@ IGraphTransformer::TStatus WideSortWrapper(const TExprNode::TPtr& input, TExprNo
     return IGraphTransformer::TStatus::Ok;
 }
 
-bool ValidateWideTopKeys(const TExprNode& keys, const TTypeAnnotationNode::TListType& types, TExprContext& ctx) {
+bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& types, TExprContext& ctx) {
     if (!(EnsureTupleMinSize(keys, 1U, ctx) && EnsureTupleMaxSize(keys, types.size(), ctx))) {
         return false;
     }

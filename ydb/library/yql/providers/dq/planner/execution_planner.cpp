@@ -83,13 +83,15 @@ namespace NYql::NDqs {
         }
     }
 
-    TDqsExecutionPlanner::TDqsExecutionPlanner(TIntrusivePtr<TTypeAnnotationContext> typeContext,
+    TDqsExecutionPlanner::TDqsExecutionPlanner(const TDqSettings::TPtr& settings,
+                                               TIntrusivePtr<TTypeAnnotationContext> typeContext,
                                                NYql::TExprContext& exprContext,
                                                const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
                                                NYql::TExprNode::TPtr dqExprRoot,
                                                NActors::TActorId executerID,
                                                NActors::TActorId resultID)
-        : TypeContext(std::move(typeContext))
+        : Settings(settings)
+        , TypeContext(std::move(typeContext))
         , ExprContext(exprContext)
         , FunctionRegistry(functionRegistry)
         , DqExprRoot(std::move(dqExprRoot))
@@ -131,12 +133,12 @@ namespace NYql::NDqs {
         return stages.size();
     }
 
-    ui32 TDqsExecutionPlanner::PlanExecution(const TDqSettings::TPtr& settings, bool canFallback) {
+    ui32 TDqsExecutionPlanner::PlanExecution(bool canFallback) {
         TExprBase expr(DqExprRoot);
         auto result = expr.Maybe<TDqCnResult>();
         auto query = expr.Maybe<TDqQuery>();
         auto value = expr.Maybe<TDqPhyPrecompute>();
-        const auto maxTasksPerOperation = settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
+        const auto maxTasksPerOperation = Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
         YQL_CLOG(DEBUG, ProviderDq) << "Execution Plan " << NCommon::ExprToPrettyString(ExprContext, *DqExprRoot);
 
@@ -149,12 +151,12 @@ namespace NYql::NDqs {
 
         for (const auto& stage : stages) {
             const bool hasDqSource = HasDqSource(stage);
-            if ((hasDqSource || HasReadWraps(stage.Program().Ptr())) && BuildReadStage(settings, stage, hasDqSource, canFallback)) {
+            if ((hasDqSource || HasReadWraps(stage.Program().Ptr())) && BuildReadStage(stage, hasDqSource, canFallback)) {
                 YQL_CLOG(TRACE, ProviderDq) << "Read stage " << NCommon::ExprToPrettyString(ExprContext, *stage.Ptr());
             } else {
                 YQL_CLOG(TRACE, ProviderDq) << "Common stage " << NCommon::ExprToPrettyString(ExprContext, *stage.Ptr());
-                double hashShuffleTasksRatio =  settings->HashShuffleTasksRatio.Get().GetOrElse(TDqSettings::TDefault::HashShuffleTasksRatio);
-                ui64 maxHashShuffleTasks = settings->HashShuffleMaxTasks.Get().GetOrElse(TDqSettings::TDefault::HashShuffleMaxTasks);
+                double hashShuffleTasksRatio =  Settings->HashShuffleTasksRatio.Get().GetOrElse(TDqSettings::TDefault::HashShuffleTasksRatio);
+                ui64 maxHashShuffleTasks = Settings->HashShuffleMaxTasks.Get().GetOrElse(TDqSettings::TDefault::HashShuffleMaxTasks);
                 NDq::CommonBuildTasks(hashShuffleTasksRatio, maxHashShuffleTasks, TasksGraph, stage);
             }
 
@@ -266,7 +268,7 @@ namespace NYql::NDqs {
             SourceTaskID = resultTask.Id;
         }
 
-        BuildCheckpointingAndWatermarksMode(true, settings->WatermarksMode.Get().GetOrElse("") == "default");
+        BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default");
 
         return TasksGraph.GetTasks().size();
     }
@@ -489,7 +491,7 @@ namespace NYql::NDqs {
         return {};
     }
 
-    bool TDqsExecutionPlanner::BuildReadStage(const TDqSettings::TPtr& settings, const TDqPhyStage& stage, bool dqSource, bool canFallback) {
+    bool TDqsExecutionPlanner::BuildReadStage(const TDqPhyStage& stage, bool dqSource, bool canFallback) {
         auto& stageInfo = TasksGraph.GetStageInfo(stage);
 
         for (ui32 i = 0; i < stageInfo.InputsCount; i++) {
@@ -534,12 +536,12 @@ namespace NYql::NDqs {
         auto datasource = TypeContext->DataSourceMap.FindPtr(dataSourceName);
         YQL_ENSURE(datasource);
         const auto stageSettings = TDqStageSettings::Parse(stage);
-        auto tasksPerStage = settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        auto tasksPerStage = Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
         const size_t maxPartitions = stageSettings.SinglePartition ? 1ULL : tasksPerStage;
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;
-            _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*settings, maxPartitions, *read, parts, &clusterName, ExprContext, canFallback));
+            _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*Settings, maxPartitions, *read, parts, &clusterName, ExprContext, canFallback));
             TMaybe<::google::protobuf::Any> sourceSettings;
             TString sourceType;
             if (dqSource) {
@@ -636,6 +638,9 @@ THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAll
         channelDesc.SetSrcTaskId(channel.SrcTask);
         channelDesc.SetDstTaskId(channel.DstTask);
         channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
+        bool fastPickle = Settings->UseFastPickleTransport.Get().GetOrElse(TDqSettings::TDefault::UseFastPickleTransport);
+        channelDesc.SetTransportVersion(fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 :
+                                                     NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
 
         if (channel.SrcTask) {
             NActors::ActorIdToProto(TasksGraph.GetTask(channel.SrcTask).ComputeActorId,

@@ -29,11 +29,13 @@ struct TEvPipeCache {
         THolder<IEventBase> Ev;
         const ui64 TabletId;
         const bool Subscribe;
+        const ui64 SubscribeCookie;
 
-        TEvForward(IEventBase *ev, ui64 tabletId, bool subscribe = true)
+        TEvForward(IEventBase *ev, ui64 tabletId, bool subscribe = true, ui64 subscribeCookie = 0)
             : Ev(ev)
             , TabletId(tabletId)
             , Subscribe(subscribe)
+            , SubscribeCookie(subscribeCookie)
         {}
     };
 

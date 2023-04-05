@@ -276,7 +276,12 @@ class YamlConfigState {
     }
 
     removeAllVolatileConfigs() {
-        var cmd = {};
+        var cmd = {
+            Request: {
+                cluster: this.cluster,
+                version: this.version,
+            },
+        };
 
         $.post(this.removeVolatileUrl, JSON.stringify(cmd))
          .done(this.onVolatileConfigChanged.bind(this))
@@ -286,6 +291,8 @@ class YamlConfigState {
     removeVolatileConfig(id) {
         var cmd = {
             Request: {
+                cluster: this.cluster,
+                version: this.version,
                 ids: [id],
             }
         };

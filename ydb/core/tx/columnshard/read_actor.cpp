@@ -51,7 +51,7 @@ public:
                 return; // ignore duplicate parts
             }
             WaitIndexed.erase(event.BlobRange);
-            IndexedData.AddIndexed(event.BlobRange, event.Data);
+            IndexedData.AddIndexed(event.BlobRange, event.Data, nullptr);
         } else if (CommittedBlobs.count(blobId)) {
             auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
             if (cmt.empty()) {

@@ -21,8 +21,7 @@ target_link_libraries(ydb-core-erasure-ut_rope PUBLIC
   cpp-digest-crc32c
 )
 target_link_options(ydb-core-erasure-ut_rope PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
 )

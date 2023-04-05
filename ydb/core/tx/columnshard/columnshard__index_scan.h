@@ -30,9 +30,6 @@ using NOlap::TBlobRange;
 class TColumnShardScanIterator : public TScanIteratorBase {
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     NOlap::TIndexedReadData IndexedData;
-    THashMap<TBlobRange, ui64> IndexedBlobs; // blobId -> granule
-    THashSet<TBlobRange> WaitIndexed;
-    THashMap<ui64, THashSet<TBlobRange>> GranuleBlobs; // granule -> blobs
     std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
     TVector<TBlobRange> BlobsToRead;
     ui64 NextBlobIdxToRead = 0;
@@ -51,10 +48,10 @@ public:
             const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
             WaitCommitted.emplace(cmtBlob, batchNo);
         }
-        IndexedBlobs = IndexedData.InitRead(batchNo, true);
-        for (auto& [blobId, granule] : IndexedBlobs) {
-            WaitIndexed.insert(blobId);
-            GranuleBlobs[granule].insert(blobId);
+        auto indexedBlobs = IndexedData.InitRead(batchNo, true);
+        THashMap<ui64, THashSet<TBlobRange>> granuleBlobs; // granule -> blobs
+        for (auto& [blobId, granule] : indexedBlobs) {
+            granuleBlobs[granule].insert(blobId);
         }
 
         // Add cached batches without read
@@ -78,21 +75,21 @@ public:
         // Read all indexed blobs (in correct order)
         auto granulesOrder = ReadMetadata->SelectInfo->GranulesOrder(ReadMetadata->IsDescSorted());
         for (ui64 granule : granulesOrder) {
-            auto& blobs = GranuleBlobs[granule];
+            auto& blobs = granuleBlobs[granule];
             BlobsToRead.insert(BlobsToRead.end(), blobs.begin(), blobs.end());
         }
 
         IsReadFinished = ReadMetadata->Empty();
     }
 
-    void AddData(const TBlobRange& blobRange, TString data) override {
+    virtual void Apply(IDataPreparationTask::TPtr task) override {
+        task->Apply(IndexedData);
+    }
+
+    void AddData(const TBlobRange& blobRange, TString data, IDataTasksProcessor::TPtr processor) override {
         const auto& blobId = blobRange.BlobId;
-        if (IndexedBlobs.count(blobRange)) {
-            if (!WaitIndexed.count(blobRange)) {
-                return; // ignore duplicate parts
-            }
-            WaitIndexed.erase(blobRange);
-            IndexedData.AddIndexed(blobRange, data);
+        if (IndexedData.IsIndexedBlob(blobRange)) {
+            IndexedData.AddIndexed(blobRange, data, processor);
         } else {
             auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
             if (cmt.empty()) {
@@ -157,11 +154,11 @@ private:
 
         if (limitLeft == 0) {
             WaitCommitted.clear();
-            WaitIndexed.clear();
+            IndexedData.ForceFinishWaiting();
             IsReadFinished = true;
         }
 
-        if (WaitCommitted.empty() && WaitIndexed.empty() && NextBlobIdxToRead == BlobsToRead.size()) {
+        if (WaitCommitted.empty() && !IndexedData.HasWaitIndexed() && NextBlobIdxToRead == BlobsToRead.size()) {
             IsReadFinished = true;
         }
     }

@@ -17,12 +17,12 @@ namespace NYql {
 
 namespace NTypeAnnImpl {
 
-bool ValidateInputTypes(const TExprNode& node, TExprContext& ctx) {
+bool ValidateInputTypes(TExprNode& node, TExprContext& ctx) {
     if (!EnsureTuple(node, ctx)) {
         return false;
     }
 
-    for (const auto& x : node.Children()) {
+    for (auto& x : node.Children()) {
         if (!EnsureTupleSize(*x, 2, ctx)) {
             return false;
         }
@@ -2769,7 +2769,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto& options = input->Head();
+    auto& options = input->Head();
     if (!EnsureTuple(options, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -2809,7 +2809,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                 return IGraphTransformer::TStatus::Error;
             }
 
-            for (const auto& option : options.Children()) {
+            for (auto& option : options.Children()) {
                 if (!EnsureTupleMinSize(*option, 1, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -2834,7 +2834,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const auto& data = option->Tail();
+                    auto& data = option->Tail();
                     if (!ValidateInputTypes(data, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -2906,7 +2906,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const auto& data = option->Tail();
+                    auto& data = option->Tail();
                     if (!EnsureTuple(data, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3181,7 +3181,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const auto& data = option->Tail();
+                    auto& data = option->Tail();
                     if (!EnsureTupleMinSize(data, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3439,7 +3439,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const auto& data = option->Tail();
+                    auto& data = option->Tail();
                     if (!EnsureTuple(data, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3622,7 +3622,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const auto& data = option->Tail();
+                    auto& data = option->Tail();
                     if (!EnsureTuple(data, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3663,7 +3663,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const auto& data = option->Tail();
+                    auto& data = option->Tail();
                     if (!EnsureTuple(data, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3690,7 +3690,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const auto& data = option->Tail();
+                    auto& data = option->Tail();
                     if (!EnsureTuple(data, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3723,7 +3723,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const auto& data = option->Tail();
+                    auto& data = option->Tail();
                     if (!EnsureTupleMinSize(data, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3804,7 +3804,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const auto& data = option->Tail();
+                    auto& data = option->Tail();
                     if (!EnsureTuple(data, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3838,7 +3838,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const auto& data = option->Tail();
+                    auto& data = option->Tail();
                     if (!EnsureTuple(data, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -4102,7 +4102,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto& options = input->Head();
+    auto& options = input->Head();
     if (!EnsureTuple(options, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -4113,7 +4113,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
     bool hasSort = false;
 
     for (ui32 pass = 0; pass < 2; ++pass) {
-        for (const auto& option : options.Children()) {
+        for (auto& option : options.Children()) {
             if (!EnsureTupleMinSize(*option, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -4215,7 +4215,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                const auto& data = option->Tail();
+                auto& data = option->Tail();
                 if (!EnsureTuple(data, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }

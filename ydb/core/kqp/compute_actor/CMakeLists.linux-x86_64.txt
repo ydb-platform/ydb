@@ -27,6 +27,8 @@ target_link_libraries(core-kqp-compute_actor PUBLIC
   core-tx-datashard
   core-tx-scheme_cache
   dq-actors-compute
+  providers-common-http_gateway
+  providers-s3-actors
   yql-public-issue
   tools-enum_parser-enum_serialization_runtime
 )

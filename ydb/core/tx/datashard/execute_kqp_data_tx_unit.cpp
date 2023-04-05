@@ -257,7 +257,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                     DataShard.Generation(),
                     Max<ui64>(),
                     table.GetTableId().OwnerId,
-                    table.GetTableId().LocalPathId);
+                    table.GetTableId().LocalPathId,
+                    false);
             }
 
             tx->ReleaseTxData(txc, ctx);
@@ -388,7 +389,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 DataShard.Generation(),
                 Max<ui64>(),
                 table.GetTableId().OwnerId,
-                table.GetTableId().LocalPathId);
+                table.GetTableId().LocalPathId,
+                false);
         }
 
         tx->ReleaseTxData(txc, ctx);
@@ -439,8 +441,8 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
                 << *op << " at " << DataShard.TabletID() << " lock " << lock);
         }
 
-        op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard,
-            lock.PathId);
+        op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
+            lock.SchemeShard, lock.PathId, lock.HasWrites);
 
         LOG_T("add lock to result: " << op->Result()->Record.GetTxLocks().rbegin()->ShortDebugString());
     }

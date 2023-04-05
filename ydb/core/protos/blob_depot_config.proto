@@ -19,4 +19,6 @@ message TBlobDepotConfig {
     repeated TChannelProfile ChannelProfiles = 1;
     optional uint32 VirtualGroupId = 2;
     optional bool IsDecommittingGroup = 3;
+    optional uint64 TabletId = 4;
+    optional bool HiveContacted = 5;
 }

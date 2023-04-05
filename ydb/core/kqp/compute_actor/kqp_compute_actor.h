@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 namespace NKikimr {
@@ -52,7 +53,7 @@ IActor* CreateKqpScanComputeActor(const NKikimrKqp::TKqpSnapshot& snapshot, cons
     const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits,
     const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId);
 
-NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(TIntrusivePtr<TKqpCounters> counters);
+NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(TIntrusivePtr<TKqpCounters> counters, const NYql::IHTTPGateway::TPtr& httpGateway);
 
 } // namespace NKqp
 } // namespace NKikimr

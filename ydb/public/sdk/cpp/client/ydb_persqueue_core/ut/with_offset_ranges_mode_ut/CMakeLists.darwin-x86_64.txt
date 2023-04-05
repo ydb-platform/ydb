@@ -24,8 +24,7 @@ target_link_libraries(with_offset_ranges_mode_ut PUBLIC
   ydb_persqueue_core-ut-ut_utils
 )
 target_link_options(with_offset_ranges_mode_ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

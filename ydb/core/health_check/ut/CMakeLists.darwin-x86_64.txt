@@ -24,8 +24,7 @@ target_link_libraries(ydb-core-health_check-ut PUBLIC
   core-testlib-default
 )
 target_link_options(ydb-core-health_check-ut PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

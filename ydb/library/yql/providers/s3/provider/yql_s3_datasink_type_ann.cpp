@@ -120,7 +120,7 @@ private:
             bool hasDateTimeFormatName = false;
             bool hasTimestampFormat = false;
             bool hasTimestampFormatName = false;
-            const auto validator = [&](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
+            const auto validator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
                 if (name == "compression") {
                     const auto& value = setting.Tail();
                     if (!EnsureAtom(value, ctx)) {

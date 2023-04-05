@@ -1487,8 +1487,12 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TMetadataProviderInitializer(runConfig));
     }
 
-    if (serviceMask.ExternalIndex) {
+    if (serviceMask.EnableExternalIndex) {
         sil->AddServiceInitializer(new TExternalIndexInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableConveyor) {
+        sil->AddServiceInitializer(new TConveyorInitializer(runConfig));
     }
 
     if (serviceMask.EnableBackgroundTasks) {

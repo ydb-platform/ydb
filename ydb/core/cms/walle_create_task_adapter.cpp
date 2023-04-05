@@ -1,6 +1,6 @@
-#include "walle.h"
-#include "info_collector.h"
 #include "cms_impl.h"
+#include "info_collector.h"
+#include "walle.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -21,8 +21,7 @@ public:
     {
     }
 
-    void Bootstrap(const TActorContext &ctx)
-    {
+    void Bootstrap(const TActorContext &ctx) {
         auto &rec = RequestEvent->Get()->Record;
 
         LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
@@ -56,8 +55,7 @@ public:
     }
 
 private:
-    STFUNC(StateWork)
-    {
+    STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvPermissionResponse, Handle);
             HFunc(TEvCms::TEvGetClusterInfoResponse, Handle);
@@ -70,8 +68,7 @@ private:
         }
     }
 
-    void ReplyWithErrorAndDie(TStatus::ECode code, const TString &err, const TActorContext &ctx)
-    {
+    void ReplyWithErrorAndDie(TStatus::ECode code, const TString &err, const TActorContext &ctx) {
         auto &rec = RequestEvent->Get()->Record;
         TAutoPtr<TEvCms::TEvWalleCreateTaskResponse> resp = new TEvCms::TEvWalleCreateTaskResponse;
         resp->Record.MutableStatus()->SetCode(code);
@@ -81,15 +78,13 @@ private:
         ReplyAndDie(resp.Release(), ctx);
     }
 
-    void ReplyAndDie(TAutoPtr<TEvCms::TEvWalleCreateTaskResponse> resp, const TActorContext &ctx)
-    {
+    void ReplyAndDie(TAutoPtr<TEvCms::TEvWalleCreateTaskResponse> resp, const TActorContext &ctx) {
         WalleAuditLog(RequestEvent->Get(), resp.Get(), ctx);
         ctx.Send(RequestEvent->Sender, resp.Release());
         Die(ctx);
     }
 
-    void Handle(TEvCms::TEvPermissionResponse::TPtr &ev, const TActorContext &ctx)
-    {
+    void Handle(TEvCms::TEvPermissionResponse::TPtr &ev, const TActorContext &ctx) {
         auto &rec = ev->Get()->Record;
 
         Response = new TEvCms::TEvWalleCreateTaskResponse;
@@ -116,9 +111,7 @@ private:
         ReplyAndDie(Response, ctx);
     }
 
-
-    void Handle(TEvCms::TEvGetClusterInfoResponse::TPtr &ev, const TActorContext &ctx)
-    {
+    void Handle(TEvCms::TEvGetClusterInfoResponse::TPtr &ev, const TActorContext &ctx) {
         if (ev->Get()->Info->IsOutdated()) {
             ReplyWithErrorAndDie(TStatus::ERROR_TEMP, "Cannot collect cluster info", ctx);
             return;
@@ -187,7 +180,6 @@ private:
             } else
                 Y_FAIL("Unknown action");
 
-
             for (auto &host : task.GetHosts()) {
                 auto &hostAction = *request->Record.AddActions();
                 hostAction.CopyFrom(action);
@@ -208,8 +200,7 @@ private:
         ReplyWithErrorAndDie(TStatus::ERROR_TEMP, ev.Get()->Get()->Reason, ctx);
     }
 
-    void Finish(const TActorContext& ctx)
-    {
+    void Finish(const TActorContext &ctx) {
         ReplyAndDie(Response, ctx);
     }
 
@@ -218,9 +209,7 @@ private:
     TActorId Cms;
 };
 
-
-IActor *CreateWalleAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &ev, TActorId cms)
-{
+IActor *CreateWalleAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &ev, TActorId cms) {
     return new TWalleCreateTaskAdapter(ev, cms);
 }
 

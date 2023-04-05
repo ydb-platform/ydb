@@ -6,5 +6,6 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(pgwire)
 add_subdirectory(ydb)
 add_subdirectory(ydbd)

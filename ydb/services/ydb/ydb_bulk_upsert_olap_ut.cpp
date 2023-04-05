@@ -492,8 +492,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             auto res = client.BulkUpsert(tablePath,
                 NYdb::NTable::EDataFormat::CSV, bigCsv).GetValueSync();
 
-            Cerr << "Negative (big batch): " << res.GetStatus() << Endl;
-            UNIT_ASSERT(res.GetStatus() != EStatus::SUCCESS);
+            Cerr << "big batch: " << res.GetStatus() << Endl;
+            UNIT_ASSERT(res.GetStatus() == EStatus::SUCCESS);
         }
     }
 

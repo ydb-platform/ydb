@@ -32,8 +32,7 @@ target_link_libraries(ydb-core-tx-datashard-ut_minikql PUBLIC
   cpp-client-ydb_result
 )
 target_link_options(ydb-core-tx-datashard-ut_minikql PRIVATE
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,11.0
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework

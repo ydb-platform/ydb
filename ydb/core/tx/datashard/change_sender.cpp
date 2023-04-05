@@ -1,5 +1,6 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
+#include "change_sender_monitoring.h"
 #include "datashard_impl.h"
 
 #include <ydb/core/protos/services.pb.h>
@@ -7,12 +8,14 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/core/mon.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 class TChangeSender: public TActor<TChangeSender> {
     using ESenderType = TEvChangeExchange::ESenderType;
@@ -70,13 +73,16 @@ class TChangeSender: public TActor<TChangeSender> {
 
         if (!IsActive()) {
             std::move(records.begin(), records.end(), std::back_inserter(Enqueued));
-            return;
+        } else {
+            Handle(std::move(records));
         }
+    }
 
+    void Handle(TVector<TEnqueuedRecord>&& enqueued) {
         THashMap<TActorId, TVector<TEnqueuedRecord>> forward;
         TVector<ui64> remove;
 
-        for (auto& record : records) {
+        for (auto& record : enqueued) {
             auto it = Senders.find(record.PathId);
             if (it != Senders.end()) {
                 forward[it->second.ActorId].push_back(std::move(record));
@@ -154,8 +160,93 @@ class TChangeSender: public TActor<TChangeSender> {
         }
 
         if (Enqueued) {
-            Send(SelfId(), new TEvChangeExchange::TEvEnqueueRecords(std::move(Enqueued)));
+            Handle(std::move(Enqueued));
         }
+    }
+
+    void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        const auto& cgi = ev->Get()->Cgi();
+        if (const auto& str = cgi.Get("pathId")) {
+            if (const auto& pathId = ParsePathId(str)) {
+                auto it = Senders.find(pathId);
+                if (it != Senders.end()) {
+                    if (const auto& to = it->second.ActorId) {
+                        ctx.Send(ev->Forward(to));
+                    } else {
+                        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(TStringBuilder()
+                            << "Change sender '" << pathId << "' (" << it->second.Type << ") is not running"));
+                    }
+                } else {
+                    Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
+                }
+            } else {
+                Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Invalid pathId"));
+            }
+
+            return;
+        }
+
+        TStringStream html;
+
+        HTML(html) {
+            Header(html, "Main change sender", DataShard.TabletId);
+
+            SimplePanel(html, "Senders", [this](IOutputStream& html) {
+                HTML(html) {
+                    TABLE_CLASS("table table-hover") {
+                        TABLEHEAD() {
+                            TABLER() {
+                                TABLEH() { html << "#"; }
+                                TABLEH() { html << "PathId"; }
+                                TABLEH() { html << "UserTableId"; }
+                                TABLEH() { html << "Type"; }
+                                TABLEH() { html << "Actor"; }
+                            }
+                        }
+                        TABLEBODY() {
+                            ui32 i = 0;
+                            for (const auto& [pathId, sender] : Senders) {
+                                TABLER() {
+                                    TABLED() { html << ++i; }
+                                    TABLED() { PathLink(html, pathId); }
+                                    TABLED() { html << sender.UserTableId; }
+                                    TABLED() { html << sender.Type; }
+                                    TABLED() { ActorLink(html, DataShard.TabletId, pathId); }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            CollapsedPanel(html, "Enqueued", "enqueued", [this](IOutputStream& html) {
+                HTML(html) {
+                    TABLE_CLASS("table table-hover") {
+                        TABLEHEAD() {
+                            TABLER() {
+                                TABLEH() { html << "#"; }
+                                TABLEH() { html << "Order"; }
+                                TABLEH() { html << "PathId"; }
+                                TABLEH() { html << "BodySize"; }
+                            }
+                        }
+                        TABLEBODY() {
+                            ui32 i = 0;
+                            for (const auto& record : Enqueued) {
+                                TABLER() {
+                                    TABLED() { html << ++i; }
+                                    TABLED() { html << record.Order; }
+                                    TABLED() { PathLink(html, record.PathId); }
+                                    TABLED() { html << record.BodySize; }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
     }
 
     void PassAway() override {
@@ -196,26 +287,26 @@ public:
         }
     }
 
-    STATEFN(StateBase) {
+    STFUNC(StateBase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvEnqueueRecords, Handle);
             hFunc(TEvChangeExchange::TEvAddSender, Handle);
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
-
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
+            HFunc(NMon::TEvRemoteHttpInfo, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
-    STATEFN(StateInactive) {
+    STFUNC(StateInactive) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvActivateSender, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev, ctx);
         }
     }
 
-    STATEFN(StateActive) {
-        return StateBase(ev, TlsActivationContext->AsActorContext());
+    STFUNC(StateActive) {
+        return StateBase(ev, ctx);
     }
 
 private:
@@ -231,5 +322,4 @@ IActor* CreateChangeSender(const TDataShard* self) {
     return new TChangeSender(self);
 }
 
-} // NDataShard
-} // NKikimr
+}

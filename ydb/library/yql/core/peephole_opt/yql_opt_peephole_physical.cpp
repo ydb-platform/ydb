@@ -4948,7 +4948,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
             return true;
         }
 
-        if (node->IsList() && !node->GetTypeAnn()->IsComputable()) {
+        if (node->IsList() && (!node->GetTypeAnn()->IsComputable() || node->IsLiteralList())) {
             return true;
         }
 

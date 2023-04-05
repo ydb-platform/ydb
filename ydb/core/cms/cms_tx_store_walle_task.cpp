@@ -19,19 +19,18 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_STORE_WALLE_TASK; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
-    {
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStoreWalleTask Execute");
 
         for (auto &perm : Task.Permissions) {
             if (Self->State->Permissions.find(perm) == Self->State->Permissions.end()) {
-
                 Response.Reset(new IEventHandle(Response->Recipient, Response->Sender,
-                               new TEvCms::TEvStoreWalleTaskFailed(Task.TaskId,
-                                                                   TStringBuilder() << "There are no stored permissions for this task. "
-                                                                                    << "Maybe cleanup ran before task been stored. "
-                                                                                    << "Try request again"),
-                               0, Response->Cookie));
+                        new TEvCms::TEvStoreWalleTaskFailed(Task.TaskId, TStringBuilder()
+                            << "There are no stored permissions for this task. "
+                            << "Maybe cleanup ran before task been stored. "
+                            << "Try request again"),
+                    0, Response->Cookie)
+                );
                 return true;
             }
         }
@@ -50,8 +49,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
-    {
+    void Complete(const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStoreWalleTask Complete");
         Self->Reply(Request.Get(), Response, ctx);
     }
@@ -62,8 +60,7 @@ private:
     TAutoPtr<IEventHandle> Response;
 };
 
-ITransaction *TCms::CreateTxStoreWalleTask(const TWalleTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp)
-{
+ITransaction *TCms::CreateTxStoreWalleTask(const TWalleTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp) {
     return new TTxStoreWalleTask(this, task, std::move(req), std::move(resp));
 }
 

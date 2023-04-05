@@ -1,24 +1,24 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
 #include "change_sender_common_ops.h"
+#include "change_sender_monitoring.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-
 #include <util/generic/maybe.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 using namespace NTable;
+using ESenderType = TEvChangeExchange::ESenderType;
 
 class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeSenderShard> {
     TStringBuf GetLogPrefix() const {
@@ -196,9 +196,38 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         Leave();
     }
 
+    void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
+        TStringStream html;
+
+        HTML(html) {
+            Header(html, "AsyncIndex partition change sender", DataShard.TabletId);
+
+            SimplePanel(html, "Info", [this](IOutputStream& html) {
+                HTML(html) {
+                    DL_CLASS("dl-horizontal") {
+                        TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId));
+                        TermDesc(html, "IndexTablePathId", IndexTablePathId);
+                        TermDesc(html, "LeaderPipeCache", LeaderPipeCache);
+                        TermDesc(html, "LastRecordOrder", LastRecordOrder);
+                    }
+                }
+            });
+        }
+
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
+    }
+
     void Leave() {
         Send(Parent, new TEvChangeExchangePrivate::TEvGone(ShardId));
         PassAway();
+    }
+
+    void PassAway() override {
+        if (LeaderPipeCache) {
+            Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(ShardId));
+        }
+
+        TActorBootstrapped::PassAway();
     }
 
 public:
@@ -224,6 +253,7 @@ public:
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            hFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -241,11 +271,12 @@ private:
 
 }; // TAsyncIndexChangeSenderShard
 
-class TAsyncIndexChangeSenderMain: public TActorBootstrapped<TAsyncIndexChangeSenderMain>
-                                 , public TBaseChangeSender
-                                 , public IChangeSenderResolver
-                                 , private TSchemeCacheHelpers {
-
+class TAsyncIndexChangeSenderMain
+    : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
+    , public TBaseChangeSender
+    , public IChangeSenderResolver
+    , private TSchemeCacheHelpers
+{
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
@@ -674,6 +705,10 @@ class TAsyncIndexChangeSenderMain: public TActorBootstrapped<TAsyncIndexChangeSe
         PassAway();
     }
 
+    void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        RenderHtmlPage(ESenderType::AsyncIndex, ev, ctx);
+    }
+
     void PassAway() override {
         KillSenders();
         TActorBootstrapped::PassAway();
@@ -695,7 +730,7 @@ public:
         ResolveUserTable();
     }
 
-    STATEFN(StateBase) {
+    STFUNC(StateBase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvEnqueueRecords, Handle);
             hFunc(TEvChangeExchange::TEvRecords, Handle);
@@ -703,6 +738,7 @@ public:
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             hFunc(TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(TEvChangeExchangePrivate::TEvGone, Handle);
+            HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -723,5 +759,4 @@ IActor* CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTable
     return new TAsyncIndexChangeSenderMain(dataShard, userTableId, indexPathId);
 }
 
-} // NDataShard
-} // NKikimr
+}

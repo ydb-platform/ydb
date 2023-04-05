@@ -7,23 +7,77 @@
 #include "executor_thread.h"
 #include "event_local.h"
 
+#include <thread>
+
 namespace NActors {
 
     class TActorCoro;
 
+#ifndef CORO_THROUGH_THREADS
+#   ifdef _tsan_enabled_
+#       define CORO_THROUGH_THREADS 1
+#   else
+#       define CORO_THROUGH_THREADS 0
+#   endif
+#endif
+
     class TActorCoroImpl : public ITrampoLine {
-        TMappedAllocation Stack;
-        bool AllowUnhandledDtor;
+        const bool AllowUnhandledDtor;
         bool Finished = false;
         bool InvokedFromDtor = false;
+#if CORO_THROUGH_THREADS
+        TAutoEvent InEvent;
+        TAutoEvent OutEvent;
+        TActivationContext *ActivationContext = nullptr;
+        std::thread WorkerThread;
+#else
+        TMappedAllocation Stack;
         TContClosure FiberClosure;
         TExceptionSafeContext FiberContext;
         TExceptionSafeContext* ActorSystemContext = nullptr;
+#endif
         THolder<IEventHandle> PendingEvent;
 
     protected:
         TActorIdentity SelfActorId = TActorIdentity(TActorId());
         TActorId ParentActorId;
+
+        // Pre-leave and pre-enter hook functions are called by coroutine actor code to conserve the state of required TLS
+        // variables.
+        //
+        // They are called in the following order:
+        //
+        // 1. coroutine executes WaitForEvent
+        // 2. StoreTlsState() is called
+        // 3. control is returned to the actor system
+        // 4. some event is received, handler called (now in different thread, unconserved TLS variables are changed!)
+        // 5. handler transfers control to the coroutine
+        // 6. RestoreTlsState() is called
+        //
+        // These hooks may be used in the following way:
+        //
+        // thread_local TMyClass *MyObject = nullptr;
+        //
+        // class TMyCoroImpl : public TActorCoroImpl {
+        //     TMyClass *SavedMyObject;
+        //     ...
+        // public:
+        //     TMyCoroImpl()
+        //         : TActorCoroImpl(...)
+        //     {
+        //         StoreTlsState = RestoreTlsState = &TMyCoroImpl::ConserveState;
+        //     }
+        //
+        //     static void ConserveState(TActorCoroImpl *p) {
+        //         TMyCoroImpl *my = static_cast<TMyCoroImpl*>(p);
+        //         std::swap(my->SavedMyObject, MyObject);
+        //     }
+        //
+        //     ...
+        // }
+        void (*StoreTlsState)(TActorCoroImpl*) = nullptr;
+        void (*RestoreTlsState)(TActorCoroImpl*) = nullptr;
+
 
     private:
         template <typename TFirstEvent, typename... TOtherEvents>
@@ -148,8 +202,8 @@ namespace NActors {
     private:
         /* Resume() function goes to actor coroutine context and continues (or starts) to execute it until actor finishes
          * his job or it is blocked on WaitForEvent. Then the function returns. */
-        void Resume();
-        void ReturnToActorSystem();
+        void Resume(THolder<IEventHandle> ev);
+        THolder<IEventHandle> ReturnToActorSystem();
         void DoRun() override final;
     };
 

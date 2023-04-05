@@ -58,6 +58,9 @@ message ImportFromS3Settings {
     repeated Item items = 6 [(size).ge = 1];
     string description = 7 [(length).le = 128];
     uint32 number_of_retries = 8;
+
+    // Region to use in requests
+    string region = 9;
 }
 
 message ImportFromS3Result {

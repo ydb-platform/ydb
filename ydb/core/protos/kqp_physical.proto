@@ -4,6 +4,7 @@ option cc_enable_arenas = true;
 package NKqpProto;
 option java_package = "ru.yandex.kikimr.proto";
 
+import "google/protobuf/any.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_value.proto";
@@ -281,11 +282,21 @@ message TKqpReadRangesSource {
     repeated string SkipNullKeys = 8;
 }
 
+message TKqpExternalSource {
+    string Type = 1;
+    google.protobuf.Any Settings = 2;
+
+    // Partitioning
+    string TaskParamKey = 3;
+    repeated string PartitionedTaskParams = 4;
+}
+
 message TKqpSource {
     uint32 InputIndex = 1;
 
     oneof Type {
         TKqpReadRangesSource ReadRangesSource = 3;
+        TKqpExternalSource ExternalSource = 4;
     }
 };
 

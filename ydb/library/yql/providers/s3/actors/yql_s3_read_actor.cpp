@@ -840,16 +840,11 @@ private:
     }
 
     static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, const TString& requestId, IHTTPGateway::TResult&& result, size_t pathInd, const TString path) {
-        switch (result.index()) {
-        case 0U:
-            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::get<IHTTPGateway::TContent>(std::move(result)), requestId, pathInd, path)));
-            return;
-        case 1U:
-            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadError(std::get<TIssues>(std::move(result)), requestId, pathInd, path)));
-            return;
-        default:
-            break;
-        }
+        if (!result.Issues) {
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::move(result.Content), requestId, pathInd, path)));
+        } else {
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadError(std::move(result.Issues), requestId, pathInd, path)));
+        }		
     }
 
     i64 GetAsyncInputData(TUnboxedValueVector& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
@@ -1459,15 +1454,10 @@ public:
     std::map<ui64, ui64> RowGroupReaderIndex;
 
     static void OnResult(TActorSystem* actorSystem, TActorId selfId, TEvPrivate::TReadRange range, ui64 cookie, IHTTPGateway::TResult&& result) {
-        switch (result.index()) {
-        case 0U:
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::get<IHTTPGateway::TContent>(std::move(result))), 0, cookie));
-            return;
-        case 1U:
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::get<TIssues>(std::move(result))), 0, cookie));
-            return;
-        default:
-            break;
+        if (!result.Issues) {
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
+        } else {
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::move(result.Issues)), 0, cookie));
         }
     }
 
@@ -1999,12 +1989,7 @@ private:
                     // Just to avoid parser error after transport failure
                     LOG_CORO_D("S3 read ERROR");
                 } catch (const NDB::Exception& ex) {
-                    TStringBuilder msgBuilder;
-                    msgBuilder << ex.message();
-                    if (ex.code()) {
-                        msgBuilder << " (code: " << ex.code() << ")";
-                    }
-                    Issues.AddIssue(TIssue(msgBuilder));
+                    Issues.AddIssue(TIssue(ex.message()));
                     fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
                 }

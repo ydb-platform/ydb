@@ -1809,8 +1809,7 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 
     auto cgi = ev->Get()->Cgi();
 
-    auto action = cgi.Get("action");
-    if (action) {
+    if (const auto& action = cgi.Get("action")) {
         if (action == "cleanup-borrowed-parts") {
             Execute(CreateTxMonitoringCleanupBorrowedParts(this, ev), ctx);
             return true;
@@ -1832,8 +1831,24 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         return true;
     }
 
-    Execute(CreateTxMonitoring(this, ev), ctx);
+    if (const auto& page = cgi.Get("page")) {
+        if (page == "main") {
+            // fallthrough
+        } else if (page == "change-sender") {
+            if (OutChangeSender) {
+                ctx.Send(ev->Forward(OutChangeSender));
+                return true;
+            } else {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Change sender is not running"));
+                return true;
+            }
+        } else {
+            ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
+            return true;
+        }
+    }
 
+    Execute(CreateTxMonitoring(this, ev), ctx);
     return true;
 }
 

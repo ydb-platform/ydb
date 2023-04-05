@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
@@ -57,7 +58,7 @@ using namespace NPathGenerator;
 struct TListRequest {
     NS3Lister::TListingRequest S3Request;
     TString FilePattern;
-    ES3ListingOptions Options = ES3ListingOptions::NoOptions;
+    TS3ListingOptions Options;
     TVector<IPathGenerator::TColumnWithValue> ColumnValues;
 };
 
@@ -79,14 +80,16 @@ public:
     TS3IODiscoveryTransformer(TS3State::TPtr state, IHTTPGateway::TPtr gateway)
         : State_(std::move(state))
         , ListerFactory_(
-              MakeS3ListerFactory(State_->Configuration->MaxInflightListsPerQuery))
+              NS3Lister::MakeS3ListerFactory(State_->Configuration->MaxInflightListsPerQuery, 1, 100, 100))
         , ListingStrategy_(MakeS3ListingStrategy(
               gateway,
               ListerFactory_,
               State_->Configuration->MaxDiscoveryFilesPerQuery,
               State_->Configuration->MaxDirectoriesAndFilesPerQuery,
               State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery,
-              State_->Configuration->AllowLocalFiles)) { }
+              State_->Configuration->MaxInflightListsPerQuery,
+              State_->Configuration->AllowLocalFiles)) {
+    }
 
     void Rewind() final {
         PendingRequests_.clear();
@@ -459,18 +462,12 @@ private:
             if (needsListingOnActors) {
                 TString pathPattern;
                 NS3Lister::ES3PatternVariant pathPatternVariant;
-                if (requests[0].Options == ES3ListingOptions::UnPartitionedDataset) {
-                    pathPattern = requests[0].S3Request.Pattern;
-                    pathPatternVariant = NS3Lister::ES3PatternVariant::PathPattern;
-                } else if (requests[0].Options == ES3ListingOptions::PartitionedDataset) {
+                if (requests[0].Options.IsPartitionedDataset) {
                     pathPattern = requests[0].FilePattern;
                     pathPatternVariant = NS3Lister::ES3PatternVariant::FilePattern;
                 } else {
-                    ctx.AddError(TIssue(
-                        ctx.GetPosition(read.Pos()),
-                        TStringBuilder()
-                            << "Unknown listing option " << int(requests[0].Options)));
-                    return TStatus::Error;
+                    pathPattern = requests[0].S3Request.Pattern;
+                    pathPatternVariant = NS3Lister::ES3PatternVariant::PathPattern;
                 }
 
                 settings.push_back(ctx.NewList(
@@ -597,7 +594,12 @@ private:
                     .Prefix = dir.Path}};
 
                 auto future = ListingStrategy_->List(
-                    req.S3Request, ES3ListingOptions::UnPartitionedDataset);
+                    req.S3Request,
+                    TS3ListingOptions{
+                        .IsPartitionedDataset = false,
+                        .IsConcurrentListing =
+                            State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(
+                                State_->Configuration->AllowConcurrentListings)});
 
                 RequestsByNode_[source.Raw()].push_back(req);
                 PendingRequests_[req] = future;
@@ -728,9 +730,13 @@ private:
             // each path in CONCAT() can generate multiple list requests for explicit partitioning
             TVector<TListRequest> reqs;
 
+            auto isConcurrentListingEnabled =
+                State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(
+                    State_->Configuration->AllowConcurrentListings);
             auto req = TListRequest{
                 .S3Request{.Url = url, .Token = tokenStr},
-                .FilePattern = effectiveFilePattern};
+                .FilePattern = effectiveFilePattern,
+                .Options{.IsConcurrentListing = isConcurrentListingEnabled}};
 
             if (partitionedBy.empty()) {
                 if (path.empty()) {
@@ -752,7 +758,7 @@ private:
                 req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
                 req.S3Request.Prefix = req.S3Request.Pattern.substr(
                     0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
-                req.Options = ES3ListingOptions::UnPartitionedDataset;
+                req.Options.IsPartitionedDataset = false;
                 reqs.push_back(req);
             } else {
                 if (NS3::HasWildcards(path)) {
@@ -784,7 +790,7 @@ private:
                     generated << '/' << NS3::RegexFromWildcards(effectiveFilePattern);
                     req.S3Request.Pattern = generated;
                     req.S3Request.PatternType = NS3Lister::ES3PatternType::Regexp;
-                    req.Options = ES3ListingOptions::PartitionedDataset;
+                    req.Options.IsPartitionedDataset = true;
                     reqs.push_back(req);
                 } else {
                     for (auto& rule : config.Generator->GetRules()) {
@@ -795,7 +801,7 @@ private:
                         req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
                         req.S3Request.Prefix = req.S3Request.Pattern.substr(
                             0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
-                        req.Options = ES3ListingOptions::PartitionedDataset;
+                        req.Options.IsPartitionedDataset = true;
                         reqs.push_back(req);
                     }
                 }
@@ -830,7 +836,7 @@ private:
     }
 
     const TS3State::TPtr State_;
-    const IS3ListerFactory::TPtr ListerFactory_;
+    const NS3Lister::IS3ListerFactory::TPtr ListerFactory_;
     const IS3ListingStrategy::TPtr ListingStrategy_;
 
     TPendingRequests PendingRequests_;

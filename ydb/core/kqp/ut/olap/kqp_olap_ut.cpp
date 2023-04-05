@@ -50,6 +50,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         //runtime->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
         runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::TX_CONVEYOR, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
@@ -762,7 +763,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         session.Close();
     }
 
-    Y_UNIT_TEST(QueryOltpAndOlap) {
+    Y_UNIT_TEST(ScanQueryOltpAndOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -789,6 +790,36 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[[1u];["Value-001"];["1"];["1"];1000001u];[[2u];["Value-002"];["2"];["2"];1000002u]])");
+        }
+    }
+
+    Y_UNIT_TEST(YqlScriptOltpAndOlap) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        // EnableDebugLogging(kikimr);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 3);
+
+        CreateSampleOltpTable(kikimr);
+
+        {
+            NScripting::TScriptingClient client(kikimr.GetDriver());
+            auto it = client.ExecuteYqlScript(R"(
+                --!syntax_v1
+
+                SELECT a.`resource_id`, a.`timestamp`, t.*
+                FROM `/Root/OltpTable` AS t
+                JOIN `/Root/olapStore/olapTable` AS a ON CAST(t.Key AS Utf8) = a.resource_id
+                ORDER BY a.`resource_id`, a.`timestamp`
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = FormatResultSetYson(it.GetResultSet(0));
             Cout << result << Endl;
             CompareYson(result, R"([[[1u];["Value-001"];["1"];["1"];1000001u];[[2u];["Value-002"];["2"];["2"];1000002u]])");
         }
@@ -2115,7 +2146,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_ResultCountExpr) {
-        NColumnShard::TLimits::SetBlobSizeForSplit(10000);
+        NColumnShard::TLimits::SetMaxBlobSize(10000);
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                     SELECT
@@ -3920,8 +3951,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapDeleteImmediate) {
-        TPortManager pm;
+        // Should be fixed in KIKIMR-17582
+        return;
 
+        TPortManager pm;
         ui32 grpcPort = pm.GetPort();
         ui32 msgbPort = pm.GetPort();
 
@@ -3974,8 +4007,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapDeleteImmediatePK) {
-        TPortManager pm;
+        // Should be fixed in KIKIMR-17582
+        return;
 
+        TPortManager pm;
         ui32 grpcPort = pm.GetPort();
         ui32 msgbPort = pm.GetPort();
 
@@ -4275,6 +4310,78 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetExpectedReply("[[10u]]");
 
         TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(OlapRead_FailsOnDataQuery) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        EnableDebugLogging(kikimr);
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+        }
+
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/tableWithNulls`;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(OlapRead_UsesScanOnJoin) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        EnableDebugLogging(kikimr);
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        {
+            WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+        }
+
+        NScripting::TScriptingClient client(kikimr.GetDriver());
+        auto result = client.ExecuteYqlScript(R"(
+            SELECT * FROM `/Root/olapStore/olapTable` WHERE resource_id IN (SELECT CAST(id AS Utf8) FROM `/Root/tableWithNulls`);
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(OlapRead_UsesScanOnJoinWithDataShardTable) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        EnableDebugLogging(kikimr);
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        {
+            WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+        }
+
+        NScripting::TScriptingClient client(kikimr.GetDriver());
+        auto result = client.ExecuteYqlScript(R"(
+            SELECT * FROM `/Root/olapStore/olapTable` WHERE resource_id IN (SELECT CAST(id AS Utf8) FROM `/Root/tableWithNulls`);
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
 

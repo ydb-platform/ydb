@@ -1,4 +1,5 @@
 #include "activation.h"
+#include <ydb/services/metadata/request/request_actor_cb.h>
 
 namespace NKikimr::NCSIndex {
 
@@ -76,8 +77,7 @@ void TActivation::OnModificationFinished(const TString& modificationId) {
             NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(Object.GetIndexTablePath(), "access");
         modifier->Execute(SelfContainer, Config.GetRequestConfig());
     } else if (modificationId == "access") {
-        TActivationContext::ActorSystem()->Register(new NMetadata::NRequest::TSessionedActorCallback<NMetadata::NRequest::TDialogYQLRequest>(
-            BuildUpdateRequest(), Config.GetRequestConfig(), NACLib::TSystemUsers::Metadata(), SelfContainer));
+        NMetadata::NRequest::TYQLRequestExecutor::Execute(BuildUpdateRequest(), NACLib::TSystemUsers::Metadata(), SelfContainer);
     } else {
         Y_VERIFY(false);
     }

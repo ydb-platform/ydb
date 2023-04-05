@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/services/metadata/request/config.h>
-#include <ydb/services/metadata/request/request_actor.h>
+#include <ydb/services/metadata/request/request_actor_cb.h>
 
 namespace NKikimr::NMetadata::NInitializer {
 
@@ -60,9 +60,9 @@ protected:
         }
     };
 
-    virtual bool DoExecute(IModifierExternalController::TPtr externalController, const NRequest::TConfig& config) const override {
-        TActivationContext::ActorSystem()->Register(new NRequest::TYDBControllerRequest<TDialogPolicy>(Request,
-            NACLib::TSystemUsers::Metadata(), std::make_shared<TAdapterController>(externalController, GetModificationId()), config));
+    virtual bool DoExecute(IModifierExternalController::TPtr externalController, const NRequest::TConfig& /*config*/) const override {
+        NRequest::TYDBOneRequestSender<TDialogPolicy> req(Request, NACLib::TSystemUsers::Metadata(), std::make_shared<TAdapterController>(externalController, GetModificationId()));
+        req.Start();
         return true;
     }
 public:

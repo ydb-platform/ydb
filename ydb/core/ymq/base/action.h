@@ -87,4 +87,31 @@ EAction GetNonBatchAction(EAction action);
         macro(ListDeadLetterSourceQueues)   \
         macro(SetQueueAttributes)
 
+// All actions
+#define ENUMERATE_ALL_ACTIONS(macro)     \
+    macro(ChangeMessageVisibility)       \
+    macro(ChangeMessageVisibilityBatch)  \
+    macro(CreateQueue)                   \
+    macro(CreateUser)                    \
+    macro(GetQueueAttributes)            \
+    macro(GetQueueAttributesBatch)       \
+    macro(GetQueueUrl)                   \
+    macro(DeleteMessage)                 \
+    macro(DeleteMessageBatch)            \
+    macro(DeleteQueue)                   \
+    macro(DeleteQueueBatch)              \
+    macro(DeleteUser)                    \
+    macro(ListQueues)                    \
+    macro(ListUsers)                     \
+    macro(PurgeQueue)                    \
+    macro(PurgeQueueBatch)               \
+    macro(ReceiveMessage)                \
+    macro(SendMessage)                   \
+    macro(SendMessageBatch)              \
+    macro(SetQueueAttributes)            \
+    macro(ModifyPermissions)             \
+    macro(ListPermissions)               \
+    macro(CountQueues)                   \
+    macro(ListDeadLetterSourceQueues)
+
 } // namespace NKikimr::NSQS

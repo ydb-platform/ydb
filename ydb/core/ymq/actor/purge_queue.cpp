@@ -21,10 +21,6 @@ public:
     TPurgeQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::PurgeQueue, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutablePurgeQueue()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:
@@ -115,10 +111,6 @@ public:
     TPurgeQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TCommonBatchActor(sourceSqsRequest, EAction::PurgeQueueBatch, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutablePurgeQueueBatch()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:
@@ -128,7 +120,7 @@ private:
         for (size_t i = 0; i < Request().EntriesSize(); ++i) {
             const auto& entry = Request().GetEntries(i);
             auto& req = *ret[i].MutablePurgeQueue();
-            req.MutableAuth()->SetUserName(UserName_);
+            *req.MutableAuth() = Request().GetAuth();
 
             if (Request().HasCredentials()) {
                 *req.MutableCredentials() = Request().GetCredentials();

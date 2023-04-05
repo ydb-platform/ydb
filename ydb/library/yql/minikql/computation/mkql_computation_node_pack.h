@@ -21,7 +21,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TValuePacker {
+template<bool Fast>
+class TValuePackerImpl {
 private:
     enum EProps {
         Begin,
@@ -32,8 +33,8 @@ private:
     };
     using TProperties = TEnumBitSet<EProps, EProps::Begin, EProps::End>;
 public:
-    TValuePacker(bool stable, const TType* type, bool tryUseCodegen = false);
-    TValuePacker(const TValuePacker& other);
+    TValuePackerImpl(bool stable, const TType* type, bool tryUseCodegen = false);
+    TValuePackerImpl(const TValuePackerImpl& other);
 
     // Returned buffer is temporary and should be copied before next Pack() call
     TStringBuf Pack(const NUdf::TUnboxedValuePod& value) const;
@@ -66,6 +67,9 @@ private:
 
     friend struct TValuePackerDetails;
 };
+
+using TValuePacker = TValuePackerImpl<false>;
+using TValuePackerFast = TValuePackerImpl<true>;
 
 class TValuePackerBoxed : public TComputationValue<TValuePackerBoxed>, public TValuePacker {
     typedef TComputationValue<TValuePackerBoxed> TBase;

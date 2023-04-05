@@ -5,8 +5,11 @@
 #include <vector>
 #include <util/stream/format.h>
 #include <util/string/builder.h>
-#include <arpa/inet.h>
-
+#if defined (_win_)
+   #include <winsock2.h>
+#elif defined (_unix_)
+   #include <arpa/inet.h>
+#endif
 namespace NPG {
 
 #pragma pack(push, 1)

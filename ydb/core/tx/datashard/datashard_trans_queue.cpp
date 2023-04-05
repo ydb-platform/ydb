@@ -360,7 +360,12 @@ bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
     artifactFlags = 0;
     if (!artifactsRow.EndOfSet()) {
         artifactFlags = artifactsRow.GetValue<Schema::TxArtifacts::Flags>();
-        locks = artifactsRow.GetValueOrDefault<Schema::TxArtifacts::Locks>({});
+        auto persistentLocks = artifactsRow.GetValueOrDefault<Schema::TxArtifacts::Locks>({});
+        locks.clear();
+        locks.reserve(persistentLocks.size());
+        for (const auto& persistentLock : persistentLocks) {
+            locks.push_back(TSysTables::TLocksTable::TLock::FromPersistent(persistentLock));
+        }
     }
 
     return true;

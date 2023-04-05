@@ -582,7 +582,7 @@ void TActiveTransaction::DbStoreLocksAccessLog(TDataShard * self,
     using Schema = TDataShard::Schema;
 
     NIceDb::TNiceDb db(txc.DB);
-    TVector<TSysTables::TLocksTable::TLock> vec;
+    TVector<TSysTables::TLocksTable::TPersistentLock> vec;
     vec.reserve(LocksAccessLog().Locks.size());
     for (auto &pr : LocksAccessLog().Locks)
         vec.emplace_back(pr.second);

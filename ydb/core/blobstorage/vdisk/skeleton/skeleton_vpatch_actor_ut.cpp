@@ -188,7 +188,7 @@ namespace NKikimr {
             }
 
             THolder<IActor> actor{CreateSkeletonVPatchActor(EdgeActors[nodeId], GType,
-                    ev, TInstant(), nullptr, nullptr, nullptr, patchCtx, VDiskIds[nodeId].ToString(), 0)};
+                    ev, TInstant(), nullptr, nullptr, nullptr, nullptr, nullptr, patchCtx, VDiskIds[nodeId].ToString(), 0)};
 
             if constexpr (!std::is_void_v<DecoratorType>) {
                 TVPatchDecoratorArgs args{EdgeActors[nodeId], IsCheckingEventsByDecorator,

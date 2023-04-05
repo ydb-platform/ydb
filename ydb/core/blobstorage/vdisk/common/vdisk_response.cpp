@@ -15,7 +15,7 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
 
 void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, ui32 channel) {
     switch (const ui32 type = ev->Type()) {
-#define HANDLE_EVENT(T, EV) \
+#define HANDLE_EVENT(T) \
         case TEvBlobStorage::T::EventType: { \
             TEvBlobStorage::T *event = static_cast<TEvBlobStorage::T *>(ev); \
             const double usPerCycle = 1000000.0 / NHPTimer::GetCyclesPerSecond(); \
@@ -23,9 +23,12 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
             break; \
         }
 
-        HANDLE_EVENT(TEvVPutResult, EvVPutResultSent)
-        HANDLE_EVENT(TEvVMultiPutResult, EvVMultiPutResultSent)
-        HANDLE_EVENT(TEvVGetResult, EvVGetResultSent)
+        HANDLE_EVENT(TEvVPutResult)
+        HANDLE_EVENT(TEvVMultiPutResult)
+        HANDLE_EVENT(TEvVGetResult)
+        HANDLE_EVENT(TEvVPatchFoundParts)
+        HANDLE_EVENT(TEvVPatchXorDiffResult)
+        HANDLE_EVENT(TEvVPatchResult)
 
 #undef HANDLE_EVENT
 

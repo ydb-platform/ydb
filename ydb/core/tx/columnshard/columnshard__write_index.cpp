@@ -43,7 +43,7 @@ private:
 bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_VERIFY(Ev);
     Y_VERIFY(Self->InsertTable);
-    Y_VERIFY(Self->PrimaryIndex);
+    Y_VERIFY(Self->TablesManager.HasPrimaryIndex());
 
     txc.DB.NoMoreReadsForTx();
 
@@ -66,7 +66,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
-        ok = Self->PrimaryIndex->ApplyChanges(dbWrap, changes, snapshot); // update changes + apply
+        ok = Self->TablesManager.MutablePrimaryIndex().ApplyChanges(dbWrap, changes, snapshot); // update changes + apply
         if (ok) {
             LOG_S_DEBUG("TTxWriteIndex (" << changes->TypeString() << ") apply at tablet " << Self->TabletID());
 
@@ -248,7 +248,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Schema::SaveSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
     }
 
-    Self->PrimaryIndex->FreeLocks(changes);
+    Self->TablesManager.MutablePrimaryIndex().FreeLocks(changes);
 
     if (changes->IsInsert()) {
         Self->ActiveIndexingOrCompaction = false;

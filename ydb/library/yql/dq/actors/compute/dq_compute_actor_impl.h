@@ -1288,7 +1288,7 @@ private:
 
         const i64 toSend = peerState.PeerFreeSpace + allowedOvercommit - peerState.InFlightBytes;
 
-        CA_LOG_D("About to drain channelId: " << channelId
+        CA_LOG_T("About to drain channelId: " << channelId
             << ", hasPeer: " << outputChannel.HasPeer
             << ", peerFreeSpace: " << peerState.PeerFreeSpace
             << ", inFlightBytes: " << peerState.InFlightBytes

@@ -17,7 +17,10 @@ if is_oss:
 
     if python_2:
         from ydb.public.sdk.python2 import ydb # noqa
+        from ydb.public.sdk.python2.ydb import Driver, DriverConfig, SessionPool # noqa
     else:
         from ydb.public.sdk.python3 import ydb # noqa
+        from ydb.public.sdk.python3.ydb import Driver, DriverConfig, SessionPool # noqa
 else:
     import ydb # noqa
+    from ydb import Driver, DriverConfig, SessionPool #noqa

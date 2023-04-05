@@ -1,1 +1,0 @@
-{% include [pk_scalability.md](_includes/pk_olap_scalability.md) %}

@@ -279,7 +279,7 @@ private:
     class TAssembledNotFiltered: public NColumnShard::IDataPreparationTask {
     private:
         using TBase = NColumnShard::IDataPreparationTask;
-        std::shared_ptr<arrow::RecordBatch> Batch;
+        TPortionInfo::TPreparedBatchData BatchConstructor;
         std::shared_ptr<arrow::RecordBatch> FilteredBatch;
         NOlap::TReadMetadata::TConstPtr ReadMetadata;
         ui32 BatchNo = 0;
@@ -288,10 +288,10 @@ private:
         virtual bool DoApply(TIndexedReadData& owner) const override;
         virtual bool DoExecuteImpl() override;
     public:
-        TAssembledNotFiltered(std::shared_ptr<arrow::RecordBatch> batch, NOlap::TReadMetadata::TConstPtr readMetadata,
+        TAssembledNotFiltered(TPortionInfo::TPreparedBatchData&& batchConstructor, NOlap::TReadMetadata::TConstPtr readMetadata,
             const ui32 batchNo, const bool allowEarlyFilter, NColumnShard::IDataTasksProcessor::TPtr processor)
             : TBase(processor)
-            , Batch(batch)
+            , BatchConstructor(batchConstructor)
             , ReadMetadata(readMetadata)
             , BatchNo(batchNo)
             , AllowEarlyFilter(allowEarlyFilter)

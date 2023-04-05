@@ -194,12 +194,55 @@ struct TPortionInfo {
         return Meta.ColumnMeta.find(columnId)->second.HasMinMax();
     }
 
-    std::shared_ptr<arrow::Table> Assemble(const TIndexInfo& indexInfo,
+    class TPreparedColumn {
+    private:
+        std::shared_ptr<arrow::Field> Field;
+        std::vector<TString> Blobs;
+
+    public:
+        TPreparedColumn(const std::shared_ptr<arrow::Field>& field, std::vector<TString>&& blobs)
+            : Field(field)
+            , Blobs(std::move(blobs))
+        {
+
+        }
+
+        std::shared_ptr<arrow::ChunkedArray> Assemble() const;
+    };
+
+    class TPreparedBatchData {
+    private:
+        std::vector<TPreparedColumn> Columns;
+        std::shared_ptr<arrow::Schema> Schema;
+    public:
+        TPreparedBatchData(std::vector<TPreparedColumn>&& columns, std::shared_ptr<arrow::Schema> schema)
+            : Columns(std::move(columns))
+            , Schema(schema)
+        {
+
+        }
+
+        std::shared_ptr<arrow::RecordBatch> Assemble() {
+            std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
+            for (auto&& i : Columns) {
+                columns.emplace_back(i.Assemble());
+            }
+
+            auto table = arrow::Table::Make(Schema, columns);
+            auto res = table->CombineChunks();
+            Y_VERIFY(res.ok());
+            return NArrow::ToBatch(*res);
+        }
+    };
+
+    TPreparedBatchData PrepareForAssemble(const TIndexInfo& indexInfo,
                                            const std::shared_ptr<arrow::Schema>& schema,
                                            const THashMap<TBlobRange, TString>& data) const;
     std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const TIndexInfo& indexInfo,
                                            const std::shared_ptr<arrow::Schema>& schema,
-                                           const THashMap<TBlobRange, TString>& data) const;
+                                           const THashMap<TBlobRange, TString>& data) const {
+        return PrepareForAssemble(indexInfo, schema, data).Assemble();
+    }
 
     static TString SerializeColumn(const std::shared_ptr<arrow::Array>& array,
                                    const std::shared_ptr<arrow::Field>& field,

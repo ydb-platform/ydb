@@ -118,7 +118,9 @@ bool TIndexedReadData::TAssembledNotFiltered::DoExecuteImpl() {
     /// @warning The replace logic is correct only in assumption that predicate is applyed over a part of ReplaceKey.
     /// It's not OK to apply predicate before replacing key duplicates otherwise.
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
-    auto filtered = NOlap::FilterPortion(Batch, *ReadMetadata);
+    auto batch = BatchConstructor.Assemble();
+    Y_VERIFY(batch);
+    auto filtered = NOlap::FilterPortion(batch, *ReadMetadata);
     if (filtered.Batch) {
         Y_VERIFY(filtered.Valid());
         filtered.ApplyFilter();
@@ -131,6 +133,8 @@ bool TIndexedReadData::TAssembledNotFiltered::DoExecuteImpl() {
         Y_VERIFY(filtered.Valid());
         filtered.ApplyFilter();
     }
+#else
+    Y_UNUSED(AllowEarlyFilter);
 #endif
     FilteredBatch = filtered.Batch;
     return true;
@@ -276,15 +280,14 @@ NColumnShard::IDataPreparationTask::TPtr TIndexedReadData::AssembleIndexedBatch(
     auto& portionInfo = Portion(batchNo);
     Y_VERIFY(portionInfo.Produced());
 
-    auto batch = portionInfo.AssembleInBatch(ReadMetadata->IndexInfo, ReadMetadata->LoadSchema, Data);
-    Y_VERIFY(batch);
+    auto batchConstructor = portionInfo.PrepareForAssemble(ReadMetadata->IndexInfo, ReadMetadata->LoadSchema, Data);
 
     for (auto& rec : portionInfo.Records) {
         auto& blobRange = rec.BlobRange;
         Data.erase(blobRange);
     }
 
-    return std::make_shared<TAssembledNotFiltered>(batch, ReadMetadata, batchNo, portionInfo.AllowEarlyFilter(), processor);
+    return std::make_shared<TAssembledNotFiltered>(std::move(batchConstructor), ReadMetadata, batchNo, portionInfo.AllowEarlyFilter(), processor);
 }
 
 void TIndexedReadData::UpdateGranuleWaits(ui32 batchNo) {

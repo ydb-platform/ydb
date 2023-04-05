@@ -3274,9 +3274,22 @@ public:
     }
 
     TCoerceResult Coerce(const TStringBuf binary, i32 typmod) {
+        return Coerce(true, binary, 0, typmod);
+    }
+
+    TCoerceResult Coerce(const NUdf::TUnboxedValuePod& value, i32 typmod) {
+        Datum datum = PassByValue ?
+            NMiniKQL::ScalarDatumFromPod(value) :
+            NMiniKQL::PointerDatumFromPod(value);
+
+        return Coerce(false, {}, datum, typmod);
+    }
+
+private:
+    TCoerceResult Coerce(bool isSourceBinary, const TStringBuf binary, Datum datum, i32 typmod) {
         NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TPAllocScope scope;
-        Datum datum = 0;
+
         Datum datumCasted = 0;
         TVector<Datum> elems;
         TVector<bool> nulls;
@@ -3285,7 +3298,7 @@ public:
         text* serialized = nullptr;
         Y_DEFER {
             if (!PassByValue) {
-                if (datum) {
+                if (datum && isSourceBinary) {
                     pfree((void*)datum);
                 }
                 if (datumCasted) {
@@ -3303,7 +3316,9 @@ public:
         };
         PG_TRY();
         {
-            datum = Receive(binary.Data(), binary.Size());
+            if (isSourceBinary) {
+                datum = Receive(binary.Data(), binary.Size());
+            }
 
             if (IsArray()) {
                 const auto& typeDesc = NYql::NPg::LookupType(ElementTypeId);
@@ -3349,7 +3364,7 @@ public:
                 }
             }
 
-            if (!datumCasted) {
+            if (!datumCasted && isSourceBinary) {
                 return {{}, {}};
             } else {
                 FmgrInfo finfo;
@@ -3360,7 +3375,7 @@ public:
                 callInfo->nargs = 1;
                 callInfo->fncollation = DEFAULT_COLLATION_OID;
                 callInfo->isnull = false;
-                callInfo->args[0] = { datumCasted, false };
+                callInfo->args[0] = { datumCasted ? datumCasted : datum, false };
 
                 serialized = (text*)finfo.fn_addr(callInfo);
                 Y_ENSURE(!callInfo->isnull);
@@ -3379,7 +3394,6 @@ public:
         PG_END_TRY();
     }
 
-private:
     Datum CoerceOne(ui32 typeId, Datum datum, i32 typmod) const {
         const auto& cast = NYql::NPg::LookupCast(typeId, typeId);
 
@@ -3583,3 +3597,25 @@ TConvertResult PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId
 }
 
 } // namespace NKikimr::NPg
+
+namespace NYql::NCommon {
+
+TString PgValueCoerce(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId, i32 typMod, TMaybe<TString>* error) {
+    auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId);
+    if (!typeDesc) {
+        if (error) {
+            *error = "invalid type descriptor";
+        }
+        return {};
+    }
+    auto result = static_cast<NKikimr::NPg::TPgTypeDescriptor*>(typeDesc)->Coerce(value, typMod);
+    if (result.Error) {
+        if (error) {
+            *error = result.Error;
+        }
+        return {};
+    }
+    return *result.NewValue;
+}
+
+} // namespace NYql::NCommon

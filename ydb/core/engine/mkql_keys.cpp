@@ -260,7 +260,10 @@ THolder<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& e
 #define MAKE_PRIMITIVE_TYPE_CELL(type, layout) \
     case NUdf::TDataType<type>::Id: return MakeCell<layout>(value);
 
-TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value, const TTypeEnvironment& env, bool copy) {
+TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
+    const TTypeEnvironment& env, bool copy,
+    i32 typmod, TMaybe<TString>* error)
+{
     if (!value)
         return TCell();
 
@@ -280,7 +283,19 @@ TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value, con
     NYql::NUdf::TStringRef ref;
     bool isPg = (type.GetTypeId() == NScheme::NTypeIds::Pg);
     if (isPg) {
-        binary = NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
+        auto typeDesc = type.GetTypeDesc();
+        if (typmod != -1 && NPg::TypeDescNeedsCoercion(typeDesc)) {
+            TMaybe<TString> err;
+            binary = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typmod, &err);
+            if (err) {
+                if (error) {
+                    *error = err;
+                }
+                return TCell();
+            }
+        } else {
+            binary = NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(typeDesc));
+        }
         ref = NYql::NUdf::TStringRef(binary);
     } else {
         ref = value.AsStringRef();

@@ -51,6 +51,14 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
     throw yexception() << "PgValueFromNativeBinary: PG types are not supported";
 }
 
+TString PgValueCoerce(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId, i32 typMod, TMaybe<TString>* error) {
+    Y_UNUSED(value);
+    Y_UNUSED(pgTypeId);
+    Y_UNUSED(typMod);
+    Y_UNUSED(error);
+    throw yexception() << "PgValueCoerce: PG types are not supported";
+}
+
 void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
     const TVector<ui32>* structPositions) {
     Y_UNUSED(writer);

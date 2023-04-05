@@ -73,6 +73,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     STATEFN(StateWaitingRecords) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvRecords, Handle);
+            sFunc(TEvPartitionWriter::TEvWriteResponse, Lost);
         default:
             return StateBase(ev, TlsActivationContext->AsActorContext());
         }
@@ -228,6 +229,16 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
     }
 
+    void Disconnected() {
+        LOG_D("Disconnected");
+        Leave();
+    }
+
+    void Lost() {
+        LOG_W("Lost");
+        Leave();
+    }
+
     void Leave() {
         Send(Parent, new TEvChangeExchangePrivate::TEvGone(PartitionId));
         PassAway();
@@ -271,7 +282,7 @@ public:
 
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvPartitionWriter::TEvDisconnected, Leave);
+            sFunc(TEvPartitionWriter::TEvDisconnected, Disconnected);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }

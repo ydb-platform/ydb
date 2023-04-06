@@ -341,7 +341,6 @@ void TKqpPlanner::PrepareKqpNodeRequest(NKikimrKqp::TEvStartKqpTasksRequest& req
                 if (DisableLlvmForUdfStages && taskDesc.GetProgram().GetSettings().GetHasUdf()) {
                     withLLVM = false;
                 }
-                AddSnapshotInfoToTaskInputs(taskDesc);
                 request.AddTasks()->Swap(&taskDesc);
             }
         }
@@ -351,7 +350,6 @@ void TKqpPlanner::PrepareKqpNodeRequest(NKikimrKqp::TEvStartKqpTasksRequest& req
                 if (DisableLlvmForUdfStages && taskDesc.GetProgram().GetSettings().GetHasUdf()) {
                     withLLVM = false;
                 }
-                AddSnapshotInfoToTaskInputs(taskDesc);
                 request.AddTasks()->Swap(&taskDesc);
             }
         }
@@ -396,7 +394,6 @@ void TKqpPlanner::AddScansToKqpNodeRequest(NKikimrKqp::TEvStartKqpTasksRequest& 
             if (DisableLlvmForUdfStages && task.GetProgram().GetSettings().GetHasUdf()) {
                 withLLVM = false;
             }
-            AddSnapshotInfoToTaskInputs(task);
             request.AddTasks()->Swap(&task);
         }
         MainTasksPerNode.erase(nodeId);
@@ -413,49 +410,6 @@ ui32 TKqpPlanner::CalcSendMessageFlagsForNode(ui32 nodeId) {
         flags |= IEventHandle::FlagSubscribeOnSession;
     }
     return flags;
-}
-
-void TKqpPlanner::AddSnapshotInfoToTaskInputs(NYql::NDqProto::TDqTask& task) {
-    YQL_ENSURE(Snapshot.IsValid());
-
-    for (auto& input : *task.MutableInputs()) {
-        if (input.HasTransform()) {
-            auto transform = input.MutableTransform();
-            YQL_ENSURE(transform->GetType() == "StreamLookupInputTransformer",
-                "Unexpected input transform type: " << transform->GetType());
-
-            const google::protobuf::Any& settingsAny = transform->GetSettings();
-            YQL_ENSURE(settingsAny.Is<NKikimrKqp::TKqpStreamLookupSettings>(), "Expected settings type: "
-                << NKikimrKqp::TKqpStreamLookupSettings::descriptor()->full_name()
-                << " , but got: " << settingsAny.type_url());
-
-            NKikimrKqp::TKqpStreamLookupSettings settings;
-            YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings");
-
-            settings.MutableSnapshot()->SetStep(Snapshot.Step);
-            settings.MutableSnapshot()->SetTxId(Snapshot.TxId);
-
-            transform->MutableSettings()->PackFrom(settings);
-        }
-        if (input.HasSource() && input.GetSource().GetType() == NYql::KqpReadRangesSourceName) {
-            auto source = input.MutableSource();
-            const google::protobuf::Any& settingsAny = source->GetSettings();
-
-            YQL_ENSURE(settingsAny.Is<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(), "Expected settings type: "
-                << NKikimrTxDataShard::TKqpReadRangesSourceSettings::descriptor()->full_name()
-                << " , but got: " << settingsAny.type_url());
-
-            NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
-            YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings");
-
-            if (Snapshot.IsValid()) {
-                settings.MutableSnapshot()->SetStep(Snapshot.Step);
-                settings.MutableSnapshot()->SetTxId(Snapshot.TxId);
-            }
-
-            source->MutableSettings()->PackFrom(settings);
-        }
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

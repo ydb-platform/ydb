@@ -130,14 +130,15 @@ private:
             << ", enough: " << ev->Get()->Record.GetEnough()
             << ", from: " << ev->Sender);
 
-        if (ResultChannelProxies.empty()) {
+        auto& resultChannelProxies = GetResultChannelProxies();
+        if (resultChannelProxies.empty()) {
             return;
         }
 
         // Forward only for stream results, data results acks event theirselves.
         YQL_ENSURE(!ResponseEv->TxResults.empty() && ResponseEv->TxResults[0].IsStream);
 
-        auto channelIt = ResultChannelProxies.begin();
+        auto channelIt = resultChannelProxies.begin();
         auto handle = ev->Forward(channelIt->second->SelfId());
         channelIt->second->Receive(handle, TlsActivationContext->AsActorContext());
     }
@@ -268,14 +269,14 @@ private:
         THashMap<ui64, ui64> assignedShardsCount;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-        const auto& table = TableKeys.GetTable(stageInfo.Meta.TableId);
+        const auto& table = GetTableKeys().GetTable(stageInfo.Meta.TableId);
         const auto& keyTypes = table.KeyColumnTypes;
 
         for (auto& op : stage.GetTableOps()) {
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, table);
-            auto partitions = PrunePartitions(TableKeys, op, stageInfo, HolderFactory(), TypeEnv());
+            auto partitions = PrunePartitions(GetTableKeys(), op, stageInfo, HolderFactory(), TypeEnv());
             const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
             auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
 
@@ -473,7 +474,7 @@ private:
             if (stage.SourcesSize() > 0) {
                 switch (stage.GetSources(0).GetTypeCase()) {
                     case NKqpProto::TKqpSource::kReadRangesSource:
-                        BuildScanTasksFromSource(stageInfo, Request.Snapshot);
+                        BuildScanTasksFromSource(stageInfo);
                         break;
                     default:
                         YQL_ENSURE(false, "unknown source type");
@@ -492,7 +493,7 @@ private:
                 YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
             }
 
-            BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, AppData()->EnableKqpSpilling);
+            BuildKqpStageChannels(TasksGraph, GetTableKeys(), stageInfo, TxId, AppData()->EnableKqpSpilling);
         }
 
         ResponseEv->InitTxResult(tx.Body);
@@ -515,8 +516,7 @@ private:
 
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-
-            NYql::NDqProto::TDqTask taskDesc = SerializeTaskToProto(TasksGraph, task, TableKeys, ResultChannelProxies, TypeEnv());
+            NYql::NDqProto::TDqTask taskDesc = SerializeTaskToProto(TasksGraph, task);
 
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
                 // Task with source
@@ -567,7 +567,7 @@ private:
         LOG_D("Total tasks: " << TasksGraph.GetTasks().size() << ", readonly: true"
             << ", " << nScanTasks << " scan tasks on " << scanTasks.size() << " nodes"
             << ", totalShardScans: " << nShardScans << ", execType: Scan"
-            << ", snapshot: {" << Request.Snapshot.TxId << ", " << Request.Snapshot.Step << "}");
+            << ", snapshot: {" << GetSnapshot().TxId << ", " << GetSnapshot().Step << "}");
 
         ExecuteScanTx(std::move(computeTasks), std::move(scanTasks), std::move(snapshot));
 
@@ -623,7 +623,7 @@ private:
         }
 
         Planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
-            std::move(scanTasks), Request.Snapshot,
+            std::move(scanTasks), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
             Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling,
             Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig);
@@ -650,7 +650,7 @@ private:
     }
 
     void PassAway() override {
-        for (auto channelPair: ResultChannelProxies) {
+        for (auto channelPair: GetResultChannelProxies()) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
 
             TAutoPtr<IEventHandle> ev = new IEventHandle(

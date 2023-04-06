@@ -185,7 +185,7 @@ struct TTask {
     NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
 };
 
-template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
+template <class TGraphMeta, class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
 class TDqTasksGraph : private TMoveOnly {
 public:
     using TStageInfoType = TStageInfo<TStageInfoMeta>;
@@ -193,6 +193,14 @@ public:
 
 public:
     TDqTasksGraph() = default;
+
+    const TGraphMeta& GetMeta() const {
+        return Meta;
+    }
+
+    TGraphMeta& GetMeta() {
+        return Meta;
+    }
 
     const TChannel& GetChannel(ui64 id) const {
         YQL_ENSURE(id <= Channels.size());
@@ -292,6 +300,7 @@ private:
     THashMap<TStageId, TStageInfoType> StagesInfo;
     TVector<TTaskType> Tasks;
     TVector<TChannel> Channels;
+    TGraphMeta Meta;
 };
 
 } // namespace NYql::NDq

@@ -192,7 +192,7 @@ bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapP
         ErrorDescription = TStringBuilder() << "Wrong olap program";
         return false;
     }
-    if (!ssaProgram->Steps.empty() && Self->TablesManager.HasPrimaryIndex()) {
+    if (!ssaProgram->Steps.empty() && Self->PrimaryIndex) {
         NSsa::OptimizeProgram(*ssaProgram);
     }
 

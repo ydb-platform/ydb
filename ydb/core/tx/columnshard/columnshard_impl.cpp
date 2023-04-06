@@ -395,6 +395,46 @@ void TColumnShard::ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& 
     }
 }
 
+bool TColumnShard::IsTableWritable(ui64 tableId) const {
+    auto it = Tables.find(tableId);
+    if (it == Tables.end()) {
+        return false;
+    }
+    return !it->second.IsDropped();
+}
+
+ui32 TColumnShard::EnsureSchemaPreset(NIceDb::TNiceDb& db, ui32 presetId, const TString& name,
+                                      const NKikimrSchemeOp::TColumnTableSchema& schemaProto,
+                                      const TRowVersion& version) {
+    if (!SchemaPresets.contains(presetId)) {
+        LOG_S_DEBUG("EnsureSchemaPreset " << presetId << " at tablet " << TabletID());
+
+        auto& preset = SchemaPresets[presetId];
+        preset.Id = presetId;
+        preset.Name = name;
+        auto& info = preset.Versions[version];
+        info.SetId(preset.Id);
+        info.SetSinceStep(version.Step);
+        info.SetSinceTxId(version.TxId);
+        *info.MutableSchema() = schemaProto;
+
+        Schema::SaveSchemaPresetInfo(db, preset.Id, preset.Name);
+        Schema::SaveSchemaPresetVersionInfo(db, preset.Id, version, info);
+        SetCounter(COUNTER_TABLE_PRESETS, SchemaPresets.size());
+    } else {
+        LOG_S_DEBUG("EnsureSchemaPreset for existed preset " << presetId << " at tablet " << TabletID());
+    }
+
+    return presetId;
+}
+
+ui32 TColumnShard::EnsureSchemaPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto,
+                                      const TRowVersion& version) {
+    Y_VERIFY(presetProto.GetName() == "default", "Only schema preset named 'default' is supported");
+
+    return EnsureSchemaPreset(db, presetProto.GetId(), presetProto.GetName(), presetProto.GetSchema(), version);
+}
+
 void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const TRowVersion& version,
                                NTabletFlatExecutor::TTransactionContext& txc) {
     switch (body.TxBody_case()) {
@@ -454,53 +494,70 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     NIceDb::TNiceDb db(txc.DB);
 
     const ui64 pathId = tableProto.GetPathId();
-    if (TablesManager.HasTable(pathId)) {
-        LOG_S_DEBUG("EnsureTable for existed pathId: " << pathId << " at tablet " << TabletID());
-        return;
-    }
+    if (!Tables.contains(pathId)) {
+        LOG_S_DEBUG("EnsureTable for pathId: " << pathId
+            << " ttl settings: " << tableProto.GetTtlSettings()
+            << " at tablet " << TabletID());
 
-    LOG_S_DEBUG("EnsureTable for pathId: " << pathId
-        << " ttl settings: " << tableProto.GetTtlSettings()
-        << " at tablet " << TabletID());
+        ui32 schemaPresetId = 0;
+        if (tableProto.HasSchemaPreset()) {
+            Y_VERIFY(!tableProto.HasSchema(), "Tables has either schema or preset");
 
-    TTableInfo::TTableVersionInfo tableVerProto;
-    tableVerProto.SetPathId(pathId);
+            schemaPresetId = EnsureSchemaPreset(db, tableProto.GetSchemaPreset(), version);
+            Y_VERIFY(schemaPresetId);
+        } else {
+            Y_VERIFY(tableProto.HasSchema(), "Tables has either schema or preset");
 
-    if (tableProto.HasSchemaPreset()) {
-        Y_VERIFY(!tableProto.HasSchema(), "Tables has either schema or preset");
+            // Save first table schema as common one with schemaPresetId == 0
 
-        TSchemaPreset preset;
-        preset.Deserialize(tableProto.GetSchemaPreset());
-        Y_VERIFY(!preset.IsStandaloneTable());
-        tableVerProto.SetSchemaPresetId(preset.GetId());
-        
-        if (TablesManager.RegisterSchemaPreset(preset, db)) {
-            TablesManager.AddPresetVersion(tableProto.GetSchemaPreset().GetId(), version, tableProto.GetSchemaPreset().GetSchema(), db);
+            if (SchemaPresets.count(0)) {
+                LOG_S_WARN("Colocated standalone tables are not supported. "
+                    << "EnsureTable failed at tablet " << TabletID());
+                return;
+            }
+
+            schemaPresetId = EnsureSchemaPreset(db, 0, "", tableProto.GetSchema(), version);
+            Y_VERIFY(!schemaPresetId);
         }
+
+        auto& table = Tables[pathId];
+        table.PathId = pathId;
+        auto& tableVerProto = table.Versions[version];
+        tableVerProto.SetPathId(pathId);
+        tableVerProto.SetSchemaPresetId(schemaPresetId);
+
+        if (tableProto.HasTtlSettings()) {
+            *tableVerProto.MutableTtlSettings() = tableProto.GetTtlSettings();
+            auto& ttlInfo = tableProto.GetTtlSettings();
+            if (ttlInfo.HasEnabled()) {
+                Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlInfo.GetEnabled()));
+                SetCounter(COUNTER_TABLE_TTLS, Ttl.PathsCount());
+            }
+            if (ttlInfo.HasUseTiering()) {
+                table.TieringUsage = ttlInfo.GetUseTiering();
+                ActivateTiering(pathId, table.TieringUsage);
+            }
+        }
+
+        if (!PrimaryIndex) {
+            TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaHistory;
+
+            auto& schemaPresetVerProto = SchemaPresets[schemaPresetId].Versions[version];
+            schemaHistory.emplace(NOlap::TSnapshot{version.Step, version.TxId},
+                                    ConvertSchema(schemaPresetVerProto.GetSchema()));
+
+            SetPrimaryIndex(std::move(schemaHistory));
+        }
+
+        tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
+        tableVerProto.SetTtlSettingsPresetVersionAdj(tableProto.GetTtlSettingsPresetVersionAdj());
+
+        Schema::SaveTableInfo(db, table.PathId, table.TieringUsage);
+        Schema::SaveTableVersionInfo(db, table.PathId, version, tableVerProto);
+        SetCounter(COUNTER_TABLES, Tables.size());
     } else {
-        Y_VERIFY(tableProto.HasSchema(), "Tables has either schema or preset");
-        *tableVerProto.MutableSchema() = tableProto.GetSchema();
+        LOG_S_DEBUG("EnsureTable for existed pathId: " << pathId << " at tablet " << TabletID());
     }
-
-    TTableInfo table(pathId);
-    if (tableProto.HasTtlSettings()) {
-        const auto& ttlSettings = tableProto.GetTtlSettings();
-        *tableVerProto.MutableTtlSettings() = ttlSettings;
-        if (ttlSettings.HasUseTiering()) {
-            table.SetTieringUsage(ttlSettings.GetUseTiering());
-            ActivateTiering(pathId, table.GetTieringUsage());
-        }
-    }
-
-    tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
-    tableVerProto.SetTtlSettingsPresetVersionAdj(tableProto.GetTtlSettingsPresetVersionAdj());
-
-    TablesManager.RegisterTable(std::move(table), db);
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, db);
-
-    SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
-    SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
-    SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().PathsCount());
 }
 
 void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterProto, const TRowVersion& version,
@@ -508,33 +565,39 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     NIceDb::TNiceDb db(txc.DB);
 
     const ui64 pathId = alterProto.GetPathId();
-    Y_VERIFY(TablesManager.HasTable(pathId), "AlterTable on a dropped or non-existent table");
-    
+    auto* tablePtr = Tables.FindPtr(pathId);
+    Y_VERIFY(tablePtr && !tablePtr->IsDropped(), "AlterTable on a dropped or non-existent table");
+    auto& table = *tablePtr;
+    auto& ttlSettings = alterProto.GetTtlSettings();
+
     LOG_S_DEBUG("AlterTable for pathId: " << pathId
         << " schema: " << alterProto.GetSchema()
-        << " ttl settings: " << alterProto.GetTtlSettings()
+        << " ttl settings: " << ttlSettings
         << " at tablet " << TabletID());
 
-    TTableInfo::TTableVersionInfo tableVerProto;
+    auto& info = table.Versions[version];
+
     if (alterProto.HasSchemaPreset()) {
-        tableVerProto.SetSchemaPresetId(alterProto.GetSchemaPreset().GetId());
-        TablesManager.AddPresetVersion(alterProto.GetSchemaPreset().GetId(), version, alterProto.GetSchemaPreset().GetSchema(), db);
-    } else if (alterProto.HasSchema()) {
-        *tableVerProto.MutableSchema() = alterProto.GetSchema();
+        info.SetSchemaPresetId(EnsureSchemaPreset(db, alterProto.GetSchemaPreset(), version));
     }
 
-    const auto& ttlSettings = alterProto.GetTtlSettings(); // Note: Not valid behaviour for full alter implementation
     const TString& tieringUsage = ttlSettings.GetUseTiering();
-    if (alterProto.HasTtlSettings()) {
-        const auto& ttlSettings = alterProto.GetTtlSettings();
-        *tableVerProto.MutableTtlSettings() = ttlSettings;
-    }
     ActivateTiering(pathId, tieringUsage);
-    Schema::SaveTableInfo(db, pathId, tieringUsage);
+    if (alterProto.HasTtlSettings()) {
+        *info.MutableTtlSettings() = ttlSettings;
+        if (ttlSettings.HasEnabled()) {
+            Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlSettings.GetEnabled()));
+        } else {
+            Ttl.DropPathTtl(pathId);
+        }
+    } else {
+        Ttl.DropPathTtl(pathId);
+    }
+    Ttl.Repeat(); // Atler TTL triggers TTL activity
 
-    tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());   
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, db);
-    TablesManager.OnTtlUpdate();
+    info.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
+    Schema::SaveTableInfo(db, table.PathId, tieringUsage);
+    Schema::SaveTableVersionInfo(db, table.PathId, version, info);
 }
 
 void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProto, const TRowVersion& version,
@@ -542,20 +605,25 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     NIceDb::TNiceDb db(txc.DB);
 
     const ui64 pathId = dropProto.GetPathId();
-    if (!TablesManager.HasTable(pathId)) {
+    auto* table = Tables.FindPtr(pathId);
+    Y_VERIFY_DEBUG(table && !table->IsDropped());
+    if (table && !table->IsDropped()) {
+        LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
+
+        PathsToDrop.insert(pathId);
+        Ttl.DropPathTtl(pathId);
+
+        // TODO: Allow to read old snapshots after DROP
+        TBlobGroupSelector dsGroupSelector(Info());
+        NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+        THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, pathId);
+        TryAbortWrites(db, dbTable, std::move(writesToAbort));
+
+        table->DropVersion = version;
+        Schema::SaveTableDropVersion(db, pathId, version.Step, version.TxId);
+    } else {
         LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
-        return;
     }
-
-    LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
-    TablesManager.DropTable(pathId, version, db);
-
-    // TODO: Allow to read old snapshots after DROP
-    TBlobGroupSelector dsGroupSelector(Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, pathId);
-
-    TryAbortWrites(db, dbTable, std::move(writesToAbort));
 }
 
 void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto, const TRowVersion& version,
@@ -567,18 +635,54 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
         Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
     }
 
+    TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaHistory;
+
     for (ui32 id : proto.GetDroppedSchemaPresets()) {
-        if (!TablesManager.HasPreset(id)) {
+        if (!SchemaPresets.contains(id)) {
             continue;
         }
-        TablesManager.DropPreset(id, version, db);
+        auto& preset = SchemaPresets.at(id);
+        Y_VERIFY(preset.Name != "default", "Cannot drop the default preset");
+        preset.DropVersion = version;
+        Schema::SaveSchemaPresetDropVersion(db, id, version);
     }
 
     for (const auto& presetProto : proto.GetSchemaPresets()) {
-        if (!TablesManager.HasPreset(presetProto.GetId())) {
+        if (!SchemaPresets.contains(presetProto.GetId())) {
             continue; // we don't update presets that we don't use
         }
-        TablesManager.AddPresetVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
+
+        auto& preset = SchemaPresets[presetProto.GetId()];
+        auto& info = preset.Versions[version];
+        info.SetId(preset.Id);
+        info.SetSinceStep(version.Step);
+        info.SetSinceTxId(version.TxId);
+        *info.MutableSchema() = presetProto.GetSchema();
+
+        if (preset.Name == "default") {
+            schemaHistory.emplace(NOlap::TSnapshot{version.Step, version.TxId}, ConvertSchema(info.GetSchema()));
+        }
+
+        Schema::SaveSchemaPresetVersionInfo(db, preset.Id, version, info);
+    }
+
+    if (!schemaHistory.empty()) {
+        SetPrimaryIndex(std::move(schemaHistory));
+    }
+}
+
+void TColumnShard::SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions) {
+    for (auto& [snap, indexInfo] : schemaVersions) {
+        if (!PrimaryIndex) {
+            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(std::move(indexInfo), TabletID());
+            SetCounter(COUNTER_INDEXES, 1);
+        } else {
+            PrimaryIndex->UpdateDefaultSchema(snap, std::move(indexInfo));
+        }
+    }
+
+    for (auto& columnName : Ttl.TtlColumns()) {
+        PrimaryIndex->GetIndexInfo().CheckTtlColumn(columnName);
     }
 }
 
@@ -660,7 +764,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
         LOG_S_DEBUG("Indexing/compaction already in progress at tablet " << TabletID());
         return {};
     }
-    if (!TablesManager.HasPrimaryIndex()) {
+    if (!PrimaryIndex) {
         LOG_S_NOTICE("Indexing not started: no index at tablet " << TabletID());
         return {};
     }
@@ -681,7 +785,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
             if (bytesToIndex && (bytesToIndex + dataSize) > (ui64)Limits.MaxInsertBytes) {
                 continue;
             }
-            if (auto* pMap = TablesManager.GetPrimaryIndexSafe().GetOverloadedGranules(data.PathId)) {
+            if (auto* pMap = PrimaryIndex->GetOverloadedGranules(data.PathId)) {
                 overloadedPathGranules[pathId] = pMap->size();
                 InsertTable->SetOverloaded(data.PathId, true);
                 ++ignored;
@@ -729,13 +833,13 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
     }
 
     Y_VERIFY(data.size());
-    auto indexChanges = TablesManager.MutablePrimaryIndex().StartInsert(std::move(data));
+    auto indexChanges = PrimaryIndex->StartInsert(std::move(data));
     if (!indexChanges) {
         LOG_S_NOTICE("Cannot prepare indexing at tablet " << TabletID());
         return {};
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
+    auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
     if (Tiers) {
         auto pathTiering = Tiers->GetTiering(); // TODO: pathIds
         actualIndexInfo.UpdatePathTiering(pathTiering);
@@ -753,13 +857,13 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
         LOG_S_DEBUG("Compaction/indexing already in progress at tablet " << TabletID());
         return {};
     }
-    if (!TablesManager.HasPrimaryIndex()) {
+    if (!PrimaryIndex) {
         LOG_S_NOTICE("Compaction not started: no index at tablet " << TabletID());
         return {};
     }
 
-    TablesManager.MutablePrimaryIndex().UpdateCompactionLimits(CompactionLimits.Get());
-    auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(LastCompactedGranule);
+    PrimaryIndex->UpdateCompactionLimits(CompactionLimits.Get());
+    auto compactionInfo = PrimaryIndex->Compact(LastCompactedGranule);
     if (!compactionInfo || compactionInfo->Empty()) {
         LOG_S_DEBUG("Compaction not started: no portions to compact at tablet " << TabletID());
         return {};
@@ -770,13 +874,13 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
     LOG_S_DEBUG("Prepare " << *compactionInfo << " at tablet " << TabletID());
 
     ui64 ourdatedStep = GetOutdatedStep();
-    auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), {ourdatedStep, 0});
+    auto indexChanges = PrimaryIndex->StartCompaction(std::move(compactionInfo), {ourdatedStep, 0});
     if (!indexChanges) {
         LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
         return {};
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
+    auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
     if (Tiers) {
         auto pathTiering = Tiers->GetTiering(); // TODO: pathIds
         actualIndexInfo.UpdatePathTiering(pathTiering);
@@ -799,7 +903,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         LOG_S_DEBUG("Do not start TTL while eviction is in progress at tablet " << TabletID());
         return {};
     }
-    if (!TablesManager.HasPrimaryIndex()) {
+    if (!PrimaryIndex) {
         LOG_S_NOTICE("TTL not started. No index for TTL at tablet " << TabletID());
         return {};
     }
@@ -809,7 +913,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         if (Tiers) {
             eviction = Tiers->GetTiering(); // TODO: pathIds
         }
-        TablesManager.AddTtls(eviction, TInstant::Now(), force);
+        Ttl.AddTtls(eviction, TInstant::Now(), force);
     }
 
     if (eviction.empty()) {
@@ -823,11 +927,11 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         LOG_S_DEBUG("Evicting path " << i.first << " with " << i.second.GetDebugString() << " at tablet " << TabletID());
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
+    auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
     actualIndexInfo.UpdatePathTiering(eviction);
 
     std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges;
-    indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction);
+    indexChanges = PrimaryIndex->StartTtl(eviction);
 
     actualIndexInfo.SetPathTiering(std::move(eviction));
 
@@ -836,7 +940,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         return {};
     }
     if (indexChanges->NeedRepeat) {
-        TablesManager.OnTtlUpdate();
+        Ttl.Repeat();
     }
 
     bool needWrites = !indexChanges->PortionsToEvict.empty();
@@ -851,14 +955,14 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
         LOG_S_DEBUG("Cleanup already in progress at tablet " << TabletID());
         return {};
     }
-    if (!TablesManager.HasPrimaryIndex()) {
+    if (!PrimaryIndex) {
         LOG_S_NOTICE("Cleanup not started. No index for cleanup at tablet " << TabletID());
         return {};
     }
 
     NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
 
-    auto changes = TablesManager.StartIndexCleanup(cleanupSnapshot, TLimits::MAX_TX_RECORDS);
+    auto changes = PrimaryIndex->StartCleanup(cleanupSnapshot, PathsToDrop, TLimits::MAX_TX_RECORDS);
     if (!changes) {
         LOG_S_NOTICE("Cannot prepare cleanup at tablet " << TabletID());
         return {};
@@ -891,7 +995,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
         return {};
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
+    auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
 #if 0 // No need for now
     if (Tiers) {
         ...
@@ -905,6 +1009,33 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     return ev;
 }
 
+NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    Y_VERIFY(schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+
+    ui32 indexId = 0;
+    NOlap::TIndexInfo indexInfo("", indexId);
+
+    for (const auto& col : schema.GetColumns()) {
+        const ui32 id = col.GetId();
+        const TString& name = col.GetName();
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
+            col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+        indexInfo.Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
+        indexInfo.ColumnNames[name] = id;
+    }
+
+    for (const auto& keyName : schema.GetKeyColumnNames()) {
+        Y_VERIFY(indexInfo.ColumnNames.count(keyName));
+        indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[keyName]);
+    }
+
+    if (schema.HasDefaultCompression()) {
+        NOlap::TCompression compression = NTiers::ConvertCompression(schema.GetDefaultCompression());
+        indexInfo.SetDefaultCompression(compression);
+    }
+
+    return indexInfo;
+}
 
 void TColumnShard::MapExternBlobs(const TActorContext& /*ctx*/, NOlap::TReadMetadata& metadata) {
     if (!metadata.SelectInfo) {

@@ -142,7 +142,8 @@ public:
                     }
 
                     auto pathExists = [&](ui64 pathId) {
-                        return Self->TablesManager.HasTable(pathId);
+                        auto it = Self->Tables.find(pathId);
+                        return it != Self->Tables.end() && !it->second.IsDropped();
                     };
 
                     auto counters = Self->InsertTable->Commit(dbTable, step, txId, meta.MetaShard, meta.WriteIds,

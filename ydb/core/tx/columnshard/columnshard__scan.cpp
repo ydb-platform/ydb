@@ -842,9 +842,9 @@ std::shared_ptr<NOlap::TReadMetadataBase> TTxScan::CreateReadMetadata(const TAct
 {
     std::shared_ptr<NOlap::TReadMetadataBase> metadata;
     if (indexStats) {
-        metadata = PrepareStatsReadMetadata(Self->TabletID(), read, Self->TablesManager.GetPrimaryIndex(), ErrorDescription);
+        metadata = PrepareStatsReadMetadata(Self->TabletID(), read, Self->PrimaryIndex, ErrorDescription);
     } else {
-        metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->TablesManager.GetPrimaryIndex(), Self->BatchCache,
+        metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->PrimaryIndex, Self->BatchCache,
                                        ErrorDescription);
     }
 
@@ -880,7 +880,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     read.PlanStep = snapshot.GetStep();
     read.TxId = snapshot.GetTxId();
     read.PathId = record.GetLocalPathId();
-    read.ReadNothing = !(Self->TablesManager.HasTable(read.PathId));
+    read.ReadNothing = Self->PathsToDrop.count(read.PathId);
     read.TableName = record.GetTablePath();
     bool isIndexStats = read.TableName.EndsWith(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE) ||
         read.TableName.EndsWith(NOlap::TIndexInfo::TABLE_INDEX_STATS_TABLE);
@@ -891,7 +891,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         // "SELECT COUNT(*)" requests empty column list but we need non-empty list for PrepareReadMetadata.
         // So we add first PK column to the request.
         if (!isIndexStats) {
-            read.ColumnIds.push_back(Self->TablesManager.GetIndexInfo().GetPKFirstColumnId());
+            read.ColumnIds.push_back(Self->PrimaryIndex->GetIndexInfo().GetPKFirstColumnId());
         } else {
             read.ColumnIds.push_back(PrimaryIndexStatsSchema.KeyColumns.front());
         }
@@ -900,7 +900,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     bool parseResult;
 
     if (!isIndexStats) {
-        TIndexColumnResolver columnResolver(Self->TablesManager.GetIndexInfo());
+        TIndexColumnResolver columnResolver(Self->PrimaryIndex->GetIndexInfo());
         parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read, columnResolver);
     } else {
         TStatsColumnResolver columnResolver;
@@ -926,7 +926,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     auto ydbKey = isIndexStats ?
         NOlap::GetColumns(PrimaryIndexStatsSchema, PrimaryIndexStatsSchema.KeyColumns) :
-        Self->TablesManager.GetIndexInfo().GetPrimaryKey();
+        Self->PrimaryIndex->GetIndexInfo().GetPrimaryKey();
 
     for (auto& range: record.GetRanges()) {
         FillPredicatesFromRange(read, range, ydbKey, Self->TabletID());
@@ -1023,7 +1023,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         if (request.GetReverse()) {
             std::reverse(rMetadataRanges.begin(), rMetadataRanges.end());
         }
-        NOlap::NCosts::TKeyRangesBuilder krBuilder(Self->TablesManager.GetIndexInfo());
+        NOlap::NCosts::TKeyRangesBuilder krBuilder(Self->PrimaryIndex->GetIndexInfo());
         {
             ui32 recordsCount = 0;
             for (auto&& i : rMetadataRanges) {

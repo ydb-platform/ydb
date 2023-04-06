@@ -1663,6 +1663,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
         SetNonZero(node, "FirstRowTimeMs", taskStats.GetFirstRowTimeMs());
         SetNonZero(node, "FinishTimeMs", taskStats.GetFinishTimeMs());
+        SetNonZero(node, "StartTimeMs", taskStats.GetStartTimeMs());
 
         SetNonZero(node, "ComputeTimeUs", taskStats.GetComputeCpuTimeUs());
         SetNonZero(node, "WaitTimeUs", taskStats.GetWaitTimeUs());

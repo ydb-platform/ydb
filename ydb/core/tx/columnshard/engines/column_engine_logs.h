@@ -92,6 +92,38 @@ public:
         }
     };
 
+    class TMarksGranules {
+    public:
+        using TPair = std::pair<TMark, ui64>;
+
+        TMarksGranules() = default;
+        TMarksGranules(std::vector<TMark>&& points);
+        TMarksGranules(const TSelectInfo& selectInfo);
+
+        TMarksGranules(TMap<TMark, ui64>&& marks) {
+            Marks.reserve(marks.size());
+            for (auto&& [m, granule] : marks) {
+                Marks.emplace_back(std::move(m), granule);
+            }
+        }
+
+        const std::vector<TPair>& GetOrderedMarks() const noexcept {
+             return Marks;
+        }
+
+        bool Empty() const noexcept {
+            return Marks.empty();
+        }
+
+        bool MakePrecedingMark(const TIndexInfo& indexInfo);
+
+        THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
+        SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch, const TIndexInfo& indexInfo);
+
+    private:
+        std::vector<TPair> Marks;
+    };
+
     class TChanges : public TColumnEngineChanges {
     public:
         struct TSrcGranule {
@@ -194,7 +226,7 @@ public:
         std::optional<TSrcGranule> SrcGranule;
         THashMap<ui64, std::pair<ui64, TMark>> NewGranules; // granule -> {pathId, key}
         THashMap<TMark, ui32> TmpGranuleIds; // mark -> tmp granule id
-        TMap<TMark, ui64> MergeBorders;
+        TMarksGranules MergeBorders;
         ui64 FirstGranuleId{0};
         ui32 ReservedGranuleIds{0};
     };
@@ -347,17 +379,5 @@ private:
 
     TVector<TVector<std::pair<TMark, ui64>>> EmptyGranuleTracks(ui64 pathId) const;
 };
-
-
-std::shared_ptr<arrow::Array> GetFirstPKColumn(const TIndexInfo& indexInfo,
-                                               const std::shared_ptr<arrow::RecordBatch>& batch);
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
-SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
-                  const TMap<TColumnEngineForLogs::TMark, ui64>& tsGranules,
-                  const TIndexInfo& indexInfo);
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
-SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
-                  const std::vector<std::pair<TColumnEngineForLogs::TMark, ui64>>& tsGranules,
-                  const TIndexInfo& indexInfo);
 
 }

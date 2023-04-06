@@ -1,7 +1,6 @@
 #pragma once
 #include "defs.h"
 #include "column_engine.h"
-#include "column_engine_logs.h" // for TColumnEngineForLogs::TMark
 #include "predicate.h"
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
@@ -311,7 +310,6 @@ private:
     THashMap<ui64, ui64> PortionGranule; // portion -> granule
     THashMap<ui64, ui32> GranuleWaits; // granule -> num portions to wait
     TDeque<ui64> GranulesOutOrder;
-    TMap<TColumnEngineForLogs::TMark, ui64> TsGranules; // ts (key) -> granule
     THashSet<ui64> GranulesWithDups;
     THashSet<ui64> PortionsWithDups;
     THashSet<const void*> BatchesToDedup;

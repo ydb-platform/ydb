@@ -6,15 +6,15 @@
 
 namespace NKikimr::NOlap {
 
+namespace {
+
+using TMark = TColumnEngineForLogs::TMark;
+
 std::shared_ptr<arrow::Array> GetFirstPKColumn(const TIndexInfo& indexInfo,
                                                const std::shared_ptr<arrow::RecordBatch>& batch) {
     TString columnName = indexInfo.GetPrimaryKey()[0].first;
     return batch->GetColumnByName(std::string(columnName.data(), columnName.size()));
 }
-
-namespace {
-
-using TMark = TColumnEngineForLogs::TMark;
 
 arrow::ipc::IpcWriteOptions WriteOptions(const TCompression& compression) {
     auto& codec = compression.Codec;
@@ -200,7 +200,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> PortionsToBatches(const TIndexI
 }
 
 bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portions, const TCompactionLimits& limits,
-                        const TSnapshot& snap, TMap<TMark, ui64>& borders) {
+                        const TSnapshot& snap, TColumnEngineForLogs::TMarksGranules& marksGranules) {
     ui64 oldTimePlanStep = snap.PlanStep - TDuration::Seconds(limits.InGranuleCompactSeconds).MilliSeconds();
     ui32 insertedCount = 0;
     ui32 insertedNew = 0;
@@ -281,7 +281,8 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
 
     // It's a map for SliceIntoGranules(). We use fake granule ids here to slice batch with borders.
     // We could merge inserted portions alltogether and slice result with filtered borders to prevent intersections.
-    borders[granuleMark] = 0;
+    std::vector<TMark> borders;
+    borders.push_back(granuleMark);
 
     TVector<TPortionInfo> tmp;
     tmp.reserve(portions.size());
@@ -292,14 +293,14 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
         if (filtered.count(curPortion)) {
             auto start = portionInfo.PkStart();
             Y_VERIFY(start);
-            borders[TMark(start)] = 0;
+            borders.emplace_back(TMark(start));
         } else {
             // nextToGood borders potentially split good compacted portions into 2 parts:
             // the first one without intersections and the second with them
             if (goodCompacted.count(curPortion) || nextToGood.count(curPortion)) {
                 auto start = portionInfo.PkStart();
                 Y_VERIFY(start);
-                borders[TMark(start)] = 0;
+                borders.emplace_back(TMark(start));
             }
 
             tmp.emplace_back(std::move(portionInfo));
@@ -308,14 +309,11 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
     tmp.swap(portions);
 
     if (borders.size() == 1) {
-        Y_VERIFY(borders.begin()->first == granuleMark);
+        Y_VERIFY(borders[0] == granuleMark);
         borders.clear();
     }
 
-    ui32 counter = 0;
-    for (auto& [ts, id] : borders) {
-        id = ++counter;
-    }
+    marksGranules = TColumnEngineForLogs::TMarksGranules(std::move(borders));
     return true;
 }
 
@@ -373,22 +371,63 @@ inline THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SliceIntoGranulesImpl
     return out;
 }
 
-}
-
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
-SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
-                  const TMap<TMark, ui64>& markGranules,
-                  const TIndexInfo& indexInfo)
-{
-    return SliceIntoGranulesImpl(batch, markGranules, indexInfo);
-}
-
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
 SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
                   const std::vector<std::pair<TMark, ui64>>& markGranules,
                   const TIndexInfo& indexInfo)
 {
     return SliceIntoGranulesImpl(batch, markGranules, indexInfo);
+}
+
+} // namespace
+
+THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
+TColumnEngineForLogs::TMarksGranules::SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                        const TIndexInfo& indexInfo)
+{
+    return SliceIntoGranulesImpl(batch, Marks, indexInfo);
+}
+
+TColumnEngineForLogs::TMarksGranules::TMarksGranules(std::vector<TMark>&& points) {
+    std::sort(points.begin(), points.end());
+
+    Marks.reserve(points.size());
+    ui32 counter = 0;
+    for (auto&& mark : points) {
+        Marks.emplace_back(std::move(mark), ++counter);
+    }
+}
+
+TColumnEngineForLogs::TMarksGranules::TMarksGranules(const TSelectInfo& selectInfo) {
+    Marks.reserve(selectInfo.Granules.size());
+    for (auto& rec : selectInfo.Granules) {
+        Marks.emplace_back(std::make_pair(rec.Mark, rec.Granule));
+    }
+
+    std::sort(Marks.begin(), Marks.end(), [](const TPair& a, const TPair& b) {
+        return a.first < b.first;
+    });
+}
+
+bool TColumnEngineForLogs::TMarksGranules::MakePrecedingMark(const TIndexInfo& indexInfo) {
+    ui64 minGranule = 0;
+    TMark minMark(indexInfo.GetIndexKey()->field(0)->type());
+    if (Marks.empty()) {
+        Marks.emplace_back(std::move(minMark), minGranule);
+        return true;
+    }
+
+    if (minMark < Marks[0].first) {
+        std::vector<TPair> copy;
+        copy.reserve(Marks.size() + 1);
+        copy.emplace_back(std::move(minMark), minGranule);
+        for (auto&& [mark, granule] : Marks) {
+            copy.emplace_back(std::move(mark), granule);
+        }
+        Marks.swap(copy);
+        return true;
+    }
+    return false;
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, const TCompactionLimits& limits)
@@ -1661,9 +1700,9 @@ static TVector<TString> CompactInGranule(const TIndexInfo& indexInfo,
     auto batch = CompactInOneGranule(indexInfo, granule, switchedProtions, changes->Blobs);
 
     TVector<TPortionInfo> portions;
-    if (changes->MergeBorders.size()) {
-        Y_VERIFY(changes->MergeBorders.size() > 1);
-        auto slices = SliceIntoGranules(batch, changes->MergeBorders, indexInfo);
+    if (!changes->MergeBorders.Empty()) {
+        Y_VERIFY(changes->MergeBorders.GetOrderedMarks().size() > 1);
+        auto slices = changes->MergeBorders.SliceIntoGranules(batch, indexInfo);
         portions.reserve(slices.size());
 
         for (auto& [_, slice] : slices) {
@@ -1946,6 +1985,7 @@ static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
             tsIds.swap(newTsIds);
         }
         Y_VERIFY(tsIds.size() > 1);
+        TColumnEngineForLogs::TMarksGranules marksGranules(std::move(tsIds));
 
         // Slice inserted portions with granules' borders
         THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> idBatches;
@@ -1954,7 +1994,7 @@ static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
         for (size_t i = 0; i < portions.size(); ++i) {
             auto& portion = portions[i];
             auto& batch = srcBatches[i];
-            auto slices = SliceIntoGranules(batch, tsIds, indexInfo);
+            auto slices = marksGranules.SliceIntoGranules(batch, indexInfo);
 
             THashSet<ui64> ids;
             for (auto& [id, slice] : slices) {
@@ -1985,8 +2025,8 @@ static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
             portions.swap(tmp);
         }
 
-        for (auto& [ts, id] : tsIds) {
-            ui64 tmpGranule = changes->SetTmpGranule(pathId, ts);
+        for (const auto& [mark, id] : marksGranules.GetOrderedMarks()) {
+            ui64 tmpGranule = changes->SetTmpGranule(pathId, mark);
 
             for (auto& batch : idBatches[id]) {
                 // Cannot set snapshot here. It would be set in committing transaction in ApplyChanges().

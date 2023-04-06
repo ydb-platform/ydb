@@ -12,8 +12,6 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-using TMark = TColumnEngineForLogs::TMark;
-
 // Slices a batch into smaller batches and appends them to result vector (which might be non-empty already)
 void SliceBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                 const int64_t maxRowsInBatch,
@@ -37,14 +35,15 @@ GroupInKeyRanges(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches
     std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> rangesSlices; // rangesSlices[rangeNo][sliceNo]
     rangesSlices.reserve(batches.size());
     {
-        TMap<TMark, std::vector<std::shared_ptr<arrow::RecordBatch>>> points;
+        TMap<NArrow::TReplaceKey, std::vector<std::shared_ptr<arrow::RecordBatch>>> points;
 
         for (auto& batch : batches) {
-            std::shared_ptr<arrow::Array> keyColumn = GetFirstPKColumn(indexInfo, batch);
-            Y_VERIFY(keyColumn && keyColumn->length() > 0);
+            auto compositeKey = NArrow::ExtractColumns(batch, indexInfo.GetReplaceKey());
+            Y_VERIFY(compositeKey && compositeKey->num_rows() > 0);
+            auto keyColumns = std::make_shared<NArrow::TArrayVec>(compositeKey->columns());
 
-            TMark min(*keyColumn->GetScalar(0));
-            TMark max(*keyColumn->GetScalar(keyColumn->length() - 1));
+            NArrow::TReplaceKey min(keyColumns, 0);
+            NArrow::TReplaceKey max(keyColumns, compositeKey->num_rows() - 1);
 
             points[min].push_back(batch); // insert start
             points[max].push_back({}); // insert end
@@ -227,18 +226,6 @@ THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGr
         }
     }
 
-    // Init split by granules structs
-    for (auto& rec : ReadMetadata->SelectInfo->Granules) {
-        TsGranules.emplace(rec.Mark, rec.Granule);
-    }
-
-    TMark minMark(IndexInfo().GetIndexKey()->field(0)->type());
-    if (!TsGranules.count(minMark)) {
-        // committed data before the first granule would be placed in fake (0,0) granule
-        // committed data after the last granule would be placed into the last granule (or here if none)
-        TsGranules.emplace(minMark, 0);
-    }
-
     auto& stats = ReadMetadata->ReadStats;
     stats->IndexGranules = GranuleWaits.size();
     stats->IndexPortions = PortionGranule.size();
@@ -338,11 +325,18 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
 
     // First time extract OutNotIndexed data
     if (NotIndexed.size()) {
-        /// @note not indexed data could contain data out of indexed granules
-        Y_VERIFY(!TsGranules.empty());
         auto mergedBatch = MergeNotIndexed(std::move(NotIndexed)); // merged has no dups
         if (mergedBatch) {
-            OutNotIndexed = SliceIntoGranules(mergedBatch, TsGranules, IndexInfo());
+            // Init split by granules structs
+            Y_VERIFY(ReadMetadata->SelectInfo);
+            TColumnEngineForLogs::TMarksGranules marksGranules(*ReadMetadata->SelectInfo);
+
+            // committed data before the first granule would be placed in fake preceding granule
+            // committed data after the last granule would be placed into the last granule
+            marksGranules.MakePrecedingMark(IndexInfo());
+            Y_VERIFY(!marksGranules.Empty());
+
+            OutNotIndexed = marksGranules.SliceIntoGranules(mergedBatch, IndexInfo());
         }
         NotIndexed.clear();
         ReadyNotIndexed = 0;

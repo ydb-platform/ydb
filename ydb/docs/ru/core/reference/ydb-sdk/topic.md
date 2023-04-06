@@ -26,6 +26,15 @@
   )
   ```
 
+- Python
+
+  ```python
+  driver.topic_client.create_topic(topic_path,
+      supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
+      min_active_partitions=3,                                    # optional
+  )
+  ```
+
 {% endlist %}
 
 ### Изменение топика
@@ -47,6 +56,11 @@
 		}),
 	)
   ```
+
+- Python
+
+  Пока не реализовано
+
 {% endlist %}
 
 ### Получение информации о топике
@@ -64,6 +78,13 @@
 	fmt.Printf("describe: %#v\n", descResult)
   ```
 
+- Python
+
+  ```python
+  info = driver.topic_client.describe_topic(topic_path)
+	print(info)
+  ```
+
 {% endlist %}
 
 ### Удаление топика
@@ -78,6 +99,11 @@
     err := db.Topic().Drop(ctx, "topic-path")
   ```
 
+- Python
+
+  ```python
+  driver.topic_client.drop_topic(topic_path)
+  ```
 {% endlist %}
 
 
@@ -98,6 +124,12 @@
   if err != nil {
       return err
   }
+  ```
+
+- Python
+
+  ```python
+  writer = driver.topic_client.writer(topic_path)
   ```
 
 {% endlist %}
@@ -124,6 +156,32 @@
   if err == nil {
     return err
   }
+  ```
+
+- Python
+
+  Для отправки сообщений можно передавать как просто содержимое сообщения (bytes, str), так и вручную задавать некорые свойства. Объекты можно передавать по-одному или сразу в массиве (list). Метод write выполняется асинхронно. Возврат из метода происходит сразу после того как сообщения будут положены во внутренний буфер, обычно это происходит быстро. Ожидание может возникнуть если внутренний буфер уже заполнен и нужно подождать пока часть данных будет отправлена на сервер.
+
+  ```python
+  # простая отправка сообщений, без явного указания метаданных, удобно начинать, удобно использовать пока важно только содержимое сообщения.
+  writer = driver.topic_client.writer(topic_path)
+  writer.write("mess")  # строки будут переданы в кодировке utf-8, так удобно отправлять текстовые сообщения.
+  writer.write(bytes([1, 2, 3]))  # эти байты будут отправлены "как есть", так удобно отправлять бинарные данные.
+  writer.write(["mess-1", "mess-2"])  # Тут за один вызов отправляется несколько сообщений - так снижаются накладные расходы на внутренние процессы SDK, имеет смысл при большом потоке сообщений
+
+  # полная форма - используется, когда кроме содержимого сообщения нужно вручную задать и его свойства
+  writer = driver.topic_client.writer(topic="topic-path", auto_seqno=False, auto_created_at=False)
+
+  writer.write(ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()))
+  writer.write(ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now()))
+
+  # В полной форме так же можно отправлять несколько сообщений за один вызов функции. Это имеет смысл при большом потоке отправляемых сообщений - для снижения
+  # накладных расходов на внутренние вызовы SDK
+  writer.write([
+    ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
+    ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now(),
+    ])
+
   ```
 
 {% endlist %}
@@ -155,6 +213,28 @@
   }
   ```
 
+- Python
+
+  Есть два способа для того чтобы дождаться подтверждения о записи сообщений на сервер:
+  1. flush() - дожидается подтверждения для всех сообщений, записанных ранее во внутренний буфер
+  2. write_with_ack(...) - отправляет сообщение и ждёт подтверждение его доставки от сервера. При отправке нескольких сообщений подряд - это медленный способ
+
+  ```python
+  # положить несколько сообщений во внутренний буфер, затем дождаться пока все они будут доставлены до сервера
+  for mess in messages:
+      writer.write(mess)
+
+  writer.flush()
+
+  # Можно отправить несколько сообщений и дождаться подтверждения на всю группу
+  writer.write_with_ack(["mess-1", "mess-2"])
+
+  # Ожидание при отправке каждого сообщения - этот метод вернёт результат только после получения подтверждения от сервера. Это самый медленный
+  # вариант отправки сообщений, используйте его только если такой режим действительно нужен
+  writer.write_with_ack("message")
+
+  ```
+
 {% endlist %}
 
 ### Выбор кодека для сжатия сообщений
@@ -174,6 +254,16 @@
   )
   ```
 
+- Python
+
+  По умолчанию SDK выбирает кодек автоматически (с учётом настроек топика). В автоматическом режиме SDK сначала отправляет по одной группе сообщений каждым из разрешённых кодеков, затем иногда будет пробовать сжать сообщения всеми доступными кодеками и выбирать кодек, дающий наименьший размер сообщения. Если для топика список разрешённых кодеков пуст, то автовыбор производится между Raw и Gzip-кодеками.
+  При необходимости можно задать фиксированный кодек в опциях подключения. Тогда будет использоваться именно он и замеры проводиться не будут.
+
+  ```python
+  writer = driver.topic_client.writer(topic_path,
+      codec=ydb.TopicCodec.GZIP,
+  )
+  ```
 {% endlist %}
 
 
@@ -194,6 +284,11 @@
   }
   ```
 
+- Python
+
+  ```python
+  reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
+  ```
 {% endlist %}
 
 Вы также можете использовать расширенный вариант создания подключения, чтобы указать несколько топиков и задать параметры чтения. Следующий код создаст подключение к топикам `my-topic` и `my-specific-topic` через читателя `my-consumer`, а также задаст время, с которого начинать читать сообщения:
@@ -217,6 +312,10 @@
       return err
   }
   ```
+
+- Python
+
+  Пока не реализовано
 
 {% endlist %}
 
@@ -250,6 +349,13 @@ SDK получает данные с сервера партиями и буфе
   }
   ```
 
+- Python
+
+  ```python
+  while True:
+      message = reader.receive_message()
+      process(message)
+  ```
 {% endlist %}
 
 Чтобы прочитать пакет сообщений, используйте следующий код:
@@ -268,6 +374,14 @@ SDK получает данные с сервера партиями и буфе
           processBatch(batch)
       }
   }
+  ```
+
+- Python
+
+  ```python
+  while True:
+    batch = reader.receive_batch()
+    process(batch)
   ```
 
 {% endlist %}
@@ -293,6 +407,14 @@ SDK получает данные с сервера партиями и буфе
   }
   ```
 
+- Python
+
+  ```python
+  while True:
+      message = reader.receive_message()
+      process(message)
+      reader.commit(message)
+  ```
 {% endlist %}
 
 Для подтверждения обработки пакета сообщений используйте следующий код:
@@ -314,6 +436,14 @@ SDK получает данные с сервера партиями и буфе
   }
   ```
 
+- Python
+
+  ```python
+  while True:
+    batch = reader.receive_batch()
+    process(batch)
+    reader.commit(batch)
+  ```
 {% endlist %}
 
 #### Чтение с хранением позиции на клиентской стороне {#client-commit}
@@ -364,6 +494,10 @@ SDK получает данные с сервера партиями и буфе
   }
   ```
 
+- Python
+
+  Пока не реализовано
+
 {% endlist %}
 
 ### Обработка серверного прерывания чтения {#stop}
@@ -395,6 +529,19 @@ SDK получает данные с сервера партиями и буфе
 
   ```
 
+- Python
+
+  Специальной обработки не требуется
+
+  ```python
+  while True:
+    batch = reader.receive_batch()
+    process(batch)
+    reader.commit(batch)
+  ```
+
+
+
 {% endlist %}
 
 #### Жесткое прерывание чтения {#hard-stop}
@@ -418,6 +565,23 @@ SDK получает данные с сервера партиями и буфе
       _, _ = io.Copy(buf, mess)
       writeMessagesToDB(ctx, buf.Bytes())
   }
+  ```
+
+- Python
+
+  В этом примере обработка сообщений в батче остановится если в процессе работы партиция будет отобрана. Такая обработка - это только оптимизация, для того чтобы перестать выполнять лишнюю работу. В простых случаях можно работать не обращая внимания на отбор партиций.
+
+  ```python
+  def process_batch(batch):
+      for message in batch.messages:
+          if not batch.alive:
+              return False
+          process(message)
+      return True
+
+  batch = reader.receive_batch()
+  if process_batch(batch):
+      reader.commit(batch)
   ```
 
 {% endlist %}

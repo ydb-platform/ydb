@@ -641,7 +641,7 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
             .Build()
         .Settings()
             .Add().Build("One", TNodeFlags::Default)
-            .Add().Build("Hashed", TNodeFlags::Default)
+            .Add().Build("Auto", TNodeFlags::Default)
             .Build()
         .Done()
         .Ptr();

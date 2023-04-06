@@ -6644,10 +6644,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TMaybe<bool> isMany;
-        TMaybe<bool> isHashed;
+        TMaybe<EDictType> type;
         TMaybe<ui64> itemsCount;
         bool isCompact;
-        TMaybe<TIssue> error = ParseToDictSettings(*input, ctx.Expr, isMany, isHashed, itemsCount, isCompact);
+        TMaybe<TIssue> error = ParseToDictSettings(*input, ctx.Expr, type, isMany, itemsCount, isCompact);
         if (error) {
             ctx.Expr.AddError(*error);
             return IGraphTransformer::TStatus::Error;
@@ -6664,18 +6664,25 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (*isHashed) {
+        switch (*type) {
+        case EDictType::Hashed: {
             if (!keyType->IsEquatable() || !keyType->IsHashable()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
                     << "Expected equatable and hashable key type for hashed dict, but got: " << *keyType));
                 return IGraphTransformer::TStatus::Error;
             }
-        } else {
+            break;
+        }
+        case EDictType::Sorted: {
             if (!keyType->IsComparable()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
                     << "Expected comparable key type for sorted dict, but got: " << *keyType));
                 return IGraphTransformer::TStatus::Error;
             }
+            break;
+        }
+        case EDictType::Auto:
+            break;
         }
 
         if (isCompact) {
@@ -6733,10 +6740,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TMaybe<bool> isMany;
-        TMaybe<bool> isHashed;
+        TMaybe<EDictType> type;
         TMaybe<ui64> itemsCount;
         bool isCompact;
-        if (const auto error = ParseToDictSettings(*input, ctx.Expr, isMany, isHashed, itemsCount, isCompact)) {
+        if (const auto error = ParseToDictSettings(*input, ctx.Expr, type, isMany, itemsCount, isCompact)) {
             ctx.Expr.AddError(*error);
             return IGraphTransformer::TStatus::Error;
         }
@@ -6752,10 +6759,25 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!*isHashed && !keyType->IsComparable()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
-                << "Expected comparable key type for sorted dict, but got: " << *keyType));
-            return IGraphTransformer::TStatus::Error;
+        switch (*type) {
+        case EDictType::Sorted: {
+            if (!keyType->IsComparable()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                    << "Expected comparable key type for sorted dict, but got: " << *keyType));
+                return IGraphTransformer::TStatus::Error;
+            }
+            break;
+        }
+        case EDictType::Hashed: {
+            if (!keyType->IsEquatable() || !keyType->IsHashable()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                    << "Expected hashable and equatable key type for hashed dict, but got: " << *keyType));
+                return IGraphTransformer::TStatus::Error;
+            }
+            break;
+        }
+        case EDictType::Auto:
+            break;
         }
 
         if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {

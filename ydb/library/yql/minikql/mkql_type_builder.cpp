@@ -1,6 +1,7 @@
 #include "mkql_type_builder.h"
 #include "mkql_node_cast.h"
 #include "mkql_node_builder.h"
+#include "mkql_alloc.h"
 
 #include <ydb/library/yql/public/udf/udf_type_ops.h>
 
@@ -1168,18 +1169,56 @@ private:
 };
 
 template <>
+class TCompare<NMiniKQL::TType::EKind::Struct> final : public NUdf::ICompare {
+public:
+    explicit TCompare(const NMiniKQL::TType* type) {
+        auto structType = static_cast<const NMiniKQL::TStructType*>(type);
+        auto count = structType->GetMembersCount();
+        Compare_.reserve(count);
+        for (ui32 i = 0; i < count; ++i) {
+            Compare_.push_back(MakeCompareImpl(structType->GetMemberType(i)));
+        }
+    }
+
+    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        return Compare(lhs, rhs) < 0;
+    }
+
+    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        for (size_t i = 0; i < Compare_.size(); ++i) {
+            auto cmp = Compare_[i]->Compare(
+                static_cast<const NUdf::TUnboxedValuePod&>(lhs.GetElement(i)),
+                static_cast<const NUdf::TUnboxedValuePod&>(rhs.GetElement(i)));
+            if (cmp != 0) {
+                return cmp;
+            }
+        }
+        return 0;
+    }
+
+private:
+    std::vector<NUdf::ICompare::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::ICompare::TPtr>> Compare_;
+};
+
+template <>
 class TCompare<NMiniKQL::TType::EKind::Variant> final : public NUdf::ICompare {
 public:
     explicit TCompare(const NMiniKQL::TType* type) {
         auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
         if (variantType->GetUnderlyingType()->IsStruct()) {
-            throw TTypeNotSupported() << "Variant over struct is unordered";
-        }
-        auto tupleType = static_cast<const NMiniKQL::TTupleType*>(variantType->GetUnderlyingType());
-        ui32 count = tupleType->GetElementsCount();
-        Compare_.reserve(count);
-        for (ui32 i = 0; i < count; ++i) {
-            Compare_.push_back(MakeCompareImpl(tupleType->GetElementType(i)));
+            auto structType = static_cast<const NMiniKQL::TStructType*>(variantType->GetUnderlyingType());
+            ui32 count = structType->GetMembersCount();
+            Compare_.reserve(count);
+            for (ui32 i = 0; i < count; ++i) {
+                Compare_.push_back(MakeCompareImpl(structType->GetMemberType(i)));
+            }
+        } else {
+            auto tupleType = static_cast<const NMiniKQL::TTupleType*>(variantType->GetUnderlyingType());
+            ui32 count = tupleType->GetElementsCount();
+            Compare_.reserve(count);
+            for (ui32 i = 0; i < count; ++i) {
+                Compare_.push_back(MakeCompareImpl(tupleType->GetElementType(i)));
+            }
         }
     }
 
@@ -1267,6 +1306,90 @@ public:
 
 private:
     const NUdf::ICompare::TPtr Compare_;
+};
+
+template <>
+class TCompare<NMiniKQL::TType::EKind::Dict> final : public NUdf::ICompare {
+public:
+    explicit TCompare(const NMiniKQL::TType* type)
+        : CompareKey_(MakeCompareImpl(static_cast<const NMiniKQL::TDictType*>(type)->GetKeyType()))
+        , ComparePayload_(MakeCompareImpl(static_cast<const NMiniKQL::TDictType*>(type)->GetPayloadType()))
+    {}
+
+    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        return Compare(lhs, rhs) < 0;
+    }
+
+    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        auto lhsIter = lhs.GetDictIterator();
+        auto rhsIter = rhs.GetDictIterator();
+
+        using TKP = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
+        TVector<TKP, NMiniKQL::TMKQLAllocator<TKP>> lhsData, rhsData;
+
+        lhsData.reserve(lhs.GetDictLength());
+        rhsData.reserve(rhs.GetDictLength());
+
+        NUdf::TUnboxedValue key, payload;
+        while (lhsIter.NextPair(key, payload)) {
+            lhsData.emplace_back(std::make_pair(key, payload));
+        }
+
+        while (rhsIter.NextPair(key, payload)) {
+            rhsData.emplace_back(std::make_pair(key, payload));
+        }
+
+        if (!lhs.IsSortedDict()) {
+            Sort(lhsData.begin(), lhsData.end(), [&](const auto& x, const auto& y) {
+                return CompareKey_->Less(x.first, y.first);
+            });
+        }
+
+        if (!rhs.IsSortedDict()) {
+            Sort(rhsData.begin(), rhsData.end(), [&](const auto& x, const auto& y) {
+                return CompareKey_->Less(x.first, y.first);
+            });
+        }
+
+        auto lhsCurr = lhsData.begin();
+        auto rhsCurr = rhsData.begin();
+        for (;;) {
+            bool hasLeft = lhsCurr != lhsData.end();
+            bool hasRight = rhsCurr != rhsData.end();
+            if (!hasLeft || !hasRight) {
+                if (hasLeft == hasRight) {
+                    return 0;
+                }
+
+                return hasLeft ? 1 : -1;
+            }
+
+            auto cmpKeys = CompareKey_->Compare(
+                static_cast<const NUdf::TUnboxedValuePod&>(lhsCurr->first), 
+                static_cast<const NUdf::TUnboxedValuePod&>(rhsCurr->first)
+            );
+
+            if (cmpKeys) {
+                return cmpKeys;
+            }
+
+            auto cmpPayloads = ComparePayload_->Compare(
+                static_cast<const NUdf::TUnboxedValuePod&>(lhsCurr->second), 
+                static_cast<const NUdf::TUnboxedValuePod&>(rhsCurr->second)
+            );
+
+            if (cmpPayloads) {
+                return cmpPayloads;
+            }
+
+            ++lhsCurr;
+            ++rhsCurr;
+        }
+    }
+
+private:
+    const NUdf::ICompare::TPtr CompareKey_;
+    const NUdf::ICompare::TPtr ComparePayload_;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1974,6 +2097,79 @@ void TTypeInfoHelper::DoBlock(const NMiniKQL::TBlockType* tt, NUdf::ITypeVisitor
     }
 }
 
+bool CanHash(const NMiniKQL::TType* type) {
+    switch (type->GetKind()) {
+        case NMiniKQL::TType::EKind::Data: {
+            auto slot = static_cast<const NMiniKQL::TDataType*>(type)->GetDataSlot();
+            if (!slot) {
+                return false;
+            }
+            if (!(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanHash)) {
+                return false;
+            }
+
+            return true;
+        }
+        case NMiniKQL::TType::EKind::Optional: {
+            auto optionalType = static_cast<const TOptionalType*>(type);
+            return CanHash(optionalType->GetItemType());
+        }
+
+        case NMiniKQL::TType::EKind::Tuple: {
+            auto tupleType = static_cast<const TTupleType*>(type);
+            for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+                if (!CanHash(tupleType->GetElementType(i))) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        case NMiniKQL::TType::EKind::Struct: {
+            auto structType = static_cast<const TStructType*>(type);
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                if (!CanHash(structType->GetMemberType(i))) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        case NMiniKQL::TType::EKind::List: {
+            auto listType = static_cast<const TListType*>(type);
+            return CanHash(listType->GetItemType());
+        }
+
+        case NMiniKQL::TType::EKind::Variant: {
+            auto variantType = static_cast<const TVariantType*>(type);
+            return CanHash(variantType->GetUnderlyingType());
+        }
+
+        case NMiniKQL::TType::EKind::Dict: {
+            auto dictType = static_cast<const TDictType*>(type);
+            return CanHash(dictType->GetKeyType()) && CanHash(dictType->GetPayloadType());
+        };
+
+        case NMiniKQL::TType::EKind::Void:
+        case NMiniKQL::TType::EKind::Null:
+        case NMiniKQL::TType::EKind::EmptyList:
+        case NMiniKQL::TType::EKind::EmptyDict:
+            return true;
+        case NMiniKQL::TType::EKind::Pg: {
+            auto pgType = static_cast<const TPgType*>(type);
+            return NYql::NPg::LookupType(pgType->GetTypeId()).HashProcId != 0;
+        }
+        case NMiniKQL::TType::EKind::Tagged: {
+            auto taggedType = static_cast<const TTaggedType*>(type);
+            return CanHash(taggedType->GetBaseType());
+        }
+        default:
+            return false;
+    }
+}
+
 NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type) {
     switch (type->GetKind()) {
         case NMiniKQL::TType::EKind::Data: {
@@ -2048,6 +2244,8 @@ NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) {
             return new TCompare<NMiniKQL::TType::EKind::Optional>(type);
         case NMiniKQL::TType::EKind::Tuple:
             return new TCompare<NMiniKQL::TType::EKind::Tuple>(type);
+        case NMiniKQL::TType::EKind::Struct:
+            return new TCompare<NMiniKQL::TType::EKind::Struct>(type);
         case NMiniKQL::TType::EKind::Void:
         case NMiniKQL::TType::EKind::Null:
         case NMiniKQL::TType::EKind::EmptyList:
@@ -2058,6 +2256,8 @@ NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) {
         }
         case NMiniKQL::TType::EKind::List:
             return new TCompare<NMiniKQL::TType::EKind::List>(type);
+        case NMiniKQL::TType::EKind::Dict:
+            return new TCompare<NMiniKQL::TType::EKind::Dict>(type);            
         case NMiniKQL::TType::EKind::Pg:
             return MakePgCompare((const TPgType*)type);
         case NMiniKQL::TType::EKind::Tagged: {
@@ -2065,7 +2265,7 @@ NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) {
             return MakeCompareImpl(taggedType->GetBaseType());
         }
         default:
-            throw TTypeNotSupported() << "Data, Pg, Optional, Variant over Tuple, Tuple or List is expected for comparing,"
+            throw TTypeNotSupported() << "Data, Pg, Optional, Variant, Tuple, Struct, List or Dict are expected for comparing,"
             << "but got: " << PrintNode(type);
     }
 }

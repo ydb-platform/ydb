@@ -5374,13 +5374,13 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (node->Head().IsCallable("AsList") && node->Child(2)->Child(1)->IsCallable("Void")) {
             TMaybe<bool> isMany;
-            TMaybe<bool> isHashed;
+            TMaybe<EDictType> type;
             TMaybe<ui64> itemsCount;
             bool isCompact;
-            auto settingsError = ParseToDictSettings(*node, ctx, isMany, isHashed, itemsCount, isCompact);
+            auto settingsError = ParseToDictSettings(*node, ctx, type, isMany, itemsCount, isCompact);
             YQL_ENSURE(!settingsError);
 
-            if (!*isMany && *isHashed) {
+            if (!*isMany && *type != EDictType::Sorted) {
                 YQL_CLOG(DEBUG, Core) << "ToDict without payload over list literal";
                 return ctx.Builder(node->Pos())
                     .Callable("DictFromKeys")

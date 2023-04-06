@@ -132,6 +132,7 @@ enum ETypeAnnotationFlags : ui32 {
     TypeHasNestedOptional = 0x800,
     TypeNonPresortable = 0x1000,
     TypeHasDynamicSize = 0x2000,
+    TypeNonComparableInternal = 0x4000,
 };
 
 const ui64 TypeHashMagic = 0x10000;
@@ -211,6 +212,10 @@ public:
 
     bool IsComparable() const {
         return IsPersistable() && (GetFlags() & TypeNonComparable) == 0;
+    }
+
+    bool IsComparableInternal() const {
+        return IsPersistable() && (GetFlags() & TypeNonComparableInternal) == 0;
     }
 
     bool HasNull() const {
@@ -712,6 +717,7 @@ public:
 
         if (!(props & NUdf::CanCompare)) {
             ret |= TypeNonComparable;
+            ret |= TypeNonComparableInternal;
         }
 
         if (slot == NUdf::EDataSlot::Yson) {

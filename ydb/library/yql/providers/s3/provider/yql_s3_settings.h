@@ -52,6 +52,9 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     ui64 MinDesiredDirectoriesOfFilesPerQuery;
     ui64 MaxReadSizePerQuery;
     ui64 MaxInflightListsPerQuery;
+    ui64 ListingCallbackThreadCount;
+    ui64 ListingCallbackPerThreadQueueSize;
+    ui64 RegexpCacheSize;
     bool AllowLocalFiles;
     bool AllowConcurrentListings;
 };

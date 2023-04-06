@@ -386,6 +386,9 @@ message TS3GatewayConfig {
     optional uint64 MaxDirectoriesAndFilesPerQuery = 8;
     optional uint64 MinDesiredDirectoriesOfFilesPerQuery = 9;
     optional bool AllowConcurrentListings = 11 [default = false];
+    optional uint64 ListingCallbackThreadCount = 12;
+    optional uint64 ListingCallbackPerThreadQueueSize = 13;
+    optional uint64 RegexpCacheSize = 14;
 
     repeated TAttr DefaultSettings = 100;
 }

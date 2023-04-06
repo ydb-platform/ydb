@@ -79,8 +79,11 @@ class TS3IODiscoveryTransformer : public TGraphTransformerBase {
 public:
     TS3IODiscoveryTransformer(TS3State::TPtr state, IHTTPGateway::TPtr gateway)
         : State_(std::move(state))
-        , ListerFactory_(
-              NS3Lister::MakeS3ListerFactory(State_->Configuration->MaxInflightListsPerQuery, 1, 100, 100))
+        , ListerFactory_(NS3Lister::MakeS3ListerFactory(
+              State_->Configuration->MaxInflightListsPerQuery,
+              State_->Configuration->ListingCallbackThreadCount,
+              State_->Configuration->ListingCallbackPerThreadQueueSize,
+              State_->Configuration->RegexpCacheSize))
         , ListingStrategy_(MakeS3ListingStrategy(
               gateway,
               ListerFactory_,

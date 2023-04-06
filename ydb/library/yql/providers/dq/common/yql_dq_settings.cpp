@@ -17,7 +17,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, MaxNetworkRetries);
     REGISTER_SETTING(*this, RetryBackoffMs);
     REGISTER_SETTING(*this, CollectCoreDumps);
-    REGISTER_SETTING(*this, FallbackPolicy);
+    REGISTER_SETTING(*this, FallbackPolicy).Parser([](const TString& v) { return FromString<EFallbackPolicy>(v); });
     REGISTER_SETTING(*this, PullRequestTimeoutMs);
     REGISTER_SETTING(*this, PingTimeoutMs);
     REGISTER_SETTING(*this, UseSimpleYtReader);

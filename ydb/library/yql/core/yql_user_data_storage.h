@@ -19,6 +19,7 @@ public:
     TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable data, IUdfResolver::TPtr udfResolver, TUdfIndex::TPtr udfIndex);
     void SetTokenResolver(TTokenResolver tokenResolver);
     void SetUrlPreprocessor(IUrlPreprocessing::TPtr urlPreprocessing);
+    void SetUserDataTable(TUserDataTable data);
 
     void AddUserDataBlock(const TStringBuf& name, const TUserDataBlock& block);
     void AddUserDataBlock(const TUserDataKey& key, const TUserDataBlock& block);
@@ -71,12 +72,12 @@ private:
 private:
     THoldingFileStorage FileStorage_;
     TUserDataTable UserData_;
-    IUdfResolver::TPtr UdfResolver;
-    TUdfIndex::TPtr UdfIndex;
+    IUdfResolver::TPtr UdfResolver_;
+    TUdfIndex::TPtr UdfIndex_;
     TTokenResolver TokenResolver_;
     IUrlPreprocessing::TPtr UrlPreprocessing_;
 
-    THashSet<TUserDataKey, TUserDataKey::THash, TUserDataKey::TEqualTo> ScannedUdfs;
+    THashSet<TUserDataKey, TUserDataKey::THash, TUserDataKey::TEqualTo> ScannedUdfs_;
     std::function<void(const TUserDataBlock& block)> ScanUdfStrategy_;
 };
 

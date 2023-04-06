@@ -168,6 +168,12 @@ enum class EHiddenMode {
     Auto /* "auto" */
 };
 
+enum class EFallbackPolicy {
+    Default     /* "default" */,
+    Never       /* "never" */,
+    Always      /* "always" */
+};
+
 struct TUdfCachedInfo {
     const TTypeAnnotationNode* FunctionType = nullptr;
     const TTypeAnnotationNode* RunConfigType = nullptr;
@@ -218,7 +224,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool DiscoveryMode = false;
     bool ForceDq = false;
     bool DqCaptured = false; // TODO: Add before/after recapture transformers
-    TString DqFallbackPolicy = "";
+    EFallbackPolicy DqFallbackPolicy = EFallbackPolicy::Default;
     bool StrictTableProps = true;
     bool JsonQueryReturnsJsonDocument = false;
     bool YsonCastToString = true;

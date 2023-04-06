@@ -40,8 +40,8 @@ namespace NYql {
 TUserDataStorage::TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable data, IUdfResolver::TPtr udfResolver, TUdfIndex::TPtr udfIndex)
     : FileStorage_(std::move(fileStorage))
     , UserData_(std::move(data))
-    , UdfResolver(std::move(udfResolver))
-    , UdfIndex(std::move(udfIndex))
+    , UdfResolver_(std::move(udfResolver))
+    , UdfIndex_(std::move(udfIndex))
 {
 }
 
@@ -51,6 +51,10 @@ void TUserDataStorage::SetTokenResolver(TTokenResolver tokenResolver) {
 
 void TUserDataStorage::SetUrlPreprocessor(IUrlPreprocessing::TPtr urlPreprocessing) {
     UrlPreprocessing_ = std::move(urlPreprocessing);
+}
+
+void TUserDataStorage::SetUserDataTable(TUserDataTable data) {
+     UserData_ = std::move(data);
 }
 
 void TUserDataStorage::AddUserDataBlock(const TStringBuf& name, const TUserDataBlock& block) {
@@ -226,21 +230,21 @@ TUserDataBlock* TUserDataStorage::FreezeUdfNoThrow(const TUserDataKey& key,
     }
     block->CustomUdfPrefix = customUdfPrefix;
 
-    if (!ScannedUdfs.insert(key).second) {
+    if (!ScannedUdfs_.insert(key).second) {
         // already scanned
         return block;
     }
 
-    if (!UdfIndex) {
+    if (!UdfIndex_) {
         return block;
     }
 
     try {
         TString scope = "ScanUdfStrategy " + key.Alias();
         YQL_PROFILE_SCOPE(DEBUG, scope.c_str());
-        Y_ENSURE(UdfResolver);
-        Y_ENSURE(UdfIndex);
-        LoadRichMetadataToUdfIndex(*UdfResolver, *block, TUdfIndex::EOverrideMode::ReplaceWithNew, *UdfIndex);
+        Y_ENSURE(UdfResolver_);
+        Y_ENSURE(UdfIndex_);
+        LoadRichMetadataToUdfIndex(*UdfResolver_, *block, TUdfIndex::EOverrideMode::ReplaceWithNew, *UdfIndex_);
     } catch (const std::exception& e) {
         errorMessage = TStringBuilder() << "Failed to scan udf with key " << key << ", details: " << e.what();
         return nullptr;

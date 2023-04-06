@@ -57,27 +57,28 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Limit",
+                                                                        "Node Type": "Top",
                                                                         "Operators": [
                                                                             {
                                                                                 "Limit": "1001",
-                                                                                "Name": "Limit"
+                                                                                "Name": "Top",
+                                                                                "TopBy": ""
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 3,
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Merge",
+                                                                                "Node Type": "UnionAll",
                                                                                 "PlanNodeId": 2,
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "TopSort-TableFullScan",
+                                                                                        "Node Type": "Top-TableFullScan",
                                                                                         "Operators": [
                                                                                             {
                                                                                                 "Limit": "1001",
-                                                                                                "Name": "TopSort",
-                                                                                                "TopSortBy": ""
+                                                                                                "Name": "Top",
+                                                                                                "TopBy": ""
                                                                                             },
                                                                                             {
                                                                                                 "Name": "TableFullScan",
@@ -97,10 +98,6 @@
                                                                                             "postgres_select.test_plan/int8_tbl"
                                                                                         ]
                                                                                     }
-                                                                                ],
-                                                                                "SortColumns": [
-                                                                                    "column0 (Asc)",
-                                                                                    "column1 (Asc)"
                                                                                 ]
                                                                             }
                                                                         ]

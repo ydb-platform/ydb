@@ -3422,6 +3422,80 @@ TExprNode::TPtr ExpandSelectMembers(const TExprNode::TPtr& node, TExprContext& c
     return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
 }
 
+template<bool Ordered>
+TExprNode::TPtr OptimizeExtend(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    if (node->ChildrenSize() == 1) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over one child";
+        return node->HeadPtr();
+    }
+
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        auto& child = SkipCallables(*node->Child(i), SkippableCallables);
+        if (IsEmptyContainer(child) || IsEmpty(child, *optCtx.Types)) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over empty list";
+            if (node->ChildrenSize() == 2) {
+                return KeepConstraints(node->ChildPtr(1 - i), *node, ctx);
+            }
+
+            TExprNode::TListType newChildren = node->ChildrenList();
+            newChildren.erase(newChildren.begin() + i);
+            return KeepConstraints(ctx.ChangeChildren(*node, std::move(newChildren)), *node, ctx);
+        }
+
+        if (TCoExtendBase::Match(node->Child(i))) {
+            TExprNode::TListType newChildren = node->ChildrenList();
+            TExprNode::TListType insertedChildren = node->Child(i)->ChildrenList();
+            newChildren.erase(newChildren.begin() + i);
+            newChildren.insert(newChildren.begin() + i, insertedChildren.begin(), insertedChildren.end());
+            return ctx.ChangeChildren(*node, std::move(newChildren));
+        }
+    }
+
+    for (ui32 i = 0; i < node->ChildrenSize() - 1; ++i) {
+        if (node->Child(i)->IsCallable("AsList") && node->Child(i + 1)->IsCallable("AsList")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over 2 or more AsList";
+            ui32 j = i + 2;
+            for (; j < node->ChildrenSize(); ++j) {
+                if (!node->Child(j)->IsCallable("AsList")) {
+                    break;
+                }
+            }
+
+            // fuse [i..j)
+            TExprNode::TListType fusedChildren;
+            for (ui32 listIndex = i; listIndex < j; ++listIndex) {
+                fusedChildren.insert(fusedChildren.end(), node->Child(listIndex)->Children().begin(), node->Child(listIndex)->Children().end());
+            }
+
+            auto fused = ctx.ChangeChildren(*node->Child(i), std::move(fusedChildren));
+            if (j - i == node->ChildrenSize()) {
+                return fused;
+            }
+
+            TExprNode::TListType newChildren = node->ChildrenList();
+            newChildren.erase(newChildren.begin() + i + 1, newChildren.begin() + j);
+            newChildren[i] = fused;
+            return ctx.ChangeChildren(*node, std::move(newChildren));
+        }
+    }
+
+    if constexpr (!Ordered) {
+        auto children = node->ChildrenList();
+        bool hasSorted = false;
+        std::for_each(children.begin(), children.end(), [&](TExprNode::TPtr& child) {
+            if (const auto sorted = child->GetConstraint<TSortedConstraintNode>()) {
+                hasSorted = true;
+                YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << child->Content();
+                child = ctx.NewCallable(node->Pos(), "Unordered", {std::move(child)});
+            }
+        });
+
+        return hasSorted ? ctx.ChangeChildren(*node, std::move(children)) : node;
+    }
+
+    return node;
+}
+
 void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     using namespace std::placeholders;
 
@@ -3917,64 +3991,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["TakeWhileInclusive"] = std::bind(&OptimizeWhile<true, true>, _1, _2);
     map["SkipWhileInclusive"] = std::bind(&OptimizeWhile<false, true>, _1, _2);
 
-    map[TCoExtend::CallableName()] = map[TCoOrderedExtend::CallableName()] = map[TCoMerge::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (node->ChildrenSize() == 1) {
-            YQL_CLOG(DEBUG, Core) << node->Content() << " over one child";
-            return node->HeadPtr();
-        }
-
-        for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-            auto& child = SkipCallables(*node->Child(i), SkippableCallables);
-            if (IsEmptyContainer(child) || IsEmpty(child, *optCtx.Types)) {
-                YQL_CLOG(DEBUG, Core) << node->Content() << " over empty list";
-                if (node->ChildrenSize() == 2) {
-                    return KeepConstraints(node->ChildPtr(1 - i), *node, ctx);
-                }
-
-                TExprNode::TListType newChildren = node->ChildrenList();
-                newChildren.erase(newChildren.begin() + i);
-                return KeepConstraints(ctx.ChangeChildren(*node, std::move(newChildren)), *node, ctx);
-            }
-
-            if (TCoExtendBase::Match(node->Child(i))) {
-                TExprNode::TListType newChildren = node->ChildrenList();
-                TExprNode::TListType insertedChildren = node->Child(i)->ChildrenList();
-                newChildren.erase(newChildren.begin() + i);
-                newChildren.insert(newChildren.begin() + i, insertedChildren.begin(), insertedChildren.end());
-                return ctx.ChangeChildren(*node, std::move(newChildren));
-            }
-        }
-
-        for (ui32 i = 0; i < node->ChildrenSize() - 1; ++i) {
-            if (node->Child(i)->IsCallable("AsList") && node->Child(i + 1)->IsCallable("AsList")) {
-                YQL_CLOG(DEBUG, Core) << node->Content() << " over 2 or more AsList";
-                ui32 j = i + 2;
-                for (; j < node->ChildrenSize(); ++j) {
-                    if (!node->Child(j)->IsCallable("AsList")) {
-                        break;
-                    }
-                }
-
-                // fuse [i..j)
-                TExprNode::TListType fusedChildren;
-                for (ui32 listIndex = i; listIndex < j; ++listIndex) {
-                    fusedChildren.insert(fusedChildren.end(), node->Child(listIndex)->Children().begin(), node->Child(listIndex)->Children().end());
-                }
-
-                auto fused = ctx.ChangeChildren(*node->Child(i), std::move(fusedChildren));
-                if (j - i == node->ChildrenSize()) {
-                    return fused;
-                }
-
-                TExprNode::TListType newChildren = node->ChildrenList();
-                newChildren.erase(newChildren.begin() + i + 1, newChildren.begin() + j);
-                newChildren[i] = fused;
-                return ctx.ChangeChildren(*node, std::move(newChildren));
-            }
-        }
-
-        return node;
-    };
+    map[TCoExtend::CallableName()] = std::bind(&OptimizeExtend<false>, _1, _2, _3);
+    map[TCoOrderedExtend::CallableName()] = map[TCoMerge::CallableName()] = std::bind(&OptimizeExtend<true>, _1, _2, _3);
 
     map["ForwardList"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Head().IsCallable("Iterator")) {

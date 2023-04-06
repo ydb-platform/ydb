@@ -1188,10 +1188,6 @@ public:
             << " has limit " << (Settings.GetItemsLimit() != 0)
             << " limit reached " << LimitReached());
 
-        if (!Results.empty()) {
-            NotifyCA();
-        }
-
         return bytes;
     }
 

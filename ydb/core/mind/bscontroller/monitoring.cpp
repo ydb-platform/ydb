@@ -1252,6 +1252,7 @@ void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Status"; }
                     TABLEH() { out << "IsReady"; }
                     TABLEH() { out << "LastSeenReady"; }
+                    TABLEH() { out << "ReplicationTime"; }
                     TABLEH() { out << "Donors"; }
 
                     TABLEH() { out << "Data Size"; }
@@ -1289,6 +1290,13 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
                 if (vslot.LastSeenReady != TInstant::Zero()) {
                     out << vslot.LastSeenReady;
                 }
+            }
+            TABLED() {
+                TDuration time = vslot.ReplicationTime;
+                if (vslot.Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                    time += TActivationContext::Now() - vslot.LastGotReplicating;
+                }
+                out << time;
             }
             TABLED() {
                 if (vslot.Mood == TMood::Donor) {

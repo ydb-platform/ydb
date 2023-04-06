@@ -584,7 +584,7 @@ namespace NKikimr {
                                 TVSlotInfo *vslotInfo = State.VSlots.ConstructInplaceNewEntry(vslotId, vslotId, pdiskInfo,
                                     groupInfo->ID, 0, groupInfo->Generation, StoragePool.VDiskKind, failRealmIdx,
                                     failDomainIdx, vdiskIdx, TMood::Normal, groupInfo, &VSlotReadyTimestampQ,
-                                    TInstant::Zero());
+                                    TInstant::Zero(), TDuration::Zero());
 
                                 // mark as uncommitted
                                 State.UncommittedVSlots.insert(vslotId);

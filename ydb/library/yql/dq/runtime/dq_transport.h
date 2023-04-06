@@ -40,10 +40,6 @@ public:
                 data.SetRows(count);
                 return data;
             }
-            case NDqProto::DATA_TRANSPORT_ARROW_1_0: {
-                NKikimr::NMiniKQL::TUnboxedValueVector buffer(first, last);
-                return Serialize(buffer, itemType);
-            }
             default:
                 YQL_ENSURE(false, "Unsupported TransportVersion");
         }

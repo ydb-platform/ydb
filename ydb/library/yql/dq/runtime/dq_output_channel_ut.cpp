@@ -460,16 +460,6 @@ Y_UNIT_TEST(SingleReadQ) {
     TestSingleRead(ctx, true);
 }
 
-Y_UNIT_TEST(SingleReadWithArrow) {
-    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-    TestSingleRead(ctx, false);
-}
-
-Y_UNIT_TEST(SingleReadWithArrowQ) {
-    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-    TestSingleRead(ctx, true);
-}
-
 Y_UNIT_TEST(PartialRead) {
     TTestContext ctx;
     TestPartialRead(ctx, false);
@@ -479,17 +469,6 @@ Y_UNIT_TEST(PartialReadQ) {
     TTestContext ctx;
     TestPartialRead(ctx, true);
 }
-
-// too heavy messages...
-//Y_UNIT_TEST(PartialReadWithArrow) {
-//    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-//    TestPartialRead(ctx, false);
-//}
-//
-//Y_UNIT_TEST(PartialReadWithArrowQ) {
-//    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-//    TestPartialRead(ctx, true);
-//}
 
 Y_UNIT_TEST(Overflow) {
     TTestContext ctx;
@@ -501,16 +480,6 @@ Y_UNIT_TEST(OverflowQ) {
     TestOverflow(ctx, true);
 }
 
-Y_UNIT_TEST(OverflowWithArrow) {
-    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-    TestOverflow(ctx, false);
-}
-
-Y_UNIT_TEST(OverflowWithArrowQ) {
-    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-    TestOverflow(ctx, true);
-}
-
 Y_UNIT_TEST(PopAll) {
     TTestContext ctx;
     TestPopAll(ctx, false);
@@ -518,16 +487,6 @@ Y_UNIT_TEST(PopAll) {
 
 Y_UNIT_TEST(PopAllQ) {
     TTestContext ctx;
-    TestPopAll(ctx, true);
-}
-
-Y_UNIT_TEST(PopAllWithArrow) {
-    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-    TestPopAll(ctx, false);
-}
-
-Y_UNIT_TEST(PopAllWithArrowQ) {
-    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
     TestPopAll(ctx, true);
 }
 
@@ -550,20 +509,9 @@ Y_UNIT_TEST(Spill) {
     TestSpillWithMockStorage(ctx);
 }
 
-// Fail because arrow serialization has a big overhead
-// Y_UNIT_TEST(SpillWithArrow) {
-//     TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-//     TestSpillWithMockStorage(ctx);
-// }
-
 Y_UNIT_TEST(Overflow) {
     TTestContext ctx;
     TestOverflowWithMockStorage(ctx);
 }
 
-// Fail because arrow serialization has a big overhead
-// Y_UNIT_TEST(OverflowWithArrow) {
-//     TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-//     TestOverflowWithMockStorage(ctx);
-// }
 }

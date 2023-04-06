@@ -26,6 +26,10 @@ target_link_directories(blobstorage-vdisk-common PUBLIC /usr/local/lib)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -v")
 
+# Add ASan flags for Debug build
+set(ASAN_FLAGS "-fsanitize=address -fno-omit-frame-pointer -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ASAN_FLAGS}")
+
 target_sources(blobstorage-vdisk-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.cpp

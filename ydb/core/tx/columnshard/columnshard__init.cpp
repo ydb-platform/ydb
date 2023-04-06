@@ -41,8 +41,7 @@ void TTxInit::SetDefaults() {
     Self->PlanQueue.clear();
     Self->AltersInFlight.clear();
     Self->CommitsInFlight.clear();
-    Self->SchemaPresets.clear();
-    Self->Tables.clear();
+    Self->TablesManager.Clear();
     Self->LongTxWrites.clear();
     Self->LongTxWritesByUniqueId.clear();
 }
@@ -137,132 +136,10 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
 
-    // Primary index defaut schema and TTL (both are versioned)
-    TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaPreset;
-    TMap<NOlap::TSnapshot, NOlap::TIndexInfo> commonSchema;
-    THashMap<ui64, TMap<TRowVersion, TTtl::TDescription>> ttls;
-
-    { // Load schema presets
-        auto rowset = db.Table<Schema::SchemaPresetInfo>().Select();
-        if (!rowset.IsReady())
-            return false;
-
-        while (!rowset.EndOfSet()) {
-            const ui32 id = rowset.GetValue<Schema::SchemaPresetInfo::Id>();
-            auto& preset = Self->SchemaPresets[id];
-            preset.Id = id;
-            if (id) {
-                preset.Name = rowset.GetValue<Schema::SchemaPresetInfo::Name>();
-            }
-            Y_VERIFY(!id || preset.Name == "default", "Unsupported preset at load time");
-
-            if (rowset.HaveValue<Schema::SchemaPresetInfo::DropStep>() &&
-                rowset.HaveValue<Schema::SchemaPresetInfo::DropTxId>())
-            {
-                preset.DropVersion.Step = rowset.GetValue<Schema::SchemaPresetInfo::DropStep>();
-                preset.DropVersion.TxId = rowset.GetValue<Schema::SchemaPresetInfo::DropTxId>();
-            }
-
-            if (!rowset.Next())
-                return false;
-        }
-    }
-
-    { // Load schema preset versions
-        auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
-        if (!rowset.IsReady())
-            return false;
-
-        while (!rowset.EndOfSet()) {
-            const ui32 id = rowset.GetValue<Schema::SchemaPresetVersionInfo::Id>();
-            Y_VERIFY(Self->SchemaPresets.contains(id));
-            auto& preset = Self->SchemaPresets.at(id);
-            TRowVersion version(
-                rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceStep>(),
-                rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceTxId>());
-            auto& info = preset.Versions[version];
-            Y_VERIFY(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
-
-            NOlap::TSnapshot snap{version.Step, version.TxId};
-            if (!id) {
-                commonSchema.emplace(snap, Self->ConvertSchema(info.GetSchema()));
-            } else if (preset.Name == "default") {
-                schemaPreset.emplace(snap, Self->ConvertSchema(info.GetSchema()));
-            }
-
-            if (!rowset.Next())
-                return false;
-        }
-    }
-
-    { // Load tables
-        auto rowset = db.Table<Schema::TableInfo>().Select();
-        if (!rowset.IsReady())
-            return false;
-
-        while (!rowset.EndOfSet()) {
-            const ui64 pathId = rowset.GetValue<Schema::TableInfo::PathId>();
-            auto& table = Self->Tables[pathId];
-            table.PathId = pathId;
-            table.TieringUsage = rowset.GetValue<Schema::TableInfo::TieringUsage>();
-            if (rowset.HaveValue<Schema::TableInfo::DropStep>() &&
-                rowset.HaveValue<Schema::TableInfo::DropTxId>())
-            {
-                table.DropVersion.Step = rowset.GetValue<Schema::TableInfo::DropStep>();
-                table.DropVersion.TxId = rowset.GetValue<Schema::TableInfo::DropTxId>();
-                Self->PathsToDrop.insert(pathId);
-            }
-
-            if (!rowset.Next())
-                return false;
-        }
-    }
-
-    { // Load table versions
-        auto rowset = db.Table<Schema::TableVersionInfo>().Select();
-        if (!rowset.IsReady())
-            return false;
-
-        while (!rowset.EndOfSet()) {
-            const ui64 pathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
-            Y_VERIFY(Self->Tables.contains(pathId));
-            auto& table = Self->Tables.at(pathId);
-            TRowVersion version(
-                rowset.GetValue<Schema::TableVersionInfo::SinceStep>(),
-                rowset.GetValue<Schema::TableVersionInfo::SinceTxId>());
-            auto& info = table.Versions[version];
-            Y_VERIFY(info.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
-
-            if (!Self->PathsToDrop.count(pathId)) {
-                auto& ttlSettings = info.GetTtlSettings();
-                if (ttlSettings.HasEnabled()) {
-                    ttls[pathId].emplace(version, TTtl::TDescription(ttlSettings.GetEnabled()));
-                }
-            }
-
-            if (!rowset.Next())
-                return false;
-        }
-    }
-
-    for (auto& [pathId, map] : ttls) {
-        auto& description = map.rbegin()->second; // last version if many
-        Self->Ttl.SetPathTtl(pathId, std::move(description));
-    }
-
-    Self->SetCounter(COUNTER_TABLES, Self->Tables.size());
-    Self->SetCounter(COUNTER_TABLE_PRESETS, Self->SchemaPresets.size());
-    Self->SetCounter(COUNTER_TABLE_TTLS, ttls.size());
-
-    if (!schemaPreset.empty()) {
-        Y_VERIFY(commonSchema.empty(), "Mix of schema preset and common schema");
-        Self->SetPrimaryIndex(std::move(schemaPreset));
-    } else if (!commonSchema.empty()) {
-        Self->SetPrimaryIndex(std::move(commonSchema));
-    } else {
-        Y_VERIFY(Self->Tables.empty());
-        Y_VERIFY(Self->SchemaPresets.empty());
-    }
+    Self->TablesManager.InitFromDB(db, Self->TabletID());
+    Self->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
+    Self->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
+    Self->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
 
     { // Load long tx writes
         auto rowset = db.Table<Schema::LongTxWrites>().Select();
@@ -310,13 +187,8 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
 
-    // Load primary index
-    if (Self->PrimaryIndex) {
-        TBlobGroupSelector dsGroupSelector(Self->Info());
-        NOlap::TDbWrapper idxDB(txc.DB, &dsGroupSelector);
-        if (!Self->PrimaryIndex->Load(idxDB, lostEvictions, Self->PathsToDrop)) {
-            return false;
-        }
+    if (!Self->TablesManager.LoadIndex(dbTable, lostEvictions)) {
+        return false;
     }
 
     // Set dropped evicting records to be erased in future cleanups

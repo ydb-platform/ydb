@@ -5,6 +5,7 @@
 #include "columnshard_ttl.h"
 #include "columnshard_private_events.h"
 #include "blob_manager.h"
+#include "tables_manager.h"
 #include "inflight_request_tracker.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
@@ -331,31 +332,8 @@ private:
         }
     };
 
-    struct TSchemaPreset {
-        using TSchemaPresetVersionInfo = NKikimrTxColumnShard::TSchemaPresetVersionInfo;
-
-        ui32 Id;
-        TString Name;
-        TMap<TRowVersion, TSchemaPresetVersionInfo> Versions;
-        TRowVersion DropVersion = TRowVersion::Max();
-
-        bool IsDropped() const {
-            return DropVersion != TRowVersion::Max();
-        }
-    };
-
-    struct TTableInfo {
-        using TTableVersionInfo = NKikimrTxColumnShard::TTableVersionInfo;
-
-        ui64 PathId;
-        std::map<TRowVersion, TTableVersionInfo> Versions;
-        TRowVersion DropVersion = TRowVersion::Max();
-        TString TieringUsage;
-
-        bool IsDropped() const {
-            return DropVersion != TRowVersion::Max();
-        }
-    };
+    using TSchemaPreset = TSchemaPreset;
+    using TTableInfo = TTableInfo;
 
     struct TLongTxWriteInfo {
         ui64 WriteId;
@@ -363,6 +341,8 @@ private:
         NLongTxService::TLongTxId LongTxId;
         ui64 PreparedTxId = 0;
     };
+
+    TTablesManager TablesManager;
 
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
@@ -401,9 +381,7 @@ private:
     TTabletCountersBase* TabletCounters;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
-    std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     TBatchCache BatchCache;
-    TTtl Ttl;
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
     TSet<TDeadlineQueueItem> DeadlineQueue;
@@ -413,14 +391,11 @@ private:
     THashMap<ui64, TInstant> ScanTxInFlight;
     THashMap<ui64, TAlterMeta> AltersInFlight;
     THashMap<ui64, TCommitMeta> CommitsInFlight; // key is TxId from propose
-    THashMap<ui32, TSchemaPreset> SchemaPresets;
-    THashMap<ui64, TTableInfo> Tables;
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
     TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
     TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
-    THashSet<ui64> PathsToDrop;
     bool ActiveIndexingOrCompaction = false;
     bool ActiveCleanup = false;
     bool ActiveTtl = false;
@@ -455,7 +430,7 @@ private:
     }
 
     bool IndexOverloaded() const {
-        return PrimaryIndex && PrimaryIndex->HasOverloadedGranules();
+        return TablesManager.IndexOverloaded();
     }
 
     TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);
@@ -472,22 +447,13 @@ private:
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
     void ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto, NTabletFlatExecutor::TTransactionContext& txc);
 
-    bool IsTableWritable(ui64 tableId) const;
-
-    ui32 EnsureSchemaPreset(NIceDb::TNiceDb& db, ui32 presetId, const TString& name,
-                            const NKikimrSchemeOp::TColumnTableSchema& schemaProto, const TRowVersion& version);
-    ui32 EnsureSchemaPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto, const TRowVersion& version);
-    //ui32 EnsureTtlSettingsPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableTtlSettingsPreset& presetProto, const TRowVersion& version);
-
     void RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunInit(const NKikimrTxColumnShard::TInitShard& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterTable(const NKikimrTxColumnShard::TAlterTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
-    void SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions);
 
-    NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
     void MapExternBlobs(const TActorContext& ctx, NOlap::TReadMetadata& metadata);
     TActorId GetS3ActorForTier(const TString& tierId) const;
     void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName, ui64 pathId,

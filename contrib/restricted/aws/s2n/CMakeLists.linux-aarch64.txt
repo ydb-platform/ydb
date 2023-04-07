@@ -16,6 +16,7 @@ target_compile_options(restricted-aws-s2n PRIVATE
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD_CTX_SET_PKEY_CTX
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
   -DS2N_MADVISE_SUPPORTED
+  -DS2N_PLATFORM_SUPPORTS_KTLS
   -DS2N___RESTRICT__SUPPORTED
   -DS2N_FEATURES_AVAILABLE
   -DS2N_STACKTRACE
@@ -154,6 +155,7 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_kex.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_key_log.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_key_update.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ktls.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_next_protocol.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ocsp_stapling.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_post_handshake.c

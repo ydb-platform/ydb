@@ -20,6 +20,7 @@ struct TPartitionInfo;
 struct TChangeNotification;
 
 class TResponseBuilder;
+class TPartition;
 
 //USES MAIN chanel for big blobs, INLINE or EXTRA for ZK-like load, EXTRA2 for small blob for logging (VDISK of type LOG is ok with EXTRA2)
 
@@ -294,6 +295,10 @@ private:
     void SendEvProposePartitionConfig(const TActorContext& ctx,
                                       TDistributedTransaction& tx);
 
+    TPartition* CreatePartitionActor(ui32 partitionId,
+                                     const NKikimrPQ::TPQTabletConfig& config,
+                                     bool newPartition,
+                                     const TActorContext& ctx);
     void CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
                              const TActorContext& ctx);
     void EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const;

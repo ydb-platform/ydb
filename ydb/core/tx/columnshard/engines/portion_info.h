@@ -1,4 +1,5 @@
 #pragma once
+
 #include "defs.h"
 #include "columns_table.h"
 #include "index_info.h"
@@ -268,4 +269,10 @@ struct TPortionInfo {
     }
 };
 
-}
+/// Ensure that TPortionInfo can be effectively assigned by moving the value.
+static_assert(std::is_nothrow_move_assignable<TPortionInfo>::value);
+
+/// Ensure that TPortionInfo can be effectively constructed by moving the value.
+static_assert(std::is_nothrow_move_constructible<TPortionInfo>::value);
+
+} // namespace NKikimr::NOlap

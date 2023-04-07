@@ -97,15 +97,9 @@ public:
         using TPair = std::pair<TMark, ui64>;
 
         TMarksGranules() = default;
+        TMarksGranules(std::vector<TPair>&& marks) noexcept;
         TMarksGranules(std::vector<TMark>&& points);
         TMarksGranules(const TSelectInfo& selectInfo);
-
-        TMarksGranules(TMap<TMark, ui64>&& marks) {
-            Marks.reserve(marks.size());
-            for (auto&& [m, granule] : marks) {
-                Marks.emplace_back(std::move(m), granule);
-            }
-        }
 
         const std::vector<TPair>& GetOrderedMarks() const noexcept {
              return Marks;

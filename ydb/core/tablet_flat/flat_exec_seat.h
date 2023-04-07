@@ -52,7 +52,7 @@ namespace NTabletFlatExecutor {
 
         TAutoPtr<TMemoryToken> AttachedMemory;
         TIntrusivePtr<TMemoryGCToken> CapturedMemory;
-        TVector<std::function<void()>> OnCommitted;
+        TVector<std::function<void()>> OnPersistent;
 
         ETerminationReason TerminationReason = ETerminationReason::None;
 

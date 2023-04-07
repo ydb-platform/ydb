@@ -264,11 +264,11 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             tx->ReleaseTxData(txc, ctx);
 
             // Transaction may have made some changes before it detected
-            // inconsistency, so we need to roll them back. We do this by
-            // marking transaction for reschedule and restarting. The next
-            // cycle will detect aborted operation and move along.
-            txc.Reschedule();
-            return EExecutionStatus::Restart;
+            // inconsistency, so we need to roll them back.
+            if (txc.DB.HasChanges()) {
+                txc.DB.RollbackChanges();
+            }
+            return EExecutionStatus::Executed;
         }
 
         if (!result && computeCtx.IsTabletNotReady()) {
@@ -291,8 +291,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
             // Rollback database changes, if any
             if (txc.DB.HasChanges()) {
-                txc.Reschedule();
-                return EExecutionStatus::Restart;
+                txc.DB.RollbackChanges();
             }
 
             return EExecutionStatus::Continue;
@@ -302,8 +301,10 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             allocGuard.Release();
             dataTx->ResetCollectedChanges();
             tx->ReleaseTxData(txc, ctx);
-            txc.Reschedule();
-            return EExecutionStatus::Restart;
+            if (txc.DB.HasChanges()) {
+                txc.DB.RollbackChanges();
+            }
+            return EExecutionStatus::Continue;
         }
 
         Y_VERIFY(result);
@@ -396,11 +397,11 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         tx->ReleaseTxData(txc, ctx);
 
         // Transaction may have made some changes before it hit the limit,
-        // so we need to roll them back. We do this by marking transaction for
-        // reschedule and restarting. The next cycle will detect aborted
-        // operation and move along.
-        txc.Reschedule();
-        return EExecutionStatus::Restart;
+        // so we need to roll them back.
+        if (txc.DB.HasChanges()) {
+            txc.DB.RollbackChanges();
+        }
+        return EExecutionStatus::Executed;
     } catch (const yexception& e) {
         LOG_C("Exception while executing KQP transaction " << *op << " at " << tabletId << ": " << e.what());
         if (op->IsReadOnly() || op->IsImmediate()) {

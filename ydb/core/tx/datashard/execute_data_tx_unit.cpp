@@ -30,7 +30,7 @@ private:
     void AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx);
 
 private:
-    class TRescheduleOpException : public yexception {};
+    class TRollbackAndWaitException : public yexception {};
 };
 
 TExecuteDataTxUnit::TExecuteDataTxUnit(TDataShard& dataShard,
@@ -193,15 +193,17 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         tx->ReleaseTxData(txc, ctx);
 
         return EExecutionStatus::Restart;
-    } catch (const TRescheduleOpException&) {
+    } catch (const TRollbackAndWaitException&) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID()
-            << " needs to reschedule " << *op << " for dependencies");
+            << " needs to wait " << *op << " for dependencies");
 
         tx->GetDataTx()->ResetCollectedChanges();
         tx->ReleaseTxData(txc, ctx);
 
-        txc.Reschedule();
-        return EExecutionStatus::Restart;
+        if (txc.DB.HasChanges()) {
+            txc.DB.RollbackChanges();
+        }
+        return EExecutionStatus::Continue;
     }
 
     DataShard.IncCounter(COUNTER_WAIT_EXECUTE_LATENCY_MS, waitExecuteLatency.MilliSeconds());
@@ -253,7 +255,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     IEngineFlat::EResult engineResult = engine->Execute();
 
     if (Pipeline.AddLockDependencies(op, guardLocks)) {
-        throw TRescheduleOpException();
+        throw TRollbackAndWaitException();
     }
 
     if (engineResult != IEngineFlat::EResult::Ok) {

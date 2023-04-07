@@ -45,6 +45,7 @@ public:
 
     struct TProd {
         THolder<TChange> Change;
+        TVector<std::function<void()>> OnPersistent;
     };
 
     struct TChg {
@@ -201,6 +202,13 @@ public:
      */
     bool HasChanges() const;
 
+    /**
+     * Rollback all current transaction changes
+     *
+     * Similar to aborting transaction and then starting a new one
+     */
+    void RollbackChanges();
+
     // executor interface
     void Begin(TTxStamp, IPages& env);
     TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr);
@@ -213,7 +221,7 @@ public:
     TCompactionStats GetCompactionStats(ui32 table) const;
 
     /**
-     * Adds callback, which is called when database changes are committed
+     * Adds a callback, which is called when database changes are committed
      */
     template<class TCallback>
     void OnCommit(TCallback&& callback) {
@@ -221,13 +229,21 @@ public:
     }
 
     /**
-     * Adds callback, which is called when database changes are rolled back
+     * Adds a callback, which is called when database changes are rolled back
      * 
      * @param callback 
      */
     template<class TCallback>
     void OnRollback(TCallback&& callback) {
         OnRollback_.emplace_back(std::forward<TCallback>(callback));
+    }
+
+    /**
+     * Adds a callback, which is called when database changes are persistent
+     */
+    template<class TCallback>
+    void OnPersistent(TCallback&& callback) {
+        OnPersistent_.emplace_back(std::forward<TCallback>(callback));
     }
 
 private:
@@ -252,6 +268,7 @@ private:
 
     TVector<std::function<void()>> OnCommit_;
     TVector<std::function<void()>> OnRollback_;
+    TVector<std::function<void()>> OnPersistent_;
 };
 
 

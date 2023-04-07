@@ -69,6 +69,13 @@ namespace NTable {
         virtual TResult Locate(const TMemTable*, ui64 ref, ui32 tag) noexcept = 0;
         virtual TResult Locate(const TPart*, ui64 ref, ELargeObj lob) noexcept = 0;
         virtual const TSharedData* TryGetPage(const TPart* part, TPageId id, TGroupId groupId = { }) = 0;
+
+        /**
+         * Hook for cleaning up env on DB.RollbackChanges()
+         */
+        virtual void OnRollbackChanges() noexcept {
+            // nothing by default
+        }
     };
 
 }

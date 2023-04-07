@@ -347,11 +347,14 @@ message TGetNodeConfigRequest {
     optional TNodeAttributes Node = 1;
     // Filter items by specified kinds (return full config by default).
     repeated uint32 ItemKinds = 2;
+    optional bool ServeYaml = 3;
 }
 
 message TGetNodeConfigResponse {
     optional TStatus Status = 1;
     optional NKikimrConfig.TAppConfig Config = 2;
+    optional string YamlConfig = 3;
+    repeated TVolatileYamlConfig VolatileConfigs = 4;
 }
 
 message TSubscriber {

@@ -33,6 +33,25 @@ const NKikimrConfig::TAppConfig &TConfigurationResult::GetConfig() const
     return Record().GetGetNodeConfigResponse().GetConfig();
 }
 
+bool TConfigurationResult::HasYamlConfig() const
+{
+    return Record().GetGetNodeConfigResponse().HasYamlConfig();
+}
+
+const TString& TConfigurationResult::GetYamlConfig() const
+{
+    return Record().GetGetNodeConfigResponse().GetYamlConfig();
+}
+
+TMap<ui64, TString> TConfigurationResult::GetVolatileYamlConfigs() const
+{
+    TMap<ui64, TString> volatileConfigs;
+    for (auto &item : Record().GetGetNodeConfigResponse().GetVolatileConfigs()) {
+       volatileConfigs.emplace(item.GetId(), item.GetConfig());
+    }
+    return volatileConfigs;
+}
+
 TNodeConfigurator::TNodeConfigurator(TKikimr& kikimr)
     : Kikimr(&kikimr)
 {
@@ -43,9 +62,10 @@ TConfigurationResult TNodeConfigurator::SyncGetNodeConfig(ui32 nodeId,
                                                           const TString &tenant,
                                                           const TString &nodeType,
                                                           const TString& domain,
-                                                          const TString& token) const
+                                                          const TString& token,
+                                                          bool serveYaml) const
 {
-    auto future = Kikimr->GetNodeConfig(nodeId, host, tenant, nodeType, domain, token);
+    auto future = Kikimr->GetNodeConfig(nodeId, host, tenant, nodeType, domain, token, serveYaml);
     auto result = future.GetValue(TDuration::Max());
     return TConfigurationResult(result);
 }

@@ -22,7 +22,7 @@ protected:
     virtual bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) = 0;
 
     virtual bool HasResult(TOperation::TPtr op) const = 0;
-    virtual void ProcessResult(TOperation::TPtr op, const TActorContext& ctx) = 0;
+    virtual bool ProcessResult(TOperation::TPtr op, const TActorContext& ctx) = 0;
 
     virtual void Cancel(TActiveTransaction* tx, const TActorContext& ctx) = 0;
 
@@ -106,9 +106,14 @@ public:
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "" << GetKind() << " complete"
                 << " at " << DataShard.TabletID());
 
-            ProcessResult(op, ctx);
-            PersistResult(op, txc);
             ResetWaiting(op);
+            if (ProcessResult(op, ctx)) {
+                PersistResult(op, txc);
+            } else {
+                Y_VERIFY_DEBUG(!HasResult(op));
+                op->SetWaitingForRestartFlag();
+                ctx.Schedule(TDuration::Seconds(1), new TDataShard::TEvPrivate::TEvRestartOperation(op->GetTxId()));
+            }
         }
 
         while (op->HasPendingInputEvents()) {

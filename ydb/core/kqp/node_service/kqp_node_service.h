@@ -5,7 +5,7 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/actors/core/actor.h>
@@ -66,7 +66,7 @@ struct IKqpNodeComputeActorFactory {
 };
 
 NActors::IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    TIntrusivePtr<TKqpCounters> counters, IKqpNodeComputeActorFactory* caFactory = nullptr, NYql::IHTTPGateway::TPtr httpGateway = nullptr);
+    TIntrusivePtr<TKqpCounters> counters, IKqpNodeComputeActorFactory* caFactory = nullptr, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory = nullptr);
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -116,12 +116,14 @@ public:
 
    TKqpSessionActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
             const TKqpWorkerSettings& workerSettings, NYql::IHTTPGateway::TPtr httpGateway,
+            NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
         : Owner(owner)
         , SessionId(sessionId)
         , Counters(counters)
         , Settings(workerSettings)
         , HttpGateway(std::move(httpGateway))
+        , AsyncIoFactory(std::move(asyncIoFactory))
         , ModuleResolverState(std::move(moduleResolverState))
         , KqpSettings(kqpSettings)
         , Config(CreateConfig(kqpSettings, workerSettings))
@@ -978,7 +980,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.Service.GetAggregationConfig(), Settings.Service.GetExecuterRetriesConfig(),
-            HttpGateway);
+            AsyncIoFactory);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1902,6 +1904,7 @@ private:
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;
     TKqpWorkerSettings Settings;
     NYql::IHTTPGateway::TPtr HttpGateway;
+    NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
@@ -1923,10 +1926,10 @@ private:
 
 IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
-    NYql::IHTTPGateway::TPtr httpGateway, TIntrusivePtr<TModuleResolverState> moduleResolverState,
+    NYql::IHTTPGateway::TPtr httpGateway, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters)
 {
-    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), std::move(moduleResolverState), counters);
+    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), std::move(asyncIoFactory), std::move(moduleResolverState), counters);
 }
 
 }

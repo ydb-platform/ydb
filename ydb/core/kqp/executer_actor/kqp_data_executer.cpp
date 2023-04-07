@@ -127,9 +127,9 @@ public:
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpRequestCounters::TPtr counters, bool streamResult,
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-        NYql::IHTTPGateway::TPtr httpGateway)
+        NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, TWilsonKqp::DataExecuter, "DataExecuter")
-        , HttpGateway(std::move(httpGateway))
+        , AsyncIoFactory(std::move(asyncIoFactory))
         , StreamResult(streamResult)
     {
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
@@ -1633,7 +1633,7 @@ private:
             return false;
         };
 
-        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), CreateKqpAsyncIoFactory(Counters->Counters, HttpGateway),
+        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), AsyncIoFactory,
             AppData()->FunctionRegistry, settings, limits);
 
         auto computeActorId = shareMailbox ? RegisterWithSameMailbox(computeActor) : Register(computeActor);
@@ -2342,7 +2342,7 @@ private:
     }
 
 private:
-    NYql::IHTTPGateway::TPtr HttpGateway;
+    NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     bool StreamResult = false;
 
     bool HasStreamLookup = false;
@@ -2381,9 +2381,9 @@ private:
 } // namespace
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::IHTTPGateway::TPtr httpGateway)
+    TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory)
 {
-    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig, std::move(httpGateway));
+    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig, std::move(asyncIoFactory));
 }
 
 } // namespace NKqp

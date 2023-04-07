@@ -99,7 +99,6 @@ private:
                     errors.AddError(Sprintf("Hash sharding requires a non-empty list of columns"));
                     return false;
                 }
-                bool keysOnly = true;
                 for (const TString& columnName : sharding.GetColumns()) {
                     auto* pColumn = schema.GetColumnByName(columnName);
                     if (!pColumn) {
@@ -107,11 +106,12 @@ private:
                         return false;
                     }
                     if (!pColumn->IsKeyColumn()) {
-                        keysOnly = false;
+                        errors.AddError(Sprintf("Hash sharding is using a non-key column '%s'", columnName.c_str()));
+                        return false;
                     }
                 }
                 sharding.SetUniqueShardKey(true);
-                tableInfo->Sharding.SetUniquePrimaryKey(keysOnly);
+                tableInfo->Sharding.SetUniquePrimaryKey(true);
                 break;
             }
             default: {

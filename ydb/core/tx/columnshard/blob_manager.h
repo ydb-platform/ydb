@@ -217,7 +217,7 @@ public:
     THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> PreparePerGroupGCRequests();
 
     // Cleanup blobs that have correct flags (skipped or already marked with correct flags)
-    bool CleanupFlaggedBlobs(IBlobManagerDb& db);
+    size_t CleanupFlaggedBlobs(IBlobManagerDb& db);
 
     // Called with GC result received from Distributed Storage
     void OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, IBlobManagerDb& db);
@@ -259,6 +259,10 @@ private:
     void PerformDelayedDeletes(IBlobManagerDb& db);
 
     bool ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped = false);
+
+    TGenStep EdgeGenStep() const {
+        return (CollectGenStepInFlight == TGenStep{0, 0}) ? LastCollectedGenStep : CollectGenStepInFlight;
+    }
 };
 
 }

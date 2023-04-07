@@ -29,6 +29,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
+        if (Requests.empty()) {
+            Self->ScheduleNextGC(ctx);
+        }
+
         for (auto& r : Requests) {
             ui32 groupId = r.first;
             auto ev = std::move(r.second);
@@ -72,10 +76,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        // Schedule next GC
-        if (Self->BlobManager->CanCollectGarbage()) {
-            Self->Execute(Self->CreateTxRunGc(), ctx);
-        }
+        Self->ScheduleNextGC(ctx);
     }
 };
 

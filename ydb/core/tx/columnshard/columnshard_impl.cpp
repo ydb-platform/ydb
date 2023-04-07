@@ -473,7 +473,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         preset.Deserialize(tableProto.GetSchemaPreset());
         Y_VERIFY(!preset.IsStandaloneTable());
         tableVerProto.SetSchemaPresetId(preset.GetId());
-        
+
         if (TablesManager.RegisterSchemaPreset(preset, db)) {
             TablesManager.AddPresetVersion(tableProto.GetSchemaPreset().GetId(), version, tableProto.GetSchemaPreset().GetSchema(), db);
         }
@@ -509,7 +509,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
 
     const ui64 pathId = alterProto.GetPathId();
     Y_VERIFY(TablesManager.HasTable(pathId), "AlterTable on a dropped or non-existent table");
-    
+
     LOG_S_DEBUG("AlterTable for pathId: " << pathId
         << " schema: " << alterProto.GetSchema()
         << " ttl settings: " << alterProto.GetTtlSettings()
@@ -532,7 +532,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     ActivateTiering(pathId, tieringUsage);
     Schema::SaveTableInfo(db, pathId, tieringUsage);
 
-    tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());   
+    tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
     TablesManager.AddTableVersion(pathId, version, tableVerProto, db);
     TablesManager.OnTtlUpdate();
 }
@@ -579,6 +579,13 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
             continue; // we don't update presets that we don't use
         }
         TablesManager.AddPresetVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
+    }
+}
+
+void TColumnShard::ScheduleNextGC(const TActorContext& ctx) {
+    UpdateBlobMangerCounters();
+    if (BlobManager->CanCollectGarbage()) {
+        Execute(CreateTxRunGc(), ctx);
     }
 }
 

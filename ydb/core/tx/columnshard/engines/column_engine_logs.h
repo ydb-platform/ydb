@@ -166,7 +166,7 @@ public:
         }
 
         bool AddPathIfNotExists(ui64 pathId) {
-            if (PathToGranule.count(pathId)) {
+            if (PathToGranule.contains(pathId)) {
                 return false;
             }
 
@@ -182,7 +182,7 @@ public:
 
         ui64 SetTmpGranule(ui64 pathId, const TMark& mark) {
             Y_VERIFY(pathId == SrcGranule->PathId);
-            if (!TmpGranuleIds.count(mark)) {
+            if (!TmpGranuleIds.contains(mark)) {
                 TmpGranuleIds[mark] = FirstGranuleId;
                 ++FirstGranuleId;
             }
@@ -248,7 +248,7 @@ public:
     const TIndexInfo& GetIndexInfo() const override { return IndexInfo; }
 
     const THashSet<ui64>* GetOverloadedGranules(ui64 pathId) const override {
-        if (PathsGranulesOverloaded.count(pathId)) {
+        if (PathsGranulesOverloaded.contains(pathId)) {
             return &PathsGranulesOverloaded.find(pathId)->second;
         }
         return nullptr;

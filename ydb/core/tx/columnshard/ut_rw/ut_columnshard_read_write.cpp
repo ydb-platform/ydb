@@ -119,7 +119,7 @@ bool DataHasOnly(const std::vector<TString>& blobs, const TString& srtSchema, st
                 return false;
             });
 
-            if (!keys.count(value)) {
+            if (!keys.contains(value)) {
                 Cerr << "Unexpected key: " << value << "\n";
                 return false;
             }
@@ -1666,8 +1666,8 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema, 
 
     ui32 prog = 0;
     for (ui32 i = 0; i < ydbSchema.size(); ++i, ++prog) {
-        if (intTypes.count(ydbSchema[i].second.GetTypeId()) ||
-            strTypes.count(ydbSchema[i].second.GetTypeId())) {
+        if (intTypes.contains(ydbSchema[i].second.GetTypeId()) ||
+            strTypes.contains(ydbSchema[i].second.GetTypeId())) {
             checkResult.insert(prog);
         }
 
@@ -1683,8 +1683,8 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema, 
 
     for (ui32 i = 0; i < ydbSchema.size(); ++i, ++prog) {
         isFiltered.insert(prog);
-        if (intTypes.count(ydbSchema[i].second.GetTypeId()) ||
-            strTypes.count(ydbSchema[i].second.GetTypeId())) {
+        if (intTypes.contains(ydbSchema[i].second.GetTypeId()) ||
+            strTypes.contains(ydbSchema[i].second.GetTypeId())) {
             checkResult.insert(prog);
         }
 
@@ -1743,8 +1743,8 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema, 
             UNIT_ASSERT(batch->ValidateFull().ok());
         }
 
-        if (checkResult.count(prog)) {
-            if (isFiltered.count(prog)) {
+        if (checkResult.contains(prog)) {
+            if (isFiltered.contains(prog)) {
                 UNIT_ASSERT(CheckColumns(batch, namedColumns, expectedFiltered.NumRows));
                 if (aggKeys.empty()) { // TODO: ORDER BY for compare
                     UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("res_min"), expectedFiltered.MinValues));
@@ -1966,7 +1966,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             Cerr << "-- group by key: " << key << "\n";
 
             // the type has the same values in test batch so result would be grouped in one row
-            if (sameValTypes.count(schema[key].second.GetTypeId())) {
+            if (sameValTypes.contains(schema[key].second.GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), {key}, resGrouped, resFiltered);
             } else {
                 TestReadAggregate(schema, testBlob, (key % 2), {key}, resDefault, resFiltered);
@@ -1974,8 +1974,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         for (ui32 key = 0; key < schema.size() - 1; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << "\n";
-            if (sameValTypes.count(schema[key].second.GetTypeId()) &&
-                sameValTypes.count(schema[key + 1].second.GetTypeId())) {
+            if (sameValTypes.contains(schema[key].second.GetTypeId()) &&
+                sameValTypes.contains(schema[key + 1].second.GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1}, resGrouped, resFiltered);
             } else {
                 TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1}, resDefault, resFiltered);
@@ -1983,9 +1983,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         for (ui32 key = 0; key < schema.size() - 2; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << ", " << key + 2 << "\n";
-            if (sameValTypes.count(schema[key].second.GetTypeId()) &&
-                sameValTypes.count(schema[key + 1].second.GetTypeId()) &&
-                sameValTypes.count(schema[key + 1].second.GetTypeId())) {
+            if (sameValTypes.contains(schema[key].second.GetTypeId()) &&
+                sameValTypes.contains(schema[key + 1].second.GetTypeId()) &&
+                sameValTypes.contains(schema[key + 1].second.GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1, key + 2}, resGrouped, resFiltered);
             } else {
                 TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1, key + 2}, resDefault, resFiltered);

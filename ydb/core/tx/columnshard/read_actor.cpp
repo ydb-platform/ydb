@@ -46,13 +46,13 @@ public:
 
         Y_VERIFY(event.Data.size() == event.BlobRange.Size, "%zu, %d", event.Data.size(), event.BlobRange.Size);
 
-        if (IndexedBlobs.count(event.BlobRange)) {
-            if (!WaitIndexed.count(event.BlobRange)) {
+        if (IndexedBlobs.contains(event.BlobRange)) {
+            if (!WaitIndexed.contains(event.BlobRange)) {
                 return; // ignore duplicate parts
             }
             WaitIndexed.erase(event.BlobRange);
             IndexedData.AddIndexed(event.BlobRange, event.Data, nullptr);
-        } else if (CommittedBlobs.count(blobId)) {
+        } else if (CommittedBlobs.contains(blobId)) {
             auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
             if (cmt.empty()) {
                 return; // ignore duplicates
@@ -219,7 +219,7 @@ public:
         Y_VERIFY(blobRange.Size);
 
         auto& externBlobs = ReadMetadata->ExternBlobs;
-        bool fallback = externBlobs && externBlobs->count(blobRange.BlobId);
+        bool fallback = externBlobs && externBlobs->contains(blobRange.BlobId);
 
         NBlobCache::TReadBlobRangeOptions readOpts {
             .CacheAfterRead = true,

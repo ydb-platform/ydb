@@ -139,7 +139,7 @@ private:
         if (ranges.size()) {
             auto& externBlobs = ReadMetadataRanges[ReadMetadataIndex]->ExternBlobs;
             for (auto&& i : ranges) {
-                bool fallback = externBlobs && externBlobs->count(i.first);
+                bool fallback = externBlobs && externBlobs->contains(i.first);
                 NBlobCache::TReadBlobRangeOptions readOpts{
                     .CacheAfterRead = true,
                     .ForceFallback = fallback,
@@ -789,7 +789,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const TReadDescription& read, const std:
     }
 
     for (ui32 colId : readColumnIds) {
-        if (!PrimaryIndexStatsSchema.Columns.count(colId)) {
+        if (!PrimaryIndexStatsSchema.Columns.contains(colId)) {
             error = Sprintf("Columnd id %" PRIu32 " not found", colId);
             return {};
         }
@@ -826,7 +826,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const TReadDescription& read, const std:
 
     const auto& stats = index->GetStats();
     if (read.TableName.EndsWith(NOlap::TIndexInfo::TABLE_INDEX_STATS_TABLE)) {
-        if (fromPathId <= read.PathId && toPathId >= read.PathId && stats.count(read.PathId)) {
+        if (fromPathId <= read.PathId && toPathId >= read.PathId && stats.contains(read.PathId)) {
             out->IndexStats[read.PathId] = std::make_shared<NOlap::TColumnEngineStats>(*stats.at(read.PathId));
         }
     } else if (read.TableName.EndsWith(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE)) {

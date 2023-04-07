@@ -91,7 +91,7 @@ TAssign MakeFunction(const TContext& info, const std::string& name,
     };
 
     auto mkLikeOptions = [&](bool ignoreCase) {
-        if (arguments.size() != 2 || !info.Constants.count(arguments[1])) {
+        if (arguments.size() != 2 || !info.Constants.contains(arguments[1])) {
             return std::shared_ptr<arrow::compute::MatchSubstringOptions>();
         }
         auto patternScalar = info.Constants[arguments[1]];

@@ -124,7 +124,7 @@ struct TPortionInfo {
         }
         if (!granuleRemap.empty()) {
             for (auto& rec : Records) {
-                Y_VERIFY(granuleRemap.count(rec.Granule));
+                Y_VERIFY(granuleRemap.contains(rec.Granule));
                 rec.Granule = granuleRemap.find(rec.Granule)->second;
             }
         }
@@ -158,7 +158,7 @@ struct TPortionInfo {
 
     std::shared_ptr<arrow::Scalar> PkStart() const {
         if (FirstPkColumn) {
-            Y_VERIFY(Meta.ColumnMeta.count(FirstPkColumn));
+            Y_VERIFY(Meta.ColumnMeta.contains(FirstPkColumn));
             return MinValue(FirstPkColumn);
         }
         return {};
@@ -166,7 +166,7 @@ struct TPortionInfo {
 
     std::shared_ptr<arrow::Scalar> PkEnd() const {
         if (FirstPkColumn) {
-            Y_VERIFY(Meta.ColumnMeta.count(FirstPkColumn));
+            Y_VERIFY(Meta.ColumnMeta.contains(FirstPkColumn));
             return MaxValue(FirstPkColumn);
         }
         return {};
@@ -174,7 +174,7 @@ struct TPortionInfo {
 
     ui32 NumRows() const {
         if (FirstPkColumn) {
-            Y_VERIFY(Meta.ColumnMeta.count(FirstPkColumn));
+            Y_VERIFY(Meta.ColumnMeta.contains(FirstPkColumn));
             return Meta.ColumnMeta.find(FirstPkColumn)->second.NumRows;
         }
         return 0;
@@ -189,7 +189,7 @@ struct TPortionInfo {
     }
 
     bool HasMinMax(ui32 columnId) const {
-        if (!Meta.ColumnMeta.count(columnId)) {
+        if (!Meta.ColumnMeta.contains(columnId)) {
             return false;
         }
         return Meta.ColumnMeta.find(columnId)->second.HasMinMax();

@@ -191,7 +191,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
 
         // Keep + DontKeep (probably in different gen:steps)
         // GC could go through it to a greater LastCollectedGenStep
-        if (BlobsToDelete.count(blobId)) {
+        if (BlobsToDelete.contains(blobId)) {
             continue;
         }
 
@@ -317,7 +317,7 @@ THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> TBlobManager:
             ui32 blobGroup = TabletInfo->GroupFor(blobIt->Channel(), blobIt->Generation());
             TGCLists& gl = PerGroupGCListsInFlight[blobGroup];
             bool skipDontKeep = false;
-            if (gl.KeepList.count(*blobIt)) {
+            if (gl.KeepList.contains(*blobIt)) {
                 // Remove the blob from keep list if its also in the delete list
                 gl.KeepList.erase(*blobIt);
                 // Skipped blobs still need to be deleted from BlobsToKeep table
@@ -395,7 +395,7 @@ void TBlobManager::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, 
 
     // Find the group for this result
     ui64 counterFromRequest = ev->Get()->PerGenerationCounter;
-    Y_VERIFY(CounterToGroupInFlight.count(counterFromRequest));
+    Y_VERIFY(CounterToGroupInFlight.contains(counterFromRequest));
     ui32 group = CounterToGroupInFlight[counterFromRequest];
 
     auto it = PerGroupGCListsInFlight.find(group);
@@ -495,7 +495,7 @@ void TBlobManager::DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) 
     ++CountersUpdate.BlobsDeleted;
 
     if (blobId.IsSmallBlob()) {
-        if (BlobsUseCount.count(blobId) == 0) {
+        if (BlobsUseCount.contains(blobId) == 0) {
             DeleteSmallBlob(blobId, db);
         } else {
             LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delay Delete Small Blob " << blobId);
@@ -510,7 +510,7 @@ void TBlobManager::DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) 
 
     // Check if the deletion needs to be delayed until the blob is no longer
     // used by in-flight requests
-    if (BlobsUseCount.count(blobId) == 0) {
+    if (BlobsUseCount.contains(blobId) == 0) {
         LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Blob " << blobId);
         TLogoBlobID logoBlobId = blobId.GetLogoBlobId();
         BlobsToDelete.insert(logoBlobId);
@@ -524,7 +524,7 @@ void TBlobManager::DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) 
 bool TBlobManager::ExportOneToOne(TEvictedBlob&& evict, const NKikimrTxColumnShard::TEvictMetadata& meta,
                                   IBlobManagerDb& db)
 {
-    if (EvictedBlobs.count(evict) || DroppedEvictedBlobs.count(evict)) {
+    if (EvictedBlobs.contains(evict) || DroppedEvictedBlobs.contains(evict)) {
         return false;
     }
 
@@ -564,7 +564,7 @@ bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool
     bool extracted = ExtractEvicted(old, meta);
     dropped = false;
     if (!extracted) {
-        dropped = DroppedEvictedBlobs.count(evict);
+        dropped = DroppedEvictedBlobs.contains(evict);
         if (!dropped) {
             return false; // update after erase
         }
@@ -684,7 +684,7 @@ void TBlobManager::PerformDelayedDeletes(IBlobManagerDb& db) {
 }
 
 bool TBlobManager::BlobInUse(const NOlap::TUnifiedBlobId& blobId) const {
-    return BlobsUseCount.count(blobId);
+    return BlobsUseCount.contains(blobId);
 }
 
 void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
@@ -723,7 +723,7 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
 
 bool TBlobManager::ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped /*= false*/) {
     if (fromDropped) {
-        if (DroppedEvictedBlobs.count(evict)) {
+        if (DroppedEvictedBlobs.contains(evict)) {
             auto node = DroppedEvictedBlobs.extract(evict);
             if (!node.empty()) {
                 evict = node.key();
@@ -732,7 +732,7 @@ bool TBlobManager::ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, boo
             }
         }
     } else {
-        if (EvictedBlobs.count(evict)) {
+        if (EvictedBlobs.contains(evict)) {
             auto node = EvictedBlobs.extract(evict);
             if (!node.empty()) {
                 evict = node.key();

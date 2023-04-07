@@ -304,7 +304,7 @@ bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
     if (it == ColumnNames.end()) {
         return false;
     }
-    return MinMaxIdxColumnsIds.count(it->second);
+    return MinMaxIdxColumnsIds.contains(it->second);
 }
 
 void TIndexInfo::UpdatePathTiering(THashMap<ui64, NOlap::TTiering>& pathTiering) const {

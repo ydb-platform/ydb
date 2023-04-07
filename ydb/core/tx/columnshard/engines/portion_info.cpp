@@ -118,7 +118,7 @@ void TPortionInfo::AddMetadata(const TIndexInfo& indexInfo, const std::shared_pt
 
 TString TPortionInfo::GetMetadata(const TColumnRecord& rec) const {
     NKikimrTxColumnShard::TIndexColumnMeta meta; // TODO: move proto serialization out of engines folder
-    if (Meta.ColumnMeta.count(rec.ColumnId)) {
+    if (Meta.ColumnMeta.contains(rec.ColumnId)) {
         const auto& columnMeta = Meta.ColumnMeta.find(rec.ColumnId)->second;
         if (auto numRows = columnMeta.NumRows) {
             meta.SetNumRows(numRows);
@@ -207,14 +207,14 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
 }
 
 std::shared_ptr<arrow::Scalar> TPortionInfo::MinValue(ui32 columnId) const {
-    if (!Meta.ColumnMeta.count(columnId)) {
+    if (!Meta.ColumnMeta.contains(columnId)) {
         return {};
     }
     return Meta.ColumnMeta.find(columnId)->second.Min;
 }
 
 std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
-    if (!Meta.ColumnMeta.count(columnId)) {
+    if (!Meta.ColumnMeta.contains(columnId)) {
         return {};
     }
     return Meta.ColumnMeta.find(columnId)->second.Max;

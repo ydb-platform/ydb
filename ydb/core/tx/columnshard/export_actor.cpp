@@ -42,7 +42,7 @@ public:
         TString blobData = event.Data;
         Y_VERIFY(blobData.size() == blobId.BlobSize());
 
-        if (!BlobsToRead.count(blobId)) {
+        if (!BlobsToRead.contains(blobId)) {
             return;
         }
 

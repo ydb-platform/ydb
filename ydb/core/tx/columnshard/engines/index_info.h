@@ -93,7 +93,7 @@ public:
 
     void CheckTtlColumn(const TString& ttlColumn) const {
         Y_VERIFY(!ttlColumn.empty());
-        Y_VERIFY(MinMaxIdxColumnsIds.count(GetColumnId(ttlColumn)));
+        Y_VERIFY(MinMaxIdxColumnsIds.contains(GetColumnId(ttlColumn)));
     }
 
     std::shared_ptr<arrow::Schema> ArrowSchema() const;

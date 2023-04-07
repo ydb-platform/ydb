@@ -141,7 +141,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
                     for (auto& rec : portionInfo.Records) {
                         auto& blobId = rec.BlobRange.BlobId;
-                        if (!blobsToExport.count(blobId)) {
+                        if (!blobsToExport.contains(blobId)) {
                             NKikimrTxColumnShard::TEvictMetadata meta;
                             meta.SetTierName(tierName);
 
@@ -167,11 +167,11 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
             THashSet<TUnifiedBlobId> blobsToDrop;
             for (const auto& rec : changes->EvictedRecords) {
                 const auto& blobId = rec.BlobRange.BlobId;
-                if (blobsToExport.count(blobId)) {
+                if (blobsToExport.contains(blobId)) {
                     // Eviction to S3. TTxExportFinish will delete src blob when dst blob get EEvictState::EXTERN state.
-                } else if (!protectedBlobs.count(blobId)) {
+                } else if (!protectedBlobs.contains(blobId)) {
                     // We could drop the blob immediately
-                    if (!blobsToDrop.count(blobId)) {
+                    if (!blobsToDrop.contains(blobId)) {
                         LOG_S_TRACE("Delete evicted blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
                         blobsToDrop.insert(blobId);
                     }
@@ -183,7 +183,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
             for (const auto& portionInfo : changes->PortionsToDrop) {
                 for (const auto& rec : portionInfo.Records) {
                     const auto& blobId = rec.BlobRange.BlobId;
-                    if (!blobsToDrop.count(blobId)) {
+                    if (!blobsToDrop.contains(blobId)) {
                         LOG_S_TRACE("Delete blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
                         blobsToDrop.insert(blobId);
                     }

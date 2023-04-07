@@ -30,7 +30,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const ui64 tabletId) {
                 PathsToDrop.insert(table.GetPathId());
             }
             Tables.insert_or_assign(table.GetPathId(), std::move(table));
-            
+
             if (!rowset.Next()) {
                 return false;
             }
@@ -231,7 +231,7 @@ void TTablesManager::AddPresetVersion(const ui32 presetId, const TRowVersion& ve
     versionInfo.SetSinceStep(version.Step);
     versionInfo.SetSinceTxId(version.TxId);
     *versionInfo.MutableSchema() = schema;
-    
+
     auto& schemaPreset = SchemaPresets.at(presetId);
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
     schemaPreset.AddVersion(version, versionInfo);
@@ -305,7 +305,7 @@ NOlap::TIndexInfo TTablesManager::ConvertSchema(const TTableSchema& schema) {
     }
 
     for (const auto& keyName : schema.GetKeyColumnNames()) {
-        Y_VERIFY(indexInfo.ColumnNames.count(keyName));
+        Y_VERIFY(indexInfo.ColumnNames.contains(keyName));
         indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[keyName]);
     }
 

@@ -8,7 +8,7 @@ namespace NKikimr::NOlap {
 
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     TWriteId writeId{data.WriteTxId};
-    if (Inserted.count(writeId)) {
+    if (Inserted.contains(writeId)) {
         return false;
     }
 
@@ -137,7 +137,7 @@ THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
 }
 
 void TInsertTable::EraseCommitted(IDbWrapper& dbTable, const TInsertedData& data) {
-    if (!CommittedByPathId.count(data.PathId)) {
+    if (!CommittedByPathId.contains(data.PathId)) {
         return;
     }
 
@@ -150,7 +150,7 @@ void TInsertTable::EraseCommitted(IDbWrapper& dbTable, const TInsertedData& data
 
 void TInsertTable::EraseAborted(IDbWrapper& dbTable, const TInsertedData& data) {
     TWriteId writeId{data.WriteTxId};
-    if (!Aborted.count(writeId)) {
+    if (!Aborted.contains(writeId)) {
         return;
     }
 

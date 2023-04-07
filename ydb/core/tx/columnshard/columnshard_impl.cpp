@@ -63,7 +63,7 @@ bool ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
         TString name = column.GetName();
         keyColumns.erase(name);
 
-        if (name == firstKeyColumn && !supportedTypes.count(column.GetTypeId())) {
+        if (name == firstKeyColumn && !supportedTypes.contains(column.GetTypeId())) {
             return false;
         }
     }

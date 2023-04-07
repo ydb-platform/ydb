@@ -210,14 +210,14 @@ public:
     // Loads the state at startup
     bool LoadState(IBlobManagerDb& db);
 
-    bool CanCollectGarbage() const;
+    bool CanCollectGarbage(bool cleanupOnly = false) const;
     bool NeedStorageCG() const;
 
     // Prepares Keep/DontKeep lists and GC barrier
     THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> PreparePerGroupGCRequests();
 
     // Cleanup blobs that have correct flags (skipped or already marked with correct flags)
-    size_t CleanupFlaggedBlobs(IBlobManagerDb& db);
+    size_t CleanupFlaggedBlobs(IBlobManagerDb& db, size_t maxBlobsToCleanup);
 
     // Called with GC result received from Distributed Storage
     void OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, IBlobManagerDb& db);

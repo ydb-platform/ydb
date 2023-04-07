@@ -463,7 +463,7 @@ private:
     bool GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
                          NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges);
 
-    void ScheduleNextGC(const TActorContext& ctx);
+    void ScheduleNextGC(const TActorContext& ctx, bool cleanupOnly = false);
 
     std::unique_ptr<TEvPrivate::TEvIndexing> SetupIndexation();
     std::unique_ptr<TEvPrivate::TEvCompaction> SetupCompaction();

@@ -582,9 +582,11 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
     }
 }
 
-void TColumnShard::ScheduleNextGC(const TActorContext& ctx) {
+void TColumnShard::ScheduleNextGC(const TActorContext& ctx, bool cleanupOnly) {
+    LOG_S_DEBUG("Scheduling GC at tablet " << TabletID());
+
     UpdateBlobMangerCounters();
-    if (BlobManager->CanCollectGarbage()) {
+    if (BlobManager->CanCollectGarbage(cleanupOnly)) {
         Execute(CreateTxRunGc(), ctx);
     }
 }

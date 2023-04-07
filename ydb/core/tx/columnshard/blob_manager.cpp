@@ -211,11 +211,13 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
     return true;
 }
 
-bool TBlobManager::CanCollectGarbage() const {
+bool TBlobManager::CanCollectGarbage(bool cleanupOnly) const {
     if (KeepsToErase.size() || DeletesToErase.size()) {
         return true;
     }
-
+    if (cleanupOnly) {
+        return false;
+    }
     return NeedStorageCG();
 }
 
@@ -367,12 +369,11 @@ THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> TBlobManager:
     return requests;
 }
 
-size_t TBlobManager::CleanupFlaggedBlobs(IBlobManagerDb& db) {
+size_t TBlobManager::CleanupFlaggedBlobs(IBlobManagerDb& db, size_t maxBlobsToCleanup) {
     if (KeepsToErase.empty() && DeletesToErase.empty()) {
         return 0;
     }
 
-    static constexpr size_t maxBlobsToCleanup = TLimits::MAX_BLOBS_TO_DELETE;
     size_t numBlobs = 0;
 
     for (; !KeepsToErase.empty() && numBlobs < maxBlobsToCleanup; ++numBlobs) {
@@ -385,6 +386,7 @@ size_t TBlobManager::CleanupFlaggedBlobs(IBlobManagerDb& db) {
         DeletesToErase.pop_front();
     }
 
+    Y_VERIFY(numBlobs <= maxBlobsToCleanup);
     return numBlobs;
 }
 
@@ -405,7 +407,7 @@ void TBlobManager::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, 
     // NOTE: It clears blobs of different groups.
     // It's expected to be safe cause we have GC result for the blobs or don't need such result.
     size_t maxBlobsToCleanup = TLimits::MAX_BLOBS_TO_DELETE;
-    maxBlobsToCleanup -= CleanupFlaggedBlobs(db);
+    maxBlobsToCleanup -= CleanupFlaggedBlobs(db, maxBlobsToCleanup);
 
     size_t blobsToForget = keepList.size() + dontKeepList.size();
 

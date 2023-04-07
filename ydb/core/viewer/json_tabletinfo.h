@@ -92,6 +92,7 @@ public:
         BLOG_TRACE("Bootstrap()");
         const auto& params(Event->Get()->Request.GetParams());
         if (params.Has("path")) {
+            TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
             THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
             if (!Event->Get()->UserToken.empty()) {
                 request->Record.SetUserToken(Event->Get()->UserToken);
@@ -168,11 +169,11 @@ public:
         if (Tablets.empty()) {
             ReplyAndPassAway();
         } else {
+            TBase::Bootstrap();
             for (TTabletId tabletId : Tablets) {
                 Request->Record.AddFilterTabletId(tabletId);
             }
         }
-        TBase::Bootstrap();
     }
 
     virtual void FilterResponse(NKikimrWhiteboard::TEvTabletStateResponse& response) override {

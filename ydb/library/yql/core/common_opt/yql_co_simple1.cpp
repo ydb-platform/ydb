@@ -2081,6 +2081,13 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
 
 template <bool Ordered>
 TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    if constexpr (!Ordered) {
+        if (const auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << node->Head().Content();
+            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
+        }
+    }
+
     const TCoFlatMapBase self(node);
     const auto& lambdaBody = self.Lambda().Body().Ref();
     const auto& lambdaArg = self.Lambda().Args().Arg(0).Ref();

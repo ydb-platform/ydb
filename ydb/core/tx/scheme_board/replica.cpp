@@ -528,16 +528,13 @@ private:
     struct TPopulatorInfo {
         ui64 Generation = 0;
         ui64 PendingGeneration = 0;
+        bool IsCommited = false;
         TActorId PopulatorActor;
-
-        bool IsCommited() const {
-            return Generation && Generation == PendingGeneration;
-        }
     };
 
     bool IsPopulatorCommited(ui64 ownerId) const {
         auto it = Populators.find(ownerId);
-        if (it != Populators.end() && it->second.IsCommited()) {
+        if (it != Populators.end() && it->second.IsCommited) {
             return true;
         }
 
@@ -1006,6 +1003,7 @@ private:
             << ", generation# " << generation);
 
         info.Generation = info.PendingGeneration;
+        info.IsCommited = true;
         Send(ev->Sender, new TSchemeBoardEvents::TEvCommitResponse(owner, info.Generation), 0, ev->Cookie);
 
         if (WaitStrongNotifications.contains(owner)) {
@@ -1274,14 +1272,14 @@ private:
     }
 
     void PassAway() override {
-        for (auto &xpair : Populators) {
-            if (const TActorId populator = xpair.second.PopulatorActor) {
-                Send(populator, new TEvStateStorage::TEvReplicaShutdown());
+        for (const auto& [_, info] : Populators) {
+            if (const auto& actorId = info.PopulatorActor) {
+                Send(actorId, new TEvStateStorage::TEvReplicaShutdown());
             }
         }
 
-        for (auto &xpair : Subscribers) {
-            Send(xpair.first, new TEvStateStorage::TEvReplicaShutdown());
+        for (const auto& [actorId, _] : Subscribers) {
+            Send(actorId, new TEvStateStorage::TEvReplicaShutdown());
         }
 
         TMonitorableActor::PassAway();

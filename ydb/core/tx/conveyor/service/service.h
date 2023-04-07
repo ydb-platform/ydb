@@ -14,10 +14,12 @@ private:
     std::vector<TActorId> Workers;
     std::deque<TWorkerTask> Waiting;
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitingQueueSize;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr WaitingQueueSizeLimit;
     const ::NMonitoring::TDynamicCounters::TCounterPtr WorkersCount;
     const ::NMonitoring::TDynamicCounters::TCounterPtr WorkersCountLimit;
     const ::NMonitoring::TDynamicCounters::TCounterPtr IncomingRate;
     const ::NMonitoring::TDynamicCounters::TCounterPtr SolutionsRate;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr OverlimitRate;
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);

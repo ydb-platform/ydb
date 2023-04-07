@@ -92,6 +92,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        auto g = Stats.MakeGuard("processing");
         ScanActorId = ctx.SelfID;
 
         TimeoutActorId = CreateLongTimer(ctx, Deadline - TInstant::Now(),
@@ -111,6 +112,7 @@ public:
 
 private:
     STATEFN(StateScan) {
+        auto g = Stats.MakeGuard("processing");
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, HandleScan);
@@ -158,9 +160,12 @@ private:
     }
 
     void HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
-        ALS_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN) << SelfId();
-        Stats.TaskProcessed();
+        auto g = Stats.MakeGuard("task_result");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " got ScanDataAck" << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
         if (ev->Get()->GetErrorMessage()) {
+            ALS_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
+                 << "Scan " << ScanActorId << " got finished error " << ev->Get()->GetErrorMessage() << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId;
             DataTasksProcessor->Stop();
             SendScanError(ev->Get()->GetErrorMessage());
             Finish();
@@ -173,7 +178,7 @@ private:
     }
 
     void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
-        Stats.TaskProcessed();
+        auto g = Stats.MakeGuard("ack");
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " got ScanDataAck"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
@@ -194,7 +199,7 @@ private:
     }
 
     void HandleScan(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) {
-        auto g = Stats.MakeGuard("EvResult");
+        auto g = Stats.MakeGuard("blob");
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " blobs response:"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
@@ -366,7 +371,6 @@ private:
             // * or there is an in-flight blob read or ScanData message for which
             //   we will get a reply and will be able to proceed futher
             if  (!ScanIterator || InFlightScanDataMessages != 0 || InFlightReads != 0) {
-                Stats.StartWait();
                 return;
             }
         }
@@ -375,7 +379,6 @@ private:
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " is hanging"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
-        Stats.StartWait();
     }
 
     void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) {
@@ -646,24 +649,15 @@ private:
         TBlobStats MissBlobs;
         THashMap<TString, TDuration> GuardedDurations;
         THashMap<TString, TInstant> StartGuards;
-        std::optional<TInstant> FirstReceived;
-        TInstant LastWaitStart;
-        TDuration WaitReceive;
+        THashMap<TString, TInstant> SectionFirst;
+        THashMap<TString, TInstant> SectionLast;
     public:
 
-        void StartWait() {
-            Y_VERIFY_DEBUG(!LastWaitStart);
-            LastWaitStart = Now();
-        }
-
         TString DebugString() const {
+            const TInstant now = TInstant::Now();
             TStringBuilder sb;
             sb << "SCAN_STATS;";
             sb << "start=" << StartInstant << ";";
-            if (FirstReceived) {
-                sb << "frw=" << *FirstReceived - StartInstant << ";";
-            }
-            sb << "srw=" << WaitReceive << ";";
             sb << "d=" << FinishInstant - StartInstant << ";";
             if (RequestsCount) {
                 sb << "req:{count=" << RequestsCount << ";bytes=" << RequestedBytes << ";bytes_avg=" << RequestedBytes / RequestsCount << "};";
@@ -672,11 +666,28 @@ private:
             } else {
                 sb << "NO_REQUESTS;";
             }
+            std::map<ui32, std::vector<TString>> points;
+            for (auto&& i : SectionFirst) {
+                points[(i.second - StartInstant).MilliSeconds()].emplace_back("f_" + i.first);
+            }
+            for (auto&& i : SectionLast) {
+                auto it = StartGuards.find(i.first);
+                if (it != StartGuards.end()) {
+                    points[(now - StartInstant).MilliSeconds()].emplace_back("l_" + i.first);
+                } else {
+                    points[(i.second - StartInstant).MilliSeconds()].emplace_back("l_" + i.first);
+                }
+            }
+            sb << "tline:(";
+            for (auto&& i : points) {
+                sb << Sprintf("%0.3f", 0.001 * i.first) << ":" << JoinSeq(",", i.second) << ";";
+            }
+            sb << ");";
             for (auto&& i : GuardedDurations) {
                 auto it = StartGuards.find(i.first);
                 TDuration delta;
                 if (it != StartGuards.end()) {
-                    delta = Now() - it->second;
+                    delta = now - it->second;
                 }
                 sb << i.first << "=" << i.second + delta << ";";
             }
@@ -693,12 +704,17 @@ private:
                 : Owner(owner)
                 , SectionName(sectionName)
             {
+                if (!Owner.SectionFirst.contains(SectionName)) {
+                    Owner.SectionFirst.emplace(SectionName, Start);
+                }
                 Y_VERIFY(Owner.StartGuards.emplace(SectionName, Start).second);
             }
 
             ~TGuard() {
-                Owner.GuardedDurations[SectionName] += Now() - Start;
+                const TInstant finish = TInstant::Now();
+                Owner.GuardedDurations[SectionName] += finish - Start;
                 Owner.StartGuards.erase(SectionName);
+                Owner.SectionLast[SectionName] = finish;
             }
         };
 
@@ -715,21 +731,7 @@ private:
             }
         }
 
-        void TaskProcessed() {
-            if (LastWaitStart) {
-                WaitReceive += Now() - LastWaitStart;
-                LastWaitStart = TInstant::Zero();
-            }
-        }
-
         void BlobReceived(const NBlobCache::TBlobRange& br, const bool fromCache, const TInstant replyInstant) {
-            if (!FirstReceived) {
-                FirstReceived = Now();
-            }
-            if (LastWaitStart) {
-                WaitReceive += Now() - LastWaitStart;
-                LastWaitStart = TInstant::Zero();
-            }
             auto it = StartBlobRequest.find(br);
             Y_VERIFY(it != StartBlobRequest.end());
             const TDuration d = replyInstant - it->second;

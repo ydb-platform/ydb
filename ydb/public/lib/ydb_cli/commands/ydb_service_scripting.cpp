@@ -87,8 +87,6 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
     }
-    ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-        ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
     ParseParameters(config);
 }
 
@@ -108,6 +106,8 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
         settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
 
         if (!Parameters.empty() || !IsStdinInteractive()) {
+            ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
+                ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
             THolder<TParamsBuilder> paramBuilder;
             while (GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
                 auto asyncResult = client.ExecuteYqlScript(

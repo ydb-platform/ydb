@@ -3,6 +3,7 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/mon.h>
 #include <ydb/core/protos/services.pb.h>
+#include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -79,7 +80,8 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     static const bool WithRetry = false;
     using TBase = TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>;
     using TThis = TJsonTabletInfo;
-    TVector<ui64> Tablets;
+    THashMap<ui64, NKikimrTabletBase::TTabletTypes::EType> Tablets;
+    TTabletId HiveId;
 public:
     TJsonTabletInfo(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
         : TJsonWhiteboardRequest(viewer, ev)
@@ -110,7 +112,7 @@ public:
                     TString strTabletId(TBase::RequestSettings.FilterFields.substr(10, TBase::RequestSettings.FilterFields.size() - 11));
                     TTabletId uiTabletId(FromStringWithDefault<TTabletId>(strTabletId, {}));
                     if (uiTabletId) {
-                        Tablets.push_back(uiTabletId);
+                        Tablets[uiTabletId] = NKikimrTabletBase::TTabletTypes::Unknown;
                         Request->Record.AddFilterTabletId(uiTabletId);
                     }
                 }
@@ -119,19 +121,21 @@ public:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev) {
+        const NKikimrScheme::TEvDescribeSchemeResult &rec = ev->Get()->GetRecord();
+        HiveId = rec.GetPathDescription().GetDomainDescription().GetProcessingParams().GetHive();
+
         THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> describeResult = ev->Release();
         if (describeResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             const auto& pathDescription = describeResult->GetRecord().GetPathDescription();
             if (pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeTable) {
-                Tablets.reserve(describeResult->GetRecord().GetPathDescription().TablePartitionsSize());
                 for (const auto& partition : describeResult->GetRecord().GetPathDescription().GetTablePartitions()) {
-                    Tablets.emplace_back(partition.GetDatashardId());
+                    Tablets[partition.GetDatashardId()] = NKikimrTabletBase::TTabletTypes::DataShard;
                 }
             }
             if (pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup) {
                 Tablets.reserve(describeResult->GetRecord().GetPathDescription().GetPersQueueGroup().PartitionsSize());
                 for (const auto& partition : describeResult->GetRecord().GetPathDescription().GetPersQueueGroup().GetPartitions()) {
-                    Tablets.emplace_back(partition.GetTabletId());
+                    Tablets[partition.GetTabletId()] = NKikimrTabletBase::TTabletTypes::PersQueue;
                 }
             }
             if (pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeDir
@@ -139,39 +143,36 @@ public:
                 || pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain) {
                 if (pathDescription.HasDomainDescription()) {
                     for (TTabletId tabletId : pathDescription.GetDomainDescription().GetProcessingParams().GetCoordinators()) {
-                        Tablets.emplace_back(tabletId);
+                        Tablets[tabletId] = NKikimrTabletBase::TTabletTypes::Coordinator;
                     }
                     for (TTabletId tabletId : pathDescription.GetDomainDescription().GetProcessingParams().GetMediators()) {
-                        Tablets.emplace_back(tabletId);
+                        Tablets[tabletId] = NKikimrTabletBase::TTabletTypes::Mediator;
                     }
                     if (pathDescription.GetDomainDescription().GetProcessingParams().HasSchemeShard()) {
-                        Tablets.emplace_back(pathDescription.GetDomainDescription().GetProcessingParams().GetSchemeShard());
+                        Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetSchemeShard()] = NKikimrTabletBase::TTabletTypes::SchemeShard;
                     } else {
                         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
                         TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
-
-                        Tablets.emplace_back(domain->SchemeRoot);
+                        Tablets[domain->SchemeRoot] = NKikimrTabletBase::TTabletTypes::SchemeShard;
 
                         ui32 hiveDomain = domains->GetHiveDomainUid(domain->DefaultHiveUid);
                         ui64 defaultStateStorageGroup = domains->GetDefaultStateStorageGroup(hiveDomain);
-                        Tablets.emplace_back(MakeBSControllerID(defaultStateStorageGroup));
-                        Tablets.emplace_back(MakeConsoleID(defaultStateStorageGroup));
-                        Tablets.emplace_back(MakeNodeBrokerID(defaultStateStorageGroup));
+                        Tablets[MakeBSControllerID(defaultStateStorageGroup)] = NKikimrTabletBase::TTabletTypes::BSController;
+                        Tablets[MakeConsoleID(defaultStateStorageGroup)] = NKikimrTabletBase::TTabletTypes::Console;
+                        Tablets[MakeNodeBrokerID(defaultStateStorageGroup)] = NKikimrTabletBase::TTabletTypes::NodeBroker;
                     }
                     if (pathDescription.GetDomainDescription().GetProcessingParams().HasHive()) {
-                        Tablets.emplace_back(pathDescription.GetDomainDescription().GetProcessingParams().GetHive());
+                        Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetHive()] = NKikimrTabletBase::TTabletTypes::Hive;
                     }
                 }
             }
-            Sort(Tablets);
-            Tablets.erase(std::unique(Tablets.begin(), Tablets.end()), Tablets.end());
         }
         if (Tablets.empty()) {
             ReplyAndPassAway();
         } else {
             TBase::Bootstrap();
-            for (TTabletId tabletId : Tablets) {
-                Request->Record.AddFilterTabletId(tabletId);
+            for (auto tablet : Tablets) {
+                Request->Record.AddFilterTabletId(tablet.first);
             }
         }
     }
@@ -180,9 +181,18 @@ public:
         if (!Tablets.empty()) {
             NKikimrWhiteboard::TEvTabletStateResponse result;
             for (const NKikimrWhiteboard::TTabletStateInfo& info : response.GetTabletStateInfo()) {
-                if (BinarySearch(Tablets.begin(), Tablets.end(), info.GetTabletId())) {
+                auto tablet = Tablets.find(info.GetTabletId());
+                if (tablet != Tablets.end()) {
                     result.MutableTabletStateInfo()->Add()->CopyFrom(info);
+                    Tablets.erase(tablet->first);
                 }
+            }
+            for (auto tablet : Tablets) {
+                auto deadTablet = result.MutableTabletStateInfo()->Add();
+                deadTablet->SetTabletId(tablet.first);
+                deadTablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Dead);
+                deadTablet->SetType(tablet.second);
+                deadTablet->SetHiveId(HiveId);
             }
             result.SetResponseTime(response.GetResponseTime());
             response = std::move(result);

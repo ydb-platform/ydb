@@ -527,7 +527,7 @@ TUniqueConstraintNodeBase<Distinct>::ColumnsListToSet(const std::vector<std::str
     YQL_ENSURE(!columns.empty());
     TSetType set;
     set.reserve(columns.size());
-    std::transform(columns.cbegin(), columns.cend(), std::back_inserter(set), [](const std::string_view& column) { return TPathType(1U, column); });
+    std::transform(columns.cbegin(), columns.cend(), std::back_inserter(set), [](const std::string_view& column) { return column.empty() ? TPathType() : TPathType(1U, column); });
     std::sort(set.begin(), set.end());
     return set;
 }
@@ -1448,15 +1448,13 @@ TPassthroughConstraintNode::TMapType TPassthroughConstraintNode::GetColumnMappin
 }
 
 TPassthroughConstraintNode::TReverseMapType TPassthroughConstraintNode::GetReverseMapping() const {
-    if (1U == Mapping_.size() && 1U == Mapping_.cbegin()->second.size() && Mapping_.cbegin()->second.cbegin()->first.empty())
-        return {{Mapping_.cbegin()->second.cbegin()->second, Mapping_.cbegin()->second.cbegin()->second}};
-
     TReverseMapType reverseMapping;
     for (const auto& part : Mapping_) {
         for (const auto& item : part.second) {
-            if (1U == item.first.size()) {
+            if (item.first.empty())
+                reverseMapping.emplace_back(item.second, std::string_view());
+            else if (1U == item.first.size())
                 reverseMapping.emplace_back(item.second, item.first.front());
-            }
         }
     }
     ::Sort(reverseMapping);

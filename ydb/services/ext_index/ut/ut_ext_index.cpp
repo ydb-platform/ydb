@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(ExternalIndex) {
             calcer.Update((const ui8*)&level, sizeof(level));
             calcer.Update((const ui8*)id.data(), id.size());
             const ui64 hash = calcer.Finish();
-            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/cs_index/Root/olapStore/olapTable/ext_index_simple` WHERE index_hash = " +
+            lHelper.StartDataRequest("SELECT index_hash, pk_timestamp FROM `/Root/.metadata/cs_index/Root/olapStore/olapTable/ext_index_simple` WHERE index_hash = " +
                 ::ToString(hash), true, &resultData);
             Cerr << resultData << "/" << tsStart << Endl;
             UNIT_ASSERT_EQUAL(resultData, "[[" + ::ToString(hash) + "u];[" + ::ToString(tsStart + 2) + "u]]");

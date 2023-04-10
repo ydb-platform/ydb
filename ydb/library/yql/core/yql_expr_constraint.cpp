@@ -1733,6 +1733,9 @@ private:
     }
 
     TStatus DictWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        const std::vector<std::string_view> k(1U, ctx.GetIndexAsString(0U));
+        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(k));
+        input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(k));
         if (input->ChildrenSize() == 1) {
             return FromEmpty(input, output, ctx);
         }
@@ -1743,6 +1746,9 @@ private:
         if (input->Child(1)->ChildrenSize() == 0) {
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
+        const std::vector<std::string_view> k(1U, ctx.GetIndexAsString(0U));
+        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(k));
+        input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(k));
         return TStatus::Ok;
     }
 

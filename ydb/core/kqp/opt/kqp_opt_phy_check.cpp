@@ -20,6 +20,20 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer() {
             auto query = TKqlQuery(input);
             YQL_ENSURE(query.Ref().GetTypeAnn());
 
+            for (const auto& result : query.Results()) {
+                if (!result.Value().Maybe<TDqConnection>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(result.Pos()), "Failed to build query results."));
+                    return TStatus::Error;
+                }
+
+                if (!result.Value().Maybe<TDqCnUnionAll>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(result.Pos()), TStringBuilder()
+                        << "Unexpected query result connection: "
+                        << result.Value().Cast<TDqConnection>().CallableName()));
+                    return TStatus::Error;
+                }
+            }
+
             for (const auto& effect : query.Effects()) {
                 if (!effect.Maybe<TDqOutput>()) {
                     ctx.AddError(TIssue(ctx.GetPosition(effect.Pos()), "Failed to build query effects."));

@@ -12,10 +12,6 @@
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
 
-#ifndef MKQL_DISABLE_CODEGEN
-#include <ydb/library/yql/minikql/codegen/codegen.h>
-#endif
-
 #include <utility>
 
 namespace NKikimr {
@@ -33,7 +29,7 @@ private:
     };
     using TProperties = TEnumBitSet<EProps, EProps::Begin, EProps::End>;
 public:
-    TValuePackerImpl(bool stable, const TType* type, bool tryUseCodegen = false);
+    TValuePackerImpl(bool stable, const TType* type);
     TValuePackerImpl(const TValuePackerImpl& other);
 
     // Returned buffer is temporary and should be copied before next Pack() call
@@ -47,25 +43,17 @@ private:
     static bool HasOptionalFields(const TType* type);
     // Returns length and empty single optional flag
     static std::pair<ui32, bool> SkipEmbeddedLength(TStringBuf& buf);
-    typedef void(*TPackFunction)(const TRawUV*, ui64*, ui64*);
-    TPackFunction MakePackFunction();
 
-#ifndef MKQL_DISABLE_CODEGEN
-    const NYql::NCodegen::ICodegen::TPtr Codegen;
-#endif
-    const bool Stable;
-    const TType* Type;
+    const bool Stable_;
+    const TType* Type_;
     // TODO: real thread safety with external state
-    mutable TBuffer Buffer;
-    TProperties Properties;
-    mutable size_t OptionalMaskReserve;
-    mutable NDetails::TOptionalUsageMask OptionalUsageMask;
-    mutable TPlainContainerCache TopStruct;
-    mutable TVector<TVector<std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>>> DictBuffers;
-    mutable TVector<TVector<std::tuple<NUdf::TUnboxedValue, NUdf::TUnboxedValue, NUdf::TUnboxedValue>>> EncodedDictBuffers;
-    TPackFunction PackFunc = nullptr;
-
-    friend struct TValuePackerDetails;
+    mutable TBuffer Buffer_;
+    TProperties Properties_;
+    mutable size_t OptionalMaskReserve_;
+    mutable NDetails::TOptionalUsageMask OptionalUsageMask_;
+    mutable TPlainContainerCache TopStruct_;
+    mutable TVector<TVector<std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>>> DictBuffers_;
+    mutable TVector<TVector<std::tuple<NUdf::TUnboxedValue, NUdf::TUnboxedValue, NUdf::TUnboxedValue>>> EncodedDictBuffers_;
 };
 
 using TValuePacker = TValuePackerImpl<false>;
@@ -74,7 +62,7 @@ using TValuePackerFast = TValuePackerImpl<true>;
 class TValuePackerBoxed : public TComputationValue<TValuePackerBoxed>, public TValuePacker {
     typedef TComputationValue<TValuePackerBoxed> TBase;
 public:
-    TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type, bool tryUseCodegen = false);
+    TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type);
     TValuePackerBoxed(TMemoryUsageInfo* memInfo, const TValuePacker& other);
 };
 

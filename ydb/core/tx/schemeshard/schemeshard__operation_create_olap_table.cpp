@@ -41,7 +41,7 @@ public:
             errors.AddError("Sharding is not set");
             return false;
         }
-        
+
         if (!DoDeserialize(description, errors)) {
             return false;
         }
@@ -58,7 +58,7 @@ public:
     TColumnTableInfo::TPtr BuildTableInfo(IErrorCollector& errors) const {
         TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo;
         tableInfo->AlterVersion = 1;
-        
+
         BuildDescription(tableInfo->Description);
         tableInfo->Description.SetColumnShardCount(ShardsCount);
         tableInfo->Description.SetName(Name);
@@ -275,7 +275,7 @@ public:
                    DebugHint() << " ProgressState"
                    << " at tabletId# " << ssId);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         TPath path = TPath::Init(pathId, context.SS);
@@ -679,6 +679,12 @@ public:
         if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Olap schema operations are not supported");
+            return result;
+        }
+
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Olap schema operations are not supported in serverless db");
             return result;
         }
 

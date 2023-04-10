@@ -15,7 +15,6 @@ target_link_libraries(ydb-library-yql-core-file_storage-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   yql-core-file_storage
   cpp-http-server
@@ -70,5 +69,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-core-file_storage-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-core-file_storage-ut)

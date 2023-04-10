@@ -523,6 +523,12 @@ private:
                     input->AddConstraint(filtered);
                 }
             }
+
+            if (const auto part = input->Head().GetConstraint<TPartOfDistinctConstraintNode>()) {
+                if (const auto filtered = part->FilterFields(ctx, filter)) {
+                    input->AddConstraint(filtered);
+                }
+            }
         }
 
         return TStatus::Ok;
@@ -1727,6 +1733,9 @@ private:
     }
 
     TStatus DictWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        const std::vector<std::string_view> k(1U, ctx.GetIndexAsString(0U));
+        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(k));
+        input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(k));
         if (input->ChildrenSize() == 1) {
             return FromEmpty(input, output, ctx);
         }
@@ -1737,6 +1746,9 @@ private:
         if (input->Child(1)->ChildrenSize() == 0) {
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
+        const std::vector<std::string_view> k(1U, ctx.GetIndexAsString(0U));
+        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(k));
+        input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(k));
         return TStatus::Ok;
     }
 
@@ -2286,7 +2298,9 @@ private:
                     return {};
 
                 const auto it = renames.find(path.front());
-                if (renames.cend() == it || it->second.empty())
+                if (renames.cend() == it)
+                    return {path};
+                if (it->second.empty())
                     return {};
 
                 std::vector<TConstraintNode::TPathType> res(it->second.size());

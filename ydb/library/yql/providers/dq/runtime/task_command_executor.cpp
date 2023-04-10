@@ -367,24 +367,8 @@ public:
                 request.Load(&input);
 
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
-                auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-                switch (request.GetData().GetTransportVersion()) {
-                    case 10000: {
-                        transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_YSON_1_0;
-                        break;
-                    }
-                    case 20000: {
-                        transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-                        break;
-                    }
-                    case 30000: {
-                        transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0;
-                        break;
-                    }
-                    default:
-                        transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-                }
-                NDq::TDqDataSerializer dataSerializer(Runner->GetTypeEnv(), Runner->GetHolderFactory(), transportVersion);
+                NDq::TDqDataSerializer dataSerializer(Runner->GetTypeEnv(), Runner->GetHolderFactory(),
+                    NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED);
                 NKikimr::NMiniKQL::TUnboxedValueVector buffer;
                 buffer.reserve(request.GetData().GetRows());
                 if (request.GetString().empty() && request.GetChunks() == 0) {

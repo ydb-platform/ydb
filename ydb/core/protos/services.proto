@@ -362,6 +362,7 @@ enum EServiceKikimr {
     DISCOVERY_CACHE = 1801;
 
     EXT_INDEX = 1900;
+    TX_CONVEYOR = 2000;
 };
 
 message TActivity {

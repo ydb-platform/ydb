@@ -623,9 +623,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         const auto partitionId = partition.GetPartitionId();
         if (Partitions.find(partitionId) == Partitions.end()) {
             Partitions.emplace(partitionId, TPartitionInfo(
-                ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                            IsLocalDC, DCId, IsServerless, Config, *Counters, SubDomainOutOfSpace,
-                                            true)),
+                ctx.Register(CreatePartitionActor(partitionId, Config, true, ctx)),
                 GetPartitionKeyRange(partition),
                 true,
                 *Counters
@@ -787,9 +785,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
-            ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                        IsLocalDC, DCId, IsServerless, Config, *Counters, SubDomainOutOfSpace,
-                                        false)),
+            ctx.Register(CreatePartitionActor(partitionId, Config, false, ctx)),
             GetPartitionKeyRange(partition),
             false,
             *Counters
@@ -3061,6 +3057,25 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
     tx.PartitionRepliesExpected = Partitions.size();
 }
 
+TPartition* TPersQueue::CreatePartitionActor(ui32 partitionId,
+                                             const NKikimrPQ::TPQTabletConfig& config,
+                                             bool newPartition,
+                                             const TActorContext& ctx)
+{
+    return new TPartition(TabletID(),
+                          partitionId,
+                          ctx.SelfID,
+                          CacheActor,
+                          TopicConverter,
+                          IsLocalDC,
+                          DCId,
+                          IsServerless,
+                          config,
+                          *Counters,
+                          SubDomainOutOfSpace,
+                          newPartition);
+}
+
 void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
                                      const TActorContext& ctx)
 {
@@ -3080,18 +3095,7 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
             continue;
         }
 
-        TActorId actorId = ctx.Register(new TPartition(TabletID(),
-                                                       partitionId,
-                                                       ctx.SelfID,
-                                                       CacheActor,
-                                                       TopicConverter,
-                                                       IsLocalDC,
-                                                       DCId,
-                                                       IsServerless,
-                                                       config,
-                                                       *Counters,
-                                                       SubDomainOutOfSpace,
-                                                       true));
+        TActorId actorId = ctx.Register(CreatePartitionActor(partitionId, config, true, ctx));
 
         Partitions.emplace(std::piecewise_construct,
                            std::forward_as_tuple(partitionId),

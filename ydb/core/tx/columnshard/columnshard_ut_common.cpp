@@ -189,7 +189,7 @@ void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, con
         UNIT_ASSERT(event);
 
         auto& res = Proto(event);
-        UNIT_ASSERT(txIds.count(res.GetTxId()));
+        UNIT_ASSERT(txIds.contains(res.GetTxId()));
         UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     }
 }
@@ -245,7 +245,7 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const TVector<std::pair<TStrin
 
     TVector<ui32> nullPositions;
     for (size_t i = 0; i < columns.size(); ++i) {
-        if (nullColumns.count(columns[i].first)) {
+        if (nullColumns.contains(columns[i].first)) {
             nullPositions.push_back(i);
         }
     }

@@ -40,6 +40,7 @@ NActors::IActor* CreateInMemoryControlPlaneStorageServiceActor(const NConfig::TC
 
 NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
     const NConfig::TControlPlaneStorageConfig& config,
+    const NYql::TS3GatewayConfig& s3Config,
     const NConfig::TCommonConfig& common,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NFq::TYqSharedResources::TPtr& yqSharedResources,

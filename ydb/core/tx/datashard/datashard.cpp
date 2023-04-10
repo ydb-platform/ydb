@@ -3827,6 +3827,23 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncJobComplete::TPtr &ev, const TActorC
     PlanQueue.Progress(ctx);
 }
 
+void TDataShard::Handle(TEvPrivate::TEvRestartOperation::TPtr &ev, const TActorContext &ctx) {
+    const auto txId = ev->Get()->TxId;
+
+    if (auto op = Pipeline.FindOp(txId)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Restart op: " << txId
+            << " at " << TabletID());
+
+        if (op->IsWaitingForRestart()) {
+            op->ResetWaitingForRestartFlag();
+            Pipeline.AddCandidateOp(op);
+        }
+    }
+
+    // Continue current Tx
+    PlanQueue.Progress(ctx);
+}
+
 bool TDataShard::ReassignChannelsEnabled() const {
     return true;
 }

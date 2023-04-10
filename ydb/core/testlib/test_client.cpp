@@ -95,6 +95,8 @@
 #include <ydb/services/ext_index/common/config.h>
 #include <ydb/services/ext_index/common/service.h>
 #include <ydb/services/ext_index/service/executor.h>
+#include <ydb/core/tx/conveyor/service/service.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service.h>
 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
@@ -712,22 +714,27 @@ namespace Tests {
         if (Settings->EnableConfigsDispatcher) {
             auto *dispatcher = NConsole::CreateConfigsDispatcher(Settings->AppConfig, {});
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid);
+            Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         if (Settings->IsEnableMetadataProvider()) {
             auto* actor = NMetadata::NProvider::CreateService(NMetadata::NProvider::TConfig());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NMetadata::NProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid);
+            Runtime->RegisterService(NMetadata::NProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         if (Settings->IsEnableBackgroundTasks()) {
             auto* actor = NBackgroundTasks::CreateService(NBackgroundTasks::TConfig());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NBackgroundTasks::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid);
+            Runtime->RegisterService(NBackgroundTasks::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         if (Settings->IsEnableExternalIndex()) {
             auto* actor = NCSIndex::CreateService(NCSIndex::TConfig());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NCSIndex::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid);
+            Runtime->RegisterService(NCSIndex::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
+        {
+            auto* actor = NConveyor::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NConveyor::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 

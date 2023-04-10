@@ -18,7 +18,6 @@ target_link_libraries(ydb-core-kqp-proxy_service-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-kqp-proxy_service
   kqp-ut-common
@@ -69,5 +68,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-kqp-proxy_service-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-kqp-proxy_service-ut)

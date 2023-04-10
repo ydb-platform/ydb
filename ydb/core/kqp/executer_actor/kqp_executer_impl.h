@@ -120,6 +120,7 @@ public:
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerRetriesConfig)
     {
+        TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
@@ -322,7 +323,7 @@ protected:
         }
 
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, Request.Transactions,
-            TableKeys, TasksGraph);
+            GetTableKeysRef(), TasksGraph);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         LOG_T("Got request, become WaitResolveState");
@@ -571,7 +572,7 @@ protected:
             auto& record = channelsInfoEv->Record;
 
             for (auto& channelId : channelIds) {
-                FillChannelDesc(TasksGraph, ResultChannelProxies, *record.AddUpdate(), TasksGraph.GetChannel(channelId));
+                FillChannelDesc(TasksGraph, *record.AddUpdate(), TasksGraph.GetChannel(channelId));
             }
 
             LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
@@ -634,7 +635,7 @@ protected:
 
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-        const auto& table = TableKeys.GetTable(stageInfo.Meta.TableId);
+        const auto& table = GetTableKeys().GetTable(stageInfo.Meta.TableId);
         const auto& keyTypes = table.KeyColumnTypes;
 
         for (auto& op : stage.GetTableOps()) {
@@ -695,7 +696,7 @@ protected:
         }
     }
 
-    size_t BuildScanTasksFromSource(TStageInfo& stageInfo, IKqpGateway::TKqpSnapshot snapshot, const TMaybe<ui64> lockTxId = {}) {
+    size_t BuildScanTasksFromSource(TStageInfo& stageInfo, const TMaybe<ui64> lockTxId = {}) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -706,19 +707,21 @@ protected:
 
         auto& source = stage.GetSources(0).GetReadRangesSource();
 
-        const auto& table = TableKeys.GetTable(MakeTableId(source.GetTable()));
+        const auto& table = GetTableKeys().GetTable(MakeTableId(source.GetTable()));
         const auto& keyTypes = table.KeyColumnTypes;
 
         YQL_ENSURE(table.TableKind != NKikimr::NKqp::ETableKind::Olap);
 
         auto columns = BuildKqpColumns(source, table);
-        auto partitions = PrunePartitions(TableKeys, source, stageInfo, HolderFactory(), TypeEnv());
+        auto partitions = PrunePartitions(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
 
         ui64 itemsLimit = 0;
 
         TString itemsLimitParamName;
         NYql::NDqProto::TData itemsLimitBytes;
         NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
+
+        const auto& snapshot = GetSnapshot();
 
         for (auto& [shardId, shardInfo] : partitions) {
             YQL_ENSURE(!shardInfo.KeyWriteRanges);
@@ -799,16 +802,6 @@ protected:
             input.SourceType = NYql::KqpReadRangesSourceName;
         }
         return partitions.size();
-    }
-
-protected:
-    void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta) {
-        meta->SetTablePath(stageInfo.Meta.TablePath);
-        meta->MutableTableId()->SetTableId(stageInfo.Meta.TableId.PathId.LocalPathId);
-        meta->MutableTableId()->SetOwnerId(stageInfo.Meta.TableId.PathId.OwnerId);
-        meta->SetSchemaVersion(stageInfo.Meta.TableId.SchemaVersion);
-        meta->SetSysViewInfo(stageInfo.Meta.TableId.SysViewInfo);
-        meta->SetTableKind((ui32)stageInfo.Meta.TableKind);
     }
 
 protected:
@@ -955,6 +948,10 @@ protected:
         }
     }
 
+    const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
+        return TasksGraph.GetMeta().Snapshot;
+    }
+
     IActor* CreateChannelProxy(const NYql::NDq::TChannel& channel) {
         IActor* proxy;
 
@@ -980,6 +977,7 @@ protected:
 
         this->RegisterWithSameMailbox(proxy);
         ResultChannelProxies.emplace(std::make_pair(channel.Id, proxy));
+        TasksGraph.GetMeta().ResultChannelProxies.emplace(channel.Id, proxy->SelfId());
 
         return proxy;
     }
@@ -1022,6 +1020,18 @@ protected:
         }
     }
 
+    const TKqpTableKeys& GetTableKeys() const {
+        return TasksGraph.GetMeta().TableKeys;
+    }
+
+    TKqpTableKeys& GetTableKeysRef() {
+        return TasksGraph.GetMeta().TableKeys;
+    }
+
+    std::unordered_map<ui64, IActor*>& GetResultChannelProxies() {
+        return ResultChannelProxies;
+    }
+
     TString DebugString() const {
         TStringBuilder sb;
         sb << "[KqpExecuter], type: " << (ExecType == EExecType::Data ? "Data" : "Scan")
@@ -1046,19 +1056,18 @@ protected:
     ui64 TxId = 0;
 
     TKqpTasksGraph TasksGraph;
-    TKqpTableKeys TableKeys;
 
     TActorId KqpTableResolverId;
     TActorId KqpShardsResolverId;
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashMap<TActorId, NYql::NDqProto::TComputeActorExtraData> ExtraData;
-    std::unordered_map<ui64, IActor*> ResultChannelProxies;
 
     TVector<TProgressStat> LastStats;
 
     TInstant StartResolveTime;
     TInstant LastResourceUsageUpdate;
 
+    std::unordered_map<ui64, IActor*> ResultChannelProxies;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
@@ -1082,7 +1091,7 @@ private:
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::IHTTPGateway::TPtr httpGateway);
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

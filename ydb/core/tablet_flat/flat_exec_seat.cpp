@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
     void TSeat::Complete(const TActorContext& ctx) noexcept {
-        for (auto& callback : OnCommitted) {
+        for (auto& callback : OnPersistent) {
             callback();
         }
         Self->Complete(ctx);

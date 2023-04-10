@@ -1,4 +1,5 @@
 #pragma once
+
 #include "cms.h"
 #include "ut_helpers.h"
 
@@ -6,23 +7,22 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
 
-#include <util/system/mutex.h>
 #include <util/datetime/base.h>
+#include <util/system/mutex.h>
 
-namespace NKikimr {
-namespace NCmsTest {
+namespace NKikimr::NCmsTest {
 
 using NNodeWhiteboard::TTabletId;
 using TNodeTenantsMap = THashMap<ui32, TVector<TString>>;
 
 struct TFakeNodeInfo {
     struct TVDiskIDComparator {
-        bool operator ()(const TVDiskID& a, const TVDiskID& b) const {
+        bool operator ()(const TVDiskID &a, const TVDiskID &b) const {
             return std::make_tuple(a.GroupID, a.FailRealm, a.FailDomain, a.VDisk)
                     < std::make_tuple(b.GroupID, b.FailRealm, b.FailDomain, b.VDisk);
         }
@@ -48,14 +48,12 @@ public:
     static inline ui32 NoisyBSCPipeCounter = 0;
     static inline TMutex Mutex;
 
-    void Bootstrap(const TActorContext &ctx)
-    {
+    void Bootstrap(const TActorContext &ctx) {
         Y_UNUSED(ctx);
         Become(&TFakeNodeWhiteboardService::StateWork);
     }
 
-    STFUNC(StateWork)
-    {
+    STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
             HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
@@ -66,7 +64,6 @@ public:
             HFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigRequest, Handle);
         }
     }
-
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev, const TActorContext &ctx);
@@ -91,28 +88,25 @@ struct TTestEnvOpts {
     TTestEnvOpts() = default;
 
     TTestEnvOpts(ui32 nodeCount, 
-                ui32 vdisks = 1,
-                const TNodeTenantsMap &tenants = TNodeTenantsMap())
-            : NodeCount(nodeCount)
-            , VDisks(vdisks)
-            , NToSelect(1)
-            , NRings(1)
-            , RingSize(nodeCount)
-            , DataCenterCount(1)
-            , Tenants(tenants)
-            , UseMirror3dcErasure(false)
-            , AdvanceCurrentTime(false)
+            ui32 vdisks = 1,
+            const TNodeTenantsMap &tenants = TNodeTenantsMap())
+        : NodeCount(nodeCount)
+        , VDisks(vdisks)
+        , NToSelect(1)
+        , NRings(1)
+        , RingSize(nodeCount)
+        , DataCenterCount(1)
+        , Tenants(tenants)
+        , UseMirror3dcErasure(false)
+        , AdvanceCurrentTime(false)
     {
     }
 };
 
 class TCmsTestEnv : public TTestBasicRuntime {
 public:
-    TCmsTestEnv(ui32 nodeCount,
-                ui32 vdisks = 1,
-                const TNodeTenantsMap &tenants = TNodeTenantsMap());
-    TCmsTestEnv(ui32 nodeCount,
-                const TNodeTenantsMap &tenants);
+    TCmsTestEnv(ui32 nodeCount, ui32 vdisks = 1, const TNodeTenantsMap &tenants = {});
+    TCmsTestEnv(ui32 nodeCount, const TNodeTenantsMap &tenants);
     TCmsTestEnv(const TTestEnvOpts &options);
 
     TActorId GetSender() { return Sender; }
@@ -123,14 +117,13 @@ public:
     void RestartCms();
     void SendRestartCms();
     void SendToCms(IEventBase *event);
+    void CreateDefaultCmsPipe();
+    void DestroyDefaultCmsPipe();
 
     NKikimrCms::TCmsConfig GetCmsConfig();
     void SendCmsConfig(const NKikimrCms::TCmsConfig &config);
     void SetCmsConfig(const NKikimrCms::TCmsConfig &config);
-    void SetLimits(ui32 tenantLimit,
-                   ui32 tenantRatioLimit,
-                   ui32 clusterLimit,
-                   ui32 clusterRatioLimit);
+    void SetLimits(ui32 tenantLimit, ui32 tenantRatioLimit, ui32 clusterLimit, ui32 clusterRatioLimit);
 
     void EnableSysNodeChecking(); 
     TIntrusiveConstPtr<NKikimr::TStateStorageInfo> GetStateStorageInfo();
@@ -139,24 +132,22 @@ public:
         TFakeNodeWhiteboardService::Info[GetNodeId(nodeIndex)].SystemStateInfo.SetStartTime(startTime.GetValue());
     }
 
-    NKikimrCms::TClusterState
-    RequestState(const NKikimrCms::TClusterStateRequest &request = {},
-                 NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+    NKikimrCms::TClusterState RequestState(const NKikimrCms::TClusterStateRequest &request = {},
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
 
-    std::pair<TString, TVector<TString>>
-    ExtractPermissions(const NKikimrCms::TPermissionResponse &response);
+    std::pair<TString, TVector<TString>> ExtractPermissions(const NKikimrCms::TPermissionResponse &response);
 
-    template<typename... Ts>
-    NKikimrCms::TPermissionResponse
-    CheckPermissionRequest(const TString &user,
-                           bool partial,
-                           bool dry,
-                           bool schedule,
-                           bool defaultTenantPolicy,
-                           TDuration duration,
-                           NKikimrCms::EAvailabilityMode availabilityMode,
-                           NKikimrCms::TStatus::ECode code,
-                           Ts... actions)
+    template <typename... Ts>
+    NKikimrCms::TPermissionResponse CheckPermissionRequest(
+            const TString &user,
+            bool partial,
+            bool dry,
+            bool schedule,
+            bool defaultTenantPolicy,
+            TDuration duration,
+            NKikimrCms::EAvailabilityMode availabilityMode,
+            NKikimrCms::TStatus::ECode code,
+            Ts... actions)
     {
         auto req = MakePermissionRequest(user, partial, dry, schedule, actions...);
         if (!defaultTenantPolicy)
@@ -166,211 +157,197 @@ public:
         req->Record.SetAvailabilityMode(availabilityMode);
         return CheckPermissionRequest(req, code);
     }
-    template<typename... Ts>
-    NKikimrCms::TPermissionResponse
-    CheckPermissionRequest(const TString &user,
-                           bool partial,
-                           bool dry,
-                           bool schedule,
-                           bool defaultTenantPolicy,
-                           NKikimrCms::EAvailabilityMode availabilityMode,
-                           NKikimrCms::TStatus::ECode code,
-                           Ts... actions)
+
+    template <typename... Ts>
+    NKikimrCms::TPermissionResponse CheckPermissionRequest(
+            const TString &user,
+            bool partial,
+            bool dry,
+            bool schedule,
+            bool defaultTenantPolicy,
+            NKikimrCms::EAvailabilityMode availabilityMode,
+            NKikimrCms::TStatus::ECode code,
+            Ts... actions)
     {
         return CheckPermissionRequest(user, partial, dry, schedule,
                                       defaultTenantPolicy, TDuration::Zero(),
                                       availabilityMode,
                                       code, actions...);
     }
-    template<typename... Ts>
-    NKikimrCms::TPermissionResponse
-    CheckPermissionRequest(const TString &user,
-                           bool partial,
-                           bool dry,
-                           bool schedule,
-                           bool defaultTenantPolicy,
-                           TDuration duration,
-                           NKikimrCms::TStatus::ECode code,
-                           Ts... actions)
+    template <typename... Ts>
+    NKikimrCms::TPermissionResponse CheckPermissionRequest(
+            const TString &user,
+            bool partial,
+            bool dry,
+            bool schedule,
+            bool defaultTenantPolicy,
+            TDuration duration,
+            NKikimrCms::TStatus::ECode code,
+            Ts... actions)
     {
-        return CheckPermissionRequest(user, partial, dry, schedule,
-                                      defaultTenantPolicy, duration,
-                                      NKikimrCms::MODE_MAX_AVAILABILITY,
-                                      code, actions...);
-    }
-    template<typename... Ts>
-    NKikimrCms::TPermissionResponse
-    CheckPermissionRequest(const TString &user,
-                           bool partial,
-                           bool dry,
-                           bool schedule,
-                           bool defaultTenantPolicy,
-                           NKikimrCms::TStatus::ECode code,
-                           Ts... actions)
-    {
-        return CheckPermissionRequest(user, partial, dry, schedule,
-                                      defaultTenantPolicy,
-                                      NKikimrCms::MODE_MAX_AVAILABILITY,
-                                      code, actions...);
+        return CheckPermissionRequest(user, partial, dry, schedule, defaultTenantPolicy,
+            duration, NKikimrCms::MODE_MAX_AVAILABILITY, code, actions...);
     }
 
-    NKikimrCms::TPermissionResponse
-    CheckPermissionRequest(TAutoPtr<NCms::TEvCms::TEvPermissionRequest> req,
-                           NKikimrCms::TStatus::ECode code);
+    template <typename... Ts>
+    NKikimrCms::TPermissionResponse CheckPermissionRequest(
+            const TString &user,
+            bool partial,
+            bool dry,
+            bool schedule,
+            bool defaultTenantPolicy,
+            NKikimrCms::TStatus::ECode code,
+            Ts... actions)
+    {
+        return CheckPermissionRequest(user, partial, dry, schedule, defaultTenantPolicy,
+            NKikimrCms::MODE_MAX_AVAILABILITY, code, actions...);
+    }
 
-    NKikimrCms::TManagePermissionResponse
-    CheckManagePermissionRequest(const TString &user,
-                                 NKikimrCms::TManagePermissionRequest::ECommand cmd,
-                                 bool dry = false,
-                                 NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
-    template<typename... Ts>
-    NKikimrCms::TManagePermissionResponse
-    CheckManagePermissionRequest(const TString &user,
-                                 NKikimrCms::TManagePermissionRequest::ECommand cmd,
-                                 bool dry,
-                                 NKikimrCms::TStatus::ECode code,
-                                 Ts... ids )
+    NKikimrCms::TPermissionResponse CheckPermissionRequest(TAutoPtr<NCms::TEvCms::TEvPermissionRequest> req,
+        NKikimrCms::TStatus::ECode code);
+
+    NKikimrCms::TManagePermissionResponse CheckManagePermissionRequest(
+        const TString &user,
+        NKikimrCms::TManagePermissionRequest::ECommand cmd,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+
+    template <typename... Ts>
+    NKikimrCms::TManagePermissionResponse CheckManagePermissionRequest(
+            const TString &user,
+            NKikimrCms::TManagePermissionRequest::ECommand cmd,
+            bool dry,
+            NKikimrCms::TStatus::ECode code,
+            Ts... ids)
     {
         auto req = MakeManagePermissionRequest(user, cmd, dry, ids...);
         return CheckManagePermissionRequest(req, code);
     }
 
-    template<typename... Ts>
-    void CheckDonePermission(const TString &user,
-                             bool dry,
-                             NKikimrCms::TStatus::ECode code,
-                             Ts... ids)
+    template <typename... Ts>
+    void CheckDonePermission(
+            const TString &user,
+            bool dry,
+            NKikimrCms::TStatus::ECode code,
+            Ts... ids)
     {
         CheckManagePermissionRequest(user, NKikimrCms::TManagePermissionRequest::DONE, dry, code, ids...);
     }
 
-    NKikimrCms::TManagePermissionResponse
-    CheckListPermissions(const TString &user,
-                         ui64 count);
-    void CheckDonePermission(const TString &user,
-                             const TString &id,
-                             bool dry = false,
-                             NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
-    void CheckRejectPermission(const TString &user,
-                               const TString &id,
-                               bool dry = false,
-                               NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
-    NKikimrCms::TManagePermissionResponse
-    CheckGetPermission(const TString &user,
-                       const TString &id,
-                       bool dry = false,
-                       NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+    NKikimrCms::TManagePermissionResponse CheckListPermissions(const TString &user, ui64 count);
+    void CheckDonePermission(
+        const TString &user,
+        const TString &id,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+    void CheckRejectPermission(
+        const TString &user,
+        const TString &id,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+    NKikimrCms::TManagePermissionResponse CheckGetPermission(
+        const TString &user,
+        const TString &id,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
 
-    NKikimrCms::TManageRequestResponse
-    CheckGetRequest(const TString &user,
-                    const TString &id,
-                    bool dry = false,
-                    NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
-    void CheckRejectRequest(const TString &user,
-                            const TString &id,
-                            bool dry = false,
-                            NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
-    NKikimrCms::TManageRequestResponse
-    CheckListRequests(const TString &user,
-                      ui64 count);
+    NKikimrCms::TManageRequestResponse CheckGetRequest(
+        const TString &user,
+        const TString &id,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+    void CheckRejectRequest(
+        const TString &user,
+        const TString &id,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+    NKikimrCms::TManageRequestResponse CheckListRequests(const TString &user, ui64 count);
 
-    NKikimrCms::TPermissionResponse
-    CheckRequest(const TString &user,
-                 TString id,
-                 bool dry,
-                 NKikimrCms::EAvailabilityMode availabilityMode,
-                 NKikimrCms::TStatus::ECode res,
-                 size_t count = 0);
-    NKikimrCms::TPermissionResponse
-    CheckRequest(const TString &user,
-                 TString id,
-                 bool dry,
-                 NKikimrCms::TStatus::ECode res,
-                 size_t count = 0)
+    NKikimrCms::TPermissionResponse CheckRequest(
+        const TString &user,
+        TString id,
+        bool dry,
+        NKikimrCms::EAvailabilityMode availabilityMode,
+        NKikimrCms::TStatus::ECode res,
+        size_t count = 0);
+    NKikimrCms::TPermissionResponse CheckRequest(
+            const TString &user,
+            TString id,
+            bool dry,
+            NKikimrCms::TStatus::ECode res,
+            size_t count = 0)
     {
         return CheckRequest(user, id, dry, NKikimrCms::MODE_MAX_AVAILABILITY, res, count);
     }
 
-    void CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask* req);
+    void CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask *req);
 
-    template<typename... Ts>
-    void CheckWalleCreateTask(const TString &id,
-                              const TString &action,
-                              bool dry,
-                              NKikimrCms::TStatus::ECode code,
-                              Ts... nodes)
+    template <typename... Ts>
+    void CheckWalleCreateTask(
+            const TString &id,
+            const TString &action,
+            bool dry,
+            NKikimrCms::TStatus::ECode code,
+            Ts... nodes)
     {
         auto req = MakeWalleCreateRequest(id, action, dry, nodes...);
         CheckWalleCreateTask(req, code);
     }
 
-    template<typename... Ts>
-    void CheckWalleListTasks(const TString &id,
-                             const TString &status,
-                             Ts... nodes)
-    {
+    template <typename... Ts>
+    void CheckWalleListTasks(const TString &id, const TString &status, Ts... nodes) {
         auto task = MakeTaskInfo(id, status, nodes...);
         CheckWalleListTasks(task);
     }
 
-    template<typename... Ts>
-    void CheckWalleCheckTask(const TString &id,
-                             NKikimrCms::TStatus::ECode code,
-                             Ts... nodes)
-    {
+    template <typename... Ts>
+    void CheckWalleCheckTask(const TString &id, NKikimrCms::TStatus::ECode code, Ts... nodes) {
         auto task = MakeTaskInfo(id, "", nodes...);
         CheckWalleCheckTask(id, code, task);
     }
 
-    void CheckWalleCheckTask(const TString &id,
-                             NKikimrCms::TStatus::ECode code);
+    void CheckWalleCheckTask(const TString &id, NKikimrCms::TStatus::ECode code);
 
     ui64 CountWalleTasks();
 
     void CheckWalleListTasks(size_t count);
 
-    void CheckWalleRemoveTask(const TString &id,
-                              NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+    void CheckWalleRemoveTask(const TString &id, NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
 
-    template<typename... Ts>
-    TString CheckNotification(NKikimrCms::TStatus::ECode code,
-                              const TString &user,
-                              TInstant when,
-                              Ts... actions)
+    template <typename... Ts>
+    TString CheckNotification(
+            NKikimrCms::TStatus::ECode code,
+            const TString &user,
+            TInstant when,
+            Ts... actions)
     {
         auto req = MakeNotification(user, when, actions...);
         return CheckNotification(req, code);
     }
 
-    void CheckGetNotification(const TString &user,
-                              const TString &id,
-                              NKikimrCms::TStatus::ECode code);
-    void CheckListNotifications(const TString &user,
-                                NKikimrCms::TStatus::ECode code,
-                                ui32 count);
-    void CheckRejectNotification(const TString &user,
-                                 const TString &id,
-                                 NKikimrCms::TStatus::ECode code,
-                                 bool dry = false);
+    void CheckGetNotification(const TString &user, const TString &id, NKikimrCms::TStatus::ECode code);
+    void CheckListNotifications(const TString &user, NKikimrCms::TStatus::ECode code, ui32 count);
+    void CheckRejectNotification(const TString &user, const TString &id, NKikimrCms::TStatus::ECode code, bool dry = false);
 
-    void WaitUpdatDiskStatus(ui32 statusEventsCount,
-                             NKikimrBlobStorage::EDriveStatus newStatus = NKikimrBlobStorage::ACTIVE);
+    void WaitUpdatDiskStatus(ui32 statusEventsCount, NKikimrBlobStorage::EDriveStatus newStatus = NKikimrBlobStorage::ACTIVE);
 
     template <typename... Ts>
-    void CheckSetMarker(NKikimrCms::EMarker marker,
-                        const TString &userToken,
-                        NKikimrCms::TStatus::ECode code,
-                        Ts ...args)
+    void CheckSetMarker(
+            NKikimrCms::EMarker marker,
+            const TString &userToken,
+            NKikimrCms::TStatus::ECode code,
+            Ts ...args)
     {
         auto req = MakeSetMarkerRequest(marker, userToken, args...);
         return CheckSetMarker(req, code);
     }
 
     template <typename... Ts>
-    void CheckResetMarker(NKikimrCms::EMarker marker,
-                          const TString &userToken,
-                          NKikimrCms::TStatus::ECode code,
-                          Ts ...args)
+    void CheckResetMarker(
+            NKikimrCms::EMarker marker,
+            const TString &userToken,
+            NKikimrCms::TStatus::ECode code,
+            Ts ...args)
     {
         auto req = MakeResetMarkerRequest(marker, userToken, args...);
         return CheckResetMarker(req, code);
@@ -379,47 +356,38 @@ public:
     void EnableBSBaseConfig();
     void DisableBSBaseConfig();
 
-    NKikimrCms::TGetLogTailResponse GetLogTail(ui32 type = 0,
-                                               TInstant from = TInstant::Zero(),
-                                               TInstant to = TInstant::Zero(),
-                                               ui32 limit = 100,
-                                               ui32 offset = 0);
+    NKikimrCms::TGetLogTailResponse GetLogTail(
+        ui32 type = 0,
+        TInstant from = TInstant::Zero(),
+        TInstant to = TInstant::Zero(),
+        ui32 limit = 100,
+        ui32 offset = 0);
 
-    void AddBSCFailures(const NCms::TPDiskID& id, TVector<bool> failuresPattern);
+    void AddBSCFailures(const NCms::TPDiskID &id, TVector<bool> failuresPattern);
 
     void EnableNoisyBSCPipe();
 
     const ui64 CmsId;
+    i32 ProcessQueueCount;
 
 private:
     void SetupLogging();
 
-    NKikimrCms::TManagePermissionResponse
-    CheckManagePermissionRequest(TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> req,
-                                 NKikimrCms::TStatus::ECode code);
-    NKikimrCms::TManageRequestResponse
-    CheckManageRequestRequest(TAutoPtr<NCms::TEvCms::TEvManageRequestRequest> req,
-                              NKikimrCms::TStatus::ECode code);
-
-    void CheckWalleCreateTask(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> req,
-                              NKikimrCms::TStatus::ECode code);
-    void CheckTasksEqual(const NKikimrCms::TWalleTaskInfo &l,
-                         const NKikimrCms::TWalleTaskInfo &r);
+    NKikimrCms::TManagePermissionResponse CheckManagePermissionRequest(
+        TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> req, NKikimrCms::TStatus::ECode code);
+    NKikimrCms::TManageRequestResponse CheckManageRequestRequest(
+        TAutoPtr<NCms::TEvCms::TEvManageRequestRequest> req, NKikimrCms::TStatus::ECode code);
+    void CheckWalleCreateTask(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> req, NKikimrCms::TStatus::ECode code);
+    void CheckTasksEqual(const NKikimrCms::TWalleTaskInfo &l, const NKikimrCms::TWalleTaskInfo &r);
     void CheckWalleListTasks(const NKikimrCms::TWalleTaskInfo &task);
-    void CheckWalleCheckTask(const TString &id,
-                             NKikimrCms::TStatus::ECode code,
-                             NKikimrCms::TWalleTaskInfo task);
-
-    TString CheckNotification(TAutoPtr<NCms::TEvCms::TEvNotification> req,
-                              NKikimrCms::TStatus::ECode code);
-
-    void CheckSetMarker(TAutoPtr<NCms::TEvCms::TEvSetMarkerRequest> req,
-                        NKikimrCms::TStatus::ECode code);
-    void CheckResetMarker(TAutoPtr<NCms::TEvCms::TEvResetMarkerRequest> req,
-                          NKikimrCms::TStatus::ECode code);
+    void CheckWalleCheckTask(const TString &id, NKikimrCms::TStatus::ECode code, NKikimrCms::TWalleTaskInfo task);
+    TString CheckNotification(TAutoPtr<NCms::TEvCms::TEvNotification> req, NKikimrCms::TStatus::ECode code);
+    void CheckSetMarker(TAutoPtr<NCms::TEvCms::TEvSetMarkerRequest> req, NKikimrCms::TStatus::ECode code);
+    void CheckResetMarker(TAutoPtr<NCms::TEvCms::TEvResetMarkerRequest> req, NKikimrCms::TStatus::ECode code);
 
     TActorId Sender;
+    TActorId ClientId;
+    TActorId CmsTabletActor;
 };
 
-} // NCmsTest
-} // NKikimr
+}

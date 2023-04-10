@@ -89,6 +89,8 @@ namespace NKikimr::NPrivate {
         TActorIDPtr SkeletonFrontIDPtr;
         ::NMonitoring::TDynamicCounters::TCounterPtr VPatchFoundPartsMsgsPtr;
         ::NMonitoring::TDynamicCounters::TCounterPtr VPatchResMsgsPtr;
+        const NVDiskMon::TLtcHistoPtr GetHistogram;
+        const NVDiskMon::TLtcHistoPtr PutHistogram;
         const TIntrusivePtr<TVPatchCtx> VPatchCtx;
         TString VDiskLogPrefix;
 
@@ -129,6 +131,7 @@ namespace NKikimr::NPrivate {
                 TEvBlobStorage::TEvVPatchStart::TPtr &ev, TInstant now, TActorIDPtr skeletonFrontIDPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
+                const NVDiskMon::TLtcHistoPtr &getHistogram, const NVDiskMon::TLtcHistoPtr &putHistogram,
                 const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid)
             : TActorBootstrapped()
             , Sender(ev->Sender)
@@ -136,6 +139,8 @@ namespace NKikimr::NPrivate {
             , SkeletonFrontIDPtr(skeletonFrontIDPtr)
             , VPatchFoundPartsMsgsPtr(vPatchFoundPartsMsgsPtr)
             , VPatchResMsgsPtr(vPatchResMsgsPtr)
+            , GetHistogram(getHistogram)
+            , PutHistogram(putHistogram)
             , VPatchCtx(vPatchCtx)
             , VDiskLogPrefix(vDiskLogPrefix)
             , LeaderId(leaderId)
@@ -161,7 +166,7 @@ namespace NKikimr::NPrivate {
             Y_VERIFY(record.HasCookie());
             FoundPartsEvent = std::make_unique<TEvBlobStorage::TEvVPatchFoundParts>(
                     NKikimrProto::OK, OriginalBlobId, PatchedBlobId, VDiskId, record.GetCookie(), now, ErrorReason, &record,
-                    SkeletonFrontIDPtr, VPatchFoundPartsMsgsPtr, nullptr, IncarnationGuid);
+                    SkeletonFrontIDPtr, VPatchFoundPartsMsgsPtr, getHistogram, IncarnationGuid);
             if (CurrentEventTrace) {
                 CurrentEventTrace->AdditionalTrace = PatchActorTrace;
             }
@@ -174,13 +179,6 @@ namespace NKikimr::NPrivate {
                     (OriginalBlobId, OriginalBlobId),
                     (Deadline, Deadline));
             AddMark("TSkeletonVPatchActor bootstrapped");
-            ui32 cookie = 0;
-            std::unique_ptr<TEvBlobStorage::TEvVGet> msg = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskId, Deadline,
-                    NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::None, cookie,
-                    TLogoBlobID(OriginalBlobId, 0), TLogoBlobID(OriginalBlobId, TLogoBlobID::MaxPartId),
-                    TLogoBlobID::MaxPartId, nullptr);
-            Send(LeaderId, msg.release());
-            AddMark("Send RangeIndexQuery");
 
             TInstant now = TActivationContext::Now();
             if (Deadline != TInstant::Zero() && Deadline < now) {
@@ -199,6 +197,14 @@ namespace NKikimr::NPrivate {
                 liveDuration = CommonLiveTime;
             }
             Schedule(liveDuration, new TKikimrEvents::TEvWakeup);
+
+            ui32 cookie = 0;
+            std::unique_ptr<TEvBlobStorage::TEvVGet> msg = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskId, Deadline,
+                    NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::None, cookie,
+                    TLogoBlobID(OriginalBlobId, 0), TLogoBlobID(OriginalBlobId, TLogoBlobID::MaxPartId),
+                    TLogoBlobID::MaxPartId);
+            Send(LeaderId, msg.release());
+            AddMark("Sent RangeIndexQuery");
         }
 
         void SendVPatchFoundParts(NKikimrProto::EReplyStatus status)
@@ -490,7 +496,7 @@ namespace NKikimr::NPrivate {
             ResultEvent = std::make_unique<TEvBlobStorage::TEvVPatchResult>(
                     NKikimrProto::OK, TLogoBlobID(OriginalBlobId, OriginalPartId),
                     TLogoBlobID(PatchedBlobId, PatchedPartId), VDiskId, record.GetCookie(), now,
-                    &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr, IncarnationGuid);
+                    &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, PutHistogram, IncarnationGuid);
             Sender = ev->Sender;
             Cookie = ev->Cookie;
             CurrentEventTrace = ev->Get()->VDiskSkeletonTrace;
@@ -554,7 +560,7 @@ namespace NKikimr::NPrivate {
 
             ResultEvent = std::make_unique<TEvBlobStorage::TEvVPatchResult>(
                     NKikimrProto::OK, originalPartBlobId, patchedPartBlobId, VDiskId, record.GetCookie(), now,
-                    &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr, IncarnationGuid);
+                    &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, PutHistogram, IncarnationGuid);
             Sender = ev->Sender;
             Cookie = ev->Cookie;
 
@@ -619,7 +625,7 @@ namespace NKikimr::NPrivate {
             NKikimrBlobStorage::TEvVPatchXorDiff &record = ev->Get()->Record;
             TInstant now = TActivationContext::Now();
             auto resultEvent = std::make_unique<TEvBlobStorage::TEvVPatchXorDiffResult>(
-                    NKikimrProto::ERROR, now, &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr);
+                    NKikimrProto::ERROR, now, &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, PutHistogram);
             AddMark("Error: HandleError TEvVPatchXorDiff");
             if (ev->Get()->VDiskSkeletonTrace) {
                 ev->Get()->VDiskSkeletonTrace->AddMark("Error: HandleError TEvVPatchXorDiff");
@@ -650,7 +656,7 @@ namespace NKikimr::NPrivate {
 
             TInstant now = TActivationContext::Now();
             std::unique_ptr<TEvBlobStorage::TEvVPatchXorDiffResult> resultEvent = std::make_unique<TEvBlobStorage::TEvVPatchXorDiffResult>(
-                    NKikimrProto::OK, now, &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr);
+                    NKikimrProto::OK, now, &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, PutHistogram);
             AddMark("Send xor diff result");
             if (ev->Get()->VDiskSkeletonTrace) {
                 ev->Get()->VDiskSkeletonTrace->AddMark("Send xor diff result");
@@ -786,10 +792,12 @@ namespace NKikimr {
             TEvBlobStorage::TEvVPatchStart::TPtr &ev, TInstant now, TActorIDPtr skeletonFrontIDPtr,
             const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
             const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
+            const NVDiskMon::TLtcHistoPtr &getHistogram, const NVDiskMon::TLtcHistoPtr &putHistogram,
             const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid)
     {
         return new NPrivate::TSkeletonVPatchActor(leaderId, gType, ev, now, skeletonFrontIDPtr,
-                vPatchFoundPartsMsgsPtr, vPatchResMsgsPtr, vPatchCtx, vDiskLogPrefix, incarnationGuid);
+                vPatchFoundPartsMsgsPtr, vPatchResMsgsPtr, getHistogram, putHistogram,
+                vPatchCtx, vDiskLogPrefix, incarnationGuid);
     }
 
 } // NKikimr

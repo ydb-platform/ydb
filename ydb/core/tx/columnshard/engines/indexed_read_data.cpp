@@ -12,8 +12,6 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-using TMark = TColumnEngineForLogs::TMark;
-
 // Slices a batch into smaller batches and appends them to result vector (which might be non-empty already)
 void SliceBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                 const int64_t maxRowsInBatch,
@@ -37,14 +35,15 @@ GroupInKeyRanges(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches
     std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> rangesSlices; // rangesSlices[rangeNo][sliceNo]
     rangesSlices.reserve(batches.size());
     {
-        TMap<TMark, std::vector<std::shared_ptr<arrow::RecordBatch>>> points;
+        TMap<NArrow::TReplaceKey, std::vector<std::shared_ptr<arrow::RecordBatch>>> points;
 
         for (auto& batch : batches) {
-            std::shared_ptr<arrow::Array> keyColumn = GetFirstPKColumn(indexInfo, batch);
-            Y_VERIFY(keyColumn && keyColumn->length() > 0);
+            auto compositeKey = NArrow::ExtractColumns(batch, indexInfo.GetReplaceKey());
+            Y_VERIFY(compositeKey && compositeKey->num_rows() > 0);
+            auto keyColumns = std::make_shared<NArrow::TArrayVec>(compositeKey->columns());
 
-            TMark min(*keyColumn->GetScalar(0));
-            TMark max(*keyColumn->GetScalar(keyColumn->length() - 1));
+            NArrow::TReplaceKey min(keyColumns, 0);
+            NArrow::TReplaceKey max(keyColumns, compositeKey->num_rows() - 1);
 
             points[min].push_back(batch); // insert start
             points[max].push_back({}); // insert end
@@ -112,6 +111,37 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
     return out;
 }
 
+}
+
+bool TIndexedReadData::TAssembledNotFiltered::DoExecuteImpl() {
+    /// @warning The replace logic is correct only in assumption that predicate is applyed over a part of ReplaceKey.
+    /// It's not OK to apply predicate before replacing key duplicates otherwise.
+    /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
+    auto batch = BatchConstructor.Assemble();
+    Y_VERIFY(batch);
+    auto filtered = NOlap::FilterPortion(batch, *ReadMetadata);
+    if (filtered.Batch) {
+        Y_VERIFY(filtered.Valid());
+        filtered.ApplyFilter();
+    }
+#if 1 // optimization
+    if (filtered.Batch && ReadMetadata->Program && AllowEarlyFilter) {
+        filtered = NOlap::EarlyFilter(filtered.Batch, ReadMetadata->Program);
+    }
+    if (filtered.Batch) {
+        Y_VERIFY(filtered.Valid());
+        filtered.ApplyFilter();
+    }
+#else
+    Y_UNUSED(AllowEarlyFilter);
+#endif
+    FilteredBatch = filtered.Batch;
+    return true;
+}
+
+bool TIndexedReadData::TAssembledNotFiltered::DoApply(TIndexedReadData& owner) const {
+    owner.PortionFinished(BatchNo, FilteredBatch);
+    return true;
 }
 
 std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan() const {
@@ -196,18 +226,6 @@ THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGr
         }
     }
 
-    // Init split by granules structs
-    for (auto& rec : ReadMetadata->SelectInfo->Granules) {
-        TsGranules.emplace(rec.Mark, rec.Granule);
-    }
-
-    TMark minMark(IndexInfo().GetIndexKey()->field(0)->type());
-    if (!TsGranules.count(minMark)) {
-        // committed data before the first granule would be placed in fake (0,0) granule
-        // committed data after the last granule would be placed into the last granule (or here if none)
-        TsGranules.emplace(minMark, 0);
-    }
-
     auto& stats = ReadMetadata->ReadStats;
     stats->IndexGranules = GranuleWaits.size();
     stats->IndexPortions = PortionGranule.size();
@@ -218,56 +236,45 @@ THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGr
     return out;
 }
 
-void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& column) {
+void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& data, NColumnShard::IDataTasksProcessor::TPtr processor) {
     Y_VERIFY(IndexedBlobs.count(blobRange));
     ui32 batchNo = IndexedBlobs[blobRange];
     if (!WaitIndexed.count(batchNo)) {
         return;
     }
     auto& waitingFor = WaitIndexed[batchNo];
-    waitingFor.erase(blobRange);
+    if (waitingFor.erase(blobRange) != 1) {
+        return;
+    }
 
-    Data[blobRange] = column;
+    Data[blobRange] = data;
 
     if (waitingFor.empty()) {
-        WaitIndexed.erase(batchNo);
-        if (auto batch = AssembleIndexedBatch(batchNo)) {
-            Indexed[batchNo] = batch;
+        if (auto batch = AssembleIndexedBatch(batchNo, processor)) {
+            if (processor) {
+                processor->Add(batch);
+            } else {
+                batch->Execute();
+                batch->Apply(*this);
+            }
+        } else {
+            WaitIndexed.erase(batchNo);
         }
-        UpdateGranuleWaits(batchNo);
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> TIndexedReadData::AssembleIndexedBatch(ui32 batchNo) {
+NColumnShard::IDataPreparationTask::TPtr TIndexedReadData::AssembleIndexedBatch(ui32 batchNo, NColumnShard::IDataTasksProcessor::TPtr processor) {
     auto& portionInfo = Portion(batchNo);
     Y_VERIFY(portionInfo.Produced());
 
-    auto batch = portionInfo.AssembleInBatch(ReadMetadata->IndexInfo, ReadMetadata->LoadSchema, Data);
-    Y_VERIFY(batch);
+    auto batchConstructor = portionInfo.PrepareForAssemble(ReadMetadata->IndexInfo, ReadMetadata->LoadSchema, Data);
 
     for (auto& rec : portionInfo.Records) {
         auto& blobRange = rec.BlobRange;
         Data.erase(blobRange);
     }
 
-    /// @warning The replace logic is correct only in assumption that predicate is applyed over a part of ReplaceKey.
-    /// It's not OK to apply predicate before replacing key duplicates otherwise.
-    /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
-    auto filtered = NOlap::FilterPortion(batch, *ReadMetadata);
-    if (filtered.Batch) {
-        Y_VERIFY(filtered.Valid());
-        filtered.ApplyFilter();
-    }
-#if 1 // optimization
-    if (filtered.Batch && ReadMetadata->Program && portionInfo.AllowEarlyFilter()) {
-        filtered = NOlap::EarlyFilter(filtered.Batch, ReadMetadata->Program);
-    }
-    if (filtered.Batch) {
-        Y_VERIFY(filtered.Valid());
-        filtered.ApplyFilter();
-    }
-#endif
-    return filtered.Batch;
+    return std::make_shared<TAssembledNotFiltered>(std::move(batchConstructor), ReadMetadata, batchNo, portionInfo.AllowEarlyFilter(), processor);
 }
 
 void TIndexedReadData::UpdateGranuleWaits(ui32 batchNo) {
@@ -318,11 +325,18 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
 
     // First time extract OutNotIndexed data
     if (NotIndexed.size()) {
-        /// @note not indexed data could contain data out of indexed granules
-        Y_VERIFY(!TsGranules.empty());
         auto mergedBatch = MergeNotIndexed(std::move(NotIndexed)); // merged has no dups
         if (mergedBatch) {
-            OutNotIndexed = SliceIntoGranules(mergedBatch, TsGranules, IndexInfo());
+            // Init split by granules structs
+            Y_VERIFY(ReadMetadata->SelectInfo);
+            TColumnEngineForLogs::TMarksGranules marksGranules(*ReadMetadata->SelectInfo);
+
+            // committed data before the first granule would be placed in fake preceding granule
+            // committed data after the last granule would be placed into the last granule
+            marksGranules.MakePrecedingMark(IndexInfo());
+            Y_VERIFY(!marksGranules.Empty());
+
+            OutNotIndexed = marksGranules.SliceIntoGranules(mergedBatch, IndexInfo());
         }
         NotIndexed.clear();
         ReadyNotIndexed = 0;
@@ -590,4 +604,23 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
     return out;
 }
 
+void TIndexedReadData::PortionFinished(const ui32 batchNo, std::shared_ptr<arrow::RecordBatch> batch) {
+    WaitIndexed.erase(batchNo);
+    if (batch) {
+        Y_VERIFY(Indexed.emplace(batchNo, batch).second);
+    }
+    UpdateGranuleWaits(batchNo);
+}
+
+}
+
+namespace NKikimr::NColumnShard {
+
+bool IDataPreparationTask::DoExecute() {
+    if (OwnerOperator && OwnerOperator->IsStopped()) {
+        return true;
+    } else {
+        return DoExecuteImpl();
+    }
+}
 }

@@ -26,8 +26,6 @@ target_link_libraries(ydb-core-persqueue-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-persqueue
@@ -119,5 +117,9 @@ resources(ydb-core-persqueue-ut
   counters_topics.html
   counters_pqproxy.html
   counters_labeled.json
+)
+target_allocator(ydb-core-persqueue-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-persqueue-ut)

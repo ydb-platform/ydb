@@ -3,7 +3,6 @@
 #include "scheme.h"
 
 #include <util/generic/algorithm.h>
-
 #include <util/string/join.h>
 
 namespace NKikimr::NCms {
@@ -13,18 +12,15 @@ TDowntime::TDowntime(TDuration ignoredDowntimeGap)
 {
 }
 
-void TDowntime::AddDowntime(TInstant start, TInstant end, const TString &reason)
-{
+void TDowntime::AddDowntime(TInstant start, TInstant end, const TString &reason) {
     AddDowntime({start, end, reason});
 }
 
-void TDowntime::AddDowntime(TInstant start, TDuration duration, const TString &reason)
-{
+void TDowntime::AddDowntime(TInstant start, TDuration duration, const TString &reason) {
     AddDowntime({start, duration, reason});
 }
 
-void TDowntime::AddDowntime(const TSegment segment)
-{
+void TDowntime::AddDowntime(const TSegment segment) {
     if (!segment.Duration())
         return;
 
@@ -43,14 +39,12 @@ void TDowntime::AddDowntime(const TSegment segment)
     }
 }
 
-void TDowntime::AddDowntime(const TDowntime &downtime)
-{
+void TDowntime::AddDowntime(const TDowntime &downtime) {
     for (auto &segment : downtime.GetDowntimeSegments())
         AddDowntime(segment);
 }
 
-void TDowntime::AddDowntime(const TLockableItem &item, TInstant now)
-{
+void TDowntime::AddDowntime(const TLockableItem &item, TInstant now) {
     AddDowntime(item.Downtime);
 
     if (item.State != NKikimrCms::UP)
@@ -68,8 +62,7 @@ void TDowntime::AddDowntime(const TLockableItem &item, TInstant now)
     }
 }
 
-bool TDowntime::HasUpcomingDowntime(TInstant now, TDuration distance, TDuration duration) const
-{
+bool TDowntime::HasUpcomingDowntime(TInstant now, TDuration distance, TDuration duration) const {
     for (auto &segment : DowntimeSegments) {
         if (segment.Start > now + distance)
             break;
@@ -81,13 +74,11 @@ bool TDowntime::HasUpcomingDowntime(TInstant now, TDuration distance, TDuration 
     return false;
 }
 
-TDuration TDowntime::GetIgnoredDowntimeGap() const
-{
+TDuration TDowntime::GetIgnoredDowntimeGap() const {
     return IgnoredDowntimeGap;
 }
 
-void TDowntime::SetIgnoredDowntimeGap(TDuration gap)
-{
+void TDowntime::SetIgnoredDowntimeGap(TDuration gap) {
     bool merge = IgnoredDowntimeGap < gap;
     IgnoredDowntimeGap = gap;
 
@@ -97,8 +88,7 @@ void TDowntime::SetIgnoredDowntimeGap(TDuration gap)
     }
 }
 
-void TDowntime::CleanupOldSegments(TInstant now)
-{
+void TDowntime::CleanupOldSegments(TInstant now) {
     while (!DowntimeSegments.empty()) {
         auto it = DowntimeSegments.begin();
         if (it->End + IgnoredDowntimeGap < now)
@@ -108,8 +98,7 @@ void TDowntime::CleanupOldSegments(TInstant now)
     }
 }
 
-void TDowntime::Serialize(NKikimrCms::TAvailabilityStats *rec) const
-{
+void TDowntime::Serialize(NKikimrCms::TAvailabilityStats *rec) const {
     for (auto &segment : DowntimeSegments) {
         auto &entry = *rec->AddDowntimes();
         entry.SetStart(segment.Start.GetValue());
@@ -119,8 +108,7 @@ void TDowntime::Serialize(NKikimrCms::TAvailabilityStats *rec) const
     rec->SetIgnoredDowntimeGap(IgnoredDowntimeGap.GetValue());
 }
 
-void TDowntime::Deserialize(const NKikimrCms::TAvailabilityStats &rec)
-{
+void TDowntime::Deserialize(const NKikimrCms::TAvailabilityStats &rec) {
     SetIgnoredDowntimeGap(TDuration::FromValue(rec.GetIgnoredDowntimeGap()));
 
     for (auto &entry : rec.GetDowntimes()) {
@@ -130,9 +118,7 @@ void TDowntime::Deserialize(const NKikimrCms::TAvailabilityStats &rec)
     }
 }
 
-std::pair<TDowntime::TSegments::iterator, bool>
-TDowntime::CollapseWithPrev(TSegments::iterator it)
-{
+std::pair<TDowntime::TSegments::iterator, bool> TDowntime::CollapseWithPrev(TSegments::iterator it) {
     auto prev = it;
     --prev;
 
@@ -158,8 +144,7 @@ TDowntimes::TDowntimes()
 {
 }
 
-void TDowntimes::SetIgnoredDowntimeGap(TDuration gap)
-{
+void TDowntimes::SetIgnoredDowntimeGap(TDuration gap) {
     if (IgnoredDowntimeGap == gap)
         return;
 
@@ -169,16 +154,14 @@ void TDowntimes::SetIgnoredDowntimeGap(TDuration gap)
         pr.second.SetIgnoredDowntimeGap(gap);
 }
 
-void TDowntimes::CleanupOld(TInstant now)
-{
+void TDowntimes::CleanupOld(TInstant now) {
     for (auto &pr : NodeDowntimes)
         pr.second.CleanupOldSegments(now);
     for (auto &pr : PDiskDowntimes)
         pr.second.CleanupOldSegments(now);
 }
 
-void TDowntimes::CleanupEmpty()
-{
+void TDowntimes::CleanupEmpty() {
     for (auto it = NodeDowntimes.begin(); it != NodeDowntimes.end(); ) {
         auto next = it;
         ++next;
@@ -196,9 +179,7 @@ void TDowntimes::CleanupEmpty()
     }
 }
 
-bool TDowntimes::DbLoadState(TTransactionContext& txc,
-                             const TActorContext& ctx)
-{
+bool TDowntimes::DbLoadState(TTransactionContext &txc, const TActorContext &ctx) {
     Y_UNUSED(ctx);
 
     NIceDb::TNiceDb db(txc.DB);
@@ -235,9 +216,7 @@ bool TDowntimes::DbLoadState(TTransactionContext& txc,
     return true;
 }
 
-void TDowntimes::DbStoreState(TTransactionContext& txc,
-                              const TActorContext& ctx)
-{
+void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx) {
     NIceDb::TNiceDb db(txc.DB);
 
     for (auto &pr : NodeDowntimes) {

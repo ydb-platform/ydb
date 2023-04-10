@@ -52,7 +52,14 @@ TExprNode::TPtr MergeSettings(const TExprNode& settings1, const TExprNode& setti
 TExprNode::TPtr ReplaceSetting(const TExprNode& settings, TPositionHandle pos, const TString& name, const TExprNode::TPtr& value, TExprContext& ctx);
 TExprNode::TPtr ReplaceSetting(const TExprNode& settings, const TExprNode::TPtr& newSetting, TExprContext& ctx);
 
-TMaybe<TIssue> ParseToDictSettings(const TExprNode& node, TExprContext& ctx, TMaybe<bool>& isMany, TMaybe<bool>& isHashed, TMaybe<ui64>& itemsCount, bool& isCompact);
+enum class EDictType {
+    Hashed,
+    Sorted,
+    Auto,
+};
+
+TMaybe<TIssue> ParseToDictSettings(const TExprNode& node, TExprContext& ctx, TMaybe<EDictType>& type, TMaybe<bool>& isMany, TMaybe<ui64>& itemsCount, bool& isCompact);
+EDictType SelectDictType(EDictType type, const TTypeAnnotationNode* keyType);
 
 using MemberUpdaterFunc = std::function<bool (TString& memberName, const TTypeAnnotationNode* TypeAnnotation)>;
 bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members,

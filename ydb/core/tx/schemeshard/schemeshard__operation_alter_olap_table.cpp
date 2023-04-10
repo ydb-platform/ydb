@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard_olap_types.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -11,107 +12,99 @@ using namespace NSchemeShard;
 
 
 class TTableInfoConstructor {
-    const NKikimrSchemeOp::TModifyScheme& ModifyRequest;
     NKikimrSchemeOp::TAlterColumnTable AlterRequest;
 
 public:
-    TTableInfoConstructor(const NKikimrSchemeOp::TModifyScheme& modify)
-        : ModifyRequest(modify) {}
-
-    const TString& GetTableName() const {
-        return AlterRequest.GetName();
-    }
-
-    bool CheckAndPrepare(TProposeResponse& errors) {
-        if (ModifyRequest.HasAlterColumnTable()) {
-            if (ModifyRequest.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterColumnTable) {
-                errors.SetError(NKikimrScheme::StatusSchemeError, "Invalid operation type");
+    bool Deserialize(const NKikimrSchemeOp::TModifyScheme& modify, IErrorCollector& errors) {
+        if (modify.HasAlterColumnTable()) {
+            if (modify.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterColumnTable) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, "Invalid operation type");
                 return false;
             }
-            AlterRequest = ModifyRequest.GetAlterColumnTable();
+            AlterRequest = modify.GetAlterColumnTable();
         } else {
             // from DDL (not known table type)
-            if (ModifyRequest.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterTable) {
-                errors.SetError(NKikimrScheme::StatusSchemeError, "Invalid operation type");
+            if (modify.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterTable) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, "Invalid operation type");
                 return false;
             }
-            if (!ParseFromDSRequest(ModifyRequest.GetAlterTable(), AlterRequest, errors)) {
+            if (!ParseFromDSRequest(modify.GetAlterTable(), AlterRequest, errors)) {
                 return false;
             }
         }
 
         if (!AlterRequest.HasName()) {
-            errors.SetError(NKikimrScheme::StatusInvalidParameter, "No table name in Alter");
+            errors.AddError(NKikimrScheme::StatusInvalidParameter, "No table name in Alter");
             return false;
         }
 
         if (AlterRequest.HasAlterSchema() || AlterRequest.HasAlterSchemaPresetName()) {
-            errors.SetError(NKikimrScheme::StatusSchemeError, "Changing table schema is not supported");
+            errors.AddError(NKikimrScheme::StatusSchemeError, "Changing table schema is not supported");
             return false;
         }
 
         if (AlterRequest.HasRESERVED_AlterTtlSettingsPresetName()) {
-            errors.SetError(NKikimrScheme::StatusSchemeError, "TTL presets are not supported");
+            errors.AddError(NKikimrScheme::StatusSchemeError, "TTL presets are not supported");
             return false;
         }
 
         return true;
     }
 
-    TColumnTableInfo::TPtr BuildTableinfo(const TTablesStorage::TTableExtractedGuard& tableInfo, const TOlapStoreInfo::TPtr& storeInfo, TProposeResponse& errors) const {
-        TColumnTableInfo::TPtr alterData = new TColumnTableInfo(*tableInfo);
-        alterData->AlterBody.ConstructInPlace(AlterRequest);
-        ++alterData->AlterVersion;
-
-        ui64 currentTtlVersion = 0;
-        if (alterData->Description.HasTtlSettings()) {
-            currentTtlVersion = alterData->Description.GetTtlSettings().GetVersion();
-        }
-
-        const NKikimrSchemeOp::TColumnTableSchema* tableSchema = nullptr;
+    const NKikimrSchemeOp::TColumnTableSchema* GetTableSchema(const TTablesStorage::TTableExtractedGuard& tableInfo, const TOlapStoreInfo::TPtr& storeInfo, IErrorCollector& errors) const {
         if (storeInfo) {
             if (!storeInfo->SchemaPresets.count(tableInfo->Description.GetSchemaPresetId())) {
-                errors.SetError(NKikimrScheme::StatusSchemeError, "No preset for in-store column table");
+                errors.AddError(NKikimrScheme::StatusSchemeError, "No preset for in-store column table");
                 return nullptr;
             }
 
             auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
-            auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.ProtoIndex);
+            auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.GetProtoIndex());
             if (!presetProto.HasSchema()) {
-                errors.SetError(NKikimrScheme::StatusSchemeError, "No schema in preset for in-store column table");
+                errors.AddError(NKikimrScheme::StatusSchemeError, "No schema in preset for in-store column table");
                 return nullptr;
             }
-
-            tableSchema = &presetProto.GetSchema();
+            return &presetProto.GetSchema();
         } else {
             if (!tableInfo->Description.HasSchema()) {
-                errors.SetError(NKikimrScheme::StatusSchemeError, "No schema for standalone column table");
+                errors.AddError(NKikimrScheme::StatusSchemeError, "No schema for standalone column table");
+                return nullptr;
+            }
+            return &tableInfo->Description.GetSchema();
+        }
+    }
+
+    TColumnTableInfo::TPtr BuildTableInfo(const TTablesStorage::TTableExtractedGuard& tableInfo, const TOlapStoreInfo::TPtr& storeInfo, IErrorCollector& errors) const {
+        TColumnTableInfo::TPtr alterData = new TColumnTableInfo(*tableInfo);
+        alterData->AlterBody.ConstructInPlace(AlterRequest);
+        ++alterData->AlterVersion;
+
+        const NKikimrSchemeOp::TColumnTableSchema* tableSchema = GetTableSchema(tableInfo, storeInfo, errors);
+        if (!tableSchema) {
+            return nullptr;
+        }
+
+        TOlapSchema localSchema;
+        localSchema.Parse(*tableSchema);
+        if (!storeInfo) {
+            TOlapSchemaUpdate schemaUpdate;
+            if (!schemaUpdate.Parse(AlterRequest, errors)) {
                 return nullptr;
             }
 
-            tableSchema = &tableInfo->Description.GetSchema();
+            if (!localSchema.Update(schemaUpdate, errors)) {
+                return nullptr;
+            }
+            NKikimrSchemeOp::TColumnTableSchema schemaUdpateProto;
+            localSchema.Serialize(schemaUdpateProto);
+            *alterData->Description.MutableSchema() = schemaUdpateProto;
         }
-
-        THashMap<ui32, TOlapSchema::TColumn> columns;
-        THashMap<TString, ui32> columnsByName;
-        for (const auto& col : tableSchema->GetColumns()) {
-            ui32 id = col.GetId();
-            TString name = col.GetName();
-            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
-                col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-            columns[id] = TOlapSchema::TColumn{id, name, typeInfoMod.TypeInfo, Max<ui32>()};
-            columnsByName[name] = id;
-
-            // TODO: add checks for compatibility with new schema after we allow such changes
-        }
-
+        
         if (AlterRequest.HasAlterTtlSettings()) {
-            TString errStr;
-            if (!ValidateTtlSettings(AlterRequest.GetAlterTtlSettings(), columns, columnsByName, errStr)) {
-                errors.SetError(NKikimrScheme::StatusSchemeError, errStr);
+            if (!localSchema.ValidateTtlSettings(AlterRequest.GetAlterTtlSettings(), errors)) {
                 return nullptr;
             }
-
+            const ui64 currentTtlVersion = alterData->Description.HasTtlSettings() ? alterData->Description.GetTtlSettings().GetVersion() : 0;
             *alterData->Description.MutableTtlSettings() = AlterRequest.GetAlterTtlSettings();
             alterData->Description.MutableTtlSettings()->SetVersion(currentTtlVersion + 1);
         }
@@ -119,7 +112,7 @@ public:
     }
 
 private:
-    bool ParseFromDSRequest(const NKikimrSchemeOp::TTableDescription& dsDescription, NKikimrSchemeOp::TAlterColumnTable& olapDescription, TProposeResponse& errors) const {
+    bool ParseFromDSRequest(const NKikimrSchemeOp::TTableDescription& dsDescription, NKikimrSchemeOp::TAlterColumnTable& olapDescription, IErrorCollector& errors) const {
         olapDescription.SetName(dsDescription.GetName());
 
         if (dsDescription.HasTTLSettings()) {
@@ -163,7 +156,7 @@ private:
         return true;
     }
 
-    bool ParseFromDSRequest(const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDescription& olapColumn, TProposeResponse& errors) const {
+    bool ParseFromDSRequest(const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDescription& olapColumn, IErrorCollector& errors) const {
         olapColumn.SetName(dsColumn.GetName());
         olapColumn.SetType(dsColumn.GetType());
         if (dsColumn.HasTypeId()) { 
@@ -179,11 +172,11 @@ private:
             olapColumn.SetId(dsColumn.GetId());
         }
         if (dsColumn.HasDefaultFromSequence()) {
-            errors.SetError(NKikimrScheme::StatusInvalidParameter, "DefaultFromSequence not supported");
+            errors.AddError(NKikimrScheme::StatusInvalidParameter, "DefaultFromSequence not supported");
             return false;
         }
         if (dsColumn.HasFamilyName() || dsColumn.HasFamily()) {
-            errors.SetError(NKikimrScheme::StatusInvalidParameter, "FamilyName and Family not supported");
+            errors.AddError(NKikimrScheme::StatusInvalidParameter, "FamilyName and Family not supported");
             return false;
         }
         return true;
@@ -218,9 +211,8 @@ public:
                    DebugHint() << " ProgressState"
                    << " at tabletId# " << ssId);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterColumnTable);
-
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
+        
         TPathId pathId = txState->TargetPathId;
         TPath path = TPath::Init(pathId, context.SS);
         TString pathString = path.PathString();
@@ -235,14 +227,12 @@ public:
         }
 
         txState->ClearShardsInProgress();
-
-        auto seqNo = context.SS->StartRound(*txState);
-
         TString columnShardTxBody;
         {
+            auto seqNo = context.SS->StartRound(*txState);
             NKikimrTxColumnShard::TSchemaTxBody tx;
             context.SS->FillSeqNo(tx, seqNo);
-
+            
             auto* alter = tx.MutableAlterTable();
 
             alter->SetPathId(pathId.LocalPathId);
@@ -261,7 +251,7 @@ public:
                        " in an olap store",
                        presetId);
               auto &preset = storeInfo->SchemaPresets.at(presetId);
-              size_t presetIndex = preset.ProtoIndex;
+              size_t presetIndex = preset.GetProtoIndex();
               *alter->MutableSchemaPreset() =
                   storeInfo->Description.GetSchemaPresets(presetIndex);
             }
@@ -333,9 +323,8 @@ public:
                      << " at tablet: " << ssId
                      << ", stepId: " << step);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterColumnTable);
-
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
+        
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
@@ -369,9 +358,7 @@ public:
                      DebugHint() << " HandleReply ProgressState"
                      << " at tablet: " << ssId);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterColumnTable);
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -406,10 +393,7 @@ public:
     }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterColumnTable);
-
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
         Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
@@ -425,10 +409,7 @@ public:
                      DebugHint() << " ProgressState"
                      << " at tablet: " << ssId);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterColumnTable);
-
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
         txState->ClearShardsInProgress();
 
         for (auto& shard : txState->Shards) {
@@ -496,15 +477,9 @@ public:
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
-
-        TTableInfoConstructor schemaConstructor(Transaction);
-        if (!schemaConstructor.CheckAndPrepare(*result)) {
-            return result;
-        }
  
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = schemaConstructor.GetTableName();
-
+        const TString& name = Transaction.HasAlterColumnTable() ? Transaction.GetAlterColumnTable().GetName() : Transaction.GetAlterTable().GetName();
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAlterColumnTable Propose"
                          << ", path: " << parentPathStr << "/" << name
@@ -540,6 +515,12 @@ public:
             return result;
         }
 
+        TProposeErrorCollector errors(*result);
+        TTableInfoConstructor schemaConstructor;
+        if (!schemaConstructor.Deserialize(Transaction, errors)) {
+            return result;
+        }
+
         TOlapStoreInfo::TPtr storeInfo;
         if (tableInfo->OlapStorePathId) {
             auto& storePathId = *tableInfo->OlapStorePathId;
@@ -562,7 +543,7 @@ public:
             storeInfo = context.SS->OlapStores.at(storePathId);
         }
 
-        TColumnTableInfo::TPtr alterData = schemaConstructor.BuildTableinfo(tableInfo, storeInfo, *result);
+        TColumnTableInfo::TPtr alterData = schemaConstructor.BuildTableInfo(tableInfo, storeInfo, errors);
         if (!alterData) {
             return result;
         }

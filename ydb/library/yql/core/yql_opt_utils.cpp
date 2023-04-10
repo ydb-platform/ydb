@@ -445,7 +445,7 @@ TExprNode::TPtr MergeSettings(const TExprNode& settings1, const TExprNode& setti
     return ret;
 }
 
-TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TMaybe<bool>& isMany, TMaybe<bool>& isHashed, TMaybe<ui64>& itemsCount, bool& isCompact) {
+TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TMaybe<EDictType>& type, TMaybe<bool>& isMany, TMaybe<ui64>& itemsCount, bool& isCompact) {
     isCompact = false;
     auto settings = input.Child(3);
     if (settings->Type() != TExprNode::List) {
@@ -461,10 +461,13 @@ TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TM
                 isMany = true;
             }
             else if (child->Content() == "Sorted") {
-                isHashed = false;
+                type = EDictType::Sorted;
             }
             else if (child->Content() == "Hashed") {
-                isHashed = true;
+                type = EDictType::Hashed;
+            }
+            else if (child->Content() == "Auto") {
+                type = EDictType::Auto;
             }
             else if (child->Content() == "Compact") {
                 isCompact = true;
@@ -493,11 +496,24 @@ TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TM
 
     }
 
-    if (!isHashed || !isMany) {
-        return TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both options must be specified: Sorted/Hashed and Many/One");
+    if (!type || !isMany) {
+        return TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both options must be specified: Sorted/Hashed/Auto and Many/One");
     }
 
     return TMaybe<TIssue>();
+}
+
+EDictType SelectDictType(EDictType type, const TTypeAnnotationNode* keyType) {
+    if (type != EDictType::Auto) {
+        return type;
+    }
+
+    if (keyType->IsHashable() && keyType->IsEquatable()) {
+        return EDictType::Hashed;
+    }
+
+    YQL_ENSURE(keyType->IsComparableInternal());
+    return EDictType::Sorted;
 }
 
 TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx) {

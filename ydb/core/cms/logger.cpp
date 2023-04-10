@@ -12,9 +12,7 @@ TLogger::TLogger(TCmsStatePtr state)
 {
 }
 
-TString TLogger::GetLogMessage(const NKikimrCms::TLogRecord &rec,
-                               NKikimrCms::ETextFormat format) const
-{
+TString TLogger::GetLogMessage(const NKikimrCms::TLogRecord &rec, NKikimrCms::ETextFormat format) const {
     switch (format) {
     case TEXT_FORMAT_NONE:
         return "";
@@ -27,10 +25,7 @@ TString TLogger::GetLogMessage(const NKikimrCms::TLogRecord &rec,
     }
 }
 
-bool TLogger::DbCleanupLog(TTransactionContext& txc,
-                           const TActorContext& ctx)
-{
-
+bool TLogger::DbCleanupLog(TTransactionContext &txc, const TActorContext &ctx) {
     NIceDb::TNiceDb db(txc.DB);
     TInstant fromDate = ctx.Now() - State->Config.LogConfig.TTL;
     ui64 from = Max<ui64>() - fromDate.GetValue();
@@ -61,10 +56,7 @@ bool TLogger::DbCleanupLog(TTransactionContext& txc,
     return true;
 }
 
-bool TLogger::DbLoadLogTail(const NKikimrCms::TLogFilter &filter,
-                            TVector<NKikimrCms::TLogRecord> &result,
-                            TTransactionContext& txc)
-{
+bool TLogger::DbLoadLogTail(const NKikimrCms::TLogFilter &filter, TVector<NKikimrCms::TLogRecord> &result, TTransactionContext &txc) {
     result.clear();
 
     ui64 from = 0;
@@ -108,10 +100,7 @@ bool TLogger::DbLoadLogTail(const NKikimrCms::TLogFilter &filter,
     return true;
 }
 
-void TLogger::DbLogData(const TLogRecordData &data,
-                        TTransactionContext& txc,
-                        const TActorContext& ctx)
-{
+void TLogger::DbLogData(const TLogRecordData &data, TTransactionContext &txc, const TActorContext &ctx) {
     if (!State->Config.IsLogEnabled(data.GetRecordType()))
         return;
 

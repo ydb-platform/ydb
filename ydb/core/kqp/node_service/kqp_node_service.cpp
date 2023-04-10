@@ -88,11 +88,11 @@ public:
     }
 
     TKqpNodeService(const NKikimrConfig::TTableServiceConfig& config, const TIntrusivePtr<TKqpCounters>& counters,
-        IKqpNodeComputeActorFactory* caFactory, NYql::IHTTPGateway::TPtr httpGateway)
+        IKqpNodeComputeActorFactory* caFactory, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory)
         : Config(config.GetResourceManager())
         , Counters(counters)
         , CaFactory(caFactory)
-        , HttpGateway(std::move(httpGateway))
+        , AsyncIoFactory(std::move(asyncIoFactory))
     {}
 
     void Bootstrap() {
@@ -326,12 +326,12 @@ private:
             IActor* computeActor;
             if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
                 computeActor = CreateKqpScanComputeActor(msg.GetSnapshot(), request.Executer, txId, std::move(dqTask),
-                    CreateKqpAsyncIoFactory(Counters, HttpGateway), AppData()->FunctionRegistry, runtimeSettings, memoryLimits, scanPolicy,
+                    AsyncIoFactory, AppData()->FunctionRegistry, runtimeSettings, memoryLimits, scanPolicy,
                     Counters, NWilson::TTraceId(ev->TraceId));
                 taskCtx.ComputeActorId = Register(computeActor);
             } else {
                 if (Y_LIKELY(!CaFactory)) {
-                    computeActor = CreateKqpComputeActor(request.Executer, txId, std::move(dqTask), CreateKqpAsyncIoFactory(Counters, HttpGateway),
+                    computeActor = CreateKqpComputeActor(request.Executer, txId, std::move(dqTask), AsyncIoFactory,
                         AppData()->FunctionRegistry, runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId));
                     taskCtx.ComputeActorId = Register(computeActor);
                 } else {
@@ -514,7 +514,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     IKqpNodeComputeActorFactory* CaFactory;
     NRm::IKqpResourceManager* ResourceManager_ = nullptr;
-    NYql::IHTTPGateway::TPtr HttpGateway;
+    NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     //state sharded by TxId
     std::array<NKqpNode::TState, BucketsCount> Buckets;
@@ -524,9 +524,9 @@ private:
 } // anonymous namespace
 
 IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    TIntrusivePtr<TKqpCounters> counters, IKqpNodeComputeActorFactory* caFactory, NYql::IHTTPGateway::TPtr httpGateway)
+    TIntrusivePtr<TKqpCounters> counters, IKqpNodeComputeActorFactory* caFactory, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory)
 {
-    return new TKqpNodeService(tableServiceConfig, counters, caFactory, std::move(httpGateway));
+    return new TKqpNodeService(tableServiceConfig, counters, caFactory, std::move(asyncIoFactory));
 }
 
 } // namespace NKqp

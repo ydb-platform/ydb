@@ -65,6 +65,7 @@ public:
                 auto rowIndex = upsertColumn.RowIndex;
 
                 NScheme::TTypeInfo type = Owner.RowTypes[rowIndex];
+                i32 typmod = Owner.RowTypeMods[rowIndex];
                 NUdf::TUnboxedValue value = Row.GetElement(rowIndex);
 
                 if (value) {
@@ -81,7 +82,9 @@ public:
 
                 // NOTE: We have to copy values here as some values inlined in TUnboxedValue
                 // cannot be inlined in TCell.
-                command.Value = MakeCell(type, value, *dsApplyCtx.Env, true);
+                TMaybe<TString> error;
+                command.Value = MakeCell(type, value, *dsApplyCtx.Env, true, typmod, &error);
+                MKQL_ENSURE(!error, "Incorrect value: " << *error);
 
                 commands.emplace_back(std::move(command));
             }
@@ -136,12 +139,13 @@ public:
 
 public:
     TKqpUpsertRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
-            TVector<NScheme::TTypeInfo>&& rowTypes, TVector<ui32>&& keyIndices,
-            TVector<TUpsertColumn>&& upsertColumns)
+            TVector<NScheme::TTypeInfo>&& rowTypes, TVector<i32>&& rowTypeMods,
+            TVector<ui32>&& keyIndices, TVector<TUpsertColumn>&& upsertColumns)
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
         , RowTypes(std::move(rowTypes))
+        , RowTypeMods(std::move(rowTypeMods))
         , KeyIndices(std::move(keyIndices))
         , UpsertColumns(std::move(upsertColumns))
     {}
@@ -155,6 +159,7 @@ private:
     TTableId TableId;
     IComputationNode* RowsNode;
     TVector<NScheme::TTypeInfo> RowTypes;
+    TVector<i32> RowTypeMods;
     TVector<ui32> KeyIndices;
     TVector<TUpsertColumn> UpsertColumns;
 };
@@ -179,13 +184,35 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
     MKQL_ENSURE_S(tableInfo->KeyColumnIds.size() <= rowType->GetMembersCount(),
         "not enough columns in the runtime node");
 
-    THashMap<TStringBuf, ui32> inputIndex;
-    TVector<NScheme::TTypeInfo> rowTypes(rowType->GetMembersCount());
+    THashMap<TStringBuf, ui32> inputIndex; // column name -> struct field index
+    THashMap<TStringBuf, ui32> columnIds; // column name -> user table column id (all columns)
+
+    auto memberCount = rowType->GetMembersCount();
+    TVector<NScheme::TTypeInfo> rowTypes(memberCount); // struct field index -> type info
+    TVector<i32> rowTypeMods; // struct field index -> binary type mod
+    rowTypeMods.resize(memberCount, -1);
+
+    for (const auto& [columnId, columnInfo] : tableInfo->Columns) {
+        columnIds.emplace(columnInfo.Name, columnId);
+    }
+
     for (ui32 i = 0; i < rowTypes.size(); ++i) {
         const auto& name = rowType->GetMemberName(i);
         MKQL_ENSURE_S(inputIndex.emplace(name, i).second);
+
         if (NKqp::StructHoldsPgType(*rowType, i)) {
             rowTypes[i] = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
+
+            auto itColumnId = columnIds.find(name);
+            MKQL_ENSURE_S(itColumnId != columnIds.end());
+            auto itColumnInfo = tableInfo->Columns.find(itColumnId->second);
+            MKQL_ENSURE_S(itColumnInfo != tableInfo->Columns.end());
+            const auto& typeMod = itColumnInfo->second.TypeMod;
+            if (!typeMod.empty()) {
+                auto result = NPg::BinaryTypeModFromTextTypeMod(typeMod, rowTypes[i].GetTypeDesc());
+                MKQL_ENSURE_S(!result.Error, "invalid type mod");
+                rowTypeMods[i] = result.Typmod;
+            }
         } else {
             rowTypes[i] = NScheme::TTypeInfo(NKqp::UnwrapDataTypeFromStruct(*rowType, i));
         }
@@ -197,8 +224,8 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
 
         auto it = inputIndex.find(columnInfo.Name);
         MKQL_ENSURE_S(it != inputIndex.end());
-        if (NKqp::StructHoldsPgType(*rowType, i)) {
-            auto typeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
+        if (NKqp::StructHoldsPgType(*rowType, it->second)) {
+            auto typeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, it->second);
             MKQL_ENSURE_S(
                 NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnInfo.Type.GetTypeDesc()),
                 "row key type mismatch with table key type"
@@ -239,8 +266,9 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
     }
 
     return new TKqpUpsertRowsWrapper(ctx.Mutables, tableId,
-        LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices),
-        std::move(upsertColumns));
+        LocateNode(ctx.NodeLocator, *rowsNode.GetNode()),
+        std::move(rowTypes), std::move(rowTypeMods),
+        std::move(keyIndices), std::move(upsertColumns));
 }
 
 } // namespace NMiniKQL

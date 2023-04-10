@@ -142,8 +142,7 @@ public:
                     }
 
                     auto pathExists = [&](ui64 pathId) {
-                        auto it = Self->Tables.find(pathId);
-                        return it != Self->Tables.end() && !it->second.IsDropped();
+                        return Self->TablesManager.HasTable(pathId);
                     };
 
                     auto counters = Self->InsertTable->Commit(dbTable, step, txId, meta.MetaShard, meta.WriteIds,
@@ -199,10 +198,7 @@ public:
             ctx.Send(res.TxInfo.Source, event.Release(), 0, res.TxInfo.Cookie);
         }
 
-        Self->UpdateBlobMangerCounters();
-        if (Self->BlobManager->CanCollectGarbage()) {
-            Self->Execute(Self->CreateTxRunGc(), ctx);
-        }
+        Self->ScheduleNextGC(ctx);
 
         switch (Trigger) {
             case ETriggerActivities::POST_INSERT:

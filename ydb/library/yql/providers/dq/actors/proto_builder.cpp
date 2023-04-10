@@ -40,20 +40,6 @@ TVector<ui32> BuildColumnOrder(const TVector<TString>& columns, NKikimr::NMiniKQ
     return columnOrder;
 }
 
-NDqProto::EDataTransportVersion GetTransportVersion(const NYql::NDqProto::TData& data) {
-    switch (data.GetTransportVersion()) {
-        case 10000:
-            return NDqProto::EDataTransportVersion::DATA_TRANSPORT_YSON_1_0;
-        case 20000:
-            return NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-        case 30000:
-            return NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0;
-        default:
-            break;
-    }
-    return NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-}
-
 } // unnamed
 
 TProtoBuilder::TProtoBuilder(const TString& type, const TVector<TString>& columns)
@@ -107,7 +93,7 @@ bool TProtoBuilder::WriteData(const NDqProto::TData& data, const std::function<b
 
     TMemoryUsageInfo memInfo("ProtoBuilder");
     THolderFactory holderFactory(Alloc.Ref(), memInfo);
-    NDqProto::EDataTransportVersion transportVersion = GetTransportVersion(data);
+    const auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
     NDq::TDqDataSerializer dataSerializer(TypeEnv, holderFactory, transportVersion);
 
     TUnboxedValueVector buffer;
@@ -126,7 +112,7 @@ bool TProtoBuilder::WriteData(const TVector<NDqProto::TData>& rows, const std::f
 
     TMemoryUsageInfo memInfo("ProtoBuilder");
     THolderFactory holderFactory(Alloc.Ref(), memInfo);
-    const auto transportVersion = rows.empty() ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED : GetTransportVersion(rows.front());
+    const auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
     NDq::TDqDataSerializer dataSerializer(TypeEnv, holderFactory, transportVersion);
 
     for (const auto& part : rows) {

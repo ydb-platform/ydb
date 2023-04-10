@@ -15,7 +15,6 @@ target_link_libraries(ydb-core-cms-console-yaml_config-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   cms-console-yaml_config
 )
@@ -64,5 +63,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-cms-console-yaml_config-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-cms-console-yaml_config-ut)

@@ -6,10 +6,11 @@ namespace NKikimr::NCms {
 
 class TCms::TTxUpdateConfig : public TTransactionBase<TCms> {
 public:
-    TTxUpdateConfig(TCms *self,
-                    const NKikimrCms::TCmsConfig &config,
-                    TAutoPtr<IEventHandle> response,
-                    ui64 subscriptionId = 0)
+    TTxUpdateConfig(
+            TCms *self,
+            const NKikimrCms::TCmsConfig &config,
+            TAutoPtr<IEventHandle> response,
+            ui64 subscriptionId = 0)
         : TBase(self)
         , Config(config)
         , Response(response)
@@ -20,10 +21,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_UPDATE_CONFIG; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
-    {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TTxUpdateConfig Execute");
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS, "TTxUpdateConfig Execute");
 
         if (SubscriptionId != Self->ConfigSubscriptionId) {
             LOG_ERROR_S(ctx, NKikimrServices::CMS,
@@ -41,8 +40,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
-    {
+    void Complete(const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxUpdateConfig Complete");
 
         if (Modify) {
@@ -73,8 +71,7 @@ private:
     bool Modify;
 };
 
-ITransaction *TCms::CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev)
-{
+ITransaction *TCms::CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev) {
     auto &rec = ev->Get()->Record;
 
     auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
@@ -82,20 +79,18 @@ ITransaction *TCms::CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationReques
     response->Record.MutableConfigId()->CopyFrom(rec.GetConfigId());
 
     return new TTxUpdateConfig(this, rec.GetConfig().GetCmsConfig(),
-                               new IEventHandle(ev->Sender, ev->Recipient,
-                                                response.Release(), 0, ev->Cookie),
-                               rec.GetSubscriptionId());
+        new IEventHandle(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie),
+        rec.GetSubscriptionId()
+    );
 }
 
-ITransaction *TCms::CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev)
-{
-    TAutoPtr<TEvCms::TEvSetConfigResponse> response
-        = new TEvCms::TEvSetConfigResponse;
+ITransaction *TCms::CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev) {
+    TAutoPtr<TEvCms::TEvSetConfigResponse> response = new TEvCms::TEvSetConfigResponse;
     response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
     return new TTxUpdateConfig(this, ev->Get()->Record.GetConfig(),
-                               new IEventHandle(ev->Sender, ev->Recipient,
-                                                response.Release(), 0, ev->Cookie),
-                               ConfigSubscriptionId);
+        new IEventHandle(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie),
+        ConfigSubscriptionId
+    );
 }
 
 } // namespace NKikimr::NCms

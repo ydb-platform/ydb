@@ -18,7 +18,6 @@ target_link_libraries(ydb-library-yql-providers-s3-range_helpers-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   providers-s3-range_helpers
   providers-common-provider
@@ -69,5 +68,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-providers-s3-range_helpers-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-providers-s3-range_helpers-ut)

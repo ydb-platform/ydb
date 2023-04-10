@@ -12,7 +12,6 @@ target_link_libraries(surg PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   library-cpp-getopt
   ydb-core-tablet_flat
   yql-sql-pg_dummy
@@ -30,5 +29,8 @@ target_link_options(surg PRIVATE
 )
 target_sources(surg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/surg/main.cpp
+)
+target_allocator(surg
+  cpp-malloc-jemalloc
 )
 vcs_info(surg)

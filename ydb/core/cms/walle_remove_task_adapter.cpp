@@ -21,8 +21,7 @@ public:
     {
     }
 
-    void Bootstrap(const TActorContext &ctx)
-    {
+    void Bootstrap(const TActorContext &ctx) {
         TAutoPtr<TEvCms::TEvWalleRemoveTaskResponse> response = new TEvCms::TEvWalleRemoveTaskResponse;
         TString id = RequestEvent->Get()->Record.GetTaskId();
 
@@ -38,11 +37,11 @@ public:
         event->TaskId = id;
         ctx.Send(Cms, event.Release());
 
-        Become(&TThis::StateWork, ctx, TDuration::Seconds(10), new TEvents::TEvWakeup());    }
+        Become(&TThis::StateWork, ctx, TDuration::Seconds(10), new TEvents::TEvWakeup());
+    }
 
 private:
-    STFUNC(StateWork)
-    {
+    STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::Wakeup, Timeout);
             CFunc(TEvCms::EvWalleTaskRemoved, Finish);
@@ -53,28 +52,24 @@ private:
         }
     }
 
-    void ReplyWithErrorAndDie(TStatus::ECode code, const TString &err, const TActorContext &ctx)
-    {
+    void ReplyWithErrorAndDie(TStatus::ECode code, const TString &err, const TActorContext &ctx) {
         TAutoPtr<TEvCms::TEvWalleRemoveTaskResponse> resp = new TEvCms::TEvWalleRemoveTaskResponse;
         resp->Record.MutableStatus()->SetCode(code);
         resp->Record.MutableStatus()->SetReason(err);
         ReplyAndDie(resp.Release(), ctx);
     }
 
-    void ReplyAndDie(TAutoPtr<TEvCms::TEvWalleRemoveTaskResponse> resp, const TActorContext &ctx)
-    {
+    void ReplyAndDie(TAutoPtr<TEvCms::TEvWalleRemoveTaskResponse> resp, const TActorContext &ctx) {
         WalleAuditLog(RequestEvent->Get(), resp.Get(), ctx);
         ctx.Send(RequestEvent->Sender, resp.Release());
         Die(ctx);
     }
 
-    void Timeout(const TActorContext& ctx)
-    {
+    void Timeout(const TActorContext &ctx) {
         ReplyWithErrorAndDie(TStatus::ERROR_TEMP, "Timeout", ctx);
     }
 
-    void Finish(const TActorContext& ctx)
-    {
+    void Finish(const TActorContext &ctx) {
         TAutoPtr<TEvCms::TEvWalleRemoveTaskResponse> resp = new TEvCms::TEvWalleRemoveTaskResponse;
         resp->Record.MutableStatus()->SetCode(TStatus::OK);
         ReplyAndDie(resp, ctx);
@@ -85,9 +80,7 @@ private:
     TActorId Cms;
 };
 
-
-IActor *CreateWalleAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &ev, const TCmsStatePtr state, TActorId cms)
-{
+IActor *CreateWalleAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &ev, const TCmsStatePtr state, TActorId cms) {
     return new TWalleRemoveTaskAdapter(ev, state, cms);
 }
 

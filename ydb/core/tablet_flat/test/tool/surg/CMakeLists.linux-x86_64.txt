@@ -12,8 +12,6 @@ target_link_libraries(surg PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   library-cpp-getopt
   ydb-core-tablet_flat
@@ -32,5 +30,9 @@ target_link_options(surg PRIVATE
 )
 target_sources(surg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/surg/main.cpp
+)
+target_allocator(surg
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(surg)

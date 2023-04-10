@@ -4,8 +4,9 @@
 
 Перед выполнением примеров [создайте топик](../ydb-cli/topic-create.md) и [добавьте читателя](../ydb-cli/topic-consumer-add.md).
 
-## Управление топиками
-### Создание топика
+## Управление топиками {#manage}
+
+### Создание топика {#create-topic}
 
 {% list tabs %}
 
@@ -15,24 +16,35 @@
 
   Полный список поддерживаемых параметров можно посмотреть в [документации SDK](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#CreateOption).
 
-  Пример создания тописка со списком поддерживаемых кодеков и минимальным количество партиций
+  Пример создания топика со списком поддерживаемых кодеков и минимальным количество партиций
+
   ```go
   err := db.Topic().Create(ctx, "topic-path",
       // optional
-	  topicoptions.CreateWithSupportedCodecs(topictypes.CodecRaw, topictypes.CodecGzip),
+    topicoptions.CreateWithSupportedCodecs(topictypes.CodecRaw, topictypes.CodecGzip),
 
-	  // optional
-	  topicoptions.CreateWithMinActivePartitions(3),
+    // optional
+    topicoptions.CreateWithMinActivePartitions(3),
+  )
+  ```
+
+- Python
+
+  ```python
+  driver.topic_client.create_topic(topic_path,
+      supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
+      min_active_partitions=3,                                    # optional
   )
   ```
 
 {% endlist %}
 
-### Изменение топика
+### Изменение топика {#alter-topic}
 
 При изменении топика в параметрах нужно указать путь топика и те параметры, которые будут изменяться.
 
 {% list tabs %}
+
 - Go
 
   Полный список поддерживаемых параметров можно посмотреть в [документации SDK](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#AlterOption).
@@ -40,16 +52,21 @@
   Пример добавления читателя к топику
 
   ```go
-   err := db.Topic().Alter(ctx, "topic-path",
-		topicoptions.AlterWithAddConsumers(topictypes.Consumer{
-			Name:            "new-consumer",
-			SupportedCodecs: []topictypes.Codec{topictypes.CodecRaw, topictypes.CodecGzip}, // optional
-		}),
-	)
+  err := db.Topic().Alter(ctx, "topic-path",
+    topicoptions.AlterWithAddConsumers(topictypes.Consumer{
+      Name:            "new-consumer",
+      SupportedCodecs: []topictypes.Codec{topictypes.CodecRaw, topictypes.CodecGzip}, // optional
+    }),
+  )
   ```
+
+- Python
+
+  Функциональность находится в разработке.
+
 {% endlist %}
 
-### Получение информации о топике
+### Получение информации о топике {#describe-topic}
 
 {% list tabs %}
 
@@ -57,16 +74,23 @@
 
   ```go
     descResult, err := db.Topic().Describe(ctx, "topic-path")
-	if err != nil {
-		log.Fatalf("failed drop topic: %v", err)
-		return
-	}
-	fmt.Printf("describe: %#v\n", descResult)
+  if err != nil {
+    log.Fatalf("failed drop topic: %v", err)
+    return
+  }
+  fmt.Printf("describe: %#v\n", descResult)
+  ```
+
+- Python
+
+  ```python
+  info = driver.topic_client.describe_topic(topic_path)
+  print(info)
   ```
 
 {% endlist %}
 
-### Удаление топика
+### Удаление топика {#drop-topic}
 
 Для удаления топика достаточно указать путь к нему.
 
@@ -78,10 +102,16 @@
     err := db.Topic().Drop(ctx, "topic-path")
   ```
 
+- Python
+
+  ```python
+  driver.topic_client.drop_topic(topic_path)
+  ```
+
 {% endlist %}
 
+## Запись сообщений {#write}
 
-## Запись сообщений
 ### Подключение к топику для записи сообщений {#start-writer}
 
 На данный момент поддерживается подключение только с совпадающими producer_id и message_group_id, в будущем это ограничение будет снято.
@@ -100,10 +130,15 @@
   }
   ```
 
+- Python
+
+  ```python
+  writer = driver.topic_client.writer(topic_path)
+  ```
+
 {% endlist %}
 
-
-### Асинхронная запись сообщений
+### Асинхронная запись сообщений {#async-write}
 
 {% list tabs %}
 
@@ -126,8 +161,39 @@
   }
   ```
 
-{% endlist %}
+- Python
 
+  Для отправки сообщений можно передавать как просто содержимое сообщения (bytes, str), так и вручную задавать некоторые свойства. Объекты можно передавать по одному или сразу в массиве (list). Метод `write` выполняется асинхронно. Возврат из метода происходит сразу после того как сообщения будут положены во внутренний буфер клиента, обычно это происходит быстро. Ожидание может возникнуть, если внутренний буфер уже заполнен и нужно подождать, пока часть данных будет отправлена на сервер.
+
+  ```python
+  # Простая отправка сообщений, без явного указания метаданных.
+  # Удобно начинать, удобно использовать пока важно только содержимое сообщения.
+  writer = driver.topic_client.writer(topic_path)
+  writer.write("mess")  # Строки будут переданы в кодировке utf-8, так удобно отправлять
+                        # текстовые сообщения.
+  writer.write(bytes([1, 2, 3]))  # Эти байты будут отправлены "как есть", так удобно отправлять
+                                  # бинарные данные.
+  writer.write(["mess-1", "mess-2"])  # Здесь за один вызов отправляется несколько сообщений —
+                                      # так снижаются накладные расходы на внутренние процессы SDK,
+                                      # имеет смысл при большом потоке сообщений.
+
+  # Полная форма, используется, когда кроме содержимого сообщения нужно вручную задать и его свойства.
+  writer = driver.topic_client.writer(topic="topic-path", auto_seqno=False, auto_created_at=False)
+
+  writer.write(ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()))
+  writer.write(ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now()))
+
+  # В полной форме так же можно отправлять несколько сообщений за один вызов функции.
+  # Это имеет смысл при большом потоке отправляемых сообщений — для снижения
+  # накладных расходов на внутренние вызовы SDK.
+  writer.write([
+    ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
+    ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now(),
+    ])
+
+  ```
+
+{% endlist %}
 
 ### Запись сообщений с подтверждением о сохранении на сервере
 
@@ -155,16 +221,43 @@
   }
   ```
 
+- Python
+
+  Есть два способа получить подтверждение о записи сообщений на сервере:
+
+  * `flush()` — дожидается подтверждения для всех сообщений, записанных ранее во внутренний буфер.
+  * `write_with_ack(...)` — отправляет сообщение и ждет подтверждение его доставки от сервера. При отправке нескольких сообщений подряд это способ работает медленно.
+
+  ```python
+  # Положить несколько сообщений во внутренний буфер, затем дождаться,
+  # пока все они будут доставлены до сервера.
+  for mess in messages:
+      writer.write(mess)
+
+  writer.flush()
+
+  # Можно отправить несколько сообщений и дождаться подтверждения на всю группу.
+  writer.write_with_ack(["mess-1", "mess-2"])
+
+  # Ожидание при отправке каждого сообщения — этот метод вернет результат только после получения
+  # подтверждения от сервера.
+  # Это самый медленный вариант отправки сообщений, используйте его только если такой режим
+  # действительно нужен.
+  writer.write_with_ack("message")
+
+  ```
+
 {% endlist %}
 
-### Выбор кодека для сжатия сообщений
+### Выбор кодека для сжатия сообщений {#codec}
+
+По умолчанию SDK выбирает кодек автоматически (с учетом настроек топика). В автоматическом режиме SDK сначала отправляет по одной группе сообщений каждым из разрешенных кодеков, затем иногда будет пробовать сжать сообщения всеми доступными кодеками и выбирать кодек, дающий наименьший размер сообщения. Если для топика список разрешенных кодеков пуст, то автовыбор производится между Raw и Gzip-кодеками.
+
+При необходимости можно задать фиксированный кодек в опциях подключения. Тогда будет использоваться именно он и замеры проводиться не будут.
 
 {% list tabs %}
 
 - Go
-
-  По умолчанию SDK выбирает кодек автоматически (с учётом настроек топика). В автоматическом режиме SDK сначала отправляет по одной группе сообщений каждым из разрешённых кодеков, затем иногда будет пробовать сжать сообщения всеми доступными кодеками и выбирать кодек, дающий наименьший размер сообщения. Если для топика список разрешённых кодеков пуст, то автовыбор производится между Raw и Gzip-кодеками.
-  При необходимости можно задать фиксированный кодек в опциях подключения. Тогда будет использоваться именно он и замеры проводиться не будут.
 
   ```go
   producerAndGroupID := "group-id"
@@ -174,11 +267,18 @@
   )
   ```
 
+- Python
+
+  ```python
+  writer = driver.topic_client.writer(topic_path,
+      codec=ydb.TopicCodec.GZIP,
+  )
+  ```
+
 {% endlist %}
 
+## Чтение сообщений {#reading}
 
-
-## Чтение сообщений
 ### Подключение к топику для чтения сообщений {#start-reader}
 
 Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
@@ -192,6 +292,12 @@
   if err != nil {
       return err
   }
+  ```
+
+- Python
+
+  ```python
+  reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
   ```
 
 {% endlist %}
@@ -217,6 +323,10 @@
       return err
   }
   ```
+
+- Python
+
+  Функциональность находится в разработке.
 
 {% endlist %}
 
@@ -250,6 +360,14 @@ SDK получает данные с сервера партиями и буфе
   }
   ```
 
+- Python
+
+  ```python
+  while True:
+      message = reader.receive_message()
+      process(message)
+  ```
+
 {% endlist %}
 
 Чтобы прочитать пакет сообщений, используйте следующий код:
@@ -268,6 +386,14 @@ SDK получает данные с сервера партиями и буфе
           processBatch(batch)
       }
   }
+  ```
+
+- Python
+
+  ```python
+  while True:
+    batch = reader.receive_batch()
+    process(batch)
   ```
 
 {% endlist %}
@@ -293,6 +419,15 @@ SDK получает данные с сервера партиями и буфе
   }
   ```
 
+- Python
+
+  ```python
+  while True:
+      message = reader.receive_message()
+      process(message)
+      reader.commit(message)
+  ```
+
 {% endlist %}
 
 Для подтверждения обработки пакета сообщений используйте следующий код:
@@ -312,6 +447,15 @@ SDK получает данные с сервера партиями и буфе
         r.Commit(batch.Context(), batch)
       }
   }
+  ```
+
+- Python
+
+  ```python
+  while True:
+    batch = reader.receive_batch()
+    process(batch)
+    reader.commit(batch)
   ```
 
 {% endlist %}
@@ -364,6 +508,10 @@ SDK получает данные с сервера партиями и буфе
   }
   ```
 
+- Python
+
+  Функциональность находится в разработке.
+
 {% endlist %}
 
 ### Обработка серверного прерывания чтения {#stop}
@@ -395,6 +543,17 @@ SDK получает данные с сервера партиями и буфе
 
   ```
 
+- Python
+
+  Специальной обработки не требуется.
+
+  ```python
+  while True:
+    batch = reader.receive_batch()
+    process(batch)
+    reader.commit(batch)
+  ```
+
 {% endlist %}
 
 #### Жесткое прерывание чтения {#hard-stop}
@@ -418,6 +577,23 @@ SDK получает данные с сервера партиями и буфе
       _, _ = io.Copy(buf, mess)
       writeMessagesToDB(ctx, buf.Bytes())
   }
+  ```
+
+- Python
+
+  В этом примере обработка сообщений в батче остановится, если в процессе работы партиция будет отобрана. Такая оптимизация требует дополнительного кода на клиенте. В простых случаях, когда обработка отобранных партиций не является проблемой, ее можно не применять.
+
+  ```python
+  def process_batch(batch):
+      for message in batch.messages:
+          if not batch.alive:
+              return False
+          process(message)
+      return True
+
+  batch = reader.receive_batch()
+  if process_batch(batch):
+      reader.commit(batch)
   ```
 
 {% endlist %}

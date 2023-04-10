@@ -15,8 +15,6 @@ target_link_libraries(ydb-library-yql-providers-dq-actors-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   providers-dq-actors
@@ -71,5 +69,9 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-providers-dq-actors-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-library-yql-providers-dq-actors-ut)

@@ -57,13 +57,21 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, EOperati
 }
 
 std::vector<bool> LikeTest(const std::vector<std::string>& data,
-                           EOperation op, const std::string& pattern, bool ignoreCase = false)
+                           EOperation op, const std::string& pattern,
+                           std::shared_ptr<arrow::DataType> type = arrow::utf8(), bool ignoreCase = false)
 {
     auto schema = std::make_shared<arrow::Schema>(std::vector{
-                                                std::make_shared<arrow::Field>("x", arrow::utf8())});
-    arrow::StringBuilder sb;
-    sb.AppendValues(data).ok();
-    auto batch = arrow::RecordBatch::Make(schema, data.size(), {*sb.Finish()});
+                                                std::make_shared<arrow::Field>("x", type)});
+    std::shared_ptr<arrow::RecordBatch> batch;
+    if (type->id() == arrow::utf8()->id()) {
+        arrow::StringBuilder sb;
+        sb.AppendValues(data).ok();
+        batch = arrow::RecordBatch::Make(schema, data.size(), {*sb.Finish()});
+    } else if (type->id() == arrow::binary()->id()) {
+        arrow::BinaryBuilder sb;
+        sb.AppendValues(data).ok();
+        batch = arrow::RecordBatch::Make(schema, data.size(), {*sb.Finish()});
+    }
     UNIT_ASSERT(batch->ValidateFull().ok());
 
     auto step = std::make_shared<TProgramStep>();
@@ -394,57 +402,69 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
     }
 
     Y_UNIT_TEST(StartsWith) {
-        std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::StartsWith, "aa");
-        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
-        UNIT_ASSERT_VALUES_EQUAL(res[2], false);
-        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        for (auto type : {arrow::utf8() /*, arrow::binary()*/}) {
+            std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::StartsWith, "aa", type);
+            UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+            UNIT_ASSERT_VALUES_EQUAL(res[2], false);
+            UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        }
     }
 
     Y_UNIT_TEST(EndsWith) {
-        std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::EndsWith, "aa");
-        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
-        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        for (auto type : {arrow::utf8() /*, arrow::binary()*/}) {
+            std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::EndsWith, "aa", type);
+            UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+            UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        }
     }
 
     Y_UNIT_TEST(MatchSubstring) {
-        std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::MatchSubstring, "aa");
-        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[1], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        for (auto type : {arrow::utf8() /*, arrow::binary()*/}) {
+            std::vector<bool> res = LikeTest({"aa", "abaaba", "baa", ""}, EOperation::MatchSubstring, "aa", type);
+            UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[1], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        }
     }
 
     Y_UNIT_TEST(StartsWithIgnoreCase) {
-        std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::StartsWith, "aA", true);
-        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
-        UNIT_ASSERT_VALUES_EQUAL(res[2], false);
-        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        for (auto type : {arrow::utf8() /*, arrow::binary()*/}) {
+            std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::StartsWith, "aA", type, true);
+            UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+            UNIT_ASSERT_VALUES_EQUAL(res[2], false);
+            UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        }
     }
 
     Y_UNIT_TEST(EndsWithIgnoreCase) {
-        std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::EndsWith, "aA", true);
-        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[1], false);
-        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        for (auto type : {arrow::utf8() /*, arrow::binary()*/}) {
+            std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::EndsWith, "aA", type, true);
+            UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[1], false);
+            UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        }
     }
 
     Y_UNIT_TEST(MatchSubstringIgnoreCase) {
-        std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::MatchSubstring, "aA", true);
-        UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(res[0], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[1], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[2], true);
-        UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        for (auto type : {arrow::utf8() /*, arrow::binary()*/}) {
+            std::vector<bool> res = LikeTest({"Aa", "abAaba", "baA", ""}, EOperation::MatchSubstring, "aA", type, true);
+            UNIT_ASSERT_VALUES_EQUAL(res.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(res[0], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[1], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[2], true);
+            UNIT_ASSERT_VALUES_EQUAL(res[3], false);
+        }
     }
 
     Y_UNIT_TEST(ScalarTest) {

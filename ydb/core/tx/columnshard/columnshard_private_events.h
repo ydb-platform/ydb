@@ -166,8 +166,8 @@ struct TEvPrivate {
                 Status = NKikimrProto::ERROR;
                 Y_VERIFY(ErrorStrings.emplace(key, errStr).second, "%s", key.data());
                 Blobs.erase(blobId);
-            } else if (!ErrorStrings.count(key)) { // (OK + !OK) == !OK
-                Y_VERIFY(Blobs.count(blobId));
+            } else if (!ErrorStrings.contains(key)) { // (OK + !OK) == !OK
+                Y_VERIFY(Blobs.contains(blobId));
                 if (Status == NKikimrProto::UNKNOWN) {
                     Status = NKikimrProto::OK;
                 }

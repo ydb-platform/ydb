@@ -3838,7 +3838,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                     Y_VERIFY(OlapStores.contains(*tableInfo->OlapStorePathId));
                     auto& storeInfo = OlapStores.at(*tableInfo->OlapStorePathId);
                     auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
-                    result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchemaPresetVersionAdj() + preset.Version);
+                    result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchemaPresetVersionAdj() + preset.GetVersion());
                 } else {
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchemaPresetVersionAdj());
                 }
@@ -4452,6 +4452,13 @@ TTxState &TSchemeShard::CreateTx(TOperationId opId, TTxState::ETxType txType, TP
 
 TTxState *TSchemeShard::FindTx(TOperationId opId) {
     TTxState* txState = TxInFlight.FindPtr(opId);
+    return txState;
+}
+
+TTxState* TSchemeShard::FindTxSafe(TOperationId opId, const TTxState::ETxType& txType) {
+    TTxState* txState = FindTx(opId);
+    Y_VERIFY(txState);
+    Y_VERIFY(txState->TxType == txType);
     return txState;
 }
 

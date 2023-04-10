@@ -15,7 +15,6 @@ target_link_libraries(ydb-core-erasure-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   ydb-core-erasure
   cpp-digest-crc32c
@@ -72,5 +71,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-erasure-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-erasure-ut)

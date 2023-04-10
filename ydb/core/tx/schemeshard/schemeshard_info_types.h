@@ -5,6 +5,7 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_identificators.h"
+#include "schemeshard_olap_types.h"
 
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -846,64 +847,6 @@ public:
     }
 };
 
-struct TOlapSchema {
-    struct TColumn {
-        ui32 Id = Max<ui32>();
-        TString Name;
-        NScheme::TTypeInfo Type;
-        ui32 KeyOrder = Max<ui32>();
-        bool NotNull = false;
-        // TODO: DefaultValue
-
-        bool IsKeyColumn() const { return KeyOrder != Max<ui32>(); }
-    };
-
-    using TColumns = THashMap<ui32, TColumn>;
-    using TColumnsByName = THashMap<TString, ui32>;
-
-    TColumns Columns;
-    TColumnsByName ColumnsByName;
-    TVector<ui32> KeyColumnIds;
-    NKikimrSchemeOp::EColumnTableEngine Engine = NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES;
-    ui32 NextColumnId = 1;
-    ui64 Version = 1;
-
-    const TColumn* FindColumnByName(const TString& name) const noexcept {
-        auto it = ColumnsByName.find(name);
-        if (it != ColumnsByName.end()) {
-            return &Columns.at(it->second);
-        }
-        return nullptr;
-    }
-
-    TColumn* FindColumnByName(const TString& name) noexcept {
-        auto it = ColumnsByName.find(name);
-        if (it != ColumnsByName.end()) {
-            return &Columns.at(it->second);
-        }
-        return nullptr;
-    }
-
-    static bool UpdateProto(NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr);
-    static bool IsAllowedType(ui32 typeId);
-    static bool IsAllowedFirstPkType(ui32 typeId);
-
-    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr, bool allowNullableKeys);
-    bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, TEvSchemeShard::EStatus& status, TString& errStr) const;
-};
-
-struct TOlapStoreSchemaPreset : public TOlapSchema {
-    ui32 Id;
-    TString Name;
-
-    // Preset index in the olap store description
-    size_t ProtoIndex = -1;
-};
-
-struct TOlapTtlSettings {
-    // TODO: add parsed settings
-    ui64 Version = 1;
-};
 
 struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     using TPtr = TIntrusivePtr<TOlapStoreInfo>;
@@ -952,7 +895,6 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
 
     TMaybe<TPathId> OlapStorePathId; // PathId of the table store
-    TMaybe<TOlapSchema> Schema; // schema for standalone table
 
     TVector<ui64> ColumnShards; // Current list of column shards
     TVector<TShardIdx> OwnedColumnShards;
@@ -2964,12 +2906,8 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
-bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
-    const THashMap<ui32, TOlapSchema::TColumn>& columns,
-    const THashMap<TString, ui32>& columnsByName,
-    TString& errStr);
-
 }
+
 }
 
 template <>

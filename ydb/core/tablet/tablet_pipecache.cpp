@@ -57,9 +57,14 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         { }
     };
 
+    struct TClientSubscription {
+        ui64 SeqNo;
+        ui64 Cookie;
+    };
+
     struct TClientState {
         TActorId Client;
-        THashMap<TActorId, ui64> Peers;
+        THashMap<TActorId, TClientSubscription> Peers;
         ui64 LastSentSeqNo = 0;
         ui64 MaxForwardedSeqNo = Max<ui64>();
         TVector<TNodeRequest> NodeRequests;
@@ -165,9 +170,10 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
 
         for (auto &kv : clientState->Peers) {
             const auto &peer = kv.first;
-            const ui64 seqNo = kv.second;
+            const ui64 seqNo = kv.second.SeqNo;
+            const ui64 cookie = kv.second.Cookie;
             const bool msgNotDelivered = notDelivered || seqNo > clientState->MaxForwardedSeqNo;
-            Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, msgNotDelivered));
+            Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, msgNotDelivered), 0, cookie);
 
             tabletState->ByPeer.erase(peer);
 
@@ -286,12 +292,27 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         TEvPipeCache::TEvForward *msg = ev->Get();
         const ui64 tablet = msg->TabletId;
         const bool subscribe = msg->Subscribe;
+        const ui64 subscribeCookie = msg->SubscribeCookie;
         const TActorId peer = ev->Sender;
         const ui64 cookie = ev->Cookie;
         NWilson::TTraceId traceId = std::move(ev->TraceId);
 
         auto *tabletState = EnsureTablet(tablet);
-        auto *clientState = EnsureClient(tabletState, tablet);
+
+        TClientState *clientState = nullptr;
+
+        // Prefer using the same pipe after subscription
+        if (!subscribe) {
+            auto it = tabletState->ByPeer.find(peer);
+            if (it != tabletState->ByPeer.end()) {
+                clientState = it->second;
+            }
+        }
+
+        // Ensure there's a valid pipe for sending messages
+        if (!clientState) {
+            clientState = EnsureClient(tabletState, tablet);
+        }
 
         if (subscribe) {
             TClientState *&link = tabletState->ByPeer[peer];
@@ -319,10 +340,10 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
                 link = clientState;
             }
             const ui64 seqNo = ++clientState->LastSentSeqNo;
-            clientState->Peers[peer] = seqNo;
-            NTabletPipe::SendDataWithSeqNo(peer, tabletState->LastClient, msg->Ev.Release(), seqNo, cookie, std::move(traceId));
+            clientState->Peers[peer] = { seqNo, subscribeCookie };
+            NTabletPipe::SendDataWithSeqNo(peer, clientState->Client, msg->Ev.Release(), seqNo, cookie, std::move(traceId));
         } else {
-            NTabletPipe::SendData(peer, tabletState->LastClient, msg->Ev.Release(), cookie, std::move(traceId));
+            NTabletPipe::SendData(peer, clientState->Client, msg->Ev.Release(), cookie, std::move(traceId));
         }
     }
 

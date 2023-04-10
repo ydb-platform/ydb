@@ -194,6 +194,7 @@ class TGRpcProxyDbCountersRegistry {
     TConcurrentRWHashMap<TString, TGRpcProxyDbCounters::TPtr, 256> DbCounters;
     TActorSystem* ActorSystem = {};
     TActorId DbWatcherActorId;
+    TMutex InitLock;
 
     class TGRpcProxyDbWatcherCallback : public NKikimr::NSysView::TDbWatcherCallback {
     public:
@@ -204,13 +205,15 @@ class TGRpcProxyDbCountersRegistry {
 
 public:
     void Initialize(TActorSystem* actorSystem) {
-        if (Y_LIKELY(ActorSystem)) {
-            return;
-        }
-        ActorSystem = actorSystem;
+        with_lock(InitLock) {
+            if (Y_LIKELY(ActorSystem)) {
+                return;
+            }
+            ActorSystem = actorSystem;
 
-        auto callback = MakeIntrusive<TGRpcProxyDbWatcherCallback>();
-        DbWatcherActorId = ActorSystem->Register(NSysView::CreateDbWatcherActor(callback));
+            auto callback = MakeIntrusive<TGRpcProxyDbWatcherCallback>();
+            DbWatcherActorId = ActorSystem->Register(NSysView::CreateDbWatcherActor(callback));
+        }
     }
 
     TGRpcProxyDbCounters::TPtr GetDbProxyCounters(const TString& database) {

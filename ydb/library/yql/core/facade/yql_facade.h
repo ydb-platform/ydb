@@ -360,6 +360,7 @@ private:
     const TUdfIndex::TPtr UdfIndex_;
     const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     const TFileStoragePtr FileStorage_;
+    TUserDataTable SavedUserDataTable_;
     const TUserDataStorage::TPtr UserDataStorage_;
     const TGatewaysConfig* GatewaysConfig_;
     TString Filename_;
@@ -398,7 +399,7 @@ private:
     TString ExtractedQueryParametersMetadataYson_;
     const bool EnableRangeComputeFor_;
     const IArrowResolver::TPtr ArrowResolver_;
-    i64 FallbackCounter = 0;
+    i64 FallbackCounter_ = 0;
     const EHiddenMode HiddenMode_ = EHiddenMode::Disable;
     THiddenQueryAborter AbortHidden_ = [](){};
 };

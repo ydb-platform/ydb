@@ -1,0 +1,223 @@
+--
+-- BOOLEAN
+--
+--
+-- sanity check - if this fails go insane!
+--
+SELECT 1 AS one;
+ one 
+-----
+   1
+(1 row)
+
+-- ******************testing built-in type bool********************
+-- check bool input syntax
+SELECT true AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT false AS false;
+ false 
+-------
+ f
+(1 row)
+
+SELECT bool 't' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool '   f           ' AS false;
+ false 
+-------
+ f
+(1 row)
+
+SELECT bool 'true' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool 'test' AS error;
+ERROR:  invalid input syntax for type boolean: "test"
+LINE 1: SELECT bool 'test' AS error;
+                    ^
+SELECT bool 'false' AS false;
+ false 
+-------
+ f
+(1 row)
+
+SELECT bool 'foo' AS error;
+ERROR:  invalid input syntax for type boolean: "foo"
+LINE 1: SELECT bool 'foo' AS error;
+                    ^
+SELECT bool 'y' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool 'yes' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool 'yeah' AS error;
+ERROR:  invalid input syntax for type boolean: "yeah"
+LINE 1: SELECT bool 'yeah' AS error;
+                    ^
+SELECT bool 'n' AS false;
+ false 
+-------
+ f
+(1 row)
+
+SELECT bool 'no' AS false;
+ false 
+-------
+ f
+(1 row)
+
+SELECT bool 'nay' AS error;
+ERROR:  invalid input syntax for type boolean: "nay"
+LINE 1: SELECT bool 'nay' AS error;
+                    ^
+SELECT bool 'on' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool 'off' AS false;
+ false 
+-------
+ f
+(1 row)
+
+SELECT bool 'of' AS false;
+ false 
+-------
+ f
+(1 row)
+
+SELECT bool 'o' AS error;
+ERROR:  invalid input syntax for type boolean: "o"
+LINE 1: SELECT bool 'o' AS error;
+                    ^
+SELECT bool 'on_' AS error;
+ERROR:  invalid input syntax for type boolean: "on_"
+LINE 1: SELECT bool 'on_' AS error;
+                    ^
+SELECT bool 'off_' AS error;
+ERROR:  invalid input syntax for type boolean: "off_"
+LINE 1: SELECT bool 'off_' AS error;
+                    ^
+SELECT bool '1' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool '11' AS error;
+ERROR:  invalid input syntax for type boolean: "11"
+LINE 1: SELECT bool '11' AS error;
+                    ^
+SELECT bool '0' AS false;
+ false 
+-------
+ f
+(1 row)
+
+SELECT bool '000' AS error;
+ERROR:  invalid input syntax for type boolean: "000"
+LINE 1: SELECT bool '000' AS error;
+                    ^
+SELECT bool '' AS error;
+ERROR:  invalid input syntax for type boolean: ""
+LINE 1: SELECT bool '' AS error;
+                    ^
+-- and, or, not in qualifications
+SELECT bool 't' or bool 'f' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool 't' and bool 'f' AS false;
+ false 
+-------
+ f
+(1 row)
+
+SELECT not bool 'f' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool 't' = bool 'f' AS false;
+ false 
+-------
+ f
+(1 row)
+
+SELECT bool 't' <> bool 'f' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool 't' > bool 'f' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool 't' >= bool 'f' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool 'f' < bool 't' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT bool 'f' <= bool 't' AS true;
+ true 
+------
+ t
+(1 row)
+
+-- explicit casts to/from text
+SELECT 'TrUe'::text::boolean AS true, 'fAlse'::text::boolean AS false;
+ true | false 
+------+-------
+ t    | f
+(1 row)
+
+SELECT '    true   '::text::boolean AS true,
+       '     FALSE'::text::boolean AS false;
+ true | false 
+------+-------
+ t    | f
+(1 row)
+
+SELECT true::boolean::text AS true, false::boolean::text AS false;
+ true | false 
+------+-------
+ true | false
+(1 row)
+
+SELECT '  tru e '::text::boolean AS invalid;    -- error
+ERROR:  invalid input syntax for type boolean: "  tru e "
+SELECT ''::text::boolean AS invalid;            -- error
+ERROR:  invalid input syntax for type boolean: ""

@@ -14,7 +14,6 @@ target_include_directories(ydb-public-sdk-cpp-client-impl-ydb_endpoints-ut PRIVA
 target_link_libraries(ydb-public-sdk-cpp-client-impl-ydb_endpoints-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   client-impl-ydb_endpoints
@@ -68,5 +67,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-public-sdk-cpp-client-impl-ydb_endpoints-ut
+  system_allocator
 )
 vcs_info(ydb-public-sdk-cpp-client-impl-ydb_endpoints-ut)

@@ -731,7 +731,7 @@ private:
             for (auto& output : *task.MutableOutputs()) {
                 if (output.HasSink() && output.GetSink().GetType() == "S3Sink") {
                     NS3::TSink s3SinkSettings;
-                    YQL_ENSURE(output.GetSink().GetSettings().UnpackTo(&s3SinkSettings));   
+                    YQL_ENSURE(output.GetSink().GetSettings().UnpackTo(&s3SinkSettings));
                     if (s3SinkSettings.GetAtomicUploadCommit()) {
                         auto prefix = s3SinkSettings.GetUrl() + s3SinkSettings.GetPath();
                         const auto& [it, isNew] = S3Prefixes.insert(prefix);
@@ -1368,7 +1368,7 @@ private:
         TDqConfiguration::TPtr dqConfiguration = MakeIntrusive<TDqConfiguration>();
         dqConfiguration->Dispatch(dqGraphParams.GetSettings());
         dqConfiguration->FreezeDefaults();
-        dqConfiguration->FallbackPolicy = "never";
+        dqConfiguration->FallbackPolicy = EFallbackPolicy::Never;
 
         TEvaluationGraphInfo info;
 
@@ -1413,7 +1413,7 @@ private:
         TDqConfiguration::TPtr dqConfiguration = MakeIntrusive<TDqConfiguration>();
         dqConfiguration->Dispatch(dqGraphParams.GetSettings());
         dqConfiguration->FreezeDefaults();
-        dqConfiguration->FallbackPolicy = "never";
+        dqConfiguration->FallbackPolicy = EFallbackPolicy::Never;
 
         ExecuterId = Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
 

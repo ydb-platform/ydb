@@ -17,7 +17,6 @@ target_include_directories(ydb-core-actorlib_impl-ut PRIVATE
 target_link_libraries(ydb-core-actorlib_impl-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-actorlib_impl
@@ -74,5 +73,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-actorlib_impl-ut
+  system_allocator
 )
 vcs_info(ydb-core-actorlib_impl-ut)

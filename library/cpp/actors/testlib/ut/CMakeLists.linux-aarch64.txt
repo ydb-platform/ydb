@@ -15,7 +15,6 @@ target_link_libraries(library-cpp-actors-testlib-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   cpp-actors-testlib
   cpp-actors-core
@@ -65,5 +64,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(library-cpp-actors-testlib-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(library-cpp-actors-testlib-ut)

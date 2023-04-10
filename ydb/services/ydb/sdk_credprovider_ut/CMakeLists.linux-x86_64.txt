@@ -18,8 +18,6 @@ target_link_libraries(ydb-services-ydb-sdk_credprovider_ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-services-ydb
@@ -80,5 +78,9 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-services-ydb-sdk_credprovider_ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-services-ydb-sdk_credprovider_ut)

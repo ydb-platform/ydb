@@ -139,6 +139,16 @@ namespace NTabletFlatExecutor {
                 || LoanConfirmation;
         }
 
+    protected:
+        void OnRollbackChanges() noexcept override {
+            MakeSnap.clear();
+            DropSnap.Reset();
+            BorrowUpdates.clear();
+            LoanBundle.clear();
+            LoanTxStatus.clear();
+            LoanConfirmation.clear();
+        }
+
     protected: /* IExecuting, tx stage func implementation */
         void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override;
 

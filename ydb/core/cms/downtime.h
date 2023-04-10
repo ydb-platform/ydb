@@ -33,20 +33,21 @@ public:
             , Reason(reason)
         {
         }
+
         TSegment(TInstant start, TDuration duration, const TString reason = "")
             : Start(start)
             , End(start + duration)
             , Reason(reason)
         {
         }
+
         TSegment(const TSegment &other) = default;
         TSegment(TSegment &&other) = default;
 
         TSegment &operator=(const TSegment &other) = default;
         TSegment &operator=(TSegment &&other) = default;
 
-        TDuration Duration() const
-        {
+        TDuration Duration() const {
             return End - Start;
         }
     };
@@ -73,18 +74,15 @@ public:
     void AddDowntime(const TDowntime &downtime);
     void AddDowntime(const TLockableItem &item, TInstant now);
 
-    const TSegments &GetDowntimeSegments() const
-    {
+    const TSegments &GetDowntimeSegments() const {
         return DowntimeSegments;
     }
 
-    bool Empty() const
-    {
+    bool Empty() const {
         return DowntimeSegments.empty();
     }
 
-    void Clear()
-    {
+    void Clear() {
         DowntimeSegments.clear();
     }
 
@@ -113,10 +111,8 @@ public:
     void CleanupOld(TInstant now);
     void CleanupEmpty();
 
-    bool DbLoadState(TTransactionContext& txc,
-                     const TActorContext& ctx);
-    void DbStoreState(TTransactionContext& txc,
-                      const TActorContext& ctx);
+    bool DbLoadState(TTransactionContext& txc, const TActorContext& ctx);
+    void DbStoreState(TTransactionContext& txc, const TActorContext& ctx);
 
     THashMap<ui32, TDowntime> NodeDowntimes;
     THashMap<TPDiskID, TDowntime, TPDiskIDHash> PDiskDowntimes;

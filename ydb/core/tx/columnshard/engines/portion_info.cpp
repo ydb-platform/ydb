@@ -14,26 +14,6 @@ TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array
     return NArrow::SerializeBatch(batch, writeOptions);
 }
 
-namespace {
-
-std::shared_ptr<arrow::ChunkedArray> DeserializeBlobs(const TVector<TString>& blobs, std::shared_ptr<arrow::Field> field) {
-    Y_VERIFY(!blobs.empty());
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
-
-    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-    batches.reserve(blobs.size());
-    for (auto& blob : blobs) {
-        batches.push_back(NArrow::DeserializeBatch(blob, schema));
-        Y_VERIFY(batches.back());
-    }
-
-    auto res = arrow::Table::FromRecordBatches(batches);
-    Y_VERIFY_S(res.ok(), res.status().message());
-    return (*res)->column(0);
-}
-
-}
-
 TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& array,
                                         const std::shared_ptr<arrow::Field>& field,
                                         TColumnRecord&& record,
@@ -49,7 +29,7 @@ TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& arr
     return blob;
 }
 
-std::shared_ptr<arrow::Table> TPortionInfo::Assemble(const TIndexInfo& indexInfo,
+TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const TIndexInfo& indexInfo,
                                                      const std::shared_ptr<arrow::Schema>& schema,
                                                      const THashMap<TBlobRange, TString>& blobsData) const {
     // Correct records order
@@ -68,7 +48,7 @@ std::shared_ptr<arrow::Table> TPortionInfo::Assemble(const TIndexInfo& indexInfo
     }
 
     // Make chunked arrays for columns
-    std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
+    std::vector<TPreparedColumn> columns;
     columns.reserve(columnChunks.size());
 
     for (auto& [pos, orderedChunks] : columnChunks) {
@@ -81,24 +61,16 @@ std::shared_ptr<arrow::Table> TPortionInfo::Assemble(const TIndexInfo& indexInfo
             Y_VERIFY(chunk == expected);
             ++expected;
 
-            Y_VERIFY(blobsData.count(blobId));
-            TString data = blobsData.find(blobId)->second;
+            auto it = blobsData.find(blobId);
+            Y_VERIFY(it != blobsData.end());
+            TString data = it->second;
             blobs.push_back(data);
         }
 
-        columns.push_back(DeserializeBlobs(blobs, field));
+        columns.emplace_back(TPreparedColumn(field, std::move(blobs)));
     }
 
-    return arrow::Table::Make(schema, columns);
-}
-
-std::shared_ptr<arrow::RecordBatch> TPortionInfo::AssembleInBatch(const TIndexInfo& indexInfo,
-                                                                  const std::shared_ptr<arrow::Schema>& schema,
-                                                                  const THashMap<TBlobRange, TString>& data) const {
-    std::shared_ptr<arrow::Table> portion = Assemble(indexInfo, schema, data);
-    auto res = portion->CombineChunks();
-    Y_VERIFY(res.ok());
-    return NArrow::ToBatch(*res);
+    return TPreparedBatchData(std::move(columns), schema);
 }
 
 void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted) {
@@ -146,7 +118,7 @@ void TPortionInfo::AddMetadata(const TIndexInfo& indexInfo, const std::shared_pt
 
 TString TPortionInfo::GetMetadata(const TColumnRecord& rec) const {
     NKikimrTxColumnShard::TIndexColumnMeta meta; // TODO: move proto serialization out of engines folder
-    if (Meta.ColumnMeta.count(rec.ColumnId)) {
+    if (Meta.ColumnMeta.contains(rec.ColumnId)) {
         const auto& columnMeta = Meta.ColumnMeta.find(rec.ColumnId)->second;
         if (auto numRows = columnMeta.NumRows) {
             meta.SetNumRows(numRows);
@@ -235,17 +207,33 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
 }
 
 std::shared_ptr<arrow::Scalar> TPortionInfo::MinValue(ui32 columnId) const {
-    if (!Meta.ColumnMeta.count(columnId)) {
+    if (!Meta.ColumnMeta.contains(columnId)) {
         return {};
     }
     return Meta.ColumnMeta.find(columnId)->second.Min;
 }
 
 std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
-    if (!Meta.ColumnMeta.count(columnId)) {
+    if (!Meta.ColumnMeta.contains(columnId)) {
         return {};
     }
     return Meta.ColumnMeta.find(columnId)->second.Max;
+}
+
+std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
+    Y_VERIFY(!Blobs.empty());
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{ Field });
+
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+    batches.reserve(Blobs.size());
+    for (auto& blob : Blobs) {
+        batches.push_back(NArrow::DeserializeBatch(blob, schema));
+        Y_VERIFY(batches.back());
+    }
+
+    auto res = arrow::Table::FromRecordBatches(batches);
+    Y_VERIFY_S(res.ok(), res.status().message());
+    return (*res)->column(0);
 }
 
 }

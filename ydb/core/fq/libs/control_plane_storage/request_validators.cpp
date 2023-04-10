@@ -315,8 +315,12 @@ NYql::TIssues ValidateProjectionColumns(const FederatedQuery::Schema& schema, co
     return issues;
 }
 
-NYql::TIssues ValidateProjection(const FederatedQuery::Schema& schema, const TString& projection, const TVector<TString>& partitionedBy) {
-    auto generator =NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy, GetDataSlotColumns(schema)); // an exception is thrown if an error occurs
+NYql::TIssues ValidateProjection(const FederatedQuery::Schema& schema, const TString& projection, const TVector<TString>& partitionedBy, size_t pathsLimit) {
+    auto generator = NYql::NPathGenerator::CreatePathGenerator(
+        projection,
+        partitionedBy,
+        GetDataSlotColumns(schema),
+        pathsLimit); // an exception is thrown if an error occurs
     TMap<TString, NYql::NPathGenerator::IPathGenerator::EType> projectionColumns;
     for (const auto& column: generator->GetConfig().Rules) {
         projectionColumns[column.Name] = column.Type;

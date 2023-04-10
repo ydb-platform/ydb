@@ -974,10 +974,10 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
         // TODO: check MapJoinCore input unique using constraints
         if (const auto& lambda = node->Tail(); node->Head().IsCallable("SqueezeToDict") && lambda.Tail().IsCallable("MapJoinCore") && lambda.Tail().Child(1U) == &lambda.Head().Head()) {
             TMaybe<bool> isMany;
-            TMaybe<bool> isHashed;
+            TMaybe<EDictType> type;
             bool isCompact = false;
             TMaybe<ui64> itemsCount;
-            ParseToDictSettings(node->Head(), ctx, isMany, isHashed, itemsCount, isCompact);
+            ParseToDictSettings(node->Head(), ctx, type, isMany, itemsCount, isCompact);
             if (isMany.GetOrElse(true)) {
                 factor *= 5.0;
             }
@@ -1002,10 +1002,10 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
         // TODO: check MapJoinCore input unique using constraints
         if (node->Child(1)->IsCallable("ToDict")) {
             TMaybe<bool> isMany;
-            TMaybe<bool> isHashed;
+            TMaybe<EDictType> type;
             bool isCompact = false;
             TMaybe<ui64> itemsCount;
-            ParseToDictSettings(*node->Child(1), ctx, isMany, isHashed, itemsCount, isCompact);
+            ParseToDictSettings(*node->Child(1), ctx, type, isMany, itemsCount, isCompact);
             if (isMany.GetOrElse(true)) {
                 factor *= 5.0;
             }

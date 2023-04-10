@@ -12,8 +12,6 @@ target_link_libraries(gencrc PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
 )
 target_link_options(gencrc PRIVATE
@@ -28,5 +26,9 @@ target_link_options(gencrc PRIVATE
 )
 target_sources(gencrc PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/digest/old_crc/gencrc/main.cpp
+)
+target_allocator(gencrc
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(gencrc)

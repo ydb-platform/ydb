@@ -52,7 +52,7 @@ struct TDqSettings {
     NCommon::TConfSetting<int, false> MaxNetworkRetries;
     NCommon::TConfSetting<ui64, false> RetryBackoffMs;
     NCommon::TConfSetting<bool, false> CollectCoreDumps;
-    NCommon::TConfSetting<TString, false> FallbackPolicy;
+    NCommon::TConfSetting<EFallbackPolicy, false> FallbackPolicy;
     NCommon::TConfSetting<ui64, false> PullRequestTimeoutMs;
     NCommon::TConfSetting<ui64, false> PingTimeoutMs;
     NCommon::TConfSetting<bool, false> UseSimpleYtReader;

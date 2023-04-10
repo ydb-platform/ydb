@@ -1,4 +1,5 @@
 #pragma once
+
 #include "defs.h"
 #include "columns_table.h"
 #include "index_info.h"
@@ -54,7 +55,7 @@ struct TPortionInfo {
     bool Produced() const { return Meta.Produced != TPortionMeta::UNSPECIFIED; }
     bool Valid() const { return !Empty() && Produced() && HasMinMax(FirstPkColumn); }
     bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
-    bool CanHaveDups() const { return !Valid(); /* || IsInserted(); */ }
+    bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted(); }
     size_t NumRecords() const { return Records.size(); }
 
@@ -123,7 +124,7 @@ struct TPortionInfo {
         }
         if (!granuleRemap.empty()) {
             for (auto& rec : Records) {
-                Y_VERIFY(granuleRemap.count(rec.Granule));
+                Y_VERIFY(granuleRemap.contains(rec.Granule));
                 rec.Granule = granuleRemap.find(rec.Granule)->second;
             }
         }
@@ -157,7 +158,7 @@ struct TPortionInfo {
 
     std::shared_ptr<arrow::Scalar> PkStart() const {
         if (FirstPkColumn) {
-            Y_VERIFY(Meta.ColumnMeta.count(FirstPkColumn));
+            Y_VERIFY(Meta.ColumnMeta.contains(FirstPkColumn));
             return MinValue(FirstPkColumn);
         }
         return {};
@@ -165,7 +166,7 @@ struct TPortionInfo {
 
     std::shared_ptr<arrow::Scalar> PkEnd() const {
         if (FirstPkColumn) {
-            Y_VERIFY(Meta.ColumnMeta.count(FirstPkColumn));
+            Y_VERIFY(Meta.ColumnMeta.contains(FirstPkColumn));
             return MaxValue(FirstPkColumn);
         }
         return {};
@@ -173,7 +174,7 @@ struct TPortionInfo {
 
     ui32 NumRows() const {
         if (FirstPkColumn) {
-            Y_VERIFY(Meta.ColumnMeta.count(FirstPkColumn));
+            Y_VERIFY(Meta.ColumnMeta.contains(FirstPkColumn));
             return Meta.ColumnMeta.find(FirstPkColumn)->second.NumRows;
         }
         return 0;
@@ -188,18 +189,61 @@ struct TPortionInfo {
     }
 
     bool HasMinMax(ui32 columnId) const {
-        if (!Meta.ColumnMeta.count(columnId)) {
+        if (!Meta.ColumnMeta.contains(columnId)) {
             return false;
         }
         return Meta.ColumnMeta.find(columnId)->second.HasMinMax();
     }
 
-    std::shared_ptr<arrow::Table> Assemble(const TIndexInfo& indexInfo,
+    class TPreparedColumn {
+    private:
+        std::shared_ptr<arrow::Field> Field;
+        std::vector<TString> Blobs;
+
+    public:
+        TPreparedColumn(const std::shared_ptr<arrow::Field>& field, std::vector<TString>&& blobs)
+            : Field(field)
+            , Blobs(std::move(blobs))
+        {
+
+        }
+
+        std::shared_ptr<arrow::ChunkedArray> Assemble() const;
+    };
+
+    class TPreparedBatchData {
+    private:
+        std::vector<TPreparedColumn> Columns;
+        std::shared_ptr<arrow::Schema> Schema;
+    public:
+        TPreparedBatchData(std::vector<TPreparedColumn>&& columns, std::shared_ptr<arrow::Schema> schema)
+            : Columns(std::move(columns))
+            , Schema(schema)
+        {
+
+        }
+
+        std::shared_ptr<arrow::RecordBatch> Assemble() {
+            std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
+            for (auto&& i : Columns) {
+                columns.emplace_back(i.Assemble());
+            }
+
+            auto table = arrow::Table::Make(Schema, columns);
+            auto res = table->CombineChunks();
+            Y_VERIFY(res.ok());
+            return NArrow::ToBatch(*res);
+        }
+    };
+
+    TPreparedBatchData PrepareForAssemble(const TIndexInfo& indexInfo,
                                            const std::shared_ptr<arrow::Schema>& schema,
                                            const THashMap<TBlobRange, TString>& data) const;
     std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const TIndexInfo& indexInfo,
                                            const std::shared_ptr<arrow::Schema>& schema,
-                                           const THashMap<TBlobRange, TString>& data) const;
+                                           const THashMap<TBlobRange, TString>& data) const {
+        return PrepareForAssemble(indexInfo, schema, data).Assemble();
+    }
 
     static TString SerializeColumn(const std::shared_ptr<arrow::Array>& array,
                                    const std::shared_ptr<arrow::Field>& field,
@@ -225,4 +269,10 @@ struct TPortionInfo {
     }
 };
 
-}
+/// Ensure that TPortionInfo can be effectively assigned by moving the value.
+static_assert(std::is_nothrow_move_assignable<TPortionInfo>::value);
+
+/// Ensure that TPortionInfo can be effectively constructed by moving the value.
+static_assert(std::is_nothrow_move_constructible<TPortionInfo>::value);
+
+} // namespace NKikimr::NOlap

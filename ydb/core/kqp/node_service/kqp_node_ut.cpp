@@ -2,6 +2,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/tablet/resource_broker_impl.h>
 
@@ -170,7 +171,9 @@ public:
         Runtime->EnableScheduleForActor(ResourceManagerActorId, true);
         WaitForBootstrap();
 
-        auto kqpNode = CreateKqpNodeService(config, KqpCounters, CompFactory.Get(), NYql::IHTTPGateway::Make());
+        auto httpGateway = NYql::IHTTPGateway::Make();
+        auto asyncIoFactory = CreateKqpAsyncIoFactory(KqpCounters, httpGateway);
+        auto kqpNode = CreateKqpNodeService(config, KqpCounters, CompFactory.Get(), asyncIoFactory);
         KqpNodeActorId = Runtime->Register(kqpNode);
         Runtime->EnableScheduleForActor(KqpNodeActorId, true);
         WaitForBootstrap();

@@ -508,7 +508,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
 
     const TInstant now = TActivationContext::Now();
     const TMonotonic mono = TActivationContext::Monotonic();
-    std::vector<std::pair<TVSlotId, TInstant>> lastSeenReadyQ;
+    std::vector<TVDiskAvailabilityTiming> timingQ;
     for (auto it = PDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != PDisks.end() && it->first.NodeId == nodeId; ++it) {
         it->second->UpdateOperational(false);
         SysViewChangedPDisks.insert(it->first);
@@ -518,11 +518,10 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
     for (auto it = VSlots.lower_bound(startingId); it != VSlots.end() && it->first.NodeId == nodeId; ++it) {
         if (const TGroupInfo *group = it->second->Group) {
             if (it->second->IsReady) {
-                it->second->LastSeenReady = now;
-                lastSeenReadyQ.emplace_back(it->second->VSlotId, now);
                 NotReadyVSlotIds.insert(it->second->VSlotId);
             }
-            it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono);
+            it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono, now);
+            timingQ.emplace_back(*it->second);
             sh->VDiskStatusUpdate.emplace_back(it->second->GetVDiskId(), it->second->Status);
             ScrubState.UpdateVDiskState(&*it->second);
         }
@@ -535,8 +534,8 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
     }
     ScrubState.OnNodeDisconnected(nodeId);
     EraseKnownDrivesOnDisconnected(&node);
-    if (!lastSeenReadyQ.empty()) {
-        Execute(CreateTxUpdateLastSeenReady(std::move(lastSeenReadyQ)));
+    if (!timingQ.empty()) {
+        Execute(CreateTxUpdateLastSeenReady(std::move(timingQ)));
     }
     for (TGroupId groupId : std::exchange(node.GroupsRequested, {})) {
         GroupToNode.erase(std::make_tuple(groupId, nodeId));

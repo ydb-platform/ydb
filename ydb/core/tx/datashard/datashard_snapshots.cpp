@@ -171,7 +171,7 @@ bool TSnapshotManager::PromoteCompleteEdge(const TRowVersion& version, TTransact
 
     NIceDb::TNiceDb db(txc.DB);
     SetCompleteEdge(db, version);
-    txc.OnCommitted([this, edge = CompleteEdge] {
+    txc.DB.OnPersistent([this, edge = CompleteEdge] {
         this->CommittedCompleteEdge = edge;
     });
 
@@ -294,7 +294,7 @@ void TSnapshotManager::SetPerformedUnprotectedReads(bool performedUnprotectedRea
     PerformedUnprotectedReads = performedUnprotectedReads;
     PerformedUnprotectedReadsUncommitted++;
 
-    txc.OnCommitted([this] {
+    txc.DB.OnPersistent([this] {
         this->PerformedUnprotectedReadsUncommitted--;
     });
 }
@@ -420,7 +420,7 @@ bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext
             Y_FAIL("Unexpected mvcc state# %d", (ui32)state);
     }
 
-    txc.OnCommitted([this, edge = CompleteEdge] {
+    txc.DB.OnPersistent([this, edge = CompleteEdge] {
         this->CommittedCompleteEdge = edge;
     });
 

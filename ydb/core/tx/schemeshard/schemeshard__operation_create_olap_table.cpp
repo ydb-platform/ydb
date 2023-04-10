@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard_olap_types.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -12,182 +13,221 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
-bool PrepareSchema(NKikimrSchemeOp::TColumnTableSchema& proto, TOlapSchema& schema, TString& errStr) {
-    proto.SetNextColumnId(1);
-    proto.SetVersion(1);
+class TTableConstructorBase {
+    YDB_READONLY(ui32, ShardsCount, 1);
+    YDB_READONLY_DEF(TString, Name);
+    YDB_OPT(NKikimrSchemeOp::TColumnDataLifeCycle, TtlSettings);
+    YDB_OPT(NKikimrSchemeOp::TColumnTableSharding, Sharding);
 
-    if (!TOlapSchema::UpdateProto(proto, errStr)) {
-        return false;
-    }
-    bool allowNullableKeys = false;
-    return schema.Parse(proto, errStr, allowNullableKeys);
-}
-
-bool SetSharding(const TOlapSchema& schema, NKikimrSchemeOp::TColumnTableDescription& op,
-                 TColumnTableInfo::TPtr tableInfo,
-                 TEvSchemeShard::EStatus& status, TString& errStr)
-{
-    ui32 shardsCount = Max(ui32(1), op.GetColumnShardCount());
-    if (op.HasSharding()) {
-        tableInfo->Sharding = std::move(*op.MutableSharding());
-    } else if (shardsCount < 2) {
-        tableInfo->Sharding.MutableRandomSharding();
-    } else {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("Sharding is not set");
-        return false;
-    }
-
-    op.ClearSharding();
-
-    switch (tableInfo->Sharding.Method_case()) {
-        case NKikimrSchemeOp::TColumnTableSharding::kRandomSharding: {
-            // Random sharding implies non-unique primary key
-            if (shardsCount > 1) {
-                tableInfo->Sharding.SetUniquePrimaryKey(false);
-            }
-            break;
-        }
-        case NKikimrSchemeOp::TColumnTableSharding::kHashSharding: {
-            auto& sharding = *tableInfo->Sharding.MutableHashSharding();
-            if (sharding.ColumnsSize() == 0) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = Sprintf("Hash sharding requires a non-empty list of columns");
-                return false;
-            }
-            bool keysOnly = true;
-            for (const TString& columnName : sharding.GetColumns()) {
-                auto* pColumn = schema.FindColumnByName(columnName);
-                if (!pColumn) {
-                    status = NKikimrScheme::StatusSchemeError;
-                    errStr = Sprintf("Hash sharding is using an unknown column '%s'", columnName.c_str());
-                    return false;
-                }
-                if (!pColumn->IsKeyColumn()) {
-                    keysOnly = false;
-                }
-            }
-            sharding.SetUniqueShardKey(true);
-            tableInfo->Sharding.SetUniquePrimaryKey(keysOnly);
-            break;
-        }
-        default: {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = "Unsupported sharding method";
+public:
+    bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
+        Name = description.GetName();
+        if (description.HasRESERVED_TtlSettingsPresetName() || description.HasRESERVED_TtlSettingsPresetId()) {
+            errors.AddError("TTL presets are not supported");
             return false;
         }
-    }
-    return true;
-}
 
-bool CheckSupported(const NKikimrSchemeOp::TColumnTableDescription& op,
-                    TEvSchemeShard::EStatus& status, TString& errStr)
-{
-    if (op.HasRESERVED_TtlSettingsPresetName() || op.HasRESERVED_TtlSettingsPresetId()) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = "TTL presets are not supported";
-        return false;
-    }
-    if (op.HasRESERVED_TtlSettingsPresetName() || op.HasRESERVED_TtlSettingsPresetId()) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = "TTL presets are not supported";
-        return false;
-    }
-    return true;
-}
+        if (description.HasRESERVED_TtlSettingsPresetName() || description.HasRESERVED_TtlSettingsPresetId()) {
+            errors.AddError("TTL presets are not supported");
+            return false;
+        }
 
-TColumnTableInfo::TPtr CreateColumnTableInStore(
-        TColumnTableInfo::TPtr& tableInfo,
-        TOlapStoreInfo::TPtr storeInfo,
-        ui32 columnShardCount,
-        TEvSchemeShard::EStatus& status, TString& errStr)
-{
-    auto& op = tableInfo->Description;
+        ShardsCount = Max(ui32(1), description.GetColumnShardCount());
+        if (description.HasSharding()) {
+            Sharding = description.GetSharding();
+        }
 
-    if (!CheckSupported(op, status, errStr)) {
-        return nullptr;
+        if (!Sharding && ShardsCount > 1) {
+            errors.AddError("Sharding is not set");
+            return false;
+        }
+
+        if (!DoDeserialize(description, errors)) {
+            return false;
+        }
+
+        if (description.HasTtlSettings()) {
+            TtlSettings = description.GetTtlSettings();
+            if (!GetSchema().ValidateTtlSettings(description.GetTtlSettings(), errors)) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    if (!op.HasSchemaPresetName() && !op.HasSchemaPresetId()) {
-        op.SetSchemaPresetName("default");
-    }
+    TColumnTableInfo::TPtr BuildTableInfo(IErrorCollector& errors) const {
+        TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo;
+        tableInfo->AlterVersion = 1;
 
-    const TOlapSchema* pSchema = nullptr;
-
-    if (op.HasSchemaPresetName()) {
-        const TString presetName = op.GetSchemaPresetName();
-        if (!storeInfo->SchemaPresetByName.contains(presetName)) {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = Sprintf("Specified schema preset '%s' does not exist in tablestore", presetName.c_str());
+        BuildDescription(tableInfo->Description);
+        tableInfo->Description.SetColumnShardCount(ShardsCount);
+        tableInfo->Description.SetName(Name);
+        if (HasTtlSettings()) {
+            tableInfo->Description.MutableTtlSettings()->CopyFrom(GetTtlSettingsUnsafe());
+            tableInfo->Description.MutableTtlSettings()->SetVersion(1);
+        }
+        if (!SetSharding(GetSchema(), tableInfo, errors)) {
             return nullptr;
         }
-        const ui32 presetId = storeInfo->SchemaPresetByName.at(presetName);
-        if (!op.HasSchemaPresetId()) {
-            op.SetSchemaPresetId(presetId);
+        return tableInfo;
+    }
+
+private:
+    virtual void BuildDescription(NKikimrSchemeOp::TColumnTableDescription& description) const = 0;
+    virtual bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) = 0;
+    virtual const TOlapSchema& GetSchema() const = 0;
+
+    bool SetSharding(const TOlapSchema& schema, TColumnTableInfo::TPtr tableInfo, IErrorCollector& errors) const {
+        if (Sharding) {
+            tableInfo->Sharding = *Sharding;
+        } else {
+            Y_VERIFY(ShardsCount == 1);
+            tableInfo->Sharding.MutableRandomSharding();
+        };
+
+        switch (tableInfo->Sharding.Method_case()) {
+            case NKikimrSchemeOp::TColumnTableSharding::kRandomSharding: {
+                // Random sharding implies non-unique primary key
+                if (ShardsCount > 1) {
+                    tableInfo->Sharding.SetUniquePrimaryKey(false);
+                }
+                break;
+            }
+            case NKikimrSchemeOp::TColumnTableSharding::kHashSharding: {
+                auto& sharding = *tableInfo->Sharding.MutableHashSharding();
+                if (sharding.ColumnsSize() == 0) {
+                    errors.AddError(Sprintf("Hash sharding requires a non-empty list of columns"));
+                    return false;
+                }
+                for (const TString& columnName : sharding.GetColumns()) {
+                    auto* pColumn = schema.GetColumnByName(columnName);
+                    if (!pColumn) {
+                        errors.AddError(Sprintf("Hash sharding is using an unknown column '%s'", columnName.c_str()));
+                        return false;
+                    }
+                    if (!pColumn->IsKeyColumn()) {
+                        errors.AddError(Sprintf("Hash sharding is using a non-key column '%s'", columnName.c_str()));
+                        return false;
+                    }
+                }
+                sharding.SetUniqueShardKey(true);
+                tableInfo->Sharding.SetUniquePrimaryKey(true);
+                break;
+            }
+            default: {
+                errors.AddError("Unsupported sharding method");
+                return false;
+            }
         }
-        if (op.GetSchemaPresetId() != presetId) {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = Sprintf("Specified schema preset '%s' and id %" PRIu32 " do not match in tablestore", presetName.c_str(), presetId);
-            return nullptr;
-        }
-        pSchema = &storeInfo->SchemaPresets.at(presetId);
-    } else if (op.HasSchemaPresetId()) {
-        const ui32 presetId = op.GetSchemaPresetId();
-        if (!storeInfo->SchemaPresets.contains(presetId)) {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = Sprintf("Specified schema preset %" PRIu32 " does not exist in tablestore", presetId);
-            return nullptr;
-        }
-        const TString& presetName = storeInfo->SchemaPresets.at(presetId).Name;
-        op.SetSchemaPresetName(presetName);
-        pSchema = &storeInfo->SchemaPresets.at(presetId);
+        return true;
     }
+};
 
-    Y_VERIFY(pSchema, "No schema preset id/name for in-store column table");
+class TOlapPresetConstructor : public TTableConstructorBase {
+    YDB_READONLY(ui32, PresetId, 0);
+    YDB_READONLY(TString, PresetName, "default");
 
-    if (op.HasSchema()) {
-        auto& opSchema = op.GetSchema();
-        if (!pSchema->Validate(opSchema, status, errStr)) {
-            return nullptr;
+    const TOlapStoreInfo& StoreInfo;
+public:
+    TOlapPresetConstructor(const TOlapStoreInfo& storeInfo)
+        : StoreInfo(storeInfo)
+    {}
+
+    bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
+        if (description.GetColumnShardCount() > StoreInfo.ColumnShards.size()) {
+            errors.AddError(Sprintf("Cannot create table with %" PRIu32 " column shards, only %" PRIu32 " are available",
+                description.GetColumnShardCount(), ui32(StoreInfo.ColumnShards.size())));
+            return false;
         }
 
-        op.ClearSchema();
-    }
-
-    if (op.HasTtlSettings()) {
-        op.MutableTtlSettings()->SetVersion(1);
-    }
-
-    // Validate ttl settings and schema compatibility
-    if (op.HasTtlSettings()) {
-        if (!ValidateTtlSettings(op.GetTtlSettings(), pSchema->Columns, pSchema->ColumnsByName, errStr)) {
-            status = NKikimrScheme::StatusSchemeError;
-            return nullptr;
+        if (description.HasSchemaPresetId()) {
+            PresetId = description.GetSchemaPresetId();
+            if (!StoreInfo.SchemaPresets.contains(PresetId)) {
+                errors.AddError(Sprintf("Specified schema preset %" PRIu32 " does not exist in tablestore", PresetId));
+                return false;
+            }
+            PresetName = StoreInfo.SchemaPresets.at(PresetId).GetName();
+        } else {
+            if (description.HasSchemaPresetName()) {
+                PresetName = description.GetSchemaPresetName();
+            }
+            if (!StoreInfo.SchemaPresetByName.contains(PresetName)) {
+                errors.AddError(Sprintf("Specified schema preset '%s' does not exist in tablestore", PresetName.c_str()));
+                return false;
+            }
+            PresetId = StoreInfo.SchemaPresetByName.at(PresetName);
+            Y_VERIFY(StoreInfo.SchemaPresets.contains(PresetId));
         }
+
+        if (description.HasSchema()) {
+            if (!GetSchema().Validate(description.GetSchema(), errors)) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    if (!SetSharding(*pSchema, op, tableInfo, status, errStr)) {
-        return nullptr;
+private:
+    void BuildDescription(NKikimrSchemeOp::TColumnTableDescription& description) const override {
+        description.SetSchemaPresetId(PresetId);
+        description.SetSchemaPresetName(PresetName);
     }
 
-    if (columnShardCount > storeInfo->ColumnShards.size()) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("Cannot create table with %" PRIu32 " column shards, only %" PRIu32 " are available",
-            columnShardCount, ui32(storeInfo->ColumnShards.size()));
-        return nullptr;
+    const TOlapSchema& GetSchema() const override {
+        return StoreInfo.SchemaPresets.at(PresetId);
+    };
+};
+
+class TOlapTableConstructor : public TTableConstructorBase {
+    TOlapSchema TableSchema;
+    bool HasDataChannels = false;
+private:
+    bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
+        if (description.HasSchemaPresetName() || description.HasSchemaPresetId()) {
+            errors.AddError("Schema presets are not supported for standalone column tables");
+            return false;
+        }
+
+        if (!description.HasSchema()) {
+            errors.AddError("No schema for column table specified");
+            return false;
+        }
+
+        HasDataChannels = description.GetStorageConfig().HasDataChannelCount();
+
+        TOlapSchemaUpdate schemaDiff;
+        if (!schemaDiff.Parse(description.GetSchema(), errors)) {
+            return false;
+        }
+
+        if (!TableSchema.Update(schemaDiff, errors)) {
+            return false;
+        }
+        return true;
     }
 
-    return tableInfo;
-}
+private:
+    void BuildDescription(NKikimrSchemeOp::TColumnTableDescription& description) const override {
+        if (HasDataChannels) {
+            description.MutableStorageConfig()->SetDataChannelCount(1);
+        }
+        TableSchema.Serialize(*description.MutableSchema());
+    }
+
+    const TOlapSchema& GetSchema() const override {
+        return TableSchema;
+    };
+};
+
 
 void SetShardingTablets(
         TColumnTableInfo::TPtr tableInfo,
         const TVector<TShardIdx>& columnShards, ui32 columnShardCount, bool shuffle,
-        TSchemeShard* ss)
+        const TSchemeShard& ss)
 {
     tableInfo->ColumnShards.reserve(columnShards.size());
     for (const auto& shardIdx : columnShards) {
-        auto* shardInfo = ss->ShardInfos.FindPtr(shardIdx);
+        auto* shardInfo = ss.ShardInfos.FindPtr(shardIdx);
         Y_VERIFY(shardInfo, "ColumnShard not found");
         tableInfo->ColumnShards.push_back(shardInfo->TabletID.GetValue());
     }
@@ -203,59 +243,7 @@ void SetShardingTablets(
     for (ui64 columnShard : tableInfo->ColumnShards) {
         tableInfo->Sharding.AddColumnShards(columnShard);
     }
-
     tableInfo->Sharding.ClearAdditionalColumnShards();
-}
-
-TColumnTableInfo::TPtr CreateColumnTable(
-        TColumnTableInfo::TPtr& tableInfo,
-        TEvSchemeShard::EStatus& status, TString& errStr)
-{
-    auto& op = tableInfo->Description;
-
-    if (!CheckSupported(op, status, errStr)) {
-        return nullptr;
-    }
-
-    if (op.HasSchemaPresetName() || op.HasSchemaPresetId()) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = "Schema presets are not supported for standalone column tables";
-        return nullptr;
-    }
-
-    if (!op.HasSchema()) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = "No schema for column table specified";
-        return nullptr;
-    }
-
-    NKikimrSchemeOp::TColumnTableSchema* opSchema = op.MutableSchema();
-    tableInfo->Schema = TOlapSchema();
-    auto& schema = *tableInfo->Schema;
-
-    if (!PrepareSchema(*opSchema, schema, errStr)) {
-        status = NKikimrScheme::StatusSchemeError;
-        return nullptr;
-    }
-
-    if (op.HasTtlSettings()) {
-        op.MutableTtlSettings()->SetVersion(1);
-
-        if (!ValidateTtlSettings(op.GetTtlSettings(), schema.Columns, schema.ColumnsByName, errStr)) {
-            status = NKikimrScheme::StatusSchemeError;
-            return nullptr;
-        }
-    }
-
-    if (!SetSharding(schema, op, tableInfo, status, errStr)) {
-        return nullptr;
-    }
-
-    if (!op.GetStorageConfig().HasDataChannelCount()) {
-        op.MutableStorageConfig()->SetDataChannelCount(1);
-    }
-
-    return tableInfo;
 }
 
 
@@ -287,8 +275,7 @@ public:
                    DebugHint() << " ProgressState"
                    << " at tabletId# " << ssId);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateColumnTable);
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         TPath path = TPath::Init(pathId, context.SS);
@@ -299,13 +286,13 @@ public:
 
         txState->ClearShardsInProgress();
 
-        auto seqNo = context.SS->StartRound(*txState);
-
         Y_VERIFY(tableInfo->ColumnShards.empty() || tableInfo->OwnedColumnShards.empty());
 
         TString columnShardTxBody;
+        auto seqNo = context.SS->StartRound(*txState);
         NKikimrTxColumnShard::TSchemaTxBody tx;
         context.SS->FillSeqNo(tx, seqNo);
+
         {
             NKikimrTxColumnShard::TCreateTable* create{};
             if (tableInfo->IsStandalone()) {
@@ -338,7 +325,7 @@ public:
                 Y_VERIFY(storeInfo->SchemaPresets.contains(presetId),
                     "Failed to find schema preset %" PRIu32 " in a tablestore", presetId);
                 auto& preset = storeInfo->SchemaPresets.at(presetId);
-                size_t presetIndex = preset.ProtoIndex;
+                size_t presetIndex = preset.GetProtoIndex();
                 create->MutableSchemaPreset()->CopyFrom(storeInfo->Description.GetSchemaPresets(presetIndex));
             }
 
@@ -422,7 +409,7 @@ public:
         auto table = context.SS->ColumnTables.TakeAlterVerified(pathId);
         if (table->IsStandalone()) {
             Y_VERIFY(table->ColumnShards.empty());
-            SetShardingTablets(table.GetPtr(), table->OwnedColumnShards, table->OwnedColumnShards.size(), false, context.SS);
+            SetShardingTablets(table.GetPtr(), table->OwnedColumnShards, table->OwnedColumnShards.size(), false, *context.SS);
         }
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
@@ -695,26 +682,32 @@ public:
             return result;
         }
 
-        TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo;
-        {
-            tableInfo->AlterVersion = 1;
-            tableInfo->Description.CopyFrom(createDescription);
-            // Don't allow users to set these fields
-            tableInfo->Description.ClearSchemaPresetVersionAdj();
-            tableInfo->Description.ClearTtlSettingsPresetVersionAdj();
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Olap schema operations are not supported in serverless db");
+            return result;
         }
 
+        TProposeErrorCollector errors(*result);
+        TColumnTableInfo::TPtr tableInfo;
         if (storeInfo) {
-            tableInfo = CreateColumnTableInStore(tableInfo, storeInfo, shardsCount, status, errStr);
+            TOlapPresetConstructor tableConstructor(*storeInfo);
+            if (!tableConstructor.Deserialize(createDescription, errors)) {
+                return result;
+            }
+            tableInfo = tableConstructor.BuildTableInfo(errors);
             if (tableInfo) {
-                SetShardingTablets(tableInfo, storeInfo->ColumnShards, shardsCount, true, context.SS);
+                SetShardingTablets(tableInfo, storeInfo->ColumnShards, shardsCount, true, *context.SS);
             }
         } else {
-            tableInfo = CreateColumnTable(tableInfo, status, errStr);
+            TOlapTableConstructor tableConstructor;
+            if (!tableConstructor.Deserialize(createDescription, errors)) {
+                return result;
+            }
+            tableInfo = tableConstructor.BuildTableInfo(errors);
         }
 
         if (!tableInfo) {
-            result->SetError(status, errStr);
             return result;
         }
 
@@ -733,7 +726,6 @@ public:
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateColumnTable, pathId);
 
-        Y_VERIFY(tableInfo);
         if (storeInfo) {
             auto olapStorePath = parentPath.FindOlapStore();
 

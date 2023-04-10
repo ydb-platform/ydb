@@ -399,6 +399,9 @@ namespace NKikimr::NBsController {
             if (state.SerialManagementStage.Changed()) {
                 db.Table<Schema::State>().Key(true).Update<Schema::State::SerialManagementStage>(state.SerialManagementStage.Get());
             }
+            if (state.NextVirtualGroupId.Changed()) {
+                db.Table<Schema::State>().Key(true).Update<Schema::State::NextVirtualGroupId>(state.NextVirtualGroupId.Get());
+            }
 
             CommitSelfHealUpdates(state);
             CommitScrubUpdates(state, txc);

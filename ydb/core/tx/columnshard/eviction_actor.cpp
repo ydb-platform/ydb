@@ -36,7 +36,7 @@ public:
                 Y_VERIFY(blobId == blobRange.BlobId);
                 Blobs[blobRange] = {};
             }
-            SendReadRequest(std::move(ranges), event.Externals.count(blobId));
+            SendReadRequest(std::move(ranges), event.Externals.contains(blobId));
         }
     }
 
@@ -46,7 +46,7 @@ public:
 
         auto& event = *ev->Get();
         const TBlobRange& blobId = event.BlobRange;
-        Y_VERIFY(Blobs.count(blobId));
+        Y_VERIFY(Blobs.contains(blobId));
         if (!Blobs[blobId].empty()) {
             return;
         }

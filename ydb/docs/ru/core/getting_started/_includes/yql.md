@@ -82,36 +82,6 @@ CREATE TABLE episodes (
 
 Для исполнения скрипта через {{ ydb-short-name }} CLI выполните инструкции, приведенные в пункте [Исполнение в {{ ydb-short-name }} CLI](#cli) данной статьи.
 
-### Создание колоночных таблиц {#create-olap-table}
-
-Таблица с заданными колонками создается [командой YQL `CREATE TABLE`](../../yql/reference/syntax/create_table.md). В таблице обязательно должен быть определен первичный ключ и ключ партиционирования. Типы данных для колонок приведены в статье [Типы данных YQL](../../yql/reference/types/index.md), а допустимые для использования в аналитических таблицах типы данных описаны в разделе [Поддерживаемые типы данных колоночных таблиц](../../concepts/datamodel/table.md#olap-data-types).
-
-Колонки, входящие в первичный ключ, должны быть описаны с ограничением `NOT NULL`. Остальные колонки по умолчанию опциональные и могут содержать `NULL`.  Ограничения `FOREIGN KEY` {{ ydb-short-name }} не поддерживает.
-
-Создайте таблицы каталога сериалов: `views` (Просмотры), выполнив следующий скрипт:
-
-```sql
-CREATE TABLE views (
-    series_id Uint64 NOT NULL,
-    season_id Uint64,
-    viewed_at Timestamp NOT NULL,
-    person_id Uint64 NOT NULL,
-    PRIMARY KEY (viewed_at, series_id, person_id)
-)
-PARTITION BY HASH(viewed_at, series_id)
-WITH (
-  STORE = COLUMN,
-  AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
-)
-```
-
-Описание всех возможностей работы с таблицами приведены в разделах документации по YQL:
-
-* [CREATE TABLE](../../yql/reference/syntax/create_table.md) — создание таблицы и определение начальных параметров.
-* [DROP TABLE](../../yql/reference/syntax/drop_table.md) — удаление таблицы.
-
-Для исполнения скрипта через {{ ydb-short-name }} CLI выполните инструкции, приведенные в пункте [Исполнение в {{ ydb-short-name }} CLI](#cli) данной статьи.
-
 ### Получение перечня существующих таблиц в БД {#scheme-ls}
 
 Проверьте, что таблицы фактически созданы в БД.

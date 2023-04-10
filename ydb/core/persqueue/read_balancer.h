@@ -419,8 +419,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         void ScheduleBalance(const TActorContext& ctx);
         void Balance(const TActorContext& ctx);
-        void LockPartition(const TActorId pipe, ui32 partition, const TActorContext& ctx);
-        void ReleasePartition(const TActorId pipe, const ui32 group, const ui32 count, const TActorContext& ctx);
+        void LockPartition(const TActorId pipe, TSessionInfo& sessionInfo, ui32 partition, const TActorContext& ctx);
+        void ReleasePartition(const TActorId pipe, TSessionInfo& sessionInfo, const ui32 group, const ui32 count, const TActorContext& ctx);
         TStringBuilder GetPrefix() const;
 
         bool WakeupScheduled = false;

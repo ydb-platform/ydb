@@ -15,8 +15,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_REMOVE_WALLE_TASK; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
-    {
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveWalleTask Execute");
 
         NIceDb::TNiceDb db(txc.DB);
@@ -36,8 +35,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
-    {
+    void Complete(const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveWalleTask Complete");
     }
 
@@ -45,8 +43,7 @@ private:
     TString Id;
 };
 
-ITransaction* TCms::CreateTxRemoveWalleTask(const TString &id)
-{
+ITransaction *TCms::CreateTxRemoveWalleTask(const TString &id) {
     return new TTxRemoveWalleTask(this, id);
 }
 

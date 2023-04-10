@@ -335,6 +335,7 @@ bool TQueryData::MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyPara
 }
 
 NDqProto::TData TQueryData::SerializeParamValue(const TString& name) {
+    auto guard = TypeEnv().BindAllocator();
     const auto& [type, value] = GetParameterUnboxedValue(name);
     return NDq::TDqDataSerializer::SerializeParamValue(type, value);
 }

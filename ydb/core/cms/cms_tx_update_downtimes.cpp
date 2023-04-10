@@ -12,8 +12,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_UPDATE_DOWNTIMES; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
-    {
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS,
                     "TTxUpdateDowntimes Execute");
 
@@ -23,16 +22,12 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
-    {
+    void Complete(const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxUpdateDowntimes Complete");
     }
-
-private:
 };
 
-ITransaction *TCms::CreateTxUpdateDowntimes()
-{
+ITransaction *TCms::CreateTxUpdateDowntimes() {
     return new TTxUpdateDowntimes(this);
 }
 

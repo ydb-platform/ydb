@@ -13,6 +13,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     protoTask->SetStageId(stageId);
     protoTask->SetCpuTimeUs(taskStats.ComputeCpuTime.MicroSeconds() + taskStats.BuildCpuTime.MicroSeconds());
     protoTask->SetFinishTimeMs(taskStats.FinishTs.MilliSeconds());
+    protoTask->SetStartTimeMs(taskStats.StartTs.MilliSeconds());
     // Cerr << (TStringBuilder() << "FillTaskRunnerStats: " << taskStats.ComputeCpuTime << ", " << taskStats.BuildCpuTime << Endl);
 
     if (Y_UNLIKELY(withProfileStats)) {

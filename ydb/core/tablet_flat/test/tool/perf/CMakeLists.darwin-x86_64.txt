@@ -11,7 +11,6 @@ add_executable(table-perf)
 target_link_libraries(table-perf PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   test-libs-table
   library-cpp-charset
@@ -30,5 +29,8 @@ target_link_options(table-perf PRIVATE
 target_sources(table-perf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/perf/colons.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/perf/main.cpp
+)
+target_allocator(table-perf
+  system_allocator
 )
 vcs_info(table-perf)

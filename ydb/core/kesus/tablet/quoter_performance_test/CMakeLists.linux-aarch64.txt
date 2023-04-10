@@ -18,7 +18,6 @@ target_link_libraries(quoter_performance_test PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   library-cpp-getopt
   cpp-testing-unittest
   core-kesus-tablet
@@ -37,5 +36,8 @@ target_link_options(quoter_performance_test PRIVATE
 target_sources(quoter_performance_test PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/quoter_performance_test/main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/ut_helpers.cpp
+)
+target_allocator(quoter_performance_test
+  cpp-malloc-jemalloc
 )
 vcs_info(quoter_performance_test)

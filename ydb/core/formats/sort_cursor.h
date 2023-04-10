@@ -116,12 +116,24 @@ private:
         TRawReplaceKey left(Impl->sort_columns.get(), lhs_pos);
         TRawReplaceKey right(rhs.Impl->sort_columns.get(), rhs_pos);
 
-        for (size_t i = 0; i < Impl->desc->Size(); ++i) {
-            int res = Impl->desc->Direction(i) * left.CompareColumnValue(i, right, i, NotNull);
-            if (res > 0)
-                return true;
-            if (res < 0)
-                return false;
+        if (NotNull) {
+            for (size_t i = 0; i < Impl->desc->Size(); ++i) {
+                auto cmp = left.CompareColumnValueNotNull(i, right, i);
+                int res = Impl->desc->Direction(i) * (std::is_eq(cmp) ? 0 : (std::is_lt(cmp) ? -1 : 1));
+                if (res > 0)
+                    return true;
+                if (res < 0)
+                    return false;
+            }
+        } else {
+            for (size_t i = 0; i < Impl->desc->Size(); ++i) {
+                auto cmp = left.CompareColumnValue(i, right, i);
+                int res = Impl->desc->Direction(i) * (std::is_eq(cmp) ? 0 : (std::is_lt(cmp) ? -1 : 1));
+                if (res > 0)
+                    return true;
+                if (res < 0)
+                    return false;
+            }
         }
         return Impl->order > rhs.Impl->order;
     }

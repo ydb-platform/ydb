@@ -667,7 +667,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     return shardInfoMap;
 }
 
-THashMap<ui64, TShardInfo> PrunePartitions(TKqpTableKeys& tableKeys,
+THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
@@ -908,7 +908,7 @@ THashMap<ui64, TShardInfo> PruneEffectPartitions(const TKqpTableKeys& tableKeys,
     return PruneEffectPartitionsImpl(tableKeys, effect, stageInfo, holderFactory, typeEnv);
 }
 
-THashMap<ui64, TShardInfo> PruneEffectPartitions(TKqpTableKeys& tableKeys,
+THashMap<ui64, TShardInfo> PruneEffectPartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {

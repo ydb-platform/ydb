@@ -17,7 +17,6 @@ target_include_directories(restricted-boost-atomic PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/include
 )
 target_include_directories(restricted-boost-atomic PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/winapi/include
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src
 )
 target_link_libraries(restricted-boost-atomic PUBLIC

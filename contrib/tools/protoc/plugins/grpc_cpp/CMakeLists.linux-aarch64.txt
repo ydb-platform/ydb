@@ -20,7 +20,6 @@ target_link_libraries(grpc_cpp PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   src-compiler-grpc_plugin_support
 )
 target_link_options(grpc_cpp PRIVATE
@@ -35,5 +34,8 @@ target_link_options(grpc_cpp PRIVATE
 )
 target_sources(grpc_cpp PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/cpp_plugin.cc
+)
+target_allocator(grpc_cpp
+  cpp-malloc-jemalloc
 )
 vcs_info(grpc_cpp)

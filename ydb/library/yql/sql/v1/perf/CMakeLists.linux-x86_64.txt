@@ -12,8 +12,6 @@ target_link_libraries(perf PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   udf-service-exception_policy
   library-yql-sql
@@ -32,5 +30,9 @@ target_link_options(perf PRIVATE
 )
 target_sources(perf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/perf/parse.cpp
+)
+target_allocator(perf
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(perf)

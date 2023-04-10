@@ -55,10 +55,13 @@ void ExecutePgInsert(
 {
     NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
     auto valType = NYql::NPg::LookupType(spec.TypeId).Name;
-    auto keyType = (spec.IsKey) ? valType : "int2";
+    if (spec.TypeId == CHAROID) {
+        valType = "\"char\"";
+    }
     if (spec.TypeId == BITOID) {
         valType.append("(4)");
     }
+    auto keyType = (spec.IsKey) ? valType : "int2";
     for (size_t i = 0; i < ((spec.TypeId == BOOLOID) ? 2 : 3); i++) {
         auto keyIn = (spec.IsKey) ? spec.TextIn(i) : ToString(i);
         TString req = Sprintf("\
@@ -79,6 +82,9 @@ void ExecutePgArrayInsert(
 {
     NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
     auto valType = NYql::NPg::LookupType(spec.TypeId).Name;
+    if (spec.TypeId == CHAROID) {
+        valType = "\"char\"";
+    }
     if (spec.TypeId == BITOID) {
         valType.append("(4)");
     }
@@ -102,6 +108,34 @@ void ExecutePgArrayInsert(
     }
 }
 
+bool ExecutePgInsertForCoercion(
+    NKikimr::NKqp::TKikimrRunner& kikimr,
+    const TString& tableName,
+    const TPgTypeCoercionTestSpec& spec)
+{
+    NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+    auto valType = NYql::NPg::LookupType(spec.TypeId).Name;
+    if (spec.TypeId == CHAROID) {
+        valType = "\"char\"";
+    }
+    if (spec.TypeId == BITOID) {
+        valType.append("(4)");
+    }
+
+    TString req = Sprintf("\
+    --!syntax_pg\n\
+    INSERT INTO \"%s\" (key, value) VALUES (\n\
+        '0'::int2, '%s'::%s\n\
+    )", tableName.Data(), spec.TextIn().Data(), valType.Data());
+    Cerr << req << Endl;
+
+    auto result = client.ExecuteYqlScript(req).GetValueSync();
+    if (!result.IsSuccess()) {
+        Cerr << result.GetIssues().ToString() << Endl;
+    }
+    return result.IsSuccess();
+}
+
 void ValidatePgYqlResult(const NYdb::NScripting::TExecuteYqlResult& result, const TPgTypeTestSpec& spec) {
     TResultSetParser parser(result.GetResultSetParser(0));
     bool gotRows = false;
@@ -119,6 +153,35 @@ void ValidatePgYqlResult(const NYdb::NScripting::TExecuteYqlResult& result, cons
         check("value", expected);
     }
     Y_ENSURE(gotRows, "empty select result");
+}
+
+void ValidateTypeCoercionResult(
+    NYdb::NTable::TSession& session,
+    const TString& tableName,
+    const TPgTypeCoercionTestSpec& spec)
+{
+    auto it = session.ReadTable(tableName).GetValueSync();
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+    bool eos = false;
+    while (!eos) {
+        auto part = it.ReadNext().ExtractValueSync();
+        if (!part.IsSuccess()) {
+            eos = true;
+            Y_ENSURE(part.EOS());
+            continue;
+        }
+        auto resultSet = part.ExtractPart();
+        TResultSetParser parser(resultSet);
+        for (size_t i = 0; parser.TryNextRow(); ++i) {
+            auto expected = spec.TextOut();
+            auto& c = parser.ColumnParser("value");
+            auto result = NPg::PgNativeTextFromNativeBinary(c.GetPg().Content_, spec.TypeId);
+            UNIT_ASSERT_C(!result.Error, *result.Error);
+            UNIT_ASSERT_VALUES_EQUAL(expected, result.Str);
+            Cerr << expected << Endl;
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpPg) {
@@ -380,7 +443,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             [] (auto i) { return Sprintf("%u %u %u", i, i + 1, i + 2); },
             [] (auto i) { return Sprintf("%u %u %u", i, i + 1, i + 2); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
-        }
+        },
     };
 
     TPgTypeTestSpec typeByteaSpec{
@@ -626,7 +689,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }
         },
         {
-            INTERVALOID, "day to second,6",
+            INTERVALOID, "day to second,4",
             SUCCESS,
             [] () { return TString("100 01:02:03.1234"); },
             [] () { return TString("100 days 01:02:03.1234"); },
@@ -718,13 +781,16 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         auto* typeDesc = NPg::TypeDescFromPgTypeId(typeId);
         auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
 
+        auto paramsHash = THash<TString>()(typeMod);
+        auto textHash = THash<TString>()(textIn());
+        auto tableName = Sprintf("/Root/Coerce_%s_%" PRIu64 "_%" PRIu64,
+            typeName.c_str(), paramsHash, textHash);
+
         TTableBuilder builder;
         builder.AddNullableColumn("key", TPgType("pgint2"));
         builder.AddNullableColumn("value", TPgType(typeName, typeMod));
         builder.SetPrimaryKeyColumn("key");
 
-        auto paramsHash = THash<TString>()(typeMod);
-        auto tableName = Sprintf("/Root/Coerce_%s_%" PRIu64, typeName.c_str(), paramsHash);
         auto createResult = session.CreateTable(tableName, builder.Build()).GetValueSync();
         UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
 
@@ -862,33 +928,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 return;
             }
 
-            auto readSettings = TReadTableSettings()
-                .AppendColumns("key")
-                .AppendColumns("value");
-
-            auto it = session.ReadTable(tableName, readSettings).GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-            bool eos = false;
-            while (!eos) {
-                auto part = it.ReadNext().ExtractValueSync();
-                if (!part.IsSuccess()) {
-                    eos = true;
-                    Y_ENSURE(part.EOS());
-                    continue;
-                }
-                auto resultSet = part.ExtractPart();
-                TResultSetParser parser(resultSet);
-                for (size_t i = 0; parser.TryNextRow(); ++i) {
-                    auto expected = spec.TextOut();
-                    auto& c = parser.ColumnParser("value");
-                    auto result = NPg::PgNativeTextFromNativeBinary(c.GetPg().Content_, spec.TypeId);
-                    UNIT_ASSERT_C(!result.Error, *result.Error);
-                    UNIT_ASSERT_VALUES_EQUAL(expected, result.Str);
-                    Cerr << result.Str << Endl;
-                }
-            }
-
+            ValidateTypeCoercionResult(session, tableName, spec);
             session.Close().GetValueSync();
         };
 
@@ -921,6 +961,54 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             [] () { return TString(""); }
         };
         testSingleType(partialArrayCoerce);
+    }
+
+    Y_UNIT_TEST(TypeCoercionInsert) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+
+        auto testSingleType = [&kikimr] (const TPgTypeCoercionTestSpec& spec) {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            TString tableName;
+            bool success;
+            std::tie(tableName, success) = createCoercionTable(db, session, spec.TypeId, spec.TypeMod, spec.TextIn, 0);
+            session.Close().GetValueSync();
+
+            success = ExecutePgInsertForCoercion(kikimr, tableName, spec);
+
+            UNIT_ASSERT_VALUES_EQUAL(success, spec.ShouldPass);
+            if (!success) {
+                return;
+            }
+
+            auto sessionValidate = db.CreateSession().GetValueSync().GetSession();
+            ValidateTypeCoercionResult(sessionValidate, tableName, spec);
+            sessionValidate.Close().GetValueSync();
+        };
+
+        auto testType = [&] (const TPgTypeCoercionTestSpec& spec) {
+            auto textInArray = [&spec] () {
+                auto str = spec.TextIn();
+                return spec.ArrayPrint(str);
+            };
+
+            auto textOutArray = [&spec] () {
+                auto str = spec.TextOut();
+                return spec.ArrayPrint(str);
+            };
+
+            auto arrayTypeId = NYql::NPg::LookupType(spec.TypeId).ArrayTypeId;
+            TPgTypeCoercionTestSpec arraySpec{arrayTypeId, spec.TypeMod, spec.ShouldPass, textInArray, textOutArray};
+
+            testSingleType(spec);
+            testSingleType(arraySpec);
+        };
+
+        for (const auto& spec : typeCoercionSpecs) {
+            Cerr << spec.TypeId << Endl;
+            testType(spec);
+        }
     }
 
     Y_UNIT_TEST(EmptyQuery) {
@@ -1036,11 +1124,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
         for (const auto& spec : typeSpecs) {
             Cerr << spec.TypeId << Endl;
-            if (spec.TypeId == CHAROID) {
-                continue;
-                // I cant come up with a query with explicit char conversion.
-                // ::char, ::character casts to pg_bpchar
-            }
             testSingleType(spec);
         }
     }
@@ -1081,11 +1164,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
         for (const auto& spec : typeSpecs) {
             Cerr << spec.TypeId << Endl;
-            if (spec.TypeId == CHAROID) {
-                continue;
-                // I cant come up with a query with explicit char conversion.
-                // ::char, ::character casts to pg_bpchar
-            }
             testType(spec);
         }
     }
@@ -1112,11 +1190,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
         for (const auto& spec : typeSpecs) {
             Cerr << spec.TypeId << Endl;
-            if (spec.TypeId == CHAROID) {
-                continue;
-                // I cant come up with a query with explicit char conversion.
-                // ::char, ::character casts to pg_bpchar
-            }
             testSingleType(spec);
         }
     }
@@ -1338,11 +1411,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
         for (const auto& spec : typeSpecs) {
             Cerr << spec.TypeId << Endl;
-            if (spec.TypeId == CHAROID) {
-                continue;
-                // I cant come up with a query with explicit char conversion.
-                // ::char, ::character casts to pg_bpchar
-            }
             testType(spec);
         }
     }

@@ -15,7 +15,6 @@ target_link_libraries(ydb-core-metering-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   ydb-core-metering
 )
@@ -65,5 +64,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-metering-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-metering-ut)

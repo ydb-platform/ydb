@@ -491,11 +491,12 @@ public:
 
             YQL_ENSURE(txIndex < queryProto.TransactionsSize());
             YQL_ENSURE(resultIndex < queryProto.GetTransactions(txIndex).ResultsSize());
+            YQL_ENSURE(queryProto.GetTransactions(txIndex).GetResults(resultIndex).GetIsStream());
 
-            auto& bindingProto = *queryProto.AddResultBindings();
-            auto& txResultProto = *bindingProto.MutableTxResultBinding();
-            txResultProto.SetTxIndex(txIndex);
-            txResultProto.SetResultIndex(resultIndex);
+            auto& queryBindingProto = *queryProto.AddResultBindings();
+            auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
+            txBindingProto.SetTxIndex(txIndex);
+            txBindingProto.SetResultIndex(resultIndex);
         }
 
         return true;

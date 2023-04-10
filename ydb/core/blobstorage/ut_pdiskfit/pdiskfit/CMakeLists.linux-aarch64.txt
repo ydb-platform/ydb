@@ -12,7 +12,6 @@ target_link_libraries(pdiskfit PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   library-cpp-getopt
   cpp-string_utils-parse_size
   ydb-core-blobstorage
@@ -31,5 +30,8 @@ target_link_options(pdiskfit PRIVATE
 )
 target_sources(pdiskfit PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/pdiskfit/pdiskfit.cpp
+)
+target_allocator(pdiskfit
+  cpp-malloc-jemalloc
 )
 vcs_info(pdiskfit)

@@ -28,7 +28,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
         Table::GroupGeneration::Type groupPrevGeneration, Table::GroupGeneration::Type groupGeneration,
         Table::Category::Type kind, Table::RingIdx::Type ringIdx, Table::FailDomainIdx::Type failDomainIdx,
         Table::VDiskIdx::Type vDiskIdx, Table::Mood::Type mood, TGroupInfo *group,
-        TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady)
+        TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady, TDuration replicationTime)
     : VSlotId(vSlotId)
     , PDisk(pdisk)
     , GroupId(groupId)
@@ -40,6 +40,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
     , VDiskIdx(vDiskIdx)
     , Mood(mood)
     , LastSeenReady(lastSeenReady)
+    , ReplicationTime(replicationTime)
     , VSlotReadyTimestampQ(*vslotReadyTimestampQ)
 {
     Y_VERIFY(pdisk);
@@ -348,6 +349,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDecommitGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kWipeVDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSanitizeGroup:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kCancelVirtualGroup:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

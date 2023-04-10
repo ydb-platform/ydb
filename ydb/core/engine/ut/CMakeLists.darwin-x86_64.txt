@@ -17,7 +17,6 @@ target_include_directories(ydb-core-engine-ut PRIVATE
 target_link_libraries(ydb-core-engine-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-engine
@@ -80,5 +79,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   150
+)
+target_allocator(ydb-core-engine-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-engine-ut)

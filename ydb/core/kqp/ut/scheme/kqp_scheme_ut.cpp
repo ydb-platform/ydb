@@ -3261,7 +3261,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value2 Int64 NOT NULL,
                 PRIMARY KEY (Key)
             )
-            PARTITION BY HASH(Value1, Value2)
+            PARTITION BY HASH(Key)
             WITH (
                 STORE = COLUMN,
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
@@ -3293,9 +3293,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto partSettings = description.GetPartitioningSettings().GetProto();
             auto& partition_by = partSettings.partition_by();
 
-            UNIT_ASSERT_VALUES_EQUAL(partition_by.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(partition_by[0], "Value1");
-            UNIT_ASSERT_VALUES_EQUAL(partition_by[1], "Value2");
+            UNIT_ASSERT_VALUES_EQUAL(partition_by.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(partition_by[0], "Key");
             // TODO: TTL
         }
 
@@ -3306,7 +3305,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-     Y_UNIT_TEST(AddColumnOlapTable) {
+    Y_UNIT_TEST(OlapSharding_KeyOnly) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
@@ -3322,7 +3321,32 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value2 Int64 NOT NULL,
                 PRIMARY KEY (Key)
             )
-            PARTITION BY HASH(Value1, Value2)
+            PARTITION BY HASH(Key, Value1)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(AddColumnOlapTable) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner kikimr(runnerSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/ColumnTableTest";
+
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL,
+                Value1 String,
+                Value2 Int64 NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(Key)
             WITH (
                 STORE = COLUMN,
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
@@ -3335,7 +3359,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ALTER TABLE `)" << tableName << R"(`ADD COLUMN Value3 Uint64;)";
         result = session.ExecuteSchemeQuery(query2).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-
     }
 
     Y_UNIT_TEST(CreateDropColumnTableNegative) {
@@ -3413,7 +3436,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value2 Datetime NOT NULL,
                 PRIMARY KEY (Key)
             )
-            PARTITION BY HASH(Value1, Value2)
+            PARTITION BY HASH(Key)
             WITH (
                 STORE = COLUMN,
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
@@ -3468,7 +3491,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value2 Int64 NOT NULL,
                 PRIMARY KEY (Key)
             )
-            PARTITION BY HASH(Value1, Value2)
+            PARTITION BY HASH(Key)
             WITH (
                 STORE = COLUMN,
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10,

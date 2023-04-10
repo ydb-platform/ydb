@@ -4,9 +4,10 @@
 #include "cluster_info.h"
 #include "cms_state.h"
 
+#include <ydb/core/protos/cms.pb.h>
+
 #include <library/cpp/actors/interconnect/events_local.h>
 #include <library/cpp/actors/core/actor.h>
-#include <ydb/core/protos/cms.pb.h>
 
 /**
  * Here we declare interface for CMS (Cluster Management System) tablet whose intention
@@ -197,8 +198,7 @@ struct TEvCms {
     struct TEvStoreWalleTask : public TEventLocal<TEvStoreWalleTask, EvStoreWalleTask> {
         TWalleTaskInfo Task;
 
-        TString ToString() const override
-        {
+        TString ToString() const override {
             return Sprintf("%s { Task: %s }", ToStringHeader().data(), Task.ToString().data());
         }
     };
@@ -213,12 +213,10 @@ struct TEvCms {
         {
         }
 
-        TString ToString() const override
-        {
+        TString ToString() const override {
             return Sprintf("%s { Task: %s Reason %s}", ToStringHeader().data(), TaskId.data(), Reason.data());
         }
     };
-
 
     struct TEvWalleTaskStored : public TEventLocal<TEvWalleTaskStored, EvWalleTaskStored> {
         TString TaskId;
@@ -228,8 +226,7 @@ struct TEvCms {
         {
         }
 
-        TString ToString() const override
-        {
+        TString ToString() const override {
             return Sprintf("%s { TaskId: %s }", ToStringHeader().data(), TaskId.data());
         }
     };
@@ -237,8 +234,7 @@ struct TEvCms {
     struct TEvRemoveWalleTask : public TEventLocal<TEvRemoveWalleTask, EvRemoveWalleTask> {
         TString TaskId;
 
-        TString ToString() const override
-        {
+        TString ToString() const override {
             return Sprintf("%s { TaskId: %s }", ToStringHeader().data(), TaskId.data());
         }
     };
@@ -251,8 +247,7 @@ struct TEvCms {
         {
         }
 
-        TString ToString() const override
-        {
+        TString ToString() const override {
             return Sprintf("%s { TaskId: %s }", ToStringHeader().data(), TaskId.data());
         }
     };
@@ -322,13 +317,13 @@ struct TEvCms {
     };
 
     struct TEvGetSentinelStateRequest : public TEventPB<TEvGetSentinelStateRequest,
-                                                  NKikimrCms::TGetSentinelStateRequest,
-                                                  EvGetSentinelStateRequest> {
+                                                        NKikimrCms::TGetSentinelStateRequest,
+                                                        EvGetSentinelStateRequest> {
     };
 
     struct TEvGetSentinelStateResponse : public TEventPB<TEvGetSentinelStateResponse,
-                                                  NKikimrCms::TGetSentinelStateResponse,
-                                                  EvGetSentinelStateResponse> {
+                                                         NKikimrCms::TGetSentinelStateResponse,
+                                                         EvGetSentinelStateResponse> {
     };
 };
 

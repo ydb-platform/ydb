@@ -17,7 +17,6 @@ target_include_directories(ydb-core-viewer-ut PRIVATE
 target_link_libraries(ydb-core-viewer-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-viewer
@@ -65,5 +64,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-viewer-ut
+  system_allocator
 )
 vcs_info(ydb-core-viewer-ut)

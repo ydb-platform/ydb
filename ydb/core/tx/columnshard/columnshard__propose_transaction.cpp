@@ -276,13 +276,13 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                     break;
                 }
 
-                if (!Self->PrimaryIndex) {
+                if (!Self->TablesManager.HasPrimaryIndex()) {
                     statusMessage = "No primary index for TTL";
                     status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
                     break;
                 }
 
-                auto schema = Self->PrimaryIndex->GetIndexInfo().ArrowSchema();
+                auto schema = Self->TablesManager.GetIndexInfo().ArrowSchema();
                 auto ttlColumn = schema->GetFieldByName(columnName);
                 if (!ttlColumn) {
                     statusMessage = "TTL tx wrong TTL column '" + columnName + "'";

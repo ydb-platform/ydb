@@ -38,3 +38,23 @@
   {{ ydb-cli }} -p db1 yql -s "select * from series" --format json-unicode | \
   {{ ydb-cli }} -p db1 topic write topic1 --format newline-delimited
   ```
+
+### Исполнение YQL-запроса с передачей сообщений из топика в качестве параметров {#example-read-to-yql-param}
+
+* Исполнение YQL-запроса с передачей параметром каждого сообщения, считанного из топика `topic1`
+
+  ```bash
+  {{ ydb-cli }} -p db1 topic read topic1 -c c1 --format newline-delimited -w | \
+  {{ ydb-cli }} -p db1 table query execute -q 'declare $s as String;select Len($s) as Bytes' \
+  --stdin-format newline-delimited --stdin-par s --stdin-format raw
+  ```
+
+* Исполнение YQL-запроса с адаптивным пакетированием параметров из сообщений, считанных из топика `topic1`
+
+  ```bash
+  {{ ydb-cli }} -p db1 topic read topic1 -c c1 --format newline-delimited -w | \
+  {{ ydb-cli }} -p db1 table query execute \
+  -q 'declare $s as List<String>;select ListLength($s) as Count, $s as Items' \
+  --stdin-format newline-delimited --stdin-par s --stdin-format raw \
+  --batch adaptive
+  ```

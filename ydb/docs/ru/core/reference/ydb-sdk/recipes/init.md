@@ -95,7 +95,30 @@ description: "В статье приведены примеры кода под�
 
 - Java
 
-
   {% include [work in progress message](_includes/addition.md) %}
+
+- Python
+
+  ```python
+  import ydb
+
+  with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
+      driver.wait(timeout=5, fail_fast=True)
+      ...
+  ```
+
+- Python (asyncio)
+
+  ```python
+  import ydb
+  import asyncio
+
+  async def ydb_init():
+        async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
+            await driver.wait(fail_fast=True)
+            ...
+
+  asyncio.run(ydb_init())
+  ```
 
 {% endlist %}

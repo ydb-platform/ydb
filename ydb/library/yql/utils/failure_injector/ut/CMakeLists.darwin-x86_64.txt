@@ -14,7 +14,6 @@ target_include_directories(ydb-library-yql-utils-failure_injector-ut PRIVATE
 target_link_libraries(ydb-library-yql-utils-failure_injector-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-utils-failure_injector
@@ -60,5 +59,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-utils-failure_injector-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-utils-failure_injector-ut)

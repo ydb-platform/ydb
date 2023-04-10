@@ -18,7 +18,6 @@ target_include_directories(ydb-library-mkql_proto-ut PRIVATE
 target_link_libraries(ydb-library-mkql_proto-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-library-mkql_proto
@@ -68,5 +67,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   150
+)
+target_allocator(ydb-library-mkql_proto-ut
+  system_allocator
 )
 vcs_info(ydb-library-mkql_proto-ut)

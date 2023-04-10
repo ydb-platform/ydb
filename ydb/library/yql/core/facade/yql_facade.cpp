@@ -255,6 +255,7 @@ TProgram::TProgram(
     , UdfIndex_(udfIndex)
     , UdfIndexPackageSet_(udfIndexPackageSet)
     , FileStorage_(fileStorage)
+    , SavedUserDataTable_(userDataTable)
     , UserDataStorage_(MakeIntrusive<TUserDataStorage>(fileStorage, userDataTable, udfResolver, udfIndex))
     , GatewaysConfig_(gatewaysConfig)
     , Filename_(filename)
@@ -934,11 +935,8 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
             && !TypeCtx_->ForceDq
             && SavedExprRoot_
             && TypeCtx_->DqCaptured
-            && TypeCtx_->DqFallbackPolicy != "never")
+            && TypeCtx_->DqFallbackPolicy != EFallbackPolicy::Never)
         {
-            ExprRoot_ = SavedExprRoot_;
-            SavedExprRoot_ = nullptr;
-
             auto issues = ExprCtx_->IssueManager.GetIssues();
             bool hasDqGatewayError = false;
             bool hasDqGatewayFallbackError = false;
@@ -965,18 +963,6 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
                 }
             };
 
-            std::function<void(const TIssuePtr& issue)> toInfo = [&](const TIssuePtr& issue) {
-                if (issue->Severity == TSeverityIds::S_ERROR
-                    || issue->Severity == TSeverityIds::S_FATAL
-                    || issue->Severity == TSeverityIds::S_WARNING)
-                {
-                    issue->Severity = TSeverityIds::S_INFO;
-                }
-                for (const auto& subissue : issue->GetSubIssues()) {
-                    toInfo(subissue);
-                }
-            };
-
             for (const auto& issue : issues) {
                 checkIssue(issue);
                 // check subissues
@@ -985,14 +971,16 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
                 }
             }
 
-            ExprCtx_->IssueManager.Reset();
-
-            if (hasDqGatewayError && !hasDqGatewayFallbackError && TypeCtx_->DqFallbackPolicy.find("always") == TString::npos) {
+            if (hasDqGatewayError && !hasDqGatewayFallbackError && TypeCtx_->DqFallbackPolicy != EFallbackPolicy::Always) {
                 // unrecoverable error
-                ExprCtx_->IssueManager.AddIssues(issues);
                 return res;
             }
 
+            ExprRoot_ = SavedExprRoot_;
+            SavedExprRoot_ = nullptr;
+            UserDataStorage_->SetUserDataTable(std::move(SavedUserDataTable_));
+
+            ExprCtx_->IssueManager.Reset();
             YQL_LOG(DEBUG) << "Fallback, Issues: " << issues.ToString();
 
             ExprCtx_->Reset();
@@ -1007,6 +995,19 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
             CleanupLastSession();
 
             if (hasDqGatewayError || hasDqOptimizeError) {
+
+                std::function<void(const TIssuePtr& issue)> toInfo = [&](const TIssuePtr& issue) {
+                    if (issue->Severity == TSeverityIds::S_ERROR
+                        || issue->Severity == TSeverityIds::S_FATAL
+                        || issue->Severity == TSeverityIds::S_WARNING)
+                    {
+                        issue->Severity = TSeverityIds::S_INFO;
+                    }
+                    for (const auto& subissue : issue->GetSubIssues()) {
+                        toInfo(subissue);
+                    }
+                };
+
                 TIssue info("DQ cannot execute the query");
                 info.Severity = TSeverityIds::S_INFO;
 
@@ -1027,14 +1028,14 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
                 ExprCtx_->IssueManager.AddIssues({info});
             }
 
-            FallbackCounter ++;
+            ++FallbackCounter_;
             // don't execute recapture again
             ExprCtx_->Step.Done(TExprStep::Recapture);
             AbortHidden_();
             return AsyncTransformWithFallback(false);
         }
-        if (status == IGraphTransformer::TStatus::Error && (TypeCtx_->DqFallbackPolicy == "never" || TypeCtx_->ForceDq)) {
-            YQL_LOG(DEBUG) << "Fallback skipped due to per query policy";
+        if (status == IGraphTransformer::TStatus::Error && (TypeCtx_->DqFallbackPolicy == EFallbackPolicy::Never || TypeCtx_->ForceDq)) {
+            YQL_LOG(INFO) << "Fallback skipped due to per query policy";
         }
         return res;
     });
@@ -1202,11 +1203,11 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
             writer.OnInt64Scalar(rusage.MajorPageFaults);
         writer.OnEndMap();
 
-        if (FallbackCounter) {
+        if (FallbackCounter_) {
             writer.OnKeyedItem("Fallback");
             writer.OnBeginMap();
                 writer.OnKeyedItem("count");
-                writer.OnInt64Scalar(FallbackCounter);
+                writer.OnInt64Scalar(FallbackCounter_);
             writer.OnEndMap();
         }
 

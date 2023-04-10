@@ -211,22 +211,10 @@ public:
 
     ~TTransactionContext() {}
 
-    void OnCommit(std::function<void()> callback) {
-        OnCommit_.emplace_back(std::move(callback));
-    }
-
-    void OnRollback(std::function<void()> callback) {
-        OnRollback_.emplace_back(std::move(callback));
-    }
-
-    void OnCommitted(std::function<void()> callback) {
-        OnCommitted_.emplace_back(std::move(callback));
-    }
-
     /**
-     * Will rollback any changes and reschedule transaction for a retry
+     * Request transaction to restart at some later time
      *
-     * Transaction must return false from its Execute after calling this method.
+     * Transaction's Execute method must return false after calling this method.
      */
     void Reschedule() {
         Rescheduled_ = true;
@@ -244,9 +232,6 @@ public:
     NTable::TDatabase &DB;
 
 private:
-    TVector<std::function<void()>> OnCommit_;
-    TVector<std::function<void()>> OnRollback_;
-    TVector<std::function<void()>> OnCommitted_;
     bool Rescheduled_ = false;
 };
 

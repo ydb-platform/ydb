@@ -12,7 +12,6 @@ target_link_libraries(pack_num PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-balloc
   testing-benchmark-main
   library-yql-minikql
   library-cpp-packedtypes
@@ -30,5 +29,8 @@ target_link_options(pack_num PRIVATE
 target_sources(pack_num PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/benchmark/pack_num/pack.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/benchmark/pack_num/pack_num_bench.cpp
+)
+target_allocator(pack_num
+  library-cpp-balloc
 )
 vcs_info(pack_num)

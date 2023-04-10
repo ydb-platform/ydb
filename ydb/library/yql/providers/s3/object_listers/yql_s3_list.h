@@ -45,19 +45,28 @@ class TSharedListingContext {
 public:
     TSharedListingContext(
         size_t callbackThreadCount, size_t callbackPerThreadQueueSize, size_t regexpCacheSize)
-        : RegexpCache(regexpCacheSize) {
-        CallbackProcessingPool.Start(callbackThreadCount, callbackPerThreadQueueSize);
+        : ThreadPoolEnabled(callbackThreadCount != 0)
+        , RegexpCacheEnabled(regexpCacheSize != 0)
+        , RegexpCache(regexpCacheSize) {
+        if (ThreadPoolEnabled) {
+            CallbackProcessingPool.Start(callbackThreadCount, callbackPerThreadQueueSize);
+        }
     }
 
     template<typename F>
     void SubmitCallbackProcessing(F&& f) {
-        if (!CallbackProcessingPool.AddFunc(std::forward<F>(f))) {
-            f();
+        if (ThreadPoolEnabled && CallbackProcessingPool.AddFunc(std::forward<F>(f))) {
+            return;
         }
+        f();
     }
 
-    std::shared_ptr<RE2> GetOrCreate(const TString& regexp) {
-        if (auto it = Get(regexp); it != nullptr) {
+    std::shared_ptr<RE2> GetOrCreateRegexp(const TString& regexp) {
+        if (!RegexpCacheEnabled) {
+            return std::make_shared<RE2>(re2::StringPiece(regexp), RE2::Options());
+        }
+
+        if (auto it = GetRegexp(regexp); it != nullptr) {
             return it;
         } else {
             auto re = std::make_shared<RE2>(re2::StringPiece(regexp), RE2::Options());
@@ -67,7 +76,15 @@ public:
             return re;
         }
     }
-    std::shared_ptr<RE2> Get(const TString& regexp) {
+
+    ~TSharedListingContext() {
+        if (ThreadPoolEnabled) {
+            CallbackProcessingPool.Stop();
+        }
+    }
+
+private:
+    std::shared_ptr<RE2> GetRegexp(const TString& regexp) {
         auto lock = TReadGuard{RWLock};
         if (auto it = RegexpCache.Find(regexp); it != RegexpCache.End()) {
             return *it;
@@ -76,9 +93,9 @@ public:
         }
     }
 
-    ~TSharedListingContext() { CallbackProcessingPool.Stop(); }
-
 private:
+    bool ThreadPoolEnabled = true;
+    bool RegexpCacheEnabled = true;
     TThreadPool CallbackProcessingPool;
     TLRUCache<TString, std::shared_ptr<RE2>> RegexpCache;
     TRWMutex RWLock;

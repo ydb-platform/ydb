@@ -84,22 +84,52 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
         return true;
     }
 
-    void InitResult(const TString& reason, NKikimrClient::TResponse&& response) {
-        Send(Client, new TEvPartitionWriter::TEvInitResult(reason, std::move(response)));
+    static NKikimrClient::TResponse MakeResponse(ui64 cookie) {
+        NKikimrClient::TResponse response;
+        response.MutablePartitionResponse()->SetCookie(cookie);
+        return response;
+    }
+
+    void BecomeZombie(const TString& error) {
+        for (auto cookie : std::exchange(PendingWrite, {})) {
+            SendWriteResult(error, MakeResponse(cookie));
+        }
+        for (const auto& [cookie, _] : std::exchange(PendingReserve, {})) {
+            SendWriteResult(error, MakeResponse(cookie));
+        }
+        for (const auto& [cookie, _] : std::exchange(Pending, {})) {
+            SendWriteResult(error, MakeResponse(cookie));
+        }
+
         Become(&TThis::StateZombie);
+    }
+
+    template <typename... Args>
+    void SendInitResult(Args&&... args) {
+        Send(Client, new TEvPartitionWriter::TEvInitResult(std::forward<Args>(args)...));
+    }
+
+    void InitResult(const TString& reason, NKikimrClient::TResponse&& response) {
+        SendInitResult(reason, std::move(response));
+        BecomeZombie("Init error");
     }
 
     void InitResult(const TString& ownerCookie, const TEvPartitionWriter::TEvInitResult::TSourceIdInfo& sourceIdInfo) {
-        Send(Client, new TEvPartitionWriter::TEvInitResult(ownerCookie, sourceIdInfo));
+        SendInitResult(ownerCookie, sourceIdInfo);
+    }
+
+    template <typename... Args>
+    void SendWriteResult(Args&&... args) {
+        Send(Client, new TEvPartitionWriter::TEvWriteResponse(std::forward<Args>(args)...));
     }
 
     void WriteResult(const TString& reason, NKikimrClient::TResponse&& response) {
-        Send(Client, new TEvPartitionWriter::TEvWriteResponse(reason, std::move(response)));
-        Become(&TThis::StateZombie);
+        SendWriteResult(reason, std::move(response));
+        BecomeZombie("Write error");
     }
 
     void WriteResult(NKikimrClient::TResponse&& response) {
-        Send(Client, new TEvPartitionWriter::TEvWriteResponse(std::move(response)));
+        SendWriteResult(std::move(response));
         PendingWrite.pop_front();
     }
 
@@ -109,7 +139,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
 
     void Disconnected() {
         Send(Client, new TEvPartitionWriter::TEvDisconnected());
-        Become(&TThis::StateZombie);
+        BecomeZombie("Disconnected");
     }
 
     /// GetOwnership
@@ -264,6 +294,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
         default:
             return StateBase(ev, TlsActivationContext->AsActorContext());
         }
+    }
+
+    void Reject(TEvPartitionWriter::TEvWriteRequest::TPtr& ev) {
+        const auto cookie = ev->Get()->Record.GetPartitionRequest().GetCookie();
+        return WriteResult("Rejected by writer", MakeResponse(cookie));
     }
 
     void HoldPending(TEvPartitionWriter::TEvWriteRequest::TPtr& ev) {
@@ -427,6 +462,7 @@ public:
 
     STATEFN(StateZombie) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPartitionWriter::TEvWriteRequest, Reject);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }

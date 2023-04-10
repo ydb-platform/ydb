@@ -14,7 +14,6 @@ target_link_libraries(library-cpp-actors-interconnect-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   cpp-actors-core
   cpp-actors-interconnect
@@ -81,5 +80,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(library-cpp-actors-interconnect-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(library-cpp-actors-interconnect-ut)

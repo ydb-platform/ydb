@@ -48,12 +48,11 @@ namespace NActors {
         }
 
         void AddToHeap(TEventOutputChannel& channel, ui64 counter) {
-            if (channel.IsWorking()) {
-                ui64 weight = channel.WeightConsumedOnPause;
-                weight -= Min(weight, counter - channel.EqualizeCounterOnPause);
-                Heap.push_back(THeapItem{&channel, weight});
-                std::push_heap(Heap.begin(), Heap.end());
-            }
+            Y_VERIFY_DEBUG(channel.IsWorking());
+            ui64 weight = channel.WeightConsumedOnPause;
+            weight -= Min(weight, counter - channel.EqualizeCounterOnPause);
+            Heap.push_back(THeapItem{&channel, weight});
+            std::push_heap(Heap.begin(), Heap.end());
         }
 
         void FinishPick(ui64 weightConsumed, ui64 counter) {
@@ -94,10 +93,7 @@ namespace NActors {
             }
 
             // find the minimum consumed weight among working channels and then adjust weights
-            ui64 min = Max<ui64>();
-            for (THeapItem& item : Heap) {
-                min = Min(min, item.WeightConsumed);
-            }
+            const ui64 min = Heap.front().WeightConsumed;
             for (THeapItem& item : Heap) {
                 item.WeightConsumed -= min;
             }

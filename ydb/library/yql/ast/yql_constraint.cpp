@@ -340,33 +340,31 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const std::vector
 
     std::optional<TContainerType> content;
     for (size_t i = 0U; i < constraints.size(); ++i) {
-        if (!constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
-            if (const auto sort = constraints[i]->GetConstraint<TSortedConstraintNode>()) {
-                const auto& nextContent = sort->GetContent();
-                if (content) {
-                    const auto size = std::min(content->size(), nextContent.size());
-                    content->resize(size);
-                    for (auto j = 0U; j < size; ++j) {
-                        auto& one = (*content)[j];
-                        auto& two = nextContent[j];
-                        TSetType common;
-                        common.reserve(std::min(one.first.size(), two.first.size()));
-                        std::set_intersection(one.first.cbegin(), one.first.cend(), two.first.cbegin(), two.first.cend(), std::back_inserter(common));
-                        if (common.empty() || one.second != two.second) {
-                            content->resize(j);
-                            break;
-                        } else
-                            one.first = std::move(common);
-                    }
-                    if (content->empty())
+        if (const auto sort = constraints[i]->GetConstraint<TSortedConstraintNode>()) {
+            const auto& nextContent = sort->GetContent();
+            if (content) {
+                const auto size = std::min(content->size(), nextContent.size());
+                content->resize(size);
+                for (auto j = 0U; j < size; ++j) {
+                    auto& one = (*content)[j];
+                    auto& two = nextContent[j];
+                    TSetType common;
+                    common.reserve(std::min(one.first.size(), two.first.size()));
+                    std::set_intersection(one.first.cbegin(), one.first.cend(), two.first.cbegin(), two.first.cend(), std::back_inserter(common));
+                    if (common.empty() || one.second != two.second) {
+                        content->resize(j);
                         break;
-                } else {
-                    content = nextContent;
+                    } else
+                        one.first = std::move(common);
                 }
+                if (content->empty())
+                    break;
             } else {
-                content.reset();
-                break;
+                content = nextContent;
             }
+        } else if (!constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
+            content.reset();
+            break;
         }
     }
 
@@ -529,7 +527,7 @@ TUniqueConstraintNodeBase<Distinct>::ColumnsListToSet(const std::vector<std::str
     YQL_ENSURE(!columns.empty());
     TSetType set;
     set.reserve(columns.size());
-    std::transform(columns.cbegin(), columns.cend(), std::back_inserter(set), [](const std::string_view& column) { return TPathType(1U, column); });
+    std::transform(columns.cbegin(), columns.cend(), std::back_inserter(set), [](const std::string_view& column) { return column.empty() ? TPathType() : TPathType(1U, column); });
     std::sort(set.begin(), set.end());
     return set;
 }
@@ -1450,15 +1448,13 @@ TPassthroughConstraintNode::TMapType TPassthroughConstraintNode::GetColumnMappin
 }
 
 TPassthroughConstraintNode::TReverseMapType TPassthroughConstraintNode::GetReverseMapping() const {
-    if (1U == Mapping_.size() && 1U == Mapping_.cbegin()->second.size() && Mapping_.cbegin()->second.cbegin()->first.empty())
-        return {{Mapping_.cbegin()->second.cbegin()->second, Mapping_.cbegin()->second.cbegin()->second}};
-
     TReverseMapType reverseMapping;
     for (const auto& part : Mapping_) {
         for (const auto& item : part.second) {
-            if (1U == item.first.size()) {
+            if (item.first.empty())
+                reverseMapping.emplace_back(item.second, std::string_view());
+            else if (1U == item.first.size())
                 reverseMapping.emplace_back(item.second, item.first.front());
-            }
         }
     }
     ::Sort(reverseMapping);

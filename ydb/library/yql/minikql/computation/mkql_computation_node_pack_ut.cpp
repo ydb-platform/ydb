@@ -29,7 +29,7 @@ constexpr static size_t PERFORMANCE_COUNT = 0x1000;
 constexpr static size_t PERFORMANCE_COUNT = NSan::PlainOrUnderSanitizer(0x4000000, 0x1000);
 #endif
 
-template<bool UseCodegen, bool Fast>
+template<bool Fast>
 class TMiniKQLComputationNodePackTest: public TTestBase {
     using TValuePackerType = std::conditional_t<Fast, TValuePackerFast, TValuePacker>;
 protected:
@@ -304,7 +304,7 @@ protected:
 
     void TestPackPerformance(TType* type, const NUdf::TUnboxedValuePod& uValue)
     {
-        TValuePackerType packer(false, type, UseCodegen);
+        TValuePackerType packer(false, type);
         const THPTimer timer;
         for (size_t i = 0U; i < PERFORMANCE_COUNT; ++i)
             packer.Pack(uValue);
@@ -325,7 +325,7 @@ protected:
     NUdf::TUnboxedValue TestPackUnpack(TType* type, const NUdf::TUnboxedValuePod& uValue, const TString& additionalMsg,
         const std::optional<ui32>& expectedLength = {})
     {
-        TValuePackerType packer(false, type, UseCodegen);
+        TValuePackerType packer(false, type);
         return TestPackUnpack(packer, uValue, additionalMsg, expectedLength);
     }
 
@@ -339,7 +339,7 @@ protected:
     template <typename T>
     void TestNumericType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType), UseCodegen);
+        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType));
 
         TestNumericValue<T>(Max<T>(), packer, typeDesc);
         TestNumericValue<T>(Min<T>(), packer, typeDesc);
@@ -364,7 +364,7 @@ protected:
     template <typename T>
     void TestOptionalNumericType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:Optional(" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePackerType packer(false, PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(schemeType)), UseCodegen);
+        TValuePackerType packer(false, PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(schemeType)));
         TestOptionalNumericValue<T>(std::optional<T>(Max<T>()), packer, typeDesc);
         TestOptionalNumericValue<T>(std::optional<T>(Min<T>()), packer, typeDesc);
         TestOptionalNumericValue<T>(std::optional<T>(), packer, typeDesc, 1);
@@ -381,7 +381,7 @@ protected:
 
     void TestStringType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType), UseCodegen);
+        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType));
         TestStringValue("0123456789012345678901234567890123456789", packer, typeDesc, 40 + 4);
         TestStringValue("[]", packer, typeDesc, Fast ? (2 + 4) : (2 + 1));
         TestStringValue("1234567", packer, typeDesc, Fast ? (7 + 4) : (7 + 1));
@@ -392,7 +392,7 @@ protected:
     void TestUuidType() {
         auto schemeType = NUdf::TDataType<NUdf::TUuid>::Id;
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType), false);
+        TValuePackerType packer(false, PgmBuilder.NewDataType(schemeType));
         TestStringValue("0123456789abcdef", packer, typeDesc, Fast ? 16 : (16 + 4));
     }
 
@@ -409,7 +409,7 @@ protected:
 
     void TestOptionalStringType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:Optional(" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        TValuePackerType packer(false, PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(schemeType)), UseCodegen);
+        TValuePackerType packer(false, PgmBuilder.NewOptionalType(PgmBuilder.NewDataType(schemeType)));
         TestOptionalStringValue("0123456789012345678901234567890123456789", packer, typeDesc, Fast ? (40 + 4 + 1) : (40 + 4));
         TestOptionalStringValue(std::nullopt, packer, typeDesc, 1);
         TestOptionalStringValue("[]", packer, typeDesc, Fast ? (2 + 4 + 1) : (2 + 1));
@@ -505,28 +505,7 @@ private:
     THolderFactory HolderFactory;
 };
 
-class TMiniKQLComputationNodePackCodegenTest: public TMiniKQLComputationNodePackTest<true, false> {
-    UNIT_TEST_SUITE(TMiniKQLComputationNodePackCodegenTest);
-        UNIT_TEST(TestNumericTypes);
-        UNIT_TEST(TestOptionalNumericTypes);
-        UNIT_TEST(TestStringTypes);
-        UNIT_TEST(TestOptionalStringTypes);
-        UNIT_TEST(TestListType);
-        UNIT_TEST(TestListOfOptionalsType);
-        UNIT_TEST(TestTupleType);
-        UNIT_TEST(TestStructType);
-        UNIT_TEST(TestOptionalType);
-        UNIT_TEST(TestDictType);
-        UNIT_TEST(TestVariantTypeOverStruct);
-        UNIT_TEST(TestVariantTypeOverTuple);
-        UNIT_TEST(TestIntegerPackPerformance);
-        UNIT_TEST(TestShortStringPackPerformance);
-        UNIT_TEST(TestPairPackPerformance);
-        UNIT_TEST(TestTuplePackPerformance);
-    UNIT_TEST_SUITE_END();
-};
-
-class TMiniKQLComputationNodePackBySwitchTest: public TMiniKQLComputationNodePackTest<false, false> {
+class TMiniKQLComputationNodePackBySwitchTest: public TMiniKQLComputationNodePackTest<false> {
     UNIT_TEST_SUITE(TMiniKQLComputationNodePackBySwitchTest);
         UNIT_TEST(TestNumericTypes);
         UNIT_TEST(TestOptionalNumericTypes);
@@ -548,7 +527,7 @@ class TMiniKQLComputationNodePackBySwitchTest: public TMiniKQLComputationNodePac
     UNIT_TEST_SUITE_END();
 };
 
-class TMiniKQLComputationNodeFastPackBySwitchTest: public TMiniKQLComputationNodePackTest<false, true> {
+class TMiniKQLComputationNodeFastPackBySwitchTest: public TMiniKQLComputationNodePackTest<true> {
     UNIT_TEST_SUITE(TMiniKQLComputationNodeFastPackBySwitchTest);
         UNIT_TEST(TestNumericTypes);
         UNIT_TEST(TestOptionalNumericTypes);
@@ -570,9 +549,6 @@ class TMiniKQLComputationNodeFastPackBySwitchTest: public TMiniKQLComputationNod
     UNIT_TEST_SUITE_END();
 };
 
-#if defined(__llvm__) && !defined(_msan_enabled_)
-UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodePackCodegenTest);
-#endif
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodePackBySwitchTest);
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeFastPackBySwitchTest);
 }

@@ -7,15 +7,16 @@
 #include "services.h"
 #include "walle.h"
 
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/counters_cms.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/interconnect.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/queue.h>
@@ -40,6 +41,7 @@ public:
             EvLogAndSend,
             EvCleanupLog,
             EvStartCollecting,
+            EvProcessQueue,
 
             EvEnd
         };
@@ -50,8 +52,7 @@ public:
             bool Success = true;
             TClusterInfoPtr Info;
 
-            TString ToString() const override
-            {
+            TString ToString() const override {
                 return "TEvClusterInfo";
             }
         };
@@ -70,9 +71,11 @@ public:
         };
 
         struct TEvCleanupLog : public TEventLocal<TEvCleanupLog, EvCleanupLog> {};
+
+        struct TEvProcessQueue : public TEventLocal<TEvProcessQueue, EvProcessQueue> {};
     };
 
-    void PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx);
+    void PersistNodeTenants(TTransactionContext &txc, const TActorContext &ctx);
 
     static void AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &node, NKikimrCms::TClusterStateResponse &resp, TInstant timestamp);
 
@@ -138,29 +141,29 @@ private:
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateDowntimes();
 
-    static void AuditLog(const TActorContext& ctx, const TString& message) {
+    static void AuditLog(const TActorContext &ctx, const TString &message) {
         NCms::AuditLog("CMS tablet", message, ctx);
     }
 
-    static void AuditLog(const IEventBase* request, const IEventBase* response, const TActorContext& ctx) {
+    static void AuditLog(const IEventBase *request, const IEventBase *response, const TActorContext &ctx) {
         return AuditLog(ctx, TStringBuilder() << "Reply"
             << ": request# " << request->ToString()
             << ", response# " << response->ToString());
     }
 
-    static void Reply(const IEventBase* request, TAutoPtr<IEventHandle> response, const TActorContext& ctx) {
+    static void Reply(const IEventBase *request, TAutoPtr<IEventHandle> response, const TActorContext &ctx) {
         AuditLog(request, response->GetBase(), ctx);
         ctx.Send(response);
     }
 
     template <typename TEvRequestPtr>
-    static void Reply(TEvRequestPtr& request, THolder<IEventBase> response, const TActorContext& ctx) {
+    static void Reply(TEvRequestPtr &request, THolder<IEventBase> response, const TActorContext &ctx) {
         AuditLog(request->Get(), response.Get(), ctx);
         ctx.Send(request->Sender, response.Release(), 0, request->Cookie);
     }
 
     template <typename TEvResponse, typename TEvRequestPtr>
-    static void ReplyWithError(TEvRequestPtr& ev, EStatusCode code, const TString& reason, const TActorContext& ctx) {
+    static void ReplyWithError(TEvRequestPtr &ev, EStatusCode code, const TString &reason, const TActorContext &ctx) {
         auto response = MakeHolder<TEvResponse>();
         response->Record.MutableStatus()->SetCode(code);
         response->Record.MutableStatus()->SetReason(reason);
@@ -168,20 +171,18 @@ private:
         Reply<TEvRequestPtr>(ev, std::move(response), ctx);
     }
 
-    STFUNC(StateInit)
-    {
+    STFUNC(StateInit) {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "StateInit event type: %" PRIx32 " event: %s",
                   ev->GetTypeRewrite(), ev->ToString().data());
         StateInitImpl(ev, ctx);
     }
 
     template <typename TEvRequest, typename TEvResponse>
-    void HandleNotSupported(typename TEvRequest::TPtr& ev, const TActorContext& ctx) {
+    void HandleNotSupported(typename TEvRequest::TPtr &ev, const TActorContext &ctx) {
         ReplyWithError<TEvResponse, typename TEvRequest::TPtr>(ev, NKikimrCms::TStatus::ERROR, NotSupportedReason, ctx);
     }
 
-    STFUNC(StateNotSupported)
-    {
+    STFUNC(StateNotSupported) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvClusterStateRequest, (HandleNotSupported<TEvCms::TEvClusterStateRequest,
                                                                       TEvCms::TEvClusterStateResponse>));
@@ -210,8 +211,7 @@ private:
         }
     }
 
-    STFUNC(StateWork)
-    {
+    STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvClusterInfo, Handle);
             HFunc(TEvPrivate::TEvLogAndSend, Handle);
@@ -220,6 +220,7 @@ private:
             CFunc(TEvPrivate::EvCleanupLog, CleanupLog);
             CFunc(TEvPrivate::EvCleanupWalle, CleanupWalleTasks);
             CFunc(TEvPrivate::EvStartCollecting, StartCollecting);
+            CFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
             HFunc(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
@@ -261,69 +262,67 @@ private:
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
 
-    void Enqueue(TAutoPtr<IEventHandle> &ev,
-                 const TActorContext &ctx) override;
+    void Enqueue(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) override;
     void ProcessInitQueue(const TActorContext &ctx);
 
     void SubscribeForConfig(const TActorContext &ctx);
     void AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const;
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,
-                                NKikimrCms::TPermissionResponse &response,
-                                NKikimrCms::TPermissionRequest &scheduled,
-                                const TActorContext &ctx);
+        NKikimrCms::TPermissionResponse &response,
+        NKikimrCms::TPermissionRequest &scheduled,
+        const TActorContext &ctx);
     bool IsActionHostValid(const NKikimrCms::TAction &action, TErrorInfo &error) const;
-    bool ParseServices(const NKikimrCms::TAction &action, TServices &services,
-                       TErrorInfo &error) const;
+    bool ParseServices(const NKikimrCms::TAction &action, TServices &services, TErrorInfo &error) const;
 
     bool CheckAccess(const TString &token,
-                     NKikimrCms::TStatus::ECode &code,
-                     TString &error,
-                     const TActorContext &ctx);
+        NKikimrCms::TStatus::ECode &code,
+        TString &error,
+        const TActorContext &ctx);
     bool CheckAction(const NKikimrCms::TAction &action, const TActionOptions &options,
-                     TErrorInfo &error, const TActorContext &ctx) const;
+        TErrorInfo &error, const TActorContext &ctx) const;
     bool CheckActionShutdownNode(const NKikimrCms::TAction &action,
-                                 const TActionOptions &options,
-                                 const TNodeInfo &node,
-                                 TErrorInfo &error,
-                                 const TActorContext &ctx) const;
+        const TActionOptions &options,
+        const TNodeInfo &node,
+        TErrorInfo &error,
+        const TActorContext &ctx) const;
     bool CheckActionRestartServices(const NKikimrCms::TAction &action,
-                                    const TActionOptions &options,
-                                    TErrorInfo &error,
-                                    const TActorContext &ctx) const;
+        const TActionOptions &options,
+        TErrorInfo &error,
+        const TActorContext &ctx) const;
     bool CheckActionShutdownHost(const NKikimrCms::TAction &action,
-                                 const TActionOptions &options,
-                                 TErrorInfo &error,
-                                 const TActorContext &ctx) const;
+        const TActionOptions &options,
+        TErrorInfo &error,
+        const TActorContext &ctx) const;
     bool CheckActionReplaceDevices(const NKikimrCms::TAction &action,
-                                   const TActionOptions &options,
-                                   TErrorInfo &error) const;
+        const TActionOptions &options,
+        TErrorInfo &error) const;
     bool CheckSysTabletsNode(const NKikimrCms::TAction &action,
-                             const TActionOptions &opts,
-                             const TNodeInfo &node,
-                             TErrorInfo &error) const;
+        const TActionOptions &opts,
+        const TNodeInfo &node,
+        TErrorInfo &error) const;
     bool TryToLockNode(const NKikimrCms::TAction &action,
-                       const TActionOptions &options,
-                       const TNodeInfo &node,
-                       TErrorInfo& error) const;
+        const TActionOptions &options,
+        const TNodeInfo &node,
+        TErrorInfo &error) const;
     bool TryToLockPDisk(const NKikimrCms::TAction &action,
-                        const TActionOptions &options,
-                        const TPDiskInfo &pdisk,
-                        TErrorInfo &error) const;
+        const TActionOptions &options,
+        const TPDiskInfo &pdisk,
+        TErrorInfo &error) const;
     bool TryToLockVDisks(const NKikimrCms::TAction &action,
-                         const TActionOptions &options,
-                         const TSet<TVDiskID> &vdisks,
-                         TErrorInfo &error) const;
+        const TActionOptions &options,
+        const TSet<TVDiskID> &vdisks,
+        TErrorInfo &error) const;
     bool TryToLockVDisk(const TActionOptions &options,
-                        const TVDiskInfo &vdisk,
-                        TDuration duration,
-                        TErrorInfo &error) const;
+        const TVDiskInfo &vdisk,
+        TDuration duration,
+        TErrorInfo &error) const;
     bool TryToLockStateStorageReplica(const NKikimrCms::TAction &action,
-                                      const TActionOptions &options,
-                                      const TNodeInfo &node,
-                                      TErrorInfo& error,
-                                      const TActorContext &ctx) const;
+        const TActionOptions &options,
+        const TNodeInfo &node,
+        TErrorInfo &error,
+        const TActorContext &ctx) const;
     void AcceptPermissions(NKikimrCms::TPermissionResponse &resp, const TString &requestId,
-                           const TString &owner, const TActorContext &ctx, bool check = false);
+        const TString &owner, const TActorContext &ctx, bool check = false);
     void ScheduleUpdateClusterInfo(const TActorContext &ctx, bool now = false);
     void ScheduleCleanup(TInstant time, const TActorContext &ctx);
     void SchedulePermissionsCleanup(const TActorContext &ctx);
@@ -336,30 +335,28 @@ private:
     void RemoveEmptyWalleTasks(const TActorContext &ctx);
     void StartCollecting(const TActorContext &ctx);
     bool CheckNotificationDeadline(const NKikimrCms::TAction &action, TInstant time,
-                                   TErrorInfo &error, const TActorContext &ctx) const;
+        TErrorInfo &error, const TActorContext &ctx) const;
     bool CheckNotificationRestartServices(const NKikimrCms::TAction &action, TInstant time,
-                                          TErrorInfo &error, const TActorContext &ctx) const;
+        TErrorInfo &error, const TActorContext &ctx) const;
     bool CheckNotificationShutdownHost(const NKikimrCms::TAction &action, TInstant time,
-                                       TErrorInfo &error, const TActorContext &ctx) const;
+        TErrorInfo &error, const TActorContext &ctx) const;
     bool CheckNotificationReplaceDevices(const NKikimrCms::TAction &action, TInstant time,
-                                         TErrorInfo &error, const TActorContext &ctx) const;
+        TErrorInfo &error, const TActorContext &ctx) const;
     bool IsValidNotificationAction(const NKikimrCms::TAction &action, TInstant time,
-                                   TErrorInfo &error, const TActorContext &ctx) const;
-    TString AcceptNotification(const NKikimrCms::TNotification &notification,
-                               const TActorContext &ctx);
+        TErrorInfo &error, const TActorContext &ctx) const;
+    TString AcceptNotification(const NKikimrCms::TNotification &notification, const TActorContext &ctx);
     bool CheckNotification(const NKikimrCms::TNotification &notification,
-                           NKikimrCms::TNotificationResponse &resp,
-                           const TActorContext &ctx) const;
+        NKikimrCms::TNotificationResponse &resp,
+        const TActorContext &ctx) const;
 
     void Cleanup(const TActorContext &ctx);
-    void Die(const TActorContext& ctx) override;
+    void Die(const TActorContext &ctx) override;
 
     void GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all, const TActorContext &ctx);
     void RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool done, const TActorContext &ctx);
     void GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const TActorContext &ctx);
     void RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
-    void GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool all,
-                          const TActorContext &ctx);
+    void GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool all, const TActorContext &ctx);
     bool RemoveNotification(const TString &id, const TString &user, bool remove, TErrorInfo &error);
 
     void EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx);
@@ -370,8 +367,8 @@ private:
     void ProcessQueue(const TActorContext &ctx);
     void ProcessRequest(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
 
-    void AddPermissionExtensions(const NKikimrCms::TAction& action, NKikimrCms::TPermission& perm) const;
-    void AddHostExtensions(const TString& host, NKikimrCms::TPermission& perm) const;
+    void AddPermissionExtensions(const NKikimrCms::TAction &action, NKikimrCms::TPermission &perm) const;
+    void AddHostExtensions(const TString &host, NKikimrCms::TPermission &perm) const;
 
     void OnBSCPipeDestroyed(const TActorContext &ctx);
 
@@ -398,12 +395,9 @@ private:
     void Handle(TEvCms::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
-                const TActorContext &ctx);
-    void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
-                const TActorContext &ctx);
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                const TActorContext &ctx);
+    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
 
@@ -430,7 +424,7 @@ private:
 
     // Monitoring
     THolder<class NKikimr::TTabletCountersBase> TabletCountersPtr;
-    TTabletCountersBase* TabletCounters;
+    TTabletCountersBase *TabletCounters;
 
     TInstant InfoCollectorStartTime;
 
@@ -450,11 +444,9 @@ public:
         TabletCounters = TabletCountersPtr.Get();
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
-    {
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::CMS_SERVICE;
     }
-
 };
 
 } // namespace NKikimr::NCms

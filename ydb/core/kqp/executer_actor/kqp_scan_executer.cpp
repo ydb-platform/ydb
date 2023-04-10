@@ -37,17 +37,6 @@ using namespace NYql::NDq;
 
 namespace {
 
-NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::EReadType ReadTypeToProto(const TTaskMeta::TReadInfo::EReadType& type) {
-    switch (type) {
-        case TTaskMeta::TReadInfo::EReadType::Rows:
-            return NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::ROWS;
-        case TTaskMeta::TReadInfo::EReadType::Blocks:
-            return NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::BLOCKS;
-    }
-
-    YQL_ENSURE(false, "Invalid read type in task meta.");
-}
-
 TTaskMeta::TReadInfo::EReadType ReadTypeFromProto(const NKqpProto::TKqpPhyOpReadOlapRanges::EReadType& type) {
     switch (type) {
         case NKqpProto::TKqpPhyOpReadOlapRanges::ROWS:
@@ -141,14 +130,15 @@ private:
             << ", enough: " << ev->Get()->Record.GetEnough()
             << ", from: " << ev->Sender);
 
-        if (ResultChannelProxies.empty()) {
+        auto& resultChannelProxies = GetResultChannelProxies();
+        if (resultChannelProxies.empty()) {
             return;
         }
 
         // Forward only for stream results, data results acks event theirselves.
         YQL_ENSURE(!ResponseEv->TxResults.empty() && ResponseEv->TxResults[0].IsStream);
 
-        auto channelIt = ResultChannelProxies.begin();
+        auto channelIt = resultChannelProxies.begin();
         auto handle = ev->Forward(channelIt->second->SelfId());
         channelIt->second->Receive(handle, TlsActivationContext->AsActorContext());
     }
@@ -253,6 +243,7 @@ private:
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.ExecuterId = SelfId();
             task.Meta.NodeId = nodeId;
+            task.Meta.ScanTask = true;
             return task;
         }
 
@@ -262,6 +253,7 @@ private:
         if (cnt < maxScansPerNode) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.NodeId = nodeId;
+            task.Meta.ScanTask = true;
             tasks.push_back(task.Id);
             ++cnt;
             return task;
@@ -277,14 +269,14 @@ private:
         THashMap<ui64, ui64> assignedShardsCount;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-        const auto& table = TableKeys.GetTable(stageInfo.Meta.TableId);
+        const auto& table = GetTableKeys().GetTable(stageInfo.Meta.TableId);
         const auto& keyTypes = table.KeyColumnTypes;
 
         for (auto& op : stage.GetTableOps()) {
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, table);
-            auto partitions = PrunePartitions(TableKeys, op, stageInfo, HolderFactory(), TypeEnv());
+            auto partitions = PrunePartitions(GetTableKeys(), op, stageInfo, HolderFactory(), TypeEnv());
             const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
             auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
 
@@ -482,7 +474,7 @@ private:
             if (stage.SourcesSize() > 0) {
                 switch (stage.GetSources(0).GetTypeCase()) {
                     case NKqpProto::TKqpSource::kReadRangesSource:
-                        BuildScanTasksFromSource(stageInfo, Request.Snapshot);
+                        BuildScanTasksFromSource(stageInfo);
                         break;
                     default:
                         YQL_ENSURE(false, "unknown source type");
@@ -501,7 +493,7 @@ private:
                 YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
             }
 
-            BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, AppData()->EnableKqpSpilling);
+            BuildKqpStageChannels(TasksGraph, GetTableKeys(), stageInfo, TxId, AppData()->EnableKqpSpilling);
         }
 
         ResponseEv->InitTxResult(tx.Body);
@@ -524,51 +516,9 @@ private:
 
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-
-            NYql::NDqProto::TDqTask taskDesc = SerializeTaskToProto(TasksGraph, ResultChannelProxies, task, TypeEnv());
-            ActorIdToProto(SelfId(), taskDesc.MutableExecuter()->MutableActorId());
+            NYql::NDqProto::TDqTask taskDesc = SerializeTaskToProto(TasksGraph, task);
 
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
-                NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
-
-                FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
-
-                const auto& tableInfo = TableKeys.GetTable(stageInfo.Meta.TableId);
-                for (const auto& keyColumnName : tableInfo.KeyColumns) {
-                    const auto& keyColumn = tableInfo.Columns.at(keyColumnName);
-                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn.Type, keyColumn.TypeMod);
-                    protoTaskMeta.AddKeyColumnTypes(columnType.TypeId);
-                    if (columnType.TypeInfo) {
-                        *protoTaskMeta.AddKeyColumnTypeInfos() = *columnType.TypeInfo;
-                    } else {
-                        *protoTaskMeta.AddKeyColumnTypeInfos() = NKikimrProto::TTypeInfo();
-                    }
-                }
-
-                switch (tableInfo.TableKind) {
-                    case ETableKind::Unknown:
-                    case ETableKind::SysView: {
-                        protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
-                        break;
-                    }
-                    case ETableKind::Datashard: {
-                        if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
-                            protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
-                        } else {
-                            protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
-                        }
-                        break;
-                    }
-                    case ETableKind::Olap: {
-                        protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
-                        break;
-                    }
-                }
-
-                for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {
-                    protoTaskMeta.AddSkipNullKeys(skipNullKey);
-                }
-
                 // Task with source
                 if (!task.Meta.Reads) {
                     scanTasks[task.Meta.NodeId].emplace_back(std::move(taskDesc));
@@ -576,82 +526,25 @@ private:
                     continue;
                 }
 
-                YQL_ENSURE(!task.Meta.Writes);
-
-                if (!task.Meta.Reads->empty()) {
-                    protoTaskMeta.SetReverse(task.Meta.ReadInfo.Reverse);
-                    protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
-                    protoTaskMeta.SetSorted(task.Meta.ReadInfo.Sorted);
-                    protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
-
-                    for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
-                        auto* protoResultColumn = protoTaskMeta.AddResultColumns();
-                        protoResultColumn->SetId(0);
-                        auto protoColumnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnType, "");
-                        protoResultColumn->SetType(protoColumnType.TypeId);
-                        if (protoColumnType.TypeInfo) {
-                            *protoResultColumn->MutableTypeInfo() = *protoColumnType.TypeInfo;
-                        }
-                    }
-
-                    if (tableInfo.TableKind == ETableKind::Olap) {
-                        auto* olapProgram = protoTaskMeta.MutableOlapProgram();
-                        olapProgram->SetProgram(task.Meta.ReadInfo.OlapProgram.Program);
-
-                        auto [schema, parameters] = SerializeKqpTasksParametersForOlap(stageInfo, task);
-                        olapProgram->SetParametersSchema(schema);
-                        olapProgram->SetParameters(parameters);
-                    } else {
-                        YQL_ENSURE(task.Meta.ReadInfo.OlapProgram.Program.empty());
-                    }
-
-                    for (auto& column : task.Meta.Reads->front().Columns) {
-                        auto* protoColumn = protoTaskMeta.AddColumns();
-                        protoColumn->SetId(column.Id);
-                        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, "");
-                        protoColumn->SetType(columnType.TypeId);
-                        if (columnType.TypeInfo) {
-                            *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
-                        }
-                        protoColumn->SetName(column.Name);
-                    }
-                }
-
-                for (auto& read : *task.Meta.Reads) {
-                    auto* protoReadMeta = protoTaskMeta.AddReads();
-                    protoReadMeta->SetShardId(read.ShardId);
-                    read.Ranges.SerializeTo(protoReadMeta);
-
-                    YQL_ENSURE((int) read.Columns.size() == protoTaskMeta.GetColumns().size());
-                    for (ui64 i = 0; i < read.Columns.size(); ++i) {
-                        YQL_ENSURE(read.Columns[i].Id == protoTaskMeta.GetColumns()[i].GetId());
-                        YQL_ENSURE(read.Columns[i].Type.GetTypeId() == protoTaskMeta.GetColumns()[i].GetType());
-                    }
-
-                    nShardScans++;
-                    if (Stats) {
-                        Stats->AffectedShards.insert(read.ShardId);
-                    }
-                }
-
-                LOG_D(
-                    "task: " << task.Id <<
-                    ", node: " << task.Meta.NodeId <<
-                    ", meta: " << protoTaskMeta.ShortDebugString()
-                );
-
-                taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
-
                 if (stageInfo.Meta.IsSysView()) {
                     computeTasks.emplace_back(std::move(taskDesc));
                 } else {
                     scanTasks[task.Meta.NodeId].emplace_back(std::move(taskDesc));
                     nScanTasks++;
                 }
+
+                nShardScans += task.Meta.Reads->size();
+                if (Stats) {
+                    for(const auto& read: *task.Meta.Reads) {
+                        Stats->AffectedShards.insert(read.ShardId);
+                    }
+                }
+
             } else {
                 computeTasks.emplace_back(std::move(taskDesc));
             }
         }
+
 
         if (computeTasks.size() + nScanTasks > Request.MaxComputeActors) {
             LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
@@ -674,7 +567,7 @@ private:
         LOG_D("Total tasks: " << TasksGraph.GetTasks().size() << ", readonly: true"
             << ", " << nScanTasks << " scan tasks on " << scanTasks.size() << " nodes"
             << ", totalShardScans: " << nShardScans << ", execType: Scan"
-            << ", snapshot: {" << Request.Snapshot.TxId << ", " << Request.Snapshot.Step << "}");
+            << ", snapshot: {" << GetSnapshot().TxId << ", " << GetSnapshot().Step << "}");
 
         ExecuteScanTx(std::move(computeTasks), std::move(scanTasks), std::move(snapshot));
 
@@ -730,7 +623,7 @@ private:
         }
 
         Planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
-            std::move(scanTasks), Request.Snapshot,
+            std::move(scanTasks), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
             Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling,
             Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig);
@@ -757,7 +650,7 @@ private:
     }
 
     void PassAway() override {
-        for (auto channelPair: ResultChannelProxies) {
+        for (auto channelPair: GetResultChannelProxies()) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
 
             TAutoPtr<IEventHandle> ev = new IEventHandle(

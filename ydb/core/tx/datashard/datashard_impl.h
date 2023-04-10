@@ -284,6 +284,7 @@ class TDataShard
     friend class TS3UploadsManager;
     friend class TS3DownloadsManager;
     friend class TS3Downloader;
+    template <typename T> friend class TBackupRestoreUnitBase;
     friend struct TSetupSysLocks;
     friend class TDataShardLocksDb;
 
@@ -334,6 +335,7 @@ class TDataShard
             EvCdcStreamScanRegistered,
             EvCdcStreamScanProgress,
             EvCdcStreamScanContinue,
+            EvRestartOperation, // used to restart after an aborted scan (e.g. backup)
             EvEnd
         };
 
@@ -505,6 +507,15 @@ class TDataShard
         };
 
         struct TEvCdcStreamScanContinue : public TEventLocal<TEvCdcStreamScanContinue, EvCdcStreamScanContinue> {};
+
+        struct TEvRestartOperation : public TEventLocal<TEvRestartOperation, EvRestartOperation> {
+            explicit TEvRestartOperation(ui64 txId)
+                : TxId(txId)
+            {
+            }
+
+            const ui64 TxId;
+        };
     };
 
     struct Schema : NIceDb::Schema {
@@ -642,7 +653,7 @@ class TDataShard
             // Specify which tx artifacts have been stored to local DB and can be
             // reused on tx replay. See TActiveTransaction::EArtifactFlags.
             struct Flags :           Column<2, NScheme::NTypeIds::Uint64> {};
-            struct Locks :           Column<3, NScheme::NTypeIds::String> { using Type = TVector<TSysTables::TLocksTable::TLock>; };
+            struct Locks :           Column<3, NScheme::NTypeIds::String> { using Type = TStringBuf; };
 
             using TKey = TableKey<TxId>;
             using TColumns = TableColumns<TxId, Flags, Locks>;
@@ -1194,6 +1205,7 @@ class TDataShard
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
@@ -2757,6 +2769,7 @@ protected:
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
             HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
+            HFunc(TEvPrivate::TEvRestartOperation, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);

@@ -19,7 +19,6 @@ target_link_libraries(ydb PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   commands
   library-cpp-resource
 )
@@ -43,5 +42,8 @@ resources(ydb
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/version.txt
   KEYS
   version.txt
+)
+target_allocator(ydb
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb)

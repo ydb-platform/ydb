@@ -117,6 +117,10 @@ namespace NKikimr {
             to.ConstructInPlace(from.GetValue());
         }
 
+        inline void Cast(const TDuration& from, TMaybe<ui64>& to) {
+            to.ConstructInPlace(from.GetValue());
+        }
+
         template<typename TRow, typename TColumn>
         struct TCell {
             typename TColumn::Type TRow::*CellPtr = nullptr;

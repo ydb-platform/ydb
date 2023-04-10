@@ -32,8 +32,7 @@ struct TCmsSentinelConfig {
     ui32 RoomRatio;
     ui32 RackRatio;
 
-    void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const
-    {
+    void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
         config.SetDryRun(DryRun);
         config.SetUpdateConfigInterval(UpdateConfigInterval.GetValue());
@@ -50,8 +49,7 @@ struct TCmsSentinelConfig {
         SaveStateLimits(config);
     }
 
-    void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig &config)
-    {
+    void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
         Enable = config.GetEnable();
         DryRun = config.GetDryRun();
         UpdateConfigInterval = TDuration::MicroSeconds(config.GetUpdateConfigInterval());
@@ -69,8 +67,7 @@ struct TCmsSentinelConfig {
         StateLimits.swap(newStateLimits);
     }
 
-    void SaveStateLimits(NKikimrCms::TCmsConfig::TSentinelConfig &config) const
-    {
+    void SaveStateLimits(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         auto defaultStateLimits = DefaultStateLimits();
         bool differsFromDefault = false;
 
@@ -97,8 +94,7 @@ struct TCmsSentinelConfig {
         }
     }
 
-    static TMap<EPDiskState, ui32> LoadStateLimits(const NKikimrCms::TCmsConfig::TSentinelConfig &config)
-    {
+    static TMap<EPDiskState, ui32> LoadStateLimits(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
         TMap<EPDiskState, ui32> stateLimits = DefaultStateLimits();
 
         for (const auto &val : config.GetStateLimits()) {
@@ -108,8 +104,7 @@ struct TCmsSentinelConfig {
         return stateLimits;
     }
 
-    static TMap<EPDiskState, ui32> DefaultStateLimits()
-    {
+    static TMap<EPDiskState, ui32> DefaultStateLimits() {
         TMap<EPDiskState, ui32> stateLimits;
         // error states
         stateLimits[NKikimrBlobStorage::TPDiskState::InitialFormatReadError] = 60;
@@ -143,27 +138,24 @@ struct TCmsLogConfig {
     bool EnabledByDefault = true;
     TDuration TTL;
 
-    void Serialize(NKikimrCms::TCmsConfig::TLogConfig &config) const
-    {
+    void Serialize(NKikimrCms::TCmsConfig::TLogConfig &config) const {
         config.SetDefaultLevel(EnabledByDefault
-                               ? NKikimrCms::TCmsConfig::TLogConfig::ENABLED
-                               : NKikimrCms::TCmsConfig::TLogConfig::DISABLED);
+            ? NKikimrCms::TCmsConfig::TLogConfig::ENABLED
+            : NKikimrCms::TCmsConfig::TLogConfig::DISABLED);
         for (auto pr : RecordLevels) {
             auto &entry = *config.AddComponentLevels();
             entry.SetRecordType(pr.first);
             entry.SetLevel(pr.second
-                           ? NKikimrCms::TCmsConfig::TLogConfig::ENABLED
-                           : NKikimrCms::TCmsConfig::TLogConfig::DISABLED);
+                ? NKikimrCms::TCmsConfig::TLogConfig::ENABLED
+                : NKikimrCms::TCmsConfig::TLogConfig::DISABLED);
         }
         config.SetTTL(TTL.GetValue());
     }
 
-    void Deserialize(const NKikimrCms::TCmsConfig::TLogConfig &config)
-    {
+    void Deserialize(const NKikimrCms::TCmsConfig::TLogConfig &config) {
         RecordLevels.clear();
 
-        EnabledByDefault = (config.GetDefaultLevel()
-                            == NKikimrCms::TCmsConfig::TLogConfig::ENABLED);
+        EnabledByDefault = (config.GetDefaultLevel() == NKikimrCms::TCmsConfig::TLogConfig::ENABLED);
         for (auto &entry : config.GetComponentLevels()) {
             RecordLevels[entry.GetRecordType()]
                 = entry.GetLevel() == NKikimrCms::TCmsConfig::TLogConfig::ENABLED;
@@ -171,8 +163,7 @@ struct TCmsLogConfig {
         TTL = TDuration::FromValue(config.GetTTL());
     }
 
-    bool IsLogEnabled(ui32 recordType) const
-    {
+    bool IsLogEnabled(ui32 recordType) const {
         if (RecordLevels.contains(recordType))
             return RecordLevels.at(recordType);
         return EnabledByDefault;
@@ -189,18 +180,15 @@ struct TCmsConfig {
     TCmsSentinelConfig SentinelConfig;
     TCmsLogConfig LogConfig;
 
-    TCmsConfig()
-    {
+    TCmsConfig() {
         Deserialize(NKikimrCms::TCmsConfig());
     }
 
-    TCmsConfig(const NKikimrCms::TCmsConfig &config)
-    {
+    TCmsConfig(const NKikimrCms::TCmsConfig &config) {
         Deserialize(config);
     }
 
-    void Serialize(NKikimrCms::TCmsConfig &config) const
-    {
+    void Serialize(NKikimrCms::TCmsConfig &config) const {
         config.SetDefaultRetryTime(DefaultRetryTime.GetValue());
         config.SetDefaultPermissionDuration(DefaultPermissionDuration.GetValue());
         config.SetInfoCollectionTimeout(InfoCollectionTimeout.GetValue());
@@ -210,8 +198,7 @@ struct TCmsConfig {
         LogConfig.Serialize(*config.MutableLogConfig());
     }
 
-    void Deserialize(const NKikimrCms::TCmsConfig &config)
-    {
+    void Deserialize(const NKikimrCms::TCmsConfig &config) {
         DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
         DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
         InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());
@@ -221,8 +208,7 @@ struct TCmsConfig {
         LogConfig.Deserialize(config.GetLogConfig());
     }
 
-    bool IsLogEnabled(ui32 recordType) const
-    {
+    bool IsLogEnabled(ui32 recordType) const {
         return LogConfig.IsLogEnabled(recordType);
     }
 };

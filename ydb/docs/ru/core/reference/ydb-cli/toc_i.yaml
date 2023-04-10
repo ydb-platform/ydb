@@ -75,6 +75,8 @@ items:
       href: scripting-yql.md
     - name: Выполнение запроса
       href: table-query-execute.md
+    - name: Передача параметров в команды выполнения YQL-запросов
+      href: parameterized-queries-cli.md
 #  - name: Утилиты
 #    items:
     # - name: Снятие бэкапа

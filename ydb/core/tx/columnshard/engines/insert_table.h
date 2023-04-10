@@ -129,7 +129,7 @@ public:
     const THashMap<ui64, TSet<TInsertedData>>& GetCommitted() const { return CommittedByPathId; }
     const THashMap<TWriteId, TInsertedData>& GetAborted() const { return Aborted; }
     void SetOverloaded(ui64 pathId, bool overload);
-    bool IsOverloaded(ui64 pathId) const { return PathsOverloaded.count(pathId); }
+    bool IsOverloaded(ui64 pathId) const { return PathsOverloaded.contains(pathId); }
     bool HasOverloaded() const { return !PathsOverloaded.empty(); }
 
 private:

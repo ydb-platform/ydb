@@ -49,7 +49,6 @@ private:
 
     void PrepareKqpNodeRequest(NKikimrKqp::TEvStartKqpTasksRequest& request, THashSet<ui64> taskIds);
     void AddScansToKqpNodeRequest(NKikimrKqp::TEvStartKqpTasksRequest& request, ui64 nodeId);
-    void AddSnapshotInfoToTaskInputs(NYql::NDqProto::TDqTask& task);
 
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 

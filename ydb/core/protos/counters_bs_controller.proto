@@ -77,6 +77,9 @@ enum ECumulativeCounters {
     COUNTER_CONFIGCMD_READ_SETTINGS_USEC = 39 [(CounterOpts) = {Name: "ReadSettings"}];
     COUNTER_CONFIGCMD_WIPE_VDISK_USEC = 40 [(CounterOpts) = {Name: "WipeVDisk"}];
     COUNTER_CONFIGCMD_SANITIZE_GROUP_USEC = 41 [(CounterOpts) = {Name: "SanitizeGroup"}];
+    COUNTER_CONFIGCMD_ALLOCATE_VIRTUAL_GROUP_USEC = 42 [(CounterOpts) = {Name: "AllocateVirtualGroup"}];
+    COUNTER_CONFIGCMD_DECOMMIT_GROUPS_USEC = 43 [(CounterOpts) = {Name: "DecommitGroups"}];
+    COUNTER_CONFIGCMD_CANCEL_VIRTUAL_GROUP_USEC = 44 [(CounterOpts) = {Name: "CancelVirtualGroup"}];
 }
 
 enum EPercentileCounters {
@@ -189,6 +192,52 @@ enum EPercentileCounters {
         Ranges { Value: 14400 Name: "14400" }
         Ranges { Value: 18000 Name: "18000" }
         Ranges { Value: 21600 Name: "21600" }
+    }];
+
+    COUNTER_NUM_REPLICATING_VDISKS_ROT = 4 [(CounterOpts) = {
+        Name: "NumReplicatingVDisks/ROT"
+        Integral: true
+        Ranges { Value: 0      Name: "0"      }
+        Ranges { Value: 600    Name: "600"    }
+        Ranges { Value: 1200   Name: "1200"   }
+        Ranges { Value: 1800   Name: "1800"   }
+        Ranges { Value: 2400   Name: "2400"   }
+        Ranges { Value: 3000   Name: "3000"   }
+        Ranges { Value: 3600   Name: "3600"   }
+        Ranges { Value: 5400   Name: "5400"   }
+        Ranges { Value: 7200   Name: "7200"   }
+        Ranges { Value: 9000   Name: "9000"   }
+        Ranges { Value: 10800  Name: "10800"  }
+        Ranges { Value: 14400  Name: "14400"  }
+        Ranges { Value: 18000  Name: "18000"  }
+        Ranges { Value: 21600  Name: "21600"  }
+        Ranges { Value: 43200  Name: "43200"  }
+        Ranges { Value: 86400  Name: "86400"  }
+        Ranges { Value: 172800 Name: "172800" }
+        Ranges { Value: 259200 Name: "259200" }
+    }];
+
+    COUNTER_NUM_REPLICATING_VDISKS_OTHER = 5 [(CounterOpts) = {
+        Name: "NumReplicatingVDisks/Other"
+        Integral: true
+        Ranges { Value: 0      Name: "0"      }
+        Ranges { Value: 600    Name: "600"    }
+        Ranges { Value: 1200   Name: "1200"   }
+        Ranges { Value: 1800   Name: "1800"   }
+        Ranges { Value: 2400   Name: "2400"   }
+        Ranges { Value: 3000   Name: "3000"   }
+        Ranges { Value: 3600   Name: "3600"   }
+        Ranges { Value: 5400   Name: "5400"   }
+        Ranges { Value: 7200   Name: "7200"   }
+        Ranges { Value: 9000   Name: "9000"   }
+        Ranges { Value: 10800  Name: "10800"  }
+        Ranges { Value: 14400  Name: "14400"  }
+        Ranges { Value: 18000  Name: "18000"  }
+        Ranges { Value: 21600  Name: "21600"  }
+        Ranges { Value: 43200  Name: "43200"  }
+        Ranges { Value: 86400  Name: "86400"  }
+        Ranges { Value: 172800 Name: "172800" }
+        Ranges { Value: 259200 Name: "259200" }
     }];
 }
 

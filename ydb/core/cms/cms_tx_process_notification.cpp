@@ -15,8 +15,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_PROCESS_NOTIFICATION; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
-    {
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxProcessNotification Execute");
 
         auto &rec = Event->Get()->Record;
@@ -49,8 +48,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
-    {
+    void Complete(const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxProcessNotification complete with response: %s",
                   Response->Record.ShortDebugString().data());
 
@@ -63,8 +61,7 @@ private:
     TAutoPtr<TEvCms::TEvNotificationResponse> Response;
 };
 
-ITransaction* TCms::CreateTxProcessNotification(TEvCms::TEvNotification::TPtr &ev)
-{
+ITransaction *TCms::CreateTxProcessNotification(TEvCms::TEvNotification::TPtr &ev) {
     return new TTxProcessNotification(this, ev.Release());
 }
 

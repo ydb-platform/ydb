@@ -1263,7 +1263,9 @@ public:
 
             state.SchemaVersion = userTableInfo->GetTableSchemaVersion();
             if (record.GetTableId().HasSchemaVersion()) {
-                if (state.SchemaVersion != record.GetTableId().GetSchemaVersion()) {
+                if (state.SchemaVersion != 0 &&
+                    state.SchemaVersion != record.GetTableId().GetSchemaVersion())
+                {
                     SetStatusError(
                         Result->Record,
                         Ydb::StatusIds::SCHEME_ERROR,

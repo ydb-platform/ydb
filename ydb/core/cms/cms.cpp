@@ -1,6 +1,6 @@
 #include "cms_impl.h"
-#include "info_collector.h"
 #include "erasure_checkers.h"
+#include "info_collector.h"
 #include "node_checkers.h"
 #include "scheme.h"
 #include "sentinel.h"
@@ -32,7 +32,6 @@ namespace NKikimr::NCms {
 
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
-
 
 void TCms::OnActivateExecutor(const TActorContext &ctx)
 {
@@ -1105,7 +1104,6 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
         ids.push_back(id);
     }
 
-
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
               TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
@@ -1176,7 +1174,6 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
             resp->Record.MutableStatus()->SetReason(Sprintf("Request %s doesn't belong to %s", id.data(), user.data()));
         }
     }
-
 
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
               TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
@@ -1343,7 +1340,9 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
 
 void TCms::ProcessQueue(const TActorContext &ctx)
 {
-    while (!Queue.empty()) {
+    // To avoid getting stuck in the processing queue for too long,
+    // we'll process queue by one.
+    if (!Queue.empty()) {
         TabletCounters->Percentile()[COUNTER_LATENCY_REQUEST_QUEUING].IncrementFor((ctx.Now() - Queue.front().ArrivedTime).MilliSeconds());
         TabletCounters->Simple()[COUNTER_REQUESTS_QUEUE_SIZE].Sub(1);
 
@@ -1351,9 +1350,13 @@ void TCms::ProcessQueue(const TActorContext &ctx)
         Queue.pop();
     }
 
-    // Process events received while collecting
-    if (!NextQueue.empty()) {
+    // Process events received while collecting and processing queue
+    if (Queue.empty() && !NextQueue.empty()) {
         StartCollecting(ctx);
+    }
+
+    if (!Queue.empty()) {
+        ctx.Send(SelfId(), new TEvPrivate::TEvProcessQueue);
     }
 }
 

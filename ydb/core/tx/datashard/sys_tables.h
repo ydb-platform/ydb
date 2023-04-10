@@ -48,15 +48,8 @@ struct TSysTables {
             PathId,
         };
 
-        struct TLock {
-            enum ESetErrors : ui64 {
-                ErrorMin = Max<ui64>() - 255,
-                ErrorAlreadyBroken = Max<ui64>() - 3,
-                ErrorNotSet = Max<ui64>() - 2,
-                ErrorTooMuch = Max<ui64>() - 1,
-                ErrorBroken = Max<ui64>()
-            };
-
+        // WARNING: this struct is persisted in datashard db, do not change size or layout
+        struct TPersistentLock {
             ui64 LockId = 0;
             ui64 DataShard = 0;
             ui32 Generation = 0;
@@ -65,6 +58,19 @@ struct TSysTables {
             ui64 Counter = 0;
             ui64 SchemeShard = 0;
             ui64 PathId = 0;
+        };
+
+        static_assert(sizeof(TPersistentLock) == 48, "Unexpected change in TPersistentLock size");
+
+        struct TLock : public TPersistentLock {
+            enum ESetErrors : ui64 {
+                ErrorMin = Max<ui64>() - 255,
+                ErrorAlreadyBroken = Max<ui64>() - 3,
+                ErrorNotSet = Max<ui64>() - 2,
+                ErrorTooMuch = Max<ui64>() - 1,
+                ErrorBroken = Max<ui64>()
+            };
+
             bool HasWrites = false; // Not exposed as a column
 
             bool IsEmpty() const { return (LockId == 0); }
@@ -94,6 +100,17 @@ struct TSysTables {
                         row.emplace_back(TCell((const char*)&PathId, sizeof(ui64)));
                     }
                 }
+            }
+
+            static TLock FromPersistent(const TPersistentLock& lock) {
+                TLock result;
+                result.LockId = lock.LockId;
+                result.DataShard = lock.DataShard;
+                result.Generation = lock.Generation;
+                result.Counter = lock.Counter;
+                result.SchemeShard = lock.SchemeShard;
+                result.PathId = lock.PathId;
+                return result;
             }
         };
 

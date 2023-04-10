@@ -1074,9 +1074,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
             result.mutable_assigned()->set_read_offset(ev->Get()->Offset);
             result.mutable_assigned()->set_end_offset(ev->Get()->EndOffset);
         } else {
-            auto database = Request->GetDatabaseName().GetOrElse(AppData(ctx)->PQConfig.GetRoot());
-
-            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetRoot()) {
+            auto database = Request->GetDatabaseName().GetOrElse(AppData(ctx)->PQConfig.GetDatabase());
+            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetDatabase() || database == AppData(ctx)->PQConfig.GetTestDatabaseRoot()) {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetFederationPathWithDC());
             } else {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetModernName());

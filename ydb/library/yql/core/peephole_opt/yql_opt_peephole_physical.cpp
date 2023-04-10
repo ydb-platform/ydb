@@ -641,7 +641,7 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
             .Build()
         .Settings()
             .Add().Build("One", TNodeFlags::Default)
-            .Add().Build("Hashed", TNodeFlags::Default)
+            .Add().Build("Auto", TNodeFlags::Default)
             .Build()
         .Done()
         .Ptr();
@@ -915,7 +915,7 @@ TExprNode::TPtr ExpandCastOverDict(const TExprNode::TPtr& input, TExprContext& c
                 .Seal()
             .Seal()
             .List(3)
-                .Atom(0, "Hashed", TNodeFlags::Default)
+                .Atom(0, "Auto", TNodeFlags::Default)
                 .Atom(1, "One", TNodeFlags::Default)
             .Seal()
         .Seal().Build();
@@ -1137,7 +1137,7 @@ TExprNode::TPtr ExpandCastOverOptionalDict(const TExprNode::TPtr& input, TExprCo
                         .Seal()
                     .Seal()
                     .List(3)
-                        .Atom(0, "Hashed", TNodeFlags::Default)
+                        .Atom(0, "Auto", TNodeFlags::Default)
                         .Atom(1, "One", TNodeFlags::Default)
                     .Seal()
                 .Seal()
@@ -1687,7 +1687,7 @@ TExprNode::TPtr BuildDictOverListOfStructs(TPositionHandle pos, const TExprNode:
                 .Seal()
             .Seal()
             .List(3)
-                .Atom(0, "Hashed", TNodeFlags::Default)
+                .Atom(0, "Auto", TNodeFlags::Default)
                 .Atom(1, "One", TNodeFlags::Default)
                 .Atom(2, "Compact", TNodeFlags::Default)
             .Seal()
@@ -1712,7 +1712,7 @@ TExprNode::TPtr BuildDictOverList(TPositionHandle pos, const TExprNode::TPtr& co
                 .Seal()
             .Seal()
             .List(3)
-                .Atom(0, "Hashed", TNodeFlags::Default)
+                .Atom(0, "Auto", TNodeFlags::Default)
                 .Atom(1, "One", TNodeFlags::Default)
                 .Atom(2, "Compact", TNodeFlags::Default)
             .Seal()
@@ -2376,7 +2376,7 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
 
     auto settings = ctx.Builder(node->Pos())
         .List()
-            .Atom(0, "Hashed")
+            .Atom(0, "Auto")
             .Atom(1, "Many")
         .Seal()
         .Build();

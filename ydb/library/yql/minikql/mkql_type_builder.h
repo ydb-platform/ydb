@@ -210,6 +210,7 @@ private:
     static void DoBlock(const NMiniKQL::TBlockType* tt, NUdf::ITypeVisitor* v);
 };
 
+bool CanHash(const NMiniKQL::TType* type);
 NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type);
 NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type);
 NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type);

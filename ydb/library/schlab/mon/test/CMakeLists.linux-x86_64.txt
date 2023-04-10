@@ -18,8 +18,6 @@ target_link_libraries(mon-test PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   library-cpp-resource
   library-cpp-getopt
@@ -46,5 +44,9 @@ resources(mon-test
   ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/schviz-test0.json
   KEYS
   schlab/schviz-test0.json
+)
+target_allocator(mon-test
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(mon-test)

@@ -199,6 +199,8 @@ message TEvVPatchStart {
     optional bool NotifyIfNotReady = 4;
     optional uint64 Cookie = 5;
 
+    optional EGetHandleClass HandleClass = 6;
+
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;
 }
@@ -242,6 +244,8 @@ message TEvVPatchDiff {
     optional uint32 ExpectedXorDiffs = 7;
     optional bool ForceEnd = 8;
     optional bool NotifyIfNotReady = 9;
+    
+    optional EPutHandleClass HandleClass = 11;
 
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;
@@ -255,6 +259,8 @@ message TEvVPatchXorDiff {
     optional uint64 Cookie = 5;
     optional uint32 FromPartId = 6;
     optional bool NotifyIfNotReady = 7;
+
+    optional EPutHandleClass HandleClass = 8;
 
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;

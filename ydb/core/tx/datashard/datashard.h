@@ -124,8 +124,10 @@ namespace NDataShard {
             WaitCompletion = 1ULL << 44,
             // Waiting for global tx id allocation
             WaitingForGlobalTxId = 1ULL << 45,
+            // Operation is waiting for restart
+            WaitingForRestart = 1ULL << 46,
 
-            LastFlag = WaitCompletion,
+            LastFlag = WaitingForRestart,
 
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader

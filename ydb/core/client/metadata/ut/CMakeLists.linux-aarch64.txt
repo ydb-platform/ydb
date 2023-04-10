@@ -18,7 +18,6 @@ target_link_libraries(ydb-core-client-metadata-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-client-metadata
   udf-service-stub
@@ -69,5 +68,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-client-metadata-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-client-metadata-ut)

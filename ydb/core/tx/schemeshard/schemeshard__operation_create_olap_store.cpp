@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_olap_types.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -12,54 +13,41 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-bool PrepareSchema(NKikimrSchemeOp::TColumnTableSchema& proto, TOlapSchema& schema, TString& errStr) {
-    if (!TOlapSchema::UpdateProto(proto, errStr)) {
-        return false;
-    }
-    // Backward compatibility. It should be removed in future versions.
-    // ColumnShards do not allow nullable PK. But it was possible to make tables with such PK before.
-    bool allowNullableKeys = true;
-    return schema.Parse(proto, errStr, allowNullableKeys);
-}
 
 // TODO: make it a part of TOlapStoreInfo
 bool PrepareSchemaPreset(NKikimrSchemeOp::TColumnTableSchemaPreset& proto, TOlapStoreInfo& store,
-                         size_t protoIndex, TString& errStr)
+                         size_t protoIndex, IErrorCollector& errors)
 {
-    if (proto.GetName().empty()) {
-        errStr = Sprintf("Schema preset name cannot be empty");
+    TOlapStoreSchemaPreset preset;
+    if (!preset.ParseFromRequest(proto, errors)) {
         return false;
     }
-    if (!proto.HasId()) {
-        proto.SetId(store.Description.GetNextSchemaPresetId());
-        store.Description.SetNextSchemaPresetId(proto.GetId() + 1);
-    } else if (proto.GetId() <= 0 || proto.GetId() >= store.Description.GetNextSchemaPresetId()) {
-        errStr = Sprintf("Schema preset id is incorrect");
+    const auto presetId = store.Description.GetNextSchemaPresetId();
+    if (store.SchemaPresets.contains(presetId) || store.SchemaPresetByName.contains(preset.GetName())) {
+        errors.AddError(Sprintf("Duplicate schema preset %" PRIu32 " with name '%s'", presetId, proto.GetName().c_str()));
         return false;
     }
-    if (store.SchemaPresets.contains(proto.GetId()) ||
-        store.SchemaPresetByName.contains(proto.GetName()))
-    {
-        errStr = Sprintf("Duplicate schema preset %" PRIu32 " with name '%s'", proto.GetId(), proto.GetName().c_str());
-        return false;
-    }
-    auto& preset = store.SchemaPresets[proto.GetId()];
-    preset.Id = proto.GetId();
-    preset.Name = proto.GetName();
-    preset.ProtoIndex = protoIndex;
-    store.SchemaPresetByName[preset.Name] = preset.Id;
+    preset.SetId(presetId);
+    preset.SetProtoIndex(protoIndex);
 
-    proto.MutableSchema()->SetNextColumnId(1);
-    proto.MutableSchema()->SetVersion(1);
-
-    if (!PrepareSchema(*proto.MutableSchema(), preset, errStr)) {
+    TOlapSchemaUpdate schemaDiff;
+    if (!schemaDiff.Parse(proto.GetSchema(), errors, true)) {
         return false;
     }
+
+    if (!preset.Update(schemaDiff, errors)) {
+        return false;
+    }
+    proto.Clear();
+    preset.Serialize(proto);
+
+    store.Description.SetNextSchemaPresetId(presetId + 1);
+    store.SchemaPresetByName[preset.GetName()] = preset.GetId();
+    store.SchemaPresets[preset.GetId()] = std::move(preset);
     return true;
 }
 
-TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescription& opSrc,
-                                    TEvSchemeShard::EStatus& status, TString& errStr)
+TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescription& opSrc, IErrorCollector& errors)
 {
     TOlapStoreInfo::TPtr storeInfo = new TOlapStoreInfo;
     storeInfo->AlterVersion = 1;
@@ -67,20 +55,23 @@ TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescript
     auto& op = storeInfo->Description;
 
     if (op.GetRESERVED_MetaShardCount() != 0) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("trying to create OLAP store with meta shards (not supported yet)");
+        errors.AddError("trying to create OLAP store with meta shards (not supported yet)");
         return nullptr;
     }
 
     if (!op.HasColumnShardCount()) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("trying to create OLAP store without shards number specified");
+        errors.AddError("trying to create OLAP store without shards number specified");
         return nullptr;
     }
 
     if (op.GetColumnShardCount() == 0) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("trying to create OLAP store without zero shards");
+        errors.AddError("trying to create OLAP store without zero shards");
+        return nullptr;
+    }
+
+    for (auto& presetProto : *op.MutableRESERVED_TtlSettingsPresets()) {
+        Y_UNUSED(presetProto);
+        errors.AddError("TTL presets are not supported");
         return nullptr;
     }
 
@@ -90,27 +81,16 @@ TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescript
     size_t protoIndex = 0;
     for (auto& presetProto : *op.MutableSchemaPresets()) {
         if (presetProto.HasId()) {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = Sprintf("Schema preset id cannot be specified explicitly");
+            errors.AddError("Schema preset id cannot be specified explicitly");
             return nullptr;
         }
-        if (!PrepareSchemaPreset(presetProto, *storeInfo, protoIndex++, errStr)) {
-            status = NKikimrScheme::StatusSchemeError;
+        if (!PrepareSchemaPreset(presetProto, *storeInfo, protoIndex++, errors)) {
             return nullptr;
         }
-    }
-
-    protoIndex = 0;
-    for (auto& presetProto : *op.MutableRESERVED_TtlSettingsPresets()) {
-        Y_UNUSED(presetProto);
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = "TTL presets are not supported";
-        return nullptr;
     }
 
     if (!storeInfo->SchemaPresetByName.contains("default") || storeInfo->SchemaPresets.size() > 1) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = "A single schema preset named 'default' is required";
+        errors.AddError("A single schema preset named 'default' is required");
         return nullptr;
     }
 
@@ -173,19 +153,16 @@ public:
                    DebugHint() << " ProgressState"
                    << " at tabletId# " << ssId);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateOlapStore);
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
         TOlapStoreInfo::TPtr pendingInfo = context.SS->OlapStores[txState->TargetPathId];
         Y_VERIFY(pendingInfo);
         Y_VERIFY(pendingInfo->AlterData);
         TOlapStoreInfo::TPtr storeInfo = pendingInfo->AlterData;
 
         txState->ClearShardsInProgress();
-
-        auto seqNo = context.SS->StartRound(*txState);
-
         TString columnShardTxBody;
         {
+            auto seqNo = context.SS->StartRound(*txState);
             NKikimrTxColumnShard::TSchemaTxBody tx;
             context.SS->FillSeqNo(tx, seqNo);
 
@@ -257,8 +234,7 @@ public:
                      << " at tablet: " << ssId
                      << ", stepId: " << step);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateOlapStore);
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -301,9 +277,7 @@ public:
                      DebugHint() << " ProgressState"
                      << " at tablet: " << ssId);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateOlapStore);
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -338,9 +312,7 @@ public:
     }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateOlapStore);
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
@@ -357,10 +329,7 @@ public:
                      DebugHint() << " ProgressState"
                      << " at tablet: " << ssId);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateOlapStore);
-
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
         txState->ClearShardsInProgress();
 
         for (auto& shard : txState->Shards) {
@@ -516,9 +485,15 @@ public:
             return result;
         }
 
-        TOlapStoreInfo::TPtr storeInfo = CreateOlapStore(createDescription, status, errStr);
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Olap schema operations are not supported in serverless db");
+            return result;
+        }
+
+        TProposeErrorCollector errors(*result);
+        TOlapStoreInfo::TPtr storeInfo = CreateOlapStore(createDescription, errors);
         if (!storeInfo.Get()) {
-            result->SetError(status, errStr);
             return result;
         }
 

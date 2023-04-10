@@ -234,6 +234,7 @@ public:
     {
         if (CollectBasicStats) {
             Stats = std::make_unique<TDqTaskRunnerStats>();
+            Stats->StartTs = TInstant::Now();
             if (Y_UNLIKELY(CollectProfileStats)) {
                 Stats->ComputeCpuTimeByRun = NMonitoring::ExponentialHistogram(6, 10, 10);
             }

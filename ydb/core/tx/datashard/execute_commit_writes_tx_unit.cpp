@@ -47,8 +47,10 @@ public:
         txc.DB.CommitTx(tableInfo.LocalTid, writeTxId, versions.WriteVersion);
 
         if (Pipeline.AddLockDependencies(op, guardLocks)) {
-            txc.Reschedule();
-            return EExecutionStatus::Restart;
+            if (txc.DB.HasChanges()) {
+                txc.DB.RollbackChanges();
+            }
+            return EExecutionStatus::Continue;
         }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

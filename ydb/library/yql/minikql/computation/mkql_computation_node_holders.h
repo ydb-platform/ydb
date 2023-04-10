@@ -617,7 +617,7 @@ public:
     IComputationNode* CreateDictNode(
             std::vector<std::pair<IComputationNode*, IComputationNode*>>&& items,
             const TKeyTypes& types, bool isTuple, TType* encodedType,
-            NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate) const;
+            NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, NUdf::ICompare::TPtr compare, bool isSorted) const;
 
     IComputationNode* CreateVariantNode(IComputationNode* item, ui32 index) const;
 

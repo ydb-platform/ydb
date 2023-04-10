@@ -279,7 +279,7 @@ private:
 
         Adds->Inc();
 
-        if (OutstandingReads.count(blobRange)) {
+        if (OutstandingReads.contains(blobRange)) {
             // Don't bother if there is already a read request for this range
             return;
         }

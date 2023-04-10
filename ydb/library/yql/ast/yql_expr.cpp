@@ -2931,12 +2931,16 @@ ui32 TVariantExprType::MakeFlags(const TTypeAnnotationNode* underlyingType) {
 
 
 bool TDictExprType::Validate(TPosition position, TExprContext& ctx) const {
-    if (!KeyType->IsHashable() || !KeyType->IsEquatable()) {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Expected hashable and equatable type as dict key type, but got: " << *KeyType));
-        return false;
+    if (KeyType->IsHashable() && KeyType->IsEquatable()) {
+        return true;
     }
 
-    return true;
+    if (KeyType->IsComparableInternal()) {
+        return true;
+    }    
+
+    ctx.AddError(TIssue(position, TStringBuilder() << "Expected hashable and equatable or internally comparable dict key type, but got: " << *KeyType));
+    return false;
 }
 
 bool TDictExprType::Validate(TPositionHandle position, TExprContext& ctx) const {

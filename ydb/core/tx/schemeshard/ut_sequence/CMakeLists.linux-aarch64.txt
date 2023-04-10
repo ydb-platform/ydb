@@ -18,7 +18,6 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_sequence PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-tx-schemeshard
   library-cpp-getopt
@@ -82,5 +81,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-tx-schemeshard-ut_sequence
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-tx-schemeshard-ut_sequence)

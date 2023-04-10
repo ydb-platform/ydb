@@ -9,6 +9,7 @@
 add_subdirectory(actor_log)
 add_subdirectory(actors)
 add_subdirectory(backtrace)
+add_subdirectory(bindings)
 add_subdirectory(failure_injector)
 add_subdirectory(fetch)
 add_subdirectory(log)

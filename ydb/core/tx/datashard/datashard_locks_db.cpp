@@ -75,7 +75,7 @@ bool TDataShardLocksDb::Load(TVector<TLockRow>& rows) {
     }
 
     // Load volatile dependencies
-    {
+    if (db.HaveTable<Schema::LockVolatileDependencies>()) {
         auto rowset = db.Table<Schema::LockVolatileDependencies>().Select();
         if (!rowset.IsReady()) {
             return false;

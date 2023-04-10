@@ -522,7 +522,7 @@ namespace NKikimr::NDataShard {
         txc.DB.OnRollback([this, txId]() {
             RollbackAddVolatileTx(txId);
         });
-        txc.OnCommitted([this, txId]() {
+        txc.DB.OnPersistent([this, txId]() {
             auto* info = FindByTxId(txId);
             Y_VERIFY_S(info, "Unexpected failure to find volatile txId# " << txId);
             Y_VERIFY_S(!info->AddCommitted, "Unexpected commit of a committed volatile txId# " << txId);

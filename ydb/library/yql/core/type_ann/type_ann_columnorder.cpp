@@ -266,6 +266,29 @@ IGraphTransformer::TStatus OrderForEquiJoin(const TExprNode::TPtr& node, TExprNo
     return ctx.Types.SetColumnOrder(*node, resultColumnOrder, ctx.Expr);
 };
 
+IGraphTransformer::TStatus OrderForCalcOverWindow(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
+    Y_UNUSED(output);
+
+    auto inputOrder = ctx.Types.LookupColumnOrder(node->Head());
+    if (!inputOrder) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    const TStructExprType* inputType = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const TStructExprType* outputType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    // we simply add new CalcOverWindow columns after original input columns
+    TVector<TString> resultOrder = *inputOrder;
+    for (auto& item : outputType->GetItems()) {
+        auto col = item->GetName();
+        if (!inputType->FindItem(col)) {
+            resultOrder.emplace_back(col);
+        }
+    }
+
+    return ctx.Types.SetColumnOrder(*node, resultOrder, ctx.Expr);
+}
+
 IGraphTransformer::TStatus OrderFromFirst(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (auto columnOrder = ctx.Types.LookupColumnOrder(node->Head())) {

@@ -81,6 +81,7 @@ void Init(
             ? NFq::CreateInMemoryControlPlaneStorageServiceActor(protoConfig.GetControlPlaneStorage())
             : NFq::CreateYdbControlPlaneStorageServiceActor(
                 protoConfig.GetControlPlaneStorage(),
+                protoConfig.GetGateways().GetS3(),
                 protoConfig.GetCommon(),
                 yqCounters->GetSubgroup("subsystem", "ControlPlaneStorage"),
                 yqSharedResources,
@@ -275,6 +276,7 @@ void Init(
         auto testConnection = NFq::CreateTestConnectionActor(
                 protoConfig.GetTestConnection(),
                 protoConfig.GetControlPlaneStorage(),
+                protoConfig.GetGateways().GetS3(),
                 protoConfig.GetCommon(),
                 protoConfig.GetTokenAccessor(),
                 yqSharedResources,

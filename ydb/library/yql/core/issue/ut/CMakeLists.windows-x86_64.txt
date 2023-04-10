@@ -14,7 +14,6 @@ target_include_directories(ydb-library-yql-core-issue-ut PRIVATE
 target_link_libraries(ydb-library-yql-core-issue-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-core-issue
@@ -61,5 +60,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   300
+)
+target_allocator(ydb-library-yql-core-issue-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-core-issue-ut)

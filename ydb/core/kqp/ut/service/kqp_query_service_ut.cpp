@@ -86,6 +86,18 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(ExecuteQueryScalar) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT COUNT(*) FROM EightShard;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[24u]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(ExecuteScript) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

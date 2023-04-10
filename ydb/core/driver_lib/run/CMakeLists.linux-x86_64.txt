@@ -93,6 +93,7 @@ target_link_libraries(run PUBLIC
   ydb-core-tx
   core-tx-columnshard
   core-tx-coordinator
+  tx-conveyor-service
   core-tx-datashard
   core-tx-long_tx_service
   tx-long_tx_service-public

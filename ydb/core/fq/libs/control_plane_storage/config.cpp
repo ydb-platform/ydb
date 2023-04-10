@@ -19,7 +19,7 @@ FederatedQuery::BindingSetting::BindingCase GetBindingType(const TString& typeSt
 
 }
 
-TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NConfig::TCommonConfig& common)
+TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config, const NConfig::TCommonConfig& common)
     : Proto(FillDefaultParameters(config))
     , IdsPrefix(common.GetIdsPrefix())
     , IdempotencyKeyTtl(GetDuration(Proto.GetIdempotencyKeysTtl(), TDuration::Minutes(10)))
@@ -38,6 +38,9 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
     for (const auto& availableBinding : Proto.GetAvailableBinding()) {
         AvailableBindings.insert(GetBindingType(availableBinding));
     }
+
+    GeneratorPathsLimit =
+        s3Config.HasGeneratorPathsLimit() ? s3Config.GetGeneratorPathsLimit() : 50'000;
 
     for (const auto& mapping : Proto.GetRetryPolicyMapping()) {
         auto& retryPolicy = mapping.GetPolicy();

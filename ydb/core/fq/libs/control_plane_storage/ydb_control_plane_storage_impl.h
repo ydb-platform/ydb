@@ -283,8 +283,9 @@ class TControlPlaneStorageUtils {
 protected:
     TControlPlaneStorageUtils(
         const NConfig::TControlPlaneStorageConfig& config,
+        const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& common)
-    : Config(std::make_shared<::NFq::TControlPlaneStorageConfig>(config, common))
+    : Config(std::make_shared<::NFq::TControlPlaneStorageConfig>(config, s3Config, common))
     {
     }
 
@@ -309,7 +310,7 @@ protected:
     template<typename T>
      NYql::TIssues ValidateBinding(T& ev)
     {
-        return ::NFq::ValidateBinding<T>(ev, Config->Proto.GetMaxRequestSize(), Config->AvailableBindings);
+        return ::NFq::ValidateBinding<T>(ev, Config->Proto.GetMaxRequestSize(), Config->AvailableBindings, Config->GeneratorPathsLimit);
     }
 
     template<typename T>
@@ -570,12 +571,13 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 public:
     TYdbControlPlaneStorageActor(
         const NConfig::TControlPlaneStorageConfig& config,
+        const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& common,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const TString& tenantName)
-        : TControlPlaneStorageUtils(config, common)
+        : TControlPlaneStorageUtils(config, s3Config, common)
         , Counters(counters, *Config)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)

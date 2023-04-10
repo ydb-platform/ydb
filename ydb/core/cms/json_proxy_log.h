@@ -5,16 +5,13 @@
 namespace NKikimr::NCms {
 
 class TJsonProxyLog : public TJsonProxyCms<TEvCms::TEvGetLogTailRequest, TEvCms::TEvGetLogTailResponse> {
-private:
-
 public:
     TJsonProxyLog(NMon::TEvHttpInfo::TPtr &event)
         : TJsonProxyCms<TEvCms::TEvGetLogTailRequest, TEvCms::TEvGetLogTailResponse>(event)
     {
     }
 
-    TAutoPtr<TRequest> PrepareRequest(const TActorContext &) override
-    {
+    TAutoPtr<TRequest> PrepareRequest(const TActorContext &) override {
         TAutoPtr<TRequest> request = new TRequest;
         const TCgiParameters& cgi = RequestEvent->Get()->Request.GetParams();
 

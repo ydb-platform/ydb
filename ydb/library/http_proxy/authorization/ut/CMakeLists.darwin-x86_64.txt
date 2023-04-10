@@ -14,7 +14,6 @@ target_include_directories(ydb-library-http_proxy-authorization-ut PRIVATE
 target_link_libraries(ydb-library-http_proxy-authorization-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   library-http_proxy-authorization
@@ -61,5 +60,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-http_proxy-authorization-ut
+  system_allocator
 )
 vcs_info(ydb-library-http_proxy-authorization-ut)

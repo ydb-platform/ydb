@@ -1,0 +1,352 @@
+--
+-- NUMERIC
+--
+SELECT sqrt('-1'::numeric);
+ERROR:  cannot take square root of a negative number
+SELECT sqrt('-inf'::numeric);
+ERROR:  cannot take square root of a negative number
+SELECT ln('0'::numeric);
+ERROR:  cannot take logarithm of zero
+SELECT ln('-1'::numeric);
+ERROR:  cannot take logarithm of a negative number
+SELECT ln('-inf'::numeric);
+ERROR:  cannot take logarithm of a negative number
+-- ******************************
+-- * miscellaneous checks for things that have been broken in the past...
+-- ******************************
+-- Check conversion to integers
+SELECT (-9223372036854775808.4)::int8; -- ok
+         int8         
+----------------------
+ -9223372036854775808
+(1 row)
+
+SELECT 9223372036854775807.5::int8; -- should fail
+ERROR:  bigint out of range
+SELECT (-2147483648.4)::int4; -- ok
+    int4     
+-------------
+ -2147483648
+(1 row)
+
+SELECT 2147483647.4::int4; -- ok
+    int4    
+------------
+ 2147483647
+(1 row)
+
+SELECT 2147483647.5::int4; -- should fail
+ERROR:  integer out of range
+SELECT (-32768.4)::int2; -- ok
+  int2  
+--------
+ -32768
+(1 row)
+
+SELECT 32767.4::int2; -- ok
+ int2  
+-------
+ 32767
+(1 row)
+
+SELECT 32767.5::int2; -- should fail
+ERROR:  smallint out of range
+-- Check inf/nan conversion behavior
+SELECT '42'::int2::numeric;
+ numeric 
+---------
+      42
+(1 row)
+
+SELECT 'NaN'::numeric::int2;
+ERROR:  cannot convert NaN to smallint
+SELECT 'Infinity'::numeric::int2;
+ERROR:  cannot convert infinity to smallint
+SELECT '-Infinity'::numeric::int2;
+ERROR:  cannot convert infinity to smallint
+SELECT 'NaN'::numeric::int4;
+ERROR:  cannot convert NaN to integer
+SELECT 'Infinity'::numeric::int4;
+ERROR:  cannot convert infinity to integer
+SELECT '-Infinity'::numeric::int4;
+ERROR:  cannot convert infinity to integer
+SELECT 'NaN'::numeric::int8;
+ERROR:  cannot convert NaN to bigint
+SELECT 'Infinity'::numeric::int8;
+ERROR:  cannot convert infinity to bigint
+SELECT '-Infinity'::numeric::int8;
+ERROR:  cannot convert infinity to bigint
+-- Simple check that ceil(), floor(), and round() work correctly
+-- Check rounding, it should round ties away from zero.
+-- Testing for width_bucket(). For convenience, we test both the
+-- numeric and float8 versions of the function in this file.
+-- errors
+SELECT width_bucket(5.0, 3.0, 4.0, 0);
+ERROR:  count must be greater than zero
+SELECT width_bucket(5.0, 3.0, 4.0, -5);
+ERROR:  count must be greater than zero
+SELECT width_bucket(3.5, 3.0, 3.0, 888);
+ERROR:  lower bound cannot equal upper bound
+SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
+ERROR:  count must be greater than zero
+SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
+ERROR:  count must be greater than zero
+SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
+ERROR:  lower bound cannot equal upper bound
+--
+-- TO_CHAR()
+--
+SELECT to_char('100'::numeric, 'FM999.9');
+ to_char 
+---------
+ 100.
+(1 row)
+
+SELECT to_char('100'::numeric, 'FM999.');
+ to_char 
+---------
+ 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'FM999');
+ to_char 
+---------
+ 100
+(1 row)
+
+-- Check parsing of literal text in a format string
+SELECT to_char('100'::numeric, 'foo999');
+ to_char 
+---------
+ foo 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f\oo999');
+ to_char  
+----------
+ f\oo 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f\\oo999');
+  to_char  
+-----------
+ f\\oo 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f\"oo999');
+ to_char  
+----------
+ f"oo 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f\\"oo999');
+  to_char  
+-----------
+ f\"oo 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f"ool"999');
+ to_char  
+----------
+ fool 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f"\ool"999');
+ to_char  
+----------
+ fool 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f"\\ool"999');
+  to_char  
+-----------
+ f\ool 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f"ool\"999');
+ to_char  
+----------
+ fool"999
+(1 row)
+
+SELECT to_char('100'::numeric, 'f"ool\\"999');
+  to_char  
+-----------
+ fool\ 100
+(1 row)
+
+-- TO_NUMBER()
+--
+SELECT to_number('-34,338,492', '99G999G999');
+ to_number 
+-----------
+ -34338492
+(1 row)
+
+SELECT to_number('-34,338,492.654,878', '99G999G999D999G999');
+    to_number     
+------------------
+ -34338492.654878
+(1 row)
+
+SELECT to_number('<564646.654564>', '999999.999999PR');
+   to_number    
+----------------
+ -564646.654564
+(1 row)
+
+SELECT to_number('0.00001-', '9.999999S');
+ to_number 
+-----------
+  -0.00001
+(1 row)
+
+SELECT to_number('5.01-', 'FM9.999999S');
+ to_number 
+-----------
+     -5.01
+(1 row)
+
+SELECT to_number('5.01-', 'FM9.999999MI');
+ to_number 
+-----------
+     -5.01
+(1 row)
+
+SELECT to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9');
+ to_number 
+-----------
+ 544448.78
+(1 row)
+
+SELECT to_number('.01', 'FM9.99');
+ to_number 
+-----------
+      0.01
+(1 row)
+
+SELECT to_number('.0', '99999999.99999999');
+ to_number 
+-----------
+       0.0
+(1 row)
+
+SELECT to_number('.-01', 'S99.99');
+ to_number 
+-----------
+     -0.01
+(1 row)
+
+SELECT to_number('.01-', '99.99S');
+ to_number 
+-----------
+     -0.01
+(1 row)
+
+SELECT to_number(' . 0 1-', ' 9 9 . 9 9 S');
+ to_number 
+-----------
+     -0.01
+(1 row)
+
+SELECT to_number('34,50','999,99');
+ to_number 
+-----------
+      3450
+(1 row)
+
+SELECT to_number('123,000','999G');
+ to_number 
+-----------
+       123
+(1 row)
+
+SELECT to_number('123456','999G999');
+ to_number 
+-----------
+    123456
+(1 row)
+
+SELECT to_number('$1234.56','L9,999.99');
+ to_number 
+-----------
+   1234.56
+(1 row)
+
+SELECT to_number('$1234.56','L99,999.99');
+ to_number 
+-----------
+   1234.56
+(1 row)
+
+SELECT to_number('$1,234.56','L99,999.99');
+ to_number 
+-----------
+   1234.56
+(1 row)
+
+SELECT to_number('1234.56','L99,999.99');
+ to_number 
+-----------
+   1234.56
+(1 row)
+
+SELECT to_number('1,234.56','L99,999.99');
+ to_number 
+-----------
+   1234.56
+(1 row)
+
+SELECT to_number('42nd', '99th');
+ to_number 
+-----------
+        42
+(1 row)
+
+--
+-- Tests for raising to non-integer powers
+--
+-- invalid inputs
+select 0.0 ^ (-12.34);
+ERROR:  zero raised to a negative power is undefined
+select (-12.34) ^ 1.2;
+ERROR:  a negative number raised to a non-integer power yields a complex result
+--
+-- Tests for LN()
+--
+-- Invalid inputs
+select ln(-12.34);
+ERROR:  cannot take logarithm of a negative number
+select ln(0.0);
+ERROR:  cannot take logarithm of zero
+--
+-- Tests for LOG() (base 10)
+--
+-- invalid inputs
+select log(-12.34);
+ERROR:  cannot take logarithm of a negative number
+CONTEXT:  SQL function "log" statement 1
+select log(0.0);
+ERROR:  cannot take logarithm of zero
+CONTEXT:  SQL function "log" statement 1
+--
+-- Tests for pg_lsn()
+--
+SELECT pg_lsn(23783416::numeric);
+  pg_lsn   
+-----------
+ 0/16AE7F8
+(1 row)
+
+SELECT pg_lsn(0::numeric);
+ pg_lsn 
+--------
+ 0/0
+(1 row)
+
+SELECT pg_lsn(-1::numeric);
+ERROR:  pg_lsn out of range
+SELECT pg_lsn(18446744073709551616::numeric);
+ERROR:  pg_lsn out of range
+SELECT pg_lsn('NaN'::numeric);
+ERROR:  cannot convert NaN to pg_lsn

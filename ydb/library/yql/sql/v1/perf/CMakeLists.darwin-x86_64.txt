@@ -11,7 +11,6 @@ add_executable(perf)
 target_link_libraries(perf PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   udf-service-exception_policy
   library-yql-sql
@@ -25,5 +24,8 @@ target_link_options(perf PRIVATE
 )
 target_sources(perf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/perf/parse.cpp
+)
+target_allocator(perf
+  system_allocator
 )
 vcs_info(perf)

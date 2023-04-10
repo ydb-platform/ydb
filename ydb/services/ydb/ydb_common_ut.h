@@ -234,6 +234,7 @@ struct TTestOlap {
                     Columns { Name: "saved_at" Type: "Timestamp" }
                     Columns { Name: "request_id" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
+                    KeyColumnNames: "uid"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }

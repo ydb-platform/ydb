@@ -13,8 +13,6 @@ target_link_libraries(validation PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   contrib-libs-protoc
   api-protos-annotations
@@ -32,5 +30,9 @@ target_link_options(validation PRIVATE
 target_sources(validation PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/main.cpp
+)
+target_allocator(validation
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(validation)

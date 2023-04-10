@@ -10,6 +10,8 @@ namespace NYql::NDqs {
         NNodes::TDqPhyStage Stage;
     };
 
+    struct TGraphMeta {};
+
     struct TTaskInputMeta {
     };
 
@@ -25,5 +27,5 @@ namespace NYql::NDqs {
     using TTaskOutputType = NYql::NDq::TTaskOutputType;
     using TTaskInput = NYql::NDq::TTaskInput<TTaskInputMeta>;
     using TTask = NYql::NDq::TTask<TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta>;
-    using TDqsTasksGraph = NYql::NDq::TDqTasksGraph<TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta>;
+    using TDqsTasksGraph = NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta>;
 }

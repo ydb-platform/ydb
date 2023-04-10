@@ -682,6 +682,9 @@ public:
     TString GetErrorMessage() const;
 
     const NKikimrConfig::TAppConfig &GetConfig() const;
+    bool HasYamlConfig() const;
+    const TString& GetYamlConfig() const;
+    TMap<ui64, TString> GetVolatileYamlConfigs() const;
 
     const NKikimrClient::TConsoleResponse &Record() const;
 
@@ -697,7 +700,8 @@ public:
                                            const TString &tenant,
                                            const TString &nodeType,
                                            const TString& domain = "",
-                                           const TString& token = "") const;
+                                           const TString& token = "",
+                                           bool serveYaml = false) const;
 
 private:
     TNodeConfigurator(TKikimr& kikimr);
@@ -802,7 +806,8 @@ protected:
                                                const TString &tenant,
                                                const TString &nodeType,
                                                const TString& domain,
-                                               const TString& token = TString());
+                                               const TString& token = TString(),
+                                               bool serveYaml = false);
 
     template <typename T> static void DumpRequest(const T& pb) {
         if (DUMP_REQUESTS) {

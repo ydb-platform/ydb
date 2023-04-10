@@ -19,6 +19,7 @@
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
@@ -168,6 +169,7 @@ public:
     void Bootstrap() {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
+        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, HttpGateway);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
         LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);
@@ -207,7 +209,7 @@ public:
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
 
-        KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, nullptr, HttpGateway));
+        KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, nullptr, AsyncIoFactory));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
 
@@ -1233,7 +1235,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, HttpGateway, ModuleResolverState, Counters);
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, HttpGateway, AsyncIoFactory, ModuleResolverState, Counters);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration());
@@ -1355,6 +1357,7 @@ private:
     TActorId SpillingService;
     TActorId WhiteBoardService;
     NKikimrKqp::TKqpProxyNodeResources NodeResources;
+    NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 };
 
 } // namespace

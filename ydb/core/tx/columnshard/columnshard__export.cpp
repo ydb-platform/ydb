@@ -42,7 +42,7 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
             Y_VERIFY(externId.IsS3Blob());
             bool dropped = false;
 
-            if (!msg.Blobs.count(blobId)) {
+            if (!msg.Blobs.contains(blobId)) {
                 Y_VERIFY(!msg.ErrorStrings.empty());
                 continue; // not exported
             }

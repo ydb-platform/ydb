@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/formats/replace_key.h>
 #include "column_engine.h"
 #include "scalars.h"
 
@@ -20,51 +21,34 @@ class TCountersTable;
 class TColumnEngineForLogs : public IColumnEngine {
 public:
     struct TMark {
-        std::shared_ptr<arrow::Scalar> Border;
+        // TODO: Grouped marks. Share columns in TReplaceKey between multiple marks.
+        NArrow::TReplaceKey Border;
 
         explicit TMark(const std::shared_ptr<arrow::Scalar>& s)
-            : Border(s)
-        {
-            Y_VERIFY(Border);
-            Y_VERIFY_DEBUG(NArrow::IsGoodScalar(Border));
-        }
+            : Border(FromScalar(s))
+        {}
 
         explicit TMark(const std::shared_ptr<arrow::DataType>& type)
-            : Border(MinScalar(type))
-        {
-            Y_VERIFY_DEBUG(NArrow::IsGoodScalar(Border));
-        }
+            : Border(MinBorder(type))
+        {}
 
-        TMark(const TString& key, const std::shared_ptr<arrow::DataType>& type) {
-            Deserialize(key, type);
-            Y_VERIFY_DEBUG(NArrow::IsGoodScalar(Border));
-        }
+        TMark(const TString& key, const std::shared_ptr<arrow::DataType>& type)
+            : Border(FromScalar(DeserializeKeyScalar(key, type)))
+        {}
 
         TMark(const TMark& m) = default;
         TMark& operator = (const TMark& m) = default;
 
         bool operator == (const TMark& m) const {
-            return Border->Equals(*m.Border);
+            return Border == m.Border;
         }
 
-        bool operator < (const TMark& m) const {
-            return NArrow::ScalarLess(*Border, *m.Border);
-        }
-
-        bool operator <= (const TMark& m) const {
-            return Border->Equals(*m.Border) || NArrow::ScalarLess(*Border, *m.Border);
-        }
-
-        bool operator > (const TMark& m) const {
-            return !(*this <= m);
-        }
-
-        bool operator >= (const TMark& m) const {
-            return !(*this < m);
+        std::partial_ordering operator <=> (const TMark& m) const {
+            return Border <=> m.Border;
         }
 
         ui64 Hash() const {
-            return Border->hash();
+            return Border.Hash();
         }
 
         operator size_t () const {
@@ -76,11 +60,32 @@ public:
         }
 
         TString Serialize() const {
-            return SerializeKeyScalar(Border);
+            return SerializeKeyScalar(ToScalar(Border));
         }
 
         void Deserialize(const TString& key, const std::shared_ptr<arrow::DataType>& type) {
-            Border = DeserializeKeyScalar(key, type);
+            Border = FromScalar(DeserializeKeyScalar(key, type));
+        }
+
+        std::shared_ptr<arrow::Scalar> ToScalar() const {
+            return ToScalar(Border);
+        }
+
+    private:
+        static NArrow::TReplaceKey FromScalar(const std::shared_ptr<arrow::Scalar>& s) {
+            Y_VERIFY_DEBUG(NArrow::IsGoodScalar(s));
+            auto res = MakeArrayFromScalar(*s, 1);
+            Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
+            return NArrow::TReplaceKey(std::make_shared<NArrow::TArrayVec>(1, *res), 0);
+        }
+
+        static std::shared_ptr<arrow::Scalar> ToScalar(const NArrow::TReplaceKey& key) {
+            Y_VERIFY_DEBUG(key.Size() == 1);
+            auto& column = key.Column(0);
+            auto res = column.GetScalar(key.GetPosition());
+            Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
+            Y_VERIFY_DEBUG(NArrow::IsGoodScalar(*res));
+            return *res;
         }
 
         static std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type) {
@@ -89,6 +94,10 @@ public:
                 return std::make_shared<arrow::TimestampScalar>(0, type);
             }
             return NArrow::MinScalar(type);
+        }
+
+        static NArrow::TReplaceKey MinBorder(const std::shared_ptr<arrow::DataType>& type) {
+            return FromScalar(MinScalar(type));
         }
     };
 
@@ -133,7 +142,7 @@ public:
         TChanges(const TColumnEngineForLogs& engine,
                  TVector<NOlap::TInsertedData>&& blobsToIndex, const TCompactionLimits& limits)
             : TColumnEngineChanges(TColumnEngineChanges::INSERT)
-            , DefaultMark(engine.GetMarkType())
+            , DefaultMark(engine.GetDefaultMark())
         {
             Limits = limits;
             DataToIndex = std::move(blobsToIndex);
@@ -142,7 +151,7 @@ public:
         TChanges(const TColumnEngineForLogs& engine,
                  std::unique_ptr<TCompactionInfo>&& info, const TCompactionLimits& limits)
             : TColumnEngineChanges(TColumnEngineChanges::COMPACTION)
-            , DefaultMark(engine.GetMarkType())
+            , DefaultMark(engine.GetDefaultMark())
         {
             Limits = limits;
             CompactionInfo = std::move(info);
@@ -151,7 +160,7 @@ public:
         TChanges(const TColumnEngineForLogs& engine,
                  const TSnapshot& snapshot, const TCompactionLimits& limits)
             : TColumnEngineChanges(TColumnEngineChanges::CLEANUP)
-            , DefaultMark(engine.GetMarkType())
+            , DefaultMark(engine.GetDefaultMark())
         {
             Limits = limits;
             InitSnapshot = snapshot;
@@ -160,7 +169,7 @@ public:
         TChanges(const TColumnEngineForLogs& engine,
                  TColumnEngineChanges::EType type, const TSnapshot& applySnapshot)
             : TColumnEngineChanges(type)
-            , DefaultMark(engine.GetMarkType())
+            , DefaultMark(engine.GetDefaultMark())
         {
             ApplySnapshot = applySnapshot;
         }
@@ -262,11 +271,11 @@ public:
     }
 
     std::shared_ptr<arrow::Scalar> DeserializeMark(const TString& key) const override {
-        return TMark(key, MarkType).Border;
+        return TMark(key, MarkType).ToScalar();
     }
 
-    const std::shared_ptr<arrow::DataType>& GetMarkType() const {
-        return MarkType;
+    TMark GetDefaultMark() const {
+        return TMark(MarkType);
     }
 
     bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;

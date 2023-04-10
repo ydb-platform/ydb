@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/base/defs.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <compare>
 
 namespace NKikimr::NArrow {
 
@@ -18,15 +19,13 @@ public:
         return TypedHash(Column(0), Position, Column(0).type_id());
     }
 
-    // TODO: NULLs
     template<typename T>
     bool operator == (const TReplaceKeyTemplate<T>& key) const {
         Y_VERIFY_DEBUG(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
-            Y_VERIFY_DEBUG(Column(i).type_id() == key.Column(i).type_id());
-
-            if (!TypedEquals(Column(i), Position, key.Column(i), key.Position)) {
+            auto cmp = CompareColumnValue(i, key, i);
+            if (std::is_neq(cmp)) {
                 return false;
             }
         }
@@ -34,44 +33,48 @@ public:
     }
 
     template<typename T>
-    bool operator < (const TReplaceKeyTemplate<T>& key) const {
+    std::partial_ordering operator <=> (const TReplaceKeyTemplate<T>& key) const {
         Y_VERIFY_DEBUG(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
-            int cmp = CompareColumnValue(i, key, i);
-            if (cmp < 0) {
-                return true;
-            } else if (cmp > 0) {
-                return false;
+            auto cmp = CompareColumnValue(i, key, i);
+            if (std::is_neq(cmp)) {
+                return cmp;
             }
         }
-        return false;
+        return std::partial_ordering::equivalent;
+    }
+
+    template<typename T>
+    std::partial_ordering CompareNotNull(const TReplaceKeyTemplate<T>& key) const {
+        Y_VERIFY_DEBUG(Size() == key.Size());
+
+        for (int i = 0; i < Size(); ++i) {
+            auto cmp = CompareColumnValueNotNull(i, key, i);
+            if (std::is_neq(cmp)) {
+                return cmp;
+            }
+        }
+        return std::partial_ordering::equivalent;
     }
 
     template<typename T>
     bool LessNotNull(const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY_DEBUG(Size() == key.Size());
-
-        for (int i = 0; i < Size(); ++i) {
-            int cmp = CompareColumnValue(i, key, i, true);
-            if (cmp < 0) {
-                return true;
-            } else if (cmp > 0) {
-                return false;
-            }
-        }
-        return false;
+        return CompareNotNull(key) == std::partial_ordering::less;
     }
 
     template<typename T>
-    int CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn, bool notNull = false) const {
+    std::partial_ordering CompareColumnValueNotNull(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
         Y_VERIFY_DEBUG(Column(column).type_id() == key.Column(keyColumn).type_id());
 
-        if (notNull) {
-            return TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.Position);
-        } else {
-            return TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.Position);
-        }
+        return TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.Position);
+    }
+
+    template<typename T>
+    std::partial_ordering CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
+        Y_VERIFY_DEBUG(Column(column).type_id() == key.Column(keyColumn).type_id());
+
+        return TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.Position);
     }
 
     int Size() const {
@@ -91,58 +94,52 @@ private:
     int Position;
 
     static size_t TypedHash(const arrow::Array& ar, int pos, arrow::Type::type typeId) {
-        // TODO: more types
-        switch (typeId) {
-            case arrow::Type::TIMESTAMP:
-                return THash<size_t>()((size_t)static_cast<const arrow::TimestampArray&>(ar).Value(pos));
-            default:
-                break;
-        }
-        return 0;
-    }
-
-    static bool TypedEquals(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
-        arrow::Type::type typeId = lhs.type_id();
         switch (typeId) {
             case arrow::Type::NA:
             case arrow::Type::BOOL:
                 break;
             case arrow::Type::UINT8:
-                return EqualValue<arrow::UInt8Array>(lhs, lpos, rhs, rpos);
+                return THash<ui8>()(static_cast<const arrow::UInt8Array&>(ar).Value(pos));
             case arrow::Type::INT8:
-                return EqualValue<arrow::Int8Array>(lhs, lpos, rhs, rpos);
+                return THash<i8>()(static_cast<const arrow::Int8Array&>(ar).Value(pos));
             case arrow::Type::UINT16:
-                return EqualValue<arrow::UInt16Array>(lhs, lpos, rhs, rpos);
+                return THash<ui16>()(static_cast<const arrow::UInt16Array&>(ar).Value(pos));
             case arrow::Type::INT16:
-                return EqualValue<arrow::Int16Array>(lhs, lpos, rhs, rpos);
+                return THash<i16>()(static_cast<const arrow::Int16Array&>(ar).Value(pos));
             case arrow::Type::UINT32:
-                return EqualValue<arrow::UInt32Array>(lhs, lpos, rhs, rpos);
+                return THash<ui32>()(static_cast<const arrow::UInt32Array&>(ar).Value(pos));
             case arrow::Type::INT32:
-                return EqualValue<arrow::Int32Array>(lhs, lpos, rhs, rpos);
+                return THash<i32>()(static_cast<const arrow::Int32Array&>(ar).Value(pos));
             case arrow::Type::UINT64:
-                return EqualValue<arrow::UInt64Array>(lhs, lpos, rhs, rpos);
+                return THash<ui64>()(static_cast<const arrow::UInt64Array&>(ar).Value(pos));
             case arrow::Type::INT64:
-                return EqualValue<arrow::Int64Array>(lhs, lpos, rhs, rpos);
+                return THash<i64>()(static_cast<const arrow::Int64Array&>(ar).Value(pos));
             case arrow::Type::HALF_FLOAT:
                 break;
             case arrow::Type::FLOAT:
-                return EqualValue<arrow::FloatArray>(lhs, lpos, rhs, rpos);
+                return THash<float>()(static_cast<const arrow::FloatArray&>(ar).Value(pos));
             case arrow::Type::DOUBLE:
-                return EqualValue<arrow::DoubleArray>(lhs, lpos, rhs, rpos);
-            case arrow::Type::STRING:
-                return EqualView<arrow::StringArray>(lhs, lpos, rhs, rpos);
-            case arrow::Type::BINARY:
-                return EqualView<arrow::BinaryArray>(lhs, lpos, rhs, rpos);
+                return THash<double>()(static_cast<const arrow::DoubleArray&>(ar).Value(pos));
+            case arrow::Type::STRING: {
+                const auto& str = static_cast<const arrow::StringArray&>(ar).GetView(pos);
+                return THash<std::string_view>()(std::string_view(str.data(), str.size()));
+            }
+            case arrow::Type::BINARY: {
+                const auto& str = static_cast<const arrow::BinaryArray&>(ar).GetView(pos);
+                return THash<std::string_view>()(std::string_view(str.data(), str.size()));
+            }
             case arrow::Type::FIXED_SIZE_BINARY:
-                break;
             case arrow::Type::DATE32:
-                return EqualView<arrow::Date32Array>(lhs, lpos, rhs, rpos);
             case arrow::Type::DATE64:
-                return EqualView<arrow::Date64Array>(lhs, lpos, rhs, rpos);
+                break;
             case arrow::Type::TIMESTAMP:
-                return EqualValue<arrow::TimestampArray>(lhs, lpos, rhs, rpos);
+                return THash<i64>()(static_cast<const arrow::TimestampArray&>(ar).Value(pos));
+            case arrow::Type::TIME32:
+                return THash<i32>()(static_cast<const arrow::Time32Array&>(ar).Value(pos));
+            case arrow::Type::TIME64:
+                return THash<i64>()(static_cast<const arrow::Time64Array&>(ar).Value(pos));
             case arrow::Type::DURATION:
-                return EqualValue<arrow::DurationArray>(lhs, lpos, rhs, rpos);
+                return THash<i64>()(static_cast<const arrow::DurationArray&>(ar).Value(pos));
             case arrow::Type::DECIMAL256:
             case arrow::Type::DECIMAL:
             case arrow::Type::DENSE_UNION:
@@ -159,42 +156,41 @@ private:
             case arrow::Type::MAX_ID:
             case arrow::Type::SPARSE_UNION:
             case arrow::Type::STRUCT:
-            case arrow::Type::TIME32:
-            case arrow::Type::TIME64:
+                Y_FAIL("not implemented");
                 break;
         }
-        return false;
+        return 0;
     }
 
     template <bool notNull>
-    static int TypedCompare(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
+    static std::partial_ordering TypedCompare(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
         arrow::Type::type typeId = lhs.type_id();
         switch (typeId) {
             case arrow::Type::NA:
             case arrow::Type::BOOL:
                 break;
             case arrow::Type::UINT8:
-                return CompareValue<arrow::UInt8Array, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::UInt8Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::INT8:
-                return CompareValue<arrow::Int8Array, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::Int8Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::UINT16:
-                return CompareValue<arrow::UInt16Array, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::UInt16Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::INT16:
-                return CompareValue<arrow::Int16Array, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::Int16Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::UINT32:
-                return CompareValue<arrow::UInt32Array, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::UInt32Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::INT32:
-                return CompareValue<arrow::Int32Array, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::Int32Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::UINT64:
-                return CompareValue<arrow::UInt64Array, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::UInt64Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::INT64:
-                return CompareValue<arrow::Int64Array, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::Int64Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::HALF_FLOAT:
                 break;
             case arrow::Type::FLOAT:
-                return CompareValue<arrow::FloatArray, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::FloatArray, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::DOUBLE:
-                return CompareValue<arrow::DoubleArray, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::DoubleArray, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::STRING:
                 return CompareView<arrow::StringArray, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::BINARY:
@@ -204,13 +200,13 @@ private:
             case arrow::Type::DATE64:
                 break;
             case arrow::Type::TIMESTAMP:
-                return CompareValue<arrow::TimestampArray, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::TimestampArray, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::TIME32:
-                return CompareValue<arrow::Time32Array, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::Time32Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::TIME64:
-                return CompareValue<arrow::Time64Array, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::Time64Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::DURATION:
-                return CompareValue<arrow::DurationArray, notNull>(lhs, lpos, rhs, rpos);
+                return CompareView<arrow::DurationArray, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::DECIMAL256:
             case arrow::Type::DECIMAL:
             case arrow::Type::DENSE_UNION:
@@ -227,40 +223,14 @@ private:
             case arrow::Type::MAX_ID:
             case arrow::Type::SPARSE_UNION:
             case arrow::Type::STRUCT:
+                Y_FAIL("not implemented");
                 break;
         }
-        return false;
-    }
-
-    // TODO: NULLs
-    template <typename T>
-    static bool EqualValue(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
-        auto& left = static_cast<const T&>(lhs);
-        auto& right = static_cast<const T&>(rhs);
-        return left.Value(lpos) == right.Value(rpos);
-    }
-
-    // TODO: NULLs
-    template <typename T>
-    static bool EqualView(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
-        auto& left = static_cast<const T&>(lhs);
-        auto& right = static_cast<const T&>(rhs);
-        return left.GetView(lpos) == right.GetView(rpos);
+        return std::partial_ordering::equivalent;
     }
 
     template <typename T, bool notNull>
-    static int CompareValue(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
-        auto& left = static_cast<const T&>(lhs);
-        auto& right = static_cast<const T&>(rhs);
-        if constexpr (notNull) {
-            return CompareValueNotNull(left.Value(lpos), right.Value(rpos));
-        } else {
-            return CompareValue(left.Value(lpos), right.Value(rpos), left.IsNull(lpos), right.IsNull(rpos));
-        }
-    }
-
-    template <typename T, bool notNull>
-    static int CompareView(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
+    static std::partial_ordering CompareView(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
         auto& left = static_cast<const T&>(lhs);
         auto& right = static_cast<const T&>(rhs);
         if constexpr (notNull) {
@@ -271,34 +241,30 @@ private:
     }
 
     template <typename T>
-    static int CompareValue(const T& x, const T& y, bool xIsNull, bool yIsNull) {
+    static std::partial_ordering CompareValue(const T& x, const T& y, bool xIsNull, bool yIsNull) {
+        // TODO: std::partial_ordering::unordered for both nulls?
         if (xIsNull) {
-            return -1;
+            return std::partial_ordering::less;
         }
         if (yIsNull) {
-            return 1;
+            return std::partial_ordering::greater;
         }
         return CompareValueNotNull(x, y);
     }
 
     template <typename T>
-    static int CompareValueNotNull(const T& x, const T& y) {
+    static std::partial_ordering CompareValueNotNull(const T& x, const T& y) {
         if constexpr (std::is_same_v<T, arrow::util::string_view>) {
             size_t minSize = (x.size() < y.size()) ? x.size() : y.size();
             int cmp = memcmp(x.data(), y.data(), minSize);
             if (cmp < 0) {
-                return -1; // avoid INT_MIN as negative cmp. We require "-negative is positive" for result.
+                return std::partial_ordering::less;
             } else if (cmp > 0) {
-                return 1;
+                return std::partial_ordering::greater;
             }
             return CompareValueNotNull(x.size(), y.size());
         } else {
-            if (x < y) {
-                return -1;
-            } else if (x > y) {
-                return 1;
-            }
-            return 0;
+            return x <=> y;
         }
     }
 };

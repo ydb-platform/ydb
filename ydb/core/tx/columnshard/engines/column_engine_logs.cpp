@@ -351,7 +351,7 @@ SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
                 // Just take the number of elements in the key column for the last granule.
                 ? keyColumn->length()
                 // Locate position of the next granule in the key.
-                : NArrow::LowerBound(keyColumn, *granules[i + 1].first.Border, offset);
+                : NArrow::LowerBound(keyColumn, *granules[i + 1].first.ToScalar(), offset); // TODO: avoid ToScalar()
 
             if (const i64 size = end - offset) {
                 Y_VERIFY(out.emplace(granules[i].second, batch->Slice(offset, size)).second);
@@ -1108,7 +1108,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
     for (auto& [granule, p] : changes.NewGranules) {
         ui64 pathId = p.first;
         TMark mark = p.second;
-        TGranuleRecord rec(pathId, granule, snapshot, mark.Border);
+        TGranuleRecord rec(pathId, granule, snapshot, mark.ToScalar());
 
         if (!SetGranule(rec, apply)) {
             LOG_S_ERROR("Cannot insert granule " << rec << " at tablet " << TabletId);
@@ -1253,7 +1253,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             if (Granules.contains(granule)) {
                 granuleStart = Granules[granule]->Record.Mark;
             } else {
-                granuleStart = changes.NewGranules.find(granule)->second.second.Border;
+                granuleStart = changes.NewGranules.find(granule)->second.second.ToScalar();
             }
             auto portionStart = portionInfo.PkStart();
             Y_VERIFY(portionStart);
@@ -1794,7 +1794,7 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
 
         batchOffsets.push_back(0);
         for (auto& border : borders) {
-            int offset = NArrow::LowerBound(keyColumn, *border.Border, batchOffsets.back());
+            int offset = NArrow::LowerBound(keyColumn, *border.ToScalar(), batchOffsets.back());
             Y_VERIFY(offset >= batchOffsets.back());
             batchOffsets.push_back(offset);
         }

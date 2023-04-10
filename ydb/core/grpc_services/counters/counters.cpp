@@ -483,13 +483,15 @@ class TGRpcDbCountersRegistry {
 
 public:
     void Initialize(TActorSystem* actorSystem) {
-        if (Y_LIKELY(ActorSystem)) {
-            return;
-        }
-        ActorSystem = actorSystem;
+        with_lock(InitLock) {
+            if (Y_LIKELY(ActorSystem)) {
+                return;
+            }
+            ActorSystem = actorSystem;
 
-        auto callback = MakeIntrusive<TGRpcDbWatcherCallback>();
-        DbWatcherActorId = ActorSystem->Register(NSysView::CreateDbWatcherActor(callback));
+            auto callback = MakeIntrusive<TGRpcDbWatcherCallback>();
+            DbWatcherActorId = ActorSystem->Register(NSysView::CreateDbWatcherActor(callback));
+        }
     }
 
     TYdbDbCounterBlockPtr GetCounterBlock(
@@ -529,6 +531,7 @@ private:
     TConcurrentRWHashMap<TString, TIntrusivePtr<TGRpcDbCounters>, 256> DbCounters;
     TActorSystem* ActorSystem = {};
     TActorId DbWatcherActorId;
+    TMutex InitLock;
 };
 
 

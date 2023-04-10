@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(topic_workload)
 target_link_libraries(topic_workload PUBLIC

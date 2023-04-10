@@ -53,13 +53,13 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config) {
         .StoreResult(&ConsumerCount);
     config.Opts->AddLongOption('m', "message-size", "Message size.")
         .DefaultValue(10_KB)
-        .StoreResult(&MessageSize);
+        .StoreMappedResultT<TString>(&MessageSize, &TCommandWorkloadTopicParams::StrToBytes);
     config.Opts->AddLongOption("message-rate", "Total message rate for all producer threads (messages per second). Exclusive with --byte-rate.")
         .DefaultValue(0)
         .StoreResult(&MessageRate);
     config.Opts->AddLongOption("byte-rate", "Total message rate for all producer threads (bytes per second). Exclusive with --message-rate.")
         .DefaultValue(0)
-        .StoreResult(&ByteRate);
+        .StoreMappedResultT<TString>(&ByteRate, &TCommandWorkloadTopicParams::StrToBytes);
     config.Opts->AddLongOption("codec", PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", InitAllowedCodecs()))
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))

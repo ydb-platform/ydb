@@ -55,7 +55,7 @@ struct TPortionInfo {
     bool Produced() const { return Meta.Produced != TPortionMeta::UNSPECIFIED; }
     bool Valid() const { return !Empty() && Produced() && HasMinMax(FirstPkColumn); }
     bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
-    bool CanHaveDups() const { return !Valid(); /* || IsInserted(); */ }
+    bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted(); }
     size_t NumRecords() const { return Records.size(); }
 

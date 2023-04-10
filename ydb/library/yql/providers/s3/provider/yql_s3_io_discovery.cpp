@@ -721,7 +721,11 @@ private:
             config.Columns = partitionedBy;
             config.SchemaTypeNode = schema->ChildPtr(1);
             if (!projection.empty()) {
-                config.Generator = CreatePathGenerator(projection, partitionedBy, GetDataSlotColumns(*schema, ctx));
+                config.Generator = CreatePathGenerator(
+                    projection,
+                    partitionedBy,
+                    GetDataSlotColumns(*schema, ctx),
+                    State_->Configuration->GeneratorPathsLimit);
                 if (!ValidateProjection(projectionPos, config.Generator, partitionedBy, ctx)) {
                     return false;
                 }

@@ -389,6 +389,7 @@ message TS3GatewayConfig {
     optional uint64 ListingCallbackThreadCount = 12;
     optional uint64 ListingCallbackPerThreadQueueSize = 13;
     optional uint64 RegexpCacheSize = 14;
+    optional uint64 GeneratorPathsLimit = 15;
 
     repeated TAttr DefaultSettings = 100;
 }

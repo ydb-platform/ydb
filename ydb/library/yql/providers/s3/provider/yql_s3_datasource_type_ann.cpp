@@ -114,8 +114,12 @@ public:
         return true;
     }
 
-    bool ValidateProjection(const TString& projection, const std::vector<TString>& partitionedBy) {
-        auto generator = NPathGenerator::CreatePathGenerator(projection, partitionedBy, DataSlotColumns);
+    bool ValidateProjection(
+        const TString& projection,
+        const std::vector<TString>& partitionedBy,
+        size_t pathsLimit) {
+        auto generator = NPathGenerator::CreatePathGenerator(
+            projection, partitionedBy, DataSlotColumns, pathsLimit);
         TMap<TString, NPathGenerator::IPathGenerator::EType> projectionColumns;
         for (const auto& column: generator->GetConfig().Rules) {
             projectionColumns[column.Name] = column.Type;
@@ -224,8 +228,13 @@ private:
     TMap<TString, NUdf::EDataSlot> DataSlotColumns;
 };
 
-
-bool ValidateProjectionTypes(const TStructExprType* columnsType, const TString& projection, const std::vector<TString>& partitionedBy, const TExprNode::TPtr& input, TExprContext& ctx) {
+bool ValidateProjectionTypes(
+    const TStructExprType* columnsType,
+    const TString& projection,
+    const std::vector<TString>& partitionedBy,
+    const TExprNode::TPtr& input,
+    TExprContext& ctx,
+    size_t pathsLimit) {
     if (!columnsType) {
         return true;
     }
@@ -242,7 +251,7 @@ bool ValidateProjectionTypes(const TStructExprType* columnsType, const TString& 
     }
 
     try {
-        if (!typeValidator.ValidateProjection(projection, partitionedBy)) {
+        if (!typeValidator.ValidateProjection(projection, partitionedBy, pathsLimit)) {
             return false;
         }
     } catch (...) {
@@ -434,7 +443,13 @@ public:
             }
         }
 
-        if (!ValidateProjectionTypes(rowType->Cast<TStructExprType>(), projection, partitionedBy, input, ctx)) {
+        if (!ValidateProjectionTypes(
+                rowType->Cast<TStructExprType>(),
+                projection,
+                partitionedBy,
+                input,
+                ctx,
+                State_->Configuration->GeneratorPathsLimit)) {
             return TStatus::Error;
         }
 

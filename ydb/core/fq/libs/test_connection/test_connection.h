@@ -44,6 +44,7 @@ NActors::TActorId TestConnectionActorId();
 NActors::IActor* CreateTestConnectionActor(
         const NConfig::TTestConnectionConfig& config,
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
+        const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& commonConfig,
         const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
         const NFq::TYqSharedResources::TPtr& sharedResources,

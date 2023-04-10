@@ -57,6 +57,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     ui64 RegexpCacheSize;
     bool AllowLocalFiles;
     bool AllowConcurrentListings;
+    ui64 GeneratorPathsLimit;
 };
 
 } // NYql

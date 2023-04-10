@@ -37,20 +37,23 @@ public:
                 TLogoBlobID id;
                 TString data;
                 std::tie(id, data) = makeBlob();
-                switch (const NKikimrProto::EReplyStatus status = PutWithResult(id, data, tactic)) {
+                TAutoPtr<TEvBlobStorage::TEvPutResult> result = PutWithResult(id, data, tactic);
+                switch (result->Status) {
                     case NKikimrProto::OK:
                         // whenever the PUT request finishes with success, the blob must be actually written and should
                         // be restored in any case while fitting failure model
+                        Y_ASSERT(fitsFailModel);
                         dataMap[id] = data;
                         break;
 
                     case NKikimrProto::ERROR:
                         // ERROR can only be generated if the failure model is exceeded
                         Y_ASSERT(!fitsFailModel);
+                        UNIT_ASSERT_VALUES_UNEQUAL("", result->ErrorReason);
                         break;
 
                     default:
-                        Y_FAIL("unexpected status %s", NKikimrProto::EReplyStatus_Name(status).data());
+                        Y_FAIL("unexpected status %s", NKikimrProto::EReplyStatus_Name(result->Status).data());
                 }
             };
 

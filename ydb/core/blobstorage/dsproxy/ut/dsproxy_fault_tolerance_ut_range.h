@@ -33,7 +33,7 @@ public:
                 buffer += b;
                 TLogoBlobID id(tabletId, generation, step, 0 /*channel*/, buffer.size(), 0);
                 if (defaultExpectedStatus == NKikimrProto::OK) {
-                    UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::OK, PutWithResult(id, buffer, TEvBlobStorage::TEvPut::TacticMaxThroughput));
+                    UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::OK, PutWithResult(id, buffer, TEvBlobStorage::TEvPut::TacticMaxThroughput)->Status);
                 } else {
                     PutWithResult(id, buffer, TEvBlobStorage::TEvPut::TacticMaxThroughput);
                 }

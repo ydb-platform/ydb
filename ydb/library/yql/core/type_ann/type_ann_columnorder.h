@@ -14,6 +14,7 @@ IGraphTransformer::TStatus OrderForSqlProject(const TExprNode::TPtr& node, TExpr
 IGraphTransformer::TStatus OrderForMergeExtend(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
 IGraphTransformer::TStatus OrderForUnionAll(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
 IGraphTransformer::TStatus OrderForEquiJoin(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
+IGraphTransformer::TStatus OrderForCalcOverWindow(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
 
 IGraphTransformer::TStatus OrderFromFirst(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
 IGraphTransformer::TStatus OrderFromFirstAndOutputType(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);

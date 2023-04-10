@@ -12000,6 +12000,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ColumnOrderFunctions[RightName] = &OrderFromFirst;
         ColumnOrderFunctions["UnionAll"] = &OrderForUnionAll;
         ColumnOrderFunctions["EquiJoin"] = &OrderForEquiJoin;
+        ColumnOrderFunctions["CalcOverWindow"] = &OrderForCalcOverWindow;
 
         ColumnOrderFunctions["RemovePrefixMembers"] = &OrderFromFirstAndOutputType;
         ColumnOrderFunctions["Sort"] = ColumnOrderFunctions["Take"] = ColumnOrderFunctions["Skip"] =

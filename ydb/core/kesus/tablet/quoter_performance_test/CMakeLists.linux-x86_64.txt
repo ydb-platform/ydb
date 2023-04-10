@@ -18,8 +18,6 @@ target_link_libraries(quoter_performance_test PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   library-cpp-getopt
   cpp-testing-unittest
@@ -39,5 +37,9 @@ target_link_options(quoter_performance_test PRIVATE
 target_sources(quoter_performance_test PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/quoter_performance_test/main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/ut_helpers.cpp
+)
+target_allocator(quoter_performance_test
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(quoter_performance_test)

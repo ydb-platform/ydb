@@ -18,7 +18,6 @@ target_link_libraries(schemeshard-ut_external_data_source_reboots PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-tx-schemeshard
   library-cpp-getopt
@@ -81,5 +80,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(schemeshard-ut_external_data_source_reboots
+  cpp-malloc-jemalloc
 )
 vcs_info(schemeshard-ut_external_data_source_reboots)

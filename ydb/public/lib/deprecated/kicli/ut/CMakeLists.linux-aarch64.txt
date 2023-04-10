@@ -18,7 +18,6 @@ target_link_libraries(ydb-public-lib-deprecated-kicli-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   lib-deprecated-kicli
   ydb-core-client
@@ -76,5 +75,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-public-lib-deprecated-kicli-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-public-lib-deprecated-kicli-ut)

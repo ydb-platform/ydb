@@ -11,7 +11,6 @@ add_executable(btree_benchmark)
 target_link_libraries(btree_benchmark PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
   library-cpp-cpuid_check
   testing-benchmark-main
   cpp-threading-skip_list
@@ -19,5 +18,8 @@ target_link_libraries(btree_benchmark PUBLIC
 )
 target_sources(btree_benchmark PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/util/btree_benchmark/main.cpp
+)
+target_allocator(btree_benchmark
+  library-cpp-lfalloc
 )
 vcs_info(btree_benchmark)

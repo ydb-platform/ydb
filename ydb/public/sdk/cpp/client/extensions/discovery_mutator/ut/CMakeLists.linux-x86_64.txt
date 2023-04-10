@@ -15,8 +15,6 @@ target_link_libraries(client-extensions-discovery_mutator-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   client-extensions-discovery_mutator
@@ -74,5 +72,9 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(client-extensions-discovery_mutator-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(client-extensions-discovery_mutator-ut)

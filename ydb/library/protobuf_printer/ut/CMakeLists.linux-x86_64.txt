@@ -27,8 +27,6 @@ target_link_libraries(ydb-library-protobuf_printer-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-library-protobuf_printer
@@ -82,6 +80,10 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-protobuf_printer-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 target_proto_addincls(ydb-library-protobuf_printer-ut
   ./

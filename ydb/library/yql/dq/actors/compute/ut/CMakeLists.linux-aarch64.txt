@@ -15,7 +15,6 @@ target_link_libraries(ydb-library-yql-dq-actors-compute-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   dq-actors-compute
   cpp-testing-unittest
@@ -69,5 +68,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-dq-actors-compute-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-dq-actors-compute-ut)

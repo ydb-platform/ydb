@@ -18,8 +18,6 @@ target_include_directories(llvm-tblgen PRIVATE
 target_link_libraries(llvm-tblgen PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   contrib-libs-llvm12
   llvm12-lib-Demangle
   llvm12-lib-Support
@@ -89,5 +87,9 @@ target_sources(llvm-tblgen PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/utils/TableGen/X86FoldTablesEmitter.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/utils/TableGen/X86ModRMFilters.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/utils/TableGen/X86RecognizableInstr.cpp
+)
+target_allocator(llvm-tblgen
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(llvm-tblgen)

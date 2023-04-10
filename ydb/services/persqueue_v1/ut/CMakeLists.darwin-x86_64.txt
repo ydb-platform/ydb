@@ -18,7 +18,6 @@ target_include_directories(ydb-services-persqueue_v1-ut PRIVATE
 target_link_libraries(ydb-services-persqueue_v1-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-services-persqueue_v1
@@ -91,5 +90,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-services-persqueue_v1-ut
+  system_allocator
 )
 vcs_info(ydb-services-persqueue_v1-ut)

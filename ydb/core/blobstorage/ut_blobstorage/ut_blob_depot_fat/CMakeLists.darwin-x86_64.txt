@@ -14,7 +14,6 @@ target_include_directories(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
 target_link_libraries(blobstorage-ut_blobstorage-ut_blob_depot_fat PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   blobstorage-ut_blobstorage-lib
@@ -70,5 +69,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   3600
+)
+target_allocator(blobstorage-ut_blobstorage-ut_blob_depot_fat
+  system_allocator
 )
 vcs_info(blobstorage-ut_blobstorage-ut_blob_depot_fat)

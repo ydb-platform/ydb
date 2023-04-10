@@ -15,7 +15,6 @@ target_link_libraries(packer PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   library-yql-minikql
   yql-minikql-comp_nodes
   yql-minikql-computation
@@ -36,5 +35,8 @@ target_link_options(packer PRIVATE
 )
 target_sources(packer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/packer/packer.cpp
+)
+target_allocator(packer
+  cpp-malloc-jemalloc
 )
 vcs_info(packer)

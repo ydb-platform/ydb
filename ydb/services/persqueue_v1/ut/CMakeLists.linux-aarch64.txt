@@ -19,7 +19,6 @@ target_link_libraries(ydb-services-persqueue_v1-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   ydb-services-persqueue_v1
   library-cpp-getopt
@@ -94,5 +93,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-services-persqueue_v1-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-services-persqueue_v1-ut)

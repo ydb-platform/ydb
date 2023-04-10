@@ -19,7 +19,6 @@ target_link_libraries(ydb-library-mkql_proto-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   ydb-library-mkql_proto
   mkql_proto-ut-helpers
@@ -78,5 +77,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   150
+)
+target_allocator(ydb-library-mkql_proto-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-mkql_proto-ut)

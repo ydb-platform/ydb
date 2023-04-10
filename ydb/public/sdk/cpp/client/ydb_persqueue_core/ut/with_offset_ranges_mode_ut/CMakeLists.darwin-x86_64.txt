@@ -14,7 +14,6 @@ target_compile_options(with_offset_ranges_mode_ut PRIVATE
 target_link_libraries(with_offset_ranges_mode_ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   cpp-testing-gmock_in_unittest
@@ -76,5 +75,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(with_offset_ranges_mode_ut
+  system_allocator
 )
 vcs_info(with_offset_ranges_mode_ut)

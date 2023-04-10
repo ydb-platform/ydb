@@ -15,7 +15,6 @@ target_link_libraries(ydb-library-yql-sql-pg-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   yql-sql-pg
   udf-service-exception_policy
@@ -66,5 +65,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-sql-pg-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-sql-pg-ut)

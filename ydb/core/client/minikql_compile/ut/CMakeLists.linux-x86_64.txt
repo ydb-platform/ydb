@@ -18,7 +18,6 @@ target_link_libraries(ydb-core-client-minikql_compile-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-client-minikql_compile
@@ -76,5 +75,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-client-minikql_compile-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-client-minikql_compile-ut)

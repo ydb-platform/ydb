@@ -14,7 +14,6 @@ target_include_directories(ydb-public-lib-idx_test-ut PRIVATE
 target_link_libraries(ydb-public-lib-idx_test-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   public-lib-idx_test
@@ -68,5 +67,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-public-lib-idx_test-ut
+  system_allocator
 )
 vcs_info(ydb-public-lib-idx_test-ut)

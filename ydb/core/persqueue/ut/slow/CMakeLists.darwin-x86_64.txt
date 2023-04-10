@@ -17,7 +17,6 @@ target_include_directories(ydb-core-persqueue-ut-slow PRIVATE
 target_link_libraries(ydb-core-persqueue-ut-slow PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-persqueue
@@ -76,5 +75,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   3600
+)
+target_allocator(ydb-core-persqueue-ut-slow
+  system_allocator
 )
 vcs_info(ydb-core-persqueue-ut-slow)

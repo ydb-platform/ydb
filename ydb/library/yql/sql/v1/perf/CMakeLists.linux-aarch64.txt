@@ -12,7 +12,6 @@ target_link_libraries(perf PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   udf-service-exception_policy
   library-yql-sql
   yql-sql-v1
@@ -30,5 +29,8 @@ target_link_options(perf PRIVATE
 )
 target_sources(perf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/perf/parse.cpp
+)
+target_allocator(perf
+  cpp-malloc-jemalloc
 )
 vcs_info(perf)

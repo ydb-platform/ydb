@@ -12,8 +12,6 @@ target_link_libraries(secondary_index_builtin PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   library-cpp-getopt
   cpp-client-ydb_table
@@ -36,5 +34,9 @@ target_sources(secondary_index_builtin PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_select.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_drop.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_select_join.cpp
+)
+target_allocator(secondary_index_builtin
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(secondary_index_builtin)

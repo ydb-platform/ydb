@@ -15,7 +15,6 @@ target_link_libraries(presort PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   library-cpp-presort
   library-yql-minikql
   yql-minikql-computation
@@ -36,5 +35,8 @@ target_link_options(presort PRIVATE
 )
 target_sources(presort PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/presort/presort.cpp
+)
+target_allocator(presort
+  cpp-malloc-jemalloc
 )
 vcs_info(presort)

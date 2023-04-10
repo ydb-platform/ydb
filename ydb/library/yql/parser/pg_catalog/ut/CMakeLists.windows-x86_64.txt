@@ -18,7 +18,6 @@ target_include_directories(ydb-library-yql-parser-pg_catalog-ut PRIVATE
 target_link_libraries(ydb-library-yql-parser-pg_catalog-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-parser-pg_catalog
@@ -64,5 +63,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-parser-pg_catalog-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-parser-pg_catalog-ut)

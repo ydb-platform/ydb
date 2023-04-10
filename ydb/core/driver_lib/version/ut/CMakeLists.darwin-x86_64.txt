@@ -14,7 +14,6 @@ target_include_directories(ydb-core-driver_lib-version-ut PRIVATE
 target_link_libraries(ydb-core-driver_lib-version-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   version
@@ -62,5 +61,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-driver_lib-version-ut
+  system_allocator
 )
 vcs_info(ydb-core-driver_lib-version-ut)

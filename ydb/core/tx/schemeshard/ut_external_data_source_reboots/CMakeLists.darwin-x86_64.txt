@@ -17,7 +17,6 @@ target_include_directories(schemeshard-ut_external_data_source_reboots PRIVATE
 target_link_libraries(schemeshard-ut_external_data_source_reboots PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-schemeshard
@@ -78,5 +77,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(schemeshard-ut_external_data_source_reboots
+  system_allocator
 )
 vcs_info(schemeshard-ut_external_data_source_reboots)

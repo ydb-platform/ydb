@@ -19,7 +19,6 @@ target_link_libraries(ydb-library-yql-parser-pg_wrapper-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   yql-parser-pg_wrapper
   yql-minikql-computation
@@ -83,5 +82,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-library-yql-parser-pg_wrapper-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-parser-pg_wrapper-ut)

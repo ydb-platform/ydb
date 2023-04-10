@@ -18,8 +18,6 @@ target_link_libraries(ydb-core-tx-columnshard-ut_schema PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-columnshard
@@ -84,5 +82,9 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-tx-columnshard-ut_schema
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-tx-columnshard-ut_schema)

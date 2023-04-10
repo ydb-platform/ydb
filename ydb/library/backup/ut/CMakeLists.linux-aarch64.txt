@@ -15,7 +15,6 @@ target_link_libraries(ydb-library-backup-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   kikimr_backup
   cpp-string_utils-quote
@@ -72,5 +71,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   60
+)
+target_allocator(ydb-library-backup-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-backup-ut)

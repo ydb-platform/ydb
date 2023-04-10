@@ -18,7 +18,6 @@ target_link_libraries(ydb-library-yql-minikql-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   library-yql-minikql
   libs-apache-arrow
@@ -91,5 +90,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-library-yql-minikql-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-minikql-ut)

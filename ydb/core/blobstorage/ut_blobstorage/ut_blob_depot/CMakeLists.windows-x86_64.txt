@@ -14,7 +14,6 @@ target_include_directories(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PRI
 target_link_libraries(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   blobstorage-ut_blobstorage-lib
@@ -56,5 +55,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot
+  system_allocator
 )
 vcs_info(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot)

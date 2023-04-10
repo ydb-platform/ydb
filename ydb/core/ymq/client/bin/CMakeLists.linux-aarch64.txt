@@ -12,7 +12,6 @@ target_link_libraries(sqs PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   library-cpp-getopt
   ymq-client-cpp
   core-ymq-proto
@@ -29,5 +28,8 @@ target_link_options(sqs PRIVATE
 )
 target_sources(sqs PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp
+)
+target_allocator(sqs
+  cpp-malloc-jemalloc
 )
 vcs_info(sqs)

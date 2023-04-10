@@ -15,7 +15,6 @@ target_include_directories(library-cpp-actors-dnsresolver-ut PRIVATE
 target_link_libraries(library-cpp-actors-dnsresolver-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   cpp-actors-dnsresolver
@@ -65,5 +64,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(library-cpp-actors-dnsresolver-ut
+  system_allocator
 )
 vcs_info(library-cpp-actors-dnsresolver-ut)

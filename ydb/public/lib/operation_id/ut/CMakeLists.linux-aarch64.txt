@@ -15,7 +15,6 @@ target_link_libraries(ydb-public-lib-operation_id-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   public-lib-operation_id
   cpp-testing-unittest
@@ -65,5 +64,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-public-lib-operation_id-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-public-lib-operation_id-ut)

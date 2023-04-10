@@ -14,7 +14,6 @@ target_include_directories(ydb-library-login-ut PRIVATE
 target_link_libraries(ydb-library-login-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-library-login
@@ -54,5 +53,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-login-ut
+  system_allocator
 )
 vcs_info(ydb-library-login-ut)

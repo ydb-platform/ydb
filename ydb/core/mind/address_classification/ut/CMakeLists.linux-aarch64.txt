@@ -18,7 +18,6 @@ target_link_libraries(ydb-core-mind-address_classification-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-mind-address_classification
   cpp-actors-http
@@ -76,5 +75,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-mind-address_classification-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-mind-address_classification-ut)

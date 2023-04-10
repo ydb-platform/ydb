@@ -17,7 +17,6 @@ target_include_directories(ydb-library-yql-minikql-ut PRIVATE
 target_link_libraries(ydb-library-yql-minikql-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   library-yql-minikql
@@ -81,5 +80,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-library-yql-minikql-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-minikql-ut)

@@ -18,7 +18,6 @@ target_link_libraries(ydb-core-kqp-ut-federated_query PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   ydb-core-kqp
   libs-aws-sdk-cpp-aws-cpp-sdk-s3
@@ -77,5 +76,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-kqp-ut-federated_query
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-kqp-ut-federated_query)

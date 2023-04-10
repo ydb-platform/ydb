@@ -15,8 +15,6 @@ target_link_libraries(presort PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   library-cpp-presort
   library-yql-minikql
@@ -38,5 +36,9 @@ target_link_options(presort PRIVATE
 )
 target_sources(presort PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/presort/presort.cpp
+)
+target_allocator(presort
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(presort)

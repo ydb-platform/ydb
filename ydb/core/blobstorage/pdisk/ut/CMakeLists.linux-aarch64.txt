@@ -15,7 +15,6 @@ target_link_libraries(ydb-core-blobstorage-pdisk-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-blobstorage-pdisk
   library-cpp-getopt
@@ -87,5 +86,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-blobstorage-pdisk-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-blobstorage-pdisk-ut)

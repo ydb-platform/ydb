@@ -14,7 +14,6 @@ target_include_directories(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PRIVAT
 target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   vdisk-hulldb-compstrat
@@ -65,5 +64,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut
+  system_allocator
 )
 vcs_info(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut)

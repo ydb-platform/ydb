@@ -3,6 +3,7 @@
 #include "ut_helpers.h"
 #include "sentinel.h"
 
+#include <ydb/core/base/tabletid.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -531,6 +532,8 @@ static void SetupServices(TTestActorRuntime &runtime,
 TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         : TTestBasicRuntime(options.NodeCount, options.DataCenterCount, false)
         , CmsId(MakeCmsID(0))
+        , ProcessQueueCount(0)
+        , CmsTabletActor(TActorId())
 {
     TFakeNodeWhiteboardService::Config.MutableResponse()->SetSuccess(true);
     TFakeNodeWhiteboardService::Config.MutableResponse()->ClearStatus();
@@ -542,19 +545,39 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure);
 
-    // Set observer to pass fake base blobstorage config.
-    auto redirectConfigRequest = [](TTestActorRuntimeBase&,
+    SetObserverFunc([&ProcessQueueCount = ProcessQueueCount, &CmsTabletActor = CmsTabletActor](TTestActorRuntimeBase&,
                                     TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
-            || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest
-            ) {
+            || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
                 event = IEventHandle::Forward(event, fakeId);
         }
+
+        if (event->GetTypeRewrite() == TCms::TEvPrivate::EvProcessQueue
+            && event->Recipient == CmsTabletActor) {
+            ++ProcessQueueCount;
+        }
+
+        if (event->GetTypeRewrite() == TCms::TEvPrivate::EvUpdateClusterInfo
+            || event->GetTypeRewrite() == TEvCms::EvClusterStateRequest
+            || event->GetTypeRewrite() == TEvCms::EvNotification
+            || event->GetTypeRewrite() == TEvCms::EvResetMarkerRequest
+            || event->GetTypeRewrite() == TEvCms::EvSetMarkerRequest
+            || event->GetTypeRewrite() == TEvCms::EvGetClusterInfoRequest) {
+            --ProcessQueueCount;
+        }
+
         return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    SetObserverFunc(redirectConfigRequest);
+    });
+
+    SetRegistrationObserverFunc([&CmsTabletActor = CmsTabletActor](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+        if (TypeName(*runtime.FindActor(actorId)) == "NKikimr::NCms::TCms") {
+            CmsTabletActor = actorId;
+        }
+
+        runtime.DefaultRegistrationObserver(runtime, parentId, actorId);
+    });
 
     using namespace NMalloc;
     TMallocInfo mallocInfo = MallocInfo();
@@ -571,6 +594,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     SetupServices(*this, options.Tenants);
 
     Sender = AllocateEdgeActor();
+    ClientId = TActorId();
 
     NKikimrCms::TCmsConfig cmsConfig;
     cmsConfig.MutableTenantLimits()->SetDisabledNodesRatioLimit(0);
@@ -640,7 +664,17 @@ void TCmsTestEnv::SendRestartCms()
 
 void TCmsTestEnv::SendToCms(IEventBase *event)
 {
-    SendToPipe(CmsId, Sender, event, 0, GetPipeConfigWithRetries());
+    SendToPipe(CmsId, Sender, event, 0, GetPipeConfigWithRetries(), ClientId);
+}
+
+void TCmsTestEnv::CreateDefaultCmsPipe()
+{
+    ClientId = ConnectToPipe(CmsId, Sender, 0, GetPipeConfigWithRetries());
+}
+
+void TCmsTestEnv::DestroyDefaultCmsPipe()
+{
+    ClosePipe(ClientId, Sender, 0);
 }
 
 NKikimrCms::TCmsConfig TCmsTestEnv::GetCmsConfig()

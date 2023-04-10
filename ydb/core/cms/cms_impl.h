@@ -41,6 +41,7 @@ public:
             EvLogAndSend,
             EvCleanupLog,
             EvStartCollecting,
+            EvProcessQueue,
 
             EvEnd
         };
@@ -70,6 +71,8 @@ public:
         };
 
         struct TEvCleanupLog : public TEventLocal<TEvCleanupLog, EvCleanupLog> {};
+
+        struct TEvProcessQueue : public TEventLocal<TEvProcessQueue, EvProcessQueue> {};
     };
 
     void PersistNodeTenants(TTransactionContext &txc, const TActorContext &ctx);
@@ -217,6 +220,7 @@ private:
             CFunc(TEvPrivate::EvCleanupLog, CleanupLog);
             CFunc(TEvPrivate::EvCleanupWalle, CleanupWalleTasks);
             CFunc(TEvPrivate::EvStartCollecting, StartCollecting);
+            CFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
             HFunc(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);

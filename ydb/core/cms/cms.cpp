@@ -1340,7 +1340,9 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
 
 void TCms::ProcessQueue(const TActorContext &ctx)
 {
-    while (!Queue.empty()) {
+    // To avoid getting stuck in the processing queue for too long,
+    // we'll process queue by one.
+    if (!Queue.empty()) {
         TabletCounters->Percentile()[COUNTER_LATENCY_REQUEST_QUEUING].IncrementFor((ctx.Now() - Queue.front().ArrivedTime).MilliSeconds());
         TabletCounters->Simple()[COUNTER_REQUESTS_QUEUE_SIZE].Sub(1);
 
@@ -1348,9 +1350,13 @@ void TCms::ProcessQueue(const TActorContext &ctx)
         Queue.pop();
     }
 
-    // Process events received while collecting
-    if (!NextQueue.empty()) {
+    // Process events received while collecting and processing queue
+    if (Queue.empty() && !NextQueue.empty()) {
         StartCollecting(ctx);
+    }
+
+    if (!Queue.empty()) {
+        ctx.Send(SelfId(), new TEvPrivate::TEvProcessQueue);
     }
 }
 

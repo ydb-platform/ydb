@@ -630,7 +630,8 @@ namespace NActors {
                 using TActorActivity = decltype(((TDerived*)nullptr)->ActorActivityType());
                 return TEnumProcessKey<TActorActivityTag, TActorActivity>::GetIndex(TDerived::ActorActivityType());
             } else {
-                return TLocalProcessExtKey<TActorActivityTag, TDerived>::GetIndex();
+                // 200 characters is limit for solomon metric tag length
+                return TLocalProcessExtKey<TActorActivityTag, TDerived, 200>::GetIndex();
             }
         }
 

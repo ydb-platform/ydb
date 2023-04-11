@@ -116,7 +116,11 @@ message TConfigItem {
         HttpProxyConfigItem = 53;
         SchemeShardConfigItem = 54;
         ClientCertificateAuthorizationConfigItem = 55;
-        YamlConfigEnabledItem = 63;
+        MetadataProviderConfigItem = 59;
+        BackgroundTasksConfigItem = 60;
+        ExternalIndexConfigItem = 63;
+        YamlConfigEnabledItem = 64;
+        ConveyorConfigItem = 65;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

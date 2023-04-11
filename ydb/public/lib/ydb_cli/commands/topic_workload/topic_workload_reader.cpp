@@ -10,12 +10,20 @@ using namespace NYdb::NConsoleClient;
 void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams&& params) {
     auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(*params.Driver);
 
+    auto consumerName = TCommandWorkloadTopicParams::GenerateConsumerName(params.ConsumerIdx);
+
+    auto consumers = topicClient->DescribeTopic(TOPIC, {}).GetValueSync().GetTopicDescription().GetConsumers();
+    if (!std::any_of(consumers.begin(), consumers.end(), [consumerName](const auto& consumer) { return consumer.GetConsumerName() == consumerName; }))
+    {
+        WRITE_LOG(params.Log, ELogPriority::TLOG_EMERG, TStringBuilder() << "Topic '"<< TOPIC << "' doesn't have a consumer '"<< consumerName << "'. Run command 'workload init' with parameter '--consumers'.\n");
+        exit(EXIT_FAILURE);
+    }
+
     NYdb::NTopic::TReadSessionSettings settings;
-    settings.ConsumerName(TCommandWorkloadTopicParams::GenerateConsumerName(params.ConsumerIdx))
-        .AppendTopics(TOPIC);
+    settings.ConsumerName(consumerName).AppendTopics(TOPIC);
 
     auto readSession = topicClient->CreateReadSession(settings);
-    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, "READER Session was created\n");
+    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, "Reader session was created\n");
 
     struct TPartitionStreamState {
         ui64 StartOffset;
@@ -53,7 +61,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams&& params) {
                     auto partition = stream->GetPartitionId();
                     ui64 fullTime = (TInstant::Now() - message.GetCreateTime()).MilliSeconds();
 
-                    WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "READER Got message: " << messageGroupId << " topic " << topic << " partition " << partition << " offset " << message.GetOffset() << " seqNo " << message.GetSeqNo() << "\n");
+                    WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got message: " << messageGroupId << " topic " << topic << " partition " << partition << " offset " << message.GetOffset() << " seqNo " << message.GetSeqNo() << "\n");
 
                     params.StatsCollector->AddReaderEvent(message.GetData().Size(), fullTime);
                 }
@@ -62,14 +70,14 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams&& params) {
                 auto stream = createPartitionStreamEvent->GetPartitionSession();
                 ui64 startOffset = streamState[std::make_pair(stream->GetTopicPath(), stream->GetPartitionId())].StartOffset;
                 streamState[std::make_pair(stream->GetTopicPath(), stream->GetPartitionId())].Stream = stream;
-                WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "READER Starting read " << createPartitionStreamEvent->DebugString() << " from " << startOffset << "\n");
+                WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Starting read " << createPartitionStreamEvent->DebugString() << " from " << startOffset << "\n");
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
                 auto stream = destroyPartitionStreamEvent->GetPartitionSession();
                 streamState[std::make_pair(stream->GetTopicPath(), stream->GetPartitionId())].Stream = nullptr;
                 destroyPartitionStreamEvent->Confirm();
             } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
-                WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, TStringBuilder() << "READER Session closed: '" << closeSessionEvent->DebugString() << "'\n");
+                WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, TStringBuilder() << "Read session closed: '" << closeSessionEvent->DebugString() << "'\n");
                 *params.ErrorFlag = 1;
                 break;
             } else if (auto* partitionStreamStatusEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {

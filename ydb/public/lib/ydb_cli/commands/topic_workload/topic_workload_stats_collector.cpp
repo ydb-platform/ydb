@@ -20,8 +20,8 @@ TTopicWorkloadStatsCollector::TTopicWorkloadStatsCollector(
 {
 }
 
-void TTopicWorkloadStatsCollector::PrintHeader() const {
-    if (Quiet)
+void TTopicWorkloadStatsCollector::PrintHeader(bool total) const {
+    if (Quiet && !total)
         return;
 
     Cout << "Window\t" << (Producer ? "Write speed\tWrite time\tInflight\t" : "") << (Consumer ? "Lag\tLag time\tRead speed\tFull time\t" : "") << (PrintTimestamp ? "Timestamp" : "") << Endl;
@@ -50,12 +50,12 @@ void TTopicWorkloadStatsCollector::PrintWindowStats(ui32 windowIt) {
     }
 }
 void TTopicWorkloadStatsCollector::PrintTotalStats() const {
-    PrintHeader();
+    PrintHeader(true);
     PrintStats({});
 }
 
 void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
-    if (Quiet)
+    if (Quiet && windowIt.Defined())
         return;
 
     with_lock (Lock) {

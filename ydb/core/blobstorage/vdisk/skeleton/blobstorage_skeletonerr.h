@@ -312,7 +312,7 @@ namespace NKikimr {
             TMaybe<ui64> cookie;
             if (record.HasCookie())
                 cookie = record.GetCookie();
-            const auto handleClass = NKikimrBlobStorage::EGetHandleClass(record.GetHandleClass());
+            const auto handleClass = NKikimrCapnProto::ConvertEGetHandleClass(record.GetHandleClass());
             const NVDiskMon::TLtcHistoPtr &histoPtr = vctx->Histograms.GetHistogram(handleClass);
             const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
             auto result = std::make_unique<TEvBlobStorage::TEvVGetResult>(status, vdiskID, now,

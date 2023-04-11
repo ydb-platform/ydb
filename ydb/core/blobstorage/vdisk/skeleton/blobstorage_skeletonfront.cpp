@@ -1193,7 +1193,7 @@ namespace NKikimr {
                 }
                 // good, enqueue it in intQueue
                 intQueue.Enqueue(ctx, recByteSize, std::move(event), msgId, cost,
-                        deadline, NKikimrBlobStorage::EVDiskQueueId(extQueueId), *this, clientId, std::move(trace));
+                        deadline, NKikimrCapnProto::ConvertEVDiskQueueId(extQueueId), *this, clientId, std::move(trace));
             }
 
             Sanitize(ctx);
@@ -1353,7 +1353,7 @@ namespace NKikimr {
             const ui64 cost = CostModel->GetCost(*ev->Get());
             // select correct internal queue
             Y_VERIFY(ev->Get()->Record.HasHandleClass());
-            auto cls = NKikimrBlobStorage::EGetHandleClass(ev->Get()->Record.GetHandleClass());
+            auto cls = NKikimrCapnProto::ConvertEGetHandleClass(ev->Get()->Record.GetHandleClass());
             NKikimrBlobStorage::EVDiskInternalQueueId intQueueId;
             switch (cls) {
                 case NKikimrBlobStorage::EGetHandleClass::AsyncRead:

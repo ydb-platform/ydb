@@ -43,6 +43,7 @@ target_sources(blobstorage-vdisk-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_outofspace.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_recoverylogwriter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_response.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/capnp/protos.cpp
 )
 
 find_path(CAPNP_INCLUDE_DIR capnp/message.h)

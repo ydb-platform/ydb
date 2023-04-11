@@ -330,6 +330,26 @@ public:
             return false;
         }
 
+        Ydb::Monitoring::StatusFlag::Status FindMaxStatus(std::initializer_list<ETags> tags) const {
+            Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREY;
+            for (const TIssueRecord& record : IssueRecords) {
+                for (const ETags tag : tags) {
+                    if (record.Tag == tag) {
+                        status = MaxStatus(status, record.IssueLog.status());
+                    }
+                }
+            }
+            return status;
+        }
+
+        void ReportWithMaxChildStatus(const TString& message = {},
+                                        ETags setTag = ETags::None,
+                                        std::initializer_list<ETags> includeTags = {}) {
+            if (HasTags(includeTags)) {
+                ReportStatus(FindMaxStatus(includeTags), message, setTag, includeTags);
+            }
+        }
+
         Ydb::Monitoring::StatusFlag::Status GetOverallStatus() const {
             return OverallStatus;
         }
@@ -1397,6 +1417,16 @@ public:
                 }
                 loadAverageStatus.set_overall(laContext.GetOverallStatus());
             }
+
+            TSelfCheckContext clockSkewContext(&context, "CLOCK_SKEW");
+            computeNodeStatus.set_maxclockskewmicrosec(nodeSystemState.clockskewmicrosec());
+            if (nodeSystemState.clockskewmicrosec() > 25000) {
+                clockSkewContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "ClockSkew above 25 ms", ETags::NodeState);
+            } else if (nodeSystemState.clockskewmicrosec() > 5000) {
+                clockSkewContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "ClockSkew above 5 ms", ETags::NodeState);
+            } else {
+                clockSkewContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+            }
         } else {
             // context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
             //                      TStringBuilder() << "Compute node is not available",
@@ -1426,15 +1456,18 @@ public:
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
                 context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
             }
-            Ydb::Monitoring::StatusFlag::Status nodesStatus = Ydb::Monitoring::StatusFlag::GREEN;
+            ui64 clockSkew = 0;
             for (TNodeId nodeId : *computeNodeIds) {
                 auto& computeNode = *computeStatus.add_nodes();
                 FillComputeNodeStatus(nodeId, computeNode, {&context, "COMPUTE_NODE"});
-                nodesStatus = MaxStatus(nodesStatus, computeNode.overall());
+                ui64 skew = computeNode.maxclockskewmicrosec();
+                if (skew > clockSkew) {
+                    clockSkew = skew;
+                }
             }
-            if (nodesStatus != Ydb::Monitoring::StatusFlag::GREEN) {
-                context.ReportStatus(nodesStatus, "Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
-            }
+            computeStatus.set_maxclockskewmicrosec(clockSkew);
+            context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
+            context.ReportWithMaxChildStatus("ClockSkew exceeded", ETags::ComputeState, {ETags::NodeState});
             Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
             computeNodeIds->push_back(0); // for tablets without node
             for (TNodeId nodeId : *computeNodeIds) {

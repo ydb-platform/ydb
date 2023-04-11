@@ -110,12 +110,14 @@ message ComputeNodeStatus {
     repeated ComputeTabletStatus tablets = 3;
     repeated ThreadPoolStatus pools = 4;
     LoadAverageStatus load = 5;
+    uint64 maxClockSkewMicrosec = 6;
 }
 
 message ComputeStatus {
     StatusFlag.Status overall = 1;
     repeated ComputeNodeStatus nodes = 2;
     repeated ComputeTabletStatus tablets = 3;
+    uint64 maxClockSkewMicrosec = 4;
 }
 
 message LocationNode {

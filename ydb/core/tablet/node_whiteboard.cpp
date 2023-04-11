@@ -653,6 +653,21 @@ protected:
             SystemStateInfo.SetSystemState(eFlag);
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }
+
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters = AppData(ctx)->Counters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> interconnectCounters = GetServiceCounters(counters, "interconnect");
+        ui64 clockSkew = 0;
+        interconnectCounters->EnumerateSubgroups([&interconnectCounters, &clockSkew](const TString &name, const TString &value) -> void {
+            if (name == "peer") {
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> peerCounters = interconnectCounters->GetSubgroup(name, value);
+                ::NMonitoring::TDynamicCounters::TCounterPtr connectedCounter = peerCounters->GetCounter("ClockSkewMicrosec");
+                ui64 skew = abs(connectedCounter->Val());
+                if (skew > clockSkew) {
+                    clockSkew = skew;
+                }
+            }
+        });
+        SystemStateInfo.SetClockSkewMicrosec(clockSkew);
     }
 
     static void CopyTabletStateInfo(

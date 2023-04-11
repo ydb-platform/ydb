@@ -492,17 +492,11 @@ private:
         struct TEvRetryShard: public TEventLocal<TEvRetryShard, EvRetryShard> {
         private:
             explicit TEvRetryShard(const ui64 tabletId)
-                : TabletId(tabletId)
-                , IsCostsRequest(true) {
+                : TabletId(tabletId) {
             }
         public:
             ui64 TabletId = 0;
             ui32 Generation = 0;
-            bool IsCostsRequest = false;
-
-            static THolder<TEvRetryShard> CostsProblem(const ui64 tabletId) {
-                return THolder<TEvRetryShard>(new TEvRetryShard(tabletId));
-            }
 
             TEvRetryShard(const ui64 tabletId, const ui32 generation)
                 : TabletId(tabletId)
@@ -549,6 +543,20 @@ public:
         }
     }
 
+    static TVector<TSerializedTableRange> BuildSerializedTableRanges(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& readData) {
+        TVector<TSerializedTableRange> resultLocal;
+        resultLocal.reserve(readData.GetKeyRanges().size());
+        for (const auto& range : readData.GetKeyRanges()) {
+            auto& sr = resultLocal.emplace_back(TSerializedTableRange(range));
+            if (!range.HasTo()) {
+                sr.To = sr.From;
+                sr.FromInclusive = sr.ToInclusive = true;
+            }
+        }
+        Y_VERIFY_DEBUG(!resultLocal.empty());
+        return resultLocal;
+    }
+
     void Bootstrap() {
         auto gTime = KqpComputeActorSpan.StartStackTimeGuard("bootstrap");
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ". ";
@@ -557,7 +565,7 @@ public:
         ShardsScanningPolicy.FillRequestScanFeatures(Meta, MaxInFlight, IsAggregationRequest);
         for (const auto& read : Meta.GetReads()) {
             auto& state = PendingShards.emplace_back(TShardState(read.GetShardId(), ++ScansCounter));
-            state.Ranges = TShardCostsState::BuildSerializedTableRanges(read);
+            state.Ranges = BuildSerializedTableRanges(read);
         }
         for (auto&& c: ComputeActorIds) {
             Sender<TEvScanExchange::TEvRegisterFetcher>().SendTo(c);

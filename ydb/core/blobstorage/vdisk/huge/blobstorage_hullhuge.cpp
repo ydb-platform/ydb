@@ -296,7 +296,8 @@ namespace NKikimr {
                             "huge reserve/commit ChunkIds# %s", FormatList(ev->Get()->ChunkIds).data()));
             LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
-                            "COMMIT: type# HugeChunkAllocator msg# %s", commitRecord.ToString().data()));
+                            "COMMIT: PDiskId# %s Lsn# %" PRIu64 " type# HugeChunkAllocator msg# %s",
+                            HugeKeeperCtx->PDiskCtx->PDiskIdString.data(), Lsn, commitRecord.ToString().data()));
 
             ctx.Send(HugeKeeperCtx->LoggerId, new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                 HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobAllocChunk,
@@ -373,7 +374,8 @@ namespace NKikimr {
                             "huge delete ChunkIds# %s", FormatList(commitRecord.DeleteChunks).data()));
             LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
-                            "COMMIT: type# HugeChunkDestroyer msg# %s", commitRecord.ToString().data()));
+                            "COMMIT: PDiskId# %s Lsn# %" PRIu64 " type# HugeChunkDestroyer msg# %s",
+                            HugeKeeperCtx->PDiskCtx->PDiskIdString.data(), Lsn, commitRecord.ToString().data()));
 
             // send log message
             ctx.Send(HugeKeeperCtx->LoggerId, new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner,

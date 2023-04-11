@@ -472,6 +472,10 @@ namespace NKikimr {
                 VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::LoadDb;
                 const auto &m = ev->Get();
                 LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
+
+                LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
+                    "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));
+
                 // create context for HullDs
                 Y_VERIFY(LocRecCtx->VCtx && LocRecCtx->VCtx->Top);
                 auto hullCtx = MakeIntrusive<THullCtx>(
@@ -491,6 +495,7 @@ namespace NKikimr {
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration);
+
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);
                 LocRecCtx->HullCtx = hullCtx;

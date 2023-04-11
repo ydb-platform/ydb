@@ -59,7 +59,8 @@ namespace NKikimr {
                                 commitMsg->ToString().data()));
                 LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
                           VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "COMMIT: type# SyncLog msg# %s",
+                                "COMMIT: PDiskId# %s Lsn# %" PRIu64 " type# SyncLog msg# %s",
+                                SlCtx->PDiskCtx->PDiskIdString.data(), seg.Point(),
                                 commitMsg->CommitRecord.ToString().data()));
 
                 ctx.Send(SlCtx->LoggerID, commitMsg.release());

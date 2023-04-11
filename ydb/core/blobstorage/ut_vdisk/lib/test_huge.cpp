@@ -184,7 +184,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         NKikimrProto::EReplyStatus status = m->Status;
         Y_VERIFY(status == NKikimrProto::OK, "Status# %s ErrorReason# %s",
                 NKikimrProto::EReplyStatus_Name(status).c_str(), m->ErrorReason.c_str());
-        HmCtx->PDiskCtx = std::make_shared<TPDiskCtx>(m->PDiskParams, HmCtx->Config->BaseInfo.PDiskActorID);
+        HmCtx->PDiskCtx = std::make_shared<TPDiskCtx>(m->PDiskParams, HmCtx->Config->BaseInfo.PDiskActorID, TString());
 
         // prepare starting points
         const TStartingPoints &startingPoints = ev->Get()->StartingPoints;

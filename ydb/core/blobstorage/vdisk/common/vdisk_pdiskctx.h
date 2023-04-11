@@ -18,16 +18,20 @@ namespace NKikimr {
         const TIntrusivePtr<TPDiskParams> Dsk;
         // PDisk Actor id
         const TActorId PDiskId;
+        // PDisk id string
+        const TString PDiskIdString;
 
-        TPDiskCtx(TIntrusivePtr<TPDiskParams> dsk, TActorId pDiskId)
+        TPDiskCtx(TIntrusivePtr<TPDiskParams> dsk, TActorId pDiskId, TString pdiskIdString)
             : Dsk(std::move(dsk))
             , PDiskId(pDiskId)
+            , PDiskIdString(pdiskIdString)
         {}
 
         static TPDiskCtxPtr Create(
                 const TIntrusivePtr<TPDiskParams> &pDiskParams,
                 const TIntrusivePtr<TVDiskConfig> &cfg) {
-            auto pdiskCtx = std::make_shared<TPDiskCtx>(pDiskParams, cfg->BaseInfo.PDiskActorID);
+            auto pdiskCtx = std::make_shared<TPDiskCtx>(pDiskParams, cfg->BaseInfo.PDiskActorID,
+                TStringBuilder() << TlsActivationContext->ExecutorThread.ActorSystem->NodeId << ":" << cfg->BaseInfo.PDiskId);
             Y_VERIFY(cfg->MaxLogoBlobDataSize < pdiskCtx->Dsk->ChunkSize + 1024u,
                     "Chunk size is too small, check your VDisk settings; "
                     "MaxLogoBlobDataSize=%" PRIu32 " chunkSize=%" PRIu64,

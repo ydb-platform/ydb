@@ -1,11 +1,12 @@
 #pragma once
+#include "kqp_scan_common.h"
 #include "kqp_compute_actor.h"
 #include "kqp_compute_state.h"
 #include "kqp_scan_compute_stat.h"
 #include <ydb/core/base/appdata.h>
 #include <library/cpp/actors/wilson/wilson_profile_span.h>
 
-namespace NKikimr::NKqp::NComputeActor {
+namespace NKikimr::NKqp::NScanPrivate {
 
 class TInFlightComputes {
 public:
@@ -137,7 +138,7 @@ public:
     }
 };
 
-class TInFlightShards: public TScanShardsStatistics {
+class TInFlightShards: public NComputeActor::TScanShardsStatistics {
 private:
     using TTabletStates = std::map<ui32, TShardState::TPtr>;
     using TTabletsData = std::map<ui64, TTabletStates>;

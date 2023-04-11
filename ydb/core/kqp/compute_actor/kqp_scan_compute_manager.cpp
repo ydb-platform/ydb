@@ -2,7 +2,7 @@
 #include <ydb/core/base/wilson.h>
 #include <util/string/builder.h>
 
-namespace NKikimr::NKqp::NComputeActor {
+namespace NKikimr::NKqp::NScanPrivate {
 
 TString TInFlightShards::TraceToString() const {
     TStringBuilder sb;

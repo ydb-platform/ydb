@@ -41,6 +41,9 @@ target_sources(core-kqp-compute_actor PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_stat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_fetcher_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_events.cpp
 )
 generate_enum_serilization(core-kqp-compute_actor
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_state.h

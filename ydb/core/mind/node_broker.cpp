@@ -132,6 +132,8 @@ void TNodeBroker::Cleanup(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TNodeBroker::Cleanup");
 
+    NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
+
     TxProcessor->Clear();
 }
 
@@ -392,14 +394,8 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
 {
-    if (ConfigSubscriptionId)
-        return;
-
     ui32 item = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
-    ctx.Register(NConsole::CreateConfigSubscriber(TabletID(),
-                                                  {item},
-                                                  "",
-                                                  ctx.SelfID));
+    NConsole::SubscribeViaConfigDispatcher(ctx, {item}, ctx.SelfID);
 }
 
 void TNodeBroker::ProcessTx(ITransaction *tx,

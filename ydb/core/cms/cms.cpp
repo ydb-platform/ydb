@@ -84,10 +84,7 @@ void TCms::ProcessInitQueue(const TActorContext &ctx)
 
 void TCms::SubscribeForConfig(const TActorContext &ctx)
 {
-    ctx.Register(NConsole::CreateConfigSubscriber(TabletID(),
-                                                  {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem},
-                                                  "",
-                                                  ctx.SelfID));
+    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem}, ctx.SelfID);
 }
 
 void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
@@ -978,6 +975,8 @@ void TCms::RemoveEmptyWalleTasks(const TActorContext &ctx)
 void TCms::Cleanup(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::CMS, "TCms::Cleanup");
+
+    NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 
     if (State->Sentinel)
         ctx.Send(State->Sentinel, new TEvents::TEvPoisonPill);

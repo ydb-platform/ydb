@@ -792,6 +792,8 @@ public:
         UpdateConfig(db, "MinPeriodBetweenReassign");
         UpdateConfig(db, "NodeSelectStrategy");
         UpdateConfig(db, "CheckMoveExpediency");
+        UpdateConfig(db, "SpaceUsagePenaltyThreshold");
+        UpdateConfig(db, "SpaceUsagePenalty");
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             TVector<TString> tabletTypeNames = SplitString(params.Get("BalancerIgnoreTabletTypes"), ";");
@@ -1061,6 +1063,8 @@ public:
         ShowConfig(out, "MaxMovementsOnAutoBalancer");
         ShowConfig(out, "ContinueAutoBalancer");
         ShowConfig(out, "CheckMoveExpediency");
+        ShowConfig(out, "SpaceUsagePenaltyThreshold");
+        ShowConfig(out, "SpaceUsagePenalty");
         ShowConfigForBalancerIgnoreTabletTypes(out);
 
         out << "<div class='row' style='margin-top:40px'>";

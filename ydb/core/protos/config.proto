@@ -1581,6 +1581,8 @@ message THiveConfig {
     optional uint64 StoragePoolFreshPeriod = 47 [default = 60000]; // milliseconds
     optional string PoolsToMonitorForUsage = 48 [default = "System,User,IC"];
     repeated NKikimrTabletBase.TTabletTypes.EType BalancerIgnoreTabletTypes = 49;
+    optional double SpaceUsagePenaltyThreshold = 53 [default  = 1.1]; // number > 1
+    optional double SpaceUsagePenalty = 54 [default = 0.2]; // number <= 1
 }
 
 message TDataShardConfig {

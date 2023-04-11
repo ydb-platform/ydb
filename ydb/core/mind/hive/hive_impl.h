@@ -764,6 +764,14 @@ public:
         return (found != ignoreList.end());
     }
 
+    double GetSpaceUsagePenaltyThreshold() {
+        return CurrentConfig.GetSpaceUsagePenaltyThreshold();
+    }
+
+    double GetSpaceUsagePenalty() {
+        return CurrentConfig.GetSpaceUsagePenalty();
+    }
+
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static bool IsSystemTablet(TTabletTypes::EType type);
 

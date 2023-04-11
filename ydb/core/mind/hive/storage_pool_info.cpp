@@ -37,71 +37,70 @@ void TStoragePoolInfo::DeleteStorageGroup(TStorageGroupId groupId) {
 }
 
 template <>
-const TEvControllerSelectGroupsResult::TGroupParameters* TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN>(const TVector<const TStorageGroupInfo*>& groupCandidates) {
-    Y_VERIFY(!groupCandidates.empty());
-    return &(groupCandidates[RoundRobinPos++ % groupCandidates.size()]->GroupParameters);
+size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN>(const TVector<double>& groupCandidateUsages) {
+    Y_VERIFY(!groupCandidateUsages.empty());
+    return RoundRobinPos++ % groupCandidateUsages.size();
 }
 
 template <>
-const TEvControllerSelectGroupsResult::TGroupParameters* TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM>(const TVector<const TStorageGroupInfo*>& groupCandidates) {
-    Y_VERIFY(!groupCandidates.empty());
-    return &(groupCandidates[TAppData::RandomProvider->GenRand() % groupCandidates.size()]->GroupParameters);
+size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM>(const TVector<double>& groupCandidateUsages) {
+    Y_VERIFY(!groupCandidateUsages.empty());
+    return TAppData::RandomProvider->GenRand() % groupCandidateUsages.size();
 }
 
 template <>
-const TEvControllerSelectGroupsResult::TGroupParameters* TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM>(const TVector<const TStorageGroupInfo*>& groupCandidates) {
-    Y_VERIFY(!groupCandidates.empty());
+size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM>(const TVector<double>& groupCandidateUsages) {
+    Y_VERIFY(!groupCandidateUsages.empty());
     double sumUsage = 0;
     double maxUsage = 0;
-    for (const TStorageGroupInfo* groupInfo : groupCandidates) {
-        double usage = groupInfo->GetUsage();
+    for (double usage : groupCandidateUsages) {
         sumUsage += usage;
         maxUsage = std::max(maxUsage, usage);
     }
     //maxUsage = std::max(1.0, maxUsage);
-    double sumAvail = maxUsage * groupCandidates.size() - sumUsage;
+    double sumAvail = maxUsage * groupCandidateUsages.size() - sumUsage;
     if (sumAvail > 0) {
         double pos = TAppData::RandomProvider->GenRandReal2() * sumAvail;
-        for (const TStorageGroupInfo* groupInfo : groupCandidates) {
-            double avail = maxUsage - groupInfo->GetUsage();
+        for (size_t i = 0; i < groupCandidateUsages.size(); ++i) {
+            double avail = maxUsage - groupCandidateUsages[i];
             if (pos < avail) {
-                return &groupInfo->GroupParameters;
+                return i;
             } else {
                 pos -= avail;
             }
         }
     }
-    return SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM>(groupCandidates);
+    return SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM>(groupCandidateUsages);
 }
 
 template <>
-const TEvControllerSelectGroupsResult::TGroupParameters* TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN>(const TVector<const TStorageGroupInfo*>& groupCandidates) {
-    Y_VERIFY(!groupCandidates.empty());
+size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN>(const TVector<double>& groupCandidateUsages) {
+    Y_VERIFY(!groupCandidateUsages.empty());
     auto itMin = std::min_element(
-                groupCandidates.begin(),
-                groupCandidates.end(),
-                [](const TStorageGroupInfo* a, const TStorageGroupInfo* b) {
-                    return a->GetUsage() < b->GetUsage();
-                });
-    return &((*itMin)->GroupParameters);
+                groupCandidateUsages.begin(),
+                groupCandidateUsages.end()
+                );
+    return itMin - groupCandidateUsages.begin();
 }
 
 template <>
-const TEvControllerSelectGroupsResult::TGroupParameters* TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P>(const TVector<const TStorageGroupInfo*>& groupCandidates) {
-    Y_VERIFY(!groupCandidates.empty());
-    TVector<const TStorageGroupInfo*> groups(groupCandidates);
-    auto itGroup = groups.begin();
+size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P>(const TVector<double>& groupCandidateUsages) {
+    Y_VERIFY(!groupCandidateUsages.empty());
+    TVector<size_t> groupIndices(groupCandidateUsages.size());
+    std::iota(groupIndices.begin(), groupIndices.end(), 0);
+    auto itGroup = groupIndices.begin();
     auto itPartition = itGroup;
-    size_t percent7 = std::max<size_t>(groups.size() * 7 / 100, 1);
+    size_t percent7 = std::max<size_t>(groupIndices.size() * 7 / 100, 1);
     std::advance(itPartition, percent7);
-    std::nth_element(groups.begin(), itPartition, groups.end(), [](const TStorageGroupInfo* a, const TStorageGroupInfo* b) {
-        return a->GetUsage() < b->GetUsage();
+    std::nth_element(groupIndices.begin(), itPartition, groupIndices.end(), [&groupCandidateUsages](size_t a, size_t b) {
+        return groupCandidateUsages[a] < groupCandidateUsages[b];
     });
     std::advance(itGroup, TAppData::RandomProvider->GenRand64() % percent7);
-    return &((*itGroup)->GroupParameters);
+    return *itGroup;
 }
 
-const TEvControllerSelectGroupsResult::TGroupParameters* TStoragePoolInfo::FindFreeAllocationUnit(std::function<bool(const TStorageGroupInfo&)> filter) {
+const TEvControllerSelectGroupsResult::TGroupParameters* TStoragePoolInfo::FindFreeAllocationUnit(std::function<bool(const TStorageGroupInfo&)> filter,
+                                                                                                  std::function<double(const TStorageGroupInfo*)> calculateUsage) {
     if (Groups.empty()) {
         return nullptr;
     }
@@ -115,18 +114,28 @@ const TEvControllerSelectGroupsResult::TGroupParameters* TStoragePoolInfo::FindF
     if (groupCandidates.empty()) {
         return nullptr;
     }
+    TVector<double> groupCandidateUsages;
+    groupCandidateUsages.reserve(groupCandidates.size());
+    std::transform(groupCandidates.begin(), groupCandidates.end(), std::back_inserter(groupCandidateUsages), calculateUsage);
+    size_t selectedIndex;
     switch (GetSelectStrategy()) {
     case NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM:
-        return SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM>(groupCandidates);
+        selectedIndex = SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM>(groupCandidateUsages);
+        break;
     case NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN:
-        return SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN>(groupCandidates);
+        selectedIndex = SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN>(groupCandidateUsages);
+        break;
     case NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P:
-        return SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P>(groupCandidates);
+        selectedIndex = SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P>(groupCandidateUsages);
+        break;
     case NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN:
-        return SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN>(groupCandidates);
+        selectedIndex = SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN>(groupCandidateUsages);
+        break;
     case NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM:
-        return SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM>(groupCandidates);
+        selectedIndex = SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM>(groupCandidateUsages);
+        break;
     }
+    return &(groupCandidates[selectedIndex]->GroupParameters);
 }
 
 bool TStoragePoolInfo::IsBalanceByIOPS() const {

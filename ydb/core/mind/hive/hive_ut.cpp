@@ -2637,6 +2637,102 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
+    Y_UNIT_TEST(TestReassignUseRelativeSpace) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 5);
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        std::unordered_set<ui32> otherPoolGroops;
+        auto getGroup = [&runtime, sender, hiveTablet](ui64 tabletId) {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo({
+                .TabletId = tabletId,
+                .ReturnChannelHistory = true,
+            }));
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+
+            const auto& tablet = response->Record.GetTablets().Get(0);
+            const auto& channel = tablet.GetTabletChannels().Get(0);
+            const auto& history = channel.GetHistory();
+            return history.Get(history.size() - 1).GetGroup();
+        };
+
+        {
+            THolder<TEvBlobStorage::TEvControllerSelectGroups> selectGroups = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+            NKikimrBlobStorage::TEvControllerSelectGroups& record = selectGroups->Record;
+            record.SetReturnAllMatchingGroups(true);
+            std::vector<TString> storagePools = {"def2", "def3"}; // we will work with pool def1, so we want to avoid messing with other pools
+            for (const auto& pool : storagePools) {
+                record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(pool);
+            }
+            runtime.SendToPipe(MakeBSControllerID(0), sender, selectGroups.Release());
+            TAutoPtr<IEventHandle> handle;
+            TEvBlobStorage::TEvControllerSelectGroupsResult* response = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerSelectGroupsResult>(handle);
+            for (const auto& matchingGroups : response->Record.GetMatchingGroups()) {
+                for (const auto& group : matchingGroups.GetGroups()) {
+                    otherPoolGroops.insert(group.GetGroupID());
+                }
+            }
+        }
+
+        auto getFreshGroup = [&otherPoolGroops](ui32 start) {
+            for (ui32 groupId = start + 1;; ++groupId) {
+                if (!otherPoolGroops.contains(groupId)) {
+                    return groupId;
+                }
+            }
+        };
+
+        ui32 initialGroup = getGroup(tabletId);
+        ui32 badGroup = getFreshGroup(initialGroup);
+        ui32 goodGroup = getFreshGroup(badGroup);
+        Ctest << "Tablet is now in group " << initialGroup << ", should later move to " << goodGroup << Endl;
+
+        struct TTestGroupInfo {
+            ui32 Id;
+            ui64 AvailiableSize;
+            ui64 MaximumSize;
+        };
+
+        auto groupMetricsExchange = MakeHolder<TEvBlobStorage::TEvControllerGroupMetricsExchange>();
+        std::vector<TTestGroupInfo> groups = {{initialGroup, 100000, 200000},
+                                              {badGroup, 200000, 800000}, // has more space in absolute units, but less in %
+                                              {goodGroup, 105001, 200000}};
+        for (const auto& group : groups) {
+            NKikimrBlobStorage::TGroupMetrics* metrics = groupMetricsExchange->Record.AddGroupMetrics();
+
+            metrics->SetGroupId(group.Id);
+            metrics->MutableGroupParameters()->SetGroupID(group.Id);
+            metrics->MutableGroupParameters()->SetStoragePoolName("def1");
+            metrics->MutableGroupParameters()->MutableAssuredResources()->SetSpace(group.MaximumSize);
+            metrics->MutableGroupParameters()->SetAvailableSize(group.AvailiableSize);
+        }
+
+        runtime.SendToPipe(MakeBSControllerID(0), sender, groupMetricsExchange.Release(), 0, GetPipeConfigWithRetries());
+        {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerGroupMetricsExchange));
+            runtime.DispatchEvents(options);
+        }
+
+        SendReassignTabletSpace(runtime, hiveTablet, tabletId, {}, 0);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+            runtime.DispatchEvents(options);
+        }
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(getGroup(tabletId), goodGroup);
+    }
+
 //    Y_UNIT_TEST(TestCreateTabletAndChangeProfiles) {
 //        TTestBasicRuntime runtime(1, false);
 //        Setup(runtime, true);

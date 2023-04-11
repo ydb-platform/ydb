@@ -9,6 +9,7 @@
 #include "tevvget.capnp.h"
 #include "util.h"
 #include <library/cpp/actors/core/event_pb.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 
 namespace NKikimrCapnProto {

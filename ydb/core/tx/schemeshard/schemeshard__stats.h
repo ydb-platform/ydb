@@ -74,6 +74,7 @@ public:
     TDuration Age() const;
     TDuration Delay() const;
 
+    EStatsQueueStatus Status() const;
     bool Empty() const;
     size_t Size() const;
 
@@ -90,7 +91,6 @@ public:
     const EPercentileCounters LatencyCounter;
 
 private:
-    EStatsQueueStatus Status() const;
 
     TSchemeShard* SS;
 
@@ -126,6 +126,8 @@ public:
 
     // returns true to continue batching
     virtual bool PersistSingleStats(const TPathId& pathId, const TItem& item, TTransactionContext& txc, const TActorContext& ctx) = 0;
+
+    virtual void ScheduleNextBatch(const TActorContext& ctx) = 0;
 };
 
 } // NSchemeShard

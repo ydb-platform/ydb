@@ -134,6 +134,73 @@ private:
         }
     }
 
+    class TMetaScan {
+    private:
+        YDB_ACCESSOR_DEF(std::vector<NActors::TActorId>, ActorIds);
+        YDB_ACCESSOR_DEF(NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta, Meta);
+    public:
+        explicit TMetaScan(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta)
+            : Meta(meta)
+        {
+
+        }
+    };
+
+    class TComputeStageInfo {
+    private:
+        YDB_ACCESSOR_DEF(std::optional<TMetaScan>, MetaNonSorted);
+        YDB_ACCESSOR_DEF(std::deque<TMetaScan>, MetaSorted);
+        std::map<ui64, TMetaScan*> SortedReadyShardIds;
+    public:
+        TComputeStageInfo() = default;
+
+        TMetaScan& MergeMetaReads(const NYql::NDqProto::TDqTask& task, const bool forceOneToMany) {
+            NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
+            YQL_ENSURE(task.GetMeta().UnpackTo(&meta), "Invalid task meta for merge: " << task.GetMeta().DebugString());
+            YQL_ENSURE(meta.ReadsSize(), "unexpected merge with no reads");
+            if (forceOneToMany) {
+                MetaSorted.emplace_back(TMetaScan(meta));
+                return MetaSorted.back();
+            } else if (meta.GetSorted()) {
+                Y_VERIFY(meta.GetReads().size() == 1);
+                auto it = SortedReadyShardIds.find(meta.GetReads()[0].GetShardId());
+                if (it == SortedReadyShardIds.end()) {
+                    MetaSorted.emplace_back(TMetaScan(meta));
+                    it = SortedReadyShardIds.emplace(meta.GetReads()[0].GetShardId(), &MetaSorted.back()).first;
+                }
+                return *it->second;
+            } else {
+                if (!MetaNonSorted) {
+                    MetaNonSorted = TMetaScan(meta);
+                } else {
+                    Y_VERIFY(meta.GetReads().size() == MetaNonSorted->GetMeta().GetReads().size());
+                }
+                return *MetaNonSorted;
+            }
+        }
+    };
+
+    class TComputeStagesWithScan {
+    private:
+        std::map<ui32, TComputeStageInfo> Stages;
+    public:
+        std::map<ui32, TComputeStageInfo>::iterator begin() {
+            return Stages.begin();
+        }
+
+        std::map<ui32, TComputeStageInfo>::iterator end() {
+            return Stages.end();
+        }
+
+        TMetaScan& UpsertTaskWithScan(const NYql::NDqProto::TDqTask& dqTask, const bool forceOneToMany) {
+            auto it = Stages.find(dqTask.GetStageId());
+            if (it == Stages.end()) {
+                it = Stages.emplace(dqTask.GetStageId(), TComputeStageInfo()).first;
+            }
+            return it->second.MergeMetaReads(dqTask, forceOneToMany);
+        }
+    };
+
     void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
         NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
 
@@ -295,6 +362,8 @@ private:
 
         TShardsScanningPolicy scanPolicy(Config.GetShardsScanningPolicy());
 
+        TComputeStagesWithScan computesByStage;
+
         // start compute actors
         for (int i = 0; i < msg.GetTasks().size(); ++i) {
             auto& dqTask = *msg.MutableTasks(i);
@@ -325,10 +394,12 @@ private:
 
             IActor* computeActor;
             if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
-                computeActor = CreateKqpScanComputeActor(msg.GetSnapshot(), request.Executer, txId, std::move(dqTask),
-                    AsyncIoFactory, AppData()->FunctionRegistry, runtimeSettings, memoryLimits, scanPolicy,
-                    Counters, NWilson::TTraceId(ev->TraceId));
+                auto& info = computesByStage.UpsertTaskWithScan(dqTask, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
+                computeActor = CreateKqpScanComputeActor(request.Executer, txId, std::move(dqTask),
+                    AsyncIoFactory, AppData()->FunctionRegistry, runtimeSettings, memoryLimits,
+                    NWilson::TTraceId(ev->TraceId));
                 taskCtx.ComputeActorId = Register(computeActor);
+                info.MutableActorIds().emplace_back(taskCtx.ComputeActorId);
             } else {
                 if (Y_LIKELY(!CaFactory)) {
                     computeActor = CreateKqpComputeActor(request.Executer, txId, std::move(dqTask), AsyncIoFactory,
@@ -346,6 +417,18 @@ private:
             auto* startedTask = reply->Record.AddStartedTasks();
             startedTask->SetTaskId(taskCtx.TaskId);
             ActorIdToProto(taskCtx.ComputeActorId, startedTask->MutableActorId());
+        }
+
+        for (auto&& i : computesByStage) {
+            for (auto&& m : i.second.MutableMetaSorted()) {
+                Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
+                    m.GetMeta(), runtimeSettingsBase, txId, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+            }
+            if (i.second.GetMetaNonSorted()) {
+                auto& m = *i.second.MutableMetaNonSorted();
+                Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
+                    m.GetMeta(), runtimeSettingsBase, txId, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+            }
         }
 
         Send(request.Executer, reply.Release(), IEventHandle::FlagTrackDelivery, txId);

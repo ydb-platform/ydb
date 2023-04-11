@@ -980,17 +980,6 @@ void TTxScan::Complete(const TActorContext& ctx) {
         detailedInfo << " read metadata: (" << TContainerPrinter(ReadMetadataRanges) << ")" << " req: " << request;
     }
     TVector<NOlap::TReadMetadata::TConstPtr> rMetadataRanges;
-    if (request.GetCostDataOnly()) {
-        for (auto&& i : ReadMetadataRanges) {
-            NOlap::TReadMetadata::TConstPtr rMetadata = std::dynamic_pointer_cast<const NOlap::TReadMetadata>(i);
-            if (!rMetadata || !rMetadata->SelectInfo) {
-                auto ev = MakeHolder<TEvKqpCompute::TEvCostData>(NOlap::NCosts::TKeyRanges(), scanId);
-                ctx.Send(scanComputeActor, ev.Release());
-                return;
-            }
-            rMetadataRanges.emplace_back(rMetadata);
-        }
-    }
 
     if (ReadMetadataRanges.empty()) {
         LOG_S_DEBUG("TTxScan failed "
@@ -1011,26 +1000,6 @@ void TTxScan::Complete(const TActorContext& ctx) {
             << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << ErrorDescription);
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
-        ctx.Send(scanComputeActor, ev.Release());
-        return;
-    }
-
-    if (request.GetCostDataOnly()) {
-        if (request.GetReverse()) {
-            std::reverse(rMetadataRanges.begin(), rMetadataRanges.end());
-        }
-        NOlap::NCosts::TKeyRangesBuilder krBuilder(Self->TablesManager.GetIndexInfo());
-        {
-            ui32 recordsCount = 0;
-            for (auto&& i : rMetadataRanges) {
-                recordsCount += i->SelectInfo->Granules.size() + 2;
-            }
-            krBuilder.Reserve(recordsCount);
-        }
-        for (auto&& i : rMetadataRanges) {
-            krBuilder.FillRangeMarks(i->GreaterPredicate, i->SelectInfo->Granules, i->LessPredicate);
-        }
-        auto ev = MakeHolder<TEvKqpCompute::TEvCostData>(krBuilder.Build(), scanId);
         ctx.Send(scanComputeActor, ev.Release());
         return;
     }

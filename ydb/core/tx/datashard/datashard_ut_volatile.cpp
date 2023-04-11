@@ -1250,6 +1250,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
         InitRoot(server, sender);
@@ -1299,14 +1300,16 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
 
-        TVector<TString> observedResults;
+        std::vector<TString> observedResults;
         TMaybe<Ydb::StatusIds::StatusCode> observedStatus;
         auto scanSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TEvKqpExecuter::TEvStreamData::EventType: {
                     auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>();
                     Cerr << "... observed stream data" << Endl;
-                    observedResults.push_back(FormatResult(msg->Record.GetResultSet()));
+                    if (msg->Record.GetResultSet().rows().size()) {
+                        observedResults.emplace_back(FormatResult(msg->Record.GetResultSet()));
+                    }
                     auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
                     resp->Record.SetSeqNo(msg->Record.GetSeqNo());
                     resp->Record.SetFreeSpace(1);

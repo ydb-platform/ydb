@@ -799,6 +799,7 @@ message TFeatureFlags {
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = false];
+    optional bool EnableSeparationComputeActorsFromRead = 90 [default = false];
 }
 
 
@@ -1225,13 +1226,13 @@ message TTableServiceConfig {
     }
 
     message TAggregationConfig {
-        optional uint32 CSScanMinimalThreads = 29;
         optional uint32 DSScanMinimalThreads = 30 [default = 4];
         optional uint32 DSBaseSortScanThreads = 32 [default = 16];
         optional uint32 DSBaseJoinScanThreads = 33 [default = 16];
 
         optional uint32 AggregationComputeThreads = 37;
 
+        optional uint32 CSScanThreadsPerNode = 38;
     }
 
     message TExecuterRetriesConfig {

@@ -6,7 +6,6 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <ydb/core/tx/columnshard/columnshard_costs.h>
 
 namespace NKikimr::NKqp {
 
@@ -22,8 +21,6 @@ struct TEvKqpCompute {
      * is expected. However, it is possible that after query planning datashard would migrate to other
      * node. To support scans in this case we provide serialization routines. For now such remote scan
      * is considered as rare event and not worth of some fast serialization, so we just use protobuf.
-     *
-     * TEvCostData is just reply with costs for request physical level optimization
      *
      * TEvScanDataAck follows the same pattern mostly for symmetry reasons.
      */
@@ -146,52 +143,6 @@ struct TEvKqpCompute {
                 }
             }
         }
-    };
-
-    struct TEvRemoteCostData: public NActors::TEventPB<TEvRemoteCostData, NKikimrKqp::TEvRemoteCostData,
-        TKqpComputeEvents::EvRemoteCostData> {
-    };
-
-    class TEvCostData: public NActors::TEventLocal<TEvCostData, TKqpComputeEvents::EvCostData> {
-    private:
-        NOlap::NCosts::TKeyRanges TableRanges;
-        ui32 ScanId = 0;
-        mutable THolder<TEvRemoteCostData> Remote;
-
-        void InitRemote() const;
-        TCell SerializeScalarToCell(const std::shared_ptr<arrow::Scalar>& x) const;
-        TVector<NKikimr::TSerializedTableRange> BuildSerializedRanges(const NOlap::NCosts::TKeyRanges& costRanges) const;
-
-    public:
-        TEvCostData(NOlap::NCosts::TKeyRanges&& ranges, const ui32 scanId)
-            : TableRanges(std::move(ranges))
-            , ScanId(scanId) {
-        }
-
-        ui32 GetScanId() const {
-            return ScanId;
-        }
-
-        const NOlap::NCosts::TKeyRanges& GetTableRanges() const {
-            return TableRanges;
-        }
-        TVector<TSerializedTableRange> GetSerializedTableRanges(const ui32 splitFactor = 1) const;
-
-        virtual bool IsSerializable() const override {
-            return true;
-        }
-
-        virtual ui32 CalculateSerializedSize() const override {
-            InitRemote();
-            return Remote->CalculateSerializedSizeCached();
-        }
-
-        virtual bool SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override {
-            InitRemote();
-            return Remote->SerializeToArcadiaStream(chunker);
-        }
-
-        static NActors::IEventBase* Load(TEventSerializedData* data);
     };
 
     struct TEvRemoteScanDataAck: public NActors::TEventPB<TEvRemoteScanDataAck, NKikimrKqp::TEvRemoteScanDataAck,

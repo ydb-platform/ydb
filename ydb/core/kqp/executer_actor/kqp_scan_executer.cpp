@@ -146,7 +146,7 @@ private:
 private:
 
     void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse, bool sorted,
-        NKikimr::NMiniKQL::TType* resultType, const TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>& readOlapRange)
+        NKikimr::NMiniKQL::TType* resultType, const TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>& readOlapRange) const
     {
         if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) {
             // Validate parameters
@@ -199,14 +199,14 @@ private:
         }
     };
 
-    ui32 GetMaxTasksPerNodeEstimate(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /*nodeId*/) const {
+    ui32 GetTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /*nodeId*/, const ui32 shardsCountCompute, const ui32 shardsCountNode) const {
         ui32 result = 0;
         if (isOlapScan) {
-            if (AggregationSettings.HasCSScanMinimalThreads()) {
-                result = AggregationSettings.GetCSScanMinimalThreads();
+            if (AggregationSettings.HasCSScanThreadsPerNode()) {
+                result = AggregationSettings.GetCSScanThreadsPerNode() * 1.0 * shardsCountCompute / shardsCountNode;
             } else {
                 const TStagePredictor& predictor = stageInfo.Meta.Tx.Body->GetCalculationPredictor(stageInfo.Id.StageId);
-                return std::max<ui32>(1, predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), {}));
+                result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), {}) * 1.0 * shardsCountCompute / shardsCountNode;
             }
         } else {
             const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -249,7 +249,7 @@ private:
 
         auto& tasks = nodeTasks[nodeId];
         auto& cnt = assignedShardsCount[nodeId];
-        const ui32 maxScansPerNode = GetMaxTasksPerNodeEstimate(stageInfo, isOlapScan, nodeId);
+        const ui32 maxScansPerNode = GetTasksPerNode(stageInfo, isOlapScan, nodeId, 1, 1);
         if (cnt < maxScansPerNode) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.NodeId = nodeId;
@@ -264,8 +264,70 @@ private:
         }
     }
 
+    void MergeToTaskMeta(TTaskMeta& meta, TShardInfoWithId& shardInfo, const TPhysicalShardReadSettings& readSettings, const TVector<TTaskMeta::TColumn>& columns,
+        const NKqpProto::TKqpPhyTableOperation& op) const {
+        YQL_ENSURE(!shardInfo.KeyWriteRanges);
+        for (auto& [name, value] : shardInfo.Params) {
+            auto ret = meta.Params.emplace(name, std::move(value));
+            YQL_ENSURE(ret.second);
+        }
+
+        TTaskMeta::TShardReadInfo readInfo = {
+            .Ranges = std::move(*shardInfo.KeyReadRanges), // sorted & non-intersecting
+            .Columns = columns,
+            .ShardId = shardInfo.ShardId,
+        };
+
+        if (readSettings.ItemsLimitParamName && !meta.Params.contains(readSettings.ItemsLimitParamName)) {
+            meta.Params.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes);
+        }
+
+        if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+            const auto& readRange = op.GetReadOlapRange();
+            FillReadInfo(meta, readSettings.ItemsLimit, readSettings.Reverse, readSettings.Sorted, readSettings.ResultType, readRange);
+        } else {
+            FillReadInfo(meta, readSettings.ItemsLimit, readSettings.Reverse, readSettings.Sorted, nullptr, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>());
+        }
+
+        if (!meta.Reads) {
+            meta.Reads.ConstructInPlace();
+        }
+
+        meta.Reads->emplace_back(std::move(readInfo));
+    }
+
+    void PrepareMetaForUsage(TTaskMeta& meta, const TVector<NScheme::TTypeInfo>& keyTypes) const {
+        YQL_ENSURE(meta.Reads.Defined());
+        auto& taskReads = meta.Reads.GetRef();
+
+        /*
+         * Sort read ranges so that sequential scan of that ranges produce sorted result.
+         *
+         * Partition pruner feed us with set of non-intersecting ranges with filled right boundary.
+         * So we may sort ranges based solely on the their rightmost point.
+         */
+        std::sort(taskReads.begin(), taskReads.end(), [&](const auto& lhs, const auto& rhs) {
+            if (lhs.ShardId == rhs.ShardId) {
+                return false;
+            }
+
+            const std::pair<const TSerializedCellVec*, bool> k1 = lhs.Ranges.GetRightBorder();
+            const std::pair<const TSerializedCellVec*, bool> k2 = rhs.Ranges.GetRightBorder();
+
+            const int cmp = CompareBorders<false, false>(
+                k1.first->GetCells(),
+                k2.first->GetCells(),
+                k1.second,
+                k2.second,
+                keyTypes);
+
+            return (cmp < 0);
+            });
+    }
+
     void BuildScanTasks(TStageInfo& stageInfo) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
+        THashMap<ui64, std::vector<TShardInfoWithId>> nodeShards;
         THashMap<ui64, ui64> assignedShardsCount;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -287,77 +349,75 @@ private:
                 YQL_ENSURE(!readSettings.Reverse);
             }
 
-            for (auto& [shardId, shardInfo] : partitions) {
-                YQL_ENSURE(!shardInfo.KeyWriteRanges);
-
-                auto& task = AssignTaskToShard(stageInfo, shardId, nodeTasks, assignedShardsCount, readSettings.Sorted, isOlapScan);
-
-                for (auto& [name, value] : shardInfo.Params) {
-                    auto ret = task.Meta.Params.emplace(name, std::move(value));
-                    YQL_ENSURE(ret.second);
-                }
-
-                TTaskMeta::TShardReadInfo readInfo = {
-                    .Ranges = std::move(*shardInfo.KeyReadRanges), // sorted & non-intersecting
-                    .Columns = columns,
-                    .ShardId = shardId,
-                };
-
-                if (readSettings.ItemsLimitParamName && !task.Meta.Params.contains(readSettings.ItemsLimitParamName)) {
-                    task.Meta.Params.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes);
-                }
-
-                if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
-                    const auto& readRange = op.GetReadOlapRange();
-                    FillReadInfo(task.Meta, readSettings.ItemsLimit, readSettings.Reverse, readSettings.Sorted, readSettings.ResultType, readRange);
-                } else {
-                    FillReadInfo(task.Meta, readSettings.ItemsLimit, readSettings.Reverse, readSettings.Sorted, nullptr, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>());
-                }
-
-                if (!task.Meta.Reads) {
-                    task.Meta.Reads.ConstructInPlace();
-                }
-
-                task.Meta.Reads->emplace_back(std::move(readInfo));
+            for (auto&& i: partitions) {
+                const ui64 nodeId = ShardIdToNodeId.at(i.first);
+                nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first, std::move(i.second)));
             }
+
+            if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead()) {
+                for (auto&& pair : nodeShards) {
+                    auto& shardsInfo = pair.second;
+                    for (auto&& shardInfo : shardsInfo) {
+                        auto& task = AssignTaskToShard(stageInfo, shardInfo.ShardId, nodeTasks, assignedShardsCount, readSettings.Sorted, isOlapScan);
+                        MergeToTaskMeta(task.Meta, shardInfo, readSettings, columns, op);
+                    }
+                }
+
+                for (const auto& pair : nodeTasks) {
+                    for (const auto& taskIdx : pair.second) {
+                        auto& task = TasksGraph.GetTask(taskIdx);
+                        PrepareMetaForUsage(task.Meta, keyTypes);
+                    }
+                }
+
+            } else if (!readSettings.Sorted) {
+                for (auto&& pair : nodeShards) {
+                    const auto nodeId = pair.first;
+                    auto& shardsInfo = pair.second;
+                    TTaskMeta meta;
+                    {
+                        for (auto&& shardInfo : shardsInfo) {
+                            MergeToTaskMeta(meta, shardInfo, readSettings, columns, op);
+                        }
+                        PrepareMetaForUsage(meta, keyTypes);
+                        LOG_D("Stage " << stageInfo.Id << " create scan task meta for node: " << nodeId
+                            << ", meta: " << meta.ToString(keyTypes, *AppData()->TypeRegistry));
+                    }
+                    for (ui32 t = 0; t < GetTasksPerNode(stageInfo, isOlapScan, nodeId, shardsInfo.size(), shardsInfo.size()); ++t) {
+                        auto& task = TasksGraph.AddTask(stageInfo);
+                        task.Meta = meta;
+                        task.Meta.ExecuterId = SelfId();
+                        task.Meta.NodeId = nodeId;
+                        task.Meta.ScanTask = true;
+                    }
+                }
+            } else {
+                for (auto&& pair : nodeShards) {
+                    const auto nodeId = pair.first;
+                    auto& shardsInfo = pair.second;
+                    for (auto&& shardInfo : shardsInfo) {
+                        YQL_ENSURE(!shardInfo.KeyWriteRanges);
+                        TTaskMeta meta;
+                        MergeToTaskMeta(meta, shardInfo, readSettings, columns, op);
+                        PrepareMetaForUsage(meta, keyTypes);
+
+                        LOG_D("Stage " << stageInfo.Id << " create datashard scan task meta for node: " << nodeId
+                            << ", meta: " << meta.ToString(keyTypes, *AppData()->TypeRegistry));
+                        for (ui32 t = 0; t < GetTasksPerNode(stageInfo, isOlapScan, nodeId, 1, shardsInfo.size()); ++t) {
+                            auto& task = TasksGraph.AddTask(stageInfo);
+                            task.Meta = meta;
+                            task.Meta.ExecuterId = SelfId();
+                            task.Meta.NodeId = nodeId;
+                            task.Meta.ScanTask = true;
+                        }
+                    }
+                }
+            }
+                
         }
 
         LOG_D("Stage " << stageInfo.Id << " will be executed on " << nodeTasks.size() << " nodes.");
 
-        for (const auto& pair : nodeTasks) {
-            for (const auto& taskIdx : pair.second) {
-                auto& task = TasksGraph.GetTask(taskIdx);
-                YQL_ENSURE(task.Meta.Reads.Defined());
-                auto& taskReads = task.Meta.Reads.GetRef();
-
-                /*
-                 * Sort read ranges so that sequential scan of that ranges produce sorted result.
-                 *
-                 * Partition pruner feed us with set of non-intersecting ranges with filled right boundary.
-                 * So we may sort ranges based solely on the their rightmost point.
-                 */
-                std::sort(taskReads.begin(), taskReads.end(), [&](const auto& lhs, const auto& rhs){
-                    if (lhs.ShardId == rhs.ShardId)
-                        return false;
-
-                    const std::pair<const TSerializedCellVec*, bool> k1 = lhs.Ranges.GetRightBorder();
-                    const std::pair<const TSerializedCellVec*, bool> k2 = rhs.Ranges.GetRightBorder();
-
-                    const int cmp = CompareBorders<false, false>(
-                        k1.first->GetCells(),
-                        k2.first->GetCells(),
-                        k1.second,
-                        k2.second,
-                        keyTypes);
-
-                    return (cmp < 0);
-                });
-
-                LOG_D("Stage " << stageInfo.Id << " create datashard scan task: " << taskIdx
-                    << ", node: " << pair.first
-                    << ", meta: " << task.Meta.ToString(keyTypes, *AppData()->TypeRegistry));
-            }
-        }
     }
 
     void BuildComputeTasks(TStageInfo& stageInfo) {

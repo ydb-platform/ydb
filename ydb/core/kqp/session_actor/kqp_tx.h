@@ -26,6 +26,9 @@ public:
     ui32 GetGeneration() const { return LockValue.GetStruct(2).GetUint32(); }
     ui64 GetCounter() const { return LockValue.GetStruct(0).GetUint64(); }
     bool HasWrites() const { return LockValue.GetStruct(6).GetBool(); }
+    void SetHasWrites() {
+        LockValue.MutableStruct(6)->SetBool(true);
+    }
 
     TKey GetKey() const { return std::make_tuple(GetLockId(), GetDataShard(), GetSchemeShard(), GetPathId()); }
     NKikimrMiniKQL::TValue GetValue() const { return LockValue; }

@@ -792,9 +792,37 @@ public:
         return false;
     }
 
-    void ExecuteOrDefer() {
+    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(const NKqpProto::TKqpPhyQuery& phyQuery) {
         auto& txCtx = *QueryState->TxCtx;
+        auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx);
 
+        if (Config->FeatureFlags.GetEnableKqpImmediateEffects()) {
+            // Execute every physical tx immediately
+            return tx;
+        }
+
+        // Deffer effects and execute them at the end before commit
+        while (tx && tx->GetHasEffects()) {
+            try {
+                QueryState->QueryData->CreateKqpValueMap(tx);
+            } catch (const yexception& ex) {
+                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+            }
+            bool success = txCtx.AddDeferredEffect(tx, QueryState->QueryData);
+            YQL_ENSURE(success);
+            LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
+            if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
+                ++QueryState->CurrentTx;
+                tx = QueryState->PreparedQuery->GetPhyTx(QueryState->CurrentTx);
+            } else {
+                tx = nullptr;
+            }
+        }
+
+        return tx;
+    }
+
+    void ExecuteOrDefer() {
         bool haveWork = QueryState->PreparedQuery &&
                 QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()
                     || QueryState->Commit && !QueryState->Commited;
@@ -805,26 +833,7 @@ public:
         }
 
         const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-
-        auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx);
-        if (!Config->FeatureFlags.GetEnableKqpImmediateEffects()) {
-            while (tx && tx->GetHasEffects()) {
-                try {
-                    QueryState->QueryData->CreateKqpValueMap(tx);
-                } catch (const yexception& ex) {
-                    ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
-                }
-                bool success = txCtx.AddDeferredEffect(tx, QueryState->QueryData);
-                YQL_ENSURE(success);
-                LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
-                if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
-                    ++QueryState->CurrentTx;
-                    tx = QueryState->PreparedQuery->GetPhyTx(QueryState->CurrentTx);
-                } else {
-                    tx = nullptr;
-                }
-            }
-        }
+        auto tx = GetCurrentPhyTx(phyQuery);
 
         if (!CheckTransacionLocks() || !CheckTopicOperations()) {
             return;
@@ -848,14 +857,19 @@ public:
             return false;
         }
 
-        if (Config->FeatureFlags.GetEnableKqpImmediateEffects() && phyQuery.GetHasUncommittedChangesRead()) {
-            // every phy tx should acquire LockTxId, so commit is sent separately at the end
-            return QueryState->CurrentTx >= phyQuery.TransactionsSize();
-        }
-
         if (!tx) {
             // no physical transactions left, perform commit
             return true;
+        } else if (Config->FeatureFlags.GetEnableKqpImmediateEffects() && QueryState->TxCtx->HasUncommittedChangesRead) {
+            YQL_ENSURE(tx);
+            if (tx->GetHasEffects()) {
+                YQL_ENSURE(tx->ResultsSize() == 0);
+                // perform commit with last tx with effects
+                return QueryState->CurrentTx + 1 == phyQuery.TransactionsSize();
+            }
+
+            // last tx contains reads, so commit should be sent separately
+            return false;
         } else {
             // we can merge commit with last tx only for read-only transactions
             return QueryState->TxCtx->DeferredEffects.Empty();

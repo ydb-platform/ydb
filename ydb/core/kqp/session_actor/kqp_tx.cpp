@@ -66,6 +66,10 @@ std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& typ
             res.first = false;
 
         } else if (auto curTxLock = locks.LocksMap.FindPtr(txLock.GetKey())) {
+            if (txLock.HasWrites()) {
+                curTxLock->SetHasWrites();
+            }
+
             if (curTxLock->Invalidated(txLock)) {
                 res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
                 res.first = false;
@@ -152,7 +156,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         }
     }
 
-    if (config.FeatureFlags.GetEnableKqpImmediateEffects() && physicalQuery.GetHasUncommittedChangesRead()) {
+    if (config.FeatureFlags.GetEnableKqpImmediateEffects() && txCtx.HasUncommittedChangesRead) {
         return true;
     }
 

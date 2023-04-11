@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -1010,6 +1011,214 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
                     (101u, "Value101");
             )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TxWithReadAtTheEnd) {
+        auto serverSettings = TKikimrSettings()
+            .SetEnableKqpImmediateEffects(true);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+
+            UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                (3u, "Value3"),
+                (101u, "Value101"),
+                (201u, "Value201");
+
+            UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                (4u, "Value4"),
+                (101u, "NewValue101");
+
+            SELECT * FROM TestImmediateEffects ORDER BY Key;
+        )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[1u];["Value1"]];
+            [[2u];["Value2"]];
+            [[3u];["Value3"]];
+            [[4u];["Value4"]];
+            [[100u];["Value100"]];
+            [[101u];["NewValue101"]];
+            [[200u];["Value200"]];
+            [[201u];["Value201"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        // check that last (commit) phase is empty
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 0);
+    }
+
+    Y_UNIT_TEST(InteractiveTxWithReadAtTheEnd) {
+        auto serverSettings = TKikimrSettings()
+            .SetEnableKqpImmediateEffects(true);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        TMaybe<TTransaction> tx;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Value3"),
+                    (101u, "Value101"),
+                    (201u, "Value201");
+            )", TTxControl::BeginTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[100u];["Value100"]];
+                [[200u];["Value200"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (4u, "Value4");
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+            )", TTxControl::Tx(*tx).CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[3u];["Value3"]];
+                [[4u];["Value4"]];
+                [[100u];["Value100"]];
+                [[101u];["Value101"]];
+                [[200u];["Value200"]];
+                [[201u];["Value201"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            // check that last (commit) phase is empty
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(TxWithWriteAtTheEnd) {
+        auto serverSettings = TKikimrSettings()
+            .SetEnableKqpImmediateEffects(true);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+
+            UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                (3u, "Value3"),
+                (101u, "Value101"),
+                (201u, "Value201");
+
+            SELECT * FROM TestImmediateEffects ORDER BY Key;
+
+            UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                (4u, "Value4"),
+                (101u, "NewValue101");
+        )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[1u];["Value1"]];
+            [[2u];["Value2"]];
+            [[3u];["Value3"]];
+            [[100u];["Value100"]];
+            [[101u];["Value101"]];
+            [[200u];["Value200"]];
+            [[201u];["Value201"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        // check that last (commit) phase contains write operation
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 1);
+    }
+
+    Y_UNIT_TEST(InteractiveTxWithWriteAtTheEnd) {
+        auto serverSettings = TKikimrSettings()
+            .SetEnableKqpImmediateEffects(true);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        TMaybe<TTransaction> tx;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Value3"),
+                    (101u, "Value101"),
+                    (201u, "Value201");
+            )", TTxControl::BeginTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[100u];["Value100"]];
+                [[200u];["Value200"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (4u, "Value4");
+            )", TTxControl::Tx(*tx).CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[3u];["Value3"]];
+                [[100u];["Value100"]];
+                [[101u];["Value101"]];
+                [[200u];["Value200"]];
+                [[201u];["Value201"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            // check that last (commit) phase contains write operation
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 1);
         }
     }
 

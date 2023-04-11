@@ -452,21 +452,25 @@ THttpIncomingResponse::THttpIncomingResponse(THttpOutgoingRequestPtr request)
     : Request(request)
 {}
 
-THttpOutgoingResponsePtr THttpIncomingRequest::CreateIncompleteResponse(TStringBuf status, TStringBuf message) {
+THttpOutgoingResponsePtr THttpIncomingRequest::ConstructResponse(TStringBuf status, TStringBuf message) {
     TStringBuf version = Version;
     if (version != "1.0" && version != "1.1") {
         version = "1.1";
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(this, "HTTP", version, status, message);
-    response->Set<&THttpResponse::Connection>(GetConnection());
-    if (!Endpoint->WorkerName.empty()) {
-        response->Set("X-Worker-Name", Endpoint->WorkerName);
-    }
     return response;
 }
 
 THttpOutgoingResponsePtr THttpIncomingRequest::CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers) {
-    THttpOutgoingResponsePtr response = CreateIncompleteResponse(status, message);
+    THttpOutgoingResponsePtr response = ConstructResponse(status, message);
+    if (!headers.Has("Connection")) {
+        response->Set<&THttpResponse::Connection>(GetConnection());
+    }
+    if (!headers.Has("X-Worker-Name")) {
+        if (!Endpoint->WorkerName.empty()) {
+            response->Set("X-Worker-Name", Endpoint->WorkerName);
+        }
+    }
     response->Set(headers);
     return response;
 }

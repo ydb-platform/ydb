@@ -6,14 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-testlib-service_mocks INTERFACE)
-target_link_libraries(library-testlib-service_mocks INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  client-yc_private-servicecontrol
-  api-grpc-draft
-  client-yc_private-resourcemanager
-  client-yc_private-iam
-  priv-oauth-v1
-)
+add_subdirectory(v1)

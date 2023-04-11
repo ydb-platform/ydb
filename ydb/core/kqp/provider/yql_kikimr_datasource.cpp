@@ -76,6 +76,8 @@ private:
 
             case TKikimrKey::Type::Object:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Topic:
+                return TStatus::Ok;
         }
 
         return TStatus::Error;

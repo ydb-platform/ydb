@@ -528,6 +528,19 @@ namespace NSQLTranslationV1 {
         TString ShortName() const;
     };
 
+    struct TTopicRef {
+        TString RefName;
+        TDeferredAtom Cluster;
+        TNodePtr Consumers;
+        TNodePtr Settings;
+        TNodePtr Keys;
+
+        TTopicRef() = default;
+        TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNodePtr keys);
+        TTopicRef(const TTopicRef&) = default;
+        TTopicRef& operator=(const TTopicRef&) = default;
+    };
+
     struct TIdentifier {
         TPosition Pos;
         TString Name;
@@ -1241,6 +1254,53 @@ namespace NSQLTranslationV1 {
         bool IsPasswordEncrypted = false;
     };
 
+    struct TTopicConsumerSettings {
+        struct TLocalSinkSettings {
+            // no special settings
+        };
+
+        TNodePtr Important;
+        NYql::TResetableSetting<TNodePtr, void> ReadFromTs;
+        NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
+    };
+
+    struct TTopicConsumerDescription {
+        TTopicConsumerDescription(const TIdentifier& name)
+            : Name(name)
+        {}
+
+        TIdentifier Name;
+        TTopicConsumerSettings Settings;
+    };
+    struct TTopicSettings {
+        NYql::TResetableSetting<TNodePtr, void> MinPartitions;
+        NYql::TResetableSetting<TNodePtr, void> PartitionsLimit;
+        NYql::TResetableSetting<TNodePtr, void> RetentionPeriod;
+        NYql::TResetableSetting<TNodePtr, void> RetentionStorage;
+        NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
+        NYql::TResetableSetting<TNodePtr, void> PartitionWriteSpeed;
+        NYql::TResetableSetting<TNodePtr, void> PartitionWriteBurstSpeed;
+        NYql::TResetableSetting<TNodePtr, void> MeteringMode;
+
+        bool IsSet() const {
+            return MinPartitions || PartitionsLimit || RetentionPeriod || RetentionStorage
+                   || SupportedCodecs || PartitionWriteSpeed|| PartitionWriteBurstSpeed || MeteringMode
+            ;
+        }
+    };
+
+    struct TCreateTopicParameters {
+        TVector<TTopicConsumerDescription> Consumers;
+        TTopicSettings TopicSettings;
+    };
+
+    struct TAlterTopicParameters {
+        TVector<TTopicConsumerDescription> AddConsumers;
+        THashMap<TString, TTopicConsumerDescription> AlterConsumers;
+        TVector<TIdentifier> DropConsumers;
+        TTopicSettings TopicSettings;
+    };
+
     TString IdContent(TContext& ctx, const TString& str);
     TString IdContentFromString(TContext& ctx, const TString& str);
     TTableHints GetContextHints(TContext& ctx);
@@ -1399,6 +1459,7 @@ namespace NSQLTranslationV1 {
     // Implemented in query.cpp
     TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TString& view);
     TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& func, const TVector<TTableArg>& args);
+    TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name);
     TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints);
     TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped);
     TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TCreateTableParameters& params, TScopedStatePtr scoped);
@@ -1433,6 +1494,12 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq);
     TNodePtr BuildWorldIfNode(TPosition pos, TNodePtr predicate, TNodePtr thenNode, TNodePtr elseNode, bool isEvaluate);
     TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate);
+
+    TNodePtr BuildCreateTopic(TPosition pos, const TTopicRef& tr, const TCreateTopicParameters& params,
+                              TScopedStatePtr scoped);
+    TNodePtr BuildAlterTopic(TPosition pos, const TTopicRef& tr, const TAlterTopicParameters& params,
+                              TScopedStatePtr scoped);
+    TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, TScopedStatePtr scoped);
 
     template<class TContainer>
     TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {

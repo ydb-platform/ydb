@@ -34,6 +34,7 @@ using TBase = TPQGrpcSchemaBase<TDropTopicActor, TEvDropTopicRequest>;
 
 public:
      TDropTopicActor(NKikimr::NGRpcService::TEvDropTopicRequest* request);
+     TDropTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
     ~TDropTopicActor() = default;
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -199,7 +200,7 @@ class TPQCreateTopicActor : public TPQGrpcSchemaBase<TPQCreateTopicActor, NKikim
 using TBase = TPQGrpcSchemaBase<TPQCreateTopicActor, TEvPQCreateTopicRequest>;
 
 public:
-     TPQCreateTopicActor(NKikimr::NGRpcService::TEvPQCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters);
+    TPQCreateTopicActor(NKikimr::NGRpcService::TEvPQCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters);
     ~TPQCreateTopicActor() = default;
 
     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
@@ -219,7 +220,8 @@ class TCreateTopicActor : public TPQGrpcSchemaBase<TCreateTopicActor, NKikimr::N
 using TBase = TPQGrpcSchemaBase<TCreateTopicActor, TEvCreateTopicRequest>;
 
 public:
-     TCreateTopicActor(NKikimr::NGRpcService::TEvCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters);
+    TCreateTopicActor(NKikimr::NGRpcService::TEvCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters);
+    TCreateTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
     ~TCreateTopicActor() = default;
 
     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
@@ -261,6 +263,7 @@ class TAlterTopicActor : public TUpdateSchemeActor<TAlterTopicActor, TEvAlterTop
 
 public:
     TAlterTopicActor(NKikimr::NGRpcService::TEvAlterTopicRequest *request);
+    TAlterTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
 
     void Bootstrap(const NActors::TActorContext &ctx);
     void ModifyPersqueueConfig(const TActorContext& ctx,

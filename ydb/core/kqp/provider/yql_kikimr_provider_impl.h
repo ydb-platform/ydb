@@ -37,6 +37,11 @@ private:
     virtual TStatus HandleCreateTable(NNodes::TKiCreateTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterTable(NNodes::TKiAlterTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropTable(NNodes::TKiDropTable node, TExprContext& ctx) = 0;
+
+    virtual TStatus HandleCreateTopic(NNodes::TKiCreateTopic node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterTopic(NNodes::TKiAlterTopic node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropTopic(NNodes::TKiDropTopic node, TExprContext& ctx) = 0;
+
     virtual TStatus HandleCreateUser(NNodes::TKiCreateUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterUser(NNodes::TKiAlterUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropUser(NNodes::TKiDropUser node, TExprContext& ctx) = 0;
@@ -61,7 +66,8 @@ public:
         TableList,
         TableScheme,
         Role,
-        Object
+        Object,
+        Topic
     };
 
 public:
@@ -76,6 +82,12 @@ public:
     TString GetTablePath() const {
         Y_VERIFY_DEBUG(KeyType.Defined());
         Y_VERIFY_DEBUG(KeyType == Type::Table || KeyType == Type::TableScheme);
+        return Target;
+    }
+
+    TString GetTopicPath() const {
+        Y_VERIFY_DEBUG(KeyType.Defined());
+        Y_VERIFY_DEBUG(KeyType == Type::Topic);
         return Target;
     }
 

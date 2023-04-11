@@ -43,6 +43,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateTable::CallableName());
         DataSinkNames.insert(TKiAlterTable::CallableName());
         DataSinkNames.insert(TKiDropTable::CallableName());
+        DataSinkNames.insert(TKiCreateTopic::CallableName());
+        DataSinkNames.insert(TKiAlterTopic::CallableName());
+        DataSinkNames.insert(TKiDropTopic::CallableName());
         DataSinkNames.insert(TKiCreateUser::CallableName());
         DataSinkNames.insert(TKiAlterUser::CallableName());
         DataSinkNames.insert(TKiDropUser::CallableName());
@@ -89,6 +92,9 @@ struct TKikimrData {
             TYdbOperation::CreateTable |
             TYdbOperation::DropTable |
             TYdbOperation::AlterTable |
+            TYdbOperation::CreateTopic |
+            TYdbOperation::AlterTopic |
+            TYdbOperation::DropTopic |
             TYdbOperation::CreateUser |
             TYdbOperation::AlterUser |
             TYdbOperation::DropUser |
@@ -347,6 +353,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         KeyType = Type::Object;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ObjectType = key.Child(1)->Child(1)->Child(0)->Content();
+    } else if (tagName == "topic") {
+        KeyType = Type::Topic;
+        const TExprNode* nameNode = key.Child(0)->Child(1);
+        if (!nameNode->IsCallable("String")) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as topic key."));
+            return false;
+        }
+        Target = nameNode->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;

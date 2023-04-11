@@ -120,6 +120,12 @@ namespace NKikimr::NGRpcProxy::V1 {
             , TopicPath(topicPath)
         {
         }
+        TPQGrpcSchemaBase(NGRpcService::IRequestOpCtx* request)
+            : TBase(request)
+            , TopicPath(TBase::GetProtoRequest()->path())
+        {
+            //auto path = TBase::GetProtoRequest()->path();
+        }
 
         TString GetTopicPath(const NActors::TActorContext& ctx) {
             auto path = NPersQueue::GetFullTopicPath(ctx, this->Request_->GetDatabaseName(), TopicPath);
@@ -354,6 +360,9 @@ namespace NKikimr::NGRpcProxy::V1 {
     public:
         TUpdateSchemeActor(NGRpcService::IRequestOpCtx* request, const TString& topicPath)
             : TBase(request, topicPath)
+        {}
+        TUpdateSchemeActor(NGRpcService::IRequestOpCtx* request)
+            : TBase(request)
         {}
         ~TUpdateSchemeActor() = default;
 

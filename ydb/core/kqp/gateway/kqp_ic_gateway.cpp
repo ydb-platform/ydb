@@ -22,7 +22,9 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/lib/base/msgbus_status.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
+#include <ydb/services/persqueue_v1/rpc_calls.h>
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -1066,6 +1068,51 @@ public:
                 Ydb::Table::DropTableResponse>;
 
             return SendLocalRpcRequestNoResult<TEvDropTableRequest>(std::move(dropTable), Database, GetTokenCompat());
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) override {
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            using namespace NGRpcService;
+            return SendLocalRpcRequestNoResult<TEvRpcCreateTopicRequest>(std::move(request), Database, GetTokenCompat());
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request) override {
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            using namespace NGRpcService;
+            return SendLocalRpcRequestNoResult<TEvRpcAlterTopicRequest>(std::move(request), Database, GetTokenCompat());
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic) override {
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            Ydb::Topic::DropTopicRequest dropTopic;
+            dropTopic.set_path(topic);
+
+            using namespace NGRpcService;
+            return SendLocalRpcRequestNoResult<TEvRpcDropTopicRequest>(std::move(dropTopic), Database, GetTokenCompat());
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));

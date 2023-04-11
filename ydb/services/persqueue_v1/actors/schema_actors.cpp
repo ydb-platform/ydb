@@ -14,6 +14,10 @@ TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::TEvDropTopicRequest* req
     : TBase(request, request->GetProtoRequest()->path())
 {
 }
+TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
+    : TBase(request)
+{
+}
 
 void TDropTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 {
@@ -305,6 +309,12 @@ TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::TEvCreateTopicReques
     Y_ASSERT(request);
 }
 
+TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
+    : TBase(request)
+{
+    Y_ASSERT(request);
+}
+
 void TCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 {
     TBase::Bootstrap(ctx);
@@ -408,9 +418,13 @@ void TPQAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransactio
 }
 
 
-
 TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::TEvAlterTopicRequest* request)
     : TBase(request, request->GetProtoRequest()->path())
+{
+}
+
+TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
+    : TBase(request)
 {
 }
 

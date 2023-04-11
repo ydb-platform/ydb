@@ -11,6 +11,7 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
 
@@ -293,6 +294,11 @@ enum class ETableType : ui32 {
 };
 
 ETableType GetTableTypeFromString(const TStringBuf& tableType);
+
+bool GetTopicMeteringModeFromString(const TString& meteringMode,
+                                                        Ydb::Topic::MeteringMode& result);
+TVector<Ydb::Topic::Codec> GetTopicCodecsFromString(const TStringBuf& codecsStr);
+
 
 enum class EStoreType : ui32 {
     Row = 0,
@@ -673,6 +679,12 @@ public:
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
 

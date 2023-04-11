@@ -379,6 +379,47 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         setup.Run(cases);
     }
 
+    Y_UNIT_TEST(CreateTopic) {
+        TCases cases = {
+            {"create topic topic1",
+             "CREATE TOPIC topic1;\n\n"},
+             {"create topic topic1 (consumer c1)",
+             "CREATE TOPIC topic1 (\n\tCONSUMER c1\n);\n\n"},
+             {"create topic topic1 (consumer c1, consumer c2 with (important = True))",
+             "CREATE TOPIC topic1 (\n\tCONSUMER c1,\n\tCONSUMER c2 WITH (important = TRUE)\n);\n\n"},
+             {"create topic topic1 (consumer c1) with (partition_count_limit = 5)",
+             "CREATE TOPIC topic1 (\n\tCONSUMER c1\n) WITH (\n\tpartition_count_limit = 5\n);\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+    Y_UNIT_TEST(AlterTopic) {
+        TCases cases = {
+             {"alter topic topic1 alter consumer c1 set (important = false)",
+             "ALTER TOPIC topic1\n\tALTER CONSUMER c1 SET (important = FALSE);\n\n"},
+             {"alter topic topic1 alter consumer c1 set (important = false), alter consumer c2 reset (read_from)",
+              "ALTER TOPIC topic1\n\tALTER CONSUMER c1 SET (important = FALSE),\n\tALTER CONSUMER c2 RESET (read_from);\n\n"},
+             {"alter topic topic1 add consumer c1, drop consumer c2",
+              "ALTER TOPIC topic1\n\tADD CONSUMER c1,\n\tDROP CONSUMER c2;\n\n"},
+             {"alter topic topic1 set (supported_codecs = 'RAW'), RESET (retention_period)",
+              "ALTER TOPIC topic1\n\tSET (supported_codecs = 'RAW'),\n\tRESET (retention_period);\n\n"},
+
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+    Y_UNIT_TEST(DropTopic) {
+        TCases cases = {
+            {"drop topic topic1",
+             "DROP TOPIC topic1;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
     Y_UNIT_TEST(Do) {
         TCases cases = {
             {"do $a(1,2,3)",

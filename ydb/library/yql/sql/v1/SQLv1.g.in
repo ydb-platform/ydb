@@ -51,6 +51,9 @@ sql_stmt_core:
   | drop_external_data_source_stmt
   | create_replication_stmt
   | drop_replication_stmt
+  | create_topic_stmt
+  | alter_topic_stmt
+  | drop_topic_stmt
 ;
 
 expr:
@@ -657,6 +660,59 @@ set_target: column_name;
 multiple_column_assignment: set_target_list EQUALS LPAREN simple_values_source RPAREN;
 set_target_list: LPAREN set_target (COMMA set_target)* RPAREN;
 
+// topics
+create_topic_stmt: CREATE TOPIC topic_ref create_topic_entries? with_topic_settings?;
+
+create_topic_entries: LPAREN create_topic_entry (COMMA create_topic_entry)* RPAREN;
+create_topic_entry:
+    topic_create_consumer_entry
+;
+with_topic_settings: WITH LPAREN topic_settings RPAREN;
+
+alter_topic_stmt: ALTER TOPIC topic_ref alter_topic_action (COMMA alter_topic_action)*;
+alter_topic_action:
+    alter_topic_add_consumer
+  | alter_topic_alter_consumer
+  | alter_topic_drop_consumer
+  | alter_topic_set_settings
+  | alter_topic_reset_settings
+;
+
+alter_topic_add_consumer: ADD topic_create_consumer_entry;
+topic_create_consumer_entry: CONSUMER an_id topic_consumer_with_settings?;
+
+alter_topic_alter_consumer: ALTER CONSUMER topic_consumer_ref alter_topic_alter_consumer_entry;
+alter_topic_alter_consumer_entry:
+    topic_alter_consumer_set
+  | topic_alter_consumer_reset
+;
+
+alter_topic_drop_consumer: DROP CONSUMER topic_consumer_ref;
+
+topic_alter_consumer_set: SET LPAREN topic_consumer_settings RPAREN;
+topic_alter_consumer_reset: RESET LPAREN an_id (COMMA an_id)* RPAREN;
+
+alter_topic_set_settings: SET LPAREN topic_settings RPAREN;
+alter_topic_reset_settings: RESET LPAREN an_id (COMMA an_id_pure)* RPAREN;
+
+drop_topic_stmt: DROP TOPIC topic_ref;
+
+topic_settings: topic_settings_entry (COMMA topic_settings_entry)*;
+topic_settings_entry: an_id EQUALS topic_setting_value;
+topic_setting_value:
+    expr
+;
+
+topic_consumer_with_settings: WITH LPAREN topic_consumer_settings RPAREN;
+topic_consumer_settings: topic_consumer_settings_entry (COMMA topic_consumer_settings_entry)*;
+topic_consumer_settings_entry: an_id EQUALS topic_consumer_setting_value;
+topic_consumer_setting_value:
+    expr
+;
+
+topic_ref: (cluster_expr DOT)? an_id;
+topic_consumer_ref: an_id_pure;
+
 /// window function supp
 // differ from 2003 for resolve conflict
 null_treatment: RESPECT NULLS | IGNORE NULLS;
@@ -908,9 +964,11 @@ keyword_hint_uncompat:
 ;
 
 keyword_as_compat:
-    DATA
+    CONSUMER
+  | DATA
   | REPLICATION
   | SOURCE
+  | TOPIC
   | TYPE
 ;
 
@@ -941,6 +999,7 @@ keyword_compat: (
   | CONDITIONAL
   | CONFLICT
   | CONSTRAINT
+  | CONSUMER
   | COVER
   | CREATE
   | CROSS
@@ -1066,6 +1125,7 @@ keyword_compat: (
   | TIES
   | TYPE
   | TO
+  | TOPIC
   | TRANSACTION
   | TRIGGER
   | UNCONDITIONAL
@@ -1218,6 +1278,7 @@ COMPACT: C O M P A C T;
 CONDITIONAL: C O N D I T I O N A L;
 CONFLICT: C O N F L I C T;
 CONSTRAINT: C O N S T R A I N T;
+CONSUMER: C O N S U M E R;
 COVER: C O V E R;
 CREATE: C R E A T E;
 CROSS: C R O S S;
@@ -1386,6 +1447,7 @@ THEN: T H E N;
 TIES: T I E S;
 TYPE: T Y P E;
 TO: T O;
+TOPIC: T O P I C;
 TRANSACTION: T R A N S A C T I O N;
 TRIGGER: T R I G G E R;
 TUPLE: T U P L E;

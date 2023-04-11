@@ -490,15 +490,19 @@ private:
     ui64 TopicsVersion = 0;
     bool UseConfigTables = true;
 
-    void RunYqlSchemeQuery(TString query) {
+public:
+    void RunYqlSchemeQuery(TString query, bool expectSuccess = true) {
         auto tableClient = NYdb::NTable::TTableClient(*Driver);
         auto result = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
             return session.ExecuteSchemeQuery(query).GetValueSync();
         });
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        if (expectSuccess) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT(!result.IsSuccess());
+        }
     }
 
-public:
     TMaybe<NYdb::TResultSet> RunYqlDataQueryWithParams(TString query, const NYdb::TParams& params) {
         auto tableClient = NYdb::NTable::TTableClient(*Driver);
         TMaybe<NYdb::TResultSet> rs;

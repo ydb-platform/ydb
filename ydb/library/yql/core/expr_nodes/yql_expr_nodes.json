@@ -64,6 +64,19 @@
             "ListBase": "TCoChangefeed"
         },
         {
+            "Name": "TCoTopicConsumer",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TCoTopicConsumerList",
+            "ListBase": "TCoTopicConsumer"
+        },
+        {
             "Name": "TCoWorld",
             "Base": "TExprBase",
             "Match": {"Type": "NodeType", "TypeName": "World"},

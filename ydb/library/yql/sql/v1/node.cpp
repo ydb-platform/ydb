@@ -45,6 +45,13 @@ TString TTableRef::ShortName() const {
     return TString();
 }
 
+TTopicRef::TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNodePtr keys)
+    : RefName(refName)
+    , Cluster(cluster)
+    , Keys(keys)
+{
+}
+
 TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
         TVector<TIdentifier> families)
     : Pos(pos)

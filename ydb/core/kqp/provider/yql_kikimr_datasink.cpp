@@ -77,6 +77,24 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterTopic(TKiAlterTopic node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropTopic(TKiDropTopic node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "CreateUser is not yet implemented for intent determination transformer"));
@@ -241,6 +259,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::Object:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Topic:
+                return TStatus::Ok;
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid table key type."));
@@ -395,6 +415,12 @@ public:
         if (node.IsCallable(TKiCreateTable::CallableName())
             || node.IsCallable(TKiDropTable::CallableName())
             || node.IsCallable(TKiAlterTable::CallableName())) {
+            return true;
+        }
+        if (node.IsCallable(TKiCreateTopic::CallableName())
+            || node.IsCallable(TKiAlterTopic::CallableName())
+            || node.IsCallable(TKiDropTopic::CallableName())
+        ) {
             return true;
         }
 
@@ -554,6 +580,48 @@ public:
 
             case TKikimrKey::Type::TableList:
                 break;
+
+            case TKikimrKey::Type::Topic: {
+                NCommon::TWriteTopicSettings settings = NCommon::ParseWriteTopicSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "create") {
+                    return Build<TKiCreateTopic>(ctx, node->Pos())
+                            .World(node->Child(0))
+                            .DataSink(node->Child(1))
+                            .Topic().Build(key.GetTopicPath())
+                            .TopicSettings(settings.TopicSettings.Cast())
+                            .Consumers(settings.Consumers.Cast())
+                            .Settings(settings.Other)
+                            .Done()
+                            .Ptr();
+                } else if (mode == "alter") {
+                    return Build<TKiAlterTopic>(ctx, node->Pos())
+                            .World(node->Child(0))
+                            .DataSink(node->Child(1))
+                            .Topic().Build(key.GetTopicPath())
+                            .TopicSettings(settings.TopicSettings.Cast())
+                            .AddConsumers(settings.AddConsumers.Cast())
+                            .AlterConsumers(settings.AlterConsumers.Cast())
+                            .DropConsumers(settings.DropConsumers.Cast())
+                            .Settings(settings.Other)
+                            .Done()
+                            .Ptr();
+                } else if (mode == "drop") {
+                        return Build<TKiDropTopic>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Topic().Build(key.GetTopicPath())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for topic"));
+                    return nullptr;
+                }
+                break;
+            }
             case TKikimrKey::Type::Object:
             {
                 NCommon::TWriteObjectSettings settings = NCommon::ParseWriteObjectSettings(TExprList(node->Child(4)), ctx);
@@ -726,6 +794,18 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiDropTable>(input)) {
         return HandleDropTable(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiCreateTopic>(input)) {
+        return HandleCreateTopic(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiAlterTopic>(input)) {
+        return HandleAlterTopic(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiDropTopic>(input)) {
+        return HandleDropTopic(node.Cast(), ctx);
     }
 
     if (auto node = TMaybeNode<TKiCreateObject>(input)) {

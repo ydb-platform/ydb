@@ -206,7 +206,10 @@ enum class TYdbOperation : ui32 {
     DropUser             = 1 << 15,
     CreateGroup           = 1 << 16,
     AlterGroup            = 1 << 17,
-    DropGroup             = 1 << 18
+    DropGroup             = 1 << 18,
+    CreateTopic           = 1 << 19,
+    AlterTopic            = 1 << 20,
+    DropTopic             = 1 << 21
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation)

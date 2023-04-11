@@ -5194,3 +5194,116 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 }
+
+Y_UNIT_TEST_SUITE(TopicsDDL) {
+    void TestQuery(const TString& query, bool expectOk = true) {
+        TStringBuilder finalQuery;
+
+        finalQuery << "use plato;" << Endl << query;
+        Cerr << "Run query: " << query << Endl;
+        auto res = SqlToYql(finalQuery, 10, "kikimr");
+        if (expectOk) {
+            UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+        } else {
+            UNIT_ASSERT(!res.IsOk());
+        }
+    }
+
+    Y_UNIT_TEST(CreateTopicSimple) {
+        TestQuery(R"(
+            CREATE TOPIC topic1;
+        )");
+        TestQuery(R"(
+            CREATE TOPIC `cluster1.topic1`;
+        )");
+        TestQuery(R"(
+            CREATE TOPIC topic1 WITH (metering_mode = "str_value", partition_count_limit = 123, retention_period = Interval('PT1H'));
+        )");
+    }
+
+    Y_UNIT_TEST(CreateTopicConsumer) {
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1);
+        )");
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons2 WITH (important = false));
+        )");
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons2 WITH (important = false)) WITH (supported_codecs = "1,2,3");
+        )");
+    }
+
+    Y_UNIT_TEST(AlterTopicSimple) {
+        TestQuery(R"(
+            ALTER TOPIC topic1 SET (retention_period = Interval('PT1H'));
+        )");
+        TestQuery(R"(
+            ALTER TOPIC topic1 SET (retention_storage_mb = 3, partition_count_limit = 50);
+        )");
+        TestQuery(R"(
+            ALTER TOPIC topic1 RESET (supported_codecs, retention_period);
+        )");
+        TestQuery(R"(
+            ALTER TOPIC topic1 RESET (partition_write_speed_bytes_per_second),
+                 SET (partition_write_burst_bytes = 11111, min_active_partitions = 1);
+        )");
+    }
+    Y_UNIT_TEST(AlterTopicConsumer) {
+        TestQuery(R"(
+            ALTER TOPIC topic1 ADD CONSUMER consumer1,
+                ADD CONSUMER consumer2 WITH (important = false, supported_codecs = "RAW"),
+                ALTER CONSUMER consumer3 SET (important = false, read_from = 1),
+                ALTER CONSUMER consumer3 RESET (supported_codecs),
+                DROP CONSUMER consumer4,
+                SET (partition_count_limit = 11, retention_period = Interval('PT1H')),
+                RESET(metering_mode)
+        )");
+    }
+    Y_UNIT_TEST(DropTopic) {
+        TestQuery(R"(
+            DROP TOPIC topic1;
+        )");
+    }
+
+    Y_UNIT_TEST(TopicBadRequests) {
+        TestQuery(R"(
+            CREATE TOPIC topic1();
+        )", false);
+        TestQuery(R"(
+            CREATE TOPIC topic1 SET setting1 = value1;
+        )", false);
+        TestQuery(R"(
+            ALTER TOPIC topic1 SET setting1 value1;
+        )", false);
+        TestQuery(R"(
+            ALTER TOPIC topic1 RESET setting1;
+        )", false);
+
+        TestQuery(R"(
+            ALTER TOPIC topic1 DROP CONSUMER consumer4 WITH (k1 = v1);
+        )", false);
+
+        TestQuery(R"(
+            CREATE TOPIC topic1 WITH (retention_period = 123);
+        )", false);
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons1 WITH (important = false));
+        )", false);
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1 WITH (bad_option = false));
+        )", false);
+        TestQuery(R"(
+            ALTER TOPIC topic1 ADD CONSUMER cons1, ALTER CONSUMER cons1 RESET (important);
+        )", false);
+        TestQuery(R"(
+            ALTER TOPIC topic1 ADD CONSUMER consumer1,
+                ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
+                ALTER CONSUMER consumer3 RESET (supported_codecs);
+        )", false);
+        TestQuery(R"(
+            ALTER TOPIC topic1 ADD CONSUMER consumer1,
+                ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
+                ALTER CONSUMER consumer3 SET (read_from = 2);
+        )", false);
+    }
+}

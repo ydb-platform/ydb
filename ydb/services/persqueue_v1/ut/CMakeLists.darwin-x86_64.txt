@@ -46,6 +46,7 @@ target_sources(ydb-services-persqueue_v1-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_common_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_compat_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/first_class_src_ids_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/topic_yql_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/rate_limiter_test_setup.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/functions_executor_wrapper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/topic_service_ut.cpp

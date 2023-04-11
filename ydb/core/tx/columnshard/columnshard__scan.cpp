@@ -160,6 +160,7 @@ private:
     }
 
     void HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
+        TaskResultsCounter.Inc();
         auto g = Stats.MakeGuard("task_result");
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " got ScanDataAck" << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
@@ -184,11 +185,8 @@ private:
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
             << " freeSpace: " << ev->Get()->FreeSpace << " prevFreeSpace: " << PeerFreeSpace);
 
-        --InFlightScanDataMessages;
-
         if (!ComputeActorId) {
             ComputeActorId = ev->Sender;
-            InFlightScanDataMessages = 0;
         }
 
         Y_VERIFY(ev->Get()->Generation == ScanGen);
@@ -342,11 +340,7 @@ private:
         }
 
         // Send new results if there is available capacity
-        i64 MAX_SCANDATA_MESSAGES_IN_FLIGHT = 2;
-        while (InFlightScanDataMessages < MAX_SCANDATA_MESSAGES_IN_FLIGHT) {
-            if (!ScanIterator || !ProduceResults()) {
-                break;
-            }
+        while (ScanIterator && ProduceResults()) {
         }
 
         // Switch to the next range if the current one is finished
@@ -369,12 +363,12 @@ private:
             // Only exist the loop if either:
             // * we have finished scanning ALL the ranges
             // * or there is an in-flight blob read or ScanData message for which
-            //   we will get a reply and will be able to proceed futher
-            if  (!ScanIterator || InFlightScanDataMessages != 0 || InFlightReads != 0) {
+            //   we will get a reply and will be able to proceed further
+            if  (!ScanIterator || PeerFreeSpace == 0 || InFlightReads != 0 || (DataTasksProcessor && DataTasksProcessor->GetDataCounter() > TaskResultsCounter.Val())) {
                 return;
             }
         }
-
+        Y_VERIFY_DEBUG(false);
         // The loop has finished without any progress!
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " is hanging"
@@ -508,6 +502,7 @@ private:
             << " arrow schema:\n" << (Result->ArrowBatch ? Result->ArrowBatch->schema()->ToString() : ""));
 
         if (PeerFreeSpace < Bytes) {
+            Result->RequestedBytesLimitReached = true;
             PeerFreeSpace = 0;
         } else {
             PeerFreeSpace -= Bytes;
@@ -525,7 +520,6 @@ private:
         }
 
         Send(ComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); // TODO: FlagSubscribeOnSession ?
-        ++InFlightScanDataMessages;
 
         ReportStats();
 
@@ -606,9 +600,9 @@ private:
     THolder<TEvKqpCompute::TEvScanData> Result;
     i64 InFlightReads = 0;
     i64 InFlightReadBytes = 0;
-    i64 InFlightScanDataMessages = 0;
     bool Finished = false;
 
+    TAtomicCounter TaskResultsCounter = 0;
     IDataTasksProcessor::TPtr DataTasksProcessor;
 
     class TBlobStats {

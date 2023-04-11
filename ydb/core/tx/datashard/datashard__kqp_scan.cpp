@@ -450,6 +450,7 @@ private:
                 << ", finished: " << Result->Finished << ", pageFault: " << Result->PageFault);
 
             if (PeerFreeSpace < sendBytes) {
+                Result->RequestedBytesLimitReached = true;
                 PeerFreeSpace = 0;
             } else {
                 PeerFreeSpace -= sendBytes;

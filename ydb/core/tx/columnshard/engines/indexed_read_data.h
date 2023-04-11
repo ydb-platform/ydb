@@ -38,10 +38,16 @@ public:
 };
 
 class IDataTasksProcessor {
+private:
+    TAtomicCounter DataProcessorAddDataCounter = 0;
 protected:
     virtual bool DoAdd(IDataPreparationTask::TPtr task) = 0;
     std::atomic<bool> Stopped = false;
 public:
+    i64 GetDataCounter() const {
+        return DataProcessorAddDataCounter.Val();
+    }
+
     void Stop() {
         Stopped = true;
     }
@@ -52,7 +58,12 @@ public:
     using TPtr = std::shared_ptr<IDataTasksProcessor>;
     virtual ~IDataTasksProcessor() = default;
     bool Add(IDataPreparationTask::TPtr task) {
-        return DoAdd(task);
+        if (DoAdd(task)) {
+            DataProcessorAddDataCounter.Inc();
+            return true;
+        }
+        return false;
+
     }
 };
 }

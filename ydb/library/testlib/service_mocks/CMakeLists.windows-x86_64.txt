@@ -15,5 +15,4 @@ target_link_libraries(library-testlib-service_mocks INTERFACE
   api-grpc-draft
   client-yc_private-resourcemanager
   client-yc_private-iam
-  priv-oauth-v1
 )

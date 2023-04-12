@@ -58,18 +58,23 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
     {{- if or (eq $type "all") (eq $type $specType) }}
 - job_name: {{ include "ydb-prometheus.counter.jobName" (tuple $spec.name $counter) }}
   metrics_path: {{ include "ydb-prometheus.counter.metricsPath" $counter | quote }}
+  {{- if $counter.metricsPathParams }}
+  params: {{ include "ydb-prometheus.counter.metricsPathParams" (tuple $spec $counter) | nindent 4 }}
+  {{- end }}
   relabel_configs:
   - source_labels:
     - __address__
     target_label: instance
     regex: '([^:]+)(:[0-9]+)?'
     replacement: '${1}'
+  {{- if not $counter.skipNameRelabeling }}
   metric_relabel_configs:
   - source_labels:
     - __name__
     target_label: __name__
     regex: (.*)
     replacement: {{ $counter.counter }}_$1
+  {{- end }}
   static_configs:
   - targets:
     {{- range $host := $spec.hosts }}
@@ -93,13 +98,18 @@ spec:
       {{- $type := include "ydb-prometheus.counter.type" $counter }}
       {{- if or (eq $type "all") (eq $type $specType) }}
   - path: {{ include "ydb-prometheus.counter.metricsPath" $counter }}
+    {{- if $counter.metricsPathParams }}
+    params: {{ include "ydb-prometheus.counter.metricsPathParams" (tuple $spec $counter) | nindent 6 }}
+    {{- end }}
     port: {{ $spec.port.name }}
+    {{- if not $counter.skipNameRelabeling }}
     metricRelabelings:
     - sourceLabels:
       - __name__
       targetLabel: __name__
       regex: (.*)
       replacement: {{ $counter.counter }}_$1
+    {{- end }}
     relabelings:
     - sourceLabels:
       - __meta_kubernetes_namespace
@@ -133,4 +143,18 @@ spec:
 {{- $counter := . -}}
 {{- $metricsPath := default (printf "/counters/counters=%s/prometheus" $counter.counter) $counter.metricsPath -}}
 {{- $metricsPath -}}
+{{- end -}}
+
+{{- define "ydb-prometheus.counter.metricsPathParams" -}}
+{{- $context := . -}}
+{{- $spec := index $context 0 -}}
+{{- $counter := index $context 1 -}}
+  {{- range $key, $val := $counter.metricsPathParams }}
+    {{- if contains "{{" $val }}
+    {{- $dummyTemplate := dict "BasePath" "" "Name" "" }}
+{{ $key }}: [{{ tpl $val (dict "target" $spec "counter" $counter "Template" $dummyTemplate) }}]
+    {{- else }}
+{{ $key }}: [{{ $val }}]
+    {{- end }}
+  {{- end }}
 {{- end -}}

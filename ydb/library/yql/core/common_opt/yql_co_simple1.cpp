@@ -1111,7 +1111,7 @@ TExprNode::TPtr OptimizeContains(const TExprNode::TPtr& node, TExprContext& ctx)
 TExprNode::TPtr OptimizeDictItems(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (1U == node->Head().ChildrenSize() && node->Head().IsCallable("Dict")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over empty " << node->Head().Content();
-        return ctx.NewCallable(node->Head().Pos(), "List", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+        return KeepConstraints(ctx.NewCallable(node->Head().Pos(), "List", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)}), *node, ctx);
     }
     return node;
 }
@@ -3966,8 +3966,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Take"] = map["Limit"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (node->Head().IsCallable("List")) {
-            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+        if (const auto& check = SkipCallables(node->Head(), SkippableCallables); check.IsCallable("List")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << check.Content();
             return node->HeadPtr();
         }
         if (node->Tail().IsCallable("Uint64")) {

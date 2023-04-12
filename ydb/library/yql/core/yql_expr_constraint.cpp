@@ -395,7 +395,16 @@ private:
         if (sets.empty())
             sets.insert_unique(typename TUniqueConstraintNodeBase<Distinct>::TSetType{TConstraintNode::TPathType()});
 
-        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(sets)));
+        auto constraint = ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(sets));
+        if (const auto old = input->Head().GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {
+            if (old->Includes(*constraint)) {
+                output = input->HeadPtr();
+                return TStatus::Repeat;
+            } else
+                constraint = TUniqueConstraintNodeBase<Distinct>::Merge(old, constraint, ctx);
+        }
+
+        input->AddConstraint(constraint);
         return FromFirst<TPassthroughConstraintNode, TSortedConstraintNode, TUniqueConstraintNodeBase<!Distinct>, TEmptyConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
@@ -2507,6 +2516,82 @@ private:
         return TStatus::Ok;
     }
 
+    static std::optional<std::pair<TConstraintNode::TPathType, bool>> GetPathToKey(const TExprNode& body, const TExprNode& lhs, const TExprNode& rhs) {
+        if (&body == &lhs)
+            return std::make_pair(TConstraintNode::TPathType(), true);
+        if (&body == &rhs)
+            return std::make_pair(TConstraintNode::TPathType(), false);
+
+        if (body.IsCallable({"Member","Nth"})) {
+            if (auto path = GetPathToKey(body.Head(), lhs, rhs)) {
+                path->first.emplace_back(body.Tail().Content());
+                return path;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    static TConstraintNode::TSetType GetSimpleKeys(const TExprNode& body, const TExprNode& lhs, const TExprNode& rhs) {
+        TConstraintNode::TSetType keys;
+        if (body.IsCallable("AggrNotEquals")) {
+            if (body.Head().IsList() && body.Tail().IsList() && body.Head().ChildrenSize() == body.Tail().ChildrenSize()) {
+                keys.reserve(body.Tail().ChildrenSize());
+                for (auto i = 0U; i < body.Head().ChildrenSize(); ++i)
+                    if (auto l = GetPathToKey(*body.Head().Child(i), lhs, rhs), r = GetPathToKey(*body.Tail().Child(i), lhs, rhs); l && r && l->first == r->first && l->second != r->second)
+                        keys.insert_unique(l->first);
+            } else if (auto l = GetPathToKey(body.Head(), lhs, rhs), r = GetPathToKey(body.Tail(), lhs, rhs); l && r && l->first == r->first && l->second != r->second) {
+                keys.insert_unique(l->first);
+            }
+        } else if (body.IsCallable("Or")) {
+            keys.reserve(body.ChildrenSize());
+            for (auto i = 0U; i < body.ChildrenSize(); ++i) {
+                const auto& part = GetSimpleKeys(*body.Child(i), lhs, rhs);
+                keys.insert_unique(part.cbegin(), part.cend());
+            }
+        }
+
+        return keys;
+    }
+
+    static TConstraintNode::TSetType GetSimpleKeys(const TExprNode& body, const TExprNode& arg) {
+        TConstraintNode::TSetType keys;
+        if (body.IsList()) {
+            if (const auto size = body.ChildrenSize()) {
+                keys.reserve(size);
+                for (auto i = 0U; i < size; ++i)
+                    if (auto path = GetPathToKey(*body.Child(i), arg))
+                        keys.insert_unique(std::move(*path));
+            }
+        } else if (auto path = GetPathToKey(body, arg))
+            keys.insert_unique(std::move(*path));
+
+        return keys;
+    }
+
+    static TConstraintNode::TSetType GetSimpleKeys(const TExprNode& selector) {
+        YQL_ENSURE(selector.IsLambda() && 2U == selector.Head().ChildrenSize(), "Expected lambda with two arguments.");
+        const auto& body = selector.Tail();
+        if (TCoIsKeySwitch::Match(&body)) {
+            const TCoIsKeySwitch keySwitch(&body);
+            const auto& i = GetSimpleKeys(keySwitch.ItemKeyExtractor().Body().Ref(), keySwitch.ItemKeyExtractor().Args().Arg(0).Ref());
+            const auto& s = GetSimpleKeys(keySwitch.StateKeyExtractor().Body().Ref(), keySwitch.StateKeyExtractor().Args().Arg(0).Ref());
+            return i == s ? i : TConstraintNode::TSetType();
+        } else {
+            const auto& lArg = selector.Head().Head();
+            const auto& rArg = selector.Head().Tail();
+            return GetSimpleKeys(body, lArg, rArg);
+        }
+    }
+
+    static void ExtractOnlySimpleKeys(const TExprNode& selector, TVector<TStringBuf>& groupByKeys) {
+        const auto& set = GetSimpleKeys(selector);
+        groupByKeys.reserve(set.size());
+        for (const auto& path : set)
+            if (1U == path.size())
+                groupByKeys.emplace_back(path.front());
+    }
+
     TStatus CondenseWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         std::unordered_set<const TPassthroughConstraintNode*> explicitPasstrought;
         auto argsConstraints = GetConstraintsForInputArgument<true, false>(*input, explicitPasstrought, ctx);
@@ -2551,8 +2636,8 @@ private:
             TVector<TStringBuf> groupByKeys;
             if (const auto groupBy = switchLambda->GetConstraint<TGroupByConstraintNode>()) {
                 groupByKeys.assign(groupBy->GetColumns().begin(), groupBy->GetColumns().end());
-            } else if (switchLambda->Tail().IsCallable("AggrNotEquals")) {
-                ExtractSimpleKeys(&switchLambda->Tail().Head(), &switchLambda->Head().Head(), groupByKeys);
+            } else {
+                ExtractOnlySimpleKeys(*switchLambda, groupByKeys);
             }
 
             if (!groupByKeys.empty() && lambdaPassthrough) {
@@ -2624,8 +2709,12 @@ private:
             TVector<TStringBuf> groupByKeys;
             if (const auto groupBy = switchLambda->GetConstraint<TGroupByConstraintNode>()) {
                 groupByKeys.assign(groupBy->GetColumns().begin(), groupBy->GetColumns().end());
-            } else if (switchLambda->Tail().IsCallable("AggrNotEquals")) {
-                ExtractSimpleKeys(&switchLambda->Tail().Head(), &switchLambda->Head().Head(), groupByKeys);
+            } else {
+                if constexpr (Wide) {
+                    if (switchLambda->Tail().IsCallable("AggrNotEquals"))
+                        ExtractSimpleKeys(&switchLambda->Tail().Head(), &switchLambda->Head().Head(), groupByKeys);
+                } else
+                    ExtractOnlySimpleKeys(*switchLambda, groupByKeys);
             }
 
             if (!groupByKeys.empty() && commonPassthrough) {

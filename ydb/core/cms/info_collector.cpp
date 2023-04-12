@@ -84,13 +84,13 @@ private:
     // Nodes
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev);
 
-    //Configs
+    // Configs
     void RequestBootstrapConfig();
-    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev);
+    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev);
 
     // State Storage
     void RequestStateStorageConfig();
-    void Handle(TEvStateStorage::TEvListStateStorageResult::TPtr &ev);
+    void Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev);
 
     // BSC
     void RequestBaseConfig();
@@ -154,7 +154,7 @@ void TInfoCollector::ReplyAndDie() {
 
     // It is also necessary to mark the disks,
     // and to do this we must wait for the base config
-    for (const auto &nodeId : UndeliveredNodes) {
+    for (auto nodeId : UndeliveredNodes) {
         Info->ClearNode(nodeId);
     }
 
@@ -208,42 +208,47 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
 }
 
 void TInfoCollector::RequestBootstrapConfig() {
-    ui32 configKind = (ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem;
-    Send(MakeConfigsDispatcherID(SelfId().NodeId()),
-         new TEvConfigsDispatcher::TEvGetConfigRequest(configKind));
+    const auto configKind = static_cast<ui32>(NKikimrConsole::TConfigItem::BootstrapConfigItem);
+    Send(MakeConfigsDispatcherID(SelfId().NodeId()), new TEvConfigsDispatcher::TEvGetConfigRequest(configKind));
 }
 
-void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev) {
-    auto &config  = ev->Get()->Config;
-    NKikimrConfig::TBootstrap bootstrap;
+void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
+    const auto& config  = ev->Get()->Config;
+    const auto& initialBootstrapConfig = AppData()->BootstrapConfig;
+    const NKikimrConfig::TBootstrap* bootstrapConfig = nullptr;
 
     BootstrapConfigReceived = true;
-    if (!config->HasBootstrapConfig()){
+    if (!config->HasBootstrapConfig()) {
         LOG_I("Couldn't collect bootstrap config from Console. Taking the local config");
-        bootstrap.CopyFrom(AppData()->BootstrapConfig);
+        bootstrapConfig = &initialBootstrapConfig;
     } else {
-        LOG_T("Got Bootstrap config"
-              << ": record# " <<  config->ShortDebugString());
+        const auto& currentBootstrapConfig = config->GetBootstrapConfig();
 
-        if (!::google::protobuf::util::MessageDifferencer::Equals(AppData()->BootstrapConfig, config->GetBootstrapConfig())) {
+        LOG_T("Got Bootstrap config"
+              << ": record# " <<  currentBootstrapConfig.ShortDebugString());
+
+        if (!::google::protobuf::util::MessageDifferencer::Equals(initialBootstrapConfig, currentBootstrapConfig)) {
             LOG_D("Local Bootstrap config is different from the config from the console");
             Info->IsLocalBootConfDiffersFromConsole = true;
         }
-        bootstrap = config->GetBootstrapConfig();
+
+        bootstrapConfig = &currentBootstrapConfig;
     }
 
-    Info->ApplySysTabletsInfo(bootstrap);
+    Y_VERIFY(bootstrapConfig);
+    Info->ApplySysTabletsInfo(*bootstrapConfig);
+
     MaybeReplyAndDie();
 }
 
 void TInfoCollector::RequestStateStorageConfig() {
-    const auto& domains = *AppData()->DomainsInfo;
-    ui32 domainUid = domains.Domains.begin()->second->DomainUid;
-    const ui32 stateStorageGroup = domains.GetDefaultStateStorageGroup(domainUid);
+    const auto& domains = AppData()->DomainsInfo->Domains;
+    Y_VERIFY(domains.size() <= 1);
 
-    const TActorId proxy = MakeStateStorageProxyID(stateStorageGroup);
-
-    Send(proxy, new TEvStateStorage::TEvListStateStorage());
+    for (const auto& domain : domains) {
+        const auto ssProxyId = MakeStateStorageProxyID(domain.second->DefaultStateStorageGroup);
+        Send(ssProxyId, new TEvStateStorage::TEvListStateStorage());
+    }
 }
 
 void TInfoCollector::Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev) {
@@ -263,7 +268,7 @@ void TInfoCollector::Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev
 void TInfoCollector::RequestBaseConfig() {
     using namespace NTabletPipe;
 
-    const auto domains = AppData()->DomainsInfo->Domains;
+    const auto& domains = AppData()->DomainsInfo->Domains;
     Y_VERIFY(domains.size() <= 1);
 
     for (const auto& domain : domains) {
@@ -336,7 +341,7 @@ void TInfoCollector::SendNodeRequests(ui32 nodeId) {
     SendNodeEvent(nodeId, whiteBoardId, new TEvWhiteboard::TEvPDiskStateRequest(), TEvWhiteboard::EvPDiskStateResponse);
     SendNodeEvent(nodeId, whiteBoardId, new TEvWhiteboard::TEvVDiskStateRequest(), TEvWhiteboard::EvVDiskStateResponse);
 
-    const auto domains = AppData()->DomainsInfo->Domains;
+    const auto& domains = AppData()->DomainsInfo->Domains;
     Y_VERIFY(domains.size() <= 1);
 
     for (const auto& domain : domains) {

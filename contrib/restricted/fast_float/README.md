@@ -72,6 +72,27 @@ We support Visual Studio, macOS, Linux, freeBSD. We support big and little endia
 
 We assume that the rounding mode is set to nearest (`std::fegetround() == FE_TONEAREST`).
 
+## C++20: compile-time evaluation (constexpr)
+
+In C++20, you may use `fast_float::from_chars` to parse strings
+at compile-time, as in the following example:
+
+```C++
+// consteval forces compile-time evaluation of the function in C++20.
+consteval double parse(std::string_view input) {
+  double result;
+  auto answer = fast_float::from_chars(input.data(), input.data()+input.size(), result);
+  if(answer.ec != std::errc()) { return -1.0; }
+  return result;
+}
+
+// This function should compile to a function which
+// merely returns 3.1415.
+constexpr double constexptest() {
+  return parse("3.1415 input");
+}
+```
+
 ## Using commas as decimal separator
 
 

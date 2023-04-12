@@ -3,6 +3,8 @@
 
 #include <system_error>
 
+#include "constexpr_feature_detect.h"
+
 namespace fast_float {
 enum chars_format {
     scientific = 1<<0,
@@ -48,6 +50,7 @@ struct parse_options {
  * The default is  `fast_float::chars_format::general` which allows both `fixed` and `scientific`.
  */
 template<typename T>
+FASTFLOAT_CONSTEXPR20
 from_chars_result from_chars(const char *first, const char *last,
                              T &value, chars_format fmt = chars_format::general)  noexcept;
 
@@ -55,6 +58,7 @@ from_chars_result from_chars(const char *first, const char *last,
  * Like from_chars, but accepts an `options` argument to govern number parsing.
  */
 template<typename T>
+FASTFLOAT_CONSTEXPR20
 from_chars_result from_chars_advanced(const char *first, const char *last,
                                       T &value, parse_options options)  noexcept;
 

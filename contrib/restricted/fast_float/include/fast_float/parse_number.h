@@ -20,8 +20,9 @@ namespace detail {
  * strings a null-free and fixed.
  **/
 template <typename T>
-from_chars_result parse_infnan(const char *first, const char *last, T &value)  noexcept  {
-  from_chars_result answer;
+from_chars_result FASTFLOAT_CONSTEXPR14
+parse_infnan(const char *first, const char *last, T &value)  noexcept  {
+  from_chars_result answer{};
   answer.ptr = first;
   answer.ec = std::errc(); // be optimistic
   bool minusSign = false;
@@ -132,12 +133,14 @@ fastfloat_really_inline bool rounds_to_nearest() noexcept {
 } // namespace detail
 
 template<typename T>
+FASTFLOAT_CONSTEXPR20
 from_chars_result from_chars(const char *first, const char *last,
                              T &value, chars_format fmt /*= chars_format::general*/)  noexcept  {
   return from_chars_advanced(first, last, value, parse_options{fmt});
 }
 
 template<typename T>
+FASTFLOAT_CONSTEXPR20
 from_chars_result from_chars_advanced(const char *first, const char *last,
                                       T &value, parse_options options)  noexcept  {
 
@@ -174,7 +177,7 @@ from_chars_result from_chars_advanced(const char *first, const char *last,
     // We could check it first (before the previous branch), but
     // there might be performance advantages at having the check
     // be last.
-    if(detail::rounds_to_nearest())  {
+    if(!cpp20_and_in_constexpr() && detail::rounds_to_nearest())  {
       // We have that fegetround() == FE_TONEAREST.
       // Next is Clinger's fast path.
       if (pns.mantissa <=binary_format<T>::max_mantissa_fast_path()) {
@@ -191,7 +194,7 @@ from_chars_result from_chars_advanced(const char *first, const char *last,
 #if defined(__clang__)
         // Clang may map 0 to -0.0 when fegetround() == FE_DOWNWARD
         if(pns.mantissa == 0) {
-          value = 0;
+          value = pns.negative ? -0. : 0.;
           return answer;
         }
 #endif

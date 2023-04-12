@@ -493,6 +493,8 @@ message TConfigNotificationRequest {
     // Updated config.
     optional NKikimrConfig.TAppConfig Config = 3;
     repeated uint32 ItemKinds = 4;
+    // Used to show that message are sent from ConfigsDispatcher
+    optional bool Local = 5;
 }
 
 message TConfigNotificationResponse {

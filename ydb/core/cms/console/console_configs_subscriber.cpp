@@ -93,6 +93,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPrivate::TEvRetryPoolStatus, Handle);
             HFuncTraced(TEvTenantPool::TEvTenantPoolStatus, Handle);
+            HFuncTraced(TEvConsole::TEvGetNodeConfigResponse, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionResponse, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionError, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
@@ -149,6 +150,32 @@ public:
             Generation = 0;
             Die(ctx);
         }
+
+        if (!FirstUpdateSent) {
+            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
+            request->Record.MutableNode()->SetNodeId(SelfId().NodeId());
+            request->Record.MutableNode()->SetHost(FQDNHostName());
+            request->Record.MutableNode()->SetTenant(Tenant);
+            request->Record.MutableNode()->SetNodeType(NodeType);
+            for (auto &kind : Kinds) {
+                request->Record.AddItemKinds(kind);
+            }
+
+            NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
+        }
+    }
+
+    void Handle(TEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) {
+        if (!FirstUpdateSent) {
+            ctx.ExecutorThread.Send(
+                new NActors::IEventHandle(
+                    SelfId(),
+                    ev->Sender,
+                    new NConsole::TEvConsole::TEvConfigSubscriptionNotification(
+                        Generation,
+                        ev->Get()->Record.GetConfig(),
+                        THashSet<ui32>(Kinds.begin(), Kinds.end()))));
+        }
     }
 
     void Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {
@@ -185,6 +212,7 @@ public:
                     YamlConfig = rec.GetYamlConfig();
                     YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
                 }
+
                 notChanged = false;
             }
 

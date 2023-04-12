@@ -10,7 +10,7 @@ public:
                     TEvConsole::TEvConfigNotificationRequest::TPtr notification)
         : TBase(self)
         , Notification(std::move(notification))
-        , Config(Notification->Get()->Record.GetConfig().GetNodeBrokerConfig())
+        , Config(Notification->Get()->GetConfig().GetNodeBrokerConfig())
         , Modify(false)
     {
     }
@@ -31,12 +31,8 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "TTxUpdateConfig Execute " << rec.ShortDebugString());
 
-        if (rec.GetSubscriptionId() != Self->ConfigSubscriptionId) {
-            LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                        "Config subscription id mismatch (" << rec.GetSubscriptionId()
-                        << " vs expected " << Self->ConfigSubscriptionId << ")");
-            return false;
-        }
+        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Config))
+            Modify = true;
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
         Response = new IEventHandle(Notification->Sender, Self->SelfId(), resp.Release(),
@@ -51,6 +47,9 @@ public:
 
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "TTxUpdateConfig Execute " << rec.ShortDebugString());
+
+        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Config))
+            Modify = true;
 
         auto resp = MakeHolder<TEvNodeBroker::TEvSetConfigResponse>();
         resp->Record.MutableStatus()->SetCode(NKikimrNodeBroker::TStatus::OK);
@@ -69,9 +68,8 @@ public:
         if (Request && !ProcessRequest(ctx))
             return true;
 
-        Self->DbUpdateConfig(Config, txc);
-
-        Modify = true;
+        if (Modify)
+            Self->DbUpdateConfig(Config, txc);
 
         return true;
     }

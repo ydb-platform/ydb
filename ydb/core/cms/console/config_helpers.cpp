@@ -1,5 +1,4 @@
 #include "config_helpers.h"
-#include "configs_dispatcher.h"
 #include "console.h"
 #include "util.h"
 
@@ -445,27 +444,6 @@ IActor *CreateSubscriptionEraser(ui64 subscriptionId,
                                  ui64 cookie)
 {
     return new TConfigHelper(subscriptionId, owner, cookie);
-}
-
-void SubscribeViaConfigDispatcher(const TActorContext &ctx,
-                                  const TVector<ui32> &configItemKinds,
-                                  TActorId owner,
-                                  ui64 cookie)
-{
-    ctx.Send(
-        MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-        new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(configItemKinds, owner),
-        cookie);
-}
-
-void UnsubscribeViaConfigDispatcher(const TActorContext &ctx,
-                                    TActorId owner,
-                                    ui64 cookie)
-{
-    ctx.Send(
-        MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-        new TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(owner),
-        cookie);
 }
 
 } // namespace NKikimr::NConsole

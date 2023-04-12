@@ -135,7 +135,7 @@ void ChangeMonitoringConfig(TTenantTestRuntime &runtime,
 
     TDispatchOptions options;
     options.FinalEvents.emplace_back
-        (TIsConfigNotificationProcessed(2 * runtime.GetNodeCount(),
+        (TIsConfigNotificationProcessed(3 * runtime.GetNodeCount(),
                                         2 * waitForPoolStatus * runtime.GetNodeCount()));
     runtime.DispatchEvents(options);
 }

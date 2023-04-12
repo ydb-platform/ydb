@@ -6,7 +6,6 @@
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/protos/tenant_slot_broker.pb.h>
@@ -1122,8 +1121,6 @@ private:
             HFuncTraced(TEvTenantSlotBroker::TEvGetTenantState, Handle);
             HFuncTraced(TEvTenantSlotBroker::TEvListTenants, Handle);
             HFuncTraced(TEvTenantSlotBroker::TEvRegisterPool, Handle);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
@@ -1154,7 +1151,6 @@ public:
 
 private:
     TDeque<TAutoPtr<IEventHandle>> InitQueue;
-    NKikimrTenantSlotBroker::TConfig Config;
     TDuration PendingTimeout;
     ui64 RequestId;
     ui32 DomainId;

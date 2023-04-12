@@ -415,7 +415,10 @@ void TTenantSlotBroker::OnActivateExecutor(const TActorContext &ctx)
     tabletCounters->RemoveSubgroup("type", "TENANT_SLOT_BROKER");
     Counters = new TCounters(tabletCounters->GetSubgroup("type", "TENANT_SLOT_BROKER"));
 
-    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::TenantSlotBrokerConfigItem}, ctx.SelfID);
+    ctx.Register(NConsole::CreateConfigSubscriber(TabletID(),
+                                                  {(ui32)NKikimrConsole::TConfigItem::TenantSlotBrokerConfigItem},
+                                                  "",
+                                                  ctx.SelfID));
 
     ProcessTx(CreateTxInitScheme(), ctx);
 }
@@ -612,8 +615,6 @@ bool TTenantSlotBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
 void TTenantSlotBroker::Cleanup(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "Cleanup");
-
-    NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 }
 
 void TTenantSlotBroker::Die(const TActorContext &ctx)
@@ -624,7 +625,6 @@ void TTenantSlotBroker::Die(const TActorContext &ctx)
 
 void TTenantSlotBroker::LoadConfigFromProto(const NKikimrTenantSlotBroker::TConfig &config)
 {
-    Config = config;
     PendingTimeout = TDuration::MicroSeconds(config.GetPendingSlotTimeout());
 }
 

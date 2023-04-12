@@ -32,8 +32,6 @@ struct TEvConfigsDispatcher {
         EvSetConfigSubscriptionResponse,
         EvGetConfigRequest,
         EvGetConfigResponse,
-        EvRemoveConfigSubscriptionRequest,
-        EvRemoveConfigSubscriptionResponse,
 
         EvEnd
     };
@@ -42,46 +40,24 @@ struct TEvConfigsDispatcher {
                   "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_CONFIGS_DISPATCHER)");
 
     struct TEvSetConfigSubscriptionRequest : public TEventLocal<TEvSetConfigSubscriptionRequest, EvSetConfigSubscriptionRequest> {
-        TEvSetConfigSubscriptionRequest(TActorId subscriber = {})
-            : Subscriber(subscriber)
+        TEvSetConfigSubscriptionRequest()
         {
         }
 
-        TEvSetConfigSubscriptionRequest(ui32 kind, TActorId subscriber = {})
+        TEvSetConfigSubscriptionRequest(ui32 kind)
             : ConfigItemKinds({kind})
-            , Subscriber(subscriber)
         {
         }
 
-        TEvSetConfigSubscriptionRequest(std::initializer_list<ui32> kinds, TActorId subscriber = {})
+        TEvSetConfigSubscriptionRequest(std::initializer_list<ui32> kinds)
             : ConfigItemKinds(kinds)
-            , Subscriber(subscriber)
-        {
-        }
-
-        TEvSetConfigSubscriptionRequest(const TVector<ui32> &kinds, TActorId subscriber = {})
-            : ConfigItemKinds(kinds)
-            , Subscriber(subscriber)
         {
         }
 
         TVector<ui32> ConfigItemKinds;
-        const TActorId Subscriber;
     };
 
     struct TEvSetConfigSubscriptionResponse : public TEventLocal<TEvSetConfigSubscriptionResponse, EvSetConfigSubscriptionResponse> {
-    };
-
-    struct TEvRemoveConfigSubscriptionRequest : public TEventLocal<TEvRemoveConfigSubscriptionRequest, EvRemoveConfigSubscriptionRequest> {
-        TEvRemoveConfigSubscriptionRequest(TActorId subscriber = {})
-            : Subscriber(subscriber)
-        {
-        }
-
-        const TActorId Subscriber;
-    };
-
-    struct TEvRemoveConfigSubscriptionResponse : public TEventLocal<TEvRemoveConfigSubscriptionResponse, EvRemoveConfigSubscriptionResponse> {
     };
 
     struct TEvGetConfigRequest : public TEventLocal<TEvGetConfigRequest, EvGetConfigRequest> {

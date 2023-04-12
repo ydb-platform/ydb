@@ -2,7 +2,6 @@
 #include "cli_cmds.h"
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/yaml_config/yaml_config.h>
 #include <ydb/core/driver_lib/run/run.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -730,8 +729,7 @@ protected:
                                                              TenantName,
                                                              NodeType,
                                                              DeduceNodeDomain(),
-                                                             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
-                                                             true);
+                                                             AppConfig.GetAuthConfig().GetStaffApiUserToken());
 
                 if (result.IsSuccess()) {
                     auto appConfig = result.GetConfig();
@@ -743,22 +741,7 @@ protected:
                         }
                     }
 
-                    NKikimrConfig::TAppConfig yamlConfig;
-
-                    if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
-                        NYamlConfig::ResolveAndParseYamlConfig(
-                            result.GetYamlConfig(),
-                            result.GetVolatileYamlConfigs(),
-                            RunConfig.Labels,
-                            yamlConfig);
-                    }
-
-                    if (yamlConfig.HasYamlConfigEnabled() && yamlConfig.GetYamlConfigEnabled()) {
-                        BaseConfig.Swap(&yamlConfig);
-                        NYamlConfig::ReplaceUnmanagedKinds(result.GetConfig(), BaseConfig);
-                    } else {
-                        BaseConfig.Swap(&appConfig);
-                    }
+                    BaseConfig.Swap(&appConfig);
 
                     Cout << "Success." << Endl;
 
@@ -1071,8 +1054,7 @@ protected:
                                                      TenantName,
                                                      NodeType,
                                                      DeduceNodeDomain(),
-                                                     AppConfig.GetAuthConfig().GetStaffApiUserToken(),
-                                                     true);
+                                                     AppConfig.GetAuthConfig().GetStaffApiUserToken());
 
         if (!result.IsSuccess()) {
             error = result.GetErrorMessage();
@@ -1082,24 +1064,7 @@ protected:
 
         Cout << "Success." << Endl;
 
-        NKikimrConfig::TAppConfig appConfig;
-
-        NKikimrConfig::TAppConfig yamlConfig;
-
-        if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
-            NYamlConfig::ResolveAndParseYamlConfig(
-                result.GetYamlConfig(),
-                result.GetVolatileYamlConfigs(),
-                RunConfig.Labels,
-                yamlConfig);
-        }
-
-        if (yamlConfig.HasYamlConfigEnabled() && yamlConfig.GetYamlConfigEnabled()) {
-            appConfig = yamlConfig;
-            NYamlConfig::ReplaceUnmanagedKinds(result.GetConfig(), appConfig);
-        } else {
-            appConfig = result.GetConfig();
-        }
+        auto appConfig = result.GetConfig();
 
         if (RunConfig.PathToConfigCacheFile) {
             Cout << "Saving config to cache file " << RunConfig.PathToConfigCacheFile << Endl;

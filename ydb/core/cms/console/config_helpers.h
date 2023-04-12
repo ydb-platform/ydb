@@ -71,20 +71,6 @@ IActor *CreateConfigSubscriber(TActorId serviceId,
                                ui64 cookie = 0);
 
 /**
- * These functions will make subscription through configs dispatcher
- * Those subscriptions handle both yaml and non-yaml configs (not in same subscriprion)
- * handle all deduplication, and reconnects
- * internally new configs dispatcher uses InMemorySubscriprion's
- */
-void SubscribeViaConfigDispatcher(const TActorContext &ctx,
-                                  const TVector<ui32> &configItemKinds,
-                                  TActorId owner,
-                                  ui64 cookie = 0);
-void UnsubscribeViaConfigDispatcher(const TActorContext &ctx,
-                                    TActorId owner,
-                                    ui64 cookie = 0);
-
-/**
  * Subscription eraser is used to remove config subscriptions by ID. If owner is
  * specified then TEvConsole::TEvRemoveConfigSubscriptionRepsonse event is
  * forwared to it.

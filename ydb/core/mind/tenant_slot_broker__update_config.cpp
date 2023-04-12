@@ -19,21 +19,20 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                     "TTxUpdateConfig Execute " << rec.ShortDebugString());
 
-        NIceDb::TNiceDb db(txc.DB);
-
-        const auto &config = Event->Get()->GetConfig().GetTenantSlotBrokerConfig();
-
-        if (!google::protobuf::util::MessageDifferencer::Equals(config, Self->Config)) {
-            TString serializedConfig = config.SerializeAsString();
-            db.Table<Schema::Config>().Key(ConfigKey_Config)
-                .Update(NIceDb::TUpdate<Schema::Config::Value>(serializedConfig));
-
-            Modify = true;
+        if (rec.GetSubscriptionId() != Self->ConfigSubscriptionId) {
+            LOG_ERROR_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
+                        "Config subscription id mismatch (" << rec.GetSubscriptionId()
+                        << " vs expected " << Self->ConfigSubscriptionId << ")");
+            return true;
         }
 
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
-        Response = new IEventHandle(Event->Sender, Self->SelfId(), resp.Release(),
-                                        0, Event->Cookie);
+        NIceDb::TNiceDb db(txc.DB);
+        TString config;
+        Y_PROTOBUF_SUPPRESS_NODISCARD rec.GetConfig().GetTenantSlotBrokerConfig().SerializeToString(&config);
+        db.Table<Schema::Config>().Key(ConfigKey_Config)
+            .Update(NIceDb::TUpdate<Schema::Config::Value>(config));
+
+        Modify = true;
 
         return true;
     }
@@ -45,17 +44,16 @@ public:
         if (Modify) {
             auto &rec = Event->Get()->Record;
             Self->LoadConfigFromProto(rec.GetConfig().GetTenantSlotBrokerConfig());
-        }
 
-        if (Response)
-            ctx.Send(Response);
+            auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+            ctx.Send(Event->Sender, resp.Release(), 0, Event->Cookie);
+        }
 
         Self->TxCompleted(this, ctx);
     }
 
 private:
     TEvConsole::TEvConfigNotificationRequest::TPtr Event;
-    TAutoPtr<IEventHandle> Response;
     bool Modify;
 };
 

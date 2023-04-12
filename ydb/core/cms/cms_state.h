@@ -41,9 +41,6 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
 
     // CMS config.
     TCmsConfig Config;
-    // CMS config proto cache
-    NKikimrCms::TCmsConfig ConfigProto;
-
     // Cluster info. It's not initialized on state creation.
     // Updated by event from info collector by rewritting
     // pointer. Therefore pointer shouldnt be preserved

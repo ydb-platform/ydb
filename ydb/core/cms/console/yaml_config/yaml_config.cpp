@@ -1,9 +1,8 @@
 #include "yaml_config.h"
 #include "yaml_config_impl.h"
 
-#include <ydb/core/base/appdata.h>
-
 #include <library/cpp/protobuf/json/json2proto.h>
+#include <ydb/core/base/appdata.h>
 
 template <>
 struct THash<NYamlConfig::TLabel> {
@@ -596,77 +595,6 @@ ui64 GetVersion(const TString& config) {
     ui64 version = 0;
     TryFromString<ui64>(str, version);
     return version;
-}
-
-/**
- * Config used to convert protobuf from/to json
- * changes how names are translated e.g. PDiskInfo -> pdisk_info instead of p_disk_info
- */
-NProtobufJson::TJson2ProtoConfig GetJsonToProtoConfig() {
-    NProtobufJson::TJson2ProtoConfig config;
-    config.SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense);
-    config.SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive);
-    config.CastRobust = true;
-    config.MapAsObject = true;
-    config.AllowUnknownFields = false;
-    return config;
-}
-
-void ResolveAndParseYamlConfig(
-    const TString& yamlConfig,
-    const TMap<ui64, TString>& volatileYamlConfigs,
-    const TMap<TString, TString>& labels,
-    NKikimrConfig::TAppConfig& appConfig,
-    TString* resolvedYamlConfig,
-    TString* resolvedJsonConfig) {
-
-    auto parser = NFyaml::TParser::Create(yamlConfig);
-    parser.NextDocument();
-    auto tree = parser.NextDocument();
-
-    for (auto& [_, config] : volatileYamlConfigs) {
-        auto d = NFyaml::TDocument::Parse(config);
-        NYamlConfig::AppendVolatileConfigs(tree.value(), d);
-    }
-
-    TSet<NYamlConfig::TNamedLabel> namedLabels;
-    for (auto& [name, label] : labels) {
-        namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
-    }
-
-    auto config = NYamlConfig::Resolve(tree.value(), namedLabels);
-
-    if (resolvedYamlConfig) {
-        TStringStream resolvedYamlConfigStream;
-        resolvedYamlConfigStream << config.second;
-        *resolvedYamlConfig = resolvedYamlConfigStream.Str();
-    }
-
-    TStringStream resolvedJsonConfigStream;
-    resolvedJsonConfigStream << NFyaml::TJsonEmitter(config.second);
-
-    if (resolvedJsonConfig) {
-        *resolvedJsonConfig = resolvedJsonConfigStream.Str();
-    }
-
-    NJson::TJsonValue json;
-    Y_VERIFY(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid config from Console");
-
-    NProtobufJson::MergeJson2Proto(json, appConfig, NYamlConfig::GetJsonToProtoConfig());
-}
-
-void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {
-    if (from.HasNameserviceConfig()) {
-        to.MutableNameserviceConfig()->CopyFrom(from.GetNameserviceConfig());
-    }
-
-    if (from.HasNetClassifierDistributableConfig()) {
-        to.MutableNetClassifierDistributableConfig()->CopyFrom(from.GetNetClassifierDistributableConfig());
-    }
-
-    if (from.NamedConfigsSize()) {
-        to.MutableNamedConfigs()->CopyFrom(from.GetNamedConfigs());
-    }
 }
 
 } // namespace NYamlConfig

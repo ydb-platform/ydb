@@ -835,6 +835,13 @@ public:
         const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         auto tx = GetCurrentPhyTx(phyQuery);
 
+        auto& txCtx = *QueryState->TxCtx;
+        if (tx && tx->GetHasEffects() && txCtx.Locks.Broken()) {
+            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+                MessageFromIssues(std::vector<TIssue>{txCtx.Locks.GetIssue()}));
+            return;
+        }
+
         if (!CheckTransacionLocks() || !CheckTopicOperations()) {
             return;
         }

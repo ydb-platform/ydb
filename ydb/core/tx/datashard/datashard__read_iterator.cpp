@@ -752,8 +752,8 @@ private:
             bool needTxObserver = (
                 // We need tx observer when there are waiting volatile transactions
                 baseTxMap ||
-                // We need tx observer when current lock has uncommitted changes
-                State.LockId && Self->SysLocksTable().HasCurrentWriteLock(State.PathId));
+                // We need tx observer when there are active write locks
+                State.LockId && Self->SysLocksTable().HasWriteLocks(State.PathId));
 
             if (needTxObserver) {
                 if (State.LockId) {

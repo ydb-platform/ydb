@@ -2059,6 +2059,7 @@ private:
                             // Tx with uncommitted changes can be aborted due to conflicts,
                             // so shards with write locks should receive readsets
                             receivingShardsSet.insert(shardId);
+                            YQL_ENSURE(!ReadOnlyTx);
                         }
                     }
                 }

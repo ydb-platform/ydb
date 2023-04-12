@@ -13,6 +13,33 @@ using namespace NYql::NNodes;
 
 namespace {
 
+bool ColumnHasBinaryStringType(const TExprBase& expr) {
+    if (!expr.Maybe<TCoMember>()) {
+        return false;
+    }
+    auto typeAnn = expr.Ptr()->GetTypeAnn();
+    auto itemType = GetSeqItemType(typeAnn);
+    if (!itemType) {
+        itemType = typeAnn;
+    }
+    if (itemType->GetKind() != ETypeAnnotationKind::Data) {
+        return false;
+    }
+    auto dataTypeInfo = NUdf::GetDataTypeInfo(itemType->Cast<TDataExprType>()->GetSlot());
+    return (std::string(dataTypeInfo.Name.data()) == "String");
+}
+
+bool IsLikeOperator(const TCoCompare& predicate) {
+    if (predicate.Maybe<TCoCmpStringContains>()) {
+        return true;
+    } else if (predicate.Maybe<TCoCmpStartsWith>()) {
+        return true;
+    } else if (predicate.Maybe<TCoCmpEndsWith>()) {
+        return true;
+    }
+    return false;
+}
+
 bool IsSupportedPredicate(const TCoCompare& predicate) {
     if (predicate.Maybe<TCoCmpEqual>()) {
         return true;
@@ -30,13 +57,7 @@ bool IsSupportedPredicate(const TCoCompare& predicate) {
         return true;
     } else if (NKikimr::NSsa::RuntimeVersion >= 2U) {
         // We introduced LIKE pushdown in v2 of SSA program
-        if (predicate.Maybe<TCoCmpStringContains>()) {
-            return true;
-        } else if (predicate.Maybe<TCoCmpStartsWith>()) {
-            return true;
-        } else if (predicate.Maybe<TCoCmpEndsWith>()) {
-            return true;
-        }
+        return IsLikeOperator(predicate);
     }
 
     return false;
@@ -271,6 +292,10 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
             return false;
         }
         if (!IsComparableTypes(leftList[i], rightList[i], equality, inputType)) {
+            return false;
+        }
+        if (IsLikeOperator(compare) && (ColumnHasBinaryStringType(leftList[i]) || ColumnHasBinaryStringType(rightList[i]))) {
+            // Currently Column Shard doesn't have LIKE kernel for binary strings
             return false;
         }
     }

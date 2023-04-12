@@ -443,7 +443,7 @@ namespace NKikimr::NBsController {
         settings->AddGroupReservePartPPM(Self.GroupReservePart);
         settings->AddMaxScrubbedDisksAtOnce(Self.MaxScrubbedDisksAtOnce);
         settings->AddPDiskSpaceColorBorder(Self.PDiskSpaceColorBorder);
-        settings->AddEnableGroupLayoutSanitizer(Self.GroupLayoutSanitizer);
+        settings->AddEnableGroupLayoutSanitizer(Self.GroupLayoutSanitizerEnabled);
         // TODO:
         // settings->AddSerialManagementStage(Self.SerialManagementStage);
     }

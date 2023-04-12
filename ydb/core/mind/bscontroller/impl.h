@@ -1449,8 +1449,10 @@ private:
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
     bool StopGivingGroups = false;
-    bool GroupLayoutSanitizer = false;
+    bool GroupLayoutSanitizerEnabled = false;
+
     std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
+
     NKikimrBlobStorage::TSerialManagementStage::E SerialManagementStage
             = NKikimrBlobStorage::TSerialManagementStage::DISCOVER_SERIAL;
 
@@ -1717,7 +1719,7 @@ public:
     IActor *CreateSelfHealActor();
 
     bool IsGroupLayoutSanitizerEnabled() const {
-        return GroupLayoutSanitizer;
+        return GroupLayoutSanitizerEnabled;
     }
 
     // For test purposes, required for self heal actor

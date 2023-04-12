@@ -84,7 +84,7 @@ public:
                 Self->GroupReservePart = state.GetValue<T::GroupReservePart>();
                 Self->MaxScrubbedDisksAtOnce = state.GetValue<T::MaxScrubbedDisksAtOnce>();
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
-                Self->GroupLayoutSanitizer = state.GetValue<T::GroupLayoutSanitizer>();
+                Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->SysViewChangedSettings = true;
             }
         }

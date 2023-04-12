@@ -13,6 +13,7 @@ default:
   feature_group_by_rollup_cube: true
   feature_window_functions: true
   feature_user_and_group: true
+  feature_olap_tables: true
 #  feature_logbroker: true
   ydb-full-name: YDB
   ydb-short-name: YDB

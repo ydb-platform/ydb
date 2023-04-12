@@ -9,7 +9,11 @@
 namespace NKikimr::NOlap::NCosts {
 
 void TKeyRangesBuilder::AddMarkFromGranule(const TGranuleRecord& record) {
-    Constructor.StartRecord(true).AddRecordValue(record.Mark);
+    auto& key = record.Mark;
+    Y_VERIFY(key.Size() == 1);
+    auto res = key.Column(0).GetScalar(key.GetPosition());
+    Y_VERIFY(res.status().ok());
+    Constructor.StartRecord(true).AddRecordValue(*res);
     Features.emplace_back(TMarkRangeFeatures());
 }
 

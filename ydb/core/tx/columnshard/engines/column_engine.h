@@ -8,6 +8,7 @@
 #include "columns_table.h"
 #include "granules_table.h"
 
+#include <ydb/core/formats/replace_key.h>
 #include <ydb/core/tx/columnshard/blob.h>
 
 namespace NKikimr::NOlap {
@@ -27,6 +28,55 @@ struct TCompactionLimits {
     ui32 GranuleOverloadSize{20 * MAX_BLOB_SIZE};
     ui32 InGranuleCompactInserts{100}; // Trigger in-granule compaction to reduce count of portions' records
     ui32 InGranuleCompactSeconds{2 * 60}; // Trigger in-granule comcation to guarantee no PK intersections
+};
+
+struct TMark {
+    /// @note It's possible to share columns in TReplaceKey between multiple marks:
+    /// read all marks as a batch; create TMark for each row
+    NArrow::TReplaceKey Border;
+
+    explicit TMark(const NArrow::TReplaceKey& key)
+        : Border(key)
+    {}
+
+    explicit TMark(const std::shared_ptr<arrow::Schema>& schema)
+        : Border(MinBorder(schema))
+    {}
+
+    TMark(const TString& key, const std::shared_ptr<arrow::Schema>& schema)
+        : Border(Deserialize(key, schema))
+    {}
+
+    TMark(const TMark& m) = default;
+    TMark& operator = (const TMark& m) = default;
+
+    bool operator == (const TMark& m) const {
+        return Border == m.Border;
+    }
+
+    std::partial_ordering operator <=> (const TMark& m) const {
+        return Border <=> m.Border;
+    }
+
+    ui64 Hash() const {
+        return Border.Hash();
+    }
+
+    operator size_t () const {
+        return Hash();
+    }
+
+    operator bool () const {
+        Y_FAIL("unexpected call");
+    }
+
+    static TString Serialize(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema);
+    static NArrow::TReplaceKey Deserialize(const TString& key, const std::shared_ptr<arrow::Schema>& schema);
+    std::string ToString() const;
+
+private:
+    static std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
+    static NArrow::TReplaceKey MinBorder(const std::shared_ptr<arrow::Schema>& schema);
 };
 
 struct TCompactionInfo {
@@ -295,8 +345,8 @@ public:
     virtual const THashSet<ui64>* GetOverloadedGranules(ui64 /*pathId*/) const { return nullptr; }
     virtual bool HasOverloadedGranules() const { return false; }
 
-    virtual TString SerializeMark(const std::shared_ptr<arrow::Scalar>& scalar) const = 0;
-    virtual std::shared_ptr<arrow::Scalar> DeserializeMark(const TString& key) const = 0;
+    virtual TString SerializeMark(const NArrow::TReplaceKey& key) const = 0;
+    virtual NArrow::TReplaceKey DeserializeMark(const TString& key) const = 0;
 
     virtual bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) = 0;
 

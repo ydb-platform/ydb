@@ -5,11 +5,25 @@
 
 namespace NKikimr::NArrow {
 
+bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);
+
+using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
+
 template<typename TArrayVecPtr>
 class TReplaceKeyTemplate {
 public:
+    static constexpr bool IsOwning = std::is_same_v<TArrayVecPtr, std::shared_ptr<TArrayVec>>;
+
     TReplaceKeyTemplate(TArrayVecPtr columns, int position)
         : Columns(columns)
+        , Position(position)
+    {
+        Y_VERIFY_DEBUG(Size() > 0 && Position < Column(0).length());
+    }
+
+    template<typename T = TArrayVecPtr> requires IsOwning
+    TReplaceKeyTemplate(TArrayVec&& columns, int position)
+        : Columns(std::make_shared<TArrayVec>(std::move(columns)))
         , Position(position)
     {
         Y_VERIFY_DEBUG(Size() > 0 && Position < Column(0).length());
@@ -78,6 +92,7 @@ public:
     }
 
     int Size() const {
+        Y_VERIFY_DEBUG(Columns);
         return Columns->size();
     }
 
@@ -86,12 +101,53 @@ public:
     }
 
     const arrow::Array& Column(int i) const {
+        Y_VERIFY_DEBUG(Columns);
         return *(*Columns)[i];
     }
 
+    template<typename T = TArrayVecPtr> requires IsOwning
+    static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                       const std::shared_ptr<arrow::Schema>& key, int row) {
+        Y_VERIFY(key->num_fields() <= batch->num_columns());
+
+        TArrayVec columns;
+        columns.reserve(key->num_fields());
+        for (int i = 0; i < key->num_fields(); ++i) {
+            auto& keyField = key->field(i);
+            auto array = batch->GetColumnByName(keyField->name());
+            Y_VERIFY(array);
+            Y_VERIFY(keyField->type()->Equals(array->type()));
+            columns.push_back(array);
+        }
+
+        return TReplaceKeyTemplate<TArrayVecPtr>(std::move(columns), row);
+    }
+
+    template<typename T = TArrayVecPtr> requires IsOwning
+    static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(const std::shared_ptr<arrow::RecordBatch>& batch, int row) {
+        auto columns = std::make_shared<TArrayVec>(batch->columns());
+        return TReplaceKeyTemplate<TArrayVecPtr>(columns, row);
+    }
+
+    static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(const std::shared_ptr<arrow::Scalar>& s) {
+        Y_VERIFY_DEBUG(IsGoodScalar(s));
+        auto res = MakeArrayFromScalar(*s, 1);
+        Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
+        return TReplaceKeyTemplate<TArrayVecPtr>(std::make_shared<TArrayVec>(1, *res), 0);
+    }
+
+    static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key) {
+        Y_VERIFY_DEBUG(key.Size() == 1);
+        auto& column = key.Column(0);
+        auto res = column.GetScalar(key.GetPosition());
+        Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
+        Y_VERIFY_DEBUG(IsGoodScalar(*res));
+        return *res;
+    }
+
 private:
-    TArrayVecPtr Columns;
-    int Position;
+    TArrayVecPtr Columns = nullptr;
+    int Position = 0;
 
     static size_t TypedHash(const arrow::Array& ar, int pos, arrow::Type::type typeId) {
         switch (typeId) {
@@ -269,7 +325,6 @@ private:
     }
 };
 
-using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
 using TReplaceKey = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
 using TRawReplaceKey = TReplaceKeyTemplate<const TArrayVec*>;
 

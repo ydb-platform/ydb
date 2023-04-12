@@ -754,6 +754,17 @@ i64 LowerBound(const std::shared_ptr<arrow::Array>& array, const arrow::Scalar& 
     return pos;
 }
 
+// TODO: implement
+i64 LowerBound(const std::shared_ptr<arrow::RecordBatch>& batch, const TReplaceKey& key, i64 offset) {
+    Y_VERIFY(batch->num_columns() == 1);
+    Y_VERIFY(key.Size() == 1);
+
+    auto res = key.Column(0).GetScalar(key.GetPosition());
+    Y_VERIFY_OK(res.status());
+    Y_VERIFY(*res);
+    return LowerBound(batch->column(0), *(*res), offset);
+}
+
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size) {
     auto res = arrow::MakeArrayFromScalar(arrow::UInt64Scalar(value), size);
     Y_VERIFY(res.ok());

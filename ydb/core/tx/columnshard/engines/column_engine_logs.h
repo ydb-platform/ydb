@@ -1,6 +1,5 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/formats/replace_key.h>
 #include "column_engine.h"
 #include "scalars.h"
 
@@ -20,87 +19,6 @@ class TCountersTable;
 /// - Columns: granule -> blobs
 class TColumnEngineForLogs : public IColumnEngine {
 public:
-    struct TMark {
-        // TODO: Grouped marks. Share columns in TReplaceKey between multiple marks.
-        NArrow::TReplaceKey Border;
-
-        explicit TMark(const std::shared_ptr<arrow::Scalar>& s)
-            : Border(FromScalar(s))
-        {}
-
-        explicit TMark(const std::shared_ptr<arrow::DataType>& type)
-            : Border(MinBorder(type))
-        {}
-
-        TMark(const TString& key, const std::shared_ptr<arrow::DataType>& type)
-            : Border(FromScalar(DeserializeKeyScalar(key, type)))
-        {}
-
-        TMark(const TMark& m) = default;
-        TMark& operator = (const TMark& m) = default;
-
-        bool operator == (const TMark& m) const {
-            return Border == m.Border;
-        }
-
-        std::partial_ordering operator <=> (const TMark& m) const {
-            return Border <=> m.Border;
-        }
-
-        ui64 Hash() const {
-            return Border.Hash();
-        }
-
-        operator size_t () const {
-            return Hash();
-        }
-
-        operator bool () const {
-            Y_VERIFY(false);
-        }
-
-        TString Serialize() const {
-            return SerializeKeyScalar(ToScalar(Border));
-        }
-
-        void Deserialize(const TString& key, const std::shared_ptr<arrow::DataType>& type) {
-            Border = FromScalar(DeserializeKeyScalar(key, type));
-        }
-
-        std::shared_ptr<arrow::Scalar> ToScalar() const {
-            return ToScalar(Border);
-        }
-
-    private:
-        static NArrow::TReplaceKey FromScalar(const std::shared_ptr<arrow::Scalar>& s) {
-            Y_VERIFY_DEBUG(NArrow::IsGoodScalar(s));
-            auto res = MakeArrayFromScalar(*s, 1);
-            Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
-            return NArrow::TReplaceKey(std::make_shared<NArrow::TArrayVec>(1, *res), 0);
-        }
-
-        static std::shared_ptr<arrow::Scalar> ToScalar(const NArrow::TReplaceKey& key) {
-            Y_VERIFY_DEBUG(key.Size() == 1);
-            auto& column = key.Column(0);
-            auto res = column.GetScalar(key.GetPosition());
-            Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
-            Y_VERIFY_DEBUG(NArrow::IsGoodScalar(*res));
-            return *res;
-        }
-
-        static std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type) {
-            if (type->id() == arrow::Type::TIMESTAMP) {
-                // TODO: support negative timestamps in index
-                return std::make_shared<arrow::TimestampScalar>(0, type);
-            }
-            return NArrow::MinScalar(type);
-        }
-
-        static NArrow::TReplaceKey MinBorder(const std::shared_ptr<arrow::DataType>& type) {
-            return FromScalar(MinScalar(type));
-        }
-    };
-
     class TMarksGranules {
     public:
         using TPair = std::pair<TMark, ui64>;
@@ -265,17 +183,16 @@ public:
 
     bool HasOverloadedGranules() const override { return !PathsGranulesOverloaded.empty(); }
 
-    TString SerializeMark(const std::shared_ptr<arrow::Scalar>& scalar) const override {
-        Y_VERIFY_S(scalar->type->Equals(MarkType), scalar->type->ToString() + ", expected " + MarkType->ToString());
-        return TMark(scalar).Serialize();
+    TString SerializeMark(const NArrow::TReplaceKey& key) const override {
+        return TMark::Serialize(key, MarkSchema);
     }
 
-    std::shared_ptr<arrow::Scalar> DeserializeMark(const TString& key) const override {
-        return TMark(key, MarkType).ToScalar();
+    NArrow::TReplaceKey DeserializeMark(const TString& key) const override {
+        return TMark::Deserialize(key, MarkSchema);
     }
 
     TMark GetDefaultMark() const {
-        return TMark(MarkType);
+        return TMark(MarkSchema);
     }
 
     bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
@@ -329,7 +246,7 @@ private:
     TIndexInfo IndexInfo;
     TCompactionLimits Limits;
     ui64 TabletId;
-    std::shared_ptr<arrow::DataType> MarkType;
+    std::shared_ptr<arrow::Schema> MarkSchema;
     std::shared_ptr<TGranulesTable> GranulesTable;
     std::shared_ptr<TColumnsTable> ColumnsTable;
     std::shared_ptr<TCountersTable> CountersTable;

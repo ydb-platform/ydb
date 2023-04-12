@@ -247,6 +247,13 @@ private:
         Y_VERIFY(!Finished);
         Y_VERIFY(ScanIterator);
 
+        if (!PeerFreeSpace) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " producing result: bytes limit exhausted"
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+            return false;
+        }
+
         if (ScanIterator->Finished()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
                 "Scan " << ScanActorId << " producing result: scan iterator is finished"
@@ -326,15 +333,6 @@ private:
         if (!ScanIterator) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
                 "Scan " << ScanActorId << " iterator is not initialized"
-                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
-            return;
-        }
-
-        if (PeerFreeSpace == 0) {
-            // Throttle down until the compute actor is ready to receive more rows
-
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
-                "Scan " << ScanActorId << " waiting for peer free space"
                 << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
             return;
         }

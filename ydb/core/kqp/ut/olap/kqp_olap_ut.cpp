@@ -220,9 +220,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
     }
 
-    TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it) {
+    TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it, NJson::TJsonValue* statInfo = nullptr) {
         TVector<THashMap<TString, NYdb::TValue>> rows;
-
+        if (statInfo) {
+            *statInfo = NJson::JSON_NULL;
+        }
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
             if (!streamPart.IsSuccess()) {
@@ -232,6 +234,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(),
                 "Unexpected empty scan query response.");
+
+            if (streamPart.HasQueryStats()) {
+                auto plan = streamPart.GetQueryStats().GetPlan();
+                if (plan && statInfo) {
+                    UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, statInfo));
+                }
+            }
 
             if (streamPart.HasResultSet()) {
                 auto resultSet = streamPart.ExtractResultSet();
@@ -541,6 +550,58 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
             CompareYson(result, R"([[["0"];1000000u];[["1"];1000001u]])");
+        }
+    }
+
+    Y_UNIT_TEST(SimpleQueryOlapStats) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        // EnableDebugLogging(kikimr);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+
+        auto client = kikimr.GetTableClient();
+
+        // EnableDebugLogging(kikimr);
+
+        {
+            TStreamExecScanQuerySettings settings;
+            settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT `resource_id`, `timestamp`
+                FROM `/Root/olapStore/olapTable`
+                ORDER BY `resource_id`, `timestamp`
+            )", settings).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            NJson::TJsonValue jsonStat;
+            CollectRows(it, &jsonStat);
+            UNIT_ASSERT(!jsonStat.IsNull());
+            const TString plan = jsonStat.GetStringRobust();
+            Cerr << plan << Endl;
+            UNIT_ASSERT(plan.find("NodesScanShards") == TString::npos);
+        }
+
+        {
+            TStreamExecScanQuerySettings settings;
+            settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT `resource_id`, `timestamp`
+                FROM `/Root/olapStore/olapTable`
+                ORDER BY `resource_id`, `timestamp`
+            )", settings).GetValueSync();
+            NJson::TJsonValue jsonStat;
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CollectRows(it, &jsonStat);
+            const TString plan = jsonStat.GetStringRobust();
+            Cerr << plan << Endl;
+            UNIT_ASSERT(plan.find("NodesScanShards") != TString::npos);
         }
     }
 

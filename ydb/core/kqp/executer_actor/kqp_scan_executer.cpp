@@ -354,6 +354,12 @@ private:
                 nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first, std::move(i.second)));
             }
 
+            if (Stats && CollectProfileStats(Request.StatsMode)) {
+                for (auto&& i : nodeShards) {
+                    Stats->AddNodeShardsCount(stageInfo.Id.StageId, i.first, i.second.size());
+                }
+            }
+
             if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead()) {
                 for (auto&& pair : nodeShards) {
                     auto& shardsInfo = pair.second;

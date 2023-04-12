@@ -1711,6 +1711,17 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["TotalOutputRows"] = (*stat)->GetOutputRows().GetSum();
                 stats["TotalOutputBytes"] = (*stat)->GetOutputBytes().GetSum();
 
+                NKqpProto::TKqpStageExtraStats kqpStageStats;
+                if ((*stat)->GetExtra().UnpackTo(&kqpStageStats)) {
+                    auto& nodesStats = stats.InsertValue("NodesScanShards", NJson::JSON_ARRAY);
+                    for (auto&& i : kqpStageStats.GetNodeStats()) {
+                        auto& nodeInfo = nodesStats.AppendValue(NJson::JSON_MAP);
+                        nodeInfo.InsertValue("shards_count", i.GetShardsCount());
+                        nodeInfo.InsertValue("node_id", i.GetNodeId());
+                    }
+                    
+                }
+
                 for (auto& caStats : (*stat)->GetComputeActors()) {
                     auto& caNode = stats["ComputeNodes"].AppendValue(NJson::TJsonValue());
                     fillCaStats(caNode, caStats);

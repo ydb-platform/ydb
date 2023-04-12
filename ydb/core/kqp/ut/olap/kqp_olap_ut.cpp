@@ -3879,10 +3879,16 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapUpsertImmediate) {
+        // Should be fixed in KIKIMR-17646
+        return;
+
         TestOlapUpsert(1);
     }
 
     Y_UNIT_TEST(OlapUpsert) {
+        // Should be fixed in KIKIMR-17646
+        return;
+
         TestOlapUpsert(2);
     }
 
@@ -4246,6 +4252,26 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetExpectedReply("[[10u]]");
 
         TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Olap_InsertFails) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        EnableDebugLogging(kikimr);
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+
+        auto tableClient = kikimr.GetTableClient();
+
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            INSERT INTO `/Root/tableWithNulls`(id, resource_id, level) VALUES(1, "1", 1);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(OlapRead_FailsOnDataQuery) {

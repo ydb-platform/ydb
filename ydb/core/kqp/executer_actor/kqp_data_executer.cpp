@@ -1681,16 +1681,12 @@ private:
                     }
                 }
 
-                for (auto& op : stage.GetTableOps()) {
-                    if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange
-                        && tx.Body->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA)
-                    {
-                        auto error = TStringBuilder() << "Data query read does not support column shard tables.";
-                        LOG_E(error);
-                        ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
-                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
-                        return;
-                    }
+                if (stageInfo.Meta.IsOlap() && tx.Body->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA) {
+                    auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
+                    LOG_E(error);
+                    ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
+                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
+                    return;
                 }
 
                 LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());

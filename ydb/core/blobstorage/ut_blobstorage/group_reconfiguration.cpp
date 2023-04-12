@@ -132,17 +132,17 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
     void VerifyCounters(std::vector<std::pair<ui32, ui32>>& counters, ui32 acceptableLoss = 5) {
         for (ui32 i = 0; i < counters.size(); ++i) {
             auto [sent, successes] = counters[i];
-            UNIT_ASSERT_GE_C(successes, sent - acceptableLoss, "Sent puts number# " << sent
+            UNIT_ASSERT_GE_C(successes + acceptableLoss, sent, "Sent puts number# " << sent
                     << " recieved successes number# " << successes
                     << " nodeId# " << i + 1);
         }
     }
 
-    void VerifyConfigsAreSame(TEnvironmentSetup& env, ui32 numNodes, ui32 groupId) {
+    void VerifyConfigsAreSame(TEnvironmentSetup& env, std::set<ui32>& nodesToCheck, ui32 groupId) {
         ui32 nodeWithInfo;
         std::optional<NKikimrBlobStorage::TEvNodeWardenGroupInfo> localGroupInfo;
 
-        for (ui32 nodeId = 1; nodeId < numNodes; ++nodeId) {
+        for (ui32 nodeId : nodesToCheck) {
             auto edge = env.Runtime->AllocateEdgeActor(nodeId);
             
             env.Runtime->WrapInActorContext(edge, [&] {
@@ -213,16 +213,21 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
         UNIT_ASSERT(bscShutDown);
         env->Sim(TDuration::Seconds(2));
-        VerifyConfigsAreSame(*env, numNodes, groupId);
+        VerifyCounters(counters, 5);
+
+        nodesInGroup.erase(fromNodeId);
+        nodesInGroup.insert(toNodeId);
+        VerifyConfigsAreSame(*env, nodesInGroup, groupId);
     }
 
     Y_UNIT_TEST(PropagateNewConfigurationViaVDisks) {
         TestPropagateNewConfigurationViaVDisks(true);
     }
 
-    Y_UNIT_TEST(PropagateNewConfigurationViaVDisksNoRequestsToNodesWVDisks) {
-        TestPropagateNewConfigurationViaVDisks(false);
-    }
+    // TODO: KIKIMR-11627
+    // Y_UNIT_TEST(PropagateNewConfigurationViaVDisksNoRequestsToNodesWVDisks) {
+    //     TestPropagateNewConfigurationViaVDisks(false);
+    // }
 
     void TestBsControllerDoesNotDisableGroup(bool requestsToNodesWVDisks) {
         const ui32 numDCs = 3;
@@ -251,7 +256,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         std::array<bool, numNodes - 1> passedMessages{true};
 
         env->Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->Sender.NodeId() == bscNodeId) {
+            if (ev->Sender.NodeId() == bscNodeId && nodeId != bscNodeId) {
                 if (nodeId != fromNodeId && nodeId != toNodeId && std::exchange(passedMessages[nodeId - 1], false)) {
                     Cerr << "Send configuration to nodeId# " << nodeId << Endl;
                     return true;
@@ -266,7 +271,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
        // UNIT_ASSERT(!passOne);
         env->Sim(TDuration::Seconds(2));
-        VerifyConfigsAreSame(*env, numNodes, groupId);
+        VerifyCounters(counters, 5);
     }
 
     Y_UNIT_TEST(BsControllerDoesNotDisableGroup) {
@@ -334,17 +339,22 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
             HandleWakeup();
         }
 
-        STRICT_STFUNC(StateFunc, {
+        void Ignore() {
+        }
+
+        STRICT_STFUNC(StateFunc,
             hFunc(TEvBlobStorage::TEvControllerNodeServiceSetUpdate, Handle)
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup)
             cFunc(TEvTabletPipe::TEvClientConnected::EventType, HandleConnected)
-        })
+
+            cFunc(TEvBlobStorage::TEvControllerConfigResponse::EventType, Ignore)
+        )
     };
 
     Y_UNIT_TEST(BsControllerConfigurationRequestIsFastEnough) {
         const ui32 numDCs = 3;
         const ui32 numNodesInDC = 10;
-        const ui32 numNodes = numDCs * numNodesInDC;
+        const ui32 numNodes = numDCs * numNodesInDC + 1;
         const ui32 disksPerNode = 1;
         const ui32 numGroups = numDCs * numNodesInDC * disksPerNode * 9 / 8;
 

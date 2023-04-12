@@ -490,7 +490,9 @@ void TInfoCollector::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     }
 
     if (msg.SourceType == TEvTenantPool::EvGetStatus && msg.Reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
-        ResponseProcessed(nodeId, TEvTenantPool::EvTenantPoolStatus);
+        if (IsNodeInfoRequired(nodeId, TEvTenantPool::EvTenantPoolStatus)) {
+            return ResponseProcessed(nodeId, TEvTenantPool::EvTenantPoolStatus);
+        }
     } else {
         UndeliveredNodes.insert(nodeId);
         NodeEvents[nodeId].clear();

@@ -41,6 +41,10 @@ namespace NKikimrCapnProto {
         }
     }
 
+    NKikimrBlobStorage::EVDiskQueueId ConvertEVDiskQueueId(NKikimrBlobStorage::EVDiskQueueId capnProtoQueueId) {
+        return capnProtoQueueId;
+    }
+
     NKikimrBlobStorage::EVDiskInternalQueueId ConvertEVDiskInternalQueueId(NKikimrCapnProto::EVDiskInternalQueueId capnProtoInternalQueueId) {
         switch (capnProtoInternalQueueId) {
             case NKikimrCapnProto::EVDiskInternalQueueId::IntUnknown: return NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown;

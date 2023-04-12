@@ -212,6 +212,8 @@ namespace NKikimrCapnProto {
         End,
     };
     NKikimrBlobStorage::EVDiskQueueId ConvertEVDiskQueueId(NKikimrCapnProto::EVDiskQueueId capnProtoQueueId);
+    NKikimrBlobStorage::EVDiskQueueId ConvertEVDiskQueueId(NKikimrBlobStorage::EVDiskQueueId capnProtoQueueId);
+
 
     enum class EVDiskInternalQueueId {
         IntUnknown,

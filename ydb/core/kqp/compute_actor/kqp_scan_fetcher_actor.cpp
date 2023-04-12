@@ -450,10 +450,10 @@ bool TKqpScanFetcherActor::SendGlobalFail(const NDqProto::EComputeState state, N
 
 bool TKqpScanFetcherActor::ProvideDataToCompute(TEvKqpCompute::TEvScanData& msg, TShardState::TPtr state) {
     if (msg.IsEmpty()) {
-        InFlightComputes.OnEmptyDataReceived(state->TabletId);
+        InFlightComputes.OnEmptyDataReceived(state->TabletId, msg.RequestedBytesLimitReached || msg.Finished);
     } else {
         ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "PROVIDING (FROM " << SelfId() << "): used free compute " << InFlightComputes.DebugString();
-        auto computeActorInfo = InFlightComputes.OnDataReceived(state->TabletId, msg.RequestedBytesLimitReached);
+        auto computeActorInfo = InFlightComputes.OnDataReceived(state->TabletId, msg.RequestedBytesLimitReached || msg.Finished);
         Send(computeActorInfo.GetActorId(), new TEvScanExchange::TEvSendData(msg, state->TabletId));
     }
     return true;
@@ -536,15 +536,13 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
 
     state->LastKey = std::move(msg.LastKey);
     const ui64 rowsCount = msg.GetRowsCount();
-    CA_LOG_D("action=got EvScanData;rows=" << rowsCount << ";finished=" << msg.Finished
+    CA_LOG_D("action=got EvScanData;rows=" << rowsCount << ";finished=" << msg.Finished << ";exhausted=" << msg.RequestedBytesLimitReached
         << ";from=" << ev->Sender << ";shards remain=" << PendingShards.size()
         << ";in flight scans=" << InFlightShards.GetScansCount()
         << ";in flight shards=" << InFlightShards.GetShardsCount()
         << ";delayed_for=" << latency.SecondsFloat() << " seconds by ratelimiter"
         << ";tabletId=" << state->TabletId);
-    if (!msg.Finished || NKqp::ETableKind(Meta.GetTable().GetTableKind()) == NKqp::ETableKind::Datashard) {
-        ProvideDataToCompute(msg, state);
-    }
+    ProvideDataToCompute(msg, state);
     InFlightShards.MutableStatistics(state->TabletId).AddPack(rowsCount, 0);
 
     Stats.AddReadStat(state->ScannerIdx, rowsCount, 0);

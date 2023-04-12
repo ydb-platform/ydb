@@ -120,8 +120,10 @@ public:
         DetachComputeActorFromShard(tabletId);
     }
 
-    void OnEmptyDataReceived(const ui64 tabletId) {
-        DetachComputeActorFromShard(tabletId);
+    void OnEmptyDataReceived(const ui64 tabletId, const bool readRequestedSpaceLimit) {
+        if (readRequestedSpaceLimit) {
+            DetachComputeActorFromShard(tabletId);
+        }
     }
 
     bool PrepareShardAck(TShardState::TPtr state, ui64& freeSpace) {
